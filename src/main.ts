@@ -1,12 +1,14 @@
 // Boot (TECH_SPEC §9-§14, src/ui/README.md §6): load the save, create audio, haptics, the UI, the
 // renderer and the session, start the loop, register the service worker, then drop the boot splash
-// once the first frame (the live dawn scene) is on screen.
+// once the first frame (the live dawn scene) is on screen. Any uncaught error or rejection flushes
+// the save first; a boot that throws leaves a "couldn't start" splash with a Reload button.
 
 import { createAudio } from './audio/index.ts';
+import { showBootFailure } from './game/crash.ts';
 import { installDebugOverlay, installTestHook } from './game/debug.ts';
 import { parseParams } from './game/params.ts';
 import { Session } from './game/session.ts';
-import { SAVE_KEY, SaveStore } from './meta/save.ts';
+import { SAVE_BAK_KEY, SAVE_KEY, SaveStore } from './meta/save.ts';
 import { createHaptics } from './platform/haptics.ts';
 import { registerServiceWorker } from './platform/pwa.ts';
 import { createStorage } from './platform/storage.ts';
@@ -14,14 +16,30 @@ import type { DebugDraw } from './render/renderer.ts';
 
 const VERSION = '0.1.0';
 
+/** The live store, for the global error handlers (null until boot has made it). */
+let liveStore: SaveStore | null = null;
+
+function flushSave(): void {
+  try {
+    liveStore?.flush();
+  } catch {
+    // Storage itself failing: nothing more to do here.
+  }
+}
+
+// Never swallow the error (no preventDefault): it still reaches the console and any tooling.
+window.addEventListener('error', flushSave);
+window.addEventListener('unhandledrejection', flushSave);
+
 function boot(): void {
   const params = parseParams(location.search);
   const storage = createStorage();
   if (params.reset && import.meta.env.DEV) {
     storage.remove(SAVE_KEY);
-    storage.remove(`${SAVE_KEY}.bak`);
+    storage.remove(SAVE_BAK_KEY);
   }
   const store = new SaveStore(storage);
+  liveStore = store;
   const settings = store.get().settings;
   const audio = createAudio({ sfx: settings.sfx, music: settings.music, muted: params.mute });
   const haptics = createHaptics(settings.haptics);
@@ -50,4 +68,10 @@ function boot(): void {
   void registerServiceWorker();
 }
 
-boot();
+try {
+  boot();
+} catch (e) {
+  console.error(e);
+  flushSave();
+  showBootFailure();
+}

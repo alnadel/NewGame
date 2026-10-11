@@ -1,7 +1,7 @@
 // Debug and test URL parameters (V1_PLAN §14, TECH_SPEC §17).
 
 import { BOT_KINDS, dayLength, type BotKind, type ProfileId } from '../core/index.ts';
-import { isDateString } from '../meta/daily.ts';
+import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';
 
 export interface Params {
   seed: number | null;
@@ -23,7 +23,15 @@ export interface Params {
   perf: boolean;
 }
 
-export function parseParams(search: string): Params {
+/**
+ * A Daily date is playable from the epoch to tomorrow (a friend's "today" may already be our
+ * tomorrow). ISO dates compare as strings. Used for ?mode=daily&date= and for k:'d' challenges.
+ */
+export function dailyDateInBounds(date: string, today: string = localDate()): boolean {
+  return isDateString(date) && date >= DAILY_EPOCH && date <= addDays(today, 1);
+}
+
+export function parseParams(search: string, today: string = localDate()): Params {
   const q = new URLSearchParams(search);
   const num = (k: string): number | null => {
     const v = q.get(k);
@@ -42,7 +50,7 @@ export function parseParams(search: string): Params {
   return {
     seed: seed === null ? null : Math.floor(Math.abs(seed)) >>> 0,
     daily: q.get('mode') === 'daily',
-    date: date && isDateString(date) ? date : null,
+    date: date && dailyDateInBounds(date, today) ? date : null,
     day: day === null ? null : Math.max(1, Math.min(60, Math.floor(day))),
     t: q.get('t'),
     chill: chill === null ? null : Math.max(1, Math.min(100, chill)),

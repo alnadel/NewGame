@@ -5,9 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { cssEaseInOut, ghostSwingX, ghostSwipe, guideAlpha, HintTracker, nearestSafe, widestArc, type HintInput } from '../../src/game/assist.ts';
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
-import { isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
+import { dailyDateInBounds, isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
 import { Input, type InputHost } from '../../src/game/input.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from '../../src/game/perf.ts';
+import { Cadence, type CadenceInput } from '../../src/game/cadence.ts';
 
 const NO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -190,6 +191,17 @@ describe('URL params', () => {
     expect(p.chill).toBe(30);
     expect(parseParams('?bot=nope&fast=-3').bot).toBeNull();
     expect(parseParams('?mode=daily&date=2026-10-11').date).toBe('2026-10-11');
+  });
+  it('accepts a Daily date from the epoch to tomorrow only', () => {
+    const today = '2026-10-11';
+    expect(parseParams('?mode=daily&date=2026-01-01', today).date).toBe('2026-01-01');
+    expect(parseParams('?mode=daily&date=2026-10-12', today).date).toBe('2026-10-12');
+    expect(parseParams('?mode=daily&date=2026-10-13', today).date).toBeNull();
+    expect(parseParams('?mode=daily&date=2025-12-31', today).date).toBeNull();
+    expect(parseParams('?mode=daily&date=2026-02-30', today).date).toBeNull();
+    expect(dailyDateInBounds('2026-12-31', '2026-12-31')).toBe(true);
+    expect(dailyDateInBounds('2027-01-01', '2026-12-31')).toBe(true);
+    expect(dailyDateInBounds('2027-01-02', '2026-12-31')).toBe(false);
   });
   it('flags sim-altering params as unscored debug runs', () => {
     expect(isDebugRun(parseParams(''))).toBe(false);
@@ -397,5 +409,71 @@ describe('perf governor (TECH_SPEC §15)', () => {
     expect(down).toBeGreaterThanOrEqual(1);
     feed(g, 30, () => 16.7, 3);
     expect(g.level).toBe(down);
+  });
+});
+
+describe('render cadence (K8, render-at-full-display-rate)', () => {
+  /** Simulated rAF: `seconds` of frames `ms` apart; returns the draws per second. */
+  function run(c: Cadence, seconds: number, ms: number, over: Partial<CadenceInput> = {}, jitter = 0): number {
+    let draws = 0;
+    const frames = Math.round((seconds * 1000) / ms);
+    for (let i = 1; i <= frames; i++) {
+      const now = 1000 + i * ms + (jitter ? Math.sin(i * 12.9898) * jitter : 0);
+      const inp: CadenceInput = { now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, ...over };
+      if (c.shouldDraw(inp)) {
+        c.drawn(now);
+        draws++;
+      }
+    }
+    return draws / seconds;
+  }
+
+  it('caps play at 60 fps on 120 Hz (8.33 ms frames) without input', () => {
+    const r = run(new Cadence(), 4, 1000 / 120);
+    expect(r).toBeGreaterThanOrEqual(58);
+    expect(r).toBeLessThanOrEqual(62);
+  });
+
+  it('draws every frame of a 60 Hz display, jitter or not', () => {
+    expect(run(new Cadence(), 4, 1000 / 60)).toBeGreaterThanOrEqual(59);
+    expect(run(new Cadence(), 4, 1000 / 60, {}, 1.5)).toBeGreaterThanOrEqual(58);
+  });
+
+  it('gives 60 (not 45) on a 90 Hz display, and about 60 on 144 Hz', () => {
+    const r90 = run(new Cadence(), 4, 1000 / 90);
+    expect(r90).toBeGreaterThanOrEqual(58);
+    expect(r90).toBeLessThanOrEqual(62);
+    const r144 = run(new Cadence(), 4, 1000 / 144);
+    expect(r144).toBeGreaterThanOrEqual(56);
+    expect(r144).toBeLessThanOrEqual(62);
+  });
+
+  it('draws every rAF while a pointer or key is down, or the clock runs at another rate', () => {
+    expect(run(new Cadence(), 2, 1000 / 120, { inputActive: true })).toBeGreaterThanOrEqual(118);
+    expect(run(new Cadence(), 2, 1000 / 120, { timeScale: 0.3 })).toBeGreaterThanOrEqual(118);
+    expect(run(new Cadence(), 2, 1000 / 120, { timeScale: 0 })).toBeGreaterThanOrEqual(118);
+  });
+
+  it('pauses at 30 fps and the reduced-motion Title at 10 fps', () => {
+    const pause = run(new Cadence(), 4, 16.7, { screen: 'pause' });
+    expect(pause).toBeGreaterThanOrEqual(28);
+    expect(pause).toBeLessThanOrEqual(32);
+    // Input never lifts the pause cap.
+    expect(run(new Cadence(), 2, 1000 / 120, { screen: 'pause', inputActive: true })).toBeLessThanOrEqual(32);
+    const title = run(new Cadence(), 4, 16.7, { screen: 'title', reducedMotion: true });
+    expect(title).toBeGreaterThanOrEqual(9);
+    expect(title).toBeLessThanOrEqual(11);
+    expect(run(new Cadence(), 4, 16.7, { screen: 'title' })).toBeGreaterThanOrEqual(59);
+  });
+
+  it('draws a menu once, and again only when invalidated or the screen changes', () => {
+    const c = new Cadence();
+    expect(run(c, 2, 16.7, { screen: 'menu' }) * 2).toBe(1);
+    c.invalidate();
+    expect(run(c, 1, 16.7, { screen: 'menu' })).toBe(1);
+    expect(run(c, 1, 16.7, { screen: 'menu' })).toBe(0);
+    // Back on the Title it draws at once, then at its own rate.
+    expect(run(c, 1, 16.7, { screen: 'title' })).toBeGreaterThanOrEqual(59);
+    expect(c.draws).toBeGreaterThanOrEqual(61);
   });
 });

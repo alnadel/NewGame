@@ -33,6 +33,16 @@ export interface InputHost {
   safeBottom(): number;
 }
 
+/** Interactive elements whose own keyboard handling wins over the game's rotation keys. */
+const CONTROL_SELECTOR = 'button, a, input, textarea, select, [role="radio"], [role="tab"], [role="switch"], [role="slider"]';
+
+/** True when a key event's target is (inside) an interactive element or editable content. */
+export function isControl(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) return false;
+  if (target.closest(CONTROL_SELECTOR) !== null) return true;
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
 function newFrame(): InputFrame {
   return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
 }
@@ -194,8 +204,9 @@ export class Input {
     else if (k === 'ArrowRight' || k === 'd' || k === 'D') right = true;
     else return;
     if (e.altKey || e.ctrlKey || e.metaKey) return;
-    const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    // Keys aimed at a control (a focused button, a slider, a radio group…) belong to it: an arrow on
+    // the focused Missions button must not start a run. Key-ups always release.
+    if (down && isControl(e.target)) return;
     if (down) {
       if (!this.host.accepting()) return;
       e.preventDefault();

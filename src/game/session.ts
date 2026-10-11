@@ -16,6 +16,7 @@ import {
   takeSnap,
   TUNING,
   type Bot,
+  type BotKind,
   type ProfileId,
   type RenderSnap,
   type RunBuild,
@@ -28,13 +29,12 @@ import { createAudioView, type AudioView, type ScreenMode, type ShadyAudio } fro
 import type { Haptics } from '../platform/haptics.ts';
 import { exportBackup, importBackup, backupErrorMessage } from '../meta/backup.ts';
 import { challengeFromHash, type Challenge } from '../meta/challenge.ts';
-import { dailyNumber, dailySeed, localDate } from '../meta/daily.ts';
+import { DAILY_TRIES, dailyNumber, dailySeed, localDate } from '../meta/daily.ts';
 import {
   applyRunResult,
   beginRun,
   buyCosmetic,
   debugRunOutcome,
-  dailyProgress,
   dailyStatus,
   dailyTryStarted,
   equipCosmetic,
@@ -43,9 +43,16 @@ import {
   type RunOutcome,
 } from '../meta/progression.ts';
 import type { SaveStore } from '../meta/save.ts';
-import type { Settings } from '../meta/saveTypes.ts';
-import { buildShare } from '../meta/share.ts';
-import { isIOS, isStandalone, onPageHidden, onReducedMotionChange, prefersReducedMotion } from '../platform/lifecycle.ts';
+import type { SaveV1, Settings } from '../meta/saveTypes.ts';
+import {
+  isIOS,
+  isStandalone,
+  onPageHidden,
+  onPageVisible,
+  onReducedMotionChange,
+  onWindowBlur,
+  prefersReducedMotion,
+} from '../platform/lifecycle.ts';
 import { readSafeArea, onSafeAreaChange } from '../platform/safeArea.ts';
 import { shareText } from '../platform/share.ts';
 import { requestPersistence } from '../platform/storage.ts';
@@ -55,12 +62,27 @@ import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
-import type { RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
+import type { ChallengeBanner, ImportOutcome, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
+import { Cadence, type CadenceInput } from './cadence.ts';
+import { createCameraFx } from './camera.ts';
+import {
+  buildShareText,
+  cfgDrain,
+  dailyProgressStrip,
+  endlessDrainFor,
+  setCfgDrain,
+  shareBaseUrl,
+  storeCanPersist,
+  storeOnDegraded,
+  storeOnExternalChange,
+  uiIsModalOpen,
+} from './compat.ts';
+import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
-import { isDebugRun, startTFor, type Params } from './params.ts';
+import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 
 const DYING_S = 1.1;
@@ -78,6 +100,18 @@ const PREBUILD_SLICE = 4;
 const DAILY_COUNT_MINUTES = 30;
 /** Title sway amplitude (GDD §4: ±25° around θ0), following the ghost hand's swing. */
 const SWAY_DEG = 25;
+/** Render-time cap per drawn frame (s), like the frame's own real-time cap. */
+const MAX_DRAW_DT = 0.1;
+/** Consecutive failed frames (about 0.5 s) before the crash overlay replaces the game. */
+const CRASH_FRAMES = 30;
+/** How long a history.back() of our own may take to come back as a popstate (ms). */
+const DISARM_WAIT_MS = 600;
+/** Title frames before the play HUD is prebuilt (keeps it off the first, boot-heavy frames). */
+const TITLE_HUD_PREBUILD_FRAMES = 3;
+/** The local date is re-read at most this often from the frame loop (ms). */
+const TODAY_CHECK_MS = 1000;
+/** Reset/Restore refusal while a newer version's save sits on disk (it must not be overwritten). */
+const NEWER_SAVE_MESSAGE = 'A newer version of SHADY saved progress here. Update the game first.';
 
 export interface SessionDeps {
   canvas: HTMLCanvasElement;
@@ -87,6 +121,20 @@ export interface SessionDeps {
   audio: ShadyAudio;
   haptics: Haptics;
   version: string;
+}
+
+/** mapProbe() result: device-pixel differences with/without the Melt Map overlay, by region. */
+export interface MapProbe {
+  /** The Results sheet's top (CSS px) and the first device-px row counted as below it. */
+  sheetTop: number;
+  cutRow: number;
+  dpr: number;
+  above: number;
+  below: number;
+  /** Device-px box (x0, y0, x1, y1) of the differences below the cut, or null. */
+  belowBox: number[] | null;
+  /** The frame with the overlay, as a PNG data URL (test attachments). */
+  png: string;
 }
 
 export interface DebugStats {
@@ -100,6 +148,19 @@ export interface DebugStats {
 
 function profileFor(runs: number): ProfileId {
   return runs >= 3 ? 3 : (runs as ProfileId);
+}
+
+/** A challenge the game can play: k:'d' dates must be in bounds (params.ts dailyDateInBounds). */
+function playableChallenge(c: Challenge | null): Challenge | null {
+  if (!c) return null;
+  if (c.k === 'd' && !dailyDateInBounds(c.d)) return null;
+  return c;
+}
+
+function sameChallenge(a: Challenge | null, b: Challenge | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.k !== b.k || a.m !== b.m || a.s !== b.s) return false;
+  return a.k === 'e' ? a.seed === (b as typeof a).seed : a.d === (b as typeof a).d;
 }
 
 function randomSeed(): number {
@@ -119,6 +180,8 @@ export class Session {
   readonly clock = new FixedClock();
   readonly fx: Fx;
   readonly gov = new Governor();
+  readonly cadence = new Cadence();
+  private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false };
   readonly stats: DebugStats = { fps: 60, frameMs: 0, simMs: 0, genMs: 0, renderMs: 0, ticks: 0 };
 
   private readonly d: SessionDeps;
@@ -142,17 +205,26 @@ export class Session {
   private lifetimeRuns = 0;
   private melody: number[] = [];
   private dailyDate: string | null = null;
+  /** The run can count as a Daily try: its date is today and tries were left when it began. */
   private dailyScored = false;
   private dailyTry: number | null = null;
   private dailyCounted = false;
   private challenge: Challenge | null = null;
+  /** A challenge link opened (hashchange) while a run was active: applied on the next home(). */
+  private queuedChallenge: Challenge | null = null;
   private runChallenge: Challenge | null = null;
   private bot: Bot | null = null;
+  /** Test hook: a core bot plays the runs (they stay scored, unlike ?bot=). */
+  private testBot: BotKind | null = null;
   private usedUrlSeed = false;
   private nextRun: SimState | null = null;
   /** The next endless run while its world is still being generated in slices (see stepPrebuild). */
   private nextBuild: RunBuild | null = null;
   private runActive = false;
+  /** Guide "Always" was on at some point of this run (latched: the share's compass marker). */
+  private runAssisted = false;
+  /** The best the HUD flags during this run, read when it began (checkpoints must not move it). */
+  private runPb = -1;
   /**
    * Sim-altering debug URL params are present (?day, ?t, ?chill, ?profile, ?bot, ?fast, ?guide):
    * such runs are not scored, saved, shared or counted as Daily tries.
@@ -173,19 +245,48 @@ export class Session {
   private time = 0;
   private swayPhase = 0;
   private swayOut = 0;
-  private trapArmed = false;
-  private ignorePopUntil = -1;
   private booted = false;
   private raf = 0;
   private cssW = 0;
   private sizeDirty = true;
   /** Cached reduced-motion decision (−1 = recompute). */
   private rmCache = -1;
+  /** The effective reduced motion the held Title run was built with. */
+  private runRm = false;
   private cssH = 0;
   private dpr = 1;
   /** Canvas DPR cap for this device (perf.ts deviceClass). */
   private dprCap = 2;
   private readonly unsub: (() => void)[] = [];
+
+  // Render cadence (cadence.ts): real and game time not yet handed to a drawn frame.
+  private drawDt = 0;
+  private drawGdt = 0;
+  /** rAF time of the last drawn frame, and whether it was a screen the governor samples. */
+  private lastDrawAt = -1;
+  private lastDrawSampled = false;
+  /** Canvas-affecting settings the last drawn frame used (a change redraws a menu once). */
+  private drawnHighContrast = false;
+  private drawnEquipped: unknown = null;
+  /** Title frames since the Title last appeared. */
+  private titleFrames = 0;
+
+  // App-wide history sentinel (V1_PLAN §8.2): armed exactly while a Back press has something to do.
+  private sentinel = false;
+  /** URL when the sentinel was pushed (the entry a Back press lands on). */
+  private sentinelHref = '';
+  /** One of our own history.back() calls is in flight: its popstate is ours to ignore. */
+  private disarming = false;
+  private disarmUntil = 0;
+
+  // Midnight rollover.
+  private today = localDate();
+  private todayCheckAt = Number.NEGATIVE_INFINITY;
+
+  // Crash containment.
+  private failures = 0;
+  private crashed = false;
+  private frameDrew = false;
 
   constructor(deps: SessionDeps) {
     this.d = deps;
@@ -202,59 +303,79 @@ export class Session {
     this.clock.fast = deps.params.fast;
     this.renderer = new Renderer(deps.canvas);
     this.fx = new Fx(this.renderer.scene, this.clock);
-    const save = deps.store.get();
-    this.challenge = challengeFromHash(location.hash);
+    const store = deps.store;
+    const save = store.get();
+    this.challenge = playableChallenge(challengeFromHash(location.hash));
+    // UI callbacks re-check the history sentinel as soon as they return (screens just changed).
+    const sync =
+      <A extends unknown[], R>(fn: (...a: A) => R) =>
+      (...a: A): R => {
+        const r = fn(...a);
+        this.syncSentinel();
+        return r;
+      };
     this.ui = createUi(deps.uiRoot, {
       callbacks: {
-        startRun: (k) => this.startRun(k),
-        retry: () => this.retry(),
-        home: () => this.home(),
-        pause: () => this.pause(),
-        resume: () => this.resume(),
-        restart: () => this.restart(),
-        skipDying: () => this.showResults(),
+        startRun: sync((k: RunKind, date?: string) => this.startRun(k, date)),
+        retry: sync(() => this.retry()),
+        home: sync(() => this.home()),
+        pause: sync(() => this.pause()),
+        resume: sync(() => this.resume()),
+        restart: sync(() => this.restart()),
+        skipDying: sync(() => this.showResults()),
         share: () => this.share(),
         settingsChanged: (st) => this.settingsChanged(st),
         buy: (id) => {
-          const r = buyCosmetic(deps.store.get(), id);
+          const r = buyCosmetic(store.get(), id);
           if (!r.ok) {
             deps.audio.play('uiError');
             return false;
           }
-          deps.store.set(r.save);
+          store.set(r.save);
+          // Written at once: another tab finishing a run must not clobber the purchase.
+          store.flush();
           this.ui.setSave(r.save);
           deps.audio.play('uiBuy');
           return true;
         },
         equip: (id) => {
-          const r = equipCosmetic(deps.store.get(), id);
+          const r = equipCosmetic(store.get(), id);
           if (!r.ok) return;
-          deps.store.set(r.save);
+          store.set(r.save);
+          store.flush();
           this.ui.setSave(r.save);
         },
-        exportBackup: () => exportBackup(deps.store.get()),
-        importBackup: (code) => {
+        exportBackup: () => exportBackup(store.get()),
+        importBackup: sync((code: string): ImportOutcome => {
+          if (!storeCanPersist(store)) return { ok: false, message: NEWER_SAVE_MESSAGE };
           const r = importBackup(code);
           if (!r.ok) return { ok: false, message: backupErrorMessage(r.error) };
-          deps.store.set(r.save);
-          deps.store.flush();
+          store.set(r.save);
+          store.flush();
           this.ui.setSave(r.save);
           this.applySettings(r.save.settings);
+          this.refreshTitleRun();
           return { ok: true };
-        },
-        resetProgress: () => {
-          const next = resetProgress(deps.store.get());
-          deps.store.set(next);
-          deps.store.flush();
+        }),
+        resetProgress: sync((): ImportOutcome => {
+          if (!storeCanPersist(store)) return { ok: false, message: NEWER_SAVE_MESSAGE };
+          const next = resetProgress(store.get());
+          store.set(next);
+          store.flush();
           this.ui.setSave(next);
-        },
+          this.applySettings(next.settings);
+          this.refreshTitleRun();
+          return { ok: true };
+        }),
         dismissChallenge: () => {
           this.challenge = null;
+          this.queuedChallenge = null;
           try {
             history.replaceState(history.state, '', location.pathname + location.search);
           } catch {
             // ignore
           }
+          this.refreshTitleRun();
         },
         dragHandoff: (e) => {
           if (this.ui.current() === 'title') this.input.begin(e);
@@ -263,14 +384,10 @@ export class Session {
         renderWardrobePreview: (canvas, equipped) => renderWardrobePreview(canvas, equipped),
       },
       save,
-      today: localDate(),
+      today: this.today,
       version: deps.version,
     });
-    if (this.challenge) {
-      const c = this.challenge;
-      const note = c.k === 'd' && c.d !== localDate() ? `Daily #${dailyNumber(c.d)} · practice run` : c.k === 'd' ? `Daily #${dailyNumber(c.d)}` : undefined;
-      this.ui.setChallenge(note ? { minutes: c.m, note } : { minutes: c.m });
-    }
+    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
     this.input = new Input({
       canvas: deps.canvas,
       accepting: () => this.accepting(),
@@ -279,6 +396,7 @@ export class Session {
       safeBottom: () => this.renderer.scene.view.safe.bottom,
     });
     this.applySettings(save.settings);
+    this.runRm = this.reducedMotion();
     this.s = this.createTitleRun();
     this.lifetimeRuns = save.stats.runs;
     this.resetSnaps();
@@ -326,28 +444,23 @@ export class Session {
 
     this.unsub.push(
       onPageHidden(() => {
-        deps.store.flush();
-        if (this.ui.current() === 'play') {
-          this.ui.show('pause');
-          this.pause();
-        }
+        store.flush();
+        this.pauseIfPlaying();
       }),
+      // V1_PLAN §8.5: losing focus (alt-tab, an OS dialog over the browser) pauses too; nothing
+      // ever resumes by itself.
+      onWindowBlur(() => this.pauseIfPlaying()),
+      onPageVisible(() => this.checkToday()),
+      // Another tab or instance saved: adopt its save instead of overwriting it later.
+      storeOnExternalChange(store, (next) => this.adoptSave(next)),
+      storeOnDegraded(store, () => this.ui.notifyStorageDegraded()),
     );
-    const onPop = (): void => {
-      if (this.time < this.ignorePopUntil) return;
-      // Our history entry was just consumed.
-      const wasArmed = this.trapArmed;
-      this.trapArmed = false;
-      const sc = this.ui.current();
-      if (sc === 'play') {
-        this.ui.show('pause');
-        this.pause();
-      }
-      // A run is still in progress (playing, paused, or settings opened from pause): re-arm.
-      if (wasArmed && this.runActive && this.deathAt < 0 && (sc === 'play' || sc === 'pause' || sc === 'settings')) this.trap();
-    };
+    const onPop = (): void => this.onPopState();
     window.addEventListener('popstate', onPop);
     this.unsub.push(() => window.removeEventListener('popstate', onPop));
+    const onHash = (): void => this.onHashChange();
+    window.addEventListener('hashchange', onHash);
+    this.unsub.push(() => window.removeEventListener('hashchange', onHash));
     this.unsub.push(onSafeAreaChange(() => (this.sizeDirty = true)));
     const onResize = (): void => {
       this.sizeDirty = true;
@@ -362,6 +475,7 @@ export class Session {
     this.unsub.push(
       onReducedMotionChange(() => {
         this.rmCache = -1;
+        this.reducedMotionMaybeChanged();
       }),
     );
     window.addEventListener('resize', onResize);
@@ -384,8 +498,9 @@ export class Session {
   /** Starts the loop; shows the Title (or autoplays with ?bot=) after the first frame. */
   start(onFirstFrame: () => void): void {
     const first = (now: number): void => {
+      this.raf = requestAnimationFrame(this.tick);
       this.last = now;
-      this.frame(now);
+      this.runFrame(now);
       if (!this.booted) {
         this.booted = true;
         if (this.params.bot) {
@@ -395,16 +510,55 @@ export class Session {
         } else {
           this.ui.show('title');
         }
+        this.syncSentinel();
         onFirstFrame();
+        this.scheduleAudioPrewarm();
       }
-      this.raf = requestAnimationFrame((t) => this.loop(t));
     };
     this.raf = requestAnimationFrame(first);
   }
 
+  /** The next frame is scheduled first, so one exception never stops the game. */
   private loop(now: number): void {
-    this.frame(now);
-    this.raf = requestAnimationFrame((t) => this.loop(t));
+    this.raf = requestAnimationFrame(this.tick);
+    this.runFrame(now);
+  }
+
+  /** The rAF callback, made once (no closure per frame). */
+  private readonly tick = (now: number): void => this.loop(now);
+
+  /**
+   * One frame, contained: an exception is logged and counted, and after CRASH_FRAMES failed frames
+   * in a row (about 0.5 s) the save is flushed and a self-contained crash overlay offers a reload.
+   * A frame that completes and draws resets the count (frames that skip their draw prove nothing).
+   */
+  private runFrame(now: number): void {
+    this.frameDrew = false;
+    try {
+      this.frame(now);
+      if (this.frameDrew) this.failures = 0;
+    } catch (e) {
+      console.error(e);
+      this.failures++;
+      if (this.failures >= CRASH_FRAMES && !this.crashed) {
+        this.crashed = true;
+        try {
+          this.d.store.flush();
+        } catch {
+          // The save stays in memory; nothing more to do.
+        }
+        showCrashOverlay();
+      }
+    }
+  }
+
+  /** Builds the audio noise tables once the Title is up, off the first tap's critical path. */
+  private scheduleAudioPrewarm(): void {
+    const audio = this.d.audio;
+    const run = (): void => audio.prewarm();
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run, { timeout: 2000 });
+    else window.setTimeout(run, 200);
   }
 
   dispose(): void {
@@ -426,8 +580,10 @@ export class Session {
     this.cssH = h;
     this.dpr = dpr;
     this.renderer.resize(w, h, dpr, readSafeArea());
+    this.cadence.invalidate();
     // Where Nubs and his halo dial sit, for DOM overlays that must keep them visible (the Title's
-    // ghost hint goes above them, the Pause card is centered in the space above the dial).
+    // ghost hint goes above them, the Pause card is centered in the space above the dial), and the
+    // world rect (K9): every screen, control, sheet and toast lays out inside it.
     const v = this.renderer.scene.view;
     const nubsY = v.vy + v.nubsFrac * v.vh;
     const haloR = 40 * v.k;
@@ -435,6 +591,10 @@ export class Session {
     root.setProperty('--nubs-y', `${Math.round(nubsY)}px`);
     root.setProperty('--halo-r', `${Math.round(haloR)}px`);
     root.setProperty('--nubs-clear', `${Math.round(h - nubsY + haloR)}px`);
+    root.setProperty('--world-left', `${Math.round(v.vx)}px`);
+    root.setProperty('--world-top', `${Math.round(v.vy)}px`);
+    root.setProperty('--world-width', `${Math.round(v.vw)}px`);
+    root.setProperty('--world-height', `${Math.round(v.vh)}px`);
   }
 
   private frame(now: number): void {
@@ -448,6 +608,10 @@ export class Session {
       // Re-read size and safe-area insets (a notch can change without the canvas resizing).
       this.sizeDirty = false;
       this.resize(true);
+    }
+    if (now - this.todayCheckAt >= TODAY_CHECK_MS) {
+      this.todayCheckAt = now;
+      this.checkToday();
     }
 
     const screen = this.ui.current();
@@ -487,7 +651,7 @@ export class Session {
       this.d.haptics.onEvents(events, s.sun.omega);
       this.fx.onEvents(events, s);
     }
-    this.afterEvents(events);
+    this.checkDailyTry();
 
     // Idle-time world generation (keeps step() from ever validating a chunk inside a tick).
     const tGen = performance.now();
@@ -502,12 +666,13 @@ export class Session {
     this.updateHints(real, screen);
     this.updateDeathFlow();
 
-    // Render.
+    // Render input (cheap; filled every frame so hints and sway stay continuous).
     const r = this.renderIn;
-    r.s = s;
-    r.screen = this.renderScreen(screen);
+    const screenNow = this.ui.current();
+    r.s = this.s;
+    r.screen = this.renderScreen(screenNow);
     this.swayPhase += real;
-    if (screen === 'title' || (screen === 'play' && s.phase === 'hold')) {
+    if (screenNow === 'title' || (screenNow === 'play' && this.s.phase === 'hold')) {
       // The sun turns with the ghost hand's swing (a rightward drag turns it clockwise), so the
       // Title shows what a drag does; without the hand's clock, a plain 0.3 Hz sway.
       const rm = this.reducedMotion();
@@ -521,32 +686,70 @@ export class Session {
       if (Math.abs(this.swayOut) < 0.01) this.swayOut = 0;
       r.sway = this.swayOut;
     }
-    r.dragging = this.input.pointerDown || this.input.keyDown || s.sun.mode === 'dragging';
+    const inputDown = this.input.pointerDown || this.input.keyDown;
+    r.dragging = inputDown || this.s.sun.mode === 'dragging';
     r.guideAlpha = this.currentGuideAlpha();
-    this.fillHintView(real, screen);
+    this.fillHintView(real, screenNow);
     const save = this.d.store.get();
     r.pbMinutes = this.pbMinutes();
     r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
     r.dying = this.deathAt >= 0 ? Math.max(0, this.dyingGame) : -1;
-    r.mapT = this.resultsAt >= 0 && screen === 'results' ? this.time - this.resultsAt : -1;
-    r.sheetTop = screen === 'results' ? this.ui.resultsSheetTop() : null;
+    r.mapT = this.resultsAt >= 0 && screenNow === 'results' ? this.time - this.resultsAt : -1;
+    r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
     r.time = this.time;
-    r.dt = real;
-    r.gdt = gdt;
     r.highContrast = save.settings.highContrast;
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
     r.detail = this.gov.detail;
     r.softShadows = this.gov.softShadows;
-    r.paused = this.paused || screen === 'pause';
+    r.paused = this.paused || screenNow === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
-    const tRender = performance.now();
-    this.renderer.draw(r);
-    this.stats.renderMs = performance.now() - tRender;
+
+    // Render cadence (cadence.ts): time not handed to a drawn frame carries over to the next one.
+    this.drawDt += real;
+    this.drawGdt += gdt;
+    if (r.highContrast !== this.drawnHighContrast || r.equipped !== this.drawnEquipped) this.cadence.invalidate();
+    const ci = this.cadenceIn;
+    ci.now = now;
+    ci.screen = r.screen;
+    ci.inputActive = inputDown;
+    ci.timeScale = this.clock.timeScale;
+    ci.reducedMotion = r.reducedMotion;
+    const draw = this.cadence.shouldDraw(ci);
+    if (draw) {
+      r.dt = Math.min(MAX_DRAW_DT, this.drawDt);
+      r.gdt = Math.min(MAX_DRAW_DT, this.drawGdt);
+      this.drawDt = 0;
+      this.drawGdt = 0;
+      this.drawnHighContrast = r.highContrast;
+      this.drawnEquipped = r.equipped;
+      const tRender = performance.now();
+      this.renderer.draw(r);
+      this.stats.renderMs = performance.now() - tRender;
+      this.cadence.drawn(now);
+      this.frameDrew = true;
+    }
+    if (r.screen === 'title') {
+      // Past the boot frames, keep the play HUD's row built for the held run (change-detected, so
+      // it is built once), so the first play frame after a tap doesn't build it.
+      if (++this.titleFrames > TITLE_HUD_PREBUILD_FRAMES) this.renderer.prebuildHud(r);
+    } else {
+      this.titleFrames = 0;
+    }
     this.d.audio.update(view, real);
+    this.syncSentinel();
     this.stats.frameMs = performance.now() - t0;
-    // The governor weighs the rAF interval against this frame's own work (see perf.ts).
-    this.gov.sample(realMs, this.stats.frameMs, real);
+    if (draw) {
+      // The governor weighs the interval between drawn frames against this frame's own work (see
+      // perf.ts), on the screens that draw at full rate; capped and menu screens never trip it.
+      const sampled = r.screen === 'play' || r.screen === 'dying' || r.screen === 'title';
+      if (sampled && this.lastDrawSampled && this.lastDrawAt >= 0) {
+        const interval = now - this.lastDrawAt;
+        this.gov.sample(interval, this.stats.frameMs, Math.min(0.25, interval / 1000));
+      }
+      this.lastDrawAt = now;
+      this.lastDrawSampled = sampled;
+    }
   }
 
   private renderScreen(id: ScreenId): RenderScreen {
@@ -601,6 +804,15 @@ export class Session {
     return this.rmCache === 1;
   }
 
+  /** The effective reduced motion may have changed (setting, OS preference, another tab's save). */
+  private reducedMotionMaybeChanged(): void {
+    const rm = this.reducedMotion();
+    if (rm === this.runRm) return;
+    // Runs bake it into their config (sun follow and inertia caps): rebuild the held run.
+    this.runRm = rm;
+    this.refreshTitleRun();
+  }
+
   private debugStart(cfg: RunConfig): RunConfig {
     const p = this.params;
     if (p.day !== null) cfg.startDay = p.day;
@@ -610,26 +822,24 @@ export class Session {
     return cfg;
   }
 
-  /** A fresh run for `kind` (endless seeds are random unless ?seed= is given). */
-  private makeRun(kind: RunKind): SimState {
-    return createRun(this.runConfig(kind));
+  /** A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`). */
+  private makeRun(kind: RunKind, date?: string): SimState {
+    return createRun(this.runConfig(kind, date));
   }
 
   /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
-  private runConfig(kind: RunKind): RunConfig {
+  private runConfig(kind: RunKind, date?: string): RunConfig {
     const save = this.d.store.get();
     const p = this.params;
-    const today = localDate();
     const rm = this.reducedMotion();
     let cfg: RunConfig;
     this.runChallenge = null;
     this.dailyDate = null;
     this.dailyScored = false;
     if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
-      const date = kind === 'daily' ? today : (p.date ?? today);
-      cfg = { seed: dailySeed(date), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: date };
-      this.dailyDate = date;
-      this.dailyScored = date === today;
+      const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
+      cfg = { seed: dailySeed(d), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: d };
+      this.dailyDate = d;
       if (kind === 'endless') this.usedUrlSeed = true;
       this.kind = 'daily';
     } else if (kind === 'challenge' && this.challenge) {
@@ -638,7 +848,6 @@ export class Session {
       if (c.k === 'd') {
         cfg = { seed: dailySeed(c.d), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: c.d };
         this.dailyDate = c.d;
-        this.dailyScored = c.d === today;
       } else {
         cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: 3, tutorial: false, reducedMotion: rm };
       }
@@ -653,8 +862,12 @@ export class Session {
       }
       const profile = p.profile ?? profileFor(save.stats.runs);
       cfg = { seed, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: rm };
+      // K2: endless runs ramp the drain run by run (Daily, challenges, ?profile= and bots keep the
+      // profile's drain).
+      if (p.profile === null && !p.bot) setCfgDrain(cfg, endlessDrainFor(save.stats.runs));
       this.kind = 'endless';
     }
+    this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
     if (p.profile !== null && cfg.mode !== 'endless') {
       // Debug override applies to every mode.
       cfg.profile = p.profile;
@@ -663,18 +876,45 @@ export class Session {
     return this.debugStart(cfg);
   }
 
-  /** The Title's live scene: the next endless run, held at dawn. */
+  /** A Daily of `date` would count as a try now: it is today's and tries are left. */
+  private dailyEligible(date: string): boolean {
+    return !this.debugRuns && date === localDate() && dailyStatus(this.d.store.get(), date).tries < DAILY_TRIES;
+  }
+
+  /**
+   * The Title's live scene, held at dawn: the challenge run while a challenge link is open (so a
+   * press on the canvas or a tray drag starts it), otherwise the next endless run.
+   */
   private createTitleRun(): SimState {
     this.finishPrebuild();
+    if (this.challenge) return this.makeRun('challenge');
     if (this.nextRun && this.nextRun.cfg.mode === 'endless' && this.nextRun.phase === 'hold') {
       const r = this.nextRun;
       this.nextRun = null;
       this.kind = 'endless';
       this.runChallenge = null;
       this.dailyDate = null;
+      this.dailyScored = false;
       return r;
     }
     return this.makeRun('endless');
+  }
+
+  /**
+   * Something the held runs depend on changed (save reset or restored, another tab's save, reduced
+   * motion, the challenge): drop the prebuilt next run and, between runs, rebuild the Title's.
+   */
+  private refreshTitleRun(): void {
+    this.nextRun = null;
+    this.nextBuild = null;
+    if (this.runActive) return;
+    this.lifetimeRuns = this.d.store.get().stats.runs;
+    this.runRm = this.reducedMotion();
+    this.s = this.createTitleRun();
+    this.renderIn.s = this.s;
+    this.resetSnaps();
+    this.resetRender();
+    this.cadence.invalidate();
   }
 
   private resetSnaps(): void {
@@ -691,6 +931,9 @@ export class Session {
     resetBanners(sc.banners);
     resetNubsAnim(sc.nubs);
     resetFootprints(sc.footprints, this.s.nubs.y);
+    // Shake and zoom pulses belong to the run that made them.
+    Object.assign(sc.cam, createCameraFx());
+    sc.cam.reducedMotion = this.reducedMotion();
     sc.sun.guilty = 0;
     sc.relief = 0;
     sc.mapReady = false;
@@ -709,14 +952,19 @@ export class Session {
     this.resetRender();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
-    if (this.params.bot) this.bot = createBot(this.params.bot);
+    const botKind = this.params.bot ?? this.testBot;
+    this.bot = botKind ? createBot(botKind) : null;
     this.d.audio.resetRun();
     this.melody = [];
     this.hints.reset();
     this.hintAlpha = 0;
-    this.lessonPending = run.cfg.profile <= 1 && !this.d.store.get().flags.tutorialDone;
+    const store = this.d.store;
+    const save = store.get();
+    this.lessonPending = run.cfg.profile <= 1 && !save.flags.tutorialDone;
     this.dailyTry = null;
     this.dailyCounted = false;
+    // Eligibility is decided when the run begins (the Title may have held it since yesterday).
+    this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
     this.deathAt = -1;
     this.dyingGame = -1;
     this.resultsAt = -1;
@@ -725,16 +973,16 @@ export class Session {
     this.resultsShown = false;
     this.paused = false;
     this.runActive = true;
-    const store = this.d.store;
-    this.lifetimeRuns = store.get().stats.runs;
+    this.runAssisted = (this.params.guide ?? save.settings.guide) === 'always';
+    this.runPb = this.livePb();
+    this.lifetimeRuns = save.stats.runs;
     if (!this.debugRuns) {
-      const begun = beginRun(store.get());
-      if (begun.save !== store.get()) {
+      const begun = beginRun(save);
+      if (begun.save !== save) {
         store.set(begun.save);
         this.ui.setSave(begun.save);
       }
     }
-    this.trap();
     this.setGhost('off');
   }
 
@@ -746,25 +994,81 @@ export class Session {
     this.ui.setGhostThumb(mode);
   }
 
-  /** V1_PLAN §8.2: Back during play pauses instead of leaving. */
-  private trap(): void {
-    if (this.trapArmed) return;
+  // -------------------------------------------------------------------------------------------
+  // History sentinel (V1_PLAN §8.2, android-back-exits-from-menus)
+  // -------------------------------------------------------------------------------------------
+
+  /** Back has something to do in the game: any screen but the Title (and boot), or an open modal. */
+  private wantsSentinel(): boolean {
+    const sc = this.ui.current();
+    return (sc !== 'boot' && sc !== 'title') || uiIsModalOpen(this.ui);
+  }
+
+  /**
+   * Keeps exactly one history entry of ours on top while wantsSentinel(): pushed when it turns
+   * true, taken back (history.back(), its popstate ignored) when in-app navigation turns it false.
+   * Checked every frame and right after UI callbacks.
+   */
+  private syncSentinel(): void {
+    if (this.disarming) {
+      // Wait for our own pop before pushing again (the history traversal is asynchronous).
+      if (performance.now() < this.disarmUntil) return;
+      this.disarming = false;
+    }
+    const want = this.wantsSentinel();
+    if (want === this.sentinel) return;
+    if (want) {
+      try {
+        history.pushState({ shady: 1 }, '');
+        this.sentinel = true;
+        this.sentinelHref = location.href;
+      } catch {
+        // History may be unavailable (sandboxed iframes): play on without the sentinel.
+      }
+      return;
+    }
+    this.sentinel = false;
     try {
-      history.pushState({ play: 1 }, '');
-      this.trapArmed = true;
+      this.disarming = true;
+      this.disarmUntil = performance.now() + DISARM_WAIT_MS;
+      history.back();
     } catch {
-      // History may be unavailable (sandboxed iframes): play on without the trap.
+      this.disarming = false;
     }
   }
 
-  private untrap(): void {
-    if (!this.trapArmed) return;
-    this.trapArmed = false;
-    try {
-      this.ignorePopUntil = this.time + 0.6;
-      history.back();
-    } catch {
-      // ignore
+  /**
+   * Back (browser, Android, a swipe): our sentinel was consumed. A modal closes first; play pauses;
+   * pause stays paused; any other screen takes its own back action (menus → their parent, Results →
+   * Home, dying → skip, Settings → where it was opened from). The next check re-arms as needed; on
+   * the Title with nothing open there is no sentinel, so Back leaves the game.
+   * (A native shell routes its back button here too: see src/game/README.md.)
+   */
+  private onPopState(): void {
+    if (this.disarming) {
+      this.disarming = false;
+      return;
+    }
+    // Not our entry (a fragment navigation, or nothing armed): leave it to the browser.
+    if (!this.sentinel || location.href !== this.sentinelHref) return;
+    this.sentinel = false;
+    this.handleBack();
+    this.syncSentinel();
+  }
+
+  /** The app's Back action (also what a native back button should call). */
+  handleBack(): void {
+    const ui = this.ui;
+    if (uiIsModalOpen(ui)) {
+      ui.back();
+      return;
+    }
+    const sc = ui.current();
+    if (sc === 'play') {
+      ui.show('pause');
+      this.pause();
+    } else if (sc !== 'pause' && sc !== 'boot' && sc !== 'title') {
+      ui.back();
     }
   }
 
@@ -775,24 +1079,32 @@ export class Session {
   }
 
   private onPress(): void {
-    this.d.audio.ensure();
+    // Audio unlocks from the engine's own gesture listeners (on a first pointerdown it builds the
+    // context in a task right after the event, so the press itself stays light).
     if (this.ui.current() === 'title') {
-      // Any press on the canvas starts the Title's run with catch semantics (θ stays θ0).
+      // Any press on the canvas starts the Title's run with catch semantics (θ stays θ0); with a
+      // challenge link open, that is the challenge run.
       this.ui.show('play');
       this.beginRun(this.s, true);
+      this.syncSentinel();
     }
   }
 
-  private startRun(kind: RunKind): void {
+  private startRun(kind: RunKind, date?: string): void {
     this.d.audio.ensure();
+    const held = !this.runActive && this.s.phase === 'hold';
     if (kind === 'endless') {
-      if (this.s.phase !== 'hold' || this.s.cfg.mode !== 'endless') this.s = this.makeRun('endless');
+      if (!held || this.s.cfg.mode !== 'endless' || this.kind !== 'endless') this.s = this.makeRun('endless');
       this.beginRun(this.s);
       this.input.tap();
       return;
     }
-    // Daily and challenge runs wait for the first press (clock held at dawn).
-    const run = this.makeRun(kind);
+    // Daily and challenge runs wait for the first press (clock held at dawn). The Title already
+    // holds the challenge run while a challenge link is open.
+    const run =
+      kind === 'challenge' && held && this.kind === 'challenge' && this.challenge !== null && this.runChallenge === this.challenge
+        ? this.s
+        : this.makeRun(kind, date);
     this.beginRun(run);
     this.setGhost('both');
   }
@@ -808,7 +1120,9 @@ export class Session {
       this.runChallenge = null;
       this.dailyDate = null;
     } else {
-      run = this.makeRun(this.kind);
+      // A Daily replays its own date (a past date stays a practice run of that date).
+      const date = this.kind === 'daily' && this.dailyDate !== null ? this.dailyDate : undefined;
+      run = this.makeRun(this.kind, date);
     }
     this.beginRun(run);
     this.input.tap();
@@ -819,11 +1133,17 @@ export class Session {
   }
 
   private home(): void {
-    this.untrap();
     this.d.audio.stopMelody();
     this.runActive = false;
     this.paused = false;
     this.input.releaseAll();
+    if (this.queuedChallenge) {
+      const c = this.queuedChallenge;
+      this.queuedChallenge = null;
+      this.challenge = c;
+      this.ui.setChallenge(this.challengeBanner(c));
+    }
+    this.lifetimeRuns = this.d.store.get().stats.runs;
     this.s = this.createTitleRun();
     this.renderIn.s = this.s;
     this.resetSnaps();
@@ -840,11 +1160,62 @@ export class Session {
     this.setGhost('off');
   }
 
+  private pauseIfPlaying(): void {
+    if (this.ui.current() !== 'play') return;
+    this.ui.show('pause');
+    this.pause();
+    this.syncSentinel();
+  }
+
   private resume(): void {
     this.d.audio.ensure();
     this.paused = false;
     this.input.releaseAll();
     this.clock.acc = 0;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Challenges, the date, other tabs
+  // -------------------------------------------------------------------------------------------
+
+  private challengeBanner(c: Challenge): ChallengeBanner {
+    if (c.k !== 'd') return { minutes: c.m };
+    const n = dailyNumber(c.d);
+    return { minutes: c.m, note: c.d === localDate() ? `Daily #${n}` : `Daily #${n} · practice run` };
+  }
+
+  /** A challenge link opened in this document (same-document navigation to #c=…). */
+  private onHashChange(): void {
+    const c = playableChallenge(challengeFromHash(location.hash));
+    if (!c || sameChallenge(c, this.challenge)) return;
+    if (this.runActive) {
+      // Never swap a run mid-play: the banner appears when the player is back on the Title.
+      this.queuedChallenge = c;
+      return;
+    }
+    this.challenge = c;
+    this.queuedChallenge = null;
+    this.ui.setChallenge(this.challengeBanner(c));
+    this.refreshTitleRun();
+  }
+
+  /** Midnight: tell the UI when the local date changes (Daily number, tries, history). */
+  private checkToday(): void {
+    const d = localDate();
+    if (d === this.today) return;
+    this.today = d;
+    this.ui.setToday(d);
+  }
+
+  /** Another tab or instance wrote the save and the store adopted it. */
+  private adoptSave(next: SaveV1): void {
+    this.ui.setSave(next);
+    this.applySettings(next.settings);
+    if (!this.runActive) {
+      this.lifetimeRuns = next.stats.runs;
+      this.refreshTitleRun();
+    }
+    this.reducedMotionMaybeChanged();
   }
 
   // -------------------------------------------------------------------------------------------
@@ -858,10 +1229,12 @@ export class Session {
         break;
       case 'hourEnd':
         if (this.dailyTry !== null && this.dailyDate) {
-          const next = dailyProgress(this.d.store.get(), this.dailyDate, this.s.minutes, this.s.stats.snow);
-          if (next !== this.d.store.get()) {
-            this.d.store.set(next);
-            this.d.store.flush();
+          const store = this.d.store;
+          const strip = { hourGlyphs: this.s.hourGlyphs, assisted: this.runAssisted };
+          const next = dailyProgressStrip(store.get(), this.dailyDate, this.s.minutes, this.s.stats.snow, strip);
+          if (next !== store.get()) {
+            store.set(next);
+            store.flush();
           }
         }
         break;
@@ -871,11 +1244,6 @@ export class Session {
       default:
         break;
     }
-  }
-
-  private afterEvents(events: readonly SimEvent[]): void {
-    void events;
-    this.checkDailyTry();
   }
 
   /** Daily: a try is counted (and saved at once) when the run passes 6:30 AM. */
@@ -904,8 +1272,8 @@ export class Session {
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
     result.melody = this.melody.slice();
-    const setting = this.params.guide ?? save.settings.guide;
-    result.assisted = setting === 'always';
+    // Latched: Guide "Always" at any point of the run marks it assisted.
+    result.assisted = this.runAssisted;
     this.result = result;
     if (this.debugRuns) {
       // Debug runs leave the save alone: no Snow, bests, missions, achievements or Daily tries.
@@ -923,7 +1291,6 @@ export class Session {
         });
       }
     }
-    this.untrap();
     this.setGhost('off');
     this.input.releaseAll();
     if (this.ui.current() === 'play') this.ui.show('dying');
@@ -940,10 +1307,13 @@ export class Session {
   private showResults(): void {
     if (this.resultsShown || !this.result || !this.outcome) return;
     this.resultsShown = true;
+    const daily = this.result.mode === 'daily';
     const view = {
       result: this.result,
       outcome: this.outcome,
-      dailyTry: this.result.mode === 'daily' ? this.dailyTry : undefined,
+      dailyTry: daily ? this.dailyTry : undefined,
+      // K5: every Daily (k:'d' challenges too) says which date it was and whether it could count.
+      ...(daily && this.dailyDate !== null ? { dailyDate: this.dailyDate, dailyScored: this.dailyScored } : {}),
       ...(this.runChallenge ? { challengeTarget: this.runChallenge.m } : {}),
       ...(this.debugRuns ? { debug: true } : {}),
     };
@@ -963,7 +1333,8 @@ export class Session {
       });
     }
     this.startPrebuild();
-    if (this.bot) {
+    if (this.params.bot) {
+      // ?bot= autoplay: on to the next run.
       window.setTimeout(() => {
         if (this.ui.current() === 'results') {
           this.ui.show('play');
@@ -1017,8 +1388,9 @@ export class Session {
 
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
     if (!this.result || this.debugRuns) return 'failed';
-    const payload = buildShare(this.result, location.origin + location.pathname, this.dailyTry);
-    return shareText({ text: payload.text });
+    // No web address (a file: build, a native shell without VITE_SHARE_URL): no link line.
+    const text = buildShareText(this.result, shareBaseUrl(), this.dailyTry);
+    return shareText({ text });
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1033,7 +1405,12 @@ export class Session {
     return guideAlpha(setting, s.cfg.profile, this.lifetimeRuns, s.day, frac);
   }
 
+  /** The HUD's best flag: frozen for the run in progress, live on the Title and menus. */
   private pbMinutes(): number {
+    return this.runActive ? this.runPb : this.livePb();
+  }
+
+  private livePb(): number {
     const save = this.d.store.get();
     if (this.dailyDate) {
       const st = dailyStatus(save, this.dailyDate);
@@ -1122,6 +1499,9 @@ export class Session {
     });
     this.applySettings(st);
     this.ui.setSave(this.d.store.get());
+    // Switching to Guide "Always" mid-run marks the run assisted, even if it is switched back.
+    if (this.runActive && (this.params.guide ?? st.guide) === 'always') this.runAssisted = true;
+    this.reducedMotionMaybeChanged();
   }
 
   private applySettings(st: Settings): void {
@@ -1166,6 +1546,11 @@ export class Session {
   forceDeath(): void {
     const s = this.s;
     if (s.phase === 'dead') return;
+    if (this.ui.current() === 'pause') {
+      // A paused run (blur, Back, the pause button) resumes so the melt can happen.
+      this.ui.show('play');
+      this.resume();
+    }
     if (s.phase === 'hold') {
       if (this.ui.current() === 'title') this.ui.show('play');
       this.beginRun(s);
@@ -1176,6 +1561,131 @@ export class Session {
 
   get active(): boolean {
     return this.runActive;
+  }
+
+  /** Test hook: the config of the current run (the Title's held run between runs). */
+  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
+    const s = this.s;
+    const c = s.cfg;
+    return {
+      mode: c.mode,
+      profile: c.profile,
+      tutorial: c.tutorial,
+      reducedMotion: c.reducedMotion,
+      seed: c.seed,
+      dailyDate: c.dailyDate ?? null,
+      drain: cfgDrain(c) ?? s.params.drain,
+    };
+  }
+
+  /** Test hook: a core bot plays this run and the next ones (null: hands back to the input). */
+  setTestBot(kind: BotKind | null): void {
+    this.testBot = kind;
+    this.bot = kind ? createBot(kind) : this.params.bot ? createBot(this.params.bot) : null;
+  }
+
+  /**
+   * Test hook (settled Results): draws the frame from the cached backdrop (puddle ring only) and
+   * as a full redraw at the same instant, and counts the device pixels that differ.
+   */
+  resultsAB(): { diff: number; ringPath: boolean } | null {
+    if (this.ui.current() !== 'results') return null;
+    const r = this.renderIn;
+    const rr = this.renderer;
+    const canvas = this.d.canvas;
+    const g = canvas.getContext('2d');
+    if (!g) return null;
+    const keep = { dt: r.dt, gdt: r.gdt, cache: rr.resultsCache };
+    r.dt = 0;
+    r.gdt = 0;
+    try {
+      rr.resultsCache = true;
+      rr.draw(r);
+      const rings = rr.ringDraws;
+      rr.draw(r);
+      const ringPath = rr.ringDraws > rings;
+      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
+      rr.resultsCache = false;
+      rr.draw(r);
+      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
+      let diff = 0;
+      for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) diff++;
+      return { diff, ringPath };
+    } finally {
+      r.dt = keep.dt;
+      r.gdt = keep.gdt;
+      rr.resultsCache = keep.cache;
+      this.cadence.invalidate();
+    }
+  }
+
+  /** Test hook: the best flag the HUD shows (the run's snapshot while one is active). */
+  hudPb(): number {
+    return this.renderIn.pbMinutes;
+  }
+
+  /**
+   * Test hook (K10): on the Results, draws the frame at `mapT` with and without the Melt Map
+   * overlay (no time passes between the two) and counts the device pixels that differ above and
+   * below the sheet's top edge. The next frame draws as usual.
+   */
+  mapProbe(mapT: number): MapProbe | null {
+    const r = this.renderIn;
+    const sheetTop = this.ui.current() === 'results' ? this.ui.resultsSheetTop() : null;
+    if (sheetTop === null || this.resultsAt < 0) return null;
+    const rr = this.renderer;
+    const canvas = this.d.canvas;
+    const g = canvas.getContext('2d');
+    if (!g) return null;
+    const keep = { mapT: r.mapT, sheetTop: r.sheetTop, dt: r.dt, gdt: r.gdt, cache: rr.resultsCache, overlay: rr.mapOverlay };
+    r.mapT = mapT;
+    r.sheetTop = sheetTop;
+    r.dt = 0;
+    r.gdt = 0;
+    rr.resultsCache = false;
+    try {
+      rr.mapOverlay = true;
+      // A first draw at this mapT settles the zoom-dependent caches (the ground's whole-pixel tiles
+      // need the scale to hold still for a frame), so the two measured frames take the same paths.
+      rr.draw(r);
+      rr.draw(r);
+      const png = canvas.toDataURL('image/png');
+      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
+      rr.mapOverlay = false;
+      rr.draw(r);
+      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
+      const dpr = rr.scene.view.dpr;
+      const cutRow = Math.floor(sheetTop * dpr);
+      const w = canvas.width;
+      let above = 0;
+      let below = 0;
+      /** Device-px box of the differences below the cut (x0, y0, x1, y1), for diagnostics. */
+      const box = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
+        const px = i >> 2;
+        const y = Math.floor(px / w);
+        if (y < cutRow) {
+          above++;
+          continue;
+        }
+        below++;
+        const x = px - y * w;
+        box[0] = Math.min(box[0] as number, x);
+        box[1] = Math.min(box[1] as number, y);
+        box[2] = Math.max(box[2] as number, x);
+        box[3] = Math.max(box[3] as number, y);
+      }
+      return { sheetTop, cutRow, dpr, above, below, belowBox: below > 0 ? box : null, png };
+    } finally {
+      r.mapT = keep.mapT;
+      r.sheetTop = keep.sheetTop;
+      r.dt = keep.dt;
+      r.gdt = keep.gdt;
+      rr.resultsCache = keep.cache;
+      rr.mapOverlay = keep.overlay;
+      this.cadence.invalidate();
+    }
   }
 
   /** Test hook: the ghost hint's state. */
