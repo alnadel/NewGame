@@ -64,6 +64,7 @@ declare global {
       audioState(): string;
       paused(): boolean;
       presses(): number;
+      demo(name: string): void;
     };
   }
 }

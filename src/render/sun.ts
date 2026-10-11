@@ -15,6 +15,9 @@ export type SunMood = 'smug' | 'worried' | 'horrified' | 'relief' | 'guilty';
 export interface SunGlyph {
   x: number;
   y: number;
+  /** The moon rides the opposite side of the dial (θ + 180°). */
+  mx: number;
+  my: number;
   /** Eased screen position (smooths jumps around corners). */
   init: boolean;
   /** Night 0..1 (moon). */
@@ -24,7 +27,7 @@ export interface SunGlyph {
 }
 
 export function createSunGlyph(): SunGlyph {
-  return { x: 0, y: 0, init: false, night: 0, squash: 0, guilty: 0 };
+  return { x: 0, y: 0, mx: 0, my: 0, init: false, night: 0, squash: 0, guilty: 0 };
 }
 
 const out = new Float64Array(2);
@@ -68,16 +71,15 @@ export function placeSun(s: SunGlyph, v: View, nx: number, ny: number, dx: numbe
   const x1 = v.vx + v.vw - inset - v.safe.right;
   const y0 = Math.max(v.vy + inset + v.safe.top, hudBand);
   const y1 = v.vy + v.vh - inset - v.safe.bottom;
-  rayRoundRect(nx, Math.min(Math.max(ny, y0 + 1), y1 - 1), dx, dy, x0, y0, x1, y1, 40, out);
-  if (!s.init || dt <= 0) {
-    s.x = out[0] as number;
-    s.y = out[1] as number;
-    s.init = true;
-    return;
-  }
-  const k = Math.min(1, dt * 30);
+  const py = Math.min(Math.max(ny, y0 + 1), y1 - 1);
+  rayRoundRect(nx, py, dx, dy, x0, y0, x1, y1, 40, out);
+  const k = !s.init || dt <= 0 ? 1 : Math.min(1, dt * 30);
   s.x += ((out[0] as number) - s.x) * k;
   s.y += ((out[1] as number) - s.y) * k;
+  rayRoundRect(nx, py, -dx, -dy, x0, y0, x1, y1, 40, out);
+  s.mx += ((out[0] as number) - s.mx) * k;
+  s.my += ((out[1] as number) - s.my) * k;
+  s.init = true;
 }
 
 /** Draws the sun (or moon) at the glyph position. `scale` multiplies the 20 px core radius. */
@@ -87,7 +89,7 @@ export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood,
   const r = 20 * scale;
   const gx = s.x + guiltDx * 8 * s.guilty;
   const gy = s.y;
-  if (night > 0.01) drawMoon(g, s.x, s.y, r * 0.8, alpha * night, time);
+  if (night > 0.01) drawMoon(g, s.mx, s.my, r * 0.8, alpha * night, time);
   const a = alpha * (1 - 0.8 * night);
   if (a <= 0.01) return;
   // Bloom.

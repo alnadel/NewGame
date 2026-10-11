@@ -19,21 +19,25 @@ import type { Insets } from '../platform/safeArea.ts';
 import { drawBanners, drawVignettes, createBanners, updateBanners, type Banners } from './banners.ts';
 import { createLight, drawCaster, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
-import { css, cssa } from './color.ts';
-import { createFootprints, drawFootprints, drawGround, drawTrail, stepFootprints, type Footprints } from './ground.ts';
+import { cssa } from './color.ts';
+import { createFootprints, drawBars, drawFootprints, drawGround, drawTrail, stepFootprints, type Footprints } from './ground.ts';
 import { createHalo, drawHalo, updateHalo, type HaloState } from './halo.ts';
 import { createHud, drawHud, hudScale, updateHud, type HudState } from './hud.ts';
 import { applyPull, createMapFrame, drawMeltMap, frameDeath, mapTarget, type MapFrame } from './meltMap.ts';
 import {
   createNubsAnim,
+  createNubsSprite,
   createPose,
   drawFootprintDisc,
-  drawNubs,
+  drawNubsSprite,
   drawOwnShadow,
   looksFor,
+  nubsBox,
+  renderNubsSprite,
   updateNubsAnim,
   type NubsAnim,
   type NubsPose,
+  type NubsSprite,
 } from './nubs.ts';
 import { createPalette, updatePalette, type Palette } from './palette.ts';
 import {
@@ -105,6 +109,7 @@ export interface RenderScene {
   footprints: Footprints;
   nubs: NubsAnim;
   pose: NubsPose;
+  nubsSprite: NubsSprite;
   halo: HaloState;
   sun: SunGlyph;
   sunMood: SunMood;
@@ -136,6 +141,7 @@ export function createScene(): RenderScene {
     footprints: createFootprints(),
     nubs: createNubsAnim(),
     pose: createPose(),
+    nubsSprite: createNubsSprite(),
     halo: createHalo(),
     sun: createSunGlyph(),
     sunMood: 'smug',
@@ -157,6 +163,7 @@ export function resizeScene(sc: RenderScene, cssW: number, cssH: number, dpr: nu
 }
 
 const casterBuf: Caster[] = [];
+const box = new Float64Array(4);
 
 export class Renderer {
   readonly scene: RenderScene;
@@ -271,8 +278,7 @@ export class Renderer {
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    g.fillStyle = css(sc.pal.bar);
-    g.fillRect(0, 0, v.cssW, v.cssH);
+    drawBars(g, v, sc.pal, inp.detail);
     g.save();
     g.beginPath();
     g.rect(v.vx, v.vy, v.vw, v.vh);
@@ -319,18 +325,35 @@ export class Renderer {
 
     // Depth-sorted objects, far (north) first, with Nubs inserted at his y.
     const looks = looksFor(inp.equipped);
+    renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr);
+    nubsBox(pose.x, pose.y, v.S, box);
     const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
     let nubsDrawn = false;
+    let occluded = false;
     for (let i = n - 1; i >= 0; i--) {
       const c = casterBuf[i] as Caster;
       if (c.maxX < v.x0 - 40 || c.minX > v.x1 + 40) continue;
       if (!nubsDrawn && c.y < snap.nubsY) {
-        drawNubs(g, pose, sc.nubs, looks);
+        drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
         nubsDrawn = true;
       }
       drawCaster(g, v, L, c);
+      if (nubsDrawn && !occluded) {
+        // Screen bounds of the caster (its top rises 0.25·maxZ; canopies spread wider).
+        const sx0 = v.ox + c.minX * v.S;
+        const sx1 = v.ox + c.maxX * v.S;
+        const syTop = v.oy - (c.maxY + 0.25 * c.maxZ) * v.S;
+        const syBot = v.oy - c.minY * v.S;
+        occluded = sx1 > (box[0] as number) && sx0 < (box[2] as number) && syBot > (box[1] as number) && syTop < (box[3] as number);
+      }
     }
-    if (!nubsDrawn) drawNubs(g, pose, sc.nubs, looks);
+    if (!nubsDrawn) drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
+    else if (occluded) {
+      // X-ray: Nubs stays readable through whatever stands in front of him.
+      g.globalAlpha = 0.62;
+      drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
+      g.globalAlpha = 1;
+    }
 
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);

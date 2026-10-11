@@ -443,11 +443,42 @@ function drawHouse(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): v
   rim(g, v, L, p.pts, p.n, p.h);
 }
 
-function drawStone(g: CanvasRenderingContext2D, v: View, L: Light, p: PrismPart, top: Rgb, side: Rgb, taper: number): void {
-  scaled(p.pts, p.n, taper, tmp);
-  if (L.sides) sideFaces(g, v, L, p.pts, tmp, p.n, 0, p.h, side, top);
-  fillTop(g, v, tmp, p.n, p.h, topColor(L, top));
-  rim(g, v, L, tmp, p.n, p.h);
+/** A menhir: the square footprint with its corners cut, tapering to a rounded crown. */
+function drawStone(g: CanvasRenderingContext2D, v: View, L: Light, p: PrismPart, top: Rgb, side: Rgb, taper: number, id: number): void {
+  // Octagon from the rotated square: each corner cut at 28 % of the edge.
+  const n = 8;
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const ax = p.pts[2 * i] as number;
+    const ay = p.pts[2 * i + 1] as number;
+    const bx = p.pts[2 * j] as number;
+    const by = p.pts[2 * j + 1] as number;
+    tmp[4 * i] = ax + (bx - ax) * 0.28;
+    tmp[4 * i + 1] = ay + (by - ay) * 0.28;
+    tmp[4 * i + 2] = ax + (bx - ax) * 0.72;
+    tmp[4 * i + 3] = ay + (by - ay) * 0.72;
+  }
+  scaled(tmp, n, taper, tmp2);
+  // Lean the crown a touch (seeded) so a row of stones doesn't look stamped.
+  const lean = ((id * 37) % 7) - 3;
+  for (let i = 0; i < n; i++) tmp2[2 * i] = (tmp2[2 * i] as number) + lean * 0.6;
+  if (L.sides) sideFaces(g, v, L, tmp, tmp2, n, 0, p.h, side, top);
+  fillTop(g, v, tmp2, n, p.h, topColor(L, top));
+  scaled(tmp2, n, 0.62, tmp);
+  fillTop(g, v, tmp, n, p.h + 4, lighten(topColor(L, top), 0.07));
+  rim(g, v, L, tmp2, n, p.h);
+  // Lichen speckles on the front.
+  center(tmp2, n, ctr);
+  g.fillStyle = cssa(tint(L.pal, 0x9fb48a), 0.55);
+  g.beginPath();
+  for (let k = 0; k < 3; k++) {
+    const sx = px(v, (ctr[0] as number) + ((id >> k) % 5) - 2);
+    const sy = py(v, (ctr[1] as number) - 8, p.h * (0.25 + 0.2 * k));
+    const r = (1.6 + (k % 2)) * v.S;
+    g.moveTo(sx + r, sy);
+    g.arc(sx, sy, r, 0, TAU);
+  }
+  g.fill();
 }
 
 function drawRock(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): void {
@@ -781,10 +812,11 @@ function drawTree(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster, oak
   const R = canopy.r * v.S;
   // Fade the canopy when it would hide Nubs.
   const nsx = px(v, L.nubsX);
-  const nsy = py(v, L.nubsY, 12);
+  const nsy = py(v, L.nubsY, 48);
   const d = Math.hypot(nsx - cx, nsy - cy) / v.S;
-  const near = canopy.cy < L.nubsY + 40 && d < canopy.r + 20;
-  const alpha = near ? 0.7 + 0.3 * Math.min(1, Math.max(0, (d - canopy.r) / 20)) : 1;
+  // Canopies in front of (south of) Nubs that overlap his sprite turn see-through.
+  const near = canopy.cy < L.nubsY + 30 && d < canopy.r + 26;
+  const alpha = near ? 0.62 + 0.38 * Math.min(1, Math.max(0, (d - canopy.r + 6) / 32)) : 1;
   g.globalAlpha = alpha;
   const l = lumps(c.id);
   const base = tint(L.pal, oak ? MAT.oak : MAT.canopy);
@@ -831,7 +863,7 @@ export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Ca
       drawHouse(g, v, L, c);
       return;
     case 'stone':
-      drawStone(g, v, L, c.parts[0] as PrismPart, MAT.stone, MAT.stoneSide, 0.78);
+      drawStone(g, v, L, c.parts[0] as PrismPart, MAT.stone, MAT.stoneSide, 0.74, c.id);
       return;
     case 'rock':
       drawRock(g, v, L, c);

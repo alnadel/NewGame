@@ -37,8 +37,8 @@ export function frameDeath(m: MapFrame, s: SimState): void {
   const d = s.death;
   const dy = d ? d.y : s.nubs.y;
   const dx = d ? d.x : s.nubs.x;
-  let y0 = dy - 500;
-  let y1 = dy + 100;
+  let y0 = dy - 420;
+  let y1 = dy + 90;
   let x0 = dx - 70;
   let x1 = dx + 70;
   const n = historyLength(s);
@@ -59,7 +59,7 @@ export function frameDeath(m: MapFrame, s: SimState): void {
     x0 = Math.min(x0, c.minX - 20);
     x1 = Math.max(x1, c.maxX + 20);
   }
-  if (y1 - y0 > 900) y0 = y1 - 900;
+  if (y1 - y0 > 760) y0 = y1 - 760;
   m.x0 = Math.max(-40, x0);
   m.x1 = Math.min(400, x1);
   m.y0 = y0;
@@ -80,7 +80,7 @@ export function frameDeath(m: MapFrame, s: SimState): void {
 export function mapTarget(v: View, m: MapFrame, top: number, bottom: number, out: Float64Array): void {
   const H = Math.max(80, bottom - top - 24);
   const W = v.vw - 32;
-  const S = Math.min(v.k * 0.7, H / (m.y1 - m.y0), W / (m.x1 - m.x0));
+  const S = Math.min(v.k * 0.75, H / (m.y1 - m.y0), W / (m.x1 - m.x0));
   out[0] = S;
   out[1] = (m.x0 + m.x1) / 2;
   out[2] = (m.y0 + m.y1) / 2;

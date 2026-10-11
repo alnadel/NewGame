@@ -234,43 +234,44 @@ function townTile(scale: number): Canvas2D {
   const g = ctx2d(c);
   g.scale(scale, scale);
   const rnd = lcg(11);
-  const rowH = 16;
+  // Irregular cobbles in loose rows: a light face and a soft darker lower lip, no hard joints.
+  const rowH = 12.8;
   const rows = TILE_U / rowH;
   for (let r = 0; r < rows; r++) {
     const y = r * rowH;
-    const offset = r % 2 === 0 ? 0 : 11;
-    let x = -offset;
+    let x = -rnd() * 10;
     while (x < TILE_U) {
-      const w = 18 + Math.floor(rnd() * 3) * 2;
-      const bx = x + 1.2;
-      const by = y + 1.2;
-      const bw = w - 2.4;
-      const bh = rowH - 2.4;
-      const shade = rnd();
-      // Joints show through as darker gaps; stones get a light face and a soft lower lip.
-      g.fillStyle = shade < 0.2 ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.11)';
-      roundRect(g, bx, by, bw, bh, 4);
-      g.fill();
-      g.fillStyle = 'rgba(40,20,10,0.05)';
-      roundRect(g, bx + 1, by + bh * 0.62, bw - 2, bh * 0.38, 3);
-      g.fill();
-      if (x + w > TILE_U) {
-        roundRect(g, bx - TILE_U, by, bw, bh, 4);
-        g.fillStyle = shade < 0.2 ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.11)';
+      const w = 9 + rnd() * 9;
+      const jy = (rnd() - 0.5) * 1.6;
+      const bx = x + 1.4;
+      const by = y + 1.4 + jy;
+      const bw = w - 2.8;
+      const bh = rowH - 2.8;
+      const light = 0.05 + rnd() * 0.06;
+      for (const dx of [0, TILE_U]) {
+        if (dx > 0 && x + w <= TILE_U) continue;
+        g.fillStyle = `rgba(255,255,255,${light.toFixed(3)})`;
+        roundRect(g, bx - dx, by, bw, bh, 4.2);
+        g.fill();
+        g.fillStyle = 'rgba(60,30,10,0.045)';
+        roundRect(g, bx - dx + 1, by + bh * 0.6, bw - 2, bh * 0.4, 3);
         g.fill();
       }
       x += w;
     }
   }
-  // Joint lines (6 % dark) between rows.
-  g.strokeStyle = 'rgba(40,20,10,0.06)';
-  g.lineWidth = 1;
-  g.beginPath();
-  for (let r = 0; r <= rows; r++) {
-    g.moveTo(0, r * rowH + 0.5);
-    g.lineTo(TILE_U, r * rowH + 0.5);
+  // A few worn flagstones and scattered pebbles break up the rows.
+  for (let i = 0; i < 6; i++) {
+    const x = rnd() * TILE_U;
+    const y = rnd() * TILE_U;
+    const w = 20 + rnd() * 14;
+    const h = 14 + rnd() * 8;
+    wrapped(x, y, 40, (px, py) => {
+      g.fillStyle = 'rgba(255,255,255,0.06)';
+      roundRect(g, px, py, w, h, 3);
+      g.fill();
+    });
   }
-  g.stroke();
   return c;
 }
 

@@ -15,6 +15,10 @@ export interface ShadyTestHook {
   /** Extras for tooling. */
   paused(): boolean;
   presses(): number;
+  /** Plays a render-only moment (phew, mult, noon, dawn, cloud, glare, flake, best) for visual review. */
+  demo(name: string): void;
+  /** Frame timing (ms) of the last frame: frame, sim, gen, render. */
+  perf(): { frameMs: number; simMs: number; genMs: number; renderMs: number; fps: number };
 }
 
 declare global {
@@ -45,6 +49,8 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     audioState: () => audio.status,
     paused: () => session.isPaused,
     presses: () => session.input.presses,
+    demo: (name) => session.demo(name),
+    perf: () => ({ ...session.stats }),
   };
   window.__SHADY_TEST__ = hook;
 }

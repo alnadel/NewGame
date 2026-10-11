@@ -64,7 +64,7 @@ function easeOutBack(t: number): number {
 export function drawVignettes(g: CanvasRenderingContext2D, b: Banners, v: View): void {
   if (b.heat > 0.01) {
     const pulse = 0.5 - 0.5 * Math.cos(b.heatPhase * TAU * 1.1);
-    g.globalAlpha = 0.25 * pulse * b.heat;
+    g.globalAlpha = 0.25 * (0.25 + 0.75 * pulse) * b.heat;
     g.drawImage(vignette('255,106,61'), v.vx, v.vy, v.vw, v.vh);
   }
   if (b.coolPulse > 0) {
@@ -95,7 +95,7 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
   if (b.night >= 0) {
     const t = b.night;
     const a = Math.min(1, t / 0.5, (2.4 - t) / 0.6);
-    serifCard(g, cx, top + 40 * scale, 'night', scale * 0.8, a, '#E8ECFF', 'rgba(29,34,71,0.72)');
+    serifCard(g, cx, top + 40 * scale, 'Night', scale * 0.85, a, '#E8ECFF', 'rgba(29,34,71,0.72)');
   }
   if (b.day >= 0) {
     const t = b.day;

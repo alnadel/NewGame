@@ -60,7 +60,7 @@ export class Fx {
             const sp = rnd(60, 120);
             spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 60), 0.4, 4, 1.5, 0xffffff);
           }
-          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 34, 0.75);
+          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.75);
           break;
         }
         case 'crystal': {
@@ -72,7 +72,7 @@ export class Fx {
             spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 80), 0.55, 5, 1.5, 0xbdf3ff);
           }
           addRing(sc.rings, nx, ny, 4, 34, 0.35, 2.5, 0.9, 0xbdf3ff);
-          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 34, 0.9);
+          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.9);
           break;
         }
         case 'flower': {
@@ -80,7 +80,7 @@ export class Fx {
             const a = rnd(0, Math.PI * 2);
             spawn(sc.particles, P_SPARKLE, ev.x, ev.y, 6, Math.cos(a) * 40, Math.sin(a) * 40, 30, 0.45, 3.5, 1, 0xe6f7ff);
           }
-          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 30, 0.7);
+          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.7);
           break;
         }
         case 'flakeMelt':
@@ -97,7 +97,7 @@ export class Fx {
         case 'multUp':
           sc.hud.multPop = 0.3;
           sc.banners.coolPulse = 0.25;
-          addPop(sc.pops, MULT[Math.min(5, ev.level)] as string, POP_MULT, nx, ny, 46, 0.8);
+          addPop(sc.pops, MULT[Math.min(5, ev.level)] as string, POP_MULT, nx + 18, ny, 150, 0.8);
           if (ev.level >= 5) {
             this.clock.addHitStop(0.04);
             sc.banners.goldPulse = 0.45;
@@ -108,8 +108,8 @@ export class Fx {
           break;
         case 'phew': {
           this.clock.slowMo(0.4, 0.35);
-          addPop(sc.pops, 'PHEW!', POP_PHEW, nx, ny, 58, 1.1);
-          addPop(sc.pops, '+3', POP_PLUS, nx + 14, ny, 34, 0.8);
+          addPop(sc.pops, 'PHEW!', POP_PHEW, nx, ny, 190, 1.1);
+          addPop(sc.pops, '+3', POP_PLUS, nx + 26, ny, 120, 0.9);
           for (let i = 0; i < 24; i++) {
             const a = (i / 24) * Math.PI * 2 + rnd(-0.1, 0.1);
             const sp = rnd(80, 150);
@@ -141,7 +141,7 @@ export class Fx {
         case 'glareTouch':
           sc.nubs.glare = 0.25;
           addShake(sc.cam, 2, 0.1);
-          addPop(sc.pops, '!', POP_BANG, nx, ny, 50, 0.5);
+          addPop(sc.pops, '!', POP_BANG, nx + 14, ny, 150, 0.5);
           break;
         case 'gateArch':
           if (ev.noon) {

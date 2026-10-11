@@ -157,13 +157,13 @@ function drawFlower(g: CanvasRenderingContext2D, v: View, p: Pickup, sx: number,
   const bloom = raw < 0.33 ? 0.35 : raw < 0.66 ? 0.7 : 1;
   const sy = v.oy - (p.y + 1) * v.S;
   const glow = radialSprite('154,216,255', 64, 0.9, 0.3, 0.3);
-  const gr = 14 * v.S * bloom;
+  const gr = 20 * v.S * bloom;
   g.globalCompositeOperation = 'lighter';
-  g.globalAlpha = 0.55 * Math.max(0.4, night);
+  g.globalAlpha = 0.75 * Math.max(0.4, night);
   g.drawImage(glow, sx - gr, sy - gr, gr * 2, gr * 2);
   g.globalCompositeOperation = 'source-over';
   g.globalAlpha = 1;
-  const r = 7.5 * v.S * bloom;
+  const r = 10 * v.S * bloom;
   g.setTransform(v.dpr, 0, 0, v.dpr, sx * v.dpr, sy * v.dpr);
   g.rotate(Math.sin(time * 0.8 + p.id) * 0.15 + p.id);
   g.drawImage(flowerSprite(), -r, -r * 0.8, r * 2, r * 1.6);

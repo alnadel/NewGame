@@ -41,7 +41,7 @@ import {
 import type { SaveStore } from '../meta/save.ts';
 import type { Settings } from '../meta/saveTypes.ts';
 import { buildShare } from '../meta/share.ts';
-import { isIOS, isStandalone, onPageHidden, prefersReducedMotion } from '../platform/lifecycle.ts';
+import { isIOS, isStandalone, onPageHidden, onReducedMotionChange, prefersReducedMotion } from '../platform/lifecycle.ts';
 import { readSafeArea, onSafeAreaChange } from '../platform/safeArea.ts';
 import { shareText } from '../platform/share.ts';
 import { requestPersistence } from '../platform/storage.ts';
@@ -151,6 +151,9 @@ export class Session {
   private booted = false;
   private raf = 0;
   private cssW = 0;
+  private sizeDirty = true;
+  /** Cached reduced-motion decision (−1 = recompute). */
+  private rmCache = -1;
   private cssH = 0;
   private dpr = 1;
   private readonly unsub: (() => void)[] = [];
@@ -289,8 +292,22 @@ export class Session {
     };
     window.addEventListener('popstate', onPop);
     this.unsub.push(() => window.removeEventListener('popstate', onPop));
-    this.unsub.push(onSafeAreaChange(() => this.resize(true)));
-    const onResize = (): void => this.resize(false);
+    this.unsub.push(onSafeAreaChange(() => (this.sizeDirty = true)));
+    const onResize = (): void => {
+      this.sizeDirty = true;
+    };
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(onResize);
+      ro.observe(deps.canvas);
+      this.unsub.push(() => ro.disconnect());
+    }
+    window.addEventListener('orientationchange', onResize);
+    this.unsub.push(() => window.removeEventListener('orientationchange', onResize));
+    this.unsub.push(
+      onReducedMotionChange(() => {
+        this.rmCache = -1;
+      }),
+    );
     window.addEventListener('resize', onResize);
     window.visualViewport?.addEventListener('resize', onResize);
     this.unsub.push(() => {
@@ -361,7 +378,10 @@ export class Session {
     this.time += real;
     this.stats.fps += (1000 / Math.max(1, realMs) - this.stats.fps) * 0.05;
     this.gov.sample(realMs, real);
-    this.resize(false);
+    if (this.sizeDirty) {
+      this.sizeDirty = false;
+      this.resize(false);
+    }
 
     const screen = this.ui.current();
     const stepping = !this.paused && (screen === 'play' || screen === 'dying') && this.s.phase !== 'dead';
@@ -497,7 +517,9 @@ export class Session {
 
   private reducedMotion(): boolean {
     const m = this.d.store.get().settings.reducedMotion;
-    return m === 'on' || (m === 'auto' && prefersReducedMotion());
+    if (m !== 'auto') return m === 'on';
+    if (this.rmCache < 0) this.rmCache = prefersReducedMotion() ? 1 : 0;
+    return this.rmCache === 1;
   }
 
   private debugStart(cfg: RunConfig): RunConfig {
@@ -973,6 +995,49 @@ export class Session {
 
   get active(): boolean {
     return this.runActive;
+  }
+
+  /** Test hook: replays a moment through fx and audio only (the sim is untouched). */
+  demo(name: string): void {
+    const s = this.s;
+    let ev: SimEvent | null = null;
+    switch (name) {
+      case 'phew':
+        ev = { e: 'phew' };
+        break;
+      case 'mult':
+        ev = { e: 'multUp', level: Math.min(5, s.nubs.mult + 1) };
+        break;
+      case 'mult5':
+        ev = { e: 'multUp', level: 5 };
+        break;
+      case 'noon':
+        ev = { e: 'noonBanner' };
+        break;
+      case 'dawn':
+        ev = { e: 'dawn', day: s.day + 1 };
+        break;
+      case 'night':
+        ev = { e: 'nightStart', day: s.day };
+        break;
+      case 'cloud':
+        ev = { e: 'cloudCapture', id: -1 };
+        break;
+      case 'glare':
+        ev = { e: 'glareTouch', ballId: -1 };
+        break;
+      case 'flake':
+        ev = { e: 'flake', mult: s.nubs.mult, degree: 3, x: s.nubs.x, y: s.nubs.y + 30, snow: s.nubs.mult };
+        break;
+      case 'best':
+        this.fx.confetti(40);
+        return;
+      default:
+        return;
+    }
+    const list = [ev];
+    this.fx.onEvents(list, s);
+    this.d.audio.onEvents(list, this.audioView);
   }
 
   /** Debug geometry toggles (?debug=1). */

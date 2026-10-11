@@ -7,7 +7,7 @@
 
 import { equippedLooks, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
 import { css, cssa, darken, hex, lighten, mix, type Rgb } from './color.ts';
-import { ctx2d } from './sprites.ts';
+import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 const SNOW = 0xffffff;
@@ -296,10 +296,12 @@ export function drawNubs(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, 
   bodyGrad.addColorStop(0.5, css(tintOf(Math.max(shadeC, bottomS))));
   bodyGrad.addColorStop(1, css(tintOf(Math.max(shadeR, bottomS))));
   // Outline first (readability against pale noon ground).
+  const ow = Math.min(1.1 * U, 3.2);
   g.fillStyle = css(mix(OUTLINE, 0x2b2140, p.night * 0.5));
   g.beginPath();
-  bodyShape(g, 0, bodyY, bodyR + 1.1 * U, low);
-  g.arc(0, headY, headR + 1.1 * U, 0, TAU);
+  bodyShape(g, 0, bodyY, bodyR + ow, low);
+  g.moveTo(headR + ow, headY);
+  g.arc(0, headY, headR + ow, 0, TAU);
   g.fill();
   g.fillStyle = bodyGrad;
   g.beginPath();
@@ -866,6 +868,67 @@ function drawMelt(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: 
   g.restore();
   void a;
   g.restore();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Offscreen sprite: Nubs is drawn into his own small canvas each frame, so effects that composite
+// against him (the glare flash) only touch his pixels, and the renderer can stamp him twice (the
+// depth-sorted pass, then a see-through "x-ray" pass when something in front hides him).
+// ---------------------------------------------------------------------------------------------
+
+/** Sprite box in world u: 80 wide, 84 tall, ground point at (40, 64). */
+const BOX_W = 80;
+const BOX_H = 84;
+const ORIGIN_X = 40;
+const ORIGIN_Y = 64;
+
+export interface NubsSprite {
+  canvas: Canvas2D;
+  g: CanvasRenderingContext2D;
+  /** Device px per world u the sprite was drawn at. */
+  scale: number;
+}
+
+export function createNubsSprite(): NubsSprite {
+  const canvas = makeCanvas(2, 2);
+  return { canvas, g: ctx2d(canvas), scale: 1 };
+}
+
+const spritePose = createPose();
+
+/** Renders the pose into the sprite at `pxPerU` device pixels per u. */
+export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks: Looks, pxPerU: number): void {
+  const w = Math.ceil(BOX_W * pxPerU);
+  const h = Math.ceil(BOX_H * pxPerU);
+  if (sp.canvas.width !== w || sp.canvas.height !== h) {
+    sp.canvas.width = w;
+    sp.canvas.height = h;
+  }
+  sp.scale = pxPerU;
+  const g = sp.g;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, w, h);
+  Object.assign(spritePose, p);
+  spritePose.x = ORIGIN_X * pxPerU;
+  spritePose.y = ORIGIN_Y * pxPerU;
+  spritePose.S = pxPerU;
+  drawNubs(g, spritePose, a, looks);
+}
+
+/** Stamps the sprite at Nubs' ground point (CSS px) with the current globalAlpha. */
+export function drawNubsSprite(g: CanvasRenderingContext2D, sp: NubsSprite, x: number, y: number, dpr: number): void {
+  const k = 1 / dpr;
+  g.drawImage(sp.canvas, x - ORIGIN_X * sp.scale * k, y - ORIGIN_Y * sp.scale * k, sp.canvas.width * k, sp.canvas.height * k);
+}
+
+/** Nubs' screen-space box (CSS px) around a ground point, for occlusion tests. */
+export function nubsBox(x: number, y: number, S: number, out: Float64Array): void {
+  out[0] = x - 16 * S;
+  out[1] = y - 34 * S;
+  out[2] = x + 16 * S;
+  out[3] = y + 8 * S;
 }
 
 // ---------------------------------------------------------------------------------------------

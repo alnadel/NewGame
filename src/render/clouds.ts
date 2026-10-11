@@ -111,7 +111,7 @@ export function drawClouds(
     const rEff = (cl.rx * cl.ry) / Math.sqrt(((cl.ry * dx) / d) ** 2 + ((cl.rx * dy) / d) ** 2);
     const edge = d - rEff;
     const near = Math.max(0, Math.min(1, (edge - 10) / 60));
-    const alpha = vis * (0.2 + 0.62 * near) * (1 - 0.55 * night);
+    const alpha = vis * (0.2 + 0.42 * near) * (1 - 0.55 * night);
     const s = spriteFor(cl, scale);
     const k = v.S / s.scale;
     g.globalAlpha = alpha;

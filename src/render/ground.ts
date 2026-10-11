@@ -7,6 +7,48 @@ import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
 import { groundTiles, TILE_U } from './sprites.ts';
 
+/**
+ * Letterbox bars (TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
+ * faintly, so the world reads as extending beyond the playfield instead of ending in flat paint.
+ */
+export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, detail: boolean): void {
+  g.fillStyle = css(pal.bar);
+  g.fillRect(0, 0, v.cssW, v.cssH);
+  if (v.vx <= 0.5 && v.vy + v.vh >= v.cssH - 0.5) return;
+  if (!detail) return;
+  const tiles = groundTiles(v.S * v.dpr);
+  const x0 = (0 - v.ox) / v.S;
+  const x1 = (v.cssW - v.ox) / v.S;
+  const y1 = v.oy / v.S;
+  const y0 = (v.oy - v.cssH) / v.S;
+  g.globalAlpha = 0.5 * (1 - pal.night * 0.6);
+  for (let ty = Math.floor(y0 / TILE_U) * TILE_U; ty < y1; ty += TILE_U) {
+    const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
+    const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
+    const h = Math.ceil(v.oy - ty * v.S) - sy;
+    for (let tx = Math.floor(x0 / TILE_U) * TILE_U; tx < x1; tx += TILE_U) {
+      const sx = Math.floor(v.ox + tx * v.S);
+      const w = Math.ceil(v.ox + (tx + TILE_U) * v.S) - sx;
+      g.drawImage(tile, sx, sy, w + 0.5, h + 0.5);
+    }
+  }
+  g.globalAlpha = 1;
+  // A soft inner shadow along the playfield's edges.
+  const shade = darken(pal.bar, 0.25);
+  if (v.vx > 0.5) {
+    const lg = g.createLinearGradient(v.vx - 24, 0, v.vx, 0);
+    lg.addColorStop(0, cssa(shade, 0));
+    lg.addColorStop(1, cssa(shade, 0.6));
+    g.fillStyle = lg;
+    g.fillRect(v.vx - 24, 0, 24, v.cssH);
+    const rg = g.createLinearGradient(v.vx + v.vw, 0, v.vx + v.vw + 24, 0);
+    rg.addColorStop(0, cssa(shade, 0.6));
+    rg.addColorStop(1, cssa(shade, 0));
+    g.fillStyle = rg;
+    g.fillRect(v.vx + v.vw, 0, 24, v.cssH);
+  }
+}
+
 export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, detail: boolean): void {
   g.fillStyle = css(pal.ground);
   g.fillRect(v.vx, v.vy, v.vw, v.vh);
@@ -15,7 +57,7 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
   const tx0 = Math.floor(v.x0 / TILE_U) * TILE_U;
   const ty0 = Math.floor(v.y0 / TILE_U) * TILE_U;
   // Night hides the detail a little (it stays as texture, not noise).
-  g.globalAlpha = 1 - pal.night * 0.4;
+  g.globalAlpha = 1 - pal.night * 0.72;
   for (let ty = ty0; ty < v.y1; ty += TILE_U) {
     const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
     const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
