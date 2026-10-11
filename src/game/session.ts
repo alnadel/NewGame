@@ -385,8 +385,9 @@ export class Session {
     this.stats.fps += (1000 / Math.max(1, realMs) - this.stats.fps) * 0.05;
     this.gov.sample(realMs, real);
     if (this.sizeDirty) {
+      // Re-read size and safe-area insets (a notch can change without the canvas resizing).
       this.sizeDirty = false;
-      this.resize(false);
+      this.resize(true);
     }
 
     const screen = this.ui.current();
