@@ -356,8 +356,15 @@
 /* Two buttons side by side, stacked once their labels would need less than 8em each (large text). */
 .row-2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8em), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7em), 1fr));
   gap: 10px;
+}
+
+/* Two buttons side by side keep their labels whole down to a 320 px phone (Pause: "Settings"
+   next to "Home"); the label is centered, so the narrower padding doesn't show on wider ones. */
+.row-2 > .btn {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -1093,6 +1100,8 @@
    the bottom of the viewport, set by the game; less the column's bottom gap inside .world), so the
    player can see whether he is lit before resuming. */
 .scr-pause {
+  /* A size container: its content box is the space between the top inset and Nubs' halo. */
+  container: pause / size;
   display: grid;
   place-items: center;
   padding: calc(var(--in-top) + 16px) var(--pad-x-r) max(calc(var(--in-bottom) + 16px), calc(var(--nubs-clear, 0px) - var(--world-gap-bottom, 0px) + 12px)) var(--pad-x-l);
@@ -1149,6 +1158,20 @@
   color: var(--ink-2);
   font-size: 1rem;
   margin-bottom: 6px;
+}
+
+/* Small phones with a notch: the Pause card drops its subtitle and tightens up so it still sits
+   above Nubs' halo (the player checks whether he is lit before resuming). */
+@container pause (max-height: 19.5em) {
+  .scr-pause .dialog {
+    gap: 8px;
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+
+  .scr-pause .dialog-sub {
+    display: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------
