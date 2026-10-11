@@ -230,8 +230,19 @@ function steamPuff(): Canvas2D {
 }
 let fireflySprite: Canvas2D | null = null;
 
-/** Air particles (steam, drips, sparkles, flying flakes, fireflies), drawn above the objects. */
+/**
+ * Air particles (steam, drips, sparkles, flying flakes, fireflies), drawn above the objects: first
+ * the plain ones, then every additive glow under one 'lighter' switch (TECH_SPEC §9.2 step 13).
+ */
 export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: View): void {
+  drawAirPass(g, p, v, false);
+  g.globalCompositeOperation = 'lighter';
+  drawAirPass(g, p, v, true);
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = 1;
+}
+
+function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: boolean): void {
   const S = v.S;
   steamSprite ??= steamPuff();
   fireflySprite ??= radialSprite('255,236,150', 64, 1, 0.18, 0.4);
@@ -242,6 +253,7 @@ export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: V
     if (life <= 0) continue;
     const k = p.kind[i]!;
     if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL) continue;
+    if ((k === P_SPARKLE || k === P_FIREFLY) !== glows) continue;
     const t = 1 - life / p.maxLife[i]!;
     const sx = v.ox + p.x[i]! * S;
     const sy = v.oy - (p.y[i]! + OBLIQUE * p.z[i]!) * S;
@@ -270,10 +282,8 @@ export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: V
         break;
       }
       case P_SPARKLE: {
-        g.globalCompositeOperation = 'lighter';
         g.globalAlpha = (1 - t) * 0.95;
         g.drawImage(sp, sx - size, sy - size, size * 2, size * 2);
-        g.globalCompositeOperation = 'source-over';
         break;
       }
       case P_FLAKE_FLY: {
@@ -287,10 +297,8 @@ export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: V
       }
       case P_FIREFLY: {
         const blink = 0.5 + 0.5 * Math.sin(life * 4.5 + i * 1.7);
-        g.globalCompositeOperation = 'lighter';
         g.globalAlpha = Math.min(1, life * 0.8, (p.maxLife[i]! - life) * 0.8) * blink * 0.9;
-        g.drawImage(fireflySprite, sx - size, sy - size, size * 2, size * 2);
-        g.globalCompositeOperation = 'source-over';
+        g.drawImage(fireflySprite!, sx - size, sy - size, size * 2, size * 2);
         break;
       }
       default:
@@ -300,8 +308,8 @@ export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: V
   g.globalAlpha = 1;
 }
 
-/** Screen-space confetti and petals (dawn card, new best). */
-export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles): void {
+/** Screen-space confetti and petals (dawn card, new best); x/y are CSS px. */
+export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles, dpr: number): void {
   for (let i = 0; i < p.cap; i++) {
     const life = p.life[i]!;
     if (life <= 0) continue;
@@ -316,13 +324,15 @@ export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles): 
     g.fillStyle = cssa(p.color[i]!, 1);
     const c = Math.cos(rot);
     const sn = Math.sin(rot);
+    const cd = c * dpr;
+    const sd = sn * dpr;
     if (k === P_CONFETTI) {
       // A spinning paper rectangle: its apparent width flips with rot.
       const w = s * Math.abs(Math.cos(rot * 1.7));
-      g.setTransform(c, sn, -sn, c, x, y);
+      g.setTransform(cd, sd, -sd, cd, x * dpr, y * dpr);
       g.fillRect(-w / 2, -s * 0.35, w, s * 0.7);
     } else {
-      g.setTransform(c, sn, -sn, c, x, y);
+      g.setTransform(cd, sd, -sd, cd, x * dpr, y * dpr);
       g.beginPath();
       g.ellipse(0, 0, s, s * 0.55, 0, 0, TAU);
       g.fill();

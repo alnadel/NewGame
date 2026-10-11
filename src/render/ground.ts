@@ -5,13 +5,15 @@ import { biomeAtY, trailX, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
-import { groundTiles, TILE_U } from './sprites.ts';
+import { groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
 
 /**
  * Letterbox bars (TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
  * faintly, so the world reads as extending beyond the playfield instead of ending in flat paint.
  */
 export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, detail: boolean): void {
+  // No bars when the world viewport fills the canvas (the ground covers every pixel anyway).
+  if (v.vx <= 0.5 && v.vy <= 0.5 && v.vw >= v.cssW - 0.5 && v.vh >= v.cssH - 0.5) return;
   g.fillStyle = css(pal.bar);
   g.fillRect(0, 0, v.cssW, v.cssH);
   if (v.vx <= 0.5 && v.vy + v.vh >= v.cssH - 0.5) return;
@@ -49,15 +51,112 @@ export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, det
   }
 }
 
-export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, detail: boolean): void {
-  g.fillStyle = css(pal.ground);
-  g.fillRect(v.vx, v.vy, v.vw, v.vh);
-  if (!detail) return;
+// Ground paint (TECH_SPEC §15 raster budget). The detail tiles are transparent marks over the ground
+// color; drawing them that way costs a full-screen fill plus ~8 scaled, blended images every frame.
+// Instead each biome's tile is pre-composited once (ground color + marks at the night alpha) into an
+// opaque canvas of a whole number of device pixels, and the tiles are blitted 1:1 at whole-pixel
+// positions anchored to the world, which the rasterizer does as a plain copy. A tile is repainted
+// only when the ground color, the night fade or the zoom changes (the renderer quantizes the ground
+// palette to 1/64 of the day, so about once a second); while the zoom is moving (cloud-capture pulse,
+// Melt Map pull) the existing tiles are drawn scaled.
+
+export interface GroundPaint {
+  meadow: Canvas2D | null;
+  town: Canvas2D | null;
+  /** Tile size in device px, and what it was painted with. */
+  T: number;
+  ground: number;
+  marksAlpha: number;
+  marksScale: number;
+  /** The view's S on the previous frame (whole-pixel blits only while the zoom holds still). */
+  lastS: number;
+  /** Tile repaints so far (perf counter). */
+  paints: number;
+}
+
+export function createGroundPaint(): GroundPaint {
+  return { meadow: null, town: null, T: 0, ground: -1, marksAlpha: -1, marksScale: 0, lastS: 0, paints: 0 };
+}
+
+function paintTile(c: Canvas2D | null, T: number, ground: Rgb, marks: Canvas2D, alpha: number): Canvas2D {
+  const cv = c ?? makeCanvas(T, T);
+  if (cv.width !== T) cv.width = T;
+  if (cv.height !== T) cv.height = T;
+  const g = cv.getContext('2d', { alpha: false });
+  if (!g) return cv;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.fillStyle = css(ground);
+  g.fillRect(0, 0, T, T);
+  g.globalAlpha = alpha;
+  g.drawImage(marks, 0, 0, T, T);
+  g.globalAlpha = 1;
+  return cv;
+}
+
+export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, detail: boolean, gp: GroundPaint | null = null): void {
+  if (!detail) {
+    g.fillStyle = css(pal.ground);
+    g.fillRect(v.vx, v.vy, v.vw, v.vh);
+    return;
+  }
   const tiles = groundTiles(v.k * v.dpr);
+  // Night hides the detail a little (it stays as texture, not noise).
+  const alpha = 1 - pal.night * 0.72;
   const tx0 = Math.floor(v.x0 / TILE_U) * TILE_U;
   const ty0 = Math.floor(v.y0 / TILE_U) * TILE_U;
-  // Night hides the detail a little (it stays as texture, not noise).
-  g.globalAlpha = 1 - pal.night * 0.72;
+  const stable = gp !== null && v.S === gp.lastS;
+  if (gp) gp.lastS = v.S;
+  if (gp && (stable || gp.T > 0)) {
+    if (stable) {
+      const T = Math.max(8, Math.round(TILE_U * v.S * v.dpr));
+      if (T !== gp.T || gp.ground !== pal.ground || gp.marksAlpha !== alpha || gp.marksScale !== tiles.scale || !gp.meadow || !gp.town) {
+        gp.meadow = paintTile(gp.meadow, T, pal.ground, tiles.meadow, alpha);
+        gp.town = paintTile(gp.town, T, pal.ground, tiles.town, alpha);
+        gp.T = T;
+        gp.ground = pal.ground;
+        gp.marksAlpha = alpha;
+        gp.marksScale = tiles.scale;
+        gp.paints++;
+      }
+    }
+    const meadow = gp.meadow as Canvas2D;
+    const town = gp.town as Canvas2D;
+    const dpr = v.dpr;
+    if (stable) {
+      // Whole-pixel grid anchored at the world tile (tx0, ty0): one copy per tile.
+      const T = gp.T;
+      const ax = Math.round((v.ox + tx0 * v.S) * dpr);
+      const ay = Math.round((v.oy - (ty0 + TILE_U) * v.S) * dpr);
+      const left = Math.floor(v.vx * dpr);
+      const right = Math.ceil((v.vx + v.vw) * dpr);
+      const top = Math.floor(v.vy * dpr);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      // One row and column of slack on the near edges: rounding must never leave a seam.
+      for (let k = -1, ty = ty0 - TILE_U; ay - k * T + T > top; k++, ty += TILE_U) {
+        const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? town : meadow;
+        const sy = ay - k * T;
+        for (let x = ax > left ? ax - T : ax; x < right; x += T) g.drawImage(tile, x, sy);
+      }
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return;
+    }
+    // Zoom in motion: the painted tiles, scaled.
+    for (let ty = ty0; ty < v.y1; ty += TILE_U) {
+      const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? town : meadow;
+      const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
+      const h = Math.ceil(v.oy - ty * v.S) - sy;
+      for (let tx = tx0; tx < v.x1; tx += TILE_U) {
+        const sx = Math.floor(v.ox + tx * v.S);
+        const w = Math.ceil(v.ox + (tx + TILE_U) * v.S) - sx;
+        g.drawImage(tile, sx, sy, w + 0.5, h + 0.5);
+      }
+    }
+    return;
+  }
+  g.fillStyle = css(pal.ground);
+  g.fillRect(v.vx, v.vy, v.vw, v.vh);
+  g.globalAlpha = alpha;
   for (let ty = ty0; ty < v.y1; ty += TILE_U) {
     const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
     const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);

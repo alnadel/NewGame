@@ -1,6 +1,9 @@
 // Frame-time governor (TECH_SPEC §15). Quality steps down one notch at a time when frames are late —
-// DPR 1 → 0.75 → 0.625 of the cap, then particles 400 → 200, then the ground detail tiles off — and
-// may step back up once.
+// crisp shadows (the shadow path filled straight onto the world instead of the soft half-res layer's
+// full-screen scaled multiply blit), then DPR × 0.75, particles 400 → 200, DPR × 0.625 (never below
+// 1 device px per CSS px), and the ground detail tiles off — and may step back up once.
+// Devices that look low-end before the first frame (≤ 4 GB or ≤ 4 cores, not iOS) start at the crisp
+// shadow step with DPR capped at 1.5 (deviceClass below).
 //
 // Two signals per frame: the rAF interval, which carries everything (JS, canvas raster, compositing,
 // vsync), and the frame's own JS work. Raster cost is only visible in the interval, so the interval
@@ -37,14 +40,17 @@ const CAPPED_WORK_SHARE = 0.6;
 const UP_AFTER_S = 10;
 const UP_MEDIAN_MS = 17.5;
 const UP_WORK_MS = 6;
-const MAX_LEVEL = 4;
+const MAX_LEVEL = 5;
 
 export class Governor {
   enabled = true;
   level = 0;
+  /** The lowest level it may step back up to (1 on low-end devices: crisp shadows from the start). */
+  floor = 0;
   dprScale = 1;
   particleCap = 400;
   detail = true;
+  softShadows = true;
   /** Last evaluated cadence (ms) and whether it counted as a capped display rate (debug overlay). */
   median = 0;
   capped = false;
@@ -138,7 +144,7 @@ export class Governor {
     }
     const smooth = steady && med <= UP_MEDIAN_MS && work <= UP_WORK_MS;
     this.clean = smooth ? this.clean + dt : 0;
-    if (this.clean >= UP_AFTER_S && this.level > 0 && this.stepsUp === 0 && this.cooldown <= 0) {
+    if (this.clean >= UP_AFTER_S && this.level > this.floor && this.stepsUp === 0 && this.cooldown <= 0) {
       this.stepsUp++;
       this.change(-1);
     }
@@ -152,11 +158,50 @@ export class Governor {
     this.onChange?.();
   }
 
+  /** Starts at `level` (and never steps back above it): low-end devices start at 1. */
+  startAt(level: number): void {
+    this.level = Math.max(0, Math.min(MAX_LEVEL, level));
+    this.floor = this.level;
+    this.apply();
+  }
+
   /** Settings for the current level. */
   private apply(): void {
     const l = this.level;
-    this.dprScale = l >= 2 ? 0.625 : l >= 1 ? 0.75 : 1;
+    this.softShadows = l < 1;
+    this.dprScale = l >= 4 ? 0.625 : l >= 2 ? 0.75 : 1;
     this.particleCap = l >= 3 ? 200 : 400;
-    this.detail = l < 4;
+    this.detail = l < 5;
   }
+}
+
+/** The canvas DPR for a device DPR, a cap and the governor's scale: never below 1 by scaling. */
+export function canvasDpr(deviceDpr: number, cap: number, scale: number): number {
+  const base = Math.min(cap, deviceDpr > 0 ? deviceDpr : 1);
+  return Math.max(Math.min(1, base), base * scale);
+}
+
+export interface DeviceHints {
+  /** navigator.deviceMemory (GB; Chromium only, capped at 8), or undefined. */
+  memory: number | undefined;
+  /** navigator.hardwareConcurrency, or undefined. */
+  cores: number | undefined;
+  ios: boolean;
+}
+
+/**
+ * 'low' for devices that are likely to rasterize a DPR-2 canvas too slowly (TECH_SPEC §15 targets a
+ * Pixel 4a / Moto G class device): ≤ 4 GB of memory or ≤ 4 cores.
+ * iOS is left out (Safari reports a fixed core count, and every supported iPhone has the GPU for it).
+ */
+export function deviceClass(h: DeviceHints): 'low' | 'normal' {
+  if (h.ios) return 'normal';
+  const lowMemory = h.memory !== undefined && h.memory > 0 && h.memory <= 4;
+  const fewCores = h.cores !== undefined && h.cores > 0 && h.cores <= 4;
+  return lowMemory || fewCores ? 'low' : 'normal';
+}
+
+/** DPR cap for a device class (TECH_SPEC §15: DPR ≤ 2). */
+export function dprCap(cls: 'low' | 'normal'): number {
+  return cls === 'low' ? 1.5 : 2;
 }

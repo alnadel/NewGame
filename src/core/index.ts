@@ -85,7 +85,8 @@ export type { ChunkLit, World, WorldStats } from './gen/world.ts';
 export { biomeAtY, dayAtY } from './gen/placer.ts';
 
 // Simulation
-export { createRun } from './sim/create.ts';
+export { createRun, prepareRun, prepareSome } from './sim/create.ts';
+export type { RunBuild } from './sim/create.ts';
 export { step } from './sim/step.ts';
 export { NO_INPUT } from './sim/types.ts';
 export type { GuideState, InputFrame, NubsState, Phase, RunConfig, SimState, SunMode, SunState } from './sim/types.ts';

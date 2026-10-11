@@ -2,8 +2,8 @@
 
 import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
-import { dayTicks } from '../clock.ts';
-import { ensureGenerated, createWorld } from '../gen/world.ts';
+import { dayTicks, yAtDayTick } from '../clock.ts';
+import { ensureGenerated, createWorld, generateSome, type World } from '../gen/world.ts';
 import { syncTime } from './step.ts';
 import { computeCoverage } from './nubs.ts';
 import { updateGuide } from './guide.ts';
@@ -32,15 +32,49 @@ function freshStats(day: number): RunStats {
   };
 }
 
+/** The start day and tick of a run (cfg.startDay/startT are debug hooks). */
+function startOf(cfg: RunConfig): { day: number; dayTick: number } {
+  const day = Math.max(1, Math.floor(cfg.startDay ?? 1));
+  const dayTick = Math.min(dayTicks(day) - 1, Math.max(0, Math.round((cfg.startT ?? 0) * TUNING.tick.hz)));
+  return { day, dayTick };
+}
+
+/**
+ * A run whose world is being generated ahead of time in slices (for example while the previous run's
+ * death plays), so that createRun() on it costs almost nothing. The world is the same however the
+ * work is sliced (gen/world.ts).
+ */
+export interface RunBuild {
+  readonly cfg: RunConfig;
+  readonly world: World;
+  /** y through which createRun() needs the world validated. */
+  readonly targetY: number;
+}
+
+/** Starts building a run's world (cheap: only the start hut is placed). */
+export function prepareRun(cfg: RunConfig): RunBuild {
+  const { day, dayTick } = startOf(cfg);
+  return {
+    cfg: { ...cfg },
+    world: createWorld(cfg.seed, cfg.profile, cfg.tutorial),
+    targetY: yAtDayTick(day, dayTick) + TUNING.world.hardAhead,
+  };
+}
+
+/** Generates part of a prepared run's world (~`budget` work units). True once createRun is cheap. */
+export function prepareSome(b: RunBuild, budget: number): boolean {
+  return generateSome(b.world, b.targetY, budget);
+}
+
 /**
  * Creates a run: builds the world (validated through Nubs + 1600 u), puts Nubs at the start (or at
  * cfg.startDay/startT for debugging) with the sun at θ0, and computes coverage and the guide so the
- * Title can render the live scene. The clock stays frozen until the first touch.
+ * Title can render the live scene. The clock stays frozen until the first touch. With `build` (from
+ * prepareRun() with the same config) its world is used and only the rest of it is generated now.
  */
-export function createRun(cfg: RunConfig): SimState {
-  const world = createWorld(cfg.seed, cfg.profile, cfg.tutorial);
-  const day = Math.max(1, Math.floor(cfg.startDay ?? 1));
-  const dayTick = Math.min(dayTicks(day) - 1, Math.max(0, Math.round((cfg.startT ?? 0) * TUNING.tick.hz)));
+export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
+  const world = build ? build.world : createWorld(cfg.seed, cfg.profile, cfg.tutorial);
+  const { day, dayTick } = startOf(cfg);
   const maxChill = TUNING.nubs.maxChill;
   const theta0 = world.theta0;
   const s: SimState = {

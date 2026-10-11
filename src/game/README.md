@@ -12,7 +12,7 @@ removes the `#boot` splash after the first frame.
 | `game/camera.ts` | View metrics and letterboxing, Nubs at 68 %/70 %, shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
 | `game/fx.ts` | SimEvents → particles, rings, pops, HUD/banner timers, Nubs reactions, slow-mo and hit-stop; continuous steam, sweat, frost sparkles and fireflies. |
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3) and the ghost-thumb hint tracker (§6.2). |
-| `game/perf.ts` | Frame-time governor (DPR 1 → 0.75 → 0.625, particles 400 → 200, detail tiles off): late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. |
+| `game/perf.ts` | Frame-time governor (crisp shadows → DPR × 0.75 → particles 400 → 200 → DPR × 0.625 → detail tiles off; never below 1 device px per CSS px): late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
 | `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters, clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial, sun mascot, HUD, banners/vignettes, particles, Melt Map, sprites. |
@@ -23,7 +23,10 @@ removes the `#boot` splash after the first frame.
 2. For each tick: `takeSnap(prev)`, `step()`, collect events; then `takeSnap(curr)`.
 3. `lerpSnap(prev, curr, alpha)`; route the frame's events to `audio.onEvents`, `haptics.onEvents`
    and `fx.onEvents`; daily try/progress bookkeeping.
-4. `generateSome(world, nubs.y + idleAhead, 12)` every frame (idle-time world generation).
+4. `generateSome(world, nubs.y + idleAhead, 12)` every frame (idle-time world generation). After an
+   endless run ends, the next run's world is built in slices (`prepareRun`/`prepareSome`, 2.5 ms a
+   frame, up to a tenth of the frame interval on slow devices) while the death and Results play;
+   Retry or Home finishes whatever is left. Nothing is built inside the death tick.
 5. `renderer.draw()`, then `audio.update(view, realDt)` on every frame (menus and pause included).
 
 Draw order: bars → ground + tiles → trail → footprints → pickups → shadow layer (one path, one fill,
@@ -32,7 +35,18 @@ rings → depth-sorted casters with Nubs (an offscreen sprite) inserted at his y
 when something in front overlaps him → heat squiggles → clouds → air particles → Melt Map overlays
 → halo dial → vignettes → text pops → sun mascot → HUD → banners → confetti.
 
-Per-frame cost notes: the HUD row is an offscreen layer rebuilt only when its text, flags or layout
+Per-frame cost notes: the ground detail tiles are pre-composited with the ground color into opaque
+tiles of a whole number of device pixels (repainted when the ground palette, quantized to 1/64 of the
+day, steps: about once a second) and blitted 1:1 at whole-pixel positions, a plain copy instead of a
+full-screen fill plus ~8 scaled, blended images; the letterbox fill is skipped when the world fills
+the canvas; additive particle glows share one `lighter` switch; the gazing ball reuses its gradient.
+The soft shadow layer's full-screen scaled multiply blit is the largest raster item in software
+raster, so the governor's first step (and low-end devices from the start) fill the same shadow path
+straight onto the world with `multiply` instead (identical colors, crisp edges). In this container
+(software raster, 4× CPU throttle, Day 4 noon, 390×844 at DPR 2) that took the rAF interval from
+~170 ms to ~140 ms at full quality (`?perf=0`) and from ~130 ms (governor at DPR 0.625) to ~60 ms by
+default (crisp shadows, DPR ≤ 1.5); the frame's JS is ~13-17 ms there, mostly caster and Nubs path
+work, so a real mid-range phone profile is still the open check. Earlier: the HUD row is an offscreen layer rebuilt only when its text, flags or layout
 change (about every 0.7 s), with the moving bits (flake pop, multiplier badge, ruler progress) drawn
 from small sprites; Nubs is stamped from two cached layers (back, front) plus live scarf tails, the
 layers redrawn only when his size (1/40 Chill steps), look (5° steps), tints or expression change;
@@ -47,9 +61,12 @@ the rAF interval, so a real mid-range phone profile is still the open check).
 the next daylight tick), `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; extras
 for tooling: `paused()`, `presses()`, `demo(name)` (replays `phew`, `mult`, `mult5`, `noon`, `dawn`,
 `night`, `cloud`, `glare`, `flake` or `best` through fx/audio only — the sim is untouched), `perf()`
-(frame/sim/gen/render ms plus Nubs layer redraw and compose counters) and `nubsScreen()`. `?perf=0` disables the governor (useful for captures).
+(frame/sim/gen/render ms plus Nubs layer redraw and compose counters) and `nubsScreen()`. `?perf=0`
+is full quality: no governor and no device-class cap (useful for captures and A/B timing).
 
 ## Deliberate deviations from the docs
+
+- **Crisp shadow mode** (V1_PLAN §9 specifies only the soft half-res layer): see the cost notes above.
 
 - **Start beat** (core, `TUNING.start.readyTicks`): every run opens with 0.8 s in which the sun
   answers the finger but the clock, Nubs and Chill wait; Nubs stands until the `go` event, then sets

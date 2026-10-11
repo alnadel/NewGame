@@ -20,7 +20,17 @@ import { drawBanners, drawVignettes, createBanners, updateBanners, type Banners 
 import { createLight, drawCaster, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
 import { cssa } from './color.ts';
-import { createFootprints, drawBars, drawFootprints, drawGround, drawTrail, stepFootprints, type Footprints } from './ground.ts';
+import {
+  createFootprints,
+  createGroundPaint,
+  drawBars,
+  drawFootprints,
+  drawGround,
+  drawTrail,
+  stepFootprints,
+  type Footprints,
+  type GroundPaint,
+} from './ground.ts';
 import { createHalo, drawHalo, updateHalo, type HaloState } from './halo.ts';
 import { createHud, drawHud, hudScale, updateHud, type HudState } from './hud.ts';
 import { applyPull, createMapFrame, drawMeltMap, frameDeath, mapTarget, type MapFrame } from './meltMap.ts';
@@ -94,6 +104,8 @@ export interface RenderInput {
   equipped: Equipped;
   /** Perf governor: ground detail tiles on/off. */
   detail: boolean;
+  /** Perf governor: soft (half-res layer) or crisp (direct multiply fill) shadows. */
+  softShadows: boolean;
   /** Paused: UI timers (banners, HUD pops, halo) hold still. */
   paused: boolean;
   debug: DebugDraw | null;
@@ -104,6 +116,10 @@ export interface RenderScene {
   view: View;
   cam: CameraFx;
   pal: Palette;
+  /** The palette the ground is drawn with: quantized to 1/64 of the day, so the pre-tinted tiles
+   * (ground.ts GroundPaint) are repainted about once a second, not every frame. */
+  groundPal: Palette;
+  ground: GroundPaint;
   light: Light;
   shadow: ShadowLayer;
   particles: Particles;
@@ -136,6 +152,8 @@ export function createScene(): RenderScene {
     view: createView(),
     cam: createCameraFx(),
     pal,
+    groundPal: createPalette(),
+    ground: createGroundPaint(),
     light: createLight(pal),
     shadow: createShadowLayer(),
     particles: createParticles(),
@@ -214,6 +232,8 @@ export class Renderer {
       }
     }
     updatePalette(sc.pal, dayFrac, night, town, inp.highContrast);
+    // The ground steps through the day in 1/64ths (≈ 0.8 s): a 1-3 level change at most.
+    updatePalette(sc.groundPal, Math.round(dayFrac * 64) / 64, Math.round(night * 16) / 16, town, inp.highContrast);
     const theta = snap.theta + inp.sway;
     const ux = Math.cos(theta * DEG);
     const uy = Math.sin(theta * DEG);
@@ -289,11 +309,11 @@ export class Renderer {
     g.rect(v.vx, v.vy, v.vw, v.vh);
     g.clip();
 
-    drawGround(g, v, sc.pal, inp.detail);
-    drawTrail(g, v, s.world, sc.pal);
+    drawGround(g, v, sc.groundPal, inp.detail, sc.ground);
+    drawTrail(g, v, s.world, sc.groundPal);
     drawFootprints(g, sc.footprints, v, sc.pal);
     drawPickups(g, v, s.world, inp.time, snap.nubsY, night);
-    if (sunUp) drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha);
+    if (sunUp) drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows);
 
     // Nubs' pose (needed for the footprint disc and the depth sort).
     const pose = sc.pose;
@@ -416,7 +436,7 @@ export class Renderer {
       drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, alpha: a, time: inp.time });
     }
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
-    drawScreenParticles(g, sc.particles);
+    drawScreenParticles(g, sc.particles, v.dpr);
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     sc.ms = performance.now() - t0;
   }

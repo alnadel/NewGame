@@ -10,12 +10,15 @@ import {
   dayTicks,
   generateSome,
   lerpSnap,
+  prepareRun,
+  prepareSome,
   step,
   takeSnap,
   TUNING,
   type Bot,
   type ProfileId,
   type RenderSnap,
+  type RunBuild,
   type RunConfig,
   type RunResult,
   type SimEvent,
@@ -58,11 +61,20 @@ import { Fx } from './fx.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { isDebugRun, startTFor, type Params } from './params.ts';
-import { Governor } from './perf.ts';
+import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
+/**
+ * Real ms per frame spent building the next run's world while a death or the Results play: 2.5 ms,
+ * or up to a tenth of the frame interval on slow devices (≤ 10 ms), so it is done before Retry.
+ */
+const PREBUILD_MS = 2.5;
+const PREBUILD_SHARE = 0.1;
+const PREBUILD_MAX_MS = 10;
+/** Work units per prebuild slice (each slice is checked against PREBUILD_MS). */
+const PREBUILD_SLICE = 4;
 const DAILY_COUNT_MINUTES = 30;
 
 export interface SessionDeps {
@@ -131,6 +143,8 @@ export class Session {
   private bot: Bot | null = null;
   private usedUrlSeed = false;
   private nextRun: SimState | null = null;
+  /** The next endless run while its world is still being generated in slices (see stepPrebuild). */
+  private nextBuild: RunBuild | null = null;
   private runActive = false;
   /**
    * Sim-altering debug URL params are present (?day, ?t, ?chill, ?profile, ?bot, ?fast, ?guide):
@@ -162,6 +176,8 @@ export class Session {
   private rmCache = -1;
   private cssH = 0;
   private dpr = 1;
+  /** Canvas DPR cap for this device (perf.ts deviceClass). */
+  private dprCap = 2;
   private readonly unsub: (() => void)[] = [];
 
   constructor(deps: SessionDeps) {
@@ -169,6 +185,13 @@ export class Session {
     this.params = deps.params;
     this.debugRuns = isDebugRun(deps.params);
     this.gov.enabled = deps.params.perf;
+    // ?perf=0 is full quality for captures and A/B timing: no governor and no device-class cap.
+    if (deps.params.perf) {
+      const nav = navigator as Navigator & { deviceMemory?: number };
+      const cls = deviceClass({ memory: nav.deviceMemory, cores: nav.hardwareConcurrency, ios: isIOS() });
+      this.dprCap = dprCap(cls);
+      if (cls === 'low') this.gov.startAt(1);
+    }
     this.clock.fast = deps.params.fast;
     this.renderer = new Renderer(deps.canvas);
     this.fx = new Fx(this.renderer.scene, this.clock);
@@ -272,6 +295,7 @@ export class Session {
       reducedMotion: false,
       equipped: save.equipped,
       detail: true,
+      softShadows: true,
       paused: false,
       debug: null,
     };
@@ -375,7 +399,7 @@ export class Session {
     const c = this.d.canvas;
     const w = c.clientWidth || window.innerWidth;
     const h = c.clientHeight || window.innerHeight;
-    const dpr = Math.min(2, window.devicePixelRatio || 1) * this.gov.dprScale;
+    const dpr = canvasDpr(window.devicePixelRatio || 1, this.dprCap, this.gov.dprScale);
     if (!force && w === this.cssW && h === this.cssH && dpr === this.dpr) return;
     // A new size means new buffers and first-frame costs: the governor warms up again.
     if (w !== this.cssW || h !== this.cssH) this.gov.reset();
@@ -449,6 +473,8 @@ export class Session {
     // Idle-time world generation (keeps step() from ever validating a chunk inside a tick).
     const tGen = performance.now();
     if (screen !== 'boot') generateSome(s.world, s.nubs.y + TUNING.world.idleAhead, IDLE_BUDGET);
+    // The next run's world is built only while no run is being played.
+    if (screen !== 'play' && screen !== 'pause') this.stepPrebuild(Math.min(PREBUILD_MAX_MS, Math.max(PREBUILD_MS, realMs * PREBUILD_SHARE)));
     this.stats.genMs = performance.now() - tGen;
 
     const gdt = stepping || screen === 'dying' || screen === 'results' ? this.clock.gameDt : screen === 'pause' ? 0 : real;
@@ -486,6 +512,7 @@ export class Session {
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
     r.detail = this.gov.detail;
+    r.softShadows = this.gov.softShadows;
     r.paused = this.paused || screen === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
     const tRender = performance.now();
@@ -558,8 +585,13 @@ export class Session {
     return cfg;
   }
 
-  /** A fresh run config for `kind` (endless seeds are random unless ?seed= is given). */
+  /** A fresh run for `kind` (endless seeds are random unless ?seed= is given). */
   private makeRun(kind: RunKind): SimState {
+    return createRun(this.runConfig(kind));
+  }
+
+  /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
+  private runConfig(kind: RunKind): RunConfig {
     const save = this.d.store.get();
     const p = this.params;
     const today = localDate();
@@ -603,11 +635,12 @@ export class Session {
       cfg.profile = p.profile;
       cfg.tutorial = p.profile === 0;
     }
-    return createRun(this.debugStart(cfg));
+    return this.debugStart(cfg);
   }
 
   /** The Title's live scene: the next endless run, held at dawn. */
   private createTitleRun(): SimState {
+    this.finishPrebuild();
     if (this.nextRun && this.nextRun.cfg.mode === 'endless' && this.nextRun.phase === 'hold') {
       const r = this.nextRun;
       this.nextRun = null;
@@ -739,6 +772,7 @@ export class Session {
 
   private retry(): void {
     this.d.audio.ensure();
+    this.finishPrebuild();
     let run: SimState;
     if (this.kind === 'endless' && this.nextRun && this.nextRun.cfg.mode === 'endless') {
       run = this.nextRun;
@@ -863,9 +897,9 @@ export class Session {
     this.setGhost('off');
     this.input.releaseAll();
     if (this.ui.current() === 'play') this.ui.show('dying');
-    // Build the next endless run now, inside the death hit-stop where a hitch can't be seen, so
-    // Retry is instant however fast it is tapped.
-    if (this.kind === 'endless' && !this.nextRun) this.nextRun = this.makeRunQuiet();
+    // Start building the next endless run: its world is generated a slice per frame while the
+    // death and the Results play (stepPrebuild), so Retry is instant and no frame hitches.
+    this.startPrebuild();
   }
 
   private updateDeathFlow(): void {
@@ -898,10 +932,7 @@ export class Session {
         sv.flags.installSheetShown = true;
       });
     }
-    // Pre-build the next endless run while the sheet is up, so Retry is instant.
-    window.setTimeout(() => {
-      if (this.ui.current() === 'results' && this.kind === 'endless' && !this.nextRun) this.nextRun = this.makeRunQuiet();
-    }, 450);
+    this.startPrebuild();
     if (this.bot) {
       window.setTimeout(() => {
         if (this.ui.current() === 'results') {
@@ -912,18 +943,46 @@ export class Session {
     }
   }
 
-  /** makeRun without disturbing the current run's kind/challenge bookkeeping. */
-  private makeRunQuiet(): SimState {
+  /** runConfig('endless') without disturbing the current run's kind/challenge bookkeeping. */
+  private endlessConfigQuiet(): RunConfig {
     const kind = this.kind;
     const ch = this.runChallenge;
     const dd = this.dailyDate;
     const ds = this.dailyScored;
-    const run = this.makeRun('endless');
+    const cfg = this.runConfig('endless');
     this.kind = kind;
     this.runChallenge = ch;
     this.dailyDate = dd;
     this.dailyScored = ds;
-    return run;
+    return cfg;
+  }
+
+  /** Starts preparing the next endless run (after an endless run ends), if none is ready. */
+  private startPrebuild(): void {
+    if (this.kind !== 'endless' || this.nextRun || this.nextBuild) return;
+    this.nextBuild = prepareRun(this.endlessConfigQuiet());
+  }
+
+  /** Spends up to `ms` of this frame generating the next run's world; creates the run when done. */
+  private stepPrebuild(ms: number): void {
+    const b = this.nextBuild;
+    if (!b) return;
+    const t0 = performance.now();
+    let done = false;
+    do done = prepareSome(b, PREBUILD_SLICE);
+    while (!done && performance.now() - t0 < ms);
+    if (done) {
+      this.nextBuild = null;
+      this.nextRun = createRun(b.cfg, b);
+    }
+  }
+
+  /** Finishes a pending prebuild now (Retry or Home came before its last slice). */
+  private finishPrebuild(): void {
+    const b = this.nextBuild;
+    if (!b) return;
+    this.nextBuild = null;
+    this.nextRun = createRun(b.cfg, b);
   }
 
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {

@@ -784,6 +784,27 @@ function drawStall(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): v
   rim(g, v, L, roof.pts, roof.n, roof.z1);
 }
 
+let ballGrad: CanvasGradient | null = null;
+let ballKey = -1;
+
+function ballGradient(g: CanvasRenderingContext2D, sunX: number, sunY: number, R: number, base: Rgb): CanvasGradient {
+  const qx = Math.round(sunX * 16);
+  const qy = Math.round(sunY * 16);
+  const qr = Math.round(R * 4);
+  const key = (((qx + 16) * 33 + (qy + 16)) * 1024 + Math.min(1023, qr)) * 16777216 + base;
+  if (ballGrad && key === ballKey) return ballGrad;
+  const ux = qx / 16;
+  const uy = qy / 16;
+  const r = qr / 4;
+  const grad = g.createRadialGradient(ux * r * 0.35, uy * r * 0.35 - r * 0.25, r * 0.1, 0, 0, r);
+  grad.addColorStop(0, css(lighten(base, 0.6)));
+  grad.addColorStop(0.55, css(base));
+  grad.addColorStop(1, css(darken(base, 0.35)));
+  ballGrad = grad;
+  ballKey = key;
+  return grad;
+}
+
 function drawPedestal(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): void {
   const p = c.parts[0] as PrismPart;
   grown(p.pts, p.n, 2, tmp);
@@ -800,14 +821,14 @@ function drawPedestal(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster)
   const sunX = L.ux;
   const sunY = -L.uy;
   const base = tint(L.pal, MAT.ball);
-  const grad = g.createRadialGradient(sx + sunX * R * 0.35, sy + sunY * R * 0.35 - R * 0.25, R * 0.1, sx, sy, R);
-  grad.addColorStop(0, css(lighten(base, 0.6)));
-  grad.addColorStop(0.55, css(base));
-  grad.addColorStop(1, css(darken(base, 0.35)));
-  g.fillStyle = grad;
+  // The shading gradient lives in ball-local space and is reused while the sun direction (in 1/16
+  // steps), the size and the tint hold, instead of a new gradient every frame.
+  g.fillStyle = ballGradient(g, sunX, sunY, R, base);
+  g.setTransform(v.dpr, 0, 0, v.dpr, sx * v.dpr, sy * v.dpr);
   g.beginPath();
-  g.arc(sx, sy, R, 0, TAU);
+  g.arc(0, 0, R, 0, TAU);
   g.fill();
+  g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   // Horizon band reflection.
   g.strokeStyle = cssa(darken(base, 0.25), 0.5);
   g.lineWidth = Math.max(0.8, R * 0.18);

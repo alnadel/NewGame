@@ -7,7 +7,7 @@ import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
 import { Input, type InputHost } from '../../src/game/input.ts';
-import { Governor } from '../../src/game/perf.ts';
+import { canvasDpr, deviceClass, dprCap, Governor } from '../../src/game/perf.ts';
 
 const NO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -244,11 +244,42 @@ describe('perf governor (TECH_SPEC §15)', () => {
     const g = new Governor();
     // Every other frame misses vsync: 16.7 / 33.3 ms (mean 25), light JS (the cost is raster).
     feed(g, 6.5, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    // First the soft shadow layer goes (its full-screen scaled blit), resolution untouched.
     expect(g.level).toBe(1);
+    expect([g.softShadows, g.dprScale]).toEqual([false, 1]);
+    feed(g, 3.2, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    expect(g.level).toBe(2);
     expect(g.dprScale).toBe(0.75);
     feed(g, 30, (i) => (i % 2 ? 33.3 : 16.7), 3);
-    expect(g.level).toBe(4);
+    expect(g.level).toBe(5);
     expect([g.dprScale, g.particleCap, g.detail]).toEqual([0.625, 200, false]);
+  });
+
+  it('starts low-end devices at crisp shadows and never steps back above that', () => {
+    const g = new Governor();
+    g.startAt(1);
+    expect([g.level, g.softShadows, g.dprScale]).toEqual([1, false, 1]);
+    feed(g, 30, () => 16.7, 3);
+    expect(g.level).toBe(1);
+  });
+
+  it('never scales the canvas below 1 device px per CSS px', () => {
+    expect(canvasDpr(3, 2, 1)).toBe(2);
+    expect(canvasDpr(2, 2, 0.625)).toBe(1.25);
+    expect(canvasDpr(2, 1.5, 0.625)).toBe(1);
+    expect(canvasDpr(1, 2, 0.75)).toBe(1);
+    expect(canvasDpr(0.8, 2, 0.75)).toBe(0.8);
+  });
+
+  it('classes ≤ 4 GB or ≤ 4 cores as low-end (not iOS), capped at DPR 1.5', () => {
+    expect(deviceClass({ memory: 4, cores: 8, ios: false })).toBe('low');
+    expect(deviceClass({ memory: 8, cores: 4, ios: false })).toBe('low');
+    expect(deviceClass({ memory: undefined, cores: 4, ios: false })).toBe('low');
+    expect(deviceClass({ memory: 8, cores: 8, ios: false })).toBe('normal');
+    expect(deviceClass({ memory: undefined, cores: undefined, ios: false })).toBe('normal');
+    expect(deviceClass({ memory: undefined, cores: 4, ios: true })).toBe('normal');
+    expect(dprCap('low')).toBe(1.5);
+    expect(dprCap('normal')).toBe(2);
   });
 
   it('treats a steady but very slow cadence as slow frames, not a display rate', () => {

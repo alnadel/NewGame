@@ -6,6 +6,11 @@
 // Winding: core polygons are CCW in world space (y up). Projected to screen space (y down) they all
 // become clockwise, and so does every arc/ellipse drawn with anticlockwise = false, so the
 // nonzero rule unions them all.
+//
+// Crisp mode (perf governor level ≥ 1 and low-end devices, game/perf.ts): the same one path is
+// filled straight onto the world with `multiply` at the LUT alpha. The colors are identical (a
+// multiply of the opaque shadow color at alpha a), only the soft penumbra of the bilinear upscale is
+// lost, and it skips the full-screen scaled multiply blit that dominates software raster.
 
 import { cloudShadow, partShadow, queryCasters, queryClouds, type Caster, type Cloud, type Part, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
@@ -108,8 +113,20 @@ export function drawShadowLayer(
   cot: number,
   tAbs: number,
   alpha: number,
+  soft = true,
 ): void {
   if (alpha <= 0.002 || cot <= 0) return;
+  if (!soft) {
+    g.globalCompositeOperation = 'multiply';
+    g.globalAlpha = alpha;
+    g.fillStyle = css(pal.shadow);
+    g.beginPath();
+    traceShadows(g, v, world, ux, uy, cot, tAbs);
+    g.fill('nonzero');
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    return;
+  }
   const w = Math.max(2, Math.ceil(v.vw / 2));
   const h = Math.max(2, Math.ceil(v.vh / 2));
   if (layer.w !== w || layer.h !== h) {

@@ -62,6 +62,13 @@ startDay?, startT?, startChill?, dailyDate? }`. `tutorial` should be `true` exac
 (first run). Daily/challenge runs use profile 3. `startDay`/`startT` (seconds after that dawn) and
 `startChill` are debug hooks; a start on Day 8 generates the world from Day 1 (≈100 ms).
 
+### Building a run in slices
+`createRun(cfg)` generates the world through Nubs + 1600 u at once (≈ 20-60 ms in Node for Day 1).
+To spread that over frames: `const b = prepareRun(cfg)` (cheap: the start hut only), then
+`prepareSome(b, units)` each frame until it returns true, then `createRun(cfg, b)`, which only does
+what is left. The run is identical however the work was sliced (`determinism.test.ts`). The session
+uses it to build the next endless run while a death and the Results play.
+
 ### `InputFrame` (V1_PLAN §3.1, produced by `src/game/input.ts`)
 `{ dTheta, down, downEdge, upEdge, release, key }`. `dTheta` is degrees requested this tick
 (already `−dx/viewW·360·sensitivity·(invert?−1:1)`, quantized to 1/1024°); `release` is °/s on the

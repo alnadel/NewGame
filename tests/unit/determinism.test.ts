@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { generateSome } from '../../src/core/gen/world.ts';
 import { createBot } from '../../src/core/sim/bots.ts';
-import { createRun } from '../../src/core/sim/create.ts';
+import { createRun, prepareRun, prepareSome } from '../../src/core/sim/create.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runHeadless } from '../../src/core/sim/headless.ts';
 import { createReplay, playReplay, recordFrame } from '../../src/core/sim/replay.ts';
@@ -70,6 +70,25 @@ describe('determinism', () => {
       if ((i + 1) % 600 === 0) expect(hashState(eager)).toBe(hashState(plain));
     }
     expect(eager.world.validatedThrough).toBeGreaterThan(plain.world.validatedThrough);
+  }, 60_000);
+
+  it('a run prepared in slices (the next-run prebuild) plays exactly like one created at once', () => {
+    for (const cfg of [headlessConfig(41, 3), { ...headlessConfig(42, 0), tutorial: true }, { ...headlessConfig(43, 3), startDay: 2, startT: 20 }]) {
+      const plain = createRun(cfg);
+      const build = prepareRun(cfg);
+      let slices = 0;
+      while (!prepareSome(build, 3)) slices++;
+      expect(slices).toBeGreaterThan(5);
+      const sliced = createRun(cfg, build);
+      expect(hashState(sliced)).toBe(hashState(plain));
+      const botA = createBot('reactive');
+      const botB = createBot('reactive');
+      for (let i = 0; i < 1800; i++) {
+        step(plain, botA.next(plain));
+        step(sliced, botB.next(sliced));
+      }
+      expect(hashState(sliced)).toBe(hashState(plain));
+    }
   }, 60_000);
 
   it('the scripted input exercises drags, flicks, catches, taps and keys', () => {
