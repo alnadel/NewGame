@@ -32,13 +32,22 @@ rings → depth-sorted casters with Nubs (an offscreen sprite) inserted at his y
 when something in front overlaps him → heat squiggles → clouds → air particles → Melt Map overlays
 → halo dial → vignettes → text pops → sun mascot → HUD → banners → confetti.
 
+Per-frame cost notes: the HUD row is an offscreen layer rebuilt only when its text, flags or layout
+change (about every 0.7 s), with the moving bits (flake pop, multiplier badge, ruler progress) drawn
+from small sprites; Nubs is stamped from two cached layers (back, front) plus live scarf tails, the
+layers redrawn only when his size (1/40 Chill steps), look (5° steps), tints or expression change;
+building windows, stall posts and footprints are batched into few fills; tree canopies fill cached
+unit-space `Path2D` lumps. At Day 4 noon with a 4× CPU throttle this took the frame's JS from
+~16.5 ms to ~12.5 ms mean (container without a GPU; raster cost there is still software and dominates
+the rAF interval, so a real mid-range phone profile is still the open check).
+
 ## Test hook (`?test=1`)
 
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`), `forceDeath()` (Nubs melts on
 the next daylight tick), `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; extras
 for tooling: `paused()`, `presses()`, `demo(name)` (replays `phew`, `mult`, `mult5`, `noon`, `dawn`,
 `night`, `cloud`, `glare`, `flake` or `best` through fx/audio only — the sim is untouched), `perf()`
-and `nubsScreen()`. `?perf=0` disables the governor (useful for captures).
+(frame/sim/gen/render ms plus Nubs layer redraw and compose counters) and `nubsScreen()`. `?perf=0` disables the governor (useful for captures).
 
 ## Deliberate deviations from the docs
 

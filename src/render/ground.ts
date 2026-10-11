@@ -158,22 +158,38 @@ export function stepFootprints(f: Footprints, x: number, y: number, slope: numbe
   }
 }
 
+/** Prints fade in this many alpha steps, so prints of a step share one path and one fill. */
+const FADE_STEPS = 8;
+
 export function drawFootprints(g: CanvasRenderingContext2D, f: Footprints, v: View, pal: Palette): void {
   const wet: Rgb = darken(pal.trail, 0.35);
   const frost: Rgb = mix(0xffffff, 0xdff1ff, 0.4);
-  for (let i = 0; i < FP_CAP; i++) {
-    const age = f.age[i]!;
-    const isFrost = f.frost[i] === 1;
+  for (let kind = 0; kind < 2; kind++) {
+    const isFrost = kind === 1;
     const life = isFrost ? FROST_LIFE : WET_LIFE;
-    if (age >= life) continue;
-    const y = f.y[i]!;
-    if (y < v.y0 - 10 || y > v.y1 + 10) continue;
-    const fade = 1 - age / life;
-    const sx = v.ox + f.x[i]! * v.S;
-    const sy = v.oy - y * v.S;
-    g.fillStyle = isFrost ? cssa(frost, 0.75 * fade) : cssa(wet, 0.45 * fade);
-    g.beginPath();
-    g.ellipse(sx, sy, 1.6 * v.S, 2.6 * v.S, Math.PI / 2 - f.angle[i]!, 0, Math.PI * 2);
-    g.fill();
+    for (let step = 1; step <= FADE_STEPS; step++) {
+      let any = false;
+      for (let i = 0; i < FP_CAP; i++) {
+        if (f.frost[i] !== kind) continue;
+        const age = f.age[i]!;
+        if (age >= life) continue;
+        if (Math.ceil((1 - age / life) * FADE_STEPS) !== step) continue;
+        const y = f.y[i]!;
+        if (y < v.y0 - 10 || y > v.y1 + 10) continue;
+        if (!any) {
+          any = true;
+          g.beginPath();
+        }
+        const sx = v.ox + f.x[i]! * v.S;
+        const sy = v.oy - y * v.S;
+        const rot = Math.PI / 2 - f.angle[i]!;
+        g.moveTo(sx + Math.cos(rot) * 1.6 * v.S, sy + Math.sin(rot) * 1.6 * v.S);
+        g.ellipse(sx, sy, 1.6 * v.S, 2.6 * v.S, rot, 0, Math.PI * 2);
+      }
+      if (!any) continue;
+      const fade = step / FADE_STEPS;
+      g.fillStyle = isFrost ? cssa(frost, 0.75 * fade) : cssa(wet, 0.45 * fade);
+      g.fill();
+    }
   }
 }

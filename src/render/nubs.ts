@@ -230,29 +230,40 @@ interface Looks {
   nose: NoseLook;
 }
 
-let cachedEquip = '';
+let cachedScarf = '';
+let cachedHat = '';
+let cachedNose = '';
 let cachedLooks: Looks | null = null;
 
+/** The looks for `e`, cached (the same object while the equipped set is unchanged). */
 export function looksFor(e: Equipped): Looks {
-  const key = `${e.scarf}|${e.hat}|${e.nose}`;
-  if (key !== cachedEquip || !cachedLooks) {
-    cachedEquip = key;
+  if (!cachedLooks || e.scarf !== cachedScarf || e.hat !== cachedHat || e.nose !== cachedNose) {
+    cachedScarf = e.scarf;
+    cachedHat = e.hat;
+    cachedNose = e.nose;
     cachedLooks = equippedLooks(e);
   }
   return cachedLooks;
 }
 
-/** Draws Nubs at pose p. `U` is px per local unit (S × visual size × 0.9). */
-export function drawNubs(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: Looks): void {
-  if (p.melt >= 0) {
-    drawMelt(g, p, a, looks);
-    return;
-  }
-  const size = 0.6 + 0.4 * p.chill;
-  // Visual scale 1.15 (V1_PLAN asks 0.9; at 360 u per screen width that read as a 20 px speck).
-  const U = p.S * size * NUBS_SCALE;
+/**
+ * Whole-sprite motion applied around the ground point: walk bob (scaleY 1 ± 0.04), shiver squash
+ * (1.12 / 0.90 easing back over 140 ms) and jitter, and the teardrop's squash and wobble below 30 %
+ * Chill. Kept out of the drawing itself so the cached sprite layers stay still (see NubsSprite).
+ */
+interface Motion {
+  sx: number;
+  sy: number;
+  rot: number;
+  /** Horizontal jitter in pose px. */
+  jx: number;
+}
+
+const motion: Motion = { sx: 1, sy: 1, rot: 0, jx: 0 };
+
+function nubsMotion(p: NubsPose, a: NubsAnim, out: Motion): Motion {
+  const U = p.S * (0.6 + 0.4 * p.chill) * NUBS_SCALE;
   const low = p.chill < 0.3;
-  // Walk bob (scaleY 1 ± 0.04), shiver squash (1.12 / 0.90 easing back over 140 ms).
   let sx = 1;
   let sy = 1;
   if (p.walking && !p.reducedMotion) sy += 0.04 * Math.sin(a.walkPhase);
@@ -266,37 +277,53 @@ export function drawNubs(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, 
     sx *= 1.15;
     sy *= 0.85;
   }
-  const wob = low && !p.reducedMotion ? (4 * Math.PI) / 180 * Math.sin(p.time * 9) : 0;
-  const shiverJitter = a.shiver > 0 && !p.reducedMotion ? Math.sin(p.time * 90) * 0.6 * U : 0;
+  out.sx = sx;
+  out.sy = sy;
+  out.rot = low && !p.reducedMotion ? ((4 * Math.PI) / 180) * Math.sin(p.time * 9) : 0;
+  out.jx = a.shiver > 0 && !p.reducedMotion ? Math.sin(p.time * 90) * 0.6 * U : 0;
+  return out;
+}
 
-  g.save();
-  g.translate(p.x + shiverJitter, p.y);
-  g.rotate(wob);
-  g.scale(sx, sy);
+/** Body/head geometry in pose px, relative to the ground point. */
+interface Geom {
+  U: number;
+  low: boolean;
+  bodyY: number;
+  bodyR: number;
+  headY: number;
+  headR: number;
+}
 
-  const bodyY = -5 * U;
-  const bodyR = 11 * U;
-  const headY = (low ? -13 : -16.5) * U;
-  const headR = 7.5 * U;
-  const lx = p.lookX;
-  const ly = p.lookY;
+const geom: Geom = { U: 1, low: false, bodyY: 0, bodyR: 1, headY: 0, headR: 1 };
 
+function nubsGeom(p: NubsPose, out: Geom): Geom {
+  // Visual scale 1.15 (V1_PLAN asks 0.9; at 360 u per screen width that read as a 20 px speck).
+  const U = p.S * (0.6 + 0.4 * p.chill) * NUBS_SCALE;
+  out.U = U;
+  out.low = p.chill < 0.3;
+  out.bodyY = -5 * U;
+  out.bodyR = 11 * U;
+  out.headY = (out.low ? -13 : -16.5) * U;
+  out.headR = 7.5 * U;
+  return out;
+}
+
+function tintOf(p: NubsPose, s: number): Rgb {
+  return mix(SNOW, p.shade, (0.15 + 0.85 * s) * (p.sunUp ? 1 : 0.6) * (1 - p.night * 0.3));
+}
+
+/** Back layer: outline, body (per-sample tint gradient), body rim and sun-side highlight. */
+function drawBackLayer(g: CanvasRenderingContext2D, p: NubsPose, G: Geom): void {
+  const { U, low, bodyY, bodyR, headY, headR } = G;
   // Partial shade per sample: shaded (w 0) samples tint that side cool.
   const shadeL = p.w2 === 0 ? 1 : 0;
   const shadeR = p.w1 === 0 ? 1 : 0;
   const shadeC = p.w0 === 0 ? 1 : 0;
-  const shadeN = p.w3 === 0 ? 1 : 0;
-  const shadeS = p.w4 === 0 ? 1 : 0;
-  const sunK = p.sunUp ? 1 : 0;
-  const tintOf = (s: number): Rgb => mix(SNOW, p.shade, (0.15 + 0.85 * s) * (sunK ? 1 : 0.6) * (1 - p.night * 0.3));
-  const glareFlash = a.glare > 0 ? a.glare / 0.25 : 0;
-
-  // Body: left/center/right tint gradient, then a sun-side highlight and a cool rim away from the sun.
-  const bottomS = shadeS * 0.5;
+  const bottomS = (p.w4 === 0 ? 1 : 0) * 0.5;
   const bodyGrad = g.createLinearGradient(-bodyR, 0, bodyR, 0);
-  bodyGrad.addColorStop(0, css(tintOf(Math.max(shadeL, bottomS))));
-  bodyGrad.addColorStop(0.5, css(tintOf(Math.max(shadeC, bottomS))));
-  bodyGrad.addColorStop(1, css(tintOf(Math.max(shadeR, bottomS))));
+  bodyGrad.addColorStop(0, css(tintOf(p, Math.max(shadeL, bottomS))));
+  bodyGrad.addColorStop(0.5, css(tintOf(p, Math.max(shadeC, bottomS))));
+  bodyGrad.addColorStop(1, css(tintOf(p, Math.max(shadeR, bottomS))));
   // Outline first (readability against pale noon ground).
   const ow = Math.min(1.1 * U, 3.2);
   g.fillStyle = css(mix(OUTLINE, 0x2b2140, p.night * 0.5));
@@ -309,31 +336,55 @@ export function drawNubs(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, 
   g.beginPath();
   bodyShape(g, 0, bodyY, bodyR, low);
   g.fill();
-  rimAndHighlight(g, 0, bodyY, bodyR, lx, ly, p.f > 0 && p.sunUp, low);
+  rimAndHighlight(g, 0, bodyY, bodyR, p.lookX, p.lookY, p.f > 0 && p.sunUp, low);
+}
 
-  // Scarf tails behind the head, below the knot.
-  drawScarfTails(g, a, looks.scarf, U, headY + headR * 0.75, lx);
+/** Scarf tails (between the layers: in front of the body, behind the head). */
+function drawTailsLayer(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: Looks, G: Geom): void {
+  drawScarfTails(g, a, looks.scarf, G.U, G.headY + G.headR * 0.75, p.lookX);
+}
 
-  // Head.
-  g.fillStyle = css(tintOf(Math.max(shadeN, shadeC * 0.6)));
+/** Front layer: head, its rim, the scarf band, face and hat. */
+function drawFrontLayer(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: Looks, G: Geom): void {
+  const { U, headY, headR } = G;
+  const lx = p.lookX;
+  const shadeC = p.w0 === 0 ? 1 : 0;
+  const shadeN = p.w3 === 0 ? 1 : 0;
+  g.fillStyle = css(tintOf(p, Math.max(shadeN, shadeC * 0.6)));
   g.beginPath();
   g.arc(0, headY, headR, 0, TAU);
   g.fill();
-  rimAndHighlight(g, 0, headY, headR, lx, ly, p.f > 0 && p.sunUp, false);
-
-  // Scarf band around the neck.
+  rimAndHighlight(g, 0, headY, headR, lx, p.lookY, p.f > 0 && p.sunUp, false);
   drawScarfBand(g, looks.scarf, U, headY + headR * 0.78, headR * 1.1, lx);
-
-  // Face.
   drawFace(g, p, a, U, headY, headR, looks.nose);
   drawHat(g, looks.hat, U, headY, headR, lx);
+}
 
-  if (glareFlash > 0) {
-    g.globalCompositeOperation = 'source-atop';
-    g.fillStyle = cssa(0xffb36b, 0.55 * glareFlash);
-    g.fillRect(-bodyR * 2, headY - headR * 2, bodyR * 4, bodyR * 4);
-    g.globalCompositeOperation = 'source-over';
+/** The orange glare flash over everything already drawn in `g` (Nubs-only canvases). */
+function drawGlareFlash(g: CanvasRenderingContext2D, a: NubsAnim, G: Geom): void {
+  if (a.glare <= 0) return;
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = cssa(0xffb36b, 0.55 * (a.glare / 0.25));
+  g.fillRect(-G.bodyR * 2, G.headY - G.headR * 2, G.bodyR * 4, G.bodyR * 4);
+  g.globalCompositeOperation = 'source-over';
+}
+
+/** Draws Nubs at pose p straight into `g` (used for the melt and the Wardrobe preview). */
+export function drawNubs(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: Looks): void {
+  if (p.melt >= 0) {
+    drawMelt(g, p, a, looks);
+    return;
   }
+  const m = nubsMotion(p, a, motion);
+  const G = nubsGeom(p, geom);
+  g.save();
+  g.translate(p.x + m.jx, p.y);
+  g.rotate(m.rot);
+  g.scale(m.sx, m.sy);
+  drawBackLayer(g, p, G);
+  drawTailsLayer(g, p, a, looks, G);
+  drawFrontLayer(g, p, a, looks, G);
+  drawGlareFlash(g, a, G);
   g.restore();
 }
 
@@ -922,9 +973,17 @@ export function drawSizzle(g: CanvasRenderingContext2D, p: NubsPose, time: numbe
 }
 
 // ---------------------------------------------------------------------------------------------
-// Offscreen sprite: Nubs is drawn into his own small canvas each frame, so effects that composite
-// against him (the glare flash) only touch his pixels, and the renderer can stamp him twice (the
-// depth-sorted pass, then a see-through "x-ray" pass when something in front hides him).
+// Offscreen sprite. Nubs is built from two cached layers — back (outline, body, rim) and front
+// (head, scarf band, face, hat) — redrawn only when what they show changes: Chill-driven size in
+// 1/40 steps, the look direction in 5° steps, per-sample shade tints, lit/night, the face's
+// expression, the cosmetics, the scale. Each frame the renderer stamps back layer → scarf tails
+// (live spring physics, a few strokes) → front layer, under one transform carrying the walk bob,
+// shiver and teardrop wobble; walking alone redraws nothing offscreen.
+//
+// Some effects need Nubs as one image: the see-through "x-ray" stamp when something in front hides
+// him (layers stamped at partial alpha would show his outline through his head) and the glare
+// flash (source-atop must touch only his pixels). For those, and for the melt, the layers and tails
+// are composed into `canvas` once that frame and it is stamped instead.
 // ---------------------------------------------------------------------------------------------
 
 /** Sprite box in world u: 80 wide, 84 tall, ground point at (40, 64). */
@@ -932,46 +991,207 @@ const BOX_W = 80;
 const BOX_H = 84;
 const ORIGIN_X = 40;
 const ORIGIN_Y = 64;
+/** Quantization of the cached layers' inputs. */
+const CHILL_STEPS = 40;
+const LOOK_STEP_DEG = 5;
+const NIGHT_STEPS = 32;
 
 export interface NubsSprite {
+  /** The composed image (x-ray, glare flash, melt). */
   canvas: Canvas2D;
   g: CanvasRenderingContext2D;
   /** Device px per world u the sprite was drawn at. */
   scale: number;
+  /** Cached layers and what they were drawn for. */
+  back: Canvas2D;
+  backG: CanvasRenderingContext2D;
+  front: Canvas2D;
+  frontG: CanvasRenderingContext2D;
+  key: number;
+  keyShade: number;
+  keyLooks: Looks | null;
+  /** This frame: draw from the composed canvas (melt, glare flash), and whether it is up to date. */
+  whole: boolean;
+  composed: boolean;
+  /** This frame's inputs for the tails (layer space, device px). */
+  anim: NubsAnim | null;
+  looks: Looks | null;
+  readonly geom: Geom;
+  /** Whole-sprite motion for stamping: scale, rotation (rad) and x jitter (CSS px). */
+  sx: number;
+  sy: number;
+  rot: number;
+  jx: number;
+  /** Layer redraws and compositions so far (perf checks). */
+  layerDraws: number;
+  composes: number;
 }
 
 export function createNubsSprite(): NubsSprite {
   const canvas = makeCanvas(2, 2);
-  return { canvas, g: ctx2d(canvas), scale: 1 };
+  const back = makeCanvas(2, 2);
+  const front = makeCanvas(2, 2);
+  return {
+    canvas,
+    g: ctx2d(canvas),
+    scale: 1,
+    back,
+    backG: ctx2d(back),
+    front,
+    frontG: ctx2d(front),
+    key: NaN,
+    keyShade: -1,
+    keyLooks: null,
+    whole: false,
+    composed: false,
+    anim: null,
+    looks: null,
+    geom: { U: 1, low: false, bodyY: 0, bodyR: 1, headY: 0, headR: 1 },
+    sx: 1,
+    sy: 1,
+    rot: 0,
+    jx: 0,
+    layerDraws: 0,
+    composes: 0,
+  };
 }
 
 const spritePose = createPose();
 
-/** Renders the pose into the sprite at `pxPerU` device pixels per u. */
-export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks: Looks, pxPerU: number): void {
-  const w = Math.ceil(BOX_W * pxPerU);
-  const h = Math.ceil(BOX_H * pxPerU);
-  if (sp.canvas.width !== w || sp.canvas.height !== h) {
-    sp.canvas.width = w;
-    sp.canvas.height = h;
+function prepare(c: Canvas2D, g: CanvasRenderingContext2D, w: number, h: number, ox: number, oy: number): void {
+  if (c.width !== w || c.height !== h) {
+    c.width = w;
+    c.height = h;
   }
-  sp.scale = pxPerU;
-  const g = sp.g;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, w, h);
-  Object.assign(spritePose, p);
-  spritePose.x = ORIGIN_X * pxPerU;
-  spritePose.y = ORIGIN_Y * pxPerU;
-  spritePose.S = pxPerU;
-  drawNubs(g, spritePose, a, looks);
+  g.setTransform(1, 0, 0, 1, ox, oy);
 }
 
-/** Stamps the sprite at Nubs' ground point (CSS px) with the current globalAlpha. */
+/**
+ * Prepares this frame's sprite for the pose at `pxPerU` device px per u: refreshes the cached
+ * layers if needed (see the note above) and, for the melt or a glare flash, composes the image.
+ */
+export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks: Looks, pxPerU: number): void {
+  const w = Math.ceil(BOX_W * pxPerU);
+  const h = Math.ceil(BOX_H * pxPerU);
+  const ox = ORIGIN_X * pxPerU;
+  const oy = ORIGIN_Y * pxPerU;
+  const resized = sp.back.width !== w || sp.back.height !== h || sp.scale !== pxPerU;
+  sp.scale = pxPerU;
+  sp.anim = a;
+  sp.looks = looks;
+  sp.composed = false;
+
+  if (p.melt >= 0) {
+    // The melt animates every frame: draw it whole, with no stamping transform.
+    prepare(sp.canvas, sp.g, w, h, 0, 0);
+    Object.assign(spritePose, p);
+    spritePose.x = ox;
+    spritePose.y = oy;
+    spritePose.S = pxPerU;
+    drawNubs(sp.g, spritePose, a, looks);
+    sp.sx = sp.sy = 1;
+    sp.rot = sp.jx = 0;
+    sp.key = NaN;
+    sp.whole = true;
+    sp.composed = true;
+    return;
+  }
+
+  const m = nubsMotion(p, a, motion);
+  sp.sx = m.sx;
+  sp.sy = m.sy;
+  sp.rot = m.rot;
+  sp.jx = m.jx;
+
+  // The pose the layers are drawn for, with its continuous inputs quantized.
+  Object.assign(spritePose, p);
+  spritePose.x = 0;
+  spritePose.y = 0;
+  spritePose.S = pxPerU;
+  const chillQ = Math.round(Math.max(0, Math.min(1, p.chill)) * CHILL_STEPS);
+  spritePose.chill = chillQ / CHILL_STEPS;
+  // Keep the teardrop switch exact (it changes the body shape).
+  if (p.chill < 0.3 !== spritePose.chill < 0.3) spritePose.chill = p.chill < 0.3 ? 0.299 : 0.3;
+  const steps = 360 / LOOK_STEP_DEG;
+  const lookQ = ((Math.round((Math.atan2(p.lookY, p.lookX) * steps) / TAU) % steps) + steps) % steps;
+  const la = (lookQ * TAU) / steps;
+  spritePose.lookX = Math.cos(la);
+  spritePose.lookY = Math.sin(la);
+  const nightQ = Math.round(Math.max(0, Math.min(1, p.night)) * NIGHT_STEPS);
+  spritePose.night = nightQ / NIGHT_STEPS;
+  const lit = p.f > 0 && p.sunUp ? 1 : 0;
+  const glare = p.w0 === 2 || p.w1 === 2 || p.w2 === 2 || p.w3 === 2 || p.w4 === 2 ? 1 : 0;
+  const tints = (p.w0 === 0 ? 1 : 0) | (p.w1 === 0 ? 2 : 0) | (p.w2 === 0 ? 4 : 0) | (p.w3 === 0 ? 8 : 0) | (p.w4 === 0 ? 16 : 0);
+  const blink = a.blink > 0 ? 1 : 0;
+  const happy = a.happy > 0 || a.phew > 0 ? 1 : 0;
+  const low = spritePose.chill < 0.3 ? 1 : 0;
+  const key =
+    ((((((((chillQ * 72 + lookQ) * 32 + tints) * 33 + nightQ) * 2 + lit) * 2 + glare) * 2 + blink) * 2 + happy) * 2 + low) * 2 +
+    (p.sunUp ? 1 : 0);
+
+  const G = nubsGeom(spritePose, sp.geom);
+  if (resized || key !== sp.key || p.shade !== sp.keyShade || looks !== sp.keyLooks) {
+    sp.key = key;
+    sp.keyShade = p.shade;
+    sp.keyLooks = looks;
+    prepare(sp.back, sp.backG, w, h, ox, oy);
+    drawBackLayer(sp.backG, spritePose, G);
+    prepare(sp.front, sp.frontG, w, h, ox, oy);
+    drawFrontLayer(sp.frontG, spritePose, a, looks, G);
+    sp.layerDraws++;
+  }
+  // The glare flash must touch only Nubs' pixels: compose him whole while it shows.
+  sp.whole = a.glare > 0;
+  if (sp.whole) compose(sp);
+}
+
+/** Composes back layer, tails, front layer (and the glare flash) into sp.canvas, once per frame. */
+function compose(sp: NubsSprite): void {
+  if (sp.composed) return;
+  const back = sp.back;
+  const ox = ORIGIN_X * sp.scale;
+  const oy = ORIGIN_Y * sp.scale;
+  prepare(sp.canvas, sp.g, back.width, back.height, 0, 0);
+  const g = sp.g;
+  g.drawImage(back, 0, 0);
+  g.setTransform(1, 0, 0, 1, ox, oy);
+  drawTailsLayer(g, spritePose, sp.anim as NubsAnim, sp.looks as Looks, sp.geom);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(sp.front, 0, 0);
+  g.setTransform(1, 0, 0, 1, ox, oy);
+  drawGlareFlash(g, sp.anim as NubsAnim, sp.geom);
+  sp.composed = true;
+  sp.composes++;
+}
+
+/**
+ * Stamps Nubs at his ground point (CSS px) with the current globalAlpha: the layers and tails
+ * directly, or the composed image for the melt, the glare flash and see-through (alpha < 1) stamps.
+ */
 export function drawNubsSprite(g: CanvasRenderingContext2D, sp: NubsSprite, x: number, y: number, dpr: number): void {
   const k = 1 / dpr;
-  g.drawImage(sp.canvas, x - ORIGIN_X * sp.scale * k, y - ORIGIN_Y * sp.scale * k, sp.canvas.width * k, sp.canvas.height * k);
+  const whole = sp.whole || g.globalAlpha < 1;
+  if (whole) compose(sp);
+  const src = whole ? sp.canvas : sp.back;
+  const w = src.width;
+  const h = src.height;
+  const ox = ORIGIN_X * sp.scale;
+  const oy = ORIGIN_Y * sp.scale;
+  g.save();
+  g.translate(x + sp.jx, y);
+  if (sp.rot !== 0) g.rotate(sp.rot);
+  // Device px from here on, like the layers.
+  g.scale(sp.sx * k, sp.sy * k);
+  g.drawImage(src, -ox, -oy, w, h);
+  if (!whole) {
+    drawTailsLayer(g, spritePose, sp.anim as NubsAnim, sp.looks as Looks, sp.geom);
+    g.drawImage(sp.front, -ox, -oy, w, h);
+  }
+  g.restore();
 }
 
 /** Nubs' screen-space box (CSS px) around a ground point, for occlusion tests. */

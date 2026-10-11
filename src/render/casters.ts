@@ -225,7 +225,11 @@ function topColor(L: Light, top: Rgb): Rgb {
   return L.sunUp ? lighten(c, 0.05 + 0.08 * L.elev) : c;
 }
 
-/** Windows on the south faces of a box between heights z0 and z1 (count per face, per floor). */
+/**
+ * Windows on the south faces of a box (count per face, per floor), and optionally a door on the
+ * first such face in place of its first ground-floor window. Windows never overlap, so all frames
+ * go into one path and all panes into another: two fills per building instead of two per window.
+ */
 function windows(
   g: CanvasRenderingContext2D,
   v: View,
@@ -238,53 +242,77 @@ function windows(
   door: boolean,
 ): void {
   const night = L.pal.night;
-  const glass = mix(tint(L.pal, MAT.window), MAT.windowLit, night);
-  const frame = tint(L.pal, 0xffffff);
-  let doorDone = !door;
-  for (let i = 0; i < n; i++) {
+  // The door's face: the first face that gets windows.
+  let doorFace = -1;
+  if (door && perFace >= 2) {
+    for (let i = 0; i < n && doorFace < 0; i++) if (windowFace(pts, n, i) > 0) doorFace = i;
+  }
+  if (doorFace >= 0) {
+    const i = doorFace;
     const j = i + 1 === n ? 0 : i + 1;
     const ax = pts[2 * i] as number;
     const ay = pts[2 * i + 1] as number;
-    const bx = pts[2 * j] as number;
-    const by = pts[2 * j + 1] as number;
-    const ex = bx - ax;
-    const ey = by - ay;
-    const len = Math.sqrt(ex * ex + ey * ey) || 1;
-    if (-ex / len > -0.25) continue;
-    const ww = Math.min(9, len / (perFace * 2.4));
-    for (let k = 0; k < perFace; k++) {
-      let s = (k + 0.5) / perFace;
-      if (!doorDone && perFace >= 2 && k === 0) {
-        // A door on the first visible face instead of its first ground-floor window.
-        doorDone = true;
-        const t0 = s - 6 / len;
-        const t1 = s + 6 / len;
-        g.fillStyle = css(tint(L.pal, MAT.door));
-        quad(g, v, ax + ex * t0, ay + ey * t0, ax + ex * t1, ay + ey * t1, 0, 22);
-        s = -1;
-      }
-      for (let f = 0; f < floors.length; f++) {
-        if (s < 0 && f === 0) continue;
-        const ss = s < 0 ? (k + 0.5) / perFace : s;
-        const z0 = floors[f] as number;
-        const t0 = ss - ww / 2 / len;
-        const t1 = ss + ww / 2 / len;
-        g.fillStyle = css(frame);
-        quad(g, v, ax + ex * (t0 - 1.2 / len), ay + ey * (t0 - 1.2 / len), ax + ex * (t1 + 1.2 / len), ay + ey * (t1 + 1.2 / len), z0 - 1.2, z0 + wh + 1.2);
-        g.fillStyle = css(glass);
-        quad(g, v, ax + ex * t0, ay + ey * t0, ax + ex * t1, ay + ey * t1, z0, z0 + wh);
+    const ex = (pts[2 * j] as number) - ax;
+    const ey = (pts[2 * j + 1] as number) - ay;
+    const len = windowFace(pts, n, i);
+    const s = 0.5 / perFace;
+    const t0 = s - 6 / len;
+    const t1 = s + 6 / len;
+    g.fillStyle = css(tint(L.pal, MAT.door));
+    g.beginPath();
+    quadPath(g, v, ax + ex * t0, ay + ey * t0, ax + ex * t1, ay + ey * t1, 0, 22);
+    g.fill();
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    // Pass 0: white frames (1.2 u larger all round); pass 1: the panes (lit at night).
+    const m = pass === 0 ? 1.2 : 0;
+    g.fillStyle = css(pass === 0 ? tint(L.pal, 0xffffff) : mix(tint(L.pal, MAT.window), MAT.windowLit, night));
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const len = windowFace(pts, n, i);
+      if (len <= 0) continue;
+      const j = i + 1 === n ? 0 : i + 1;
+      const ax = pts[2 * i] as number;
+      const ay = pts[2 * i + 1] as number;
+      const ex = (pts[2 * j] as number) - ax;
+      const ey = (pts[2 * j + 1] as number) - ay;
+      const ww = Math.min(9, len / (perFace * 2.4));
+      for (let k = 0; k < perFace; k++) {
+        const ss = (k + 0.5) / perFace;
+        const t0 = ss - ww / 2 / len - m / len;
+        const t1 = ss + ww / 2 / len + m / len;
+        for (let f = 0; f < floors.length; f++) {
+          if (i === doorFace && k === 0 && f === 0) continue;
+          const z0 = floors[f] as number;
+          quadPath(g, v, ax + ex * t0, ay + ey * t0, ax + ex * t1, ay + ey * t1, z0 - m, z0 + wh + m);
+        }
       }
     }
+    g.fill();
   }
 }
 
-function quad(g: CanvasRenderingContext2D, v: View, ax: number, ay: number, bx: number, by: number, z0: number, z1: number): void {
-  g.beginPath();
+/** Length of face i (edge i → i+1) if it faces south enough to carry windows, else 0. */
+function windowFace(pts: Float64Array, n: number, i: number): number {
+  const j = i + 1 === n ? 0 : i + 1;
+  const ex = (pts[2 * j] as number) - (pts[2 * i] as number);
+  const ey = (pts[2 * j + 1] as number) - (pts[2 * i + 1] as number);
+  const len = Math.sqrt(ex * ex + ey * ey) || 1;
+  return -ex / len > -0.25 ? 0 : len;
+}
+
+/** Appends a vertical quad on the segment (a → b) between heights z0 and z1 to the current path. */
+function quadPath(g: CanvasRenderingContext2D, v: View, ax: number, ay: number, bx: number, by: number, z0: number, z1: number): void {
   g.moveTo(px(v, ax), py(v, ay, z0));
   g.lineTo(px(v, bx), py(v, by, z0));
   g.lineTo(px(v, bx), py(v, by, z1));
   g.lineTo(px(v, ax), py(v, ay, z1));
   g.closePath();
+}
+
+function quad(g: CanvasRenderingContext2D, v: View, ax: number, ay: number, bx: number, by: number, z0: number, z1: number): void {
+  g.beginPath();
+  quadPath(g, v, ax, ay, bx, by, z0, z1);
   g.fill();
 }
 
@@ -700,9 +728,26 @@ function drawStall(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): v
     g.arc(sx, sy, 1.8 * v.S, 0, TAU);
   }
   g.fill();
-  for (let i = 0; i < 4; i++) {
-    const post = c.parts[i] as PrismPart;
-    if (L.sides) sideFaces(g, v, L, post.pts, post.pts, post.n, 0, post.h, darken(MAT.post, 0.15), MAT.post);
+  // The four posts share a rotation, so face k has the same normal (and color) on each: one fill
+  // per face direction. Thin posts never overlap on screen, so the draw order between them is moot.
+  if (L.sides) {
+    const p0 = c.parts[0] as PrismPart;
+    for (let k = 0; k < p0.n; k++) {
+      const k1 = k + 1 === p0.n ? 0 : k + 1;
+      const ex = (p0.pts[2 * k1] as number) - (p0.pts[2 * k] as number);
+      const ey = (p0.pts[2 * k1 + 1] as number) - (p0.pts[2 * k + 1] as number);
+      const len = Math.sqrt(ex * ex + ey * ey) || 1;
+      const ny = -ex / len;
+      if (ny > -0.02) continue;
+      const ndu = (ey / len) * L.ux + ny * L.uy;
+      g.fillStyle = css(faceShade(L.pal, darken(MAT.post, 0.15), MAT.post, ndu * (0.6 + 0.4 * (1 - L.elev)), L.sunUp));
+      g.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const post = c.parts[i] as PrismPart;
+        quadPath(g, v, post.pts[2 * k] as number, post.pts[2 * k + 1] as number, post.pts[2 * k1] as number, post.pts[2 * k1 + 1] as number, 0, post.h);
+      }
+      g.fill();
+    }
   }
   // Awning sides (red), then stripes on top.
   if (L.sides) sideFaces(g, v, L, roof.pts, roof.pts, roof.n, roof.z0 - 3, roof.z1, MAT.stallRed, MAT.stallRed);
@@ -812,15 +857,37 @@ function lumps(id: number): Float32Array {
   return l;
 }
 
-function lumpPath(g: CanvasRenderingContext2D, l: Float32Array, cx: number, cy: number, R: number, ox: number, oy: number, scale: number): void {
-  g.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const x = cx + ((l[3 * i] as number) + ox) * R;
-    const y = cy - ((l[3 * i + 1] as number) - oy) * R;
-    const r = (l[3 * i + 2] as number) * R * scale;
-    g.moveTo(x + r, y);
-    g.arc(x, y, r, 0, TAU);
+/** Canopy lump paths per tree in unit space (lump radius × 1, 0.86, 0.42), built once per tree. */
+const lumpPaths = new Map<number, Path2D[]>();
+const LUMP_SCALES = [1, 0.86, 0.42];
+
+function lumpPathsFor(id: number, l: Float32Array): Path2D[] {
+  let ps = lumpPaths.get(id);
+  if (ps) return ps;
+  if (lumpPaths.size > 600) lumpPaths.clear();
+  ps = [];
+  for (const scale of LUMP_SCALES) {
+    const p = new Path2D();
+    for (let i = 0; i < 6; i++) {
+      const x = l[3 * i] as number;
+      const y = -(l[3 * i + 1] as number);
+      const r = (l[3 * i + 2] as number) * scale;
+      p.moveTo(x + r, y);
+      p.arc(x, y, r, 0, TAU);
+    }
+    ps.push(p);
   }
+  lumpPaths.set(id, ps);
+  return ps;
+}
+
+/** Fills the canopy lumps centered at (cx, cy) with radius R, offset by (ox, oy)·R. */
+function fillLumps(g: CanvasRenderingContext2D, paths: Path2D[], cx: number, cy: number, R: number, ox: number, oy: number, which: number): void {
+  g.save();
+  g.translate(cx + ox * R, cy + oy * R);
+  g.scale(R, R);
+  g.fill(paths[which] as Path2D);
+  g.restore();
 }
 
 function drawTree(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster, oak: boolean): void {
@@ -846,20 +913,17 @@ function drawTree(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster, oak
   const base = tint(L.pal, mix(oak ? MAT.oak : MAT.canopy, shift, amt));
   const shade = tint(L.pal, mix(oak ? MAT.oakShade : MAT.canopyShade, shift, amt * 0.8));
   // Underside (gives the canopy thickness), then the shaded mass, then the lit mass toward the sun.
+  const paths = lumpPathsFor(c.id, l);
   g.fillStyle = css(darken(shade, 0.12));
-  lumpPath(g, l, cx, cy + 4 * v.S, R, 0, 0, 1);
-  g.fill();
+  fillLumps(g, paths, cx, cy + 4 * v.S, R, 0, 0, 0);
   g.fillStyle = css(shade);
-  lumpPath(g, l, cx, cy, R, 0, 0, 1);
-  g.fill();
+  fillLumps(g, paths, cx, cy, R, 0, 0, 0);
   const off = L.sunUp ? 0.16 + 0.08 * (1 - L.elev) : 0.05;
   g.fillStyle = css(base);
-  lumpPath(g, l, cx, cy, R, L.ux * off, L.uy * off - 0.05, 0.86);
-  g.fill();
+  fillLumps(g, paths, cx, cy, R, L.ux * off, L.uy * off - 0.05, 1);
   if (L.sunUp) {
     g.fillStyle = css(lighten(base, 0.22));
-    lumpPath(g, l, cx, cy, R, L.ux * (off + 0.2), L.uy * (off + 0.2), 0.42);
-    g.fill();
+    fillLumps(g, paths, cx, cy, R, L.ux * (off + 0.2), L.uy * (off + 0.2), 2);
   }
   g.globalAlpha = 1;
 }

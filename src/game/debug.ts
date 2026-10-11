@@ -20,7 +20,7 @@ export interface ShadyTestHook {
   /** Nubs' ground point on screen (CSS px), for review tooling. */
   nubsScreen(): { x: number; y: number };
   /** Frame timing (ms) of the last frame: frame, sim, gen, render. */
-  perf(): { frameMs: number; simMs: number; genMs: number; renderMs: number; fps: number };
+  perf(): { frameMs: number; simMs: number; genMs: number; renderMs: number; fps: number; nubsLayerDraws: number; nubsComposes: number };
 }
 
 declare global {
@@ -53,7 +53,11 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     paused: () => session.isPaused,
     presses: () => session.input.presses,
     demo: (name) => session.demo(name),
-    perf: () => ({ ...session.stats }),
+    perf: () => ({
+      ...session.stats,
+      nubsLayerDraws: session.renderer.scene.nubsSprite.layerDraws,
+      nubsComposes: session.renderer.scene.nubsSprite.composes,
+    }),
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
   };
   window.__SHADY_TEST__ = hook;
