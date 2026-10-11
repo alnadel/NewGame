@@ -70,11 +70,16 @@ export interface ProfileParams {
  * Onboarding profiles (V1_PLAN §6). Daily and challenge runs always use profile 3. Drains step
  * 30 / 40 / 47 / 55 (K2) so the run-3 jump to the full drain is no longer a cliff; endless runs also
  * cap it per lifetime run with endlessDrain() below.
+ *
+ * Runs 1 and 2 keep the parked noon cloud. The seeded human model showed that without it they die
+ * just before Day 1 noon (median 24 s, 18% see night, vs 67% on run 0). With it, run 1 reaches a
+ * median of 40 s and 43% see night. The training wheel still asks the player to find the cloud's
+ * angle, and it ends at run 3.
  */
 export const PROFILES: readonly ProfileParams[] = Object.freeze([
   Object.freeze({ drain: 30, day1EpsNoon: 40, day1Floor: 70, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: true }),
-  Object.freeze({ drain: 40, day1EpsNoon: 44, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
-  Object.freeze({ drain: 47, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
+  Object.freeze({ drain: 40, day1EpsNoon: 44, day1Floor: 0, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: false }),
+  Object.freeze({ drain: 47, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: false }),
   Object.freeze({ drain: 55, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 15, guideAlways: false }),
 ]);
 

@@ -231,8 +231,8 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 | Profile | Lifetime runs | Drain | Day 1 εnoon | Extras |
 |---|---|---|---|---|
 | 0 | 0 | 30 | 40° | Tutorial chunk 0; Day 1 validator floor 70; a **parked cloud** rides with Nubs from 11:00 AM to 1:00 PM on Day 1, its shadow reachable by pointing the sun roughly north; guide always on; PHEW T = 20 |
-| 1 | 1 | 40 | 44° | PHEW T = 20 |
-| 2 | 2 | 47 | 48° | PHEW T = 20 |
+| 1 | 1 | 40 | 44° | The same parked noon cloud and overtaking first cloud as profile 0; PHEW T = 20 |
+| 2 | 2 | 47 | 48° | The same parked noon cloud and overtaking first cloud as profile 0; PHEW T = 20 |
 | 3 | ≥ 3 | 55 | 48° | Standard |
 
 Days 2 and later use the standard table in every profile; only the drain persists for the whole run.

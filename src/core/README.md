@@ -341,7 +341,7 @@ Polish wave (all in the golden hashes regenerated with it):
 - **Flakes** melt after `TUNING.pickups.meltBudget` = 1.2 lit seconds (GDD §5.4; never above 1.3).
 - **Death line**: a cloud is blamed only within ±`cloudTurnRate`·`cloudTurnSec` = ±60° of θ one
   second before death (GDD §10 row 3).
-- `PROFILES[p].firstCloudOvertakes` / `parkedNoonCloud` are honoured as flags (only p0 sets them).
+- `PROFILES[p].firstCloudOvertakes` / `parkedNoonCloud` are honoured as flags (p0-p2 set them: runs 1-2 keep the noon cloud as a training wheel).
   `day1Floor` (70 for p0) is currently non-binding: the table's 50 gives byte-identical output.
 
 `sim --check` after the wave (40 / 50 / 100 seeds): idle p3 dies before 8 AM on 97.5 / 98 / 98%;
