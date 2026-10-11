@@ -2,7 +2,7 @@
 // Play, and the last 14 days.
 
 import { formatScore } from '../../core/format.ts';
-import { DAILY_TRIES, formatDateLabel, recentDates } from '../../meta/daily.ts';
+import { beforeSaveStart, DAILY_TRIES, formatDateLabel, recentDates } from '../../meta/daily.ts';
 import { dailyStatus, type DailyStatus } from '../../meta/progression.ts';
 import { h, setChildren } from '../dom.ts';
 import { icon } from '../icons.ts';
@@ -55,15 +55,25 @@ export function createDailyScreen(ctx: UiContext): Screen {
   const body = h('div', { class: 'menu-body' }, hero, h('section', { class: 'card' }, h('h3', { class: 'card-title' }, 'Recent days'), history));
   const el = h('section', { class: 'scr scr-menu scr-daily', 'aria-label': 'Daily Solstice' }, h('div', { class: 'menu pe' }, menuHeader(ctx, 'Daily'), body));
 
-  const historyRow = (s: DailyStatus, isToday: boolean): HTMLElement => {
-    const result = s.played && s.bestMinutes > 0 ? formatScore(s.bestMinutes) : s.played ? 'Melted early' : isToday ? 'Not played yet' : 'Missed';
+  /** One history row. Days before the save existed read neutrally ("—"), not as missed. */
+  const historyRow = (s: DailyStatus, isToday: boolean, before: boolean): HTMLElement => {
+    const unplayed = before ? '—' : isToday ? 'Not played yet' : 'Missed';
+    const result = s.played && s.bestMinutes > 0 ? formatScore(s.bestMinutes) : s.played ? 'Melted early' : unplayed;
     const strip = s.glyphs ? lastStrip(s.glyphs) : '';
+    const quiet = before && !s.played;
     return h(
       'li',
-      { class: `drow${isToday ? ' is-today' : ''}${s.played ? '' : ' is-empty'}` },
+      { class: `drow${isToday ? ' is-today' : ''}${s.played ? '' : ' is-empty'}${quiet ? ' is-before' : ''}` },
       h('span', { class: 'drow-when' }, h('span', { class: 'drow-num' }, `#${s.number}`), h('span', { class: 'drow-date' }, isToday ? 'Today' : formatDateLabel(s.date))),
-      h('span', { class: 'drow-result' }, h('span', { class: 'drow-score' }, result), strip ? h('span', { class: 'drow-strip', 'aria-hidden': 'true' }, strip) : null),
-      h('span', { class: 'drow-tries', 'aria-label': `${s.tries} of ${DAILY_TRIES} tries` }, `${s.tries}/${DAILY_TRIES}`),
+      h(
+        'span',
+        { class: 'drow-result', ...(quiet ? { 'aria-label': 'Before you started' } : {}) },
+        h('span', { class: 'drow-score' }, result),
+        strip ? h('span', { class: 'drow-strip', 'aria-hidden': 'true' }, strip) : null,
+      ),
+      quiet
+        ? h('span', { class: 'drow-tries', 'aria-hidden': 'true' })
+        : h('span', { class: 'drow-tries', 'aria-label': `${s.tries} of ${DAILY_TRIES} tries` }, `${s.tries}/${DAILY_TRIES}`),
     );
   };
 
@@ -79,7 +89,10 @@ export function createDailyScreen(ctx: UiContext): Screen {
     setButtonLabel(play, s.scored ? `Play · try ${s.tries + 1}/${DAILY_TRIES}` : 'Practice (unscored)');
     play.classList.toggle('btn--primary', s.scored);
     play.classList.toggle('btn--plain', !s.scored);
-    setChildren(history, ...recentDates(today, HISTORY_DAYS).map((d) => historyRow(dailyStatus(save, d), d === today)));
+    setChildren(
+      history,
+      ...recentDates(today, HISTORY_DAYS).map((d) => historyRow(dailyStatus(save, d), d === today, beforeSaveStart(d, save.createdAt))),
+    );
   }
 
   return {

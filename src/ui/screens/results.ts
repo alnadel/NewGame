@@ -6,6 +6,7 @@
 // top of the Melt Map, where the named caster pins of the death line usually are.
 
 import { splitMinutes, formatTimeOfDay } from '../../core/format.ts';
+import { challengeVerdict } from '../../meta/challenge.ts';
 import { dailyNumber, DAILY_TRIES } from '../../meta/daily.ts';
 import type { MissionView } from '../../meta/missions.ts';
 import { h, setChildren } from '../dom.ts';
@@ -25,13 +26,6 @@ const TOAST_GAP_MS = 650;
 export interface ResultsScreen extends Screen {
   /** Top edge of the sheet in CSS px from the top of the UI root. */
   sheetTop(): number;
-}
-
-function formatDuration(minutes: number): string {
-  const hh = Math.floor(minutes / 60);
-  const mm = minutes % 60;
-  if (hh === 0) return `${mm} min`;
-  return mm === 0 ? `${hh} h` : `${hh} h ${mm} min`;
 }
 
 export function createResultsScreen(ctx: UiContext): ResultsScreen {
@@ -195,10 +189,9 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // Challenge verdict
     hide(verdict, view.challengeTarget === undefined);
     if (view.challengeTarget !== undefined) {
-      const diff = result.minutes - view.challengeTarget;
-      verdict.classList.toggle('is-win', diff >= 0);
-      verdict.textContent =
-        diff > 0 ? `Challenge beaten by ${formatDuration(diff)}!` : diff === 0 ? 'Dead heat with the challenge!' : `${formatDuration(-diff)} short of the challenge`;
+      const v = challengeVerdict(result.minutes, view.challengeTarget);
+      verdict.classList.toggle('is-win', v.win);
+      verdict.textContent = v.text;
     }
 
     // Stats (Snow counts up into the wallet).

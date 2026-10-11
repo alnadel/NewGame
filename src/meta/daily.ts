@@ -79,6 +79,14 @@ export function recentDates(today: string, count: number): string[] {
   return out;
 }
 
+/**
+ * True when `date` is before the local day the save was created (`createdAt`, ms): the player
+ * couldn't have played that Daily, so history shows it neutrally rather than as missed.
+ */
+export function beforeSaveStart(date: string, createdAt: number): boolean {
+  return date < localDate(new Date(createdAt));
+}
+
 /** Short human label such as "Sun, Oct 11" (English, independent of the device locale). */
 export function formatDateLabel(date: string): string {
   const ms = utcMidnight(date);

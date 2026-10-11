@@ -1,6 +1,7 @@
 // Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code). Opened from the Title or from Pause;
 // Back returns to wherever it was opened from.
 
+import { backupErrorMessage, backupSummary, importBackup } from '../../meta/backup.ts';
 import type { Settings } from '../../meta/saveTypes.ts';
 import { copyText } from '../../platform/share.ts';
 import { h } from '../dom.ts';
@@ -85,10 +86,19 @@ export function createSettingsScreen(ctx: UiContext): Screen {
         importArea.focus();
         return;
       }
+      // Check the code before asking anything: a typo or a cut-off paste gets its error at once,
+      // and only a code that would really restore gets the (destructive) confirmation.
+      const check = importBackup(code);
+      if (!check.ok) {
+        ctx.sound('deny');
+        ctx.toast(backupErrorMessage(check.error), { icon: 'warn', tone: 'danger' });
+        importArea.focus();
+        return;
+      }
       void ctx
         .confirm({
           title: 'Restore this backup?',
-          body: 'Your current Snow, cosmetics, missions and bests will be replaced by the ones in the code.',
+          body: `It holds: ${backupSummary(check.save)}. Your current Snow, cosmetics, missions and bests will be replaced by these.`,
           confirmLabel: 'Restore',
         })
         .then((yes) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hashString } from '../../src/core/rng.ts';
 import {
   addDays,
+  beforeSaveStart,
   dailyNumber,
   dailySeed,
   daysBetween,
@@ -54,6 +55,13 @@ describe('local date helpers', () => {
     expect(addDays('2026-03-08', 1)).toBe('2026-03-09');
     expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
     expect(daysBetween('2026-03-07', '2026-03-10')).toBe(3);
+  });
+
+  it('knows which history days came before the save existed (shown neutrally, not as missed)', () => {
+    const created = new Date(2026, 9, 9, 18, 30).getTime();
+    expect(beforeSaveStart('2026-10-08', created)).toBe(true);
+    expect(beforeSaveStart('2026-10-09', created)).toBe(false);
+    expect(beforeSaveStart('2026-10-10', created)).toBe(false);
   });
 
   it('lists recent dates newest first', () => {

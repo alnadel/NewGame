@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backupErrorMessage, exportBackup, importBackup } from '../../src/meta/backup.ts';
+import { backupErrorMessage, backupSummary, exportBackup, importBackup } from '../../src/meta/backup.ts';
 import { encodeBase64Url } from '../../src/meta/base64url.ts';
 import { defaults } from '../../src/meta/save.ts';
 
@@ -17,6 +17,15 @@ describe('backup codes', () => {
     const r = importBackup(code, NOW);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.save).toEqual(migrateShape(save));
+  });
+
+  it('summarizes what a backup holds for the restore confirmation', () => {
+    const save = defaults(1);
+    expect(backupSummary(save)).toBe(`No best yet, 0 Snow, ${save.unlocks.cosmetics.length} cosmetics`);
+    save.stats.bestMinutes = 1240;
+    save.stats.wallet = 420;
+    save.unlocks.cosmetics = ['scarf-red'];
+    expect(backupSummary(save)).toBe('Best Day 2 · 2:40 PM, 420 Snow, 1 cosmetic');
   });
 
   it('ignores whitespace and line breaks from pasting', () => {

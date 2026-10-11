@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  challengeVerdict,
   challengeFromHash,
   challengeUrl,
   decodeChallenge,
@@ -63,6 +64,18 @@ describe('challenge codes', () => {
     const c: Challenge = { v: 1, k: 'e', seed: 1, m: 2, s: 3 };
     expect(challengeUrl('https://a.example/shady/', c)).toBe(`https://a.example/shady/#c=${encodeChallenge(c)}`);
     expect(challengeUrl('https://a.example/#c=old', c)).toBe(`https://a.example/#c=${encodeChallenge(c)}`);
+  });
+});
+
+describe('challenge verdict (Results)', () => {
+  it('names the target across days and gives a clock gap only on its own day', () => {
+    // Day 2 · 2:40 PM is 1240.
+    expect(challengeVerdict(23, 1240)).toEqual({ text: 'Short of the target: Day 2 · 2:40 PM', win: false });
+    expect(challengeVerdict(1200, 1240)).toEqual({ text: '40 min short of 2:40 PM on Day 2', win: false });
+    expect(challengeVerdict(1240 - 137, 1240)).toEqual({ text: '2 h 17 min short of 2:40 PM on Day 2', win: false });
+    expect(challengeVerdict(1240, 1240)).toEqual({ text: 'Dead heat with Day 2 · 2:40 PM!', win: true });
+    expect(challengeVerdict(1265, 1240)).toEqual({ text: 'Beat Day 2 · 2:40 PM by 25 min!', win: true });
+    expect(challengeVerdict(1500, 1240)).toEqual({ text: 'Beat Day 2 · 2:40 PM!', win: true });
   });
 });
 

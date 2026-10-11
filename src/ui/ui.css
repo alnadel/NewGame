@@ -1904,6 +1904,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.drow.is-before {
+  opacity: 0.55;
+}
+
 .drow.is-empty .drow-score {
   font-weight: 600;
   color: var(--ink-3);

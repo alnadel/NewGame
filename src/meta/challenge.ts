@@ -3,6 +3,7 @@
 //   daily:   {"v":1,"k":"d","d":"YYYY-MM-DD","m":M,"s":S}
 // m = target score in in-game minutes (Day 2 · 2:40 PM is 1240), s = the sender's run Snow.
 
+import { formatScore, formatTimeOfDay, splitMinutes } from '../core/format.ts';
 import { decodeBase64Url, encodeBase64Url } from './base64url.ts';
 import { isDateString } from './daily.ts';
 
@@ -62,4 +63,29 @@ export function challengeFromHash(hash: string): Challenge | null {
 export function challengeUrl(baseUrl: string, c: Challenge): string {
   const clean = baseUrl.replace(/#.*$/, '');
   return `${clean}#c=${encodeChallenge(c)}`;
+}
+
+/** Clock-time gap on one day: "40 min", "2 h", "2 h 17 min". */
+function clockGap(minutes: number): string {
+  const hh = Math.floor(minutes / 60);
+  const mm = minutes % 60;
+  if (hh === 0) return `${mm} min`;
+  return mm === 0 ? `${hh} h` : `${hh} h ${mm} min`;
+}
+
+/**
+ * The Results verdict for a challenge run, in score terms. Score minutes count daylight only, so a
+ * gap across days is not a duration anyone lived through: across days the line names the target
+ * ("Short of Day 2 · 2:40 PM"); on the target's own day it is a clock gap ("40 min short of 2:40 PM").
+ */
+export function challengeVerdict(reached: number, target: number): { text: string; win: boolean } {
+  const r = splitMinutes(reached);
+  const t = splitMinutes(target);
+  const label = formatScore(target);
+  if (reached === target) return { text: `Dead heat with ${label}!`, win: true };
+  if (reached > target) {
+    return r.day === t.day ? { text: `Beat ${label} by ${clockGap(reached - target)}!`, win: true } : { text: `Beat ${label}!`, win: true };
+  }
+  if (r.day === t.day) return { text: `${clockGap(target - reached)} short of ${formatTimeOfDay(t.minute)} on Day ${t.day}`, win: false };
+  return { text: `Short of the target: ${label}`, win: false };
 }
