@@ -370,6 +370,8 @@ export class Session {
     const h = c.clientHeight || window.innerHeight;
     const dpr = Math.min(2, window.devicePixelRatio || 1) * this.gov.dprScale;
     if (!force && w === this.cssW && h === this.cssH && dpr === this.dpr) return;
+    // A new size means new buffers and first-frame costs: the governor warms up again.
+    if (w !== this.cssW || h !== this.cssH) this.gov.reset();
     this.cssW = w;
     this.cssH = h;
     this.dpr = dpr;
@@ -383,7 +385,6 @@ export class Session {
     const real = Math.min(0.1, Math.max(0, realMs / 1000));
     this.time += real;
     this.stats.fps += (1000 / Math.max(1, realMs) - this.stats.fps) * 0.05;
-    this.gov.sample(realMs, real);
     if (this.sizeDirty) {
       // Re-read size and safe-area insets (a notch can change without the canvas resizing).
       this.sizeDirty = false;
@@ -476,6 +477,8 @@ export class Session {
     this.stats.renderMs = performance.now() - tRender;
     this.d.audio.update(view, real);
     this.stats.frameMs = performance.now() - t0;
+    // The governor weighs the rAF interval against this frame's own work (see perf.ts).
+    this.gov.sample(realMs, this.stats.frameMs, real);
   }
 
   private renderScreen(id: ScreenId): RenderScreen {

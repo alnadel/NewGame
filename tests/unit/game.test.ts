@@ -1,12 +1,13 @@
 // Pure game-layer logic: guide Auto rules and ghost hints (V1_PLAN §6.2-§6.3), the fixed-step clock
-// (TECH_SPEC §9.10), URL params (V1_PLAN §14), view letterboxing (TECH_SPEC §9.1) and the input
-// frame splitting/quantization (V1_PLAN §3.1).
+// (TECH_SPEC §9.10), URL params (V1_PLAN §14), view letterboxing (TECH_SPEC §9.1), the input
+// frame splitting/quantization (V1_PLAN §3.1) and the perf governor (TECH_SPEC §15).
 import { describe, expect, it } from 'vitest';
 import { guideAlpha, HintTracker, nearestSafe, widestArc } from '../../src/game/assist.ts';
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { parseParams, startTFor } from '../../src/game/params.ts';
 import { Input, type InputHost } from '../../src/game/input.ts';
+import { Governor } from '../../src/game/perf.ts';
 
 const NO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -201,5 +202,70 @@ describe('input frames (V1_PLAN §3.1)', () => {
     expect(inp.takeFrames(0).length).toBe(0);
     expect(inp.takeFrames(1)[0]!.downEdge).toBe(true);
     inp.dispose();
+  });
+});
+
+describe('perf governor (TECH_SPEC §15)', () => {
+  /** Feeds `seconds` of frames: intervals from `interval(i)` (ms), JS work `work` (ms). */
+  function feed(g: Governor, seconds: number, interval: (i: number) => number, work: number): void {
+    let t = 0;
+    for (let i = 0; t < seconds; i++) {
+      const ms = interval(i);
+      g.sample(ms, work, ms / 1000);
+      t += ms / 1000;
+    }
+  }
+
+  it('keeps full quality on a steady 30 Hz display with light frames', () => {
+    const g = new Governor();
+    feed(g, 40, (i) => 33.3 + (i % 3) * 0.2, 2.1);
+    expect(g.level).toBe(0);
+    expect(g.capped).toBe(true);
+    expect(g.dprScale).toBe(1);
+  });
+
+  it('steps down on a 30 Hz cadence when the JS work itself is heavy', () => {
+    const g = new Governor();
+    feed(g, 8, () => 33.3, 24);
+    expect(g.level).toBeGreaterThanOrEqual(1);
+  });
+
+  it('steps down one notch per 3 s on a 60 Hz display that keeps missing frames', () => {
+    const g = new Governor();
+    // Every other frame misses vsync: 16.7 / 33.3 ms (mean 25), light JS (the cost is raster).
+    feed(g, 6.5, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    expect(g.level).toBe(1);
+    expect(g.dprScale).toBe(0.75);
+    feed(g, 30, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    expect(g.level).toBe(4);
+    expect([g.dprScale, g.particleCap, g.detail]).toEqual([0.625, 200, false]);
+  });
+
+  it('treats a steady but very slow cadence as slow frames, not a display rate', () => {
+    const g = new Governor();
+    feed(g, 30, () => 120, 14);
+    expect(g.level).toBeGreaterThanOrEqual(2);
+  });
+
+  it('ignores the first 2 s after boot and after a reset', () => {
+    const g = new Governor();
+    feed(g, 1.9, (i) => (i % 2 ? 50 : 16.7), 3);
+    expect(g.level).toBe(0);
+    g.reset();
+    feed(g, 1.9, (i) => (i % 2 ? 50 : 16.7), 3);
+    expect(g.level).toBe(0);
+  });
+
+  it('steps back up once after 10 s of clean frames, and stays down if that fails', () => {
+    const g = new Governor();
+    feed(g, 6.5, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    expect(g.level).toBe(1);
+    feed(g, 15, () => 16.7, 3);
+    expect(g.level).toBe(0);
+    feed(g, 6.5, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    const down = g.level;
+    expect(down).toBeGreaterThanOrEqual(1);
+    feed(g, 30, () => 16.7, 3);
+    expect(g.level).toBe(down);
   });
 });

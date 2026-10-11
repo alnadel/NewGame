@@ -98,7 +98,7 @@ export function installDebugOverlay(session: Session, draw: DebugDraw): void {
     const gov = session.gov;
     const lines = [
       `fps ${st.fps.toFixed(0)}  frame ${st.frameMs.toFixed(1)}ms  sim ${st.simMs.toFixed(2)} gen ${st.genMs.toFixed(2)} draw ${st.renderMs.toFixed(2)}`,
-      `ticks/f ${st.ticks}  dpr ${v.dpr.toFixed(2)} gov L${gov.level} (${gov.mean.toFixed(1)}ms)  particles ${session.renderer.scene.particles.count}`,
+      `ticks/f ${st.ticks}  dpr ${v.dpr.toFixed(2)} gov L${gov.level} (${gov.mean.toFixed(1)}ms, cadence ${gov.median.toFixed(1)}${gov.capped ? ' capped' : ''}, work ${gov.meanWork.toFixed(1)})  particles ${session.renderer.scene.particles.count}`,
       `casters ${s.world.casters.length}  chunks ${w.chunksValidated}/${w.chunksPlaced}  rescues ${w.rescues} parked ${w.parkedClouds} unres ${w.unresolved}`,
       `day ${s.day} t ${s.tDay.toFixed(1)}s  ε ${s.eps.toFixed(1)}°  θ ${s.sun.theta.toFixed(1)}° ${s.sun.mode}  ω ${s.sun.omega.toFixed(0)}`,
       `f ${s.nubs.f.toFixed(2)}  chill ${s.nubs.chill.toFixed(1)}  ×${s.nubs.mult}  hour lit ${s.hourLit.toFixed(2)}s  seed ${s.cfg.seed} p${s.cfg.profile}`,

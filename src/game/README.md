@@ -12,7 +12,7 @@ removes the `#boot` splash after the first frame.
 | `game/camera.ts` | View metrics and letterboxing, Nubs at 68 %/70 %, shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
 | `game/fx.ts` | SimEvents → particles, rings, pops, HUD/banner timers, Nubs reactions, slow-mo and hit-stop; continuous steam, sweat, frost sparkles and fireflies. |
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3) and the ghost-thumb hint tracker (§6.2). |
-| `game/perf.ts` | Frame-time governor (DPR 1 → 0.75 → 0.625, particles 400 → 200, detail tiles off). |
+| `game/perf.ts` | Frame-time governor (DPR 1 → 0.75 → 0.625, particles 400 → 200, detail tiles off): late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
 | `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters, clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial, sun mascot, HUD, banners/vignettes, particles, Melt Map, sprites. |
