@@ -36,8 +36,12 @@ const ASSETS = ${JSON.stringify(assets)};
 const NAV_TIMEOUT_MS = 3000;
 
 // No skipWaiting(): a new version takes over on the next cold start, so a running game never reloads.
+// cache: 'reload' skips the HTTP cache, so a CDN's stale copy of index.html (Pages caches it for
+// minutes) can never be precached next to the new version's assets.
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))),
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -93,7 +97,8 @@ self.addEventListener('fetch', (event) => {
 /**
  * Emits sw.js into client builds. VERSION hashes the contents of every precached file, so any
  * change (even a same-size edit of a public file) ships a new worker. Skipped for SSR builds and for
- * build:single (dist-single), whose inliner deletes the JS files a precache list would name.
+ * the single-file build (`--mode single`, or any build into dist-single), whose inliner deletes the
+ * JS files a precache list would name and whose page never registers a worker.
  */
 function shadySW(): Plugin {
   let config: ResolvedConfig;
@@ -105,7 +110,7 @@ function shadySW(): Plugin {
       config = resolved;
     },
     generateBundle(_options, bundle) {
-      if (config.build.ssr || basename(resolve(config.root, config.build.outDir)) === 'dist-single') return;
+      if (config.build.ssr || config.mode === 'single' || basename(resolve(config.root, config.build.outDir)) === 'dist-single') return;
       const hash = createHash('sha1');
       const files: string[] = [];
       for (const name of Object.keys(bundle).sort()) {

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { isLegalTransition } from '../../src/ui/transitions.ts';
 import type { ScreenId } from '../../src/ui/types.ts';
-import { canRegisterServiceWorker, type SwEnvironment } from '../../src/platform/pwa.ts';
+import {
+  canPromptInstall,
+  canRegisterServiceWorker,
+  captureInstallPrompt,
+  onInstallPromptChange,
+  promptInstall,
+  type SwEnvironment,
+} from '../../src/platform/pwa.ts';
 import { appIconSvg, logoSvg } from '../../src/ui/art.ts';
 
 describe('screen transitions', () => {
@@ -65,6 +72,63 @@ describe('service worker registration rules', () => {
     expect(canRegisterServiceWorker(env({ protocol: 'file:', hostname: '' }))).toBe(false);
     expect(canRegisterServiceWorker(env({ protocol: 'http:' }))).toBe(false);
     expect(canRegisterServiceWorker(env({ hasServiceWorker: false }))).toBe(false);
+  });
+
+  it('never registers in the single-file build', () => {
+    expect(canRegisterServiceWorker(env({ mode: 'single' }))).toBe(false);
+    expect(canRegisterServiceWorker(env({ mode: 'production' }))).toBe(true);
+  });
+});
+
+describe('install prompt (Android)', () => {
+  /** A synthetic beforeinstallprompt with a stubbed prompt() and userChoice. */
+  function promptEvent(outcome: 'accepted' | 'dismissed'): Event & { prompts: number } {
+    const e = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompts: number;
+      prompt(): Promise<void>;
+      userChoice: Promise<{ outcome: string }>;
+    };
+    e.prompts = 0;
+    e.prompt = async () => {
+      e.prompts++;
+    };
+    e.userChoice = Promise.resolve({ outcome });
+    return e;
+  }
+
+  it('stashes the prompt, shows it once and forgets it after appinstalled', async () => {
+    const target = new EventTarget();
+    const stop = captureInstallPrompt(target);
+    let changes = 0;
+    const off = onInstallPromptChange(() => changes++);
+    expect(canPromptInstall()).toBe(false);
+    expect(await promptInstall()).toBe('unavailable');
+
+    const e = promptEvent('accepted');
+    target.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(canPromptInstall()).toBe(true);
+    expect(changes).toBe(1);
+    expect(await promptInstall()).toBe('accepted');
+    expect(e.prompts).toBe(1);
+    // A prompt event works once.
+    expect(canPromptInstall()).toBe(false);
+    expect(await promptInstall()).toBe('unavailable');
+    expect(e.prompts).toBe(1);
+
+    const again = promptEvent('dismissed');
+    target.dispatchEvent(again);
+    expect(canPromptInstall()).toBe(true);
+    target.dispatchEvent(new Event('appinstalled'));
+    expect(canPromptInstall()).toBe(false);
+    expect(again.prompts).toBe(0);
+
+    target.dispatchEvent(promptEvent('dismissed'));
+    expect(await promptInstall()).toBe('dismissed');
+    stop();
+    off();
+    target.dispatchEvent(promptEvent('accepted'));
+    expect(canPromptInstall()).toBe(false);
   });
 });
 
