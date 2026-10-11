@@ -93,6 +93,8 @@ export interface RenderInput {
   equipped: Equipped;
   /** Perf governor: ground detail tiles on/off. */
   detail: boolean;
+  /** Paused: UI timers (banners, HUD pops, halo) hold still. */
+  paused: boolean;
   debug: DebugDraw | null;
 }
 
@@ -261,12 +263,13 @@ export class Renderer {
     const gdt = inp.gdt;
     updateParticles(sc.particles, gdt, snap.nubsX, snap.nubsY, v.cssH);
     updateRings(sc.rings, gdt);
-    updatePops(sc.pops, inp.dt);
-    updateHud(sc.hud, inp.dt);
-    updateBanners(sc.banners, inp.dt, s.phase === 'day' && snap.chill < 25 && inp.dying < 0);
+    const udt = inp.paused ? 0 : inp.dt;
+    updatePops(sc.pops, udt);
+    updateHud(sc.hud, udt);
+    updateBanners(sc.banners, udt, s.phase === 'day' && snap.chill < 25 && inp.dying < 0);
     const walking = (s.phase === 'day' || s.phase === 'night') && inp.dying < 0;
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
-    updateHalo(sc.halo, inp.dt, inp.dragging, snap.chill, s.sun.dTheta);
+    updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta);
     sc.relief = Math.max(0, sc.relief - inp.dt);
     if (inp.screen === 'play' && walking) {
       stepFootprints(sc.footprints, snap.nubsX, snap.nubsY, trailSlope(s.world.trail, snap.nubsY), s.nubs.f === 0, gdt);

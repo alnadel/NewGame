@@ -33,6 +33,12 @@ export interface HudState {
   widths: Map<string, number>;
   /** Bottom of the HUD band (CSS px), for the sun glyph and banners. */
   bottom: number;
+  /** Fonts for the current HUD scale. */
+  fontK: number;
+  snowFont: string;
+  multFont: string;
+  dayFont: string;
+  clockFont: string;
 }
 
 export function createHud(): HudState {
@@ -54,6 +60,11 @@ export function createHud(): HudState {
     rulerGrad: null,
     widths: new Map(),
     bottom: 64,
+    fontK: -1,
+    snowFont: '',
+    multFont: '',
+    dayFont: '',
+    clockFont: '',
   };
 }
 
@@ -150,8 +161,15 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     h.multVal = s.nubs.mult;
     h.multText = `×${s.nubs.mult}`;
   }
-  const snowFont = `800 ${Math.round(18 * k)}px ${FONT}`;
-  const multFont = `800 ${Math.round(14 * k)}px ${FONT}`;
+  if (h.fontK !== k) {
+    h.fontK = k;
+    h.snowFont = `800 ${Math.round(18 * k)}px ${FONT}`;
+    h.multFont = `800 ${Math.round(14 * k)}px ${FONT}`;
+    h.dayFont = `800 ${Math.round(13 * k)}px ${FONT}`;
+    h.clockFont = `800 ${Math.round(19 * k)}px ${FONT}`;
+  }
+  const snowFont = h.snowFont;
+  const multFont = h.multFont;
   const snowW = tabularWidth(g, h, snowFont, h.snowText);
   const multW = charW(g, h, multFont, '×') + tabularWidth(g, h, multFont, String(s.nubs.mult));
   const iconS = 18 * k;
@@ -212,7 +230,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     h.dayVal = s.day;
     h.dayText = `D${s.day}`;
   }
-  const dayFont = `800 ${Math.round(13 * k)}px ${FONT}`;
+  const dayFont = h.dayFont;
   const dW = tabularWidth(g, h, dayFont, h.dayText) + 12 * k;
   const dH = 22 * k;
   let lx = lx0 + 8 * k;
@@ -227,7 +245,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     h.clockKey = key;
     h.clock = hudClock(s.day, Math.min(s.dayTick, ticks));
   }
-  const clockFont = `800 ${Math.round(19 * k)}px ${FONT}`;
+  const clockFont = h.clockFont;
   g.fillStyle = '#2B2140';
   drawTabular(g, h, clockFont, h.clock, lx, cy + 1);
   // Reserve the width of the widest clock so the ruler doesn't jump.

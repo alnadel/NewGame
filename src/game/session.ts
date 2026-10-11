@@ -265,6 +265,7 @@ export class Session {
       reducedMotion: false,
       equipped: save.equipped,
       detail: true,
+      paused: false,
       debug: null,
     };
 
@@ -284,11 +285,16 @@ export class Session {
     );
     const onPop = (): void => {
       if (this.time < this.ignorePopUntil) return;
-      if (this.ui.current() === 'play') {
+      // Our history entry was just consumed.
+      const wasArmed = this.trapArmed;
+      this.trapArmed = false;
+      const sc = this.ui.current();
+      if (sc === 'play') {
         this.ui.show('pause');
         this.pause();
-        this.trap();
       }
+      // A run is still in progress (playing, paused, or settings opened from pause): re-arm.
+      if (wasArmed && this.runActive && this.deathAt < 0 && (sc === 'play' || sc === 'pause' || sc === 'settings')) this.trap();
     };
     window.addEventListener('popstate', onPop);
     this.unsub.push(() => window.removeEventListener('popstate', onPop));
@@ -462,6 +468,7 @@ export class Session {
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
     r.detail = this.gov.detail;
+    r.paused = this.paused || screen === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
     const tRender = performance.now();
     this.renderer.draw(r);
@@ -659,8 +666,9 @@ export class Session {
 
   /** V1_PLAN §8.2: Back during play pauses instead of leaving. */
   private trap(): void {
+    if (this.trapArmed) return;
     try {
-      if (!(history.state && (history.state as { play?: number }).play === 1)) history.pushState({ play: 1 }, '');
+      history.pushState({ play: 1 }, '');
       this.trapArmed = true;
     } catch {
       // History may be unavailable (sandboxed iframes): play on without the trap.
@@ -671,10 +679,8 @@ export class Session {
     if (!this.trapArmed) return;
     this.trapArmed = false;
     try {
-      if (history.state && (history.state as { play?: number }).play === 1) {
-        this.ignorePopUntil = this.time + 0.6;
-        history.back();
-      }
+      this.ignorePopUntil = this.time + 0.6;
+      history.back();
     } catch {
       // ignore
     }
@@ -785,8 +791,13 @@ export class Session {
   }
 
   private afterEvents(events: readonly SimEvent[]): void {
+    void events;
+    this.checkDailyTry();
+  }
+
+  /** Daily: a try is counted (and saved at once) when the run passes 6:30 AM. */
+  private checkDailyTry(): void {
     const s = this.s;
-    // Daily: a try is counted and saved when the run passes 6:30 AM.
     if (this.dailyScored && this.dailyDate && !this.dailyCounted && s.phase !== 'hold' && s.minutes >= DAILY_COUNT_MINUTES) {
       this.dailyCounted = true;
       const r = dailyTryStarted(this.d.store.get(), this.dailyDate);
@@ -797,13 +808,13 @@ export class Session {
         this.ui.setSave(r.save);
       }
     }
-    void events;
   }
 
   private onDeath(): void {
     if (this.deathAt >= 0) return;
     this.deathAt = this.time;
     this.dyingGame = 0;
+    this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
     result.melody = this.melody.slice();

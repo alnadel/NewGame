@@ -73,17 +73,20 @@ export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, 
   }
 }
 
+const hexX = new Float64Array(6);
+const hexY = new Float64Array(6);
+
 function drawCrystal(g: CanvasRenderingContext2D, v: View, sx: number, sy: number, t: number, shrink: number): void {
   // A hexagonal prism 10 u tall, slowly turning.
   const r = 6 * v.S * shrink;
   const h = 10 * OBLIQUE * 4 * v.S * shrink * 0.5;
   const a0 = t * 0.8;
-  const ptsX: number[] = [];
-  const ptsY: number[] = [];
+  const ptsX = hexX;
+  const ptsY = hexY;
   for (let i = 0; i < 6; i++) {
     const a = a0 + (i * TAU) / 6;
-    ptsX.push(sx + Math.cos(a) * r);
-    ptsY.push(sy + Math.sin(a) * r * 0.55 + h / 2);
+    ptsX[i] = sx + Math.cos(a) * r;
+    ptsY[i] = sy + Math.sin(a) * r * 0.55 + h / 2;
   }
   // Side faces facing the viewer (lower half of the hexagon).
   for (let i = 0; i < 6; i++) {
@@ -91,7 +94,7 @@ function drawCrystal(g: CanvasRenderingContext2D, v: View, sx: number, sy: numbe
     const midY = ((ptsY[i] as number) + (ptsY[j] as number)) / 2 - (sy + h / 2);
     if (midY < -0.01) continue;
     const shade = 0.55 + 0.45 * Math.abs(Math.cos(a0 + ((i + 0.5) * TAU) / 6));
-    g.fillStyle = `rgba(${Math.round(150 + 60 * shade)},${Math.round(220 + 25 * shade)},255,0.95)`;
+    g.fillStyle = cssa(((Math.round(150 + 60 * shade) << 16) | (Math.round(220 + 25 * shade) << 8) | 255) >>> 0, 0.95);
     g.beginPath();
     g.moveTo(ptsX[i] as number, ptsY[i] as number);
     g.lineTo(ptsX[j] as number, ptsY[j] as number);
