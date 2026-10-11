@@ -36,6 +36,14 @@ const tuning = {
     /** Release angular velocity clamp (°/s). */
     releaseCap: 360,
     releaseCapReduced: 180,
+    /**
+     * Only genuine flicks coast (K1). The release speed (°/s of requested angle over the last
+     * ~80 ms) is scaled by smoothstep(flickMin, flickFull, |release|) before the cap: below
+     * flickMin a lift stops the sun where the finger left it (a slow drag's tail never drifts on),
+     * from flickFull up it coasts at full speed, and in between it eases in (400 → 200°/s).
+     */
+    flickMin: 200,
+    flickFull: 600,
     /** Coasting friction per tick: e^(−3.5/60). */
     friction: 0.9433354499,
     /** Coasting stops below this |ω| (°/s). */

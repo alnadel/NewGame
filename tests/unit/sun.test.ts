@@ -148,6 +148,23 @@ describe('sun control', () => {
     expect(back.filter((e) => e.e === 'detent' && e.dir === -1).length).toBe(2);
   });
 
+  it('catch semantics are unchanged by K1: a flick coasts and a touch-down still stops it dead', () => {
+    const s = sunState(10);
+    updateSun(s, f({ downEdge: true, down: true }));
+    updateSun(s, f({ upEdge: true, release: 900 }));
+    expect(s.sun.mode).toBe('coasting');
+    for (let i = 0; i < 10; i++) updateSun(s, f());
+    const at = s.sun.theta;
+    expect(s.sun.omega).toBeGreaterThan(200);
+    s.events.length = 0;
+    updateSun(s, f({ downEdge: true, down: true }));
+    expect(s.events.some((e) => e.e === 'catch')).toBe(true);
+    expect(s.sun.omega).toBe(0);
+    expect(s.sun.mode).toBe('dragging');
+    for (let i = 0; i < 30; i++) updateSun(s, f({ down: true }));
+    expect(Math.abs(angleDiff(s.sun.theta, at))).toBeLessThan(1e-9);
+  });
+
   it('a fast 270° swipe goes the long way round', () => {
     const s = sunState(0);
     updateSun(s, f({ downEdge: true, down: true, dTheta: 270 }));
@@ -155,5 +172,58 @@ describe('sun control', () => {
     expect(Math.abs(angleDiff(s.sun.theta, 270))).toBeLessThan(1e-9);
     // It travelled counter-clockwise the whole time.
     expect(s.sun.lag).toBe(0);
+  });
+});
+
+/** Touches down, lifts at `release` °/s and lets the sun settle. Returns ω_rel at the lift and the coast travel (°). */
+function flick(release: number, reducedMotion = false): { omegaRel: number; omega: number; travel: number; mode: string } {
+  const s = sunState(0, 30, reducedMotion);
+  updateSun(s, f({ downEdge: true, down: true }));
+  updateSun(s, f({ upEdge: true, release }));
+  const out = { omegaRel: s.sun.mode === 'chasing' ? s.sun.omegaRel : s.sun.omega, omega: s.sun.omega, travel: 0, mode: s.sun.mode as string };
+  for (let i = 0; i < 600 && s.sun.mode !== 'idle'; i++) {
+    updateSun(s, f());
+    out.travel += s.sun.dTheta;
+  }
+  return out;
+}
+
+describe('only genuine flicks coast (K1)', () => {
+  it('a 150°/s lift does not coast: the sun is idle once the chase ends', () => {
+    const r = flick(150);
+    expect(r.omegaRel).toBe(0);
+    expect(r.mode).toBe('idle');
+    expect(r.travel).toBe(0);
+    // Also with a remaining lag to chase: the chase ends, then nothing.
+    const s = sunState(0);
+    updateSun(s, f({ downEdge: true, down: true, dTheta: 40 }));
+    updateSun(s, f({ upEdge: true, dTheta: 20, release: -150 }));
+    expect(s.sun.mode).toBe('chasing');
+    expect(s.sun.omegaRel).toBe(0);
+    settle(s);
+    expect(Math.abs(angleDiff(s.sun.theta, 60))).toBeLessThan(1e-9);
+    expect(s.sun.omega).toBe(0);
+  });
+
+  it('a 400°/s lift coasts at 200°/s (halfway up the smoothstep)', () => {
+    expect(flick(400).omegaRel).toBe(200);
+    expect(flick(-400).omegaRel).toBe(-200);
+  });
+
+  it('a 300°/s lift coasts less than 15° in total', () => {
+    const r = flick(300);
+    expect(r.omegaRel).toBeCloseTo(46.875, 9);
+    expect(r.travel).toBeGreaterThan(0);
+    expect(r.travel).toBeLessThan(15);
+  });
+
+  it('a 1000°/s flick coasts at the 360°/s cap (180 reduced) and travels about 103° as before', () => {
+    const full = flick(1000);
+    expect(full.omegaRel).toBe(360);
+    expect(full.travel).toBeGreaterThan(101);
+    expect(full.travel).toBeLessThan(106);
+    expect(flick(-1000).omegaRel).toBe(-360);
+    expect(flick(600).omegaRel).toBe(360);
+    expect(flick(1000, true).omegaRel).toBe(180);
   });
 });

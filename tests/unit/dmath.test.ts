@@ -12,6 +12,7 @@ import {
   dtan,
   ROT15_COS,
   sinD,
+  smoothstep,
   SUN_COS,
   SUN_SIN,
   tanD,
@@ -135,4 +136,16 @@ describe('dmath bit-exact snapshots', () => {
   for (const [name, v, h] of cases) {
     it(name, () => expect(hex(v)).toBe(h));
   }
+});
+
+describe('smoothstep', () => {
+  it('is 0 below a, 1 above b and t²(3 − 2t) between', () => {
+    expect(smoothstep(200, 600, 0)).toBe(0);
+    expect(smoothstep(200, 600, 200)).toBe(0);
+    expect(smoothstep(200, 600, 400)).toBe(0.5);
+    expect(smoothstep(200, 600, 300)).toBe(0.15625);
+    expect(smoothstep(200, 600, 600)).toBe(1);
+    expect(smoothstep(200, 600, 1e6)).toBe(1);
+    expect(smoothstep(0, 1, 0.75)).toBe(0.84375);
+  });
 });
