@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>SHADY: Don't Melt Nubs</title>
+    <meta name="description" content="You are the sun. Swing every shadow in the world to keep Nubs the snowman cool. How far into the week can he get?" />
+    <meta name="theme-color" content="#34306B" />
+    <meta name="color-scheme" content="light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SHADY" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #34306B; overscroll-behavior: none; }
+      body { position: fixed; inset: 0; overflow: hidden; -webkit-tap-highlight-color: transparent;
+             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      #game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block;
+              touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+      #safe-probe { position: fixed; visibility: hidden; pointer-events: none;
+                    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; color: #FFE27A;
+              font: 800 40px system-ui, -apple-system, sans-serif; letter-spacing: 0.08em; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" aria-label="SHADY game. Drag left or right to turn the sun." role="img"></canvas>
+    <div id="ui"></div>
+    <div id="safe-probe" aria-hidden="true"></div>
+    <div id="boot" aria-hidden="true">SHADY</div>
+    <noscript>SHADY needs JavaScript to run.</noscript>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
