@@ -131,6 +131,33 @@ test.describe('smoke', () => {
     expect(await page.evaluate(() => window.__SHADY_TEST__!.presses())).toBe(0);
   });
 
+  test('a sideways touch drag from a Title tray button hands off to the sun', async ({ page }, testInfo) => {
+    test.skip(!testInfo.project.use.hasTouch, 'touch input only');
+    const errors = watchErrors(page);
+    await openGame(page, 'test=1&seed=4&profile=3');
+    const box = await page.locator('.tray button[aria-label="Missions"]').boundingBox();
+    expect(box).not.toBeNull();
+    const x = Math.round(box!.x + box!.width / 2);
+    const y = Math.round(box!.y + box!.height / 2);
+    const theta0 = (await state(page)).theta;
+    // Real touch events (CDP), so the browser's touch-action and pointercancel rules apply.
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: { x: number; y: number }[]): Promise<unknown> =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p) => ({ ...p, id: 1 })) });
+    await touch('touchStart', [{ x, y }]);
+    for (let i = 1; i <= 8; i++) {
+      await touch('touchMove', [{ x: x - i * 12, y }]);
+      await page.waitForTimeout(16);
+    }
+    await touch('touchEnd', []);
+    await waitForScreen(page, 'play');
+    await page.waitForTimeout(400);
+    const d = ((((await state(page)).theta - theta0) % 360) + 540) % 360 - 180;
+    // −96 px on a 412 px viewport requests about +84°; a cancelled gesture stopped at ~11°.
+    expect(Math.abs(d)).toBeGreaterThan(45);
+    expect(errors).toEqual([]);
+  });
+
   test('Back during play pauses (history trap)', async ({ page }) => {
     await openGame(page);
     const c = center(page);

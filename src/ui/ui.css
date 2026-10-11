@@ -618,6 +618,10 @@
   padding: 4px 0 2px;
   border: 0;
   background: none;
+  /* A sideways drag that starts here is handed to the sun (dragHandoff). With the default
+     'manipulation' the browser claims the moving touch as a pan and fires pointercancel ~12 px
+     in, which the game must treat as a release. Taps and clicks still work with 'none'. */
+  touch-action: none;
 }
 
 .tray-disc {
