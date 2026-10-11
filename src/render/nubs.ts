@@ -818,55 +818,73 @@ function drawMelt(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: 
   const U = p.S * NUBS_SCALE;
   const t = Math.min(1, p.melt / 0.6);
   const e = easeInOut(t);
+  const lerp = (x: number, y: number): number => x + (y - x) * e;
   g.save();
   g.translate(p.x, p.y);
-  // Puddle.
-  const pw = 11 * U * (1 + 0.6 * e);
-  const ph = 11 * U * (1 - 0.65 * e);
-  const py = -4.5 * U * (1 - e);
-  g.fillStyle = css(mix(0xffffff, 0xcfe6ff, 0.35 + 0.4 * e));
-  g.strokeStyle = cssa(OUTLINE, 0.9);
-  g.lineWidth = Math.max(1, 1.1 * U);
+  // The body slumps from a ball (r 11 at −5) into a 1.6 × 0.35 puddle.
+  const bx = 11 * U * (1 + 0.6 * e);
+  const by = 11 * U * (1 - 0.65 * e);
+  const bodyY = lerp(-5 * U, 1 * U);
+  const snow = mix(0xffffff, 0xcfe6ff, 0.25 + 0.45 * e);
+  g.fillStyle = css(mix(OUTLINE, 0x2b2140, p.night * 0.5));
   g.beginPath();
-  g.ellipse(0, py, pw, ph, 0, 0, TAU);
+  g.ellipse(0, bodyY, bx + 1.1 * U, by + 1.1 * U, 0, 0, TAU);
   g.fill();
-  g.stroke();
-  // Puddle highlight.
-  g.fillStyle = cssa(0xffffff, 0.8);
+  g.fillStyle = css(snow);
   g.beginPath();
-  g.ellipse(-pw * 0.35, py - ph * 0.3, pw * 0.25, ph * 0.18 + 0.5, -0.2, 0, TAU);
+  g.ellipse(0, bodyY, bx, by, 0, 0, TAU);
   g.fill();
-  // The head slides down into the puddle and shrinks away.
-  const hr = 7.5 * U * (1 - 0.85 * e);
-  const hy = (-16.5 + 15.5 * e) * U;
-  if (hr > 0.4) {
-    g.fillStyle = '#FFFFFF';
+  // Wet sheen.
+  g.fillStyle = cssa(0xffffff, 0.55 + 0.3 * e);
+  g.beginPath();
+  g.ellipse(-bx * 0.35, bodyY - by * 0.35, bx * 0.28, Math.max(0.6, by * 0.22), -0.2, 0, TAU);
+  g.fill();
+  // The head sinks into it and shrinks away.
+  const hr = 7.5 * U * (1 - 0.8 * e);
+  const hy = lerp(-16.5 * U, bodyY - 1 * U);
+  if (e < 0.95) {
+    g.globalAlpha = 1 - e * e;
+    g.fillStyle = css(mix(OUTLINE, 0x2b2140, p.night * 0.5));
+    g.beginPath();
+    g.arc(0, hy, hr + 1.1 * U, 0, TAU);
+    g.fill();
+    g.fillStyle = css(snow);
     g.beginPath();
     g.arc(0, hy, hr, 0, TAU);
     g.fill();
+    g.globalAlpha = 1;
   }
-  // Scarf left on the puddle.
+  // The scarf: a band under the head that slides down and settles across the puddle.
   const s = looks.scarf;
-  g.strokeStyle = s.pattern === 'rainbow' ? (s.stripes[0] as string) : s.main;
-  g.lineWidth = 2.4 * U;
+  const scarfColor = s.pattern === 'rainbow' ? (s.stripes[0] as string) : s.main;
+  g.strokeStyle = scarfColor;
   g.lineCap = 'round';
+  g.lineWidth = 2.6 * U;
   g.beginPath();
-  g.moveTo(-pw * 0.6, py + ph * 0.1);
-  g.quadraticCurveTo(-pw * 0.1, py + ph * 0.9, pw * 0.5, py + ph * 0.2);
+  const sy = lerp(hy + hr * 0.9, bodyY + by * 0.25);
+  const sw = lerp(hr * 1.05, bx * 0.55);
+  g.moveTo(-sw, sy - 0.6 * U);
+  g.quadraticCurveTo(0, sy + lerp(1.6 * U, 2.6 * U), sw, sy - 0.6 * U + 1.2 * U * e);
   g.stroke();
-  // Floating coal eyes and nose, bobbing once melted.
+  // One tail flops out onto the puddle.
+  g.lineWidth = 2.2 * U;
+  g.beginPath();
+  g.moveTo(sw * 0.6, sy);
+  g.quadraticCurveTo(sw * 0.9 + 2 * U * e, sy + 3 * U, sw * 1.15 + 3 * U * e, sy + 2 * U + 1.5 * U * e);
+  g.stroke();
+  // Coal eyes and nose ride the head down, then float and bob (1.2 Hz, 2 u).
   const bob = t >= 1 ? Math.sin((p.melt - 0.6) * 1.2 * TAU) * 2 * U * 0.5 : 0;
+  const ey = lerp(hy - 0.8 * U, bodyY - 1.4 * U) + bob * 0.6;
   g.fillStyle = css(COAL);
   for (const side of [-1, 1]) {
     g.beginPath();
-    g.arc(side * (2.9 + 1.5 * e) * U, hy * (1 - e) + py * e - 0.5 * U + bob * 0.6, 1.1 * U, 0, TAU);
+    g.arc(side * lerp(2.9 * U, 5.5 * U), ey, 1.1 * U, 0, TAU);
     g.fill();
   }
-  const nose = looks.nose;
   g.save();
-  g.translate(2 * U * e, py + bob - 1 * U * e);
-  g.rotate(0.5 * e);
-  drawNose(g, nose, U, -3 * U, 0, 1, 0);
+  g.translate(lerp(0, 1.5 * U), lerp(hy + 1.5 * U, bodyY + 0.5 * U) + bob);
+  g.rotate(0.45 * e);
+  drawNose(g, looks.nose, U, lerp(0, -3 * U), 0, 1, lerp(0.3, 0));
   g.restore();
   void a;
   g.restore();

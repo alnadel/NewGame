@@ -17,6 +17,8 @@ export interface ShadyTestHook {
   presses(): number;
   /** Plays a render-only moment (phew, mult, noon, dawn, cloud, glare, flake, best) for visual review. */
   demo(name: string): void;
+  /** Nubs' ground point on screen (CSS px), for review tooling. */
+  nubsScreen(): { x: number; y: number };
   /** Frame timing (ms) of the last frame: frame, sim, gen, render. */
   perf(): { frameMs: number; simMs: number; genMs: number; renderMs: number; fps: number };
 }
@@ -52,6 +54,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     presses: () => session.input.presses,
     demo: (name) => session.demo(name),
     perf: () => ({ ...session.stats }),
+    nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
   };
   window.__SHADY_TEST__ = hook;
 }
