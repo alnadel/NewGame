@@ -5,7 +5,7 @@ import { biomeAtY, trailX, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
-import { groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
+import { exactGroundTiles, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
 
 /**
  * Letterbox bars (TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
@@ -67,7 +67,6 @@ export interface GroundPaint {
   T: number;
   ground: number;
   marksAlpha: number;
-  marksScale: number;
   /** The view's S on the previous frame (whole-pixel blits only while the zoom holds still). */
   lastS: number;
   /** Tile repaints so far (perf counter). */
@@ -75,7 +74,7 @@ export interface GroundPaint {
 }
 
 export function createGroundPaint(): GroundPaint {
-  return { meadow: null, town: null, T: 0, ground: -1, marksAlpha: -1, marksScale: 0, lastS: 0, paints: 0 };
+  return { meadow: null, town: null, T: 0, ground: -1, marksAlpha: -1, lastS: 0, paints: 0 };
 }
 
 function paintTile(c: Canvas2D | null, T: number, ground: Rgb, marks: Canvas2D, alpha: number): Canvas2D {
@@ -89,7 +88,8 @@ function paintTile(c: Canvas2D | null, T: number, ground: Rgb, marks: Canvas2D, 
   g.fillStyle = css(ground);
   g.fillRect(0, 0, T, T);
   g.globalAlpha = alpha;
-  g.drawImage(marks, 0, 0, T, T);
+  // The marks are drawn at exactly T px (sprites.ts exactGroundTiles): an unscaled blend.
+  g.drawImage(marks, 0, 0);
   g.globalAlpha = 1;
   return cv;
 }
@@ -100,23 +100,23 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
     g.fillRect(v.vx, v.vy, v.vw, v.vh);
     return;
   }
-  const tiles = groundTiles(v.k * v.dpr);
   // Night hides the detail a little (it stays as texture, not noise).
   const alpha = 1 - pal.night * 0.72;
   const tx0 = Math.floor(v.x0 / TILE_U) * TILE_U;
   const ty0 = Math.floor(v.y0 / TILE_U) * TILE_U;
-  const stable = gp !== null && v.S === gp.lastS;
+  // Repaint only while the zoom holds still (or for the very first tiles).
+  const stable = gp !== null && (v.S === gp.lastS || gp.T === 0);
   if (gp) gp.lastS = v.S;
-  if (gp && (stable || gp.T > 0)) {
+  if (gp) {
     if (stable) {
       const T = Math.max(8, Math.round(TILE_U * v.S * v.dpr));
-      if (T !== gp.T || gp.ground !== pal.ground || gp.marksAlpha !== alpha || gp.marksScale !== tiles.scale || !gp.meadow || !gp.town) {
-        gp.meadow = paintTile(gp.meadow, T, pal.ground, tiles.meadow, alpha);
-        gp.town = paintTile(gp.town, T, pal.ground, tiles.town, alpha);
+      if (T !== gp.T || gp.ground !== pal.ground || gp.marksAlpha !== alpha || !gp.meadow || !gp.town) {
+        const marks = exactGroundTiles(T);
+        gp.meadow = paintTile(gp.meadow, T, pal.ground, marks.meadow, alpha);
+        gp.town = paintTile(gp.town, T, pal.ground, marks.town, alpha);
         gp.T = T;
         gp.ground = pal.ground;
         gp.marksAlpha = alpha;
-        gp.marksScale = tiles.scale;
         gp.paints++;
       }
     }
@@ -154,6 +154,7 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
     }
     return;
   }
+  const tiles = groundTiles(v.k * v.dpr);
   g.fillStyle = css(pal.ground);
   g.fillRect(v.vx, v.vy, v.vw, v.vh);
   g.globalAlpha = alpha;

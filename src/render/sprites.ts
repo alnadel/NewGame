@@ -158,6 +158,22 @@ export function groundTiles(pxPerU: number): TileSet {
   return tiles;
 }
 
+const exact = new Map<number, TileSet>();
+
+/**
+ * Tiles drawn at exactly `T` device pixels square (for the pre-tinted ground in ground.ts, so its
+ * repaint composites them unscaled). The last three sizes are kept: play and the Melt Map zoom.
+ */
+export function exactGroundTiles(T: number): TileSet {
+  let t = exact.get(T);
+  if (t) return t;
+  if (exact.size >= 3) exact.delete(exact.keys().next().value as number);
+  const scale = T / TILE_U;
+  t = { scale, meadow: meadowTile(scale), town: townTile(scale) };
+  exact.set(T, t);
+  return t;
+}
+
 /** Draws `fn` at (x, y) and its wrapped copies so the tile repeats seamlessly. */
 function wrapped(x: number, y: number, r: number, fn: (x: number, y: number) => void): void {
   for (const dx of [-TILE_U, 0, TILE_U]) {

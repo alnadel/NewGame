@@ -24,7 +24,20 @@ export interface ShadyTestHook {
   /** The ghost hint: thumb mode, target arc, way round (+1 CCW) and whether the lesson is on. */
   hint(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number };
   /** Frame timing (ms) of the last frame: frame, sim, gen, render. */
-  perf(): { frameMs: number; simMs: number; genMs: number; renderMs: number; fps: number; nubsLayerDraws: number; nubsComposes: number };
+  perf(): {
+    frameMs: number;
+    simMs: number;
+    genMs: number;
+    renderMs: number;
+    fps: number;
+    nubsLayerDraws: number;
+    nubsComposes: number;
+    /** Ground tile repaints so far (render/ground.ts GroundPaint). */
+    groundPaints: number;
+    /** Canvas DPR and governor level now. */
+    dpr: number;
+    govLevel: number;
+  };
 }
 
 declare global {
@@ -61,6 +74,9 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       ...session.stats,
       nubsLayerDraws: session.renderer.scene.nubsSprite.layerDraws,
       nubsComposes: session.renderer.scene.nubsSprite.composes,
+      groundPaints: session.renderer.scene.ground.paints,
+      dpr: session.renderer.scene.view.dpr,
+      govLevel: session.gov.level,
     }),
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
     timeScale: () => session.clock.timeScale,
