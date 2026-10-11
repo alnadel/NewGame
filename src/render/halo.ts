@@ -184,7 +184,10 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     if (chill < 25) g.setLineDash([4, 3]);
     g.lineCap = 'round';
     const pulse = chill < 25 ? 0.75 + 0.25 * Math.sin(inp.time * TAU * 1.1) : 1;
-    g.strokeStyle = cssa(col, 0.95 * Math.max(A, chill < 99 ? 0.9 : A) * pulse);
+    // Quiet while Chill is high (the teal safe arcs lead), loud as it drains.
+    const urgency = 0.45 + 0.55 * (1 - chill / 100);
+    g.lineWidth = chill < 50 ? 3.5 : 2.5;
+    g.strokeStyle = cssa(col, Math.min(1, urgency * 1.1) * Math.max(A, chill < 99 ? 0.9 : A) * pulse);
     g.beginPath();
     g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
     g.stroke();
