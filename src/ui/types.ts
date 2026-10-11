@@ -38,8 +38,15 @@ export interface ResultsView {
   result: RunResult;
   /** From meta/progression applyRunResult. */
   outcome: RunOutcome;
-  /** Daily runs: the counted try (1-3), or null for practice. */
+  /** Daily runs: the counted try (1-3), or null when the run wasn't counted. */
   dailyTry?: number | null;
+  /** Daily runs (and k:'d' challenges): the Daily's date ('YYYY-MM-DD'). */
+  dailyDate?: string;
+  /**
+   * Daily runs: the run was eligible to count (its date was today and fewer than 3 tries were used
+   * when it started). With dailyTry null it melted before 6:30 AM ("Not counted"); false = practice.
+   */
+  dailyScored?: boolean;
   /** Challenge runs: the target score in in-game minutes. */
   challengeTarget?: number;
   /** A run started with sim-altering debug URL params: not scored, saved or shareable. */
@@ -71,8 +78,12 @@ export type ImportOutcome = { ok: true } | { ok: false; message: string };
  * (pause, resume, retry, home, startRun…) it has already switched screens when the callback runs.
  */
 export interface UiCallbacks {
-  /** Start a run. 'endless' from Space/Enter on the Title, 'daily' from the Daily screen, 'challenge' from the banner. The UI is already on 'play'. */
-  startRun(kind: RunKind): void;
+  /**
+   * Start a run. 'endless' from Space/Enter on the Title; 'challenge' from the banner's Play (or
+   * Space/Enter while the banner is up); 'daily' from the Daily screen with the date it shows (the
+   * UI has checked it is still today). The UI is already on 'play'.
+   */
+  startRun(kind: RunKind, date?: string): void;
   /** Results: Retry button, Space/Enter, or a tap on the map above the sheet. The UI is already on 'play'. */
   retry(): void;
   /** Back to the Title (Pause > Home, Results > Home). The UI is already on 'title'. */
@@ -97,8 +108,11 @@ export interface UiCallbacks {
   exportBackup(): string;
   /** Settings > Restore: validate and apply a pasted code (meta/backup importBackup). */
   importBackup(code: string): ImportOutcome;
-  /** Settings > Reset progress, after the player confirmed (meta/progression resetProgress). */
-  resetProgress(): void;
+  /**
+   * Settings > Reset progress, after the player confirmed (meta/progression resetProgress). Returns
+   * { ok: false, message } when nothing could be reset (a newer version's save is on disk).
+   */
+  resetProgress(): ImportOutcome;
   /** The challenge banner was dismissed (clear the #c= hash and the challenge). */
   dismissChallenge(): void;
   /**
@@ -132,11 +146,19 @@ export interface Ui {
   /** Switches screens (legal transitions only: illegal ones throw in dev and are ignored in prod). */
   show<K extends ScreenId>(id: K, ...args: ScreenArgs<K>): void;
   current(): ScreenId;
-  /** Escape / Android back: the screen's back action (pause in play, resume in pause, close menus…). */
+  /**
+   * Escape / Android back: dismiss an open modal first; otherwise the screen's back action (play →
+   * pause, pause → resume, menus → their parent, results → home, dying → skip, settings → origin).
+   */
   back(): void;
+  /** True while a modal (confirm dialog, install or restore sheet) is open. */
+  isModalOpen(): boolean;
   /** Pushes a new save; every screen re-renders from it. */
   setSave(save: SaveV1): void;
-  /** Updates the local date (call when the date rolls over while the app is open). */
+  /**
+   * Updates the local date (call when the date rolls over while the app is open). Re-renders the
+   * Daily screen, the Title's Daily dot and the 14-day history.
+   */
   setToday(date: string): void;
   setChallenge(banner: ChallengeBanner | null): void;
   setGhostThumb(mode: GhostMode): void;
@@ -148,11 +170,15 @@ export interface Ui {
   /** Shows the small muted indicator in play while audio isn't running. */
   setAudioMuted(muted: boolean): void;
   toast(text: string, options?: ToastOptions): void;
-  /** iOS "Add to Home Screen" instructions (see progression shouldShowInstallSheet). */
+  /** iOS "Add to Home Screen" instructions (see progression shouldShowInstallSheet). No-op in in-app browsers. */
   showInstallSheet(): void;
   /** One-time "Progress can't be saved in this browser mode" toast (no-op after the first call). */
   notifyStorageDegraded(): void;
-  /** Top edge (CSS px from the viewport top) of the Results sheet, or null when Results isn't shown. Frame the Melt Map above it. */
+  /**
+   * The Results sheet's resting top edge in viewport CSS px (slide-in transforms excluded), or null
+   * when Results isn't shown. Frame the Melt Map above it. Cached (ResizeObserver on the sheet and
+   * the screen): reading it every frame costs no layout.
+   */
   resultsSheetTop(): number | null;
   /** True while the rotate overlay covers the game (phone held landscape). */
   isRotateBlocking(): boolean;

@@ -1,16 +1,23 @@
 // Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code). Opened from the Title or from Pause;
-// Back returns to wherever it was opened from.
+// Back returns to wherever it was opened from. Mid-run (from Pause) the backup, restore and reset
+// controls are hidden: replacing the save under a running run would desync it.
 
 import { backupErrorMessage, backupSummary, importBackup } from '../../meta/backup.ts';
 import type { Settings } from '../../meta/saveTypes.ts';
+import { isStandalone } from '../../platform/lifecycle.ts';
+import { canPromptInstall, onInstallPromptChange, promptInstall } from '../../platform/pwa.ts';
 import { copyText } from '../../platform/share.ts';
 import { h } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
+import { settingsSections } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
 import { button, hide, menuHeader, section, segmented, slider, toggleSwitch } from '../widgets.ts';
 
 const percent = (v: number): string => `${Math.round(v)}%`;
+
+export const KEYS_LINE = '← → or A D: turn the sun · Space/Enter: start or retry · P or Esc: pause';
+export const MID_RUN_BACKUP_NOTE = 'Backup, restore and reset are in Settings on the Title screen.';
 
 export function createSettingsScreen(ctx: UiContext): Screen {
   let origin: ScreenId = 'title';
@@ -25,7 +32,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     h(
       'div',
       { class: 'set-row' },
-      h('span', { class: 'set-ic' }, icon(iconName)),
+      h('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon(iconName)),
       h('span', { class: 'set-text' }, h('span', { class: 'set-label' }, label), hint ? h('span', { class: 'set-hint' }, hint) : null),
       control,
     );
@@ -45,6 +52,15 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const sensitivity = slider({ label: 'Drag sensitivity', min: 0.6, max: 1.5, step: 0.05, format: (v) => `${v.toFixed(2)}×`,
     onInput: (v) => change('sensitivity', Math.round(v * 100) / 100) });
   const invert = toggleSwitch(ctx, 'Invert drag direction', (on) => change('invert', on));
+  const keys = h('div', { class: 'set-row set-row--keys' },
+    h('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon('keyboard')),
+    h('span', { class: 'set-text' }, h('span', { class: 'set-label' }, 'Keys'), h('span', { class: 'set-hint set-keys' },
+      // One binding per line (a "·" between them would wrap mid-binding on phones); the separators
+      // stay in the text for screen readers.
+      ...KEYS_LINE.split(' · ').flatMap((part, i) => [
+        ...(i > 0 ? [h('span', { class: 'sr-only' }, ' · ')] : []),
+        h('span', { class: 'set-key' }, part),
+      ]))));
 
   // Display & assist
   const motion = segmented(ctx, 'Reduced motion', [
@@ -54,6 +70,21 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const guide = segmented(ctx, 'Shade guide', [
     { value: 'auto', label: 'Auto' }, { value: 'always', label: 'Always' }, { value: 'off', label: 'Off' },
   ] as const, (v) => change('guide', v));
+
+  // App: the browser's install prompt, caught by platform/pwa (Chromium/Android only).
+  const installBtn = button(ctx, {
+    label: 'Install SHADY',
+    icon: 'plusSquare',
+    block: true,
+    onPress: () => {
+      void promptInstall().then((outcome) => {
+        if (outcome === 'accepted') ctx.toast('Installing SHADY. Find it with your apps.', { icon: 'check', tone: 'accent' });
+        syncInstall();
+      });
+    },
+  });
+  const appSection = section('App', h('p', { class: 'card-note card-note--top' }, 'Play full screen from your home screen, even offline.'), installBtn);
+  const syncInstall = (): void => hide(appSection, !(canPromptInstall() && !isStandalone()));
 
   // Progress: backup code export / import, reset.
   const exportArea = h('textarea', { class: 'code-box', readonly: true, rows: 3, 'aria-label': 'Your backup code', hidden: true });
@@ -130,11 +161,27 @@ export function createSettingsScreen(ctx: UiContext): Screen {
         })
         .then((yes) => {
           if (!yes) return;
-          ctx.cb.resetProgress();
-          ctx.toast('Progress reset. Fresh snow!', { icon: 'info', tone: 'ink' });
+          const r = ctx.cb.resetProgress();
+          if (r.ok) {
+            ctx.toast('Progress reset. Fresh snow!', { icon: 'info', tone: 'ink' });
+          } else {
+            ctx.sound('deny');
+            ctx.toast(r.message, { icon: 'warn', tone: 'danger' });
+          }
         });
     },
   });
+
+  const backupSection = section(
+    'Backup',
+    h('p', { class: 'card-note card-note--top' }, 'Browsers can clear saved games. A backup code carries your progress to another browser or device.'),
+    exportBtn,
+    exportArea,
+    importArea,
+    importBtn,
+  );
+  const dangerSection = section('Danger zone', resetBtn);
+  const midRunNote = h('p', { class: 'card card-note set-midrun' }, MID_RUN_BACKUP_NOTE);
 
   const body = h(
     'div',
@@ -149,6 +196,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       'Controls',
       stackRow('gauge', 'Drag sensitivity', 'How far the sun turns per swipe', sensitivity.el),
       row('invert', 'Invert drag', 'Drag right to turn the sun the other way', invert.el),
+      keys,
     ),
     section(
       'Display & assist',
@@ -156,15 +204,10 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       row('contrast', 'High-contrast shadows', null, contrast.el),
       stackRow('compass', 'Shade guide', 'Teal arcs on the dial show safe angles. "Always" marks your shares.', guide.el),
     ),
-    section(
-      'Backup',
-      h('p', { class: 'card-note' }, 'Browsers can clear saved games. A backup code carries your progress to another browser or device.'),
-      exportBtn,
-      exportArea,
-      importArea,
-      importBtn,
-    ),
-    section('Danger zone', resetBtn),
+    appSection,
+    backupSection,
+    dangerSection,
+    midRunNote,
     h('p', { class: 'version' }, `SHADY v${ctx.version}`),
   );
 
@@ -172,6 +215,10 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const el = h('section', { class: 'scr scr-menu scr-settings', 'aria-labelledby': 'settings-title' },
     h('div', { class: 'menu pe' }, header, body));
   header.querySelector('.menu-title')?.setAttribute('id', 'settings-title');
+  const backBtn = header.querySelector('button');
+
+  // While shown, the install row appears (or goes) as the browser offers or withdraws the prompt.
+  let stopInstallWatch: (() => void) | null = null;
 
   function refresh(): void {
     current = { ...ctx.save().settings };
@@ -183,19 +230,30 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     motion.set(current.reducedMotion);
     contrast.set(current.highContrast);
     guide.set(current.guide);
+    syncInstall();
   }
 
   return {
     el,
     enter(from) {
       if (from === 'title' || from === 'pause') origin = from;
+      const shown = settingsSections(origin);
+      hide(backupSection, !shown.backup);
+      hide(dangerSection, !shown.danger);
+      hide(midRunNote, !shown.backupNote);
       hide(exportArea, true);
       exportArea.value = '';
       body.scrollTop = 0;
+      stopInstallWatch?.();
+      stopInstallWatch = onInstallPromptChange(syncInstall);
       refresh();
+    },
+    leave() {
+      stopInstallWatch?.();
+      stopInstallWatch = null;
     },
     refresh,
     back: () => ctx.go(origin),
-    initialFocus: () => header.querySelector('button'),
+    initialFocus: () => backBtn,
   };
 }

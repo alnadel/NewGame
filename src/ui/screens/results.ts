@@ -4,17 +4,23 @@
 // Retry arms 0.3 s after the sheet appears; a tap on the map area above the sheet also retries.
 // The unlocks live in the sheet rather than the top toast stack: toasts there would sit over the
 // top of the Melt Map, where the named caster pins of the death line usually are.
+//
+// Sizing: the sheet is at least 58% tall and grows with its content up to the viewport minus
+// 96 px of map. The score block stays pinned while stats and missions scroll; on short or
+// large-text screens (under 520 px, or under 120 px left for the scroll area) the whole sheet body
+// scrolls as one, with Retry always pinned below it.
 
 import { splitMinutes, formatTimeOfDay } from '../../core/format.ts';
 import { challengeVerdict } from '../../meta/challenge.ts';
-import { dailyNumber, DAILY_TRIES } from '../../meta/daily.ts';
+import { dailyNumber } from '../../meta/daily.ts';
 import type { MissionView } from '../../meta/missions.ts';
 import { h, setChildren } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
+import { dailyRunLabel, multiplierTile, NOT_COUNTED_NOTE, resultsAnnouncement, retryLabel, viewDailyDate } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ResultsView } from '../types.ts';
 import { toastIconName } from '../overlays.ts';
-import { button, hide, progressBar, setDisabled } from '../widgets.ts';
+import { button, hide, progressBar, setButtonLabel, setDisabled } from '../widgets.ts';
 
 const RETRY_ARM_MS = 300;
 const TYPE_CPS = 30;
@@ -22,10 +28,23 @@ const COUNT_MS = 700;
 const STAMP_FIRST_MS = 650;
 const STAMP_GAP_MS = 300;
 const TOAST_GAP_MS = 650;
+/** Below this viewport height the sheet body scrolls as one. */
+const ONE_SCROLL_BELOW_PX = 520;
+/** The stats/missions scroll area must keep at least this much height, or the body scrolls as one. */
+const MIN_SCROLL_PX = 120;
+/** Map kept above a sheet that grows with its content. */
+const MAP_MIN_PX = 96;
+const SHEET_MIN_FRACTION = 0.58;
 
 export interface ResultsScreen extends Screen {
-  /** Top edge of the sheet in CSS px from the top of the UI root. */
+  /**
+   * The sheet's resting top edge in viewport CSS px (slide-in transforms excluded). Cached: it is
+   * re-measured only when the sheet or the screen resizes (ResizeObserver), on enter and on
+   * invalidateSheetTop(), so reading it every frame costs no layout.
+   */
   sheetTop(): number;
+  /** The world column moved: re-measure the sheet top. */
+  invalidateSheetTop(): void;
 }
 
 export function createResultsScreen(ctx: UiContext): ResultsScreen {
@@ -68,7 +87,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const kicker = h('p', { class: 'kicker res-kicker' });
   const dayBadge = h('span', { class: 'res-day' });
   const clock = h('span', { class: 'res-clock' });
-  const time = h('h2', { class: 'res-time' }, dayBadge, clock);
+  const time = h('h2', { class: 'res-time', id: 'res-time' }, dayBadge, clock);
   const shareBtn = button(ctx, { label: 'Share', icon: 'share', round: true, onPress: () => void share() });
   const homeBtn = button(ctx, { label: 'Home', icon: 'home', round: true, sound: 'back', onPress: home });
   // The full line is laid out invisibly so the paragraph has its final height from the first
@@ -76,13 +95,15 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const deathFull = h('span', { class: 'sr-only' });
   const deathSpace = h('span', { class: 'res-death-space', 'aria-hidden': 'true' });
   const deathTyped = h('span', { 'aria-hidden': 'true' });
+  let caret = h('span', { class: 'caret', 'aria-hidden': 'true' });
   const death = h(
     'p',
-    { class: 'res-death' },
+    { class: 'res-death', id: 'res-death' },
     deathFull,
     deathSpace,
-    h('span', { class: 'res-death-typed' }, deathTyped, h('span', { class: 'caret', 'aria-hidden': 'true' })),
+    h('span', { class: 'res-death-typed' }, deathTyped, caret),
   );
+  const note = h('p', { class: 'res-note' });
   const verdict = h('p', { class: 'res-verdict' });
   const awards = h('ul', { class: 'res-awards', 'aria-label': 'Unlocked this run' });
   const stats = h('div', { class: 'res-stats' });
@@ -96,23 +117,37 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     className: 'res-retry',
     onPress: retry,
   });
+  // Screen readers hear the score and the death line as Retry's description.
+  retryBtn.setAttribute('aria-describedby', 'res-time res-death');
 
-  const sheet = h(
-    'div',
-    { class: 'res-sheet pe', role: 'region', 'aria-label': 'Run results' },
-    ribbon,
-    // The score stays pinned; only stats and missions scroll on short screens.
-    h('div', { class: 'res-top' }, h('div', { class: 'res-head' }, kicker, h('div', { class: 'res-head-actions' }, shareBtn, homeBtn)), time, death, verdict),
-    h('div', { class: 'res-scroll' }, awards, stats, missionList),
-    h('div', { class: 'res-actions' }, retryBtn),
-  );
+  const top = h('div', { class: 'res-top' }, h('div', { class: 'res-head' }, kicker, h('div', { class: 'res-head-actions' }, shareBtn, homeBtn)), time, death, note, verdict);
+  const scroll = h('div', { class: 'res-scroll' }, awards, stats, missionList);
+  const actions = h('div', { class: 'res-actions' }, retryBtn);
+  // The score block stays pinned; stats and missions scroll (or the whole body, see sizing above).
+  const body = h('div', { class: 'res-body' }, top, scroll);
+  const sheet = h('div', { class: 'res-sheet pe', role: 'region', 'aria-label': 'Run results' }, ribbon, body, actions);
   const el = h('section', { class: 'scr scr-results' }, mapCatch, sheet);
 
-  // Keep the tap-to-retry area exactly above the sheet as its height changes.
-  const syncMapArea = (): void => {
-    mapCatch.style.bottom = `${sheet.offsetHeight}px`;
+  // Keep the tap-to-retry area exactly above the sheet as its height changes, pick the scroll mode,
+  // and cache the sheet's resting top for resultsSheetTop() (offset sizes ignore the slide-in).
+  let sheetTopPx = 0;
+  const measure = (): void => {
+    const screenH = el.clientHeight;
+    const maxSheet = Math.max(SHEET_MIN_FRACTION * screenH, screenH - MAP_MIN_PX);
+    const cs = getComputedStyle(sheet);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const left = maxSheet - padY - top.offsetHeight - actions.offsetHeight;
+    sheet.classList.toggle('is-one-scroll', window.innerHeight < ONE_SCROLL_BELOW_PX || left < MIN_SCROLL_PX);
+    const hh = sheet.offsetHeight;
+    mapCatch.style.bottom = `${hh}px`;
+    sheetTopPx = el.getBoundingClientRect().top + screenH - hh;
   };
-  new ResizeObserver(syncMapArea).observe(sheet);
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(measure);
+    ro.observe(sheet);
+    ro.observe(top);
+    ro.observe(el);
+  }
 
   const tile = (iconName: IconName, value: HTMLElement | string, caption: string, cls = '', sub?: string): HTMLElement =>
     h(
@@ -137,23 +172,34 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
         h('span', { class: 'mrow-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
         progressBar(m.fraction),
       ),
-      h('span', { class: 'mrow-side' }, side, h('span', { class: 'reward', 'aria-label': `reward ${m.reward} Snow` }, icon('snow'), `+${m.reward}`)),
+      h(
+        'span',
+        { class: 'mrow-side' },
+        side,
+        h('span', { class: 'reward' }, icon('snow'), h('span', { 'aria-hidden': 'true' }, `+${m.reward}`), h('span', { class: 'sr-only' }, `, reward ${m.reward} Snow`)),
+      ),
     );
   };
 
+  let shown: ResultsView | null = null;
+
   function render(view: ResultsView): void {
+    shown = view;
     const { result, outcome } = view;
     const reduced = ctx.reducedMotion();
 
     // Header
+    const dailyDate = viewDailyDate(view);
     if (view.debug) {
       kicker.textContent = 'Debug run · not saved';
-    } else if (result.mode === 'daily' && result.dailyDate) {
-      const tryText = view.dailyTry != null ? `Try ${view.dailyTry}/${DAILY_TRIES}` : 'Practice';
-      kicker.textContent = `Daily #${dailyNumber(result.dailyDate)} · ${tryText}`;
+    } else if (dailyDate !== undefined) {
+      kicker.textContent = `Daily #${dailyNumber(dailyDate)} · ${dailyRunLabel(view.dailyTry, view.dailyScored)}`;
     } else {
       kicker.textContent = result.mode === 'challenge' ? 'Challenge run' : 'Nubs made it to';
     }
+    const notCounted = !view.debug && dailyDate !== undefined && view.dailyTry == null && view.dailyScored === true;
+    note.textContent = notCounted ? NOT_COUNTED_NOTE : '';
+    hide(note, !notCounted);
     // A debug run's score isn't real: no share text or challenge link for it.
     hide(shareBtn, view.debug === true);
     const { day, minute } = splitMinutes(result.minutes);
@@ -163,11 +209,18 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     time.setAttribute('aria-label', `${outcome.newBest ? 'New best! ' : ''}Day ${day}, ${formatTimeOfDay(minute)}`);
     ribbon.classList.toggle('is-on', outcome.newBest);
 
+    // Retry replays this run's kind; a Daily that can't count any more says so.
+    setButtonLabel(retryBtn, retryLabel(view, ctx.save(), ctx.today()));
+
     // Death line, typed.
     // Keep "4:15 PM" on one line when the sentence wraps.
-    const line = result.death.line.replace(/(\d) ([AP]M)/g, '$1 $2');
+    const line = result.death.line.replace(/(\d) ([AP]M)/g, '$1\u00a0$2');
     deathFull.textContent = line;
     deathSpace.textContent = line;
+    // A fresh caret restarts its blink (its animation was paused while Results was hidden).
+    const freshCaret = caret.cloneNode(false) as HTMLSpanElement;
+    caret.replaceWith(freshCaret);
+    caret = freshCaret;
     clearInterval(typing);
     if (reduced) {
       deathTyped.textContent = line;
@@ -197,12 +250,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // Stats (Snow counts up into the wallet).
     const snowValue = h('span', { class: 'num' }, reduced ? `+${outcome.snowEarned}` : '+0');
     const st = result.stats;
+    const mult = multiplierTile(st);
     setChildren(
       stats,
       tile('snow', snowValue, `Wallet ${outcome.walletAfter}`, 'stat--snow'),
       tile('flake', String(st.flakes), st.flakes === 1 ? 'flake' : 'flakes', '', st.flakesMelted > 0 ? `${st.flakesMelted} melted` : undefined),
       tile('phew', String(st.phews), st.phews === 1 ? 'PHEW' : 'PHEWs'),
-      tile('bolt', st.x5HoldBest > 0 ? `${st.x5HoldBest.toFixed(1)}s` : '–', 'longest ×5'),
+      tile('bolt', mult.value, mult.caption),
     );
     if (!reduced && outcome.snowEarned > 0) {
       const start = performance.now();
@@ -273,8 +327,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       mapCatch.classList.add('is-armed');
     });
 
-    sheet.querySelector('.res-scroll')?.scrollTo({ top: 0 });
-    syncMapArea();
+    scroll.scrollTo({ top: 0 });
+    body.scrollTo({ top: 0 });
+    measure();
+    ctx.announce(resultsAnnouncement(view));
   }
 
   return {
@@ -284,12 +340,17 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       render(data as ResultsView);
     },
     leave: stopAll,
+    // A new save (another tab's Daily try) or a new day can turn Retry into practice.
+    refresh() {
+      if (shown) setButtonLabel(retryBtn, retryLabel(shown, ctx.save(), ctx.today()));
+    },
     back: home,
     activate() {
       retry();
       return true;
     },
     initialFocus: () => retryBtn,
-    sheetTop: () => el.clientHeight - sheet.offsetHeight,
+    sheetTop: () => sheetTopPx,
+    invalidateSheetTop: measure,
   };
 }

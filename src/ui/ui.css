@@ -1,6 +1,14 @@
 /* SHADY DOM UI. Palette and panel rules from GDD §10; accessibility from GDD §14.
    Everything is scoped under .sui (the #ui root). Layout respects --safe-* insets, which default
-   to env(safe-area-inset-*) and can be overridden on <html> to simulate notches. */
+   to env(safe-area-inset-*) and can be overridden on <html> to simulate notches.
+
+   World column (K9): the game publishes the canvas world viewport on #ui as --world-left/-top/
+   -width/-height (CSS px; the whole viewport on phones, a centered column on wide screens). Every
+   screen, the HUD controls, toasts and dialogs live in .world, which sits exactly on that rect;
+   only scrims and opaque menu backdrops cover the full viewport. Inside it the safe insets shrink
+   by the rect's distance from each viewport edge (--in-*): a notch only matters where the column
+   touches it. --world-gap-right/-bottom (the rect's distance to the right and bottom viewport
+   edges) are measured by ui.ts. */
 
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
@@ -12,7 +20,8 @@
 .sui {
   --ink: #2b2140;
   --ink-2: #5b5070;
-  --ink-3: #8a819c;
+  /* Muted text: 4.5:1 or better on white, paper and the gold Daily row (#8a819c was 3.3-3.7). */
+  --ink-3: #6e6584;
   --line: rgba(43, 33, 64, 0.1);
   --paper: #fff8ee;
   --paper-2: #f6ecdc;
@@ -36,12 +45,27 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --pad-x-l: calc(var(--safe-left) + 16px);
-  --pad-x-r: calc(var(--safe-right) + 16px);
+  /* The world rect (see the header comment) and the safe insets that remain inside it. */
+  --wl: var(--world-left, 0px);
+  --wt: var(--world-top, 0px);
+  --ww: var(--world-width, 100%);
+  --wh: var(--world-height, 100%);
+  /* Width/height of the column for vw/vh-style sizing (falls back to the viewport). */
+  --cw: var(--world-width, 100vw);
+  --ch: var(--world-height, 100vh);
+  --in-top: max(0px, var(--safe-top) - var(--wt));
+  --in-left: max(0px, var(--safe-left) - var(--wl));
+  --in-right: max(0px, var(--safe-right) - var(--world-gap-right, 0px));
+  --in-bottom: max(0px, var(--safe-bottom) - var(--world-gap-bottom, 0px));
+  --pad-x-l: calc(var(--in-left) + 16px);
+  --pad-x-r: calc(var(--in-right) + 16px);
 
   position: fixed;
   inset: 0;
   overflow: hidden;
+  /* clip, not just hidden: a focused or scrolled-into-view control must never scroll the whole UI
+     (the hidden Results sheet sits 40% below the screen, making the root scrollable). */
+  overflow: clip;
   color: var(--ink);
   font: 500 1rem/1.35 var(--font);
   -webkit-font-smoothing: antialiased;
@@ -49,6 +73,9 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  /* Panning only: no pinch or double-tap zoom of the page (iOS ignores user-scalable=no). The
+     canvas and the Title tray keep 'none'; scrolling lists say pan-y. */
+  touch-action: pan-x pan-y;
 }
 
 .sui *,
@@ -83,9 +110,12 @@
   display: none !important;
 }
 
+/* Two-tone focus ring that follows the border radius: an ink ring with a white halo reads on any
+   background (dawn, noon and night skies, paper, white cards, teal buttons). */
 .sui :focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 3px;
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px #fff;
 }
 
 .sui .pe {
@@ -115,7 +145,7 @@
 }
 
 .sui .kicker {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -126,9 +156,26 @@
    Screens and transitions
    --------------------------------------------------------------------------------------------- */
 
+/* The world column: screens, the ghost hint and toasts are laid out inside it. */
+.world {
+  position: absolute;
+  left: var(--wl);
+  top: var(--wt);
+  width: var(--ww);
+  height: var(--wh);
+}
+
 .screens {
   position: absolute;
   inset: 0;
+}
+
+/* Inactive screens are hidden but laid out (for their fade): no CSS animation may tick in them. */
+.scr:not(.is-on),
+.scr:not(.is-on) *,
+.scr:not(.is-on) *::before,
+.scr:not(.is-on) *::after {
+  animation-play-state: paused !important;
 }
 
 .scr {
@@ -160,7 +207,7 @@
   justify-content: center;
   gap: 8px;
   min-height: 48px;
-  padding: 0 20px;
+  padding: 6px 20px;
   border: 0;
   border-radius: 16px;
   background: #fff;
@@ -195,6 +242,13 @@
 .btn .ic {
   width: 22px;
   height: 22px;
+}
+
+/* Labels wrap rather than clip (large text, narrow buttons). */
+.btn-label {
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .btn--primary {
@@ -272,6 +326,15 @@
   padding: 0;
   border-radius: 50%;
   flex: none;
+  /* The hit box below is a full 48 px square, not just the visible disc. */
+  overflow: visible;
+}
+
+.btn--round::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
 }
 
 .btn--round .ic {
@@ -290,10 +353,18 @@
   80% { transform: translateX(2px); }
 }
 
+/* Two buttons side by side, stacked once their labels would need less than 8em each (large text). */
 .row-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7em), 1fr));
   gap: 10px;
+}
+
+/* Two buttons side by side keep their labels whole down to a 320 px phone (Pause: "Settings"
+   next to "Home"); the label is centered, so the narrower padding doesn't show on wider ones. */
+.row-2 > .btn {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -303,14 +374,15 @@
 .chip {
   display: inline-flex;
   align-items: center;
+  flex: none;
   gap: 6px;
-  height: 36px;
+  min-height: 36px;
   padding: 0 11px 0 8px;
   border-radius: 999px;
   background: var(--panel);
   box-shadow: var(--shadow-sm);
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: min(0.9375rem, 18px);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -377,11 +449,12 @@
 }
 
 .reward {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 3px;
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
   color: var(--accent-ink);
   white-space: nowrap;
@@ -405,10 +478,11 @@
   border-radius: 6px;
   background: var(--gold-soft);
   color: #8a5a00;
-  font-size: 0.75rem;
+  font-size: 1rem;
   font-weight: 900;
   letter-spacing: 0.04em;
-  vertical-align: 2px;
+  line-height: 1.15;
+  vertical-align: 1px;
 }
 
 .stamp {
@@ -418,18 +492,19 @@
   border-radius: 8px;
   color: var(--accent-ink);
   background: rgba(215, 245, 241, 0.7);
-  font-size: 0.75rem;
+  font-size: 1rem;
   font-weight: 900;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   transform: rotate(-8deg);
   white-space: nowrap;
 }
 
 .stamp--sm {
-  font-size: 0.6875rem;
-  padding: 2px 6px;
+  font-size: 1rem;
+  padding: 1px 6px;
   border-width: 2px;
+  letter-spacing: 0.04em;
 }
 
 @keyframes stamp-in {
@@ -443,10 +518,11 @@
    --------------------------------------------------------------------------------------------- */
 
 .title-top {
+  container: title / inline-size;
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--safe-top) + clamp(10px, 4.5vh, 44px));
+  top: calc(var(--in-top) + clamp(10px, calc(var(--ch) * 0.045), 44px));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -454,28 +530,44 @@
 }
 
 .logo {
-  width: min(84vw, 340px);
+  width: min(calc(var(--cw) * 0.84), 340px);
   line-height: 0;
   filter: drop-shadow(0 6px 10px rgba(43, 33, 64, 0.18));
 }
 
 .logo-svg {
+  position: relative;
   width: 100%;
   height: auto;
   overflow: visible;
 }
 
-.sun-rays {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: spin 40s linear infinite;
+/* The logo is stacked full-size layers (title.ts logo(), art.ts logoLayers()); only these
+   wrappers animate, and only their transform, so the compositor runs the motions. Percentages are
+   of the logo box (viewBox 360 × 172): the sun bobs 2.16 units up and 4° around its center
+   (83.3333% 37.2093%, set inline), the rays spin around the same point, the shadow sways (3, −1)
+   units. The keyframes hold constants: var() in keyframes is re-resolved on every frame. */
+.logo-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
 }
 
-.sun-bob {
+.logo-layer > .logo-svg {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.logo-sun {
   animation: bob 3.2s ease-in-out infinite;
 }
 
-.logo-shadow {
+.logo-rays {
+  animation: spin 40s linear infinite;
+}
+
+.logo-drop {
   animation: shadow-sway 3.2s ease-in-out infinite;
 }
 
@@ -484,11 +576,20 @@
 }
 
 @keyframes bob {
-  50% { transform: translateY(-0.06px) rotate(-4deg); }
+  50% { transform: translateY(-1.2558%) rotate(-4deg); }
 }
 
 @keyframes shadow-sway {
-  50% { transform: translate(3px, -1px); }
+  50% { transform: translate(0.8333%, -0.5814%); }
+}
+
+/* With a challenge banner on a short screen (title.ts fit()), the logo gives the hint room. */
+.scr-title.is-compact .logo {
+  width: min(calc(var(--cw) * 0.56), 220px);
+}
+
+.scr-title.no-tagline .tagline {
+  display: none;
 }
 
 .tagline {
@@ -505,12 +606,14 @@
 .challenge {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'flag text play';
   align-items: center;
   gap: 10px;
   width: min(100%, 380px);
   margin-top: 14px;
-  padding: 10px 10px 10px 12px;
+  /* The right padding keeps Play's 48 px hit box clear of the dismiss button's. */
+  padding: 10px 16px 10px 12px;
   border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--shadow), inset 0 0 0 2px var(--accent);
@@ -518,6 +621,7 @@
 }
 
 .challenge-flag {
+  grid-area: flag;
   display: grid;
   place-items: center;
   width: 40px;
@@ -528,6 +632,7 @@
 }
 
 .challenge-text {
+  grid-area: text;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -538,11 +643,13 @@
   color: var(--accent-ink);
 }
 
+/* May wrap after "Beat" and after "·" (title.ts challengeGoalText keeps "Day 2" and "2:40 PM"). */
 .challenge-goal {
   font-weight: 900;
   font-size: 1.0625rem;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  white-space: normal;
 }
 
 .challenge-note {
@@ -550,25 +657,39 @@
   color: var(--ink-2);
 }
 
-.challenge .btn {
-  min-height: 44px;
-  padding: 0 14px;
+.challenge .challenge-play {
+  grid-area: play;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 16px;
+}
+
+/* Narrow columns (or large text): Play goes under the goal, so the text never runs beneath it. */
+@container title (max-width: 20rem) {
+  .challenge {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'flag text'
+      'play play';
+  }
 }
 
 .challenge-close {
   position: absolute;
+  /* Close enough to the banner's corner that its 48 px hit box stays on screen at 320 px. */
   top: -14px;
-  right: -10px;
+  right: -4px;
   width: 32px !important;
   height: 32px !important;
   min-height: 32px !important;
 }
 
 .challenge-close::before {
-  /* 48 px touch target around the small visual. */
+  /* 48 px touch target around the small visual (round buttons don't clip their ::before). */
   content: '';
   position: absolute;
   inset: -8px;
+  border-radius: 0;
 }
 
 .challenge-close .ic {
@@ -580,6 +701,9 @@
   from { opacity: 0; transform: scale(0.9); }
 }
 
+/* Chips + tray. Its top stays below Nubs' halo (--nubs-y + --halo-r, viewport px): the cluster is
+   capped to that height and the gap between chips and tray shrinks first; title.ts fit() then drops
+   the tray labels if it still doesn't fit. */
 .title-bottom {
   position: absolute;
   left: 0;
@@ -587,22 +711,42 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   align-items: center;
-  gap: 12px;
-  padding: 0 var(--pad-x-r) calc(var(--safe-bottom) + 14px) var(--pad-x-l);
+  /* 1 px of slack: --nubs-y and --halo-r arrive rounded to whole px. */
+  max-height: calc(100% - (var(--nubs-y, 68%) - var(--wt)) - var(--halo-r, 44px) - 1px);
+  padding: 0 var(--pad-x-r) calc(var(--in-bottom) + 14px) var(--pad-x-l);
 }
 
+.title-gap {
+  display: block;
+  flex: 0 1 12px;
+  min-height: 4px;
+}
+
+/* One line of chips: the Snow chip goes below 340 px or when the row would overflow (fit()). */
 .chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 6px;
+  max-width: 100%;
+}
+
+.chips.no-wallet .chip--snow {
+  display: none;
+}
+
+@media (max-width: 339.98px) {
+  .chips .chip--snow {
+    display: none;
+  }
 }
 
 .tray {
   display: flex;
   justify-content: center;
-  gap: clamp(4px, 2.5vw, 20px);
+  gap: clamp(4px, calc(var(--cw) * 0.025), 20px);
   width: 100%;
   max-width: 420px;
 }
@@ -651,14 +795,29 @@
     var(--shadow-sm);
 }
 
+/* 14 px at any root size; may wrap within its button slot, never overlapping a neighbor. Below
+   340 px (or when fit() needs the room) the icons and the buttons' aria-labels carry the menu. */
 .tray-label {
+  max-width: 100%;
   padding: 2px 7px;
   border-radius: 999px;
   background: rgba(255, 248, 238, 0.82);
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 14px;
   line-height: 1.25;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.title-bottom.no-labels .tray-label {
+  display: none;
+}
+
+@media (max-width: 339.98px) {
+  .tray-label {
+    display: none;
+  }
 }
 
 .tray-btn.is-locked .tray-disc {
@@ -706,7 +865,7 @@
    --------------------------------------------------------------------------------------------- */
 
 .ghost {
-  --reach: min(26vw, 110px);
+  --reach: min(calc(var(--cw) * 0.26), 110px);
   position: absolute;
   left: 0;
   right: 0;
@@ -722,10 +881,11 @@
 /* On the Title the hint sits above Nubs and his halo dial — the word "drag" on top, the swiping
    hand below it — so neither covers him or the dial's sun pointer. The hand hangs ~50 px below its
    fingertip path (18 px past the track), so the track ends 26 px above the dial. --nubs-y and
-   --halo-r are set by the game from the camera layout; the fallback is the 68 % Nubs line. */
+   --halo-r are set by the game from the camera layout (viewport px, so --nubs-y is taken relative
+   to the world column's top); the fallback is the 68 % Nubs line. */
 .sui[data-screen='title'] .ghost {
   top: auto;
-  bottom: calc(100% - var(--nubs-y, 68%) + var(--halo-r, 44px) + 26px);
+  bottom: calc(100% - (var(--nubs-y, 68%) - var(--wt)) + var(--halo-r, 44px) + 26px);
   flex-direction: column-reverse;
   transform: none;
 }
@@ -734,17 +894,46 @@
   margin: 0 0 2px;
 }
 
-/* Short screens with a challenge banner: the banner reaches down to the hint, so only the hand
-   shows (the banner's own Play button and the hand carry the message). */
-@media (max-height: 700px) {
-  .sui[data-screen='title']:has(.challenge:not([hidden])) .ghost-word {
-    visibility: hidden;
+/* title.ts fit() measures the hint against the tagline and the challenge banner: the key line goes
+   first, then the word, then (after a smaller logo) the whole hint, so it never overlaps them. */
+.sui:has(.scr-title.is-on.no-ghost-word) .ghost-word,
+.sui:has(.scr-title.is-on.no-ghost-word) .ghost-keys,
+.sui:has(.scr-title.is-on.no-ghost-keys) .ghost-keys {
+  display: none !important;
+}
+
+.sui:has(.scr-title.is-on.no-ghost) .ghost {
+  visibility: hidden;
+}
+
+/* The key mapping under "drag", for mouse players and once a key was pressed. */
+.ghost-keys {
+  display: none;
+  max-width: calc(100% - 32px);
+  margin: 0 0 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(43, 33, 64, 0.78);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
+@media (pointer: fine) {
+  .sui[data-screen='title'] .ghost[data-mode='both'] .ghost-keys {
+    display: block;
   }
+}
+
+.sui.is-kbd[data-screen='title'] .ghost[data-mode='both'] .ghost-keys {
+  display: block;
 }
 
 /* In play Nubs and his halo dial sit at 68-70% of the height: keep the hint just below them. */
 .sui[data-screen='play'] .ghost {
-  top: min(84%, calc(100% - var(--safe-bottom) - 72px));
+  top: min(84%, calc(100% - var(--in-bottom) - 72px));
 }
 
 .ghost[data-mode='both'],
@@ -775,11 +964,13 @@
 }
 
 .ghost-hand {
-  /* The fingertip (20 px, 5 px into the hand) sits on the track's center line. */
+  /* The fingertip (20 px, 5 px into the 44 px hand) sits on the track's center line. The box is
+     --reach wide (the hand is drawn at its left), so the swing keyframes can say ±100% instead of
+     var(--reach): keyframes with var() are re-resolved on the main thread every frame. */
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 44px;
+  width: var(--reach);
   height: 55px;
   margin: -5px 0 0 -20px;
   transform-origin: 20px 5px;
@@ -789,7 +980,7 @@
 .ghost-hand svg {
   position: relative;
   display: block;
-  width: 100%;
+  width: 44px;
   height: 100%;
 }
 
@@ -813,18 +1004,19 @@
   animation: ghost-once 1.5s ease-in-out infinite;
 }
 
+/* ±100% of the hand box = ±--reach (see .ghost-hand). */
 @keyframes ghost-swing {
-  0%, 100% { transform: translateX(calc(var(--reach) * -1)) scale(1); }
-  8%, 92% { transform: translateX(calc(var(--reach) * -1)) scale(0.88); }
-  50% { transform: translateX(var(--reach)) scale(0.88); }
-  58% { transform: translateX(var(--reach)) scale(1); }
+  0%, 100% { transform: translateX(-100%) scale(1); }
+  8%, 92% { transform: translateX(-100%) scale(0.88); }
+  50% { transform: translateX(100%) scale(0.88); }
+  58% { transform: translateX(100%) scale(1); }
 }
 
 @keyframes ghost-once {
-  0% { opacity: 0; transform: translateX(calc(var(--reach) * -1)) scale(1.1); }
-  15% { opacity: 1; transform: translateX(calc(var(--reach) * -1)) scale(0.9); }
-  75% { opacity: 1; transform: translateX(var(--reach)) scale(0.9); }
-  100% { opacity: 0; transform: translateX(var(--reach)) scale(1.1); }
+  0% { opacity: 0; transform: translateX(-100%) scale(1.1); }
+  15% { opacity: 1; transform: translateX(-100%) scale(0.9); }
+  75% { opacity: 1; transform: translateX(100%) scale(0.9); }
+  100% { opacity: 0; transform: translateX(100%) scale(1.1); }
 }
 
 @keyframes ghost-pulse {
@@ -861,16 +1053,16 @@
 
 .pause-btn {
   position: absolute;
-  top: calc(var(--safe-top) + 8px);
-  left: calc(var(--safe-left) + 8px);
+  top: calc(var(--in-top) + 8px);
+  left: calc(var(--in-left) + 8px);
   border-radius: 16px !important;
   background: var(--panel);
 }
 
 .muted-ind {
   position: absolute;
-  top: calc(var(--safe-top) + 64px);
-  left: calc(var(--safe-left) + 16px);
+  top: calc(var(--in-top) + 64px);
+  left: calc(var(--in-left) + 16px);
   display: grid;
   place-items: center;
   width: 32px;
@@ -897,13 +1089,22 @@
   pointer-events: auto;
 }
 
+/* Scrims dim the whole viewport, not just the world column (.world has no transform, so fixed
+   positioning is relative to the viewport). */
+.scr-pause > .scrim,
+.modal-wrap > .scrim {
+  position: fixed;
+}
+
 /* The card is centered in the space above Nubs' halo dial (--nubs-clear: from the dial's top to
-   the bottom of the screen, set by the game), so the player can see whether he is lit before
-   resuming. */
+   the bottom of the viewport, set by the game; less the column's bottom gap inside .world), so the
+   player can see whether he is lit before resuming. */
 .scr-pause {
+  /* A size container: its content box is the space between the top inset and Nubs' halo. */
+  container: pause / size;
   display: grid;
   place-items: center;
-  padding: calc(var(--safe-top) + 16px) var(--pad-x-r) max(calc(var(--safe-bottom) + 16px), calc(var(--nubs-clear, 0px) + 12px)) var(--pad-x-l);
+  padding: calc(var(--in-top) + 16px) var(--pad-x-r) max(calc(var(--in-bottom) + 16px), calc(var(--nubs-clear, 0px) - var(--world-gap-bottom, 0px) + 12px)) var(--pad-x-l);
 }
 
 .dialog,
@@ -959,12 +1160,27 @@
   margin-bottom: 6px;
 }
 
+/* Small phones with a notch: the Pause card drops its subtitle and tightens up so it still sits
+   above Nubs' halo (the player checks whether he is lit before resuming). */
+@container pause (max-height: 19.5em) {
+  .scr-pause .dialog {
+    gap: 8px;
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+
+  .scr-pause .dialog-sub {
+    display: none;
+  }
+}
+
 /* ---------------------------------------------------------------------------------------------
    Dying
    --------------------------------------------------------------------------------------------- */
 
 .dying-catch {
-  position: absolute;
+  /* An invisible scrim: a tap anywhere skips, even beside the world column. */
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -997,10 +1213,12 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
-  max-height: 58%;
+  /* At least 58% (when the content needs it), growing with the content up to the map's 96 px. */
+  max-height: max(58%, calc(100% - 96px));
   margin: 0 auto;
   max-width: 560px;
-  padding: 12px var(--pad-x-r) calc(var(--safe-bottom) + 12px) var(--pad-x-l);
+  container: sheet / inline-size;
+  padding: 12px var(--pad-x-r) calc(var(--in-bottom) + 12px) var(--pad-x-l);
   border-radius: 26px 26px 0 0;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 -8px 28px rgba(43, 33, 64, 0.2);
@@ -1016,17 +1234,48 @@
   transform: none;
 }
 
+/* The score block (.res-top) stays put while stats and missions (.res-scroll) scroll... */
+.res-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .res-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   margin: 0 -4px;
   padding: 0 4px 14px;
   /* Soft fade at the bottom edge hints that the sheet scrolls on short screens. */
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+}
+
+/* ...unless the screen is short or the text large (results.ts measure()): then the whole body
+   scrolls as one and Retry stays pinned below it. */
+.res-sheet.is-one-scroll .res-body {
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  margin: 0 -4px;
+  padding: 0 4px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+}
+
+.res-sheet.is-one-scroll .res-scroll {
+  overflow: visible;
+  margin: 0;
+  padding: 0 0 14px;
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .res-ribbon {
@@ -1061,7 +1310,7 @@
   flex: none;
 }
 
-.res-ribbon.is-on ~ .res-top {
+.res-ribbon.is-on ~ .res-body .res-top {
   padding-top: 16px;
 }
 
@@ -1115,7 +1364,8 @@
 }
 
 .res-clock {
-  font-size: clamp(2rem, 10vw, 2.625rem);
+  /* Narrow columns and short screens get a smaller time. */
+  font-size: clamp(1.5rem, min(calc(var(--cw) * 0.1), calc(var(--ch) * 0.06)), 2.625rem);
   font-weight: 900;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
@@ -1166,7 +1416,16 @@
   background: var(--danger-soft);
   color: #a52727;
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: 1rem;
+}
+
+/* "Not counted": why a Daily run used no try. */
+.res-note {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.3;
 }
 
 .res-verdict.is-win {
@@ -1191,7 +1450,7 @@
   border-radius: 12px;
   background: var(--paper);
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 1rem;
   line-height: 1.25;
   opacity: 0;
   transform: scale(0.8);
@@ -1281,20 +1540,26 @@
 }
 
 .stat-cap {
-  font-size: 0.75rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--ink-2);
   line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .stat-sub {
-  font-size: 0.6875rem;
+  font-size: 1rem;
   font-weight: 800;
   color: #b23b3b;
   line-height: 1.15;
+}
+
+/* A narrow sheet: two tiles per row (16 px captions need the room). */
+@container sheet (max-width: 439.98px) {
+  .res-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .res-missions {
@@ -1348,12 +1613,12 @@
 
 .mrow-label {
   font-weight: 700;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   line-height: 1.2;
 }
 
 .mrow-side .reward {
-  font-size: 0.8125rem;
+  font-size: 1rem;
 }
 
 .mrow-side {
@@ -1365,7 +1630,7 @@
 
 .mrow-prog {
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1424,6 +1689,17 @@
    Full-screen menus (Settings, Daily, Missions, Wardrobe)
    --------------------------------------------------------------------------------------------- */
 
+/* Menus are opaque over the whole viewport (K8: the game stops redrawing the canvas behind them);
+   their content stays in the world column. */
+.scr-menu::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(43, 33, 64, 0.07) 1px, transparent 0) 0 0 / 20px 20px,
+    var(--paper);
+}
+
 .menu {
   position: absolute;
   inset: 0;
@@ -1445,11 +1721,17 @@
   grid-template-columns: 48px 1fr minmax(48px, auto);
   align-items: center;
   gap: 8px;
-  padding: calc(var(--safe-top) + 10px) var(--pad-x-r) 10px var(--pad-x-l);
+  padding: calc(var(--in-top) + 10px) var(--pad-x-r) 10px var(--pad-x-l);
 }
 
+/* One line: a long title ellipsizes instead of sliding under the wallet chip (and the header keeps
+   a known height for the toast stack below it). */
 .menu-title {
+  min-width: 0;
+  overflow: hidden;
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 900;
   font-size: 1.375rem;
   letter-spacing: 0.01em;
@@ -1461,6 +1743,7 @@
 
 .menu-head .chip {
   justify-self: end;
+  font-size: 1rem;
 }
 
 .menu-body {
@@ -1469,10 +1752,12 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  container: menu / inline-size;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 4px var(--pad-x-r) calc(var(--safe-bottom) + 28px) var(--pad-x-l);
+  padding: 4px var(--pad-x-r) calc(var(--in-bottom) + 28px) var(--pad-x-l);
 }
 
 .menu-body > * {
@@ -1500,7 +1785,7 @@
 }
 
 .card-count {
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 800;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
@@ -1509,8 +1794,12 @@
 .card-note {
   margin-top: 10px;
   color: var(--ink-2);
-  font-size: 0.875rem;
+  font-size: 1rem;
   line-height: 1.4;
+}
+
+.card-note--top {
+  margin: 0 0 12px;
 }
 
 /* Settings rows */
@@ -1565,12 +1854,30 @@
 
 .set-hint {
   color: var(--ink-2);
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.3;
 }
 
+/* Settings → Controls → Keys: the keyboard mapping. */
+.set-row--keys {
+  align-items: start;
+}
+
+.set-keys {
+  margin-top: 2px;
+}
+
+.set-key {
+  display: block;
+}
+
+/* Settings opened from Pause: where backup, restore and reset went. */
+.set-midrun {
+  margin-top: 0;
+}
+
 .set-row .range-wrap {
-  width: min(44vw, 200px);
+  width: min(calc(var(--cw) * 0.44), 200px);
 }
 
 .set-row--stack .range-wrap {
@@ -1587,7 +1894,7 @@
   min-width: 3.4em;
   text-align: right;
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1595,7 +1902,7 @@
   --fill: 50%;
   flex: 1 1 auto;
   min-width: 0;
-  height: 44px;
+  height: 48px;
   margin: 0;
   background: transparent;
   -webkit-appearance: none;
@@ -1691,24 +1998,27 @@
 }
 
 .seg-opt {
-  min-height: 40px;
+  min-height: 48px;
   padding: 0 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: var(--ink-2);
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   transition:
     background-color var(--t),
     color var(--t),
     box-shadow var(--t);
 }
 
+/* Selected: white with a 2 px ink edge, so it doesn't rely on color alone (≥ 3:1 vs the track). */
 .seg-opt[aria-checked='true'] {
   background: #fff;
   color: var(--ink);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    inset 0 0 0 2px var(--ink),
+    var(--shadow-sm);
 }
 
 .code-box {
@@ -1720,11 +2030,14 @@
   border-radius: 14px;
   background: var(--paper);
   color: var(--ink);
-  font: 600 0.875rem/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* 16 px: iOS zooms the page into any smaller text field on focus. */
+  font: 600 1rem/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   resize: none;
   word-break: break-all;
   user-select: text;
   -webkit-user-select: text;
+  /* A text area is its own scroll container, so it doesn't inherit the page's no-zoom panning. */
+  touch-action: pan-x pan-y;
 }
 
 .code-box:focus {
@@ -1739,7 +2052,7 @@
 .version {
   text-align: center;
   color: var(--ink-3);
-  font-size: 0.8125rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -1804,9 +2117,9 @@
 }
 
 .daily-blurb {
-  max-width: 300px;
+  max-width: 320px;
   color: var(--ink-2);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -1829,13 +2142,16 @@
 }
 
 .daily-meta-cell .kicker {
-  font-size: 0.6875rem;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
 }
 
 .daily-tries {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -1857,7 +2173,7 @@
 }
 
 .daily-tries-text {
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--ink-2);
 }
 
@@ -1874,7 +2190,7 @@
 
 .drow {
   display: grid;
-  grid-template-columns: 92px 1fr auto;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 48px;
@@ -1907,7 +2223,7 @@
 }
 
 .drow-date {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   color: var(--ink-2);
   font-weight: 600;
 }
@@ -1920,12 +2236,14 @@
 
 .drow-score {
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
 }
 
-.drow.is-before {
-  opacity: 0.55;
+/* Days before the save existed: muted with a lighter ink, not opacity (text keeps 4.5:1). */
+.drow.is-before,
+.drow.is-before .drow-date {
+  color: var(--ink-3);
 }
 
 .drow.is-empty .drow-score {
@@ -1943,7 +2261,7 @@
 
 .drow-tries {
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -1994,7 +2312,7 @@
 
 .mcard-prog {
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2043,7 +2361,7 @@
 
 .badge-name {
   font-weight: 900;
-  font-size: 0.9375rem;
+  font-size: 1rem;
 }
 
 .badge:not(.is-on) .badge-name {
@@ -2051,7 +2369,7 @@
 }
 
 .badge-desc {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.3;
   color: var(--ink-2);
 }
@@ -2070,7 +2388,7 @@
   background: var(--gold-soft);
   color: #7a4c00;
   font-weight: 800;
-  font-size: 0.75rem;
+  font-size: 1rem;
 }
 
 .badge-reward .ic {
@@ -2115,7 +2433,7 @@
   max-width: 300px;
   margin-bottom: 8px;
   color: var(--ink-2);
-  font-size: 0.875rem;
+  font-size: 1rem;
   line-height: 1.3;
 }
 
@@ -2155,8 +2473,8 @@
   .stage .btn {
     align-self: end;
     min-height: 48px;
-    padding: 0 12px;
-    font-size: 0.9375rem;
+    padding: 4px 12px;
+    font-size: 1rem;
   }
 }
 
@@ -2170,7 +2488,7 @@
 }
 
 .tab {
-  min-height: 44px;
+  min-height: 48px;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -2179,16 +2497,26 @@
   font-size: 1rem;
 }
 
+/* Selected: white with a 2 px ink edge, not color alone. */
 .tab[aria-selected='true'] {
   background: #fff;
   color: var(--ink);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    inset 0 0 0 2px var(--ink),
+    var(--shadow-sm);
 }
 
 .tile-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+/* A narrow column: two tiles per row, so names and prices stay on their lines at 16 px. */
+@container menu (max-width: 299.98px) {
+  .tile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .tile {
@@ -2238,17 +2566,21 @@
 }
 
 .tile-name {
+  max-width: 100%;
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 1rem;
   line-height: 1.15;
+  overflow-wrap: break-word;
 }
 
 .tile-status {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 3px;
   margin-top: auto;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   font-weight: 800;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
@@ -2295,7 +2627,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--safe-top) + 12px);
+  top: calc(var(--in-top) + 12px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2307,7 +2639,16 @@
 
 /* In play, toasts drop below the canvas HUD row and the pause button. */
 .sui[data-screen='play'] .toasts {
-  top: calc(var(--safe-top) + 72px);
+  top: calc(var(--in-top) + 72px);
+}
+
+/* On menus they sit 8 px below the header (Back button and wallet chip): its padding (10 + 10) plus
+   its single-line row, the 48 px Back button or the title's line box at large text sizes. */
+.sui[data-screen='settings'] .toasts,
+.sui[data-screen='daily'] .toasts,
+.sui[data-screen='missions'] .toasts,
+.sui[data-screen='wardrobe'] .toasts {
+  top: calc(var(--in-top) + 28px + max(48px, 1.375rem * 1.35));
 }
 
 .toast {
@@ -2320,7 +2661,7 @@
   background: #fff;
   box-shadow: var(--shadow);
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   line-height: 1.3;
   animation: toast-in 280ms var(--ease-back) both;
   transition:
@@ -2331,6 +2672,11 @@
 .toast.is-out {
   opacity: 0;
   transform: translateY(-10px) scale(0.96);
+}
+
+/* Cleared by a screen switch: gone within 150 ms. */
+.toast.is-fast {
+  transition-duration: 120ms;
 }
 
 .toast-ic {
@@ -2378,9 +2724,6 @@
 .modal-wrap {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  padding: calc(var(--safe-top) + 16px) var(--pad-x-r) calc(var(--safe-bottom) + 16px) var(--pad-x-l);
   opacity: 0;
   transition: opacity var(--t) ease;
 }
@@ -2389,7 +2732,20 @@
   opacity: 1;
 }
 
-.modal-wrap--sheet {
+/* Places the dialog or sheet inside the world column. */
+.modal-frame {
+  position: absolute;
+  left: var(--wl);
+  top: var(--wt);
+  width: var(--ww);
+  height: var(--wh);
+  display: grid;
+  place-items: center;
+  padding: calc(var(--in-top) + 16px) var(--pad-x-r) calc(var(--in-bottom) + 16px) var(--pad-x-l);
+  pointer-events: none;
+}
+
+.modal-wrap--sheet .modal-frame {
   place-items: end center;
   padding: 0;
 }
@@ -2411,7 +2767,7 @@
   position: relative;
   width: 100%;
   max-width: 560px;
-  padding: 10px 20px calc(var(--safe-bottom) + 18px);
+  padding: 10px 20px calc(var(--in-bottom) + 18px);
   border-radius: 26px 26px 0 0;
   background: var(--paper);
   box-shadow: 0 -8px 28px rgba(43, 33, 64, 0.22);
@@ -2482,7 +2838,7 @@
 
 .install-step {
   display: grid;
-  grid-template-columns: 32px 1fr 40px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -2510,6 +2866,20 @@
   border-radius: 12px;
   background: var(--paper-2);
   color: #1f6fd1;
+}
+
+/* "Not now" / "Start fresh": quiet text buttons under the sheet's main action. */
+.sheet-quiet {
+  background: transparent;
+  box-shadow: none;
+}
+
+.install-copy {
+  padding: 6px 12px;
+}
+
+.restore .code-box {
+  margin: 4px 0 2px;
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -2581,4 +2951,141 @@
 
 .sui.is-rm .res-death .caret {
   display: none;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Desktop affordances: hover states and the grab cursor on the game canvas.
+   --------------------------------------------------------------------------------------------- */
+
+@media (hover: hover) {
+  .btn:hover:not([aria-disabled='true']) {
+    box-shadow:
+      0 5px 0 rgba(43, 33, 64, 0.18),
+      0 6px 16px rgba(43, 33, 64, 0.16);
+  }
+
+  .btn--primary:hover:not([aria-disabled='true']) {
+    background: #3dcdbf;
+    box-shadow:
+      0 4px 0 var(--accent-deep),
+      0 10px 22px rgba(46, 196, 182, 0.36);
+  }
+
+  .btn--gold:hover:not([aria-disabled='true']) {
+    background: #ffc94f;
+  }
+
+  .btn--danger:hover:not([aria-disabled='true']) {
+    background: #ff6b6b;
+  }
+
+  .tray-btn:hover .tray-disc {
+    background: #fff;
+  }
+
+  .tile:hover {
+    box-shadow:
+      0 0 0 2px rgba(43, 33, 64, 0.18),
+      var(--shadow-sm);
+  }
+
+  .tile.is-selected:hover {
+    box-shadow:
+      0 0 0 3px var(--accent),
+      var(--shadow-sm);
+  }
+
+  .tab:hover:not([aria-selected='true']),
+  .seg-opt:hover:not([aria-checked='true']) {
+    background: rgba(255, 255, 255, 0.55);
+    color: var(--ink);
+  }
+}
+
+/* The canvas lives outside #ui; its cursor follows the screen: grab where a drag turns the sun. */
+body:has(#ui[data-screen='title']) #game,
+body:has(#ui[data-screen='play']) #game {
+  cursor: grab;
+}
+
+body:has(#ui[data-screen='title']) #game:active,
+body:has(#ui[data-screen='play']) #game:active {
+  cursor: grabbing;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Forced colors (Windows High Contrast): state must not live in backgrounds and shadows alone.
+   --------------------------------------------------------------------------------------------- */
+
+@media (forced-colors: active) {
+  .switch {
+    border: 2px solid ButtonText;
+  }
+
+  .switch[aria-checked='true'] {
+    background: Highlight;
+  }
+
+  .switch-knob {
+    background: ButtonText;
+    forced-color-adjust: none;
+  }
+
+  .seg-opt[aria-checked='true'],
+  .tab[aria-selected='true'],
+  .tile.is-selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .btn,
+  .tray-btn,
+  .tab,
+  .seg-opt,
+  .tile {
+    border: 1px solid ButtonText;
+  }
+
+  /* Range tracks: keep the track and the fill visible. */
+  .range {
+    forced-color-adjust: none;
+  }
+
+  .range::-webkit-slider-runnable-track {
+    background: linear-gradient(90deg, Highlight var(--fill), GrayText var(--fill));
+    border: 1px solid ButtonText;
+  }
+
+  .range::-moz-range-track {
+    background: GrayText;
+    border: 1px solid ButtonText;
+  }
+
+  .range::-moz-range-progress {
+    background: Highlight;
+  }
+
+  .range::-webkit-slider-thumb {
+    background: ButtonFace;
+    border-color: ButtonText;
+  }
+
+  .range::-moz-range-thumb {
+    background: ButtonFace;
+    border-color: ButtonText;
+  }
+
+  .bar,
+  .pip {
+    border: 1px solid CanvasText;
+  }
+
+  .bar i {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  .sui :focus-visible {
+    outline-color: Highlight;
+  }
 }

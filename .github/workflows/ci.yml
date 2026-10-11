@@ -1,9 +1,16 @@
+# Checks every push and pull request; a green push to main (or a manual run on main) then publishes
+# the game to GitHub Pages. Deploying from this workflow means a red build never reaches players.
+# One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -20,6 +27,8 @@ jobs:
       - run: npm test
       - name: Difficulty acceptance (headless bots)
         run: npm run sim -- --check --seeds 50
+      - name: Single-file build (offline copy; no service worker)
+        run: npm run build:single
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - run: npm run e2e
@@ -30,3 +39,44 @@ jobs:
           path: |
             playwright-report/
             test-results/
+
+  pages-build:
+    needs: check
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Build
+        run: npm run build
+        env:
+          # Challenge links point at the published game (base_url has no trailing slash).
+          VITE_SHARE_URL: ${{ steps.pages.outputs.base_url }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  pages-deploy:
+    needs: pages-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deploy at a time; a deploy in flight finishes rather than leaving Pages half-published.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

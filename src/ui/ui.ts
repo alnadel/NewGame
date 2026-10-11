@@ -2,8 +2,18 @@
 // it through the `Ui` interface and receives player intents through `UiCallbacks` (see README.md).
 
 import './ui.css';
+import { shouldOfferRestoreSheet } from '../meta/progression.ts';
 import type { SaveV1, Settings } from '../meta/saveTypes.ts';
-import { isLandscapePhone, onReducedMotionChange, onViewportChange, prefersReducedMotion } from '../platform/lifecycle.ts';
+import {
+  isInAppBrowser,
+  isIOS,
+  isLandscapePhone,
+  isStandalone,
+  onReducedMotionChange,
+  onViewportChange,
+  prefersReducedMotion,
+} from '../platform/lifecycle.ts';
+import { captureInstallPrompt } from '../platform/pwa.ts';
 import { ghostHandSvg } from './art.ts';
 import { h, isInteractive, setFlag, svgFromMarkup } from './dom.ts';
 import { createModalHost, createRotateOverlay, createToastStack } from './overlays.ts';
@@ -21,6 +31,10 @@ import { isLegalTransition } from './transitions.ts';
 import type { ChallengeBanner, GhostMode, ScreenArgs, ScreenId, Ui, UiDeps } from './types.ts';
 
 const STORAGE_WARNING = "Progress can't be saved in this browser mode.";
+/** Shown under the Title's drag hint for mouse and keyboard players. */
+export const KEY_HINT = '← → turn the sun · Space to start · Esc pauses';
+
+const WORLD_VARS = ['--world-left', '--world-top', '--world-width', '--world-height'] as const;
 
 export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const cb = deps.callbacks;
@@ -31,9 +45,10 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   let ghost: GhostMode = 'off';
   let rotateBlocking = false;
   let storageWarned = false;
-  /** Last input came from a keyboard: move focus into screens as they open. */
+  /** Last input came from a keyboard: move focus into screens as they open, show key hints. */
   let keyboardMode = false;
   let motionSetting: Settings['reducedMotion'] = save.settings.reducedMotion;
+  let announceFlip = false;
 
   root.classList.add('sui');
   root.dataset.screen = current;
@@ -42,12 +57,33 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const applyMotion = (): void => {
     root.classList.toggle('is-rm', reducedMotion());
   };
+  const setKeyboardMode = (on: boolean): void => {
+    if (on === keyboardMode) return;
+    keyboardMode = on;
+    root.classList.toggle('is-kbd', on);
+    // The Title's key line may just have appeared: let it make room.
+    if (current !== 'boot') screens[current].relayout?.();
+  };
+
+  // Polite live region for screen-reader-only announcements (Results, Pause).
+  const live = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
+  const announce = (text: string): void => {
+    // A trailing no-break space alternates so the same sentence twice is still a change.
+    announceFlip = !announceFlip;
+    live.textContent = announceFlip ? text : `${text} `;
+  };
+
+  const rootPx = (name: string): number | null => {
+    const v = parseFloat(root.style.getPropertyValue(name));
+    return Number.isFinite(v) ? v : null;
+  };
 
   const ctx: UiContext = {
     cb,
     version: deps.version,
     save: () => save,
     today: () => today,
+    setToday: (date) => setToday(date),
     challenge: () => challenge,
     clearChallenge: () => {
       challenge = null;
@@ -56,8 +92,11 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     go: (id, ...args) => go(id, args[0]),
     back: () => back(),
     toast: (text, options) => toasts.show(text, options),
+    announce,
     sound: (name) => cb.uiSound(name),
     reducedMotion,
+    keyboardMode: () => keyboardMode,
+    rootPx,
     changeSettings: (settings) => {
       motionSetting = settings.reducedMotion;
       applyMotion();
@@ -69,6 +108,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const title = createTitleScreen(ctx);
   const play = createPlayScreen(ctx);
   const results = createResultsScreen(ctx);
+  const daily = createDailyScreen(ctx);
   const screens: Record<Exclude<ScreenId, 'boot'>, Screen> = {
     title,
     play,
@@ -76,7 +116,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     dying: createDyingScreen(ctx),
     results,
     settings: createSettingsScreen(ctx),
-    daily: createDailyScreen(ctx),
+    daily,
     missions: createMissionsScreen(ctx),
     wardrobe: createWardrobeScreen(ctx),
   };
@@ -87,18 +127,55 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     screenLayer.append(s.el);
   }
 
-  // Ghost thumb: Title swipe hint and the in-play directional hint (V1_PLAN §6.2).
+  // Ghost thumb: Title swipe hint and the in-play directional hint (V1_PLAN §6.2). On the Title,
+  // mouse and keyboard players also get the key mapping under the word "drag".
   const ghostEl = h(
     'div',
     { class: 'ghost', 'aria-hidden': 'true' },
     h('div', { class: 'ghost-track' }, h('div', { class: 'ghost-trail' }),
       h('div', { class: 'ghost-hand' }, h('span', { class: 'ghost-tip' }), svgFromMarkup(ghostHandSvg()))),
+    h('p', { class: 'ghost-keys' }, KEY_HINT),
     h('p', { class: 'ghost-word' }, h('span', { class: 'ghost-arrow' }, '‹'), 'drag', h('span', { class: 'ghost-arrow' }, '›')),
   );
   const toasts = createToastStack();
   const modals = createModalHost(() => ctx, (open) => setFlag(screenLayer, 'inert', open || rotateBlocking));
   const rotateEl = createRotateOverlay();
-  root.append(screenLayer, ghostEl, toasts.el, modals.el, rotateEl);
+  // Screens, the ghost hint and toasts live in the world column; modals and the rotate overlay
+  // span the viewport (modals place their dialog inside the column themselves).
+  const world = h('div', { class: 'world' }, screenLayer, ghostEl, toasts.el);
+  root.append(world, modals.el, rotateEl, live);
+
+  // The column's distance to the right and bottom viewport edges, for the inset math in ui.css.
+  // Re-measured when the game republishes --world-* (an inline style change) or the viewport moves;
+  // the Title re-fits its bottom cluster when Nubs' line (--nubs-y, --halo-r) moves.
+  const setVar = (name: string, value: string): void => {
+    if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+  };
+  let worldKey = '';
+  let nubsKey = '';
+  const syncWorld = (force: boolean): void => {
+    const st = root.style;
+    const key = WORLD_VARS.map((n) => st.getPropertyValue(n)).join('|');
+    const nkey = `${st.getPropertyValue('--nubs-y')}|${st.getPropertyValue('--halo-r')}`;
+    const worldChanged = force || key !== worldKey;
+    const nubsChanged = nkey !== nubsKey;
+    worldKey = key;
+    nubsKey = nkey;
+    if (worldChanged) {
+      const l = rootPx('--world-left');
+      const t = rootPx('--world-top');
+      const w = rootPx('--world-width');
+      const hh = rootPx('--world-height');
+      const right = l !== null && w !== null ? Math.max(0, Math.round(root.clientWidth - l - w)) : 0;
+      const bottom = t !== null && hh !== null ? Math.max(0, Math.round(root.clientHeight - t - hh)) : 0;
+      setVar('--world-gap-right', `${right}px`);
+      setVar('--world-gap-bottom', `${bottom}px`);
+      results.invalidateSheetTop();
+    }
+    if ((worldChanged || nubsChanged) && current !== 'boot') screens[current].relayout?.();
+  };
+  const worldObserver = typeof MutationObserver === 'function' ? new MutationObserver(() => syncWorld(false)) : null;
+  worldObserver?.observe(root, { attributes: true, attributeFilter: ['style'] });
 
   function setHidden(el: HTMLElement, hidden: boolean): void {
     el.classList.toggle('is-on', !hidden);
@@ -118,6 +195,8 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     ghostEl.dataset.mode = mode;
     ghostAnim = null;
     ghostDur = 0;
+    // The Title keeps the hint clear of its tagline and banner (it measures the shown hint).
+    if (current === 'title') screens.title.relayout?.();
     if (mode === 'off' || !ghostHand || typeof ghostHand.getAnimations !== 'function') return;
     try {
       const a = ghostHand.getAnimations()[0];
@@ -139,6 +218,8 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     return (t % ghostDur) / ghostDur;
   }
 
+  let restoreOffered = false;
+
   function go(id: ScreenId, data?: unknown): void {
     if (id === 'boot') return;
     const from = current;
@@ -155,13 +236,24 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       const prev = screens[from];
       setHidden(prev.el, true);
       prev.leave?.();
+      // Toasts belong to the screen that raised them; the entering screen's own (raised in enter()
+      // or later) stay. The boot-time storage warning survives the first switch.
+      toasts.clear();
     }
     current = id;
     root.dataset.screen = id;
     next.enter(from, data);
     setHidden(next.el, false);
     updateGhost();
+    // Screens that measure (the Title's crowding checks) do it once they and the ghost are shown.
+    next.relayout?.();
+    // Screens choose their focus target from where they were entered (a menu returns focus to the
+    // control that opened it).
     if (keyboardMode) next.initialFocus?.()?.focus({ preventScroll: true });
+    if (from === 'boot' && id === 'title' && !restoreOffered) {
+      restoreOffered = true;
+      if (shouldOfferRestoreSheet(save, { ios: isIOS(), standalone: isStandalone() })) modals.restoreSheet();
+    }
   }
 
   function back(): void {
@@ -171,6 +263,16 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     }
     if (rotateBlocking || current === 'boot') return;
     screens[current].back?.();
+  }
+
+  function setToday(date: string): void {
+    if (date === today) return;
+    today = date;
+    // Date-dependent views: the Daily screen (number, tries, Play label, history), the Title's dot,
+    // and Results' Retry label (yesterday's Daily replays as practice).
+    screens.daily.refresh?.();
+    screens.title.refresh?.();
+    if (current !== 'boot' && current !== 'daily' && current !== 'title') screens[current].refresh?.();
   }
 
   function checkRotate(): void {
@@ -187,7 +289,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   }
 
   const onKeyDown = (e: KeyboardEvent): void => {
-    keyboardMode = true;
+    setKeyboardMode(true);
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -205,30 +307,37 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     }
   };
   const onPointerDown = (): void => {
-    keyboardMode = false;
+    setKeyboardMode(false);
   };
+  // iOS Safari ignores user-scalable=no; its proprietary gesture events are the only way to stop a
+  // pinch from zooming the page (touch-action covers the rest).
+  const onGesture = (e: Event): void => e.preventDefault();
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('pointerdown', onPointerDown, true);
-  const stopViewport = onViewportChange(checkRotate);
+  document.addEventListener('gesturestart', onGesture, { passive: false });
+  const stopInstallPrompt = captureInstallPrompt();
+  const stopViewport = onViewportChange(() => {
+    checkRotate();
+    syncWorld(true);
+  });
   const stopMotion = onReducedMotionChange(applyMotion);
 
   applyMotion();
   checkRotate();
+  syncWorld(true);
 
   return {
     show: <K extends ScreenId>(id: K, ...args: ScreenArgs<K>) => go(id, args[0]),
     current: () => current,
     back,
+    isModalOpen: () => modals.isOpen(),
     setSave(next) {
       save = next;
       motionSetting = next.settings.reducedMotion;
       applyMotion();
       if (current !== 'boot') screens[current].refresh?.();
     },
-    setToday(date) {
-      today = date;
-      if (current !== 'boot') screens[current].refresh?.();
-    },
+    setToday,
     setChallenge(banner) {
       challenge = banner;
       screens.title.refresh?.();
@@ -242,7 +351,11 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       play.setMuted(muted);
     },
     toast: (text, options) => toasts.show(text, options),
-    showInstallSheet: () => modals.installSheet(),
+    showInstallSheet() {
+      // Social apps' web views can't add to the Home Screen.
+      if (isInAppBrowser()) return;
+      modals.installSheet();
+    },
     notifyStorageDegraded() {
       if (storageWarned) return;
       storageWarned = true;
@@ -253,11 +366,14 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     destroy() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('gesturestart', onGesture);
+      stopInstallPrompt();
       stopViewport();
       stopMotion();
+      worldObserver?.disconnect();
       for (const s of Object.values(screens)) s.leave?.();
       root.replaceChildren();
-      root.classList.remove('sui', 'is-rm');
+      root.classList.remove('sui', 'is-rm', 'is-kbd');
       delete root.dataset.screen;
     },
   };

@@ -8,7 +8,9 @@ import {
   defaults,
   migrate,
   sanitizeSettings,
+  type SaveChangeSource,
 } from '../../src/meta/save.ts';
+import type { SaveV1 } from '../../src/meta/saveTypes.ts';
 import { createStorage, type StorageAdapter } from '../../src/platform/storage.ts';
 import { addDays } from '../../src/meta/daily.ts';
 
@@ -60,7 +62,8 @@ describe('defaults', () => {
     expect(s.stats.wallet).toBe(0);
     expect(s.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot' });
     expect(s.unlocks.cosmetics).toEqual(['scarf-red', 'hat-none', 'nose-carrot']);
-    expect(s.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'mult-3']);
+    expect(s.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'survive-noon']);
+    expect(s.flags.missionsV2).toBe(true);
     expect(s.missions.cursor).toBe(3);
     expect(s.missions.tier).toBe(1);
     expect(s.daily).toEqual({});
@@ -195,6 +198,48 @@ describe('migrate', () => {
     expect(s.daily['2026-02-30']).toBeUndefined();
   });
 
+  it('converts old "Hold ×5 for 8 s" progress (seconds) once, to the ×4 goal\'s unit', () => {
+    const old = {
+      v: 1,
+      missions: {
+        cursor: 9,
+        tier: 1,
+        active: [
+          { id: 'hold-x5', progress: 3.4, done: false },
+          { id: 'hold-x5@2', progress: 0.5, done: false },
+          { id: 'flakes-10', progress: 7, done: false },
+        ],
+      },
+    };
+    const m = migrate(old, NOW).save;
+    expect(m.missions.active).toEqual([
+      { id: 'hold-x5', progress: 5, done: false },
+      { id: 'hold-x5@2', progress: 5, done: false },
+      { id: 'flakes-10', progress: 7, done: false },
+    ]);
+    expect(m.flags.missionsV2).toBe(true);
+    // Zero stays zero, done slots are left alone.
+    const zero = migrate({ v: 1, missions: { active: [{ id: 'hold-x5', progress: 0 }, { id: 'hold-x5@3', progress: 12, done: true }] } }, NOW).save;
+    expect(zero.missions.active.slice(0, 2)).toEqual([
+      { id: 'hold-x5', progress: 0, done: false },
+      { id: 'hold-x5@3', progress: 12, done: true },
+    ]);
+    // A save already in the new unit (best multiplier ×3) is never bumped, however often it loads.
+    const fresh = defaults(NOW);
+    fresh.missions.active[0] = { id: 'hold-x5', progress: 3, done: false };
+    let raw = JSON.stringify(fresh);
+    for (let i = 0; i < 3; i++) {
+      const again = migrate(raw, NOW);
+      expect(again.save.missions.active[0]).toEqual({ id: 'hold-x5', progress: 3, done: false });
+      raw = JSON.stringify(again.save);
+    }
+  });
+
+  it('derives the side keys from the main key', () => {
+    expect(SAVE_BAK_KEY).toBe(`${SAVE_KEY}.bak`);
+    expect(SAVE_FUTURE_KEY).toBe(`${SAVE_KEY}.future`);
+  });
+
   it('sanitizeSettings fills defaults for junk', () => {
     expect(sanitizeSettings('nope')).toEqual(defaults(NOW).settings);
   });
@@ -231,6 +276,36 @@ describe('storage adapter', () => {
     const backing = new FakeStorage();
     backing.failAfter = 0;
     expect(createStorage(backing).degraded).toBe(true);
+  });
+
+  it('retries the backing store on every write: degraded follows the latest write', () => {
+    const backing = new FakeStorage();
+    const s = createStorage(backing);
+    backing.failAfter = backing.writes;
+    s.set('k', 'memory only');
+    expect(s.degraded).toBe(true);
+    // The newer value lives in memory: reads must not fall back to the stale backing copy.
+    backing.map.set('k', 'stale');
+    expect(s.get('k')).toBe('memory only');
+    backing.failAfter = Infinity;
+    s.set('k', 'durable');
+    expect(s.degraded).toBe(false);
+    expect(backing.getItem('k')).toBe('durable');
+  });
+
+  it('reads the backing store first, so other instances\' writes are seen', () => {
+    const backing = new FakeStorage();
+    const s = createStorage(backing);
+    s.set('k', 'mine');
+    backing.map.set('k', 'theirs');
+    expect(s.get('k')).toBe('theirs');
+    // Falls back to memory when the backing store has nothing or throws.
+    backing.map.delete('k');
+    expect(s.get('k')).toBe('mine');
+    backing.getItem = () => {
+      throw new DOMException('denied', 'SecurityError');
+    };
+    expect(s.get('k')).toBe('mine');
   });
 });
 
@@ -328,5 +403,182 @@ describe('SaveStore', () => {
   it('reports degraded storage', () => {
     const store = new SaveStore(createStorage(null), { now: () => NOW });
     expect(store.degraded).toBe(true);
+  });
+
+  it('cannot persist over a newer version\'s save', () => {
+    storage.set(SAVE_KEY, JSON.stringify({ v: 2, stats: { runs: 40 } }));
+    const store = new SaveStore(storage, { now: () => NOW, changes: null });
+    expect(store.canPersist).toBe(false);
+    expect(new SaveStore(createStorage(new FakeStorage()), { now: () => NOW, changes: null }).canPersist).toBe(true);
+  });
+
+  it('fires onDegraded once on the first failed write, and later writes still land', () => {
+    const backing = new FakeStorage();
+    const s = createStorage(backing);
+    const store = new SaveStore(s, { now: () => NOW, changes: null });
+    let fired = 0;
+    store.onDegraded(() => fired++);
+    store.update((d) => {
+      d.stats.wallet = 1;
+    });
+    store.flush();
+    expect(fired).toBe(0);
+    // One write throws (quota), then storage recovers.
+    const realSet = backing.setItem.bind(backing);
+    let throwOnce = true;
+    backing.setItem = (k: string, v: string) => {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new DOMException('quota', 'QuotaExceededError');
+      }
+      realSet(k, v);
+    };
+    store.update((d) => {
+      d.stats.wallet = 2;
+    });
+    store.flush();
+    expect(fired).toBe(1);
+    expect(store.degraded).toBe(true);
+    expect(JSON.parse(backing.getItem(SAVE_KEY) as string).stats.wallet).toBe(1);
+    store.update((d) => {
+      d.stats.wallet = 3;
+    });
+    store.flush();
+    expect(store.degraded).toBe(false);
+    expect(JSON.parse(backing.getItem(SAVE_KEY) as string).stats.wallet).toBe(3);
+    // A later failure doesn't fire again.
+    backing.setItem = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    store.update((d) => {
+      d.stats.wallet = 4;
+    });
+    store.flush();
+    expect(fired).toBe(1);
+  });
+});
+
+/** A change source the test drives by hand: storage events and visibility. */
+class FakeChanges implements SaveChangeSource {
+  storageCbs: ((key: string | null, value: string | null) => void)[] = [];
+  visibleCbs: (() => void)[] = [];
+  onStorage(cb: (key: string | null, value: string | null) => void): () => void {
+    this.storageCbs.push(cb);
+    return () => (this.storageCbs = this.storageCbs.filter((c) => c !== cb));
+  }
+  onVisible(cb: () => void): () => void {
+    this.visibleCbs.push(cb);
+    return () => (this.visibleCbs = this.visibleCbs.filter((c) => c !== cb));
+  }
+  storage(key: string | null, value: string | null): void {
+    for (const cb of this.storageCbs) cb(key, value);
+  }
+  visible(): void {
+    for (const cb of this.visibleCbs) cb();
+  }
+}
+
+describe('SaveStore across instances (tabs, the installed app)', () => {
+  let backing: FakeStorage;
+  let changes: FakeChanges;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    backing = new FakeStorage();
+    changes = new FakeChanges();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** What another instance would write: this one's save after a run, a purchase and a Daily try. */
+  function otherInstanceSave(base: SaveV1): SaveV1 {
+    const o = structuredClone(base);
+    o.stats.runs = 9;
+    o.stats.wallet = 321;
+    o.unlocks.cosmetics = ['scarf-red', 'scarf-mint', 'hat-none', 'hat-beanie', 'nose-carrot'];
+    o.equipped.hat = 'hat-beanie';
+    o.daily['2026-10-11'] = { tries: 2, bestMinutes: 700, bestSnow: 30, glyphs: 'x' };
+    return o;
+  }
+
+  it('adopts a save written by another instance (storage event) without writing it back', () => {
+    const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
+    const seen: SaveV1[] = [];
+    store.onExternalChange((sv) => seen.push(sv));
+    const writesBefore = backing.writes;
+    const remote = JSON.stringify(otherInstanceSave(store.get()));
+    backing.map.set(SAVE_KEY, remote);
+    changes.storage(SAVE_KEY, remote);
+    const got = store.get();
+    expect(got.stats.runs).toBe(9);
+    expect(got.stats.wallet).toBe(321);
+    expect(got.unlocks.cosmetics).toContain('hat-beanie');
+    expect(got.equipped.hat).toBe('hat-beanie');
+    expect(got.daily['2026-10-11']?.tries).toBe(2);
+    expect(seen).toHaveLength(1);
+    // No echo: nothing written now, nor after the debounce.
+    vi.advanceTimersByTime(1000);
+    store.flush();
+    expect(backing.writes).toBe(writesBefore);
+    expect(backing.getItem(SAVE_KEY)).toBe(remote);
+    // Other keys, removals and the same bytes again are ignored.
+    changes.storage('other', remote);
+    changes.storage(SAVE_KEY, null);
+    changes.storage(SAVE_KEY, remote);
+    expect(seen).toHaveLength(1);
+  });
+
+  it('keeps a pending local settings change through an adopt, then writes the merge', () => {
+    const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
+    const remoteSave = otherInstanceSave(store.get());
+    remoteSave.settings.music = 0.9;
+    store.update((d) => {
+      d.settings.music = 0.1;
+      d.settings.invert = true;
+      d.unlocks.cosmetics.push('nose-cane');
+      d.equipped.nose = 'nose-cane';
+    });
+    const remote = JSON.stringify(remoteSave);
+    backing.map.set(SAVE_KEY, remote);
+    changes.storage(SAVE_KEY, remote);
+    const got = store.get();
+    expect(got.settings.music).toBe(0.1);
+    expect(got.settings.invert).toBe(true);
+    expect(got.stats.runs).toBe(9);
+    expect(got.stats.wallet).toBe(321);
+    // The outfit worn here is kept where the remote owns it (hat-none); the Candy Cane isn't theirs.
+    expect(got.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot' });
+    const written = JSON.parse(backing.getItem(SAVE_KEY) as string) as SaveV1;
+    expect(written.settings.music).toBe(0.1);
+    expect(written.stats.runs).toBe(9);
+  });
+
+  it('re-reads on becoming visible and adopts bytes changed meanwhile', () => {
+    const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
+    let fired = 0;
+    store.onExternalChange(() => fired++);
+    changes.visible();
+    expect(fired).toBe(0);
+    backing.map.set(SAVE_KEY, JSON.stringify(otherInstanceSave(store.get())));
+    changes.visible();
+    expect(fired).toBe(1);
+    expect(store.get().stats.wallet).toBe(321);
+    changes.visible();
+    expect(fired).toBe(1);
+  });
+
+  it('ignores a newer version\'s save and garbage from other instances', () => {
+    const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
+    let fired = 0;
+    store.onExternalChange(() => fired++);
+    changes.storage(SAVE_KEY, JSON.stringify({ v: 2, stats: { runs: 99 } }));
+    changes.storage(SAVE_KEY, '{nope');
+    expect(fired).toBe(0);
+    expect(store.get().stats.runs).toBe(0);
+  });
+
+  it('stops listening after dispose', () => {
+    const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
+    store.dispose();
+    expect(changes.storageCbs).toHaveLength(0);
+    expect(changes.visibleCbs).toHaveLength(0);
   });
 });

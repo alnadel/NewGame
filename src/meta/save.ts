@@ -5,6 +5,7 @@
 
 import type { DailyEntry, MissionSlot, SaveV1, Settings } from './saveTypes.ts';
 import type { StorageAdapter } from '../platform/storage.ts';
+import { onPageVisible } from '../platform/lifecycle.ts';
 import {
   ACHIEVEMENTS,
   ACTIVE_MISSIONS,
@@ -22,8 +23,13 @@ import { parseMissionId, refillMissions } from './missions.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
 
 export const SAVE_KEY = 'shady.save';
-export const SAVE_BAK_KEY = 'shady.save.bak';
-export const SAVE_FUTURE_KEY = 'shady.save.future';
+/** Suffixes of the side keys every store keeps next to its main key. */
+const BAK_SUFFIX = '.bak';
+const FUTURE_SUFFIX = '.future';
+/** The pre-migration / unreadable raw save, kept for recovery. */
+export const SAVE_BAK_KEY = `${SAVE_KEY}${BAK_SUFFIX}`;
+/** A save written by a newer build, copied aside and never overwritten. */
+export const SAVE_FUTURE_KEY = `${SAVE_KEY}${FUTURE_SUFFIX}`;
 export const SAVE_VERSION = 1;
 /** Daily entries kept (newest dates win). */
 export const DAILY_KEEP = 60;
@@ -72,7 +78,14 @@ export function defaults(now: number = Date.now()): SaveV1 {
     equipped: { ...DEFAULT_EQUIPPED },
     missions,
     daily: {},
-    flags: { hintsShown: 0, tutorialDone: false, installSheetShown: false, persistRequested: false, storageWarned: false },
+    flags: {
+      hintsShown: 0,
+      tutorialDone: false,
+      installSheetShown: false,
+      persistRequested: false,
+      storageWarned: false,
+      missionsV2: true,
+    },
   };
 }
 
@@ -148,15 +161,28 @@ function sanitizeDaily(raw: unknown): Record<string, DailyEntry> {
   return pruneDaily(out);
 }
 
-function sanitizeMissions(raw: unknown): SaveV1['missions'] {
+/**
+ * Progress of an undone 'hold-x5' slot from a save written before the polish wave. The mission was
+ * "Hold ×5 for 8 s" (progress = seconds held at ×5) and is now "Reach a ×4 multiplier" (progress =
+ * the best multiplier level). Any held seconds mean ×5 was reached, so they become level 5; zero
+ * stays zero. Saves carrying `flags.missionsV2` already use the new unit and are left alone.
+ */
+export const HOLD_X5_MIGRATED_PROGRESS = 5;
+
+function sanitizeMissions(raw: unknown, legacyUnits: boolean): SaveV1['missions'] {
   const r = rec(raw);
   const active: MissionSlot[] = [];
   if (Array.isArray(r.active)) {
     for (const item of r.active) {
       if (active.length >= ACTIVE_MISSIONS) break;
-      if (!isRecord(item) || typeof item.id !== 'string' || !parseMissionId(item.id)) continue;
+      if (!isRecord(item) || typeof item.id !== 'string') continue;
+      const parsed = parseMissionId(item.id);
+      if (!parsed) continue;
       if (active.some((s) => s.id === item.id)) continue;
-      active.push({ id: item.id, progress: num(item.progress, 0, 0, BIG), done: bool(item.done, false) });
+      const done = bool(item.done, false);
+      let progress = num(item.progress, 0, 0, BIG);
+      if (legacyUnits && !done && parsed.def.id === 'hold-x5' && progress > 0) progress = HOLD_X5_MIGRATED_PROGRESS;
+      active.push({ id: item.id, progress, done });
     }
   }
   const missions = {
@@ -216,7 +242,8 @@ function sanitize(r: Rec, now: number): SaveV1 {
     },
     unlocks: { cosmetics, achievements },
     equipped: eq,
-    missions: sanitizeMissions(r.missions),
+    // Saves without the flag predate the polish-wave mission units: convert them once.
+    missions: sanitizeMissions(r.missions, !bool(flags.missionsV2, false)),
     daily: sanitizeDaily(r.daily),
     flags: {
       hintsShown: int(flags.hintsShown, 0, 0, BIG),
@@ -224,6 +251,7 @@ function sanitize(r: Rec, now: number): SaveV1 {
       installSheetShown: bool(flags.installSheetShown, false),
       persistRequested: bool(flags.persistRequested, false),
       storageWarned: bool(flags.storageWarned, false),
+      missionsV2: true,
     },
   };
 }
@@ -281,15 +309,46 @@ export function migrate(raw: unknown, now: number = Date.now()): MigrateResult {
 // SaveStore
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Where a store hears about other instances (another tab, the installed app and its browser tab):
+ * `storage` events for writes made elsewhere, and the page becoming visible again (some browsers
+ * deliver no storage event to a background tab, so the store re-reads then). Injected in tests.
+ */
+export interface SaveChangeSource {
+  onStorage(cb: (key: string | null, newValue: string | null) => void): () => void;
+  onVisible(cb: () => void): () => void;
+}
+
+/** The browser's sources: window 'storage' events and platform/lifecycle onPageVisible. */
+function browserChangeSource(): SaveChangeSource | null {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  return {
+    onStorage(cb) {
+      const listener = (e: StorageEvent): void => cb(e.key, e.newValue);
+      window.addEventListener('storage', listener);
+      return () => window.removeEventListener('storage', listener);
+    },
+    onVisible: (cb) => onPageVisible(cb),
+  };
+}
+
 export interface SaveStoreOptions {
   key?: string;
   debounceMs?: number;
   now?: () => number;
+  /** Change notifications from other instances; defaults to the browser's (none outside a page). */
+  changes?: SaveChangeSource | null;
 }
 
 /**
  * Owns the live save. `get()` returns the in-memory object (treat it as read-only outside
  * `update`); writes are debounced and `flush()` forces them (call on pagehide/hidden and run end).
+ *
+ * Several instances can share one origin (two tabs, or the Home Screen app next to its browser
+ * tab on Android). A save written by another instance is adopted (`onExternalChange`) instead of
+ * being overwritten later by this one's stale copy: with nothing pending here it replaces the
+ * in-memory save without writing; with a local change pending, the other instance's progress is
+ * taken and only this instance's settings and outfit are kept, then written back at once.
  */
 export class SaveStore {
   readonly status: LoadStatus;
@@ -297,29 +356,38 @@ export class SaveStore {
   private readonly storage: StorageAdapter;
   private readonly key: string;
   private readonly debounceMs: number;
+  private readonly now: () => number;
   /** False after loading a future-version save: that save must never be overwritten. */
   private readonly writable: boolean;
   /** Raw pre-migration value to preserve in `.bak` before the first write. */
   private pendingBackup: string | null = null;
   private dirty = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** The raw bytes last read from or written to the main key (to spot writes made elsewhere). */
+  private lastRaw: string | null;
+  private degradedNotified = false;
   private readonly listeners = new Set<(save: SaveV1) => void>();
+  private readonly externalListeners = new Set<(save: SaveV1) => void>();
+  private readonly degradedListeners = new Set<() => void>();
+  private readonly detach: (() => void)[] = [];
 
   constructor(storage: StorageAdapter, options: SaveStoreOptions = {}) {
     this.storage = storage;
     this.key = options.key ?? SAVE_KEY;
     this.debounceMs = options.debounceMs ?? SAVE_DEBOUNCE_MS;
-    const now = (options.now ?? Date.now)();
+    this.now = options.now ?? Date.now;
+    const now = this.now();
     const raw = storage.get(this.key);
+    this.lastRaw = raw;
     const loaded = migrate(raw, now);
     let status: LoadStatus = loaded.status;
     this.current = loaded.save;
     this.writable = loaded.status !== 'future';
 
     if (loaded.status === 'future' && raw !== null) {
-      storage.set(`${this.key}.future`, raw);
+      storage.set(`${this.key}${FUTURE_SUFFIX}`, raw);
     } else if (loaded.status === 'corrupt') {
-      const bak = migrate(storage.get(`${this.key}.bak`), now);
+      const bak = migrate(storage.get(`${this.key}${BAK_SUFFIX}`), now);
       if (bak.status === 'ok') {
         this.current = bak.save;
         status = 'recovered';
@@ -334,11 +402,26 @@ export class SaveStore {
       this.dirty = true;
     }
     this.status = status;
+
+    const source = options.changes === undefined ? browserChangeSource() : options.changes;
+    if (source) {
+      this.detach.push(
+        source.onStorage((key, value) => {
+          if (key === this.key && value !== null) this.adopt(value);
+        }),
+        source.onVisible(() => this.reread()),
+      );
+    }
   }
 
   /** True when progress will not survive this session (memory-only storage or a newer save on disk). */
   get degraded(): boolean {
     return this.storage.degraded || !this.writable;
+  }
+
+  /** False when a save from a newer version of the game is on disk: nothing may be written over it. */
+  get canPersist(): boolean {
+    return this.writable;
   }
 
   get(): SaveV1 {
@@ -365,17 +448,77 @@ export class SaveStore {
     }
     if (!this.dirty || !this.writable) return;
     if (this.pendingBackup !== null) {
-      this.storage.set(`${this.key}.bak`, this.pendingBackup);
+      this.storage.set(`${this.key}${BAK_SUFFIX}`, this.pendingBackup);
       this.pendingBackup = null;
     }
-    this.storage.set(this.key, JSON.stringify(this.current));
+    const raw = JSON.stringify(this.current);
+    this.storage.set(this.key, raw);
+    this.lastRaw = raw;
     this.dirty = false;
+    if (this.storage.degraded && !this.degradedNotified) {
+      this.degradedNotified = true;
+      for (const cb of [...this.degradedListeners]) cb();
+    }
   }
 
   /** Called with the new save after every set/update. Returns an unsubscribe function. */
   subscribe(listener: (save: SaveV1) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Called after this store adopted a save written by another instance (a storage event on its key,
+   * or a re-read on becoming visible that found different bytes). Push it to the UI and re-apply
+   * its settings. Returns an unsubscribe function.
+   */
+  onExternalChange(cb: (save: SaveV1) => void): () => void {
+    this.externalListeners.add(cb);
+    return () => this.externalListeners.delete(cb);
+  }
+
+  /** Called once, on the first write after boot that didn't reach durable storage. */
+  onDegraded(cb: () => void): () => void {
+    this.degradedListeners.add(cb);
+    return () => this.degradedListeners.delete(cb);
+  }
+
+  /** Writes anything pending and stops listening for other instances. */
+  dispose(): void {
+    this.flush();
+    for (const off of this.detach.splice(0)) off();
+    this.listeners.clear();
+    this.externalListeners.clear();
+    this.degradedListeners.clear();
+  }
+
+  /** Visibility re-read: adopt the stored save if another instance changed it meanwhile. */
+  private reread(): void {
+    const raw = this.storage.get(this.key);
+    if (raw !== null && raw !== this.lastRaw) this.adopt(raw);
+  }
+
+  private adopt(raw: string): void {
+    if (raw === this.lastRaw) return;
+    const remote = migrate(raw, this.now());
+    // A newer build's save (or garbage) is never adopted: this instance keeps what it has.
+    if (remote.status !== 'ok') return;
+    this.lastRaw = raw;
+    if (!this.dirty) {
+      this.current = remote.save;
+    } else {
+      // A local change is pending: keep the other instance's progress (runs, wallet, cosmetics,
+      // Daily tries) and only this instance's settings and outfit (where the remote owns it).
+      const merged = remote.save;
+      merged.settings = { ...this.current.settings };
+      for (const slot of COSMETIC_SLOTS) {
+        const id = this.current.equipped[slot];
+        if (merged.unlocks.cosmetics.includes(id)) merged.equipped[slot] = id;
+      }
+      this.current = merged;
+      this.flush();
+    }
+    for (const cb of [...this.externalListeners]) cb(this.current);
   }
 
   private changed(): void {

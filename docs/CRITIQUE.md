@@ -441,7 +441,7 @@ By day 7 a player replays the same two easy minutes before every meaningful deci
 
 **Problem.** At Day 1 noon (about 20% safe angles), flakes enter the 280 u melt window 4 s before Nubs reaches them, and almost all of them melt. The result is a stream of 'tss' sounds, and Snow income depends on the time of day more than on skill.
 
-**Fix.** - Make the melt window time-based: 1.6 s ahead of Nubs, with a 1.0 s melt budget, so flakes near Nubs share his shade.
+**Fix.** - Make the melt window time-based: 1.6 s ahead of Nubs, with a 1.0 s melt budget, so flakes near Nubs share his shade. *(Resolved: the time-based window shipped; wave 3 restored the GDD's 1.2 s budget, V1_PLAN §5.4.)*
 - Limit the 'tss' sound to 3 per second.
 - Tune mission 10's threshold using the sim's flake stats.
 
@@ -463,7 +463,7 @@ By day 7 a player replays the same two easy minutes before every meaningful deci
 
 A try is counted at 6:30 AM, but if that count isn't saved at that moment, force-quitting a bad run refunds the try.
 
-**Fix.** - Unlock the Daily after run 3 or after the first night, and show a one-card explanation of the charm of the day.
+**Fix.** - Unlock the Daily after run 3 or after the first night, and show a one-card explanation of the charm of the day. *(Resolved: v1 has no charms, and the Daily unlocks after 3 completed runs, V1_PLAN §11.3.)*
 - Save the try increment immediately at 6:30 AM.
 - Save the run's best time to the Daily entry every in-game hour, so quitting the app counts the try along with the progress made.
 

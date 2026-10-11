@@ -61,5 +61,10 @@ export interface SaveV1 {
     installSheetShown: boolean;
     persistRequested: boolean;
     storageWarned: boolean;
+    /**
+     * Mission progress is in the polish-wave units ('hold-x5' = best multiplier level, not seconds
+     * held at ×5). Always true once validated; saves without it are converted once on load.
+     */
+    missionsV2: boolean;
   };
 }

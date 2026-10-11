@@ -58,21 +58,44 @@ describe('cosmetics catalog', () => {
 });
 
 describe('missions and achievements', () => {
-  it('has the 13-mission pool in V1 order with V1 rewards', () => {
-    expect(MISSIONS.map((m) => m.reward)).toEqual([10, 10, 15, 20, 20, 30, 25, 20, 30, 30, 30, 50, 15]);
+  it('has the 13-mission pool in the polish-wave order with V1 rewards', () => {
+    expect(MISSIONS.map((m) => m.id)).toEqual([
+      'reach-9am', 'flakes-10', 'survive-noon', 'mult-3', 'cloud-ride', 'reach-day-2', 'ice-crystal',
+      'two-phews', 'gate-arch', 'clean-balls', 'reach-day-3', 'hold-x5', 'play-daily',
+    ]);
+    expect(MISSIONS.map((m) => m.reward)).toEqual([10, 10, 20, 15, 20, 30, 20, 25, 30, 30, 50, 30, 15]);
     expect(MISSIONS.map((m) => missionLabel(m, 1))).toEqual([
       'Reach 9:00 AM',
       'Collect 10 flakes in one run',
-      'Reach a ×3 multiplier',
       'Survive a noon (reach 12:30 PM)',
+      'Reach a ×3 multiplier',
       "Ride a cloud's shadow for 3 s straight",
       'Reach Day 2',
-      'Two PHEWs in one run',
       'Collect an Ice Crystal',
-      'Hold ×5 for 8 s',
+      'Two PHEWs in one run',
+      'Walk under a gate arch between 11 AM and 1 PM',
+      'Pass 2 gazing balls in one run with no glare contact',
+      'Reach Day 3',
+      'Reach a ×4 multiplier',
+      "Play today's Daily",
+    ]);
+  });
+
+  it('labels every mission at tier II', () => {
+    expect(MISSIONS.map((m) => missionLabel(m, 2))).toEqual([
+      'Reach Day 2 · 9:00 AM',
+      'Collect 20 flakes in one run',
+      "Survive Day 2's noon (reach 12:30 PM)",
+      'Reach a ×5 multiplier',
+      "Ride a cloud's shadow for 6 s straight",
+      'Reach Day 3',
+      'Collect 2 Ice Crystals in one run',
+      '4 PHEWs in one run',
       'Walk under a gate arch between 11 AM and 1 PM',
       'Pass 4 gazing balls in one run with no glare contact',
-      'Reach Day 3',
+      'Reach Day 4',
+      // ×4 at tier II clamps to the ×5 cap.
+      'Reach a ×5 multiplier',
       "Play today's Daily",
     ]);
   });
@@ -81,11 +104,17 @@ describe('missions and achievements', () => {
     const byId = (id: string) => MISSIONS.find((m) => m.id === id)!;
     expect(missionTarget(byId('flakes-10'), 3)).toBe(30);
     expect(missionTarget(byId('mult-3'), 2)).toBe(5);
+    expect(missionTarget(byId('hold-x5'), 1)).toBe(4);
+    expect(missionTarget(byId('hold-x5'), 2)).toBe(5);
+    expect(missionTarget(byId('clean-balls'), 1)).toBe(2);
+    expect(missionTarget(byId('clean-balls'), 2)).toBe(4);
     expect(missionTarget(byId('reach-day-3'), 2)).toBe(2160);
     expect(missionTarget(byId('gate-arch'), 4)).toBe(1);
     expect(missionLabel(byId('ice-crystal'), 2)).toBe('Collect 2 Ice Crystals in one run');
     expect(missionLabel(byId('two-phews'), 3)).toBe('6 PHEWs in one run');
-    expect(missionProgressText(byId('hold-x5'), 1, 3.47, false)).toBe('3.4/8 s');
+    expect(missionProgressText(byId('cloud-ride'), 1, 2.47, false)).toBe('2.4/3 s');
+    expect(missionProgressText(byId('hold-x5'), 1, 3, false)).toBe('×3/×4');
+    expect(missionProgressText(byId('hold-x5'), 2, 1, false)).toBe('×1/×5');
     expect(missionProgressText(byId('mult-3'), 1, 2, false)).toBe('×2/×3');
     expect(missionProgressText(byId('reach-day-2'), 1, 500, false)).toBe('Day 1 · 2:20 PM');
     expect(missionProgressText(byId('reach-9am'), 1, 170, false)).toBe('8:50 AM');

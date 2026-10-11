@@ -1,7 +1,7 @@
 // Pure progression rules (V1_PLAN §11, GDD §6-§8). Every function takes a save and returns a new one;
 // inputs are never mutated, so the session can diff, test and persist freely.
 
-import type { RunResult } from '../core/sim/events.ts';
+import type { HourGlyph, RunResult } from '../core/sim/events.ts';
 import type { DailyEntry, SaveV1 } from './saveTypes.ts';
 import {
   ACHIEVEMENTS,
@@ -16,7 +16,10 @@ import { cloneSave, defaults, pruneDaily } from './save.ts';
 import { DAILY_TRIES, dailyNumber } from './daily.ts';
 import { dayStripLines } from './share.ts';
 
-/** Daily unlocks after this many lifetime runs (or after the first night). */
+/**
+ * The Daily unlocks after this many completed lifetime runs (V1_PLAN §11.3), i.e. once onboarding
+ * (profiles 0-2) is over. A save that already holds a Daily entry keeps it unlocked.
+ */
 export const DAILY_UNLOCK_RUNS = 3;
 /** The iOS "Add to Home Screen" sheet is offered once after this many runs. */
 export const INSTALL_SHEET_RUNS = 3;
@@ -56,8 +59,11 @@ export interface RunOutcome {
 }
 
 export interface ApplyRunOptions {
-  /** Local date of the device ('YYYY-MM-DD'), for "Play today's Daily". */
-  today: string;
+  /**
+   * Local date of the device ('YYYY-MM-DD') at run end. Informational: "Play today's Daily" now
+   * credits any counted try (`dailyTry`), so a try that crosses midnight still completes it.
+   */
+  today?: string;
   /** Daily runs: the try number counted at 6:30 AM by dailyTryStarted, or null/undefined if unscored. */
   dailyTry?: number | null;
 }
@@ -76,8 +82,12 @@ const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
   'daily-habit': (s) => s.stats.dailyDaysPlayed >= 7,
 };
 
+/**
+ * Unlocked after DAILY_UNLOCK_RUNS completed runs. Any stored Daily entry also counts, so players
+ * who unlocked it under the old "first night" rule (or restored such a backup) keep it.
+ */
 export function isDailyUnlocked(save: SaveV1): boolean {
-  return save.stats.runs >= DAILY_UNLOCK_RUNS || save.stats.reachedNight;
+  return save.stats.runs >= DAILY_UNLOCK_RUNS || Object.keys(save.daily).length > 0;
 }
 
 /** Cheapest Snow-priced cosmetic the player doesn't own yet. */
@@ -134,7 +144,7 @@ export function applyRunResult(
     if (!parsed) continue;
     let justCompleted = false;
     if (!slot.done) {
-      slot.progress = Math.max(slot.progress, missionValue(parsed.def, result, options.today));
+      slot.progress = Math.max(slot.progress, missionValue(parsed.def, result, options));
       if (slot.progress >= missionTarget(parsed.def, parsed.tier)) {
         slot.done = true;
         justCompleted = true;
@@ -204,7 +214,6 @@ export function applyRunResult(
   };
 }
 
-/** Call when a run starts: completed missions are swapped for fresh ones (V1_PLAN §11.1). Pure. */
 /**
  * Results data for a debug run (sim-altering URL params such as ?day=, ?bot=, ?chill=): nothing is
  * earned, unlocked or saved, so the outcome only mirrors the save as it is.
@@ -228,6 +237,7 @@ export function debugRunOutcome(save: SaveV1, result: RunResult): RunOutcome {
   };
 }
 
+/** Call when a run starts: completed missions are swapped for fresh ones (V1_PLAN §11.1). Pure. */
 export function beginRun(save: SaveV1): { save: SaveV1; dealt: MissionView[] } {
   if (!save.missions.active.some((m) => m.done)) return { save, dealt: [] };
   const next = cloneSave(save);
@@ -301,16 +311,26 @@ function recordDailyBest(save: SaveV1, date: string, minutes: number, snow: numb
   save.daily[date] = entry;
 }
 
+/** The run's hour glyphs so far, for a daily checkpoint (same data applyRunResult stores at the end). */
+export interface DailyStripSource {
+  hourGlyphs: readonly (readonly HourGlyph[])[];
+  assisted: boolean;
+}
+
 /**
  * Hourly checkpoint for a scored daily run (call only after dailyTryStarted returned a try number),
- * so progress survives the app being killed mid-run.
+ * so progress survives the app being killed mid-run. With `strip`, a new best also stores the run's
+ * glyph strip so far (in applyRunResult's format), so the Daily history never shows the best time
+ * next to an older try's strip.
  */
-export function dailyProgress(save: SaveV1, date: string, minutes: number, snow: number): SaveV1 {
+export function dailyProgress(save: SaveV1, date: string, minutes: number, snow: number, strip?: DailyStripSource): SaveV1 {
   const entry = save.daily[date];
   if (!entry || entry.tries === 0) return save;
-  if (minutes < entry.bestMinutes || (minutes === entry.bestMinutes && snow <= entry.bestSnow)) return save;
+  const runSnow = Math.max(0, Math.floor(snow));
+  if (minutes < entry.bestMinutes || (minutes === entry.bestMinutes && runSnow <= entry.bestSnow)) return save;
   const next = cloneSave(save);
-  recordDailyBest(next, date, minutes, Math.max(0, Math.floor(snow)));
+  const glyphs = strip ? dayStripLines(strip.hourGlyphs, strip.assisted).join('\n') : undefined;
+  recordDailyBest(next, date, minutes, runSnow, glyphs);
   return next;
 }
 
@@ -377,7 +397,26 @@ export function resetProgress(save: SaveV1, now: number = Date.now()): SaveV1 {
   return fresh;
 }
 
-/** iOS Safari only: offer the "Add to Home Screen" sheet once, after run 3 (V1_PLAN §11.5). */
-export function shouldShowInstallSheet(save: SaveV1, env: { ios: boolean; standalone: boolean }): boolean {
-  return env.ios && !env.standalone && save.stats.runs >= INSTALL_SHEET_RUNS && !save.flags.installSheetShown;
+export interface InstallEnv {
+  ios: boolean;
+  standalone: boolean;
+  /** A social/search app's embedded browser (platform/lifecycle isInAppBrowser): it can't install. */
+  inApp?: boolean;
+}
+
+/**
+ * iOS browsers only: offer the "Add to Home Screen" sheet once, after run 3 (V1_PLAN §11.5). Never
+ * inside an in-app browser, which has no Add to Home Screen.
+ */
+export function shouldShowInstallSheet(save: SaveV1, env: InstallEnv): boolean {
+  return env.ios && !env.standalone && env.inApp !== true && save.stats.runs >= INSTALL_SHEET_RUNS && !save.flags.installSheetShown;
+}
+
+/**
+ * The iOS Home Screen app keeps its own storage, apart from the browser's. On its first launch with
+ * no runs yet, offer to restore the progress copied in the browser (the install sheet's step 1).
+ * Nothing needs saving: once a run finishes the condition is false for good.
+ */
+export function shouldOfferRestoreSheet(save: SaveV1, env: InstallEnv): boolean {
+  return env.ios && env.standalone && save.stats.runs === 0;
 }

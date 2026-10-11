@@ -74,7 +74,7 @@ At 6:00 AM (ε = 6°), L/h = 9.5, so shadows hit the 520 u cap. At night there i
 - **Drag.** A horizontal drag anywhere on screen changes the target by Δθ = −(dx / viewportCssWidth) × 310° × sensitivity. Sensitivity defaults to 1.0 (range 0.6-1.5). Dragging right turns the sun clockwise, and all shadows swing clockwise too. A setting inverts this. Vertical motion is ignored.
 - **Following the finger.** While the finger is down, θ follows the target at up to **600°/s** (300°/s with reduced motion).
 - **Catch.** Touch-down sets the angular velocity ω to 0 instantly.
-- **Inertia.** On release, ω = the average angular velocity over the last 80 ms of drag. If the finger did not move in the last 50 ms, ω = 0. ω is clamped to ±360°/s. Each tick, θ += ω·dt and ω *= e^(−3.5·dt) (0.9433354 per 60 Hz tick). Inertia stops when |ω| < 5°/s. A full-speed flick travels about 103°.
+- **Inertia (only flicks coast).** On release, the release speed is the average angular velocity over the last 80 ms of drag (0 if the finger did not move in the last 50 ms), scaled by smoothstep(200, 600, |speed|) and clamped to ±360°/s. So a slow drag stops where the finger lifts, a 400°/s lift coasts at 200°/s, and a real flick (600°/s or faster) coasts at full speed. Each tick, θ += ω·dt and ω *= e^(−3.5·dt) (0.9433354 per 60 Hz tick). Inertia stops when |ω| < 5°/s. A full-speed flick travels about 103°.
 - **Detents.** Each time θ crosses a multiple of 15°, you get a click sound, a 5 ms haptic, and a flash on that dial tick. Detents are feedback only; there is no magnetic snap.
 - **Keyboard.** Left/A turns counter-clockwise and Right/D turns clockwise, at 180°/s.
 - **Sun glyph.** A cast ray from Nubs' screen position in direction θ meets a rounded rectangle inset 26 CSS px from the world viewport edges (plus safe-area insets). The sun glyph sits at that point. A small sun pointer (an 8 px triangle) also rides Nubs' chill ring toward θ, so the direction stays visible even when the thumb covers the glyph.
@@ -99,7 +99,7 @@ Other rules:
 - **Lit weight per sample:** 0 if shaded and not in glare, 1 if lit, +1 extra if inside a glare spot (glare ignores shade). **f** = (sum of weights) / 5, so f ∈ [0, 2].
 - **Chill** runs from 0 to max (100; 130 with Snowball) and starts at max.
   - dChill/dt = **−55·f + 30·max(0, 1 − f)**. Full sun takes Nubs from 100 to 0 in 1.82 s; glare is twice as fast.
-  - **Gentle tuning** applies to lifetime runs 0, 1 and 2: the drain coefficient is 40 instead of 55.
+  - **Gentle tuning** applies to lifetime runs 0, 1 and 2: the drain coefficient is 30, 40 and 47 instead of 55. Endless runs also ramp the drain by lifetime runs, 30 + 3 per run up to 55, so the full drain arrives gradually (V1_PLAN §6).
   - At night Chill regenerates at +30/s regardless of f, so the next dawn always starts at max.
 - **Visual size** s = 0.6 + 0.4·Chill/max. This is visual only; the logic samples never shrink.
 - **Death:** Chill ≤ 0 during daylight. It is the only fail state.
@@ -321,7 +321,7 @@ The only words shown are "drag", "NOON", "NIGHT", "DAY 2" and pop words ("PHEW!"
 
 Settings also offers "Always" (the share card is marked assisted) and "Off".
 
-**Gentle tuning** (drain 40 instead of 55) applies to lifetime runs 0-2, and the title shows no score pressure.
+**Gentle tuning** (drains 30 / 40 / 47 instead of 55, then the endless ramp of 30 + 3 per lifetime run up to 55) applies to the first runs, and the title shows no score pressure.
 
 ---
 
@@ -354,7 +354,7 @@ Opening a challenge link --> Title with challenge banner "Beat Day 2 · 2:40 PM"
   - The camera pulls up over 1.4 s into the **Melt Map**: the last 2000 u of trail with footprint dots colored by Chill (blue, then amber, then red), day boundaries labelled, and a puddle marker with a carrot icon.
   - The results panel (DOM) slides up from the bottom at +1.2 s:
     - the big time, a "NEW BEST" ribbon when it applies, and the death line typing in at 30 chars/s;
-    - a stats row: Snow +N (wallet total), flakes collected/melted, PHEWs, longest ×5;
+    - a stats row: Snow +N (wallet total), flakes collected/melted, PHEWs, and the best multiplier (or the longest ×5 hold when there was one);
     - the 3 missions with progress and a "complete" stamp;
     - buttons: **Retry** (primary, full width, 64 px tall), Share, Postcard, Home.
   - Tapping the map area also retries after a 0.6 s lockout. The run's flake melody replays over the pad while the stats count up.
@@ -418,7 +418,7 @@ Expected income is about 25-60 Snow per run early, so the first purchase comes i
 
 ## 8. Missions and achievements
 
-**Missions.** Three are active at once. Completing one pays Snow on the results screen; it is replaced at the next run start by the next uncompleted mission in this ordered pool. When the pool is exhausted it repeats as Tier II, Tier III and so on: numeric thresholds ×tier, Day goals +(tier−1) days, rewards ×tier.
+**Missions.** (v1 ships the reordered pool in V1_PLAN §11.1.) Three are active at once. Completing one pays Snow on the results screen; it is replaced at the next run start by the next uncompleted mission in this ordered pool. When the pool is exhausted it repeats as Tier II, Tier III and so on: numeric thresholds ×tier, Day goals +(tier−1) days, rewards ×tier.
 
 | # | Mission | Reward |
 |---|---|---|
@@ -479,7 +479,7 @@ The glyphs differ in shape as well as color, so the strip is colorblind-safe.
 SHADY: Nubs made it to Day 3 · 2:40 PM
 <final day's glyph strip>
 Snow 112 · 4 PHEWs
-Beat my run: <origin>/#c=<code>
+Beat my run: <share base>#c=<code>
 ```
 
 **Daily share text**
@@ -487,10 +487,10 @@ Beat my run: <origin>/#c=<code>
 SHADY Daily #284: Day 2 · 2:40 PM (try 2/3)
 <day 1 strip><moon>
 <day 2 strip ending in droplet>
-<origin>/#c=<code>
+<share base>#c=<code>
 ```
 
-**Challenge code.** base64url of compact JSON: `{"k":"d","d":"2026-10-11","m":1180,"s":112}` for a daily, or `{"k":"e","seed":123456789,"m":1180,"s":112}` for an endless seed. Opening the link shows a challenge banner on the Title, and the run uses that seed (a daily for another date plays as unscored practice). The teal flag on the ruler marks the target time. No server is needed.
+**Challenge code.** base64url of compact JSON: `{"k":"d","d":"2026-10-11","m":1180,"s":112}` for a daily, or `{"k":"e","seed":123456789,"m":1180,"s":112}` for an endless seed. The share base is the page's own address on the web, or the configured public URL from builds that have none (the single-file build, native shells); with neither, the link line is left out (V1_PLAN §11.4). Opening the link shows a challenge banner on the Title, and the run uses that seed (a daily for another date plays as unscored practice). The teal flag on the ruler marks the target time. No server is needed.
 
 **Postcard PNG** (1080×1920):
 - Top 1400 px: the Melt Map scene rendered at high resolution, with the guilty sun in a corner.

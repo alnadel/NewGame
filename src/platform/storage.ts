@@ -6,7 +6,7 @@ export interface StorageAdapter {
   get(key: string): string | null;
   set(key: string, value: string): void;
   remove(key: string): void;
-  /** True when writes are not reaching durable storage (the session's data is memory-only). */
+  /** True when the latest write didn't reach durable storage (or there is none): data is memory-only. */
   readonly degraded: boolean;
 }
 
@@ -14,52 +14,64 @@ const PROBE_KEY = 'shady.probe';
 
 /**
  * Wraps a Web Storage area (localStorage by default). Values written this session are mirrored in
- * memory, so reads stay consistent even after the backing store starts failing.
+ * memory, so reads stay consistent even while the backing store fails.
+ *
+ * - Reads go to the backing store first, so a value another tab or the installed app wrote is
+ *   seen; memory answers only when there is no backing store, it throws or holds nothing, or this
+ *   adapter's own latest write of that key didn't reach it (memory is newer then).
+ * - Every write tries the backing store again (no permanent failure latch: a full quota can free
+ *   up), and `degraded` reports whether the latest write failed.
  */
 class WebStorageAdapter implements StorageAdapter {
   private readonly memory = new Map<string, string>();
   private readonly backing: Storage | null;
-  private failed: boolean;
+  /** Keys whose latest write reached memory only. */
+  private readonly unsynced = new Set<string>();
+  private lastWriteFailed: boolean;
 
   constructor(backing: Storage | null) {
     this.backing = backing;
-    this.failed = backing === null || !probe(backing);
+    this.lastWriteFailed = backing === null || !probe(backing);
   }
 
   get degraded(): boolean {
-    return this.failed;
+    return this.backing === null || this.lastWriteFailed;
   }
 
   get(key: string): string | null {
-    const mem = this.memory.get(key);
-    if (mem !== undefined) return mem;
-    if (this.failed || !this.backing) return null;
-    try {
-      return this.backing.getItem(key);
-    } catch {
-      this.failed = true;
-      return null;
+    if (this.backing && !this.unsynced.has(key)) {
+      try {
+        const value = this.backing.getItem(key);
+        if (value !== null) return value;
+      } catch {
+        // Storage revoked or blocked: fall back to what this session wrote.
+      }
     }
+    return this.memory.get(key) ?? null;
   }
 
   set(key: string, value: string): void {
     this.memory.set(key, value);
-    if (this.failed || !this.backing) return;
+    if (!this.backing) return;
     try {
       this.backing.setItem(key, value);
+      this.unsynced.delete(key);
+      this.lastWriteFailed = false;
     } catch {
-      // Quota exceeded or storage revoked mid-session: keep playing from memory.
-      this.failed = true;
+      // Quota exceeded or storage revoked mid-session: keep playing from memory, retry next write.
+      this.unsynced.add(key);
+      this.lastWriteFailed = true;
     }
   }
 
   remove(key: string): void {
     this.memory.delete(key);
-    if (this.failed || !this.backing) return;
+    this.unsynced.delete(key);
+    if (!this.backing) return;
     try {
       this.backing.removeItem(key);
     } catch {
-      this.failed = true;
+      // Nothing else to do: the key is gone from memory either way.
     }
   }
 }
