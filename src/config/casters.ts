@@ -102,8 +102,15 @@ export const TUTORIAL = Object.freeze({
   flakes: Object.freeze([300, 324, 348]),
 });
 
-/** Start hut: first caster of every run, at y = 10 with its nearest edge 20 u from the centerline. */
-export const START_HUT = Object.freeze({ y: 10, lat: 20 });
+/**
+ * Start hut: first caster of every run, at y = 10 with its nearest edge 20 u from the centerline.
+ * clearAhead: in generated (non-tutorial) worlds no other caster stands on the hut's side of the
+ * trail for y ∈ (0, clearAhead) — about 2 s of Day-1 walking. The sun starts pointing at the hut
+ * (θ0), so its shade covers only the first ~15 u; after that, holding θ0 leaves Nubs in the sun
+ * until a swing finds shade (the idle bot must die before 8:00 AM, V1_PLAN §13), while the far side
+ * and the casters further ahead still offer shade to a player who turns the sun.
+ */
+export const START_HUT = Object.freeze({ y: 10, lat: 20, clearAhead: 140 });
 
 /** Seeded names: "the {Adj} {Noun}". */
 export const NAME_ADJECTIVES: readonly string[] = Object.freeze([

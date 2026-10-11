@@ -3,6 +3,7 @@
 // Order: sun → clock (+ night/dawn/noon/hour events) → sun vector and Nubs' position → world hard
 // guarantee and pruning → coverage → Chill/multiplier/PHEW (or night regen) → pickups → gates and
 // balls passed → history → death → guide. Everything is pure arithmetic on the state.
+// The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
 import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
@@ -142,6 +143,20 @@ function die(s: SimState): void {
 // Scratch frame for the run-start tick (its rotation is discarded so θ stays exactly θ0).
 const startFrame: InputFrame = { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
 
+/**
+ * A start-beat tick: the sun follows the input and coverage is recomputed for the new θ, but the
+ * clock, Nubs, Chill, the multiplier, pickups and the guide (θ-independent) all wait. `go` fires on
+ * the last beat tick; Nubs sets off on the next one.
+ */
+function readyTick(s: SimState): void {
+  s.ready--;
+  s.tick++;
+  s.ux = cosD(s.sun.theta);
+  s.uy = sinD(s.sun.theta);
+  computeCoverage(s);
+  if (s.ready === 0) s.events.push({ e: 'go' });
+}
+
 /** Advances the run by one tick. s.events holds this tick's events afterwards. */
 export function step(s: SimState, input: InputFrame): void {
   s.events.length = 0;
@@ -151,6 +166,7 @@ export function step(s: SimState, input: InputFrame): void {
     // Any touch (or a rotation key) starts the run with catch semantics; θ stays θ0 this tick.
     if (!input.downEdge && input.key === 0) return;
     s.phase = 'day';
+    s.ready = TUNING.start.readyTicks;
     s.events.push({ e: 'start' });
     startFrame.down = input.down;
     startFrame.downEdge = input.downEdge;
@@ -160,6 +176,10 @@ export function step(s: SimState, input: InputFrame): void {
   }
 
   updateSun(s, inp);
+  if (s.ready > 0) {
+    readyTick(s);
+    return;
+  }
   advanceClock(s);
   const prevY = s.nubs.y;
   syncTime(s);

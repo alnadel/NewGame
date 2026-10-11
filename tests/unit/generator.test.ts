@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { START_HUT } from '../../src/config/casters.ts';
 import { dayParams } from '../../src/config/days.ts';
 import { dayStartY, yAtTime } from '../../src/core/clock.ts';
 import { angleDiff } from '../../src/core/dmath.ts';
@@ -14,7 +15,7 @@ import { createRun } from '../../src/core/sim/create.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { trailX } from '../../src/core/trail.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { NO_INPUT, type InputFrame } from '../../src/core/sim/types.ts';
+import { NO_INPUT, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 import { chunkDigests } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
@@ -126,8 +127,31 @@ describe('world generation', () => {
   });
 });
 
+describe('start of a generated world', () => {
+  it("keeps the start hut's side of the trail clear just past the hut, so holding θ0 stops working", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      for (const profile of [1, 3] as const) {
+        const w = createWorld(seed, profile, false);
+        ensureGenerated(w, 1200);
+        const hut = w.byId.get(w.startHutId)!;
+        expect(Math.sign(hut.x - trailX(w.trail, hut.y))).toBe(w.startSide);
+        for (const c of w.casters) {
+          if (c.id === hut.id || c.y <= 0 || c.y >= START_HUT.clearAhead) continue;
+          expect(Math.sign(c.x - trailX(w.trail, c.y))).toBe(-w.startSide);
+        }
+      }
+    }
+  });
+});
+
 describe('profile-0 tutorial chunk (V1_PLAN §6.1)', () => {
   const TAP: InputFrame = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, key: 0 };
+  /** Starts a run holding θ0: the tap, then the start beat (the clock is still at 6:00 AM after it). */
+  const begin = (s: SimState): SimState => {
+    step(s, TAP);
+    while (s.ready > 0) step(s, NO_INPUT);
+    return s;
+  };
 
   it('runs on a straight trail with the start hut 20 u to the right (θ0 ≈ east)', () => {
     const s = createRun(headlessConfig(5, 0));
@@ -139,10 +163,10 @@ describe('profile-0 tutorial chunk (V1_PLAN §6.1)', () => {
 
   it('1. holding θ0 keeps Nubs fully shaded for ≥ 80% of the first 2.5 s', () => {
     for (const seed of [1, 2, 3]) {
-      const s = createRun(headlessConfig(seed, 0));
+      const s = begin(createRun(headlessConfig(seed, 0)));
       let shaded = 0;
       for (let i = 0; i < 150; i++) {
-        step(s, i === 0 ? TAP : NO_INPUT);
+        step(s, NO_INPUT);
         if (s.nubs.f === 0) shaded++;
       }
       expect(shaded / 150).toBeGreaterThanOrEqual(0.8);
@@ -150,8 +174,8 @@ describe('profile-0 tutorial chunk (V1_PLAN §6.1)', () => {
   });
 
   it('2. around 3 s one deliberate swing is needed (≥ 90° to the west arc) and it works', () => {
-    const s = createRun(headlessConfig(3, 0));
-    for (let i = 0; i < 180; i++) step(s, i === 0 ? TAP : NO_INPUT);
+    const s = begin(createRun(headlessConfig(3, 0)));
+    for (let i = 0; i < 180; i++) step(s, NO_INPUT);
     // At 3.0 s θ0 no longer shades Nubs, nothing within 30° does, and the west arc is ≥ 90° away.
     expect(s.nubs.f).toBeGreaterThan(0);
     let nearest = 360;
@@ -166,16 +190,16 @@ describe('profile-0 tutorial chunk (V1_PLAN §6.1)', () => {
     expect(west).toBeGreaterThanOrEqual(40);
 
     // Holding θ0 through the chunk melts Nubs well before it ends…
-    const hold = createRun(headlessConfig(3, 0));
-    for (let i = 0; i < 480 && hold.phase !== 'dead'; i++) step(hold, i === 0 ? TAP : NO_INPUT);
+    const hold = begin(createRun(headlessConfig(3, 0)));
+    for (let i = 0; i < 480 && hold.phase !== 'dead'; i++) step(hold, NO_INPUT);
     expect(hold.nubs.chill).toBeLessThan(25);
 
     // …while one swing (180°/s, counter-clockwise to 180°) at 2.7 s keeps him cool and lands the
     // flakes in shade.
-    const swing = createRun(headlessConfig(3, 0));
+    const swing = begin(createRun(headlessConfig(3, 0)));
     let flakes = 0;
     for (let i = 0; i < 420; i++) {
-      let f: InputFrame = i === 0 ? TAP : NO_INPUT;
+      let f: InputFrame = NO_INPUT;
       if (i >= 162) {
         const d = angleDiff(180, swing.sun.theta + swing.sun.lag);
         f = { dTheta: Math.max(-3, Math.min(3, d)), down: true, downEdge: i === 162, upEdge: false, release: 0, key: 0 };

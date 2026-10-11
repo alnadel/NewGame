@@ -37,6 +37,7 @@ export function createWorld(seed: number, profile: ProfileId, tutorial: boolean)
     nextId: 1,
     startHutId: -1,
     theta0: 0,
+    startSide: 1,
     placedThrough: -2,
     validatedThrough: -1,
     daysGenerated: 0,

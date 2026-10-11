@@ -97,7 +97,7 @@ also retries (the UI catches it, the game does nothing).
 | Callback | When / what to do |
 |---|---|
 | `startRun(kind)` | `'endless'` (Space/Enter on Title), `'daily'` (Daily > Play), `'challenge'` (banner Play). Start the run (daily: `dailySeed(today)`, profile 3; challenge: its seed or date, profile 3). UI is on `play`. |
-| `retry()` | New run, clock running immediately. |
+| `retry()` | New run, started at once (the core's 0.8 s start beat then gives the player time to aim before Nubs walks). |
 | `home()` | Abandon/leave to the Title scene. Don't trap back-navigation any more. |
 | `pause()` / `resume()` | Freeze/unfreeze the loop. In `resume`, call `ensureAudio()` synchronously (iOS). |
 | `restart()` | Abandon this run, start a new one. |

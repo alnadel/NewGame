@@ -13,6 +13,7 @@ import type { SimEvent } from '../../src/core/sim/events.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT, type RunConfig, type SimState } from '../../src/core/sim/types.ts';
+import { TUNING } from '../../src/config/tuning.ts';
 import { trailX } from '../../src/core/trail.ts';
 
 const TAP = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, key: 0 as const };
@@ -56,15 +57,28 @@ function unshade(s: SimState): void {
   }
 }
 
-/** Steps n ticks with no input (after a start tap if still holding); returns all events. */
+/**
+ * Steps n clock ticks with no input; returns all events. A run still holding is started first (a
+ * tap, then the start beat, during which the clock does not move).
+ */
 function run(s: SimState, n: number): SimEvent[] {
   const all: SimEvent[] = [];
+  if (s.phase === 'hold') {
+    step(s, TAP);
+    all.push(...s.events);
+    while (s.ready > 0) {
+      step(s, NO_INPUT);
+      all.push(...s.events);
+    }
+  }
   for (let i = 0; i < n && s.phase !== 'dead'; i++) {
-    step(s, s.phase === 'hold' ? TAP : NO_INPUT);
+    step(s, NO_INPUT);
     all.push(...s.events);
   }
   return all;
 }
+
+const READY = TUNING.start.readyTicks;
 
 describe('sim rules', () => {
   it('holds the clock, Nubs and Chill until the first touch, then starts at θ0', () => {
@@ -78,11 +92,43 @@ describe('sim rules', () => {
     expect(s.phase).toBe('day');
   });
 
+  it('opens with a start beat: the sun follows the finger while the clock, Nubs and Chill wait', () => {
+    expect(READY).toBeGreaterThanOrEqual(36);
+    const s = lab();
+    step(s, { ...TAP, upEdge: false, down: true });
+    expect(s.ready).toBe(READY - 1);
+    const drag = { dTheta: 2, down: true, downEdge: false, upEdge: false, release: 0, key: 0 as const };
+    const events: SimEvent[] = [];
+    while (s.ready > 0) {
+      expect([s.dayTick, s.nubs.y, s.nubs.chill, s.minutes]).toEqual([0, 0, 100, 0]);
+      step(s, drag);
+      events.push(...s.events);
+    }
+    // The sun moved during the beat (full sun here, so coverage is live and lit), nothing else did.
+    expect(Math.abs(s.sun.theta - s.theta0)).toBeGreaterThan(60);
+    expect(s.nubs.f).toBe(1);
+    expect([s.dayTick, s.nubs.y, s.nubs.chill, s.tick]).toEqual([0, 0, 100, READY]);
+    expect(events.filter((e) => e.e === 'go')).toHaveLength(1);
+    expect(events[events.length - 1]).toEqual({ e: 'go' });
+    // Then the clock runs: one tick later Nubs has walked and Chill is draining.
+    step(s, drag);
+    expect(s.dayTick).toBe(1);
+    expect(s.nubs.y).toBeGreaterThan(0);
+    expect(s.nubs.chill).toBeLessThan(100);
+  });
+
+  it('the start beat leaves the idle outcome unchanged (the clock is frozen, θ stays θ0)', () => {
+    const a = createRun(headlessConfig(4));
+    step(a, TAP);
+    while (a.ready > 0) step(a, NO_INPUT);
+    expect([a.sun.theta, a.dayTick, a.nubs.chill]).toEqual([a.theta0, 0, 100]);
+  });
+
   it('full sun drains 100 → 0 in 100/55 s (±1 tick) and kills Nubs', () => {
     const s = lab();
     const ev = run(s, 400);
     expect(s.phase).toBe('dead');
-    expect(Math.abs(s.tick - (100 / 55) * 60)).toBeLessThanOrEqual(1);
+    expect(Math.abs(s.tick - READY - (100 / 55) * 60)).toBeLessThanOrEqual(1);
     const death = ev.find((e) => e.e === 'death');
     expect(death && death.e === 'death' && death.info.line).toBe('Melted by You at 6:26 AM.');
     expect(s.hourGlyphs[0]).toEqual(['melt']);

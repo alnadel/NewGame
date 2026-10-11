@@ -1,12 +1,18 @@
 // Headless balance simulation and acceptance check (V1_PLAN §13).
 //
 //   node scripts/sim.ts [--seeds N] [--days D] [--bot idle|novice|reactive|oracle|all] [--profile P]
-//                       [--check] [--workers W]
+//                       [--check] [--margin PTS] [--workers W]
 //
 // Runs the real createRun/step with bot input at full speed in worker threads and prints, per bot
 // and profile, death-time quantiles, first-night rate, flake stats and Snow, plus world stats
 // (rescues per chunk, unresolved validator failures), generation ms/chunk and sim µs/tick.
-// --check exits non-zero if any acceptance target fails.
+// --check exits non-zero if any acceptance target fails, or passes by less than --margin
+// percentage points of seeds (default 3), so a target that only just passes fails CI before a
+// small tuning change or a different seed count tips it over:
+//   - share targets ("≥ 90% of seeds"): the share must clear the bar by the margin (≥ 93%);
+//   - median-window targets: at least 50% + margin of the seeds must die at or after the window's
+//     start, and 50% + margin at or before its end (the median sits inside with room to spare).
+// The oracle's 100% and the world targets are absolute and have no margin.
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
@@ -136,6 +142,7 @@ async function main(): Promise<void> {
   const botArg = arg('bot', 'all');
   const profileArg = arg('profile', '');
   const check = process.argv.includes('--check');
+  const margin = Number(arg('margin', '3'));
   const workers = Math.max(1, Number(arg('workers', String(Math.min(4, availableParallelism())))));
 
   const all: Job[] = [
@@ -230,30 +237,40 @@ async function main(): Promise<void> {
   }
 
   if (check) {
-    console.log('\nAcceptance (V1_PLAN §13):');
+    console.log(`\nAcceptance (V1_PLAN §13), required margin ${margin} points:`);
     const runs = (bot: BotKind, profile: ProfileId): RunOut[] => results.filter((r) => r.bot === bot && r.profile === profile);
     const median = (rs: RunOut[]): number => quantile(rs.map((r) => (r.died ? r.minutes : Infinity)).sort((a, b) => a - b), 0.5);
     const report = (ok: boolean, what: string, got: string): void => console.log(`  ${targetMet(ok, what)}  ${what}: ${got}`);
+    const pts = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(1)} pts`;
+    /** A share target: `share` of the seeds must reach `bar`, by at least the margin. */
+    const share = (what: string, got: number, bar: number): void => {
+      const m = 100 * (got - bar);
+      report(m >= 0, what, `${(100 * got).toFixed(1)}% (margin ${pts(m)})`);
+      if (m >= 0 && m < margin) report(false, `${what} with a ${margin}-point margin`, pts(m));
+    };
+    /** A median-window target: the median death in [lo, hi] minutes, with the margin on both sides. */
+    const window = (what: string, rs: RunOut[], lo: number, hi: number): void => {
+      const m = median(rs);
+      const after = (100 * rs.filter((r) => !r.died || r.minutes >= lo).length) / rs.length - 50;
+      const before = (100 * rs.filter((r) => r.died && r.minutes <= hi).length) / rs.length - 50;
+      const got = m === Infinity ? 'survived' : formatScore(m);
+      report(m >= lo && m <= hi, what, `${got} (margin ${pts(Math.min(after, before))}: ${pts(after)} after the start, ${pts(before)} before the end)`);
+      if (m >= lo && m <= hi && Math.min(after, before) < margin) report(false, `${what} with a ${margin}-point margin`, pts(Math.min(after, before)));
+    };
     const idle = runs('idle', 3);
     if (idle.length) {
       const early = idle.filter((r) => r.died && r.minutes < 120).length / idle.length;
-      report(early >= 0.9, 'idle p3 dies before 8:00 AM Day 1 on ≥ 90%', `${(100 * early).toFixed(0)}%`);
+      share('idle p3 dies before 8:00 AM Day 1 on ≥ 90%', early, 0.9);
     }
     const nov3 = runs('novice', 3);
-    if (nov3.length) {
-      const m = median(nov3);
-      report(m >= 240 && m <= 540, 'novice p3 median death in [Day 1 10:00 AM, Day 1 3:00 PM]', m === Infinity ? 'survived' : formatScore(m));
-    }
+    if (nov3.length) window('novice p3 median death in [Day 1 10:00 AM, Day 1 3:00 PM]', nov3, 240, 540);
     const nov0 = runs('novice', 0);
     if (nov0.length) {
       const night = nov0.filter((r) => !r.died || r.minutes >= 720).length / nov0.length;
-      report(night >= 0.75, 'novice p0 reaches the first night on ≥ 75%', `${(100 * night).toFixed(0)}%`);
+      share('novice p0 reaches the first night on ≥ 75%', night, 0.75);
     }
     const rea = runs('reactive', 3);
-    if (rea.length) {
-      const m = median(rea);
-      report(m >= 1080 && m <= 2520, 'reactive p3 median death in [Day 2 noon, Day 4 noon]', m === Infinity ? 'survived' : formatScore(m));
-    }
+    if (rea.length) window('reactive p3 median death in [Day 2 noon, Day 4 noon]', rea, 1080, 2520);
     const ora = runs('oracle', 3);
     if (ora.length) {
       const ok = ora.filter((r) => !r.died && r.day >= 8).length / ora.length;

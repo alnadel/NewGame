@@ -52,7 +52,8 @@ export interface RunConfig {
 }
 
 /**
- * hold: before the first touch (clock, Nubs and Chill frozen); day/night: running; dead: Chill hit 0
+ * hold: before the first touch (clock, Nubs and Chill frozen); day/night: running (the first
+ * `ready` ticks of 'day' are the start beat: the sun moves, everything else waits); dead: Chill hit 0
  * in daylight (step() is then a no-op).
  */
 export type Phase = 'hold' | 'day' | 'night' | 'dead';
@@ -130,8 +131,14 @@ export interface SimState {
   /** Parameters of the current day (profile applied). */
   params: DayParams;
   phase: Phase;
-  /** Sim ticks since the run started (hold excluded). */
+  /** Sim ticks since the run started (hold excluded; the start beat counts). */
   tick: number;
+  /**
+   * Start-beat ticks left (TUNING.start.readyTicks after the first touch, then 0). While > 0 the
+   * sun follows the input and coverage is live, but the clock, Nubs' walk, Chill, the multiplier
+   * and pickups wait.
+   */
+  ready: number;
   day: number;
   /** Ticks since the current day's dawn (daylight then night). */
   dayTick: number;

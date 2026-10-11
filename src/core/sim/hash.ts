@@ -43,6 +43,7 @@ export function hashState(s: SimState): string {
   const st = s.stats;
   for (const v of [
     s.tick,
+    s.ready,
     PHASES.indexOf(s.phase),
     s.day,
     s.dayTick,

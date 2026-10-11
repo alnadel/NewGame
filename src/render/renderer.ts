@@ -268,7 +268,8 @@ export class Renderer {
     updatePops(sc.pops, udt);
     updateHud(sc.hud, udt);
     updateBanners(sc.banners, udt, s.phase === 'day' && snap.chill < 25 && inp.dying < 0);
-    const walking = (s.phase === 'day' || s.phase === 'night') && inp.dying < 0;
+    // Nubs stands still through the start beat (the clock waits; the sun already moves).
+    const walking = (s.phase === 'day' || s.phase === 'night') && s.ready === 0 && inp.dying < 0;
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
     updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta);
     sc.relief = Math.max(0, sc.relief - inp.dt);

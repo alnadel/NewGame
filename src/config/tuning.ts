@@ -16,6 +16,14 @@ const tuning = {
   /** Visible world width (u). The camera never pans horizontally. */
   viewWidth: 360,
 
+  /**
+   * Run start. The touch (or key) that starts a run opens a short "ready" beat: the sun answers the
+   * finger at once, but the clock, Nubs and Chill wait this many ticks, so every run opens with
+   * time to aim instead of a scramble (the start hut's θ0 shade only lasts ~0.2 s of walking).
+   * The clock is frozen, so the world, scores and the idle bot are unchanged by it.
+   */
+  start: { readyTicks: 48 },
+
   /** Sun control (V1_PLAN §3.3). */
   sun: {
     /** Follow rate toward the finger target (°/s). */

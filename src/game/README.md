@@ -42,6 +42,11 @@ and `nubsScreen()`. `?perf=0` disables the governor (useful for captures).
 
 ## Deliberate deviations from the docs
 
+- **Start beat** (core, `TUNING.start.readyTicks`): every run opens with 0.8 s in which the sun
+  answers the finger but the clock, Nubs and Chill wait; Nubs stands until the `go` event, then sets
+  off with a little cheer. Retry/Restart start the run on the tap, so without it Nubs walked out of
+  the start hut's shade ~0.2 s later while the finger was still lifting off the button.
+
 - **Nubs is drawn at 1.15× the GDD body size** (V1_PLAN says 0.9): at 360 u per screen width the
   compressed sprite was a ~20 px speck. The footprint disc still marks the true test area; its rim is
   drawn at r 13.5 u (not 9) so its per-sample quadrants stay visible around his base.

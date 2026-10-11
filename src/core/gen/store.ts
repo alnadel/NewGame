@@ -58,6 +58,8 @@ export interface World {
   /** Start hut and the initial sun azimuth θ0 (from Nubs at y = 0 toward the hut center). */
   startHutId: number;
   theta0: number;
+  /** Side of the trail the start hut is on (+1 east, −1 west). */
+  startSide: -1 | 1;
 
   // Generation progress. Chunk k covers y ∈ [480k, 480(k+1)); chunk −1 is scenery behind the start.
   placedThrough: number;

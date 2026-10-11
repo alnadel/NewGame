@@ -52,6 +52,13 @@ export class Fx {
         case 'catch':
           sc.sun.squash = 0.08;
           break;
+        case 'go':
+          // End of the start beat: a little cheer and a kick of snow dust as Nubs sets off.
+          sc.nubs.happy = Math.max(sc.nubs.happy, 0.45);
+          for (let i = 0; i < 5; i++) {
+            spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-14, 14), rnd(-30, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
+          }
+          break;
         case 'flake': {
           const p = sc.particles;
           spawn(p, P_FLAKE_FLY, ev.x, ev.y, 8, 0, 0, 0, 0.15, 7, 5, 0xffffff);

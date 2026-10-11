@@ -292,7 +292,8 @@ export function addCloud(
 /**
  * Start hut (always the first caster, y = 10, nearest edge 20 u from the centerline; on the right
  * in the tutorial, random side otherwise) and, for the tutorial, the authored chunk-0 layout.
- * θ0 = direction from Nubs (trailX(0), 0) to the hut center.
+ * θ0 = direction from Nubs (trailX(0), 0) to the hut center. Generated casters keep off the hut's
+ * side until y = START_HUT.clearAhead (see placeCasters).
  */
 export function placeStart(w: World): void {
   const side: -1 | 1 = w.tutorial ? 1 : rngFor(w.seed, 'start').chance(0.5) ? 1 : -1;
@@ -300,6 +301,7 @@ export function placeStart(w: World): void {
   // The first caster always fits: nothing else exists yet and the push loop clears the trail.
   if (!hut) throw new Error('start hut could not be placed');
   w.startHutId = hut.id;
+  w.startSide = side;
   w.theta0 = atan2D(hut.y, hut.x - trailX(w.trail, 0));
   if (!w.tutorial) return;
   for (const a of TUTORIAL.casters) {
@@ -419,7 +421,10 @@ function placeCasters(w: World, k: number, y1: number): void {
     const kind = pickWeighted(mix.kinds, mix.weights, kindRoll);
     const lat = p.latMin + (p.latMax - p.latMin) * latRoll;
     if (kind === 'arch' && p.biome === 'oldtown' && gateRoll < GATE_ARCH.chance && placeGate(w, y, k)) continue;
-    if (!placeBeside(w, { kind, y, side: w.cursorSide, lat, rotIdx, chunk: k })) w.stats.dropped++;
+    // Just past the start hut its side of the trail stays open (non-tutorial runs; the tutorial's
+    // chunk 0 is authored): holding θ0 must stop working soon after the hut's shade ends.
+    const side = y > 0 && y < START_HUT.clearAhead && w.cursorSide === w.startSide ? (w.startSide > 0 ? -1 : 1) : w.cursorSide;
+    if (!placeBeside(w, { kind, y, side, lat, rotIdx, chunk: k })) w.stats.dropped++;
   }
 }
 

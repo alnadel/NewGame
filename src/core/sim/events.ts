@@ -27,6 +27,7 @@ export interface DeathInfo {
 
 export type SimEvent =
   | { e: 'start' }
+  | { e: 'go' }
   | { e: 'detent'; dir: 1 | -1; index: number }
   | { e: 'catch'; omega: number }
   | { e: 'flake'; mult: number; degree: number; x: number; y: number; snow: number }

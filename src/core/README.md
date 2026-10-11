@@ -70,10 +70,22 @@ A tap within one tick is `downEdge && upEdge`. `NO_INPUT` is a frozen empty fram
 
 ### Starting
 In `'hold'`, `step()` ignores everything until a frame with `downEdge` **or** `key ≠ 0`. That frame
-emits `start`, applies catch semantics, and **θ stays exactly θ0** (its dTheta/key are discarded);
-the clock then runs from the same tick. For Space/Enter send one tap frame
-(`{downEdge: true, upEdge: true}`). The Title sway is render-only: add it to the displayed θ and
-drop it at start.
+emits `start`, applies catch semantics, and **θ stays exactly θ0** (its dTheta/key are discarded).
+For Space/Enter send one tap frame (`{downEdge: true, upEdge: true}`). The Title sway is
+render-only: add it to the displayed θ and drop it at start.
+
+**Start beat.** The start tick opens `s.ready = TUNING.start.readyTicks` (48 ticks, 0.8 s) of
+`'day'` ticks in which the sun follows the input and coverage is live, but the clock, Nubs' walk,
+Chill, the multiplier, pickups and the guide wait (`s.tick` still counts). `go` fires on the last
+beat tick and the clock runs from the next one. Every run (Title, Retry, Restart, Daily, challenge,
+debug starts) therefore opens with ~1 s before Nubs can be lit: the beat plus the ~0.2 s the start
+hut's θ0 shade lasts. Because the clock is frozen, the world, the score and an idle player's fate
+are exactly as without it. Draw Nubs standing (not walking) while `s.ready > 0`.
+
+**Start hut.** In generated (non-tutorial) worlds no caster stands on the start hut's side of the
+trail for y ∈ (0, `START_HUT.clearAhead` = 140 u): the hut's shade at θ0 ends ~15 u in, and holding
+θ0 must stop working soon after so the idle bot dies before 8:00 AM (V1_PLAN §13) — the first swing
+is the run's first lesson. `world.startSide` is the hut's side.
 
 ### Sun state machine (`sun.ts`, V1_PLAN §3.3)
 `s.sun = { theta, lag, omega, omegaRel, mode, detent, dTheta }`; target = `wrapDeg(theta + lag)`
@@ -90,7 +102,8 @@ tick reaching `dayTicks(day)` starts the night; the tick ending the night is daw
 
 | Field | Meaning |
 |---|---|
-| `phase`, `tick` | phase; sim ticks since start (hold excluded). |
+| `phase`, `tick` | phase; sim ticks since start (hold excluded, the start beat included). |
+| `ready` | start-beat ticks left (> 0: the clock, Nubs and Chill wait; the sun moves). |
 | `day`, `dayTick`, `tDay`, `params` | current day, ticks/seconds since its dawn, its `DayParams` (biome, εnoon, v, Dl, …). |
 | `tickAbs`, `tAbs` | absolute ticks/seconds since Day 1 dawn (pass `tAbs` to cloud functions). |
 | `minutes` | score so far (`scoreLabel(minutes)` → "Day 2 · 2:40 PM"). |
@@ -119,7 +132,8 @@ Clock strings: `hudClock(day, dayTick)` ("2:40 PM", 10-minute steps), `exactCloc
 
 | Event | When |
 |---|---|
-| `start` | first touch/key in hold. |
+| `start` | first touch/key in hold (the start beat begins). |
+| `go` | last tick of the start beat; Nubs sets off on the next tick. |
 | `detent {dir, index}` | θ crossed the 15° line `index·15°` (dir +1 CCW). Feedback only. |
 | `catch {omega}` | touch-down while |ω| > 90°/s. |
 | `flake {mult, degree, x, y, snow}` | flake collected; `snow` = Snow awarded (= mult); `degree` = (flakes today + mult) mod 10 for the bell. |
@@ -267,7 +281,9 @@ caster geometry, biome mixes, names and the authored tutorial chunk. Changing an
 worlds: re-run `npm run sim -- --check` and `node scripts/golden.ts`.
 
 Tuned from the V1_PLAN table (to meet §13 with margin): Day 1 caster spacing 55 → 45, lateral
-20-50 → 20-46, an extra Day 1 cloud at t = 9 s.
+20-50 → 20-46, an extra Day 1 cloud at t = 9 s, and the start hut's side kept clear for 140 u.
+`npm run sim -- --check` fails a target that passes by less than 3 percentage points of seeds
+(`--margin`); at 40/50/100 seeds idle p3 dies before 8 AM on 97.5/98/98%.
 
 ## 12. Decisions beyond the docs
 

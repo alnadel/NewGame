@@ -155,6 +155,7 @@ export class SfxRouter {
         this.out.play('death', {}, false);
         return;
       case 'start':
+      case 'go':
       case 'shadeExit':
       case 'lowChill':
         // Carried by continuous layers: the arpeggio entering, the sizzle, the heartbeat.

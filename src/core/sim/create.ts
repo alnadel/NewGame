@@ -48,6 +48,7 @@ export function createRun(cfg: RunConfig): SimState {
     params: dayParams(day, cfg.profile),
     phase: 'hold',
     tick: 0,
+    ready: 0,
     day,
     dayTick,
     tDay: 0,
