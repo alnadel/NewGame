@@ -16,9 +16,19 @@ import { createRun, step, takeSnap, lerpSnap, queryCasters, partShadow, TUNING }
 ## 1. Ground rules
 
 - **Layering.** `src/config` imports nothing. `src/core` imports only `src/core` and `src/config`.
-  Enforced by `tests/unit/architecture.test.ts`, which also bans `Math.random`, `Date`,
-  `performance`, `Math.sin/cos/tan/asin/acos/atan/atan2/exp/log/pow/hypot/cbrt`, the `**` operator,
-  `toFixed`, `parseFloat`, `window`, `document`, `localStorage` and `Float32Array` in both folders.
+  `tests/unit/architecture.test.ts` enforces the whole table on every layer, reading imports from
+  the AST (type-only imports count too): platform → platform; meta → meta/core/config/platform;
+  ui → ui/meta/core/config/platform; audio → audio/core/config/platform; render →
+  render/core/config/meta/platform plus `../game/camera.ts` and `../game/assist.ts`; game (and
+  `main.ts`) may import anything. One type-only exception is listed in the test
+  (`platform/haptics.ts` → `core/sim/events.ts`) until its owner moves the type.
+- **Banned tokens** in both folders (same test): `Math.random`, `Date`, `performance`,
+  `Math.sin/cos/tan/asin/acos/atan/atan2/exp/log/pow/hypot/cbrt`, the hyperbolic
+  `sinh/cosh/tanh/asinh/acosh/atanh`, `log2/log10/log1p/expm1`, the `**` operator, `toFixed`,
+  `toPrecision`, `toExponential`, `toLocale*`, `parseFloat`, `Intl`, `crypto`, `globalThis`,
+  `self`, `window`, `document`, `localStorage` and `Float32Array`. The check runs on a TypeScript
+  scanner pass that drops only comments, string literals and template text, so code inside
+  template `${…}` expressions and after regex literals is checked too.
 - **Determinism.** Only `+ − * /`, `Math.sqrt/floor/ceil/round/trunc/abs/min/max/sign/imul` and the
   fdlibm ports in `dmath.ts`. Same seed + same input frames ⇒ bit-identical state on V8, JSC and
   Node. Time is integer ticks; dTheta/release arrive pre-quantized.
