@@ -7,7 +7,7 @@ import type { Session } from './session.ts';
 
 export interface ShadyTestHook {
   screen(): string;
-  state(): { phase: string; day: number; minutes: number; chill: number; snow: number; theta: number };
+  state(): { phase: string; day: number; minutes: number; chill: number; snow: number; theta: number; f: number };
   forceDeath(): void;
   runHeadless(seed: number, ticks: number, bot: string): string;
   setTimeScale(n: number): void;
@@ -39,6 +39,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
         chill: s.nubs.chill,
         snow: s.stats.snow,
         theta: s.sun.theta,
+        f: s.nubs.f,
       };
     },
     forceDeath: () => session.forceDeath(),

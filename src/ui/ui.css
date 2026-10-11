@@ -721,6 +721,11 @@
   top: min(65%, calc(100% - var(--title-bottom-h, 170px) - 104px));
 }
 
+/* In play Nubs and his halo dial sit at 68-70% of the height: keep the hint just below them. */
+.sui[data-screen='play'] .ghost {
+  top: min(84%, calc(100% - var(--safe-bottom) - 72px));
+}
+
 .ghost[data-mode='both'],
 .ghost[data-mode='left'],
 .ghost[data-mode='right'] {

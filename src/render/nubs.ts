@@ -178,7 +178,9 @@ const sampleOf = (w: number): Rgb => (w === 0 ? 0 : w === 1 ? 1 : 2);
  */
 export function drawFootprintDisc(g: CanvasRenderingContext2D, p: NubsPose, trailColor: Rgb): void {
   if (p.melt >= 0) return;
-  const r = 9 * p.S;
+  // The disc covers the 5 test points (r 9 u); its rim is drawn a little wider so it still shows
+  // around Nubs' base instead of disappearing under his body.
+  const r = 13.5 * p.S;
   const wet = darken(trailColor, 0.4);
   // Fill: cool when fully shaded, damp when lit.
   const shaded = p.f === 0;

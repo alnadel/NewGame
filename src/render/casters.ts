@@ -372,6 +372,26 @@ function gableRoof(g: CanvasRenderingContext2D, v: View, L: Light, p: PrismPart,
     planeB();
     planeA();
   }
+  // Chimney on cottages: a small brick stack on the ridge, two thirds along it.
+  if (ridgeH >= 20) {
+    const t = 0.7;
+    const cx = r0x + (r1x - r0x) * t;
+    const cy = r0y + (r1y - r0y) * t;
+    const s2 = 3.2;
+    tmp2[0] = cx - s2;
+    tmp2[1] = cy - s2;
+    tmp2[2] = cx + s2;
+    tmp2[3] = cy - s2;
+    tmp2[4] = cx + s2;
+    tmp2[5] = cy + s2;
+    tmp2[6] = cx - s2;
+    tmp2[7] = cy + s2;
+    const brick = hex('#9C5B48');
+    if (L.sides) sideFaces(g, v, L, tmp2, tmp2, 4, zr - 10, zr + 9, darken(brick, 0.15), brick);
+    fillTop(g, v, tmp2, 4, zr + 9, topColor(L, lighten(brick, 0.1)));
+    scaled(tmp2, 4, 0.55, tmp);
+    fillTop(g, v, tmp, 4, zr + 9.2, darken(brick, 0.45));
+  }
   // Ridge line.
   g.strokeStyle = cssa(lighten(tint(L.pal, roof), 0.35), 0.8 * (1 - L.pal.night * 0.6));
   g.lineWidth = Math.max(1, 1.4 * v.S);
