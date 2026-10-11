@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SHADY Audio Lab</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root {
+        --ink: #2b2140;
+        --paper: #fff8ee;
+        --teal: #2ec4b6;
+        --gold: #ffc23d;
+        --danger: #ff5d5d;
+        --panel: #ffffff;
+        --muted: #6c6380;
+        --line: #e8dfd2;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: var(--paper); color: var(--ink);
+        font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      main { max-width: 1100px; margin: 0 auto; padding: 16px 16px 48px; }
+      header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 12px; }
+      h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.02em; }
+      h1 small { font-weight: 600; color: var(--muted); font-size: 14px; margin-left: 6px; }
+      h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+      section { background: var(--panel); border-radius: 18px; padding: 14px 16px;
+        box-shadow: 0 6px 20px rgba(43, 33, 64, 0.08); }
+      section.wide { grid-column: 1 / -1; }
+      .stack { display: grid; gap: 14px; align-content: start; }
+      .pill { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 13px;
+        background: #f1e9de; color: var(--muted); }
+      .pill.on { background: #d6f5f1; color: #127a70; }
+      .pill.warn { background: #ffe1e1; color: #a43030; }
+      label.pill { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; cursor: pointer; }
+      label.pill input { margin: 0; accent-color: var(--teal); }
+      .meter { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+      .meter .bar { width: 180px; height: 10px; border-radius: 6px; background: #f1e9de; overflow: hidden; position: relative; }
+      .meter .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--teal); }
+      .meter .hold { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); left: 0; }
+      .meter .limit { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--danger); }
+      .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+      .buttons.spaced { margin-top: 8px; }
+      button { font: inherit; font-weight: 700; color: var(--ink); background: #f6efe4; border: 0;
+        border-radius: 12px; padding: 9px 12px; min-height: 40px; cursor: pointer; }
+      button:hover { background: #efe5d6; }
+      button:active { transform: translateY(1px); }
+      button:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+      button.primary { background: var(--teal); color: #fff; }
+      button.primary:hover { background: #27b0a3; }
+      button.active { background: var(--gold); }
+      .row { display: grid; grid-template-columns: 92px 1fr 64px; align-items: center; gap: 10px; margin: 4px 0; }
+      .row label { font-weight: 600; font-size: 14px; }
+      .row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+      .row select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); }
+      input[type='range'] { width: 100%; accent-color: var(--teal); }
+      .note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+      th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+      th:first-child, td:first-child { text-align: left; }
+      tbody tr { cursor: pointer; }
+      tbody tr:hover { background: #fbf6ee; }
+      td.bad { color: #c03030; font-weight: 700; }
+      td.ok { color: #127a70; }
+      canvas { width: 100%; height: 300px; display: block; border-radius: 12px; margin-top: 12px; background: #141228; }
+      .sim { font-variant-numeric: tabular-nums; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main id="lab"></main>
+    <script type="module" src="./src/audio/lab.ts"></script>
+  </body>
+</html>
