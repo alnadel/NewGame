@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "sim": "node scripts/sim.ts",
-    "test:all": "npm run typecheck && npm test && npm run sim -- --check --seeds 50 && npm run e2e"
+    "test:all": "npm run typecheck && npm test && npm run sim -- --check --seeds 50 && npm run e2e",
+    "golden": "node scripts/golden.ts",
+    "icons": "node scripts/gen-icons.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
