@@ -1,7 +1,7 @@
 // Headless balance simulation and acceptance check (V1_PLAN §13).
 //
-//   node scripts/sim.ts [--seeds N] [--days D] [--bot idle|novice|reactive|oracle|all] [--profile P]
-//                       [--check] [--margin PTS] [--workers W]
+//   node scripts/sim.ts [--seeds N] [--days D] [--bot idle|novice|reactive|oracle|human|all]
+//                       [--profile P] [--check] [--margin PTS] [--workers W]
 //
 // Runs the real createRun/step with bot input at full speed in worker threads and prints, per bot
 // and profile, death-time quantiles, first-night rate, melted% (flakes melted ÷ (melted +
@@ -14,10 +14,15 @@
 //   - median-window targets: at least 50% + margin of the seeds must die at or after the window's
 //     start, and 50% + margin at or before its end (the median sits inside with room to spare).
 // The oracle's 100% and the world targets are absolute and have no margin.
+//
+// ADVISORY rows (the seeded 'human' bot, a model of a new player, at the drains the endless
+// onboarding ramp gives it: p0 at its profile drain, p1 at endlessDrain(1), p3 at endlessDrain(4))
+// print PASS or MISS against onboarding goals but never fail --check: the model is a rough guide,
+// not a spec. Their worlds are reported but only the §13 jobs' profiles are checked.
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
-import type { ProfileId } from '../src/config/days.ts';
+import { endlessDrain, type ProfileId } from '../src/config/days.ts';
 import { dayStartTick, dayStartY } from '../src/core/clock.ts';
 import { formatScore } from '../src/core/format.ts';
 import { ensureGenerated } from '../src/core/gen/world.ts';
@@ -29,7 +34,14 @@ import { step } from '../src/core/sim/step.ts';
 interface Job {
   bot: BotKind;
   profile: ProfileId;
+  /** RunConfig.drain override (the endless onboarding ramp); unset = the profile drain. */
+  drain?: number;
+  /** Reported as PASS/MISS only; never fails --check. */
+  advisory?: boolean;
 }
+
+const sameJob = (a: Job, b: Job): boolean => a.bot === b.bot && a.profile === b.profile && a.drain === b.drain;
+const jobName = (j: Job): string => `${j.bot} p${j.profile}${j.drain !== undefined ? `@${j.drain}` : ''}`;
 
 interface Task extends Job {
   seed: number;
@@ -61,7 +73,7 @@ interface RunOut extends Task {
 // Worker side
 
 function runTask(t: Task): RunOut {
-  const cfg = headlessConfig(t.seed, t.profile);
+  const cfg = headlessConfig(t.seed, t.profile, t.drain);
   let genMs = 0;
   const s = createRun(cfg);
   if (t.timeGen) {
@@ -132,6 +144,16 @@ function quantile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] as number;
 }
 
+/** Share of runs that reached the first night (or survived the cap). */
+function firstNight(rs: RunOut[]): number {
+  return rs.filter((r) => !r.died || r.minutes >= 720).length / Math.max(1, rs.length);
+}
+
+/** Median run length in real seconds (sim ticks / 60, the start beat included). */
+function medianSec(rs: RunOut[]): number {
+  return quantile(rs.map((r) => r.ticks / 60).sort((a, b) => a - b), 0.5);
+}
+
 /** "Day 1 · 9:37 AM", or "≥ Day 8" for runs that survived to the cap. */
 function label(m: number, survived: boolean, days: number): string {
   return survived ? `≥ Day ${days}` : formatScore(m);
@@ -152,13 +174,16 @@ async function main(): Promise<void> {
     { bot: 'novice', profile: 0 },
     { bot: 'reactive', profile: 3 },
     { bot: 'oracle', profile: 3 },
+    { bot: 'human', profile: 0, advisory: true },
+    { bot: 'human', profile: 1, drain: endlessDrain(1), advisory: true },
+    { bot: 'human', profile: 3, drain: endlessDrain(4), advisory: true },
   ];
   let jobs = botArg === 'all' ? all : all.filter((j) => j.bot === botArg);
   if (botArg !== 'all' && !BOT_KINDS.includes(botArg as BotKind)) throw new Error(`unknown bot ${botArg}`);
   if (profileArg !== '') {
     const p = Number(profileArg) as ProfileId;
     const bots = [...new Set(jobs.map((j) => j.bot))];
-    jobs = bots.map((bot) => ({ bot, profile: p }));
+    jobs = bots.map((bot) => ({ bot, profile: p, advisory: bot === 'human' }));
   }
 
   const tasks: Task[] = [];
@@ -191,28 +216,31 @@ async function main(): Promise<void> {
 
   console.log(`SHADY sim: ${seeds} seeds, up to Day ${days}, ${workers} workers, ${wall.toFixed(1)} s\n`);
   for (const j of jobs) {
-    const rs = results.filter((r) => r.bot === j.bot && r.profile === j.profile);
+    const rs = results.filter((r) => sameJob(r, j));
     const keyed = rs.map((r) => (r.died ? r.minutes : Infinity)).sort((a, b) => a - b);
     const q = (p: number): string => {
       const v = quantile(keyed, p);
       return v === Infinity ? label(0, true, days) : label(v, false, days);
     };
-    const night = rs.filter((r) => !r.died || r.minutes >= 720).length / rs.length;
+    const night = firstNight(rs);
     const flakes = rs.reduce((a, r) => a + r.flakes, 0);
     const melted = rs.reduce((a, r) => a + r.flakesMelted, 0);
     const snow = rs.reduce((a, r) => a + r.snow, 0) / rs.length;
     const ticks = rs.reduce((a, r) => a + r.ticks, 0);
     const stepMs = rs.reduce((a, r) => a + r.stepMs, 0);
     const meltedPct = (100 * melted) / Math.max(1, flakes + melted);
+    const realSec = medianSec(rs);
+    const name = `${j.advisory ? 'ADVISORY ' : ''}${jobName(j)}`;
     console.log(
-      `${j.bot.padEnd(8)} p${j.profile}  median ${q(0.5).padEnd(17)} p10 ${q(0.1).padEnd(17)} p90 ${q(0.9).padEnd(17)} melted% ${meltedPct.toFixed(1).padStart(4)}`,
+      `${name.padEnd(12)}  median ${q(0.5).padEnd(17)} p10 ${q(0.1).padEnd(17)} p90 ${q(0.9).padEnd(17)} melted% ${meltedPct.toFixed(1).padStart(4)}`,
     );
     console.log(
-      `             first night ${(100 * night).toFixed(0)}%  flakes ${flakes} collected / ${melted} melted  mean Snow ${snow.toFixed(1)}  step ${((1000 * stepMs) / Math.max(1, ticks)).toFixed(1)} µs/tick${j.bot === 'oracle' ? ' (world pre-generated)' : ' (incl. in-step generation)'}`,
+      `              first night ${(100 * night).toFixed(0)}%  median run ${realSec.toFixed(1)} s  flakes ${flakes} collected / ${melted} melted  mean Snow ${snow.toFixed(1)}  step ${((1000 * stepMs) / Math.max(1, ticks)).toFixed(1)} µs/tick${j.bot === 'oracle' ? ' (world pre-generated)' : ' (incl. in-step generation)'}`,
     );
   }
 
   console.log('\nWorld (validator):');
+  const checkedProfiles = new Set(jobs.filter((j) => !j.advisory).map((j) => j.profile));
   for (const profile of [...new Set(jobs.map((j) => j.profile))]) {
     // Each seed's deepest run for this profile covers the most chunks.
     const bySeed = new Map<number, RunOut>();
@@ -232,17 +260,50 @@ async function main(): Promise<void> {
     const genChunks = gen.reduce((a, r) => a + r.chunks, 0);
     console.log(
       `  p${profile}: ${chunks} chunks, rescues/chunk mean ${(rescues / Math.max(1, chunks)).toFixed(3)} max ${maxR}, parked clouds ${parked}, unresolved ${unresolved}` +
-        (genChunks > 0 ? `, gen+validate ${(genMs / genChunks).toFixed(2)} ms/chunk` : ''),
+        (genChunks > 0 ? `, gen+validate ${(genMs / genChunks).toFixed(2)} ms/chunk` : '') +
+        (checkedProfiles.has(profile) ? '' : ' (advisory runs only, not checked)'),
     );
-    if (check) {
+    if (check && checkedProfiles.has(profile)) {
       targetMet(rescues / Math.max(1, chunks) <= 1.0, `p${profile} mean rescues per chunk ≤ 1.0`);
       targetMet(unresolved === 0, `p${profile} unresolved = 0`);
     }
   }
 
+  // Advisory onboarding goals for the human model (printed whenever its jobs ran; never fail).
+  const advisory: { job: Job; what: string; ok: (rs: RunOut[]) => boolean }[] = [
+    {
+      job: { bot: 'human', profile: 0 },
+      what: 'human p0 reaches the first night on ≥ 50%',
+      ok: (rs) => firstNight(rs) >= 0.5,
+    },
+    {
+      job: { bot: 'human', profile: 1, drain: endlessDrain(1) },
+      what: `human p1@endlessDrain(1) = ${endlessDrain(1)} median run ≥ 30 s`,
+      ok: (rs) => medianSec(rs) >= 30,
+    },
+    {
+      job: { bot: 'human', profile: 3, drain: endlessDrain(4) },
+      what: `human p3@endlessDrain(4) = ${endlessDrain(4)} median run ≥ 25 s`,
+      ok: (rs) => medianSec(rs) >= 25,
+    },
+  ];
+  const shown = advisory.filter((a) => results.some((r) => sameJob(r, a.job)));
+  if (shown.length) {
+    console.log('\nAdvisory (seeded human model; PASS/MISS never fails --check):');
+    for (const a of shown) {
+      const rs = results.filter((r) => sameJob(r, a.job));
+      const m = quantile(rs.map((r) => (r.died ? r.minutes : Infinity)).sort((x, y) => x - y), 0.5);
+      const flakes = rs.reduce((acc, r) => acc + r.flakes, 0);
+      const melted = rs.reduce((acc, r) => acc + r.flakesMelted, 0);
+      console.log(
+        `  ${a.ok(rs) ? 'PASS' : 'MISS'}  ${a.what}: median ${m === Infinity ? `≥ Day ${days}` : formatScore(m)}, ${medianSec(rs).toFixed(1)} s, first night ${(100 * firstNight(rs)).toFixed(0)}%, melted% ${((100 * melted) / Math.max(1, flakes + melted)).toFixed(1)}`,
+      );
+    }
+  }
+
   if (check) {
     console.log(`\nAcceptance (V1_PLAN §13), required margin ${margin} points:`);
-    const runs = (bot: BotKind, profile: ProfileId): RunOut[] => results.filter((r) => r.bot === bot && r.profile === profile);
+    const runs = (bot: BotKind, profile: ProfileId): RunOut[] => results.filter((r) => sameJob(r, { bot, profile }));
     const median = (rs: RunOut[]): number => quantile(rs.map((r) => (r.died ? r.minutes : Infinity)).sort((a, b) => a - b), 0.5);
     const report = (ok: boolean, what: string, got: string): void => console.log(`  ${targetMet(ok, what)}  ${what}: ${got}`);
     const pts = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(1)} pts`;

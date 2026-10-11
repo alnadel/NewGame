@@ -278,6 +278,12 @@ const tuning = {
     novice: { lagTicks: 12, rate: 180, blur: 6, penalty: 0.2 },
     reactive: { lagTicks: 0, rate: 200, blur: 4, penalty: 0.5, nextWeight: 1, nowWeight: 2 },
     oracle: { rate: 240, horizonSteps: 40, planBins: 18, slackCap: 30, penalty: 0.02, margin: 1 },
+    /**
+     * Seeded human model (tooling only, never an acceptance gate): reaction lag U(lagMin, lagMax)
+     * per decision, aim error N(0, aimSigma)° plus a ±N(0, gainSigma) over/undershoot, min-jerk
+     * drags lasting moveBase + moveMsPerDeg·|Δθ| ms, then a settle pause; lifts at ω = 0.
+     */
+    human: { lagMinMs: 250, lagMaxMs: 350, aimSigmaDeg: 10, gainSigma: 0.2, settleMs: 120, moveBaseMs: 120, moveMsPerDeg: 0.9 },
   },
 };
 
