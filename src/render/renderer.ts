@@ -31,6 +31,7 @@ import {
   drawFootprintDisc,
   drawNubsSprite,
   drawOwnShadow,
+  drawSizzle,
   looksFor,
   nubsBox,
   renderNubsSprite,
@@ -358,6 +359,7 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
+    if (inp.screen !== 'title') drawSizzle(g, pose, inp.time, s.nubs.glare > 0);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
 

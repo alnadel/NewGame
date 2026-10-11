@@ -890,6 +890,37 @@ function drawMelt(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: 
   g.restore();
 }
 
+/**
+ * Heat squiggles above a lit Nubs: three wavy strokes rising and fading in a loop. Shape-coded (no
+ * hue needed) and readable on the palest noon ground, where white steam disappears.
+ */
+export function drawSizzle(g: CanvasRenderingContext2D, p: NubsPose, time: number, glare: boolean): void {
+  if (!p.sunUp || p.f <= 0 || p.melt >= 0) return;
+  const size = 0.6 + 0.4 * p.chill;
+  const U = p.S * size * NUBS_SCALE;
+  const k = Math.min(1, p.f);
+  g.lineCap = 'round';
+  g.lineWidth = Math.max(1.6, 1.7 * U);
+  g.strokeStyle = glare ? '#FF3D3D' : '#FF7A1A';
+  for (let i = 0; i < 3; i++) {
+    const ph = (time * 1.3 + i / 3) % 1;
+    const x = p.x + (i - 1) * 7.5 * U;
+    const y0 = p.y - (25 + ph * 10 + (i === 1 ? 3 : 0)) * U;
+    const h = 10 * U;
+    g.globalAlpha = 0.95 * k * Math.sin(Math.PI * Math.min(1, ph * 1.15));
+    g.beginPath();
+    for (let j = 0; j <= 8; j++) {
+      const t = j / 8;
+      const xx = x + Math.sin(t * Math.PI * 2 + time * 9 + i) * 1.6 * U;
+      const yy = y0 - t * h;
+      if (j === 0) g.moveTo(xx, yy);
+      else g.lineTo(xx, yy);
+    }
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Offscreen sprite: Nubs is drawn into his own small canvas each frame, so effects that composite
 // against him (the glare flash) only touch his pixels, and the renderer can stamp him twice (the

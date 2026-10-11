@@ -58,7 +58,7 @@ export class Fx {
           for (let i = 0; i < 8; i++) {
             const a = rnd(0, Math.PI * 2);
             const sp = rnd(60, 120);
-            spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 60), 0.4, 4, 1.5, 0xffffff);
+            spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp + s.params.v, rnd(10, 60), 0.4, 4, 1.5, 0xffffff);
           }
           addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.75);
           break;
@@ -174,12 +174,14 @@ export class Fx {
     const nb = s.nubs;
     const p = sc.particles;
     const daylight = s.phase === 'day';
+    const walk = daylight ? s.params.v : 0;
     if (daylight && nb.f > 0) {
       // Steam at 30·f per second, rising 30 u/s and growing 3 → 9 u over 0.8 s.
       this.steamAcc += dt * 30 * Math.min(2, nb.f);
       while (this.steamAcc >= 1) {
         this.steamAcc -= 1;
-        spawn(p, P_STEAM, nb.x + rnd(-7, 7), nb.y + rnd(-4, 4), rnd(14, 26), rnd(-6, 6), rnd(-2, 4), 30, 0.8, 3, 9, 0xffffff);
+        // Steam inherits Nubs' walking speed so it rises from him instead of trailing behind.
+        spawn(p, P_STEAM, nb.x + rnd(-8, 8), nb.y + rnd(0, 6), rnd(70, 92), rnd(-6, 6), walk * rnd(0.9, 1), 40, 0.8, 2.5, 8, 0xffffff);
       }
     } else {
       this.steamAcc = 0;
@@ -189,7 +191,7 @@ export class Fx {
       if (this.sweatAcc >= 0.4) {
         this.sweatAcc = 0;
         const side = Math.random() < 0.5 ? -1 : 1;
-        spawn(p, P_DRIP, nb.x + side * rnd(4, 7), nb.y, rnd(30, 40), side * rnd(10, 22), rnd(-4, 4), rnd(30, 60), 1.2, 1.3, 1.1, 0x9ad8ff);
+        spawn(p, P_DRIP, nb.x + side * rnd(5, 8), nb.y + 2, rnd(34, 44), side * rnd(10, 22), walk * 0.9, rnd(30, 60), 1.2, 1.4, 1.2, 0x7fc8ff);
       }
     }
     if (daylight && nb.f === 0) {

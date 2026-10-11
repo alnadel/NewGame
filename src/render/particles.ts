@@ -6,7 +6,7 @@
 import type { View } from '../game/camera.ts';
 import { OBLIQUE } from '../game/camera.ts';
 import { cssa, type Rgb } from './color.ts';
-import { flake, radialSprite, sparkle, type Canvas2D } from './sprites.ts';
+import { ctx2d, flake, makeCanvas, radialSprite, sparkle, type Canvas2D } from './sprites.ts';
 
 export const P_STEAM = 1;
 export const P_DRIP = 2;
@@ -213,12 +213,27 @@ export function drawGroundParticles(g: CanvasRenderingContext2D, p: Particles, v
 }
 
 let steamSprite: Canvas2D | null = null;
+
+/** A steam puff: white core with a cool grey rim so it reads on pale ground too. */
+function steamPuff(): Canvas2D {
+  const s = 64;
+  const c = makeCanvas(s, s);
+  const g = ctx2d(c);
+  const grad = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.45, 'rgba(250,252,255,0.8)');
+  grad.addColorStop(0.72, 'rgba(176,192,220,0.5)');
+  grad.addColorStop(1, 'rgba(176,192,220,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, s, s);
+  return c;
+}
 let fireflySprite: Canvas2D | null = null;
 
 /** Air particles (steam, drips, sparkles, flying flakes, fireflies), drawn above the objects. */
 export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: View): void {
   const S = v.S;
-  steamSprite ??= radialSprite('255,255,255', 64, 0.85, 0.5, 0.35);
+  steamSprite ??= steamPuff();
   fireflySprite ??= radialSprite('255,236,150', 64, 1, 0.18, 0.4);
   const fl = flake();
   const sp = sparkle();
