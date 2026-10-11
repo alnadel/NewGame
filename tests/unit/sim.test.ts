@@ -240,13 +240,18 @@ describe('sim rules', () => {
     expect(run(gentle, 1).some((e) => e.e === 'phew')).toBe(true);
   });
 
-  it('a lit flake melts after 1.0 s, only within 1.6 s of walking ahead', () => {
+  it('a lit flake melts after 1.2 s (meltBudget), only within 1.6 s of walking ahead', () => {
+    expect(TUNING.pickups.meltBudget).toBe(1.2);
+    // Ticks of full light until the accumulated melt reaches the budget (72 = 1.2 s, up to rounding).
+    let ticks = 0;
+    for (let m = 0; m < TUNING.pickups.meltBudget; m += 1 / 60) ticks++;
+    expect(Math.abs(ticks - 72)).toBeLessThanOrEqual(1);
     const s = lab();
     const near = { id: 501, kind: 'flake' as const, x: trailX(s.world.trail, 100), y: 100, day: 1, melt: 0, state: 0 as const };
     const far = { id: 502, kind: 'flake' as const, x: trailX(s.world.trail, 300), y: 300, day: 1, melt: 0, state: 0 as const };
     insertPickup(s.world, near);
     insertPickup(s.world, far);
-    const ev = run(s, 59);
+    const ev = run(s, ticks - 1);
     expect(near.state).toBe(0);
     expect(far.melt).toBe(0);
     const ev2 = run(s, 1);

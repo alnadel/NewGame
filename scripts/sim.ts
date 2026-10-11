@@ -4,8 +4,9 @@
 //                       [--check] [--margin PTS] [--workers W]
 //
 // Runs the real createRun/step with bot input at full speed in worker threads and prints, per bot
-// and profile, death-time quantiles, first-night rate, flake stats and Snow, plus world stats
-// (rescues per chunk, unresolved validator failures), generation ms/chunk and sim µs/tick.
+// and profile, death-time quantiles, first-night rate, melted% (flakes melted ÷ (melted +
+// collected)), flake stats and Snow, plus world stats (rescues per chunk, unresolved validator
+// failures), generation ms/chunk and sim µs/tick.
 // --check exits non-zero if any acceptance target fails, or passes by less than --margin
 // percentage points of seeds (default 3), so a target that only just passes fails CI before a
 // small tuning change or a different seed count tips it over:
@@ -202,9 +203,12 @@ async function main(): Promise<void> {
     const snow = rs.reduce((a, r) => a + r.snow, 0) / rs.length;
     const ticks = rs.reduce((a, r) => a + r.ticks, 0);
     const stepMs = rs.reduce((a, r) => a + r.stepMs, 0);
-    console.log(`${j.bot.padEnd(8)} p${j.profile}  median ${q(0.5).padEnd(17)} p10 ${q(0.1).padEnd(17)} p90 ${q(0.9).padEnd(17)}`);
+    const meltedPct = (100 * melted) / Math.max(1, flakes + melted);
     console.log(
-      `             first night ${(100 * night).toFixed(0)}%  flakes ${flakes} collected / ${melted} melted (${((100 * melted) / Math.max(1, flakes + melted)).toFixed(0)}% melted)  mean Snow ${snow.toFixed(1)}  step ${((1000 * stepMs) / Math.max(1, ticks)).toFixed(1)} µs/tick${j.bot === 'oracle' ? ' (world pre-generated)' : ' (incl. in-step generation)'}`,
+      `${j.bot.padEnd(8)} p${j.profile}  median ${q(0.5).padEnd(17)} p10 ${q(0.1).padEnd(17)} p90 ${q(0.9).padEnd(17)} melted% ${meltedPct.toFixed(1).padStart(4)}`,
+    );
+    console.log(
+      `             first night ${(100 * night).toFixed(0)}%  flakes ${flakes} collected / ${melted} melted  mean Snow ${snow.toFixed(1)}  step ${((1000 * stepMs) / Math.max(1, ticks)).toFixed(1)} µs/tick${j.bot === 'oracle' ? ' (world pre-generated)' : ' (incl. in-step generation)'}`,
     );
   }
 

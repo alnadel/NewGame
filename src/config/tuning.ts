@@ -123,8 +123,12 @@ const tuning = {
     clusterTMax: 0.92,
     /** A pickup melts only while it is at most this many seconds of walking ahead of Nubs. */
     meltAheadSec: 1.6,
-    /** Lit seconds (×2 in glare) until a flake or crystal melts. */
-    meltBudget: 1.0,
+    /**
+     * Lit seconds (×2 in glare) until a flake or crystal melts (GDD §5.4: 1.2). Never above 1.3: a
+     * flake only melts while it is 14 u to meltAheadSec of walking ahead (≈ 1.4 s on Day 1), so at
+     * 1.4 or more it must stay lit for that whole window and flakes become effectively unmeltable.
+     */
+    meltBudget: 1.2,
     flakeChill: 6,
     crystalSnowMult: 5,
     crystalChill: 35,
