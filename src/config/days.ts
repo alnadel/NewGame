@@ -28,7 +28,11 @@ export interface DayParams {
   readonly flakesPerCluster: number;
   /** Validator floor: the best achievable Chill must stay at or above this. */
   readonly floor: number;
-  /** Profile drain (Chill/s at f = 1). Persists for the whole run. */
+  /**
+   * Profile drain (Chill/s at f = 1). Persists for the whole run. The sim reads the drain through
+   * effectiveDrain(s), which prefers RunConfig.drain (the endless onboarding ramp) when it is set;
+   * the validator always uses this profile value.
+   */
   readonly drain: number;
   /** PHEW fires below this Chill. */
   readonly phewT: number;
@@ -54,13 +58,36 @@ export interface ProfileParams {
   readonly guideAlways: boolean;
 }
 
-/** Onboarding profiles (V1_PLAN §6). Daily and challenge runs always use profile 3. */
+/**
+ * Onboarding profiles (V1_PLAN §6). Daily and challenge runs always use profile 3. Drains step
+ * 30 / 40 / 47 / 55 (K2) so the run-3 jump to the full drain is no longer a cliff; endless runs also
+ * cap it per lifetime run with endlessDrain() below.
+ */
 export const PROFILES: readonly ProfileParams[] = Object.freeze([
   Object.freeze({ drain: 30, day1EpsNoon: 40, day1Floor: 70, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: true }),
   Object.freeze({ drain: 40, day1EpsNoon: 44, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
-  Object.freeze({ drain: 40, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
+  Object.freeze({ drain: 47, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
   Object.freeze({ drain: 55, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 15, guideAlways: false }),
 ]);
+
+/**
+ * Endless onboarding drain ramp (K2 addendum): run n (0-based lifetime runs) drains at most
+ * start + perRun·n Chill/s, never above max or its profile's drain.
+ */
+export const ONBOARD_DRAIN = Object.freeze({ start: 30, perRun: 3, max: 55 });
+
+/**
+ * Drain (Chill/s at f = 1) for an endless run started after `lifetimeRuns` finished runs:
+ * min(PROFILES[min(3, n)].drain, start + perRun·n, max) with n = max(0, floor(runs)).
+ * Runs 0..9 give 30, 33, 36, 39, 42, 45, 48, 51, 54, 55; 9 and later give 55. The session passes it
+ * as RunConfig.drain for endless runs only; daily, challenge and bots keep the profile drain.
+ */
+export function endlessDrain(lifetimeRuns: number): number {
+  const n = lifetimeRuns > 0 ? Math.floor(lifetimeRuns) : 0;
+  const prof = (PROFILES[n < 3 ? n : 3] as ProfileParams).drain;
+  const ramp = ONBOARD_DRAIN.start + ONBOARD_DRAIN.perRun * n;
+  return Math.min(prof, ramp, ONBOARD_DRAIN.max);
+}
 
 interface Row {
   epsNoon: number;

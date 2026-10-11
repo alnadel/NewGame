@@ -7,9 +7,14 @@ import { hashState } from './hash.ts';
 import { step } from './step.ts';
 import type { RunConfig, SimState } from './types.ts';
 
-/** Default endless config for a seed/profile (the tutorial chunk goes with profile 0). */
-export function headlessConfig(seed: number, profile: ProfileId = 3): RunConfig {
-  return { seed: seed >>> 0, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: false };
+/**
+ * Default endless config for a seed/profile (the tutorial chunk goes with profile 0). `drain`, when
+ * given, sets RunConfig.drain (the endless onboarding override); bots normally leave it unset.
+ */
+export function headlessConfig(seed: number, profile: ProfileId = 3, drain?: number): RunConfig {
+  const cfg: RunConfig = { seed: seed >>> 0, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: false };
+  if (drain !== undefined) cfg.drain = drain;
+  return cfg;
 }
 
 /** Runs `ticks` ticks (or until death) with a bot. Returns the final state. */

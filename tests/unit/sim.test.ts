@@ -135,12 +135,20 @@ describe('sim rules', () => {
     expect(s.death?.cause).toBe('plain');
   });
 
-  it('drain follows the profile: 30, 40, 40, 55 per second', () => {
-    const drains = [30, 40, 40, 55];
+  it('drain follows the profile: 30, 40, 47, 55 per second', () => {
+    const drains = [30, 40, 47, 55];
     for (let p = 0; p < 4; p++) {
       const s = lab({ profile: p as ProfileId, tutorial: false });
       run(s, 30);
       expect(s.nubs.chill).toBeCloseTo(100 - drains[p]! * 0.5, 9);
+    }
+  });
+
+  it('RunConfig.drain overrides the profile drain (endless onboarding ramp)', () => {
+    for (const drain of [30, 39, 55]) {
+      const s = lab({ drain });
+      run(s, 30);
+      expect(s.nubs.chill).toBeCloseTo(100 - drain * 0.5, 9);
     }
   });
 

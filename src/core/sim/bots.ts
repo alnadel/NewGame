@@ -13,6 +13,7 @@ import { dayAtTick, dayStartTick, DT, elevation, TICK_HZ } from '../clock.ts';
 import { angleDiff, wrapDeg } from '../dmath.ts';
 import { chillDeltaTable, slidingMaxCircular, stepLit } from '../gen/validator.ts';
 import { BINS, binOf } from '../intervals.ts';
+import { effectiveDrain } from './nubs.ts';
 import type { InputFrame, SimState } from './types.ts';
 
 export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle';
@@ -180,7 +181,7 @@ function oracleBot(): Bot {
       const d = dayAtTick(tick);
       night[h] = elevation(dayParams(d, s.cfg.profile), (tick - dayStartTick(d)) / TICK_HZ) > 0 ? 0 : 1;
     }
-    const delta = chillDeltaTable(s.params.drain);
+    const delta = chillDeltaTable(effectiveDrain(s));
     // need[i][b]: least Chill after step j0 + i at bin b that still survives to the horizon.
     need.fill(cfg.margin, H * BINS, (H + 1) * BINS);
     for (let i = H - 1; i >= 0; i--) {
