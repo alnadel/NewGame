@@ -17,6 +17,14 @@ export interface DayParams {
   readonly nightLen: number;
   /** Mean caster gap along y (u). */
   readonly spacing: number;
+  /**
+   * Daylight difficulty wave on caster spacing: the gap after a caster at daylight time t is
+   * spacing · (waveA + waveB · sin⁴(180°·t/Dl)) · U(gapMin, gapMax); nights use 1. Day 1 is
+   * 0.75 / 0.65 (dense at dawn and dusk, 1.4× sparser at noon, day mean 0.75 + 0.65·3/8 ≈ 0.994, so
+   * noon is the boss from the very first day); later days are 1 / 0 (flat).
+   */
+  readonly waveA: number;
+  readonly waveB: number;
   /** Lateral distance from the centerline to the nearest footprint point, U(latMin, latMax) (u). */
   readonly latMin: number;
   readonly latMax: number;
@@ -94,6 +102,8 @@ interface Row {
   v: number;
   dayLen: number;
   spacing: number;
+  waveA: number;
+  waveB: number;
   latMin: number;
   latMax: number;
   clouds: readonly number[];
@@ -105,12 +115,12 @@ interface Row {
 
 /** Standard table for Days 1-6 (profile 3). Day 7+ use the ramp in rampRow(). */
 const TABLE: readonly Row[] = [
-  { epsNoon: 48, v: 70, dayLen: 50, spacing: 45, latMin: 20, latMax: 46, clouds: [9, 19, 38], ballStart: 0, ballEvery: 0, flakes: 3, floor: 50 },
-  { epsNoon: 58, v: 80, dayLen: 50, spacing: 60, latMin: 20, latMax: 55, clouds: [8, 24, 40], ballStart: 6, ballEvery: 14, flakes: 3, floor: 45 },
-  { epsNoon: 66, v: 90, dayLen: 50, spacing: 65, latMin: 20, latMax: 60, clouds: [6, 19, 32, 45], ballStart: 0, ballEvery: 0, flakes: 4, floor: 40 },
-  { epsNoon: 72, v: 100, dayLen: 50, spacing: 70, latMin: 20, latMax: 65, clouds: [5, 16, 27, 38, 49], ballStart: 5, ballEvery: 10, flakes: 4, floor: 40 },
-  { epsNoon: 76, v: 110, dayLen: 50, spacing: 75, latMin: 20, latMax: 70, clouds: [4, 13, 22, 31, 40, 49], ballStart: 0, ballEvery: 0, flakes: 4, floor: 35 },
-  { epsNoon: 76, v: 120, dayLen: 45, spacing: 75, latMin: 20, latMax: 70, clouds: evenly(6, 4, 44), ballStart: 4, ballEvery: 8, flakes: 4, floor: 35 },
+  { epsNoon: 48, v: 70, dayLen: 50, spacing: 45, waveA: 0.75, waveB: 0.65, latMin: 20, latMax: 46, clouds: [9, 19, 38], ballStart: 0, ballEvery: 0, flakes: 3, floor: 50 },
+  { epsNoon: 58, v: 80, dayLen: 50, spacing: 60, waveA: 1, waveB: 0, latMin: 20, latMax: 55, clouds: [8, 24, 40], ballStart: 6, ballEvery: 14, flakes: 3, floor: 45 },
+  { epsNoon: 66, v: 90, dayLen: 50, spacing: 65, waveA: 1, waveB: 0, latMin: 20, latMax: 60, clouds: [6, 19, 32, 45], ballStart: 0, ballEvery: 0, flakes: 4, floor: 40 },
+  { epsNoon: 72, v: 100, dayLen: 50, spacing: 70, waveA: 1, waveB: 0, latMin: 20, latMax: 65, clouds: [5, 16, 27, 38, 49], ballStart: 5, ballEvery: 10, flakes: 4, floor: 40 },
+  { epsNoon: 76, v: 110, dayLen: 50, spacing: 75, waveA: 1, waveB: 0, latMin: 20, latMax: 70, clouds: [4, 13, 22, 31, 40, 49], ballStart: 0, ballEvery: 0, flakes: 4, floor: 35 },
+  { epsNoon: 76, v: 120, dayLen: 45, spacing: 75, waveA: 1, waveB: 0, latMin: 20, latMax: 70, clouds: evenly(6, 4, 44), ballStart: 4, ballEvery: 8, flakes: 4, floor: 35 },
 ];
 
 /** n spawn times evenly spaced over [a, b]. */
@@ -129,6 +139,8 @@ function rampRow(day: number): Row {
     v: 130,
     dayLen: 45,
     spacing: 75 + 4 * n,
+    waveA: 1,
+    waveB: 0,
     latMin: 20,
     latMax: 70 + 4 * n,
     clouds: evenly(Math.max(3, 6 - n), 4, 44),
@@ -167,6 +179,8 @@ export function dayParams(day: number, profile: ProfileId): DayParams {
     dayLen: row.dayLen,
     nightLen: nightLength(d),
     spacing: row.spacing,
+    waveA: row.waveA,
+    waveB: row.waveB,
     latMin: row.latMin,
     latMax: row.latMax,
     clouds: Object.freeze(row.clouds.slice()),

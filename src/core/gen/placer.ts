@@ -15,7 +15,7 @@ import {
   TUTORIAL,
   type CasterKind,
 } from '../../config/casters.ts';
-import { dayParams, PROFILES, type BiomeId, type ProfileParams } from '../../config/days.ts';
+import { dayParams, PROFILES, type BiomeId, type DayParams, type ProfileParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { cloudOffset } from '../shadows.ts';
 import {
@@ -402,12 +402,31 @@ export function placeChunk(w: World, k: number): void {
   w.stats.chunksPlaced++;
 }
 
+/**
+ * Day-1 difficulty wave (days.ts waveA/waveB): the gap factor after a caster at daylight time t is
+ * waveA + waveB·sin⁴(180°·t/Dl), t clamped to [0, Dl] (so ground behind the start counts as dawn);
+ * night positions use 1. dmath only, so it is deterministic.
+ */
+function spacingWave(p: DayParams, at: YTime): number {
+  if (at.night) return 1;
+  let t = at.dayTick / TICK_HZ;
+  if (t < 0) t = 0;
+  else if (t > p.dayLen) t = p.dayLen;
+  const sn = sinD((180 * t) / p.dayLen);
+  const s2 = sn * sn;
+  return p.waveA + p.waveB * s2 * s2;
+}
+
+const waveAt: YTime = { day: 1, dayTick: 0, night: false };
+
 function placeCasters(w: World, k: number, y1: number): void {
   const rng = rngFor(w.seed, 'chunk', k);
   for (;;) {
-    const p0 = dayParams(dayAtY(w.cursorY), w.profile);
-    // Draw every value up front so the stream advances identically whatever gets placed.
-    const gap = p0.spacing * rng.range(WT.gapMin, WT.gapMax);
+    timeAtY(w.cursorY, waveAt);
+    const p0 = dayParams(waveAt.day, w.profile);
+    // Draw every value up front so the stream advances identically whatever gets placed. The
+    // authored tutorial chunk never reaches here (placeChunk skips it), so it keeps its layout.
+    const gap = p0.spacing * spacingWave(p0, waveAt) * rng.range(WT.gapMin, WT.gapMax);
     const flip = rng.next() < WT.sideFlip;
     const kindRoll = rng.next();
     const latRoll = rng.next();

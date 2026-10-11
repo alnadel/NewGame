@@ -105,6 +105,23 @@ describe('validator', () => {
     }
   });
 
+  it('the Day-1 wave (sparser casters at noon) still validates: seeds 1-12 stay fair through Day 1', () => {
+    let rescues = 0;
+    let chunks = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const w = createWorld(seed, 3, false);
+      ensureGenerated(w, dayStartY(2));
+      expect(w.stats.unresolved, `seed ${seed}`).toBe(0);
+      expect(worstMargin(w), `seed ${seed}`).toBeGreaterThanOrEqual(0);
+      for (const r of w.stats.rescuesPerChunk) {
+        if (r === undefined) continue;
+        rescues += r;
+        chunks++;
+      }
+    }
+    expect(rescues / chunks).toBeLessThanOrEqual(1.0);
+  }, 60_000);
+
   it('profile 0 holds Day 1 to the higher floor (70)', () => {
     const w = createWorld(4, 0, true);
     ensureGenerated(w, dayStartY(2));
