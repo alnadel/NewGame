@@ -273,6 +273,8 @@ test.describe('focus loss and run markers', () => {
     await openGame(page, 'test=1');
     await dragOnCanvas(page);
     await waitForScreen(page, 'play');
+    // A bot keeps Nubs alive through the 2.5 s (the run stays scored and shareable).
+    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
     await page.waitForTimeout(2500);
     await page.locator('button[aria-label="Pause"]').click();
     await waitForScreen(page, 'pause');
@@ -295,6 +297,7 @@ test.describe('focus loss and run markers', () => {
     await openGame(page, 'test=1');
     await dragOnCanvas(page);
     await waitForScreen(page, 'play');
+    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
     await page.waitForTimeout(500);
     await forceDeath(page);
     await page.locator('.res-sheet button[aria-label="Share"]').click();
