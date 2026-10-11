@@ -2,18 +2,24 @@
 
 This spec matches the existing scaffold in `/home/user/NewGame`:
 - Vite 8.3.4 (`base: './'`), TypeScript 6.0.2 (strict), Vitest 5.0.3 (`tests/unit/**/*.test.ts`, node environment), Playwright 1.56.1 (`tests/e2e`, projects `mobile` = Pixel 7 Chromium and `desktop` = Desktop Chrome, webServer build+preview on port 4173).
-- Node 22.22. Existing scripts `build:single` + `scripts/inline-build.mjs` stay as they are.
+- Node 22.22. `build:single` is `vite build --mode single --outDir dist-single && node scripts/inline-build.mjs dist-single` (§14.1).
 - **No runtime dependencies.**
 
 ---
 
 ## 0. Ground rules
 
-1. **Layering.** `src/config` → `src/core` (pure, deterministic) → `src/game` (orchestration) → `src/render`, `src/audio`, `src/platform`, `src/ui`, `src/meta` (side effects).
-   - `core` imports only from `core` and `config`. `config` imports nothing.
-   - A unit test enforces this (§13.1, `architecture.test.ts`).
+1. **Layering.** `src/config` → `src/core` (pure, deterministic) → `src/meta` → `src/render`, `src/audio`, `src/ui` (side effects) → `src/game` (orchestration, with `main.ts`); `src/platform` holds the browser and native seams.
+   - `config` imports nothing; `core` imports only `core` and `config`.
+   - `platform` imports only `platform`.
+   - `meta` imports `meta`, `core`, `config`, `platform`.
+   - `ui` imports `ui`, `meta`, `core`, `config`, `platform`.
+   - `audio` imports `audio`, `core`, `config`, `platform`.
+   - `render` imports `render`, `core`, `config`, `meta`, `platform`, plus the allowlisted `../game/camera.ts` and `../game/assist.ts`.
+   - `game` and `main.ts` may import anything.
+   - `tests/unit/architecture.test.ts` (§16.1) enforces the whole table on every layer, reading imports with a TypeScript scanner (type-only and dynamic imports count). Any exception is listed in the test by file, with its owner.
 2. **Determinism.** Everything in `src/core` must be bit-for-bit reproducible across engines (V8, JavaScriptCore, Node):
-   - **Forbidden in core:** `Math.random`, `Date`, `performance`, `Math.sin|cos|tan|asin|acos|atan|atan2|exp|log|pow|hypot|cbrt`, `window`, `document`, `localStorage`, `Float32Array`. Use `dmath.ts` instead.
+   - **Forbidden in core and config** (same test, on code with comments, strings and template text removed): `Math.random`, `Date`, `performance`, `Math.sin|cos|tan|asin|acos|atan|atan2|exp|log|pow|hypot|cbrt`, the hyperbolic and `log2|log10|log1p|expm1` functions, the `**` operator, `toFixed`, `toPrecision`, `toExponential`, `toLocale*`, `parseFloat`, `Intl`, `crypto`, `globalThis`, `self`, `window`, `document`, `localStorage`, `Float32Array`. Use `dmath.ts` instead.
    - **Allowed:** `+ − * /`, `Math.sqrt`, `Math.abs`, `Math.floor`, `Math.ceil`, `Math.round`, `Math.trunc`, `Math.min`, `Math.max`, `Math.sign`, `Math.imul`, and `Float64Array`/`Int32Array`/`Uint8Array`/`Uint32Array`.
    - These are IEEE-754 exact or integer operations, so results match across devices. `Array.prototype.sort` is stable; sort comparators must be total.
 3. **Imports use explicit `.ts` extensions** (for example `import { step } from './step.ts'`) so `scripts/*.ts` run directly with Node's built-in type stripping. tsconfig additions:
@@ -299,7 +305,7 @@ Pruning: the active caster window is y ∈ [nubs.y − 700, nubs.y + 1600]; obje
    - For each of the 5 samples, compute `litWeight(sample)` from casters within reach R = min(520, maxZ/tanε) + 60 (bucket query), floaters, and glare.
    - Set `f` and `glareW`. Record `lastShaderId` = the first caster or floater id that shades the center sample.
 8. **Chill:**
-   - drain = (gentle ? 40 : 55). Parasol buffer: while parasol > 0 and f > 0, `parasol −= DT` and the drain term is 0.
+   - drain = `effectiveDrain(s)` = `s.cfg.drain ?? s.params.drain`: the profile drain (30 / 40 / 47 / 55 for profiles 0-3), or the endless onboarding ramp `endlessDrain(runs)` the session passes as `RunConfig.drain` (V1_PLAN §6). World generation and the validator always use the profile drain. (Charms such as the parasol are out of v1.)
    - `chill += (−drain·f + regen·max(0, 1 − f))·DT`, clamped to [0, maxChill]. Regen is 30, or 20 for Snowball. Night: `chill += 30·DT`.
    - Frost multiplier rules, PHEW, `shadeEnter`/`shadeExit` events, hour log, cloud-ride timers, `lowChill` event when chill first crosses below 25.
 9. **Pickups** (`pickups.ts`):
@@ -319,7 +325,7 @@ Everything here is pure arithmetic on `s`. Rendering never mutates `s`.
 if input.down and !sun.down: sun.omega = 0; emit catch if |omega_before| > 90
 if input.down: sun.target += input.dTheta; maxStep = maxRate*DT  (600, 750 sundog, 300 reduced-motion)
                delta = clamp(angleDiff(sun.target, sun.theta), -maxStep, +maxStep); sun.theta = wrap(sun.theta + delta)
-elif !isNaN(input.release): sun.omega = clamp(input.release, ±cap) (cap 360 / 450 sundog / 180 reduced); sun.target = sun.theta
+elif upEdge: sun.omega = clamp(release * smoothstep(flickMin, flickFull, |release|), ±cap) (TUNING.sun.flickMin/flickFull = 200/600 °/s; cap 360, 180 reduced): only genuine flicks coast; sun.target = sun.theta
 else: sun.theta = wrap(sun.theta + sun.omega*DT); sun.omega *= FRICTION_PER_TICK (0.9433354499; sundog 0.9592377960);
       if |omega| < 5: omega = 0; sun.target = sun.theta
 input.key != 0: sun.theta = wrap(sun.theta + key * -180 * DT) (Right/D = clockwise = negative); omega = 0
@@ -562,8 +568,14 @@ frame(now):
   renderer.draw(state, prevSnap, acc/DT, real)
   audio.update(state, real); requestAnimationFrame(frame)
 ```
-- The loop pauses (stops calling `step`) on Paused/hidden but keeps rendering the dimmed scene at 30 fps.
+- The loop pauses (stops calling `step`) on Paused/hidden.
 - The title "attract" state is a `'hold'`-phase sim of the next run; the auto-sway is the session feeding dTheta.
+- **Render cadence** (`game/cadence.ts`, details in `src/game/README.md`). Every rAF still steps the sim, generates, updates audio and the UI; only `renderer.draw` is skipped:
+  - **Menus** (Settings, Daily, Missions, Wardrobe): the UI paints an opaque background over the world rect, so the canvas is drawn once on entry and again only after a resize, a DPR or governor change, or a canvas-affecting setting. The UI never depends on the canvas animating behind a menu.
+  - **Pause**: at most 30 fps. **Title under reduced motion**: at most 10 fps.
+  - **Play, dying, Results and the Title**: at most 60 fps on a 60 Hz timeline, but every rAF while a finger or key is down or the clock runs at another rate (hit-stop, slow-mo).
+  - **Settled Results** redraw only the puddle marker over a cached backdrop.
+- **Crash containment.** The loop schedules its next frame before running this one and catches what it throws (logged). After 30 failing frames in a row the save is flushed and a self-contained overlay (`#crash`, role alertdialog: "Something went wrong. Your progress is saved." and a Reload button) covers the game; a one-off failure heals on the next frame. If boot itself throws, the splash becomes "SHADY couldn't start." with Reload. Uncaught errors and rejections flush the save.
 
 ---
 
@@ -614,7 +626,7 @@ export interface Haptics { play(name: HapticName): void; setEnabled(on: boolean)
 ```ts
 interface StorageAdapter { get(key: string): string | null; set(key: string, v: string): void; remove(key: string): void }
 ```
-`LocalStorageAdapter` wraps every call in try/catch and falls back to an in-memory Map, setting `degraded = true`; the UI then shows a one-time toast "Progress can't be saved in this browser mode".
+`WebStorageAdapter` wraps every call in try/catch with an in-memory Map behind it. `get()` reads the backing store first and falls back to memory only when the backing value is missing or unreadable (or a write to that key failed and hasn't been retried successfully). `set()` tries the backing store on every call, so a transient failure (quota, private mode hiccup) heals on the next write; `degraded` is true while the latest write failed or there is no backing store. The UI shows a one-time toast "Progress can't be saved in this browser mode." on the first failed write after boot (`SaveStore.onDegraded`).
 
 **Key** `shady.save`. **Schema v1:**
 ```ts
@@ -642,7 +654,11 @@ interface SaveV1 {
 
 **SaveStore**
 - `get()` returns the in-memory object; `update(fn)` mutates it and schedules a 300 ms debounced write.
-- `flush()` runs on `pagehide`, `visibilitychange` → hidden, and run end.
+- `flush()` runs on `pagehide`, `visibilitychange` → hidden, and run end (and right after a Wardrobe buy or equip).
+- Keys: `SAVE_KEY` = `shady.save`, with `SAVE_BAK_KEY` (`.bak`) and `SAVE_FUTURE_KEY` (`.future`) derived from it.
+- `canPersist` is false while a newer version's save sits on disk; the store then never writes, and Reset and Restore answer "A newer version of SHADY saved progress here. Update the game first."
+- **Other instances** (another tab, the installed app): a `storage` event on the key, or a re-read when the page becomes visible that finds different bytes, adopts the other save if it migrates cleanly (newer versions are ignored). With no unsaved local change it replaces the current save without writing; with one, it takes the other save but keeps the local settings (and equipped items the other save owns), then writes. Either way `onExternalChange(cb)` fires; the session refreshes the UI, the settings and, between runs, the run count and the held run.
+- `onDegraded(cb)` fires once, on the first failed write after boot. `dispose()` flushes and detaches the listeners.
 - Daily entries are pruned to the latest 60 dates.
 
 **progression.ts.** `applyRunResult(save, result)` is pure (tested):
@@ -661,6 +677,7 @@ interface SaveV1 {
 
 **Mechanics**
 - `#ui` is a full-screen absolutely positioned div. Each screen module exports `mount(root, ctx): Screen` with `{ el, onEnter(), onExit(), onBack() }`.
+- **World column.** The session publishes the world viewport on `#ui` as `--world-left/top/width/height` (whole px; 400/0/480/800 at 1280×800, 0/0/390/844 on a phone). Screens, HUD controls, the tray, sheets, dialogs and toasts are laid out inside that rect (fallbacks 0/0/100%/100%); scrims and the menus' paper may cover the viewport. Safe-area padding is max(0, inset − distance from the rect edge to the viewport edge).
 - `ui.ts` holds `current: ScreenId` and a transition table:
 ```
 boot→title; title→play|daily|wardrobe|charms|missions|atlas|settings; daily→play|title;
@@ -669,10 +686,11 @@ play→pause|dying; pause→play|title|settings; dying→results; results→play
 ```
   Illegal transitions throw in dev and are ignored in prod.
 - **Transitions:** screens fade/slide with CSS transitions (180 ms; opacity only under reduced motion).
-- **Back:** the Escape key and the Android back button (via Capacitor App later) call `ui.back()`.
-- **Toasts:** a stack at the top center that auto-hides after 2.5 s.
-- **Theming:** `ui.css` uses CSS custom properties for the palette (GDD §10); `font-size` is in rem with a 16 px base; buttons have min-height 48 px and border-radius 16 px; `:focus-visible` gets a 3 px outline in the accent color.
-- **Results panel:** a DOM sheet anchored to the bottom (max-height 58%), so the Melt Map stays visible above it. The tap-to-retry hit area is the canvas region above the sheet.
+- **Back:** the Escape key, the browser's Back (through the session's history sentinel, V1_PLAN §8.2) and a native back button call `ui.back()`: an open modal closes first (`ui.isModalOpen()`), then the screen's back action.
+- **Toasts:** a stack at the top of the world column (below the header on menus) that auto-hides after 2.5 s; a screen switch fades the old screen's toasts out in about 120 ms.
+- **Screen readers:** a polite live region announces the Results summary and "Paused"; focus moves into screens only in keyboard mode, and menus return focus to the control that opened them.
+- **Theming:** `ui.css` uses CSS custom properties for the palette (GDD §10); text is ≥ 16 px (1rem) on menus and Results; every control has a 48×48 px hit area; buttons grow with their label (min-height, not height); `:focus-visible` gets a two-tone ring (3 px ink outline plus a white halo) that reads on any background, and `forced-colors` mode keeps switches, sliders and selections visible.
+- **Results panel:** a DOM sheet anchored to the bottom (at least 58% tall, more when its content needs it, up to 96 px below the top), so the Melt Map stays visible above it; on short or large-text screens the whole sheet scrolls as one with Retry pinned. `ui.resultsSheetTop()` (cached by a ResizeObserver) tells the renderer where the sheet starts. The tap-to-retry hit area is the canvas region above the sheet.
 - **Rotate overlay:** shown when a touch device (`matchMedia('(pointer: coarse)')`) is held landscape with innerHeight < 500. It pauses play.
 
 ---
@@ -693,16 +711,24 @@ play→pause|dying; pause→play|title|settings; dying→results; results→play
 **Service worker.** It is hand-rolled; no workbox dependency. The `shadySW()` plugin in `vite.config.ts` hooks `generateBundle` (client build only) and emits `sw.js`:
 ```js
 const VERSION = '<sha1 of sorted asset names+sizes>'; const ASSETS = ['./', './index.html', ...bundleFiles, ...publicFiles];
-self.addEventListener('install', e => e.waitUntil(caches.open('shady-'+VERSION).then(c => c.addAll(ASSETS))));
+self.addEventListener('install', e => e.waitUntil(caches.open('shady-'+VERSION).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== 'shady-'+VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => { const r = e.request; if (r.method !== 'GET' || new URL(r.url).origin !== location.origin) return;
   if (r.mode === 'navigate') e.respondWith(fetchWithTimeout(r, 3000).then(res => { cachePut('./index.html', res.clone()); return res; }).catch(() => caches.match('./index.html')));
   else e.respondWith(caches.match(r).then(hit => hit || fetch(r).then(res => { cachePut(r, res.clone()); return res; }))); });
 ```
 
-**Registration** (`platform/pwa.ts`): only when `import.meta.env.PROD`, `'serviceWorker' in navigator`, `location.protocol === 'https:' || location.hostname === 'localhost'`, and `!isNative()`. It calls `navigator.serviceWorker.register('./sw.js', { scope: './' })`.
+- **Precache with `cache: 'reload'`.** Install fetches every asset past the HTTP cache, so a CDN's stale `index.html` (GitHub Pages caches it for minutes) can never be precached next to a new version's assets. Navigations keep their network-first path (a `Request` init can't be built from a navigate-mode request).
+
+**Registration** (`platform/pwa.ts`): only when `import.meta.env.PROD`, `import.meta.env.MODE !== 'single'`, `'serviceWorker' in navigator`, `location.protocol === 'https:'` or `http:` on localhost/127.0.0.1, and `!isNative()`. It calls `navigator.serviceWorker.register('./sw.js', { scope: './' })`.
 - No `skipWaiting`: a new version activates on the next cold start, so a running game never reloads.
-- `build:single` output does not register the SW (detected by `location.protocol === 'file:'` or the absence of `sw.js`).
+- **Install prompt (Android/Chromium).** `captureInstallPrompt()` (called by the UI) prevents and stashes `beforeinstallprompt` and clears it on `appinstalled`; Settings shows an "Install SHADY" row while `canPromptInstall()` and the game isn't standalone, and `promptInstall()` resolves `'accepted' | 'dismissed' | 'unavailable'`. On iOS the "Play SHADY from your Home Screen" sheet (V1_PLAN §11.5) explains the steps instead; it is skipped in in-app browsers.
+
+### 14.1 Single-file build
+`npm run build:single` = `vite build --mode single --outDir dist-single && node scripts/inline-build.mjs dist-single`.
+- The `single` mode never registers a service worker (`canRegisterServiceWorker()` checks `MODE`), and `shadySW()` emits no `sw.js` for it (nor for any build into `dist-single`).
+- `inline-build.mjs` inlines the script and stylesheet into `index.html`, inlines `icons/favicon.svg` as a `data:` URI, removes the manifest and apple-touch-icon links, and exits 1 if the output still references `./assets/`, a `<script src>` or a stylesheet `<link>`. The result opens from `file://` and in WebViews.
+- Without an http(s) address, challenge links use `VITE_SHARE_URL` from `.env` (V1_PLAN §11.4).
 
 **Icons.** `src/render/iconSvg.ts` exports `iconSvg(size: number, maskable: boolean): string`: an indigo #34306B background (full-bleed when maskable, with an 80% safe zone), the sun disc #FFE27A with rays and sunglasses, and a tiny white Nubs silhouette at the lower right. `scripts/gen-icons.ts` launches Playwright Chromium, sets the page content to each SVG at 192/512/180/1024 px, and screenshots the PNGs into `public/icons/` (the 1024 px PNG feeds Capacitor assets). It also writes `favicon.svg`. Outputs are committed.
 
@@ -735,7 +761,7 @@ self.addEventListener('fetch', e => { const r = e.request; if (r.method !== 'GET
 
 | File | Covers |
 |---|---|
-| `architecture.test.ts` | Scans `src/core/**` for forbidden tokens (§0.2) and for imports outside core/config; scans `src/config` for any import |
+| `architecture.test.ts` | Checks every layer's imports against the §0.1 table (type-only and dynamic imports included) and scans `src/core/**` and `src/config/**` for the forbidden tokens of §0.2 |
 | `dmath.test.ts` | 20k random x ∈ [−1e4, 1e4]: \|dsin − Math.sin\| ≤ 1e-15·max(1,\|x\|) (same for dcos, datan2 vs Math.atan2 within 2e-16 relative); literal snapshots of 16 specific outputs (bitwise via DataView hex) |
 | `rng.test.ts` | Known first 10 outputs for seeds 1 and 0xDEADBEEF; `rngFor` stream independence; `int` bounds |
 | `geom.test.ts` | Hull of random sets (all points inside/on hull, CCW); point-in-convex; segment-vs-convex vs brute-force sampling on 5k cases |
@@ -745,8 +771,8 @@ self.addEventListener('fetch', e => { const r = e.request; if (r.method !== 'GET
 | `trail.test.ts` | Catmull-Rom linear-y property; forced ranges honored; clearance helper |
 | `generator.test.ts` | Golden hashes of chunks 0-9 for seeds 1, 2, 3 (from `tests/golden/hashes.json`); clearance ≥ 14 for every caster on seeds 1-100; forks fully inside chunks; tutorial chunk 0 equals the authored list |
 | `validator.test.ts` | Empty world fails → rescue inserted → passes; sliding-window max equals naive max on random arrays; demand rule triggers on a crafted hedge corridor; across seeds 1-100 × 8 days, no chunk exceeds 8 rescues |
-| `sim.test.ts` | Full sun 100 → 0 in 1.82 s ± 1 tick; regen 30/s; gentle drain 40; glare doubles drain; multiplier +1 per 4.0 s and reset after 0.15 s lit; PHEW only below 15 and with cooldown 3 s; flake melts after 1.2 s lit (72 ticks) and not beyond 280 u; pickups collected only on matching lane; fork picks the shadier branch with Safe Lane on a tie; night regen; death at Chill ≤ 0; `'hold'` phase freezes the clock until a drag |
-| `sun.test.ts` | Catch zeroes ω; release ω from frames; friction decay; ±360 cap; 600°/s follow cap; detent events at each 15° crossing; keyboard rate |
+| `sim.test.ts` | Full sun 100 → 0 in 1.82 s ± 1 tick; regen 30/s; profile drains 30/40/47/55 and the endless `cfg.drain` override (`drain.test.ts`); glare doubles drain; multiplier +1 per 4.0 s and reset after 0.15 s lit; PHEW only below 15 and with cooldown 3 s; flake melts after 1.2 s lit (72 ticks) and not beyond 280 u; pickups collected only on matching lane; fork picks the shadier branch with Safe Lane on a tie; night regen; death at Chill ≤ 0; `'hold'` phase freezes the clock until a drag |
+| `sun.test.ts` | Catch zeroes ω; release ω from frames; only flicks coast (smoothstep 200-600 °/s); friction decay; ±360 cap; 600°/s follow cap; detent events at each 15° crossing; keyboard rate |
 | `determinism.test.ts` | Scripted 3-minute input (sine sweeps + flicks), run twice → equal `hashState` every 600 ticks; record → encode → decode → replay equals live hash; hash equals `golden.hashes.scripted` |
 | `deathcause.test.ts` | Crafted scenarios for each of the 5 causes; correct names in the line |
 | `share.test.ts` | Glyph strip mapping thresholds; endless and daily text exact strings; assisted marker |
@@ -781,13 +807,16 @@ node scripts/sim.ts [--seeds 200] [--days 8] [--bot idle|novice|reactive|oracle|
   5. Daily screen shows "#" plus the computed number for today, and the Play button reads "try 1/3".
   6. Determinism across engine and Node: `runHeadless(7, 3600, 'reactive')` equals `golden.hashes.headless_7_3600_reactive`.
   7. PWA (desktop project only): the manifest link resolves to JSON with name "SHADY: Don't Melt Nubs"; after load, `navigator.serviceWorker.getRegistration()` is truthy (preview serves the prod build on localhost).
+- **`pwa.spec.ts`**: the service worker registers on the preview build and serves the game offline after a reload.
+- **`single.spec.ts`** (desktop): builds `dist-single` if it is missing, opens it from `file://`, plays a run to Results without console errors, requests no service worker, manifest or `./assets/` file, and checks that the share text links to `VITE_SHARE_URL` (read from `.env`), never `file:`.
+- Further specs cover the lifecycle flows, the render cadence, Back and the history sentinel, other tabs' saves, robustness, keyboard play and the world-column layout (`src/game/README.md` lists them).
 - **`layout.spec.ts`** runs at viewports 360×640, 390×844 and 430×932, plus landscape 844×390 on mobile:
   - pause button and results buttons lie inside the viewport and outside a simulated 47 px top inset (CSS var override);
   - the rotate overlay is visible in landscape on the mobile project;
   - screenshots are attached as artifacts (not asserted).
 - An optional WebKit iPhone 13 project is enabled when `SHADY_E2E_WEBKIT=1` (needs `npx playwright install webkit`) and runs `smoke.spec.ts` (6) to prove JavaScriptCore determinism.
 
-**CI order:** `npm run typecheck && npm test && npm run sim:check && npm run e2e`.
+**CI order** (`.github/workflows/ci.yml`): `npm run typecheck`, `npm test`, `npm run sim -- --check --seeds 50`, `npm run build:single`, `npm run e2e`. Only a green run on `main` (a push or a manual dispatch) builds and deploys GitHub Pages, with `VITE_SHARE_URL` set to the Pages URL.
 
 ---
 
@@ -799,17 +828,17 @@ node scripts/sim.ts [--seeds 200] [--days 8] [--bot idle|novice|reactive|oracle|
 | `?mode=daily&date=YYYY-MM-DD` | Daily run for a date (unscored if not today) |
 | `?day=N&t=noon\|dawn\|dusk\|HH:MM` | Start at that day/time (`RunConfig.startDay`/`startT`) |
 | `?chill=N` | Starting Chill |
-| `?charm=id` | Force a charm |
-| `?bot=idle\|novice\|reactive\|oracle` | Autoplay with a bot |
+| `?profile=0..3` | Force a difficulty profile |
+| `?bot=idle\|novice\|reactive\|oracle\|human` | Autoplay with a bot |
 | `?fast=N` | N× ticks per frame (soak/tuning) |
 | `?guide=always\|off` | Override the guide |
-| `?tutorial=1` | Force tutorial overrides |
-| `?debug=1` | Overlay with FPS, sim ms, render ms, generation ms, caster/particle counts, DPR scale, chunk/rescue counts, ε, θ, f, current hour lit time. Live sliders for drain, regen, εnoon bonus, walk-speed scale, sun max rate. Toggles to draw validator masks and shadow polygons as outlines |
+| `?debug=1` | Overlay (updated 4×/s) with FPS, sim, generation and render ms, caster/particle counts, DPR scale, chunk/rescue counts, ε, θ, f, current hour lit time; toggles to draw the test points, validator masks and shadow polygons as outlines |
 | `?mute=1` | Mute audio |
+| `?perf=0` | Full quality: no frame-time governor and no low-end device caps (captures, A/B timing) |
 | `?test=1` | Test hook |
 | `?reset=1` | Clear the save; dev builds only |
 
-Slider changes write into a mutable dev copy of `TUNING`, so they invalidate determinism. The overlay shows "TUNING MODIFIED".
+Runs started with `?day`, `?t`, `?chill`, `?profile`, `?bot`, `?fast` or `?guide` are debug runs: not saved, scored, shared or counted as Daily tries (the overlay never changes `TUNING`, so determinism holds).
 
 ---
 
@@ -818,13 +847,15 @@ Slider changes write into a mutable dev copy of `TUNING`, so they invalidate det
 1. `npm i @capacitor/core @capacitor/app @capacitor/haptics @capacitor/preferences @capacitor/share @capacitor/filesystem @capacitor/status-bar @capacitor/splash-screen` and `npm i -D @capacitor/cli @capacitor/ios @capacitor/android @capacitor/assets`.
 2. `npx cap init SHADY app.shady.game --web-dir=dist`, then `npx cap add ios` and `npx cap add android`. `base: './'` already makes the build work from the app bundle.
 3. **Adapters** switched by `platform/native.ts → isNative()` (checks `globalThis.Capacitor?.isNativePlatform?.()`):
-   - **Storage:** `PreferencesAdapter`. At boot, `await Preferences.get('shady.save')` before the Title; writes are mirrored to localStorage as a backup.
+   - **Storage:** `PreferencesAdapter`. Preferences is asynchronous and `SaveStore` reads once, synchronously, in its constructor, so at boot `await Preferences.get({ key: 'shady.save' })` and seed the adapter **before** `new SaveStore(...)`; writes are mirrored to localStorage as a backup.
    - **Haptics:** `NativeHaptics` (§11).
    - **Share:** text via `Share.share({ text, url })`. Postcard: `Filesystem.writeFile` (Cache directory, base64), then `Share.share({ files: [uri] })`.
-   - **Lifecycle:** `App.addListener('pause' | 'resume')` → pause and audio suspend/resume. `App.addListener('backButton')` → `ui.back()`, and exits the app from the Title.
+   - **Lifecycle:** `App.addListener('pause' | 'resume')` → pause and audio suspend/resume. `App.addListener('backButton')` → the session's back handler (`Session.handleBack()`, the same path as the browser's Back), and `App.exitApp()` when the Title shows with no modal open.
    - **Status bar:** `StatusBar.setOverlaysWebView({ overlay: true })` and `StatusBar.hide()` during play.
    - **Splash:** `SplashScreen.hide()` after the first rendered frame.
    - **PWA:** service worker not registered when native.
+   - **Share links:** a native page has no web address, so challenge links use `VITE_SHARE_URL` (`shareBase()`); point it at the public web build.
+   - **Android 15 edge-to-edge:** apps targeting SDK 35 draw under the system bars. Let the shell inset the web view (`adjustMarginsForEdgeToEdge`) or feed the real insets into the `--safe-top/right/bottom/left` properties on `<html>`, which both the DOM layout and the canvas read (`platform/safeArea.ts`).
 4. **Orientation lock:**
    - iOS `Info.plist`: `UISupportedInterfaceOrientations` = portrait only; `UIRequiresFullScreen` = YES.
    - Android `AndroidManifest.xml` activity: `android:screenOrientation="portrait"`.

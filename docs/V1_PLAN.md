@@ -52,10 +52,14 @@ This plan is the **vertical slice**. Its quality gate: *the first 60 seconds mus
 ## 2. Conventions (all agents)
 
 ### 2.1 Layering
-`src/config` → `src/core` (pure, deterministic) → `src/game` (orchestration) → `src/render`, `src/audio`, `src/platform`, `src/ui`, `src/meta` (side effects).
-- `core` imports only `core` and `config`.
-- `config` imports nothing.
-- `meta` may import `core` types and pure helpers.
+`src/config` → `src/core` (pure, deterministic) → `src/meta` → `src/render`, `src/audio`, `src/ui` (side effects) → `src/game` (orchestration); `src/platform` holds the browser and native seams. `tests/unit/architecture.test.ts` enforces this table on every layer (type-only imports count too):
+- `config` imports nothing; `core` imports only `core` and `config`.
+- `platform` imports only `platform`.
+- `meta` imports `meta`, `core`, `config` and `platform`.
+- `ui` imports `ui`, `meta`, `core`, `config` and `platform`.
+- `audio` imports `audio`, `core`, `config` and `platform`.
+- `render` imports `render`, `core`, `config`, `meta` and `platform`, plus `../game/camera.ts` and `../game/assist.ts`.
+- `game` and `main.ts` may import anything.
 
 ### 2.2 TypeScript
 - Use explicit `.ts` extensions in relative imports.
@@ -121,7 +125,8 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
   - maxRate is **600°/s**: 450 while ε < 15°, 300 under reduced motion.
 - **upEdge tick:**
   - Apply that tick's dTheta to target first.
-  - Then store ω_rel = clamp(release, ±cap). cap = 360, or 180 under reduced motion.
+  - Then store ω_rel = clamp(release · smoothstep(200, 600, |release|), ±cap): **only genuine flicks coast** (`TUNING.sun.flickMin/flickFull` = 200/600, in °/s of requested angle). cap = 360, or 180 under reduced motion.
+  - So a lift below 200°/s stops where the finger left it (once the chase ends), 400°/s coasts at 200°/s, 300°/s drifts less than 15° in total, and 600°/s or faster coasts at the cap (about 103° of travel at 360°/s).
   - Enter `chasing`: keep following target at maxRate.
   - When |angleDiff(target, θ)| < 1°, switch to `coasting` with ω = ω_rel.
 - **coasting:**
@@ -140,6 +145,7 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 6. The ±cap clamp.
 7. The follow-rate caps (600, 450, 300).
 8. A detent event at each 15° crossing.
+9. Flick-only inertia: a 150°/s lift doesn't coast; a 400°/s lift coasts at 200°/s; a 300°/s lift drifts less than 15°; a 1000°/s flick coasts at the cap. Catch semantics are unchanged.
 
 ---
 
@@ -160,7 +166,7 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 
 | Day | Biome | εnoon | Walk v (u/s) | Dl (s) | Caster spacing (u) | Lateral (u) | Clouds: spawn t (s) | Gazing balls | Flakes/cluster | Validator floor |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Meadow | 48 | 70 | 50 | 55 | 20-50 | 19, 38 | none | 3 | 50 |
+| 1 | Meadow | 48 | 70 | 50 | 45, with the Day-1 wave (§7.2) | 20-46 | 9, 19, 38 | none | 3 | 50 |
 | 2 | Old Town | 58 | 80 | 50 | 60 | 20-55 | 8, 24, 40 | every 14 s from t=6 | 3 | 45 |
 | 3 | Meadow | 66 | 90 | 50 | 65 | 20-60 | 6, 19, 32, 45 | none | 4 | 40 |
 | 4 | Old Town | 72 | 100 | 50 | 70 | 20-65 | 5, 16, 27, 38, 49 | every 10 s from t=5 | 4 | 40 |
@@ -168,6 +174,7 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 | 6 | Old Town | 76 | 120 | 45 | 75 | 20-70 | 6 evenly spaced over [4, 44] | every 8 s from t=4 | 4 | 35 |
 | N ≥ 7 | odd Meadow, even Old Town | 76 (80 from Day 10) | 130 | 45 | 75 + 4·(N−6) | 20 to 70 + 4·(N−6) | max(3, 6 − (N−6)) evenly spaced over [4, 44] | every max(5, 8 − (N−6)) s from t=4 | 4 | max(25, 35 − 2·(N−6)) |
 
+- "Caster spacing" is the mean gap along y; each gap is spacing · U(0.7, 1.3), shaped on Day 1 by the wave in §7.2.
 - "Lateral" is the distance from the trail centerline to the nearest footprint point. The minimum of 20 is the **clearance** (critique: raise 14 to 20).
 - Walk speed: y advances at v during daylight. At night it advances at v·8/nightLen, so night distance is always 8·v.
 
@@ -180,7 +187,7 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 - **Lit weight per sample:** 0 if shaded and not in glare; 1 if lit; +1 if in glare (glare ignores shade). f = Σ/5, in [0, 2].
 - **Chill:**
   - max 100; starts at max.
-  - Daylight: dChill/dt = −drain·f + 30·max(0, 1 − f), with drain from the profile (§6).
+  - Daylight: dChill/dt = −drain·f + 30·max(0, 1 − f), with drain from the profile, or lower for early endless runs (§6).
   - Night: +30/s. Dawn: set to max.
   - Death: Chill ≤ 0 during daylight. It is the only fail state.
 
@@ -200,7 +207,7 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 - **Flakes:**
   - Clusters every U(5, 8) s of trail time while t ∈ [0.08·Dl, 0.92·Dl], on the trail centerline, 24 u apart.
   - Collected within 14 u of Nubs' center.
-  - **Melting is time-based:** while the flake is ≤ 1.6·v ahead of Nubs (in y) and lit (×2 in glare), it accumulates melt. It melts at **1.0 s** and never refreezes.
+  - **Melting is time-based:** while the flake is ≤ 1.6·v ahead of Nubs (in y) and lit (×2 in glare), it accumulates melt. It melts at **1.2 s** (`TUNING.pickups.meltBudget`, the GDD's value) and never refreezes.
   - Reward: +mult Snow and +6 Chill.
   - Emit the `flakeMelt` event per melt; the audio layer throttles it.
 - **Ice crystal:** 1 per day at t ∈ U(0.3, 0.7)·Dl. Same melt rules. +5·mult Snow and +35 Chill.
@@ -225,10 +232,12 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 |---|---|---|---|---|
 | 0 | 0 | 30 | 40° | Tutorial chunk 0; Day 1 validator floor 70; a **parked cloud** rides with Nubs from 11:00 AM to 1:00 PM on Day 1, its shadow reachable by pointing the sun roughly north; guide always on; PHEW T = 20 |
 | 1 | 1 | 40 | 44° | PHEW T = 20 |
-| 2 | 2 | 40 | 48° | PHEW T = 20 |
+| 2 | 2 | 47 | 48° | PHEW T = 20 |
 | 3 | ≥ 3 | 55 | 48° | Standard |
 
 Days 2 and later use the standard table in every profile; only the drain persists for the whole run.
+
+**Endless drain ramp.** Endless runs without a `?profile=` or `?bot=` override also cap the drain by lifetime runs: the session sets `RunConfig.drain = endlessDrain(runs) = min(PROFILES[min(3, runs)].drain, 30 + 3·runs, 55)` (`ONBOARD_DRAIN = { start: 30, perRun: 3, max: 55 }`). Runs 0-9 drain 30, 33, 36, 39, 42, 45, 48, 51, 54, 55, and 55 from then on, so the step to the full drain is never a cliff. Daily, challenge and bot runs keep the profile drain, and world generation and the validator always use the profile drain, so a seed builds the same world either way.
 
 ### 6.1 Tutorial chunk (profile 0, y ∈ [−120, 480])
 - The trail is straight at x = 180.
@@ -265,6 +274,7 @@ Days 2 and later use the standard table in every profile; only the drain persist
 
 ### 7.2 Casters
 - **Placement:** GDD §2.7 rules and kinds.
+- **Spacing and the Day-1 wave:** the gap after a caster placed at daylight time t is spacing · (waveA + waveB·sin⁴(180°·t/Dl)) · U(0.7, 1.3), with t clamped to [0, Dl]; nights use a factor of 1 and the tutorial chunk is authored. Day 1 has waveA 0.75 and waveB 0.65: dense at dawn and dusk and 1.4× sparser at noon (a day mean of about 0.994), so noon is the boss from the first day. Later days are flat (waveA 1, waveB 0). Over 30 seeds the share of sun angles that fully shade Nubs on Day 1 is about 31% at 7-8 AM against 19% at 11 AM-1 PM.
 - **Clearance:** every ground footprint stays ≥ 20 u from the trail centerline, checked against a polyline sampled every 8 u. Push outward 4 u per step, at most 20 steps.
 - Rectangle kinds are rotated by 15°·randInt(0..11); trees are not rotated.
 - **Gate arch:**
@@ -317,8 +327,11 @@ Days 2 and later use the standard table in every profile; only the drain persist
 - `pointercancel` is a release with ω = 0.
 - `lostpointercapture` is treated as pointerup.
 
-### 8.2 Back-navigation trap
-On run start, call `history.pushState({play: 1}, '')`. On `popstate` during play, pause and push again. When leaving play normally (Home), don't trap.
+### 8.2 Back navigation (app-wide history sentinel)
+- One history entry of ours (`history.pushState({ shady: 1 }, '')`) is on top exactly while Back has something to do in the game: any screen except boot and the Title, or an open modal (confirm dialog, install or restore sheet; `ui.isModalOpen()`).
+- On `popstate`: an open modal closes first; play pauses; pause stays paused; any other screen takes its back action (menus → their parent, Results → Home, dying → skip, Settings → where it was opened from).
+- In-app navigation that ends that state (Home to the Title, or closing a dialog there) takes the entry back with `history.back()`. On the Title with nothing open there is no entry, so Back leaves the game.
+- A native shell routes its back button to the same handler and exits the app from the Title.
 
 ### 8.3 Run start
 - **Any pointerdown on the canvas** (not on DOM buttons) during Title/hold starts the run: `start` event plus catch semantics, and θ stays exactly θ0. The Title sway is a render-only offset and is discarded.
@@ -335,7 +348,7 @@ On run start, call `history.pushState({play: 1}, '')`. On `popstate` during play
 
 ### 8.5 Escape and visibility
 - Escape/P pauses.
-- Visibility hidden: pause. It never auto-resumes.
+- Visibility hidden: pause. Losing window focus during play (`blur`) pauses too. Nothing ever auto-resumes.
 
 ---
 
@@ -375,7 +388,7 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 | # | Cause | Condition | Line |
 |---|---|---|---|
 | 1 | glare | Glare ≥ 50% of lit weight over the last 60 ticks | "Glared by {Ball} at {time}." |
-| 2 | cloud | At tick −60, a cloud would have fully shaded Nubs at some θ within ±(180°/s × 1 s) of θ(−60) | "Melted by You at {time}. That cloud was right there." |
+| 2 | cloud | At tick −60, a cloud would have fully shaded Nubs at some θ within ±60° of θ(−60) (`cloudTurnRate` 60°/s × `cloudTurnSec` 1 s: a turn a player can make in that second) | "Melted by You at {time}. That cloud was right there." |
 | 3 | gap | last = the most recent caster that shaded the center sample (within 5 s); next = the nearest caster ahead whose shade covers Nubs' position 0.5 s ahead at some θ | "Melted by You at {time}, between {last} and {next}." If only one is known: "…, just past {last}." or "…, right before {next}." |
 | 4 | plain | none of the above | "Melted by You at {time}." |
 
@@ -391,21 +404,25 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 - **Missions:** 3 active, from the ordered pool below. A completed mission is replaced at the next run start.
   - When the pool is exhausted, it repeats with numeric thresholds ×tier, Day goals +(tier−1) and rewards ×tier.
 
-| # | Mission | Reward |
+| # | Mission (id) | Reward |
 |---|---|---|
-| 1 | Reach 9:00 AM | 10 |
-| 2 | Collect 10 flakes in one run | 10 |
-| 3 | Reach a ×3 multiplier | 15 |
-| 4 | Survive a noon (reach 12:30 PM) | 20 |
-| 5 | Ride a cloud's shadow for 3 s straight | 20 |
-| 6 | Reach Day 2 | 30 |
-| 7 | Two PHEWs in one run | 25 |
-| 8 | Collect an Ice Crystal | 20 |
-| 9 | Hold ×5 for 8 s | 30 |
-| 10 | Walk under a gate arch between 11 AM and 1 PM | 30 |
-| 11 | Pass 4 gazing balls in one run with no glare contact | 30 |
-| 12 | Reach Day 3 | 50 |
-| 13 | Play today's Daily | 15 |
+| 1 | Reach 9:00 AM (`reach-9am`) | 10 |
+| 2 | Collect 10 flakes in one run (`flakes-10`) | 10 |
+| 3 | Survive a noon (reach 12:30 PM) (`survive-noon`) | 20 |
+| 4 | Reach a ×3 multiplier (`mult-3`) | 15 |
+| 5 | Ride a cloud's shadow for 3 s straight (`cloud-ride`) | 20 |
+| 6 | Reach Day 2 (`reach-day-2`) | 30 |
+| 7 | Collect an Ice Crystal (`ice-crystal`) | 20 |
+| 8 | Two PHEWs in one run (`two-phews`) | 25 |
+| 9 | Walk under a gate arch between 11 AM and 1 PM (`gate-arch`) | 30 |
+| 10 | Pass 2 gazing balls in one run with no glare contact (`clean-balls`) | 30 |
+| 11 | Reach Day 3 (`reach-day-3`) | 50 |
+| 12 | Reach a ×4 multiplier (`hold-x5`) | 30 |
+| 13 | Play today's Daily (`play-daily`) | 15 |
+
+- A fresh save opens with Reach 9:00 AM, Collect 10 flakes and Survive a noon: three goals a first-timer can see happen.
+- Multiplier goals clamp at ×5 (tier II of both reads "Reach a ×5 multiplier"). `hold-x5` keeps its id; a save whose unfinished `hold-x5` had progress (seconds held at ×5, which implies ×5 was reached) migrates that progress to ×5 once.
+- "Play today's Daily" counts a run that used a Daily try, even one that ends after midnight.
 
 ### 11.2 Achievements (8)
 
@@ -427,14 +444,17 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
   - A try is counted **and saved** when the run passes 6:30 AM.
   - Best progress is saved each in-game hour.
   - After 3 tries the button becomes Practice (unscored).
-- Unlocked after lifetime run 3 or after the first night.
+  - Results label the run 'Try n/3' (a counted try), 'Not counted' (it melted before 6:30 AM, so no try was used) or 'Practice' (another date, or no tries left when it began). Retry reads 'Retry · practice' when the next run of that date can't count.
+- **Unlocked after 3 completed lifetime runs**, i.e. once onboarding (profiles 0-2) is over. A save that already holds a Daily entry stays unlocked.
+- **Dates:** a date from `?mode=daily&date=` or a Daily challenge link is accepted only if it is a valid `YYYY-MM-DD` from 2026-01-01 (`DAILY_EPOCH`, Daily #1) through tomorrow's local date (ISO strings compare lexicographically); anything else is ignored.
+- **Midnight:** the session tells the UI about a new local date (checked at most once a second and when the page shows again); the Daily screen, the Title's Daily dot and the history refresh. A Play press on a screen still showing yesterday refreshes to today with a toast instead of starting yesterday's Daily.
 - The screen lists the last 14 days.
 
 ### 11.4 Share and challenges
 - **Share text:** as GDD §9, using the glyphs from §5.5 above.
 - **Challenge code:** base64url JSON `{"v":1,"k":"e","seed":N,"m":M,"s":S}` or `{"v":1,"k":"d","d":"YYYY-MM-DD","m":M,"s":S}`.
   - Example: Day 2 · 2:40 PM is m = 1240.
-  - A link is `<origin><path>#c=<code>`.
+  - A link is `<base>#c=<code>`. The base is the page's own address (origin + path) when it is served over http(s) and not in a native shell; otherwise `VITE_SHARE_URL` (the committed `.env` has `https://alnadel.github.io/NewGame/`, and the GitHub Pages build sets it to the Pages URL); otherwise there is no link line. A `file:` build never shares a `file:` link.
   - Opening a link shows a Title banner "Beat Day 2 · 2:40 PM". The run uses profile 3 and that seed (or that date's daily, unscored if not today).
   - A teal flag on the ruler marks the target.
 - **Share mechanism:** Web Share API, then clipboard, then a toast.
@@ -444,7 +464,9 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 - Memory fallback with a one-time toast.
 - `navigator.storage.persist()` after the first completed run.
 - **Backup code** (Settings): export copies base64url of JSON; import validates via migrate().
-- **iOS:** show the "Add to Home Screen" instructions sheet once after lifetime run 3, when not standalone.
+- **Other tabs:** the store adopts a save another tab or instance writes (storage events, and a re-read when the page shows again); a newer version's save on disk makes it read-only (`canPersist` false; Reset and Restore say so); the first failed write shows the one-time toast.
+- **iOS:** show the "Play SHADY from your Home Screen" sheet once after lifetime run 3, when not standalone and not in an in-app browser. The Home Screen app keeps its own storage, so the sheet copies a backup code first; the app's first launch with no runs offers to paste it (restore sheet).
+- **Android:** when the browser offers installation (`beforeinstallprompt`), Settings shows an "Install SHADY" row.
 
 ---
 
@@ -475,6 +497,16 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 | oracle (follows the validator DP), profile 3 | Reaches Day 8 on 100% of seeds |
 | world | Mean rescues per chunk ≤ 1.0; `unresolved` = 0 |
 
+**Advisory onboarding rows** (printed as PASS/MISS; they never fail `--check`). The `human` bot is a seeded model of a new player (250-350 ms reaction lag, aim noise, over/undershoot, minimum-jerk drags):
+
+| Bot | Goal |
+|---|---|
+| human, profile 0 | Reaches the first night on ≥ 50% of seeds |
+| human, profile 1 at `endlessDrain(1)` = 33 | Median run ≥ 30 s of real time |
+| human, profile 3 at `endlessDrain(4)` = 42 | Median run ≥ 25 s of real time |
+
+Each sim row also reports `melted%` (flakes melted ÷ all flakes resolved), the first-night share and the median run length in seconds. Current numbers are in `src/core/README.md` §11.
+
 Tune `src/config/days.ts`/`tuning.ts` until these pass. **Never weaken a target to make it pass**; report it instead.
 
 ---
@@ -490,8 +522,9 @@ Tune `src/config/days.ts`/`tuning.ts` until these pass. **Never weaken a target 
 | `?day=N&t=dawn\|noon\|dusk\|HH:MM` | Start at that day/time |
 | `?chill=N` | Starting Chill |
 | `?profile=0..3` | Force a profile |
-| `?bot=idle\|novice\|reactive\|oracle` | Autoplay with a bot |
+| `?bot=idle\|novice\|reactive\|oracle\|human` | Autoplay with a bot |
 | `?fast=N` | N× ticks per frame |
+| `?perf=0` | Full quality: no frame-time governor and no low-end device caps |
 | `?guide=always\|off` | Override the guide |
 | `?debug=1` | Overlay: FPS, ms/frame, sim/gen/render ms, counts, ε, θ, f, chunk/rescues; toggles to draw test points, masks and shadow outlines |
 | `?mute=1` | Mute audio |
