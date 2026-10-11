@@ -1,6 +1,9 @@
 // Results bottom sheet (GDD §5, V1_PLAN §8.4): the canvas Melt Map shows above it.
-// Big time, NEW BEST ribbon, death line typed at 30 chars/s, stats, missions with stamps, toasts.
+// Big time, NEW BEST ribbon, death line typed at 30 chars/s, the run's unlocks (achievements,
+// cosmetics, the Daily) as award chips, stats, missions with stamps.
 // Retry arms 0.3 s after the sheet appears; a tap on the map area above the sheet also retries.
+// The unlocks live in the sheet rather than the top toast stack: toasts there would sit over the
+// top of the Melt Map, where the named caster pins of the death line usually are.
 
 import { splitMinutes, formatTimeOfDay } from '../../core/format.ts';
 import { dailyNumber, DAILY_TRIES } from '../../meta/daily.ts';
@@ -9,6 +12,7 @@ import { h, setChildren } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ResultsView } from '../types.ts';
+import { toastIconName } from '../overlays.ts';
 import { button, hide, progressBar, setDisabled } from '../widgets.ts';
 
 const RETRY_ARM_MS = 300;
@@ -86,6 +90,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     h('span', { class: 'res-death-typed' }, deathTyped, h('span', { class: 'caret', 'aria-hidden': 'true' })),
   );
   const verdict = h('p', { class: 'res-verdict' });
+  const awards = h('ul', { class: 'res-awards', 'aria-label': 'Unlocked this run' });
   const stats = h('div', { class: 'res-stats' });
   const missionList = h('ul', { class: 'res-missions', 'aria-label': 'Missions' });
   const retryBtn = button(ctx, {
@@ -104,7 +109,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ribbon,
     // The score stays pinned; only stats and missions scroll on short screens.
     h('div', { class: 'res-top' }, h('div', { class: 'res-head' }, kicker, h('div', { class: 'res-head-actions' }, shareBtn, homeBtn)), time, death, verdict),
-    h('div', { class: 'res-scroll' }, stats, missionList),
+    h('div', { class: 'res-scroll' }, awards, stats, missionList),
     h('div', { class: 'res-actions' }, retryBtn),
   );
   const el = h('section', { class: 'scr scr-results' }, mapCatch, sheet);
@@ -147,12 +152,16 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const reduced = ctx.reducedMotion();
 
     // Header
-    if (result.mode === 'daily' && result.dailyDate) {
+    if (view.debug) {
+      kicker.textContent = 'Debug run · not saved';
+    } else if (result.mode === 'daily' && result.dailyDate) {
       const tryText = view.dailyTry != null ? `Try ${view.dailyTry}/${DAILY_TRIES}` : 'Practice';
       kicker.textContent = `Daily #${dailyNumber(result.dailyDate)} · ${tryText}`;
     } else {
       kicker.textContent = result.mode === 'challenge' ? 'Challenge run' : 'Nubs made it to';
     }
+    // A debug run's score isn't real: no share text or challenge link for it.
+    hide(shareBtn, view.debug === true);
     const { day, minute } = splitMinutes(result.minutes);
     dayBadge.textContent = `Day ${day}`;
     clock.textContent = formatTimeOfDay(minute);
@@ -237,9 +246,22 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       stampAt += STAMP_GAP_MS;
     });
 
-    outcome.toasts.forEach((t, i) => {
+    // Unlocks: chips at the top of the scroll area (their space is held from the start so nothing
+    // jumps), popping in one by one after the stamps.
+    const chips = outcome.toasts.map((t) =>
+      h(
+        'li',
+        { class: `award award--${t.tone ?? 'ink'}` },
+        h('span', { class: 'award-ic', 'aria-hidden': 'true' }, icon(toastIconName(t.icon ?? 'info'))),
+        h('span', { class: 'award-text' }, t.text),
+      ),
+    );
+    setChildren(awards, ...chips);
+    hide(awards, chips.length === 0);
+    chips.forEach((chip, i) => {
       later(stampAt + 250 + i * TOAST_GAP_MS, () => {
-        ctx.toast(t.text, { icon: t.icon, tone: t.tone });
+        chip.classList.add('is-in');
+        chip.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
         ctx.sound('unlock');
       });
     });

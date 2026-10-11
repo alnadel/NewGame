@@ -27,6 +27,11 @@ const TOAST_ICON: Record<ToastIcon, IconName> = {
   lock: 'lock',
 };
 
+/** The icon a toast (or a Results award chip) shows for a ToastSpec icon. */
+export function toastIconName(i: ToastIcon): IconName {
+  return TOAST_ICON[i];
+}
+
 export interface ToastStack {
   el: HTMLElement;
   show(text: string, options?: ToastOptions): void;

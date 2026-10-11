@@ -12,6 +12,7 @@ import {
   dailyProgress,
   dailyStatus,
   dailyTryStarted,
+  debugRunOutcome,
   equipCosmetic,
   isDailyUnlocked,
   itemState,
@@ -119,6 +120,21 @@ describe('applyRunResult: stats, bests and wallet', () => {
     expect(s.stats.reachedNight).toBe(true);
     expect(s.stats.daysSurvived).toBe(1);
     expect(s.stats.maxDay).toBe(2);
+  });
+});
+
+describe('debug runs (sim-altering URL params)', () => {
+  it('earn, unlock and change nothing, and the outcome mirrors the save', () => {
+    const save = play(defaults(), run(300, { snow: 12, flakes: 9 }));
+    const before = JSON.stringify(save);
+    const o = debugRunOutcome(save, run(720 * 6 + 360, { snow: 40, phews: 30, cloudRideBest: 12 }));
+    expect(JSON.stringify(save)).toBe(before);
+    expect(o.newBest).toBe(false);
+    expect([o.snowEarned, o.missionSnow, o.walletBefore, o.walletAfter]).toEqual([0, 0, save.stats.wallet, save.stats.wallet]);
+    expect(o.runSnow).toBe(40);
+    expect([o.achievementsUnlocked, o.cosmeticsUnlocked, o.toasts, o.missionsCompleted]).toEqual([[], [], [], []]);
+    expect(o.missions).toEqual(activeMissionViews(save));
+    expect(o.dailyUnlocked).toBe(false);
   });
 });
 

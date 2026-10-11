@@ -42,6 +42,8 @@ export interface ResultsView {
   dailyTry?: number | null;
   /** Challenge runs: the target score in in-game minutes. */
   challengeTarget?: number;
+  /** A run started with sim-altering debug URL params: not scored, saved or shareable. */
+  debug?: boolean;
 }
 
 /** Title banner shown when the page was opened from a challenge link. */

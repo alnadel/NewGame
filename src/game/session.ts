@@ -30,6 +30,7 @@ import {
   applyRunResult,
   beginRun,
   buyCosmetic,
+  debugRunOutcome,
   dailyProgress,
   dailyStatus,
   dailyTryStarted,
@@ -56,7 +57,7 @@ import { guideAlpha, HintTracker, type GuideSetting } from './assist.ts';
 import { Fx } from './fx.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
-import { startTFor, type Params } from './params.ts';
+import { isDebugRun, startTFor, type Params } from './params.ts';
 import { Governor } from './perf.ts';
 
 const DYING_S = 1.1;
@@ -131,6 +132,11 @@ export class Session {
   private usedUrlSeed = false;
   private nextRun: SimState | null = null;
   private runActive = false;
+  /**
+   * Sim-altering debug URL params are present (?day, ?t, ?chill, ?profile, ?bot, ?fast, ?guide):
+   * such runs are not scored, saved, shared or counted as Daily tries.
+   */
+  private readonly debugRuns: boolean;
 
   // Death / results.
   private deathAt = -1;
@@ -161,6 +167,7 @@ export class Session {
   constructor(deps: SessionDeps) {
     this.d = deps;
     this.params = deps.params;
+    this.debugRuns = isDebugRun(deps.params);
     this.gov.enabled = deps.params.perf;
     this.clock.fast = deps.params.fast;
     this.renderer = new Renderer(deps.canvas);
@@ -651,10 +658,12 @@ export class Session {
     this.runActive = true;
     const store = this.d.store;
     this.lifetimeRuns = store.get().stats.runs;
-    const begun = beginRun(store.get());
-    if (begun.save !== store.get()) {
-      store.set(begun.save);
-      this.ui.setSave(begun.save);
+    if (!this.debugRuns) {
+      const begun = beginRun(store.get());
+      if (begun.save !== store.get()) {
+        store.set(begun.save);
+        this.ui.setSave(begun.save);
+      }
     }
     this.trap();
     this.setGhost('off');
@@ -802,7 +811,7 @@ export class Session {
   /** Daily: a try is counted (and saved at once) when the run passes 6:30 AM. */
   private checkDailyTry(): void {
     const s = this.s;
-    if (this.dailyScored && this.dailyDate && !this.dailyCounted && s.phase !== 'hold' && s.minutes >= DAILY_COUNT_MINUTES) {
+    if (this.dailyScored && !this.debugRuns && this.dailyDate && !this.dailyCounted && s.phase !== 'hold' && s.minutes >= DAILY_COUNT_MINUTES) {
       this.dailyCounted = true;
       const r = dailyTryStarted(this.d.store.get(), this.dailyDate);
       this.dailyTry = r.tryNumber;
@@ -824,17 +833,22 @@ export class Session {
     result.melody = this.melody.slice();
     const setting = this.params.guide ?? save.settings.guide;
     result.assisted = setting === 'always';
-    const { save: next, outcome } = applyRunResult(save, result, { today: localDate(), dailyTry: this.dailyTry });
-    this.d.store.set(next);
-    this.d.store.flush();
-    this.ui.setSave(next);
     this.result = result;
-    this.outcome = outcome;
-    if (!next.flags.persistRequested) {
-      void requestPersistence();
-      this.d.store.update((sv) => {
-        sv.flags.persistRequested = true;
-      });
+    if (this.debugRuns) {
+      // Debug runs leave the save alone: no Snow, bests, missions, achievements or Daily tries.
+      this.outcome = debugRunOutcome(save, result);
+    } else {
+      const { save: next, outcome } = applyRunResult(save, result, { today: localDate(), dailyTry: this.dailyTry });
+      this.d.store.set(next);
+      this.d.store.flush();
+      this.ui.setSave(next);
+      this.outcome = outcome;
+      if (!next.flags.persistRequested) {
+        void requestPersistence();
+        this.d.store.update((sv) => {
+          sv.flags.persistRequested = true;
+        });
+      }
     }
     this.untrap();
     this.setGhost('off');
@@ -858,6 +872,7 @@ export class Session {
       outcome: this.outcome,
       dailyTry: this.result.mode === 'daily' ? this.dailyTry : undefined,
       ...(this.runChallenge ? { challengeTarget: this.runChallenge.m } : {}),
+      ...(this.debugRuns ? { debug: true } : {}),
     };
     this.ui.show('results', view);
     this.resultsAt = this.time;
@@ -868,7 +883,7 @@ export class Session {
       this.fx.confetti(40);
     }
     const save = this.d.store.get();
-    if (shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone() })) {
+    if (!this.debugRuns && shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone() })) {
       this.ui.showInstallSheet();
       this.d.store.update((sv) => {
         sv.flags.installSheetShown = true;
@@ -903,7 +918,7 @@ export class Session {
   }
 
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
-    if (!this.result) return 'failed';
+    if (!this.result || this.debugRuns) return 'failed';
     const payload = buildShare(this.result, location.origin + location.pathname, this.dailyTry);
     return shareText({ text: payload.text });
   }
@@ -945,9 +960,11 @@ export class Session {
     const start = this.hints.update(dt, s.cfg.profile, s.nubs.f, s.sunUp, s.guide.now, s.sun.theta, this.input.pointerDown || this.input.keyDown);
     if (start) {
       this.setGhost(this.hints.dir);
-      this.d.store.update((sv) => {
-        sv.flags.hintsShown += 1;
-      });
+      if (!this.debugRuns) {
+        this.d.store.update((sv) => {
+          sv.flags.hintsShown += 1;
+        });
+      }
     } else if (was && this.hints.active <= 0) {
       this.setGhost('off');
     }

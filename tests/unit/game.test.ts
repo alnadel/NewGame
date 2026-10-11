@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { guideAlpha, HintTracker, nearestSafe, widestArc } from '../../src/game/assist.ts';
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
-import { parseParams, startTFor } from '../../src/game/params.ts';
+import { isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
 import { Input, type InputHost } from '../../src/game/input.ts';
 import { Governor } from '../../src/game/perf.ts';
 
@@ -102,6 +102,16 @@ describe('URL params', () => {
     expect(parseParams('?bot=nope&fast=-3').bot).toBeNull();
     expect(parseParams('?mode=daily&date=2026-10-11').date).toBe('2026-10-11');
   });
+  it('flags sim-altering params as unscored debug runs', () => {
+    expect(isDebugRun(parseParams(''))).toBe(false);
+    expect(isDebugRun(parseParams('?seed=7&test=1&mute=1&debug=1&perf=0'))).toBe(false);
+    expect(isDebugRun(parseParams('?mode=daily&date=2026-10-01'))).toBe(false);
+    for (const q of ['?day=7', '?t=noon', '?chill=20', '?profile=3', '?bot=oracle', '?fast=4', '?guide=always']) {
+      expect(isDebugRun(parseParams(q))).toBe(true);
+    }
+    expect(isDebugRun(parseParams('?fast=1'))).toBe(false);
+  });
+
   it('maps t= to seconds after dawn', () => {
     expect(startTFor('dawn', 1)).toBe(0);
     expect(startTFor('noon', 1)).toBe(25);

@@ -71,3 +71,13 @@ export function startTFor(t: string | null, day: number): number | null {
   const frac = Math.max(0, Math.min(719, minutes)) / 720;
   return frac * dl;
 }
+
+/**
+ * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
+ * a forced profile, fast-forward or a guide override. Such runs are not scored, saved, shared or
+ * counted as Daily tries (they work in production builds for QA). ?seed, ?mode=daily&date, ?mute,
+ * ?debug, ?test and ?perf don't make a run a debug run.
+ */
+export function isDebugRun(p: Params): boolean {
+  return p.day !== null || p.t !== null || p.chill !== null || p.profile !== null || p.bot !== null || p.fast > 1 || p.guide !== null;
+}

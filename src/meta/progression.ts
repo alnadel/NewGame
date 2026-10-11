@@ -205,6 +205,29 @@ export function applyRunResult(
 }
 
 /** Call when a run starts: completed missions are swapped for fresh ones (V1_PLAN §11.1). Pure. */
+/**
+ * Results data for a debug run (sim-altering URL params such as ?day=, ?bot=, ?chill=): nothing is
+ * earned, unlocked or saved, so the outcome only mirrors the save as it is.
+ */
+export function debugRunOutcome(save: SaveV1, result: RunResult): RunOutcome {
+  const wallet = save.stats.wallet;
+  return {
+    newBest: false,
+    prevBestMinutes: save.stats.bestMinutes,
+    runSnow: Math.max(0, Math.floor(result.stats.snow)),
+    missionSnow: 0,
+    snowEarned: 0,
+    walletBefore: wallet,
+    walletAfter: wallet,
+    missions: activeMissionViews(save),
+    missionsCompleted: [],
+    achievementsUnlocked: [],
+    cosmeticsUnlocked: [],
+    dailyUnlocked: false,
+    toasts: [],
+  };
+}
+
 export function beginRun(save: SaveV1): { save: SaveV1; dealt: MissionView[] } {
   if (!save.missions.active.some((m) => m.done)) return { save, dealt: [] };
   const next = cloneSave(save);

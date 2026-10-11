@@ -1154,6 +1154,68 @@
   color: var(--accent-ink);
 }
 
+/* The run's unlocks (achievements, cosmetics, the Daily): chips that pop in after the stamps. */
+.res-awards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.award {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 12px 4px 4px;
+  border-radius: 12px;
+  background: var(--paper);
+  font-weight: 800;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 180ms ease,
+    transform 320ms var(--ease-back);
+}
+
+.award.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.award--gold {
+  background: var(--gold-soft);
+}
+
+.award--accent {
+  background: var(--accent-soft);
+}
+
+.award-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--paper-2);
+}
+
+.award-ic .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.award--gold .award-ic {
+  background: var(--gold);
+}
+
+.award--accent .award-ic {
+  background: var(--accent);
+}
+
 .res-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
