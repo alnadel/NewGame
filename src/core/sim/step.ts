@@ -1,0 +1,184 @@
+// step(): advances a run by exactly one 1/60 s tick (TECH_SPEC §4, with V1_PLAN fixes).
+//
+// Order: sun → clock (+ night/dawn/noon/hour events) → sun vector and Nubs' position → world hard
+// guarantee and pruning → coverage → Chill/multiplier/PHEW (or night regen) → pickups → gates and
+// balls passed → history → death → guide. Everything is pure arithmetic on the state.
+
+import { dayParams } from '../../config/days.ts';
+import { TUNING } from '../../config/tuning.ts';
+import {
+  dayStartTick,
+  dayTicks,
+  elevation,
+  hourTicks,
+  nightTicks,
+  noonBannerTick,
+  noonPassedTick,
+  scoreMinutes,
+  minutesOfDay,
+  TICK_HZ,
+  yAtDayTick,
+} from '../clock.ts';
+import { cosD, sinD, tanD } from '../dmath.ts';
+import { lowerBound, pruneWorld } from '../gen/store.ts';
+import { ensureGenerated } from '../gen/world.ts';
+import type { Caster, GazingBall } from '../objects.ts';
+import { trailX } from '../trail.ts';
+import { deathCause } from './deathcause.ts';
+import { guideDue, updateGuide } from './guide.ts';
+import { pushHistory } from './history.ts';
+import { applyDaylight, applyNight, computeCoverage, hourGlyph } from './nubs.ts';
+import { updatePickups } from './pickups.ts';
+import { updateSun } from './sun.ts';
+import type { InputFrame, SimState } from './types.ts';
+
+const W = TUNING.world;
+const RECENT = TUNING.death.recentTicks;
+/** A ball counts as passed once Nubs is beyond the reach of its glare. */
+const BALL_PASS = TUNING.glare.cap + TUNING.glare.radius;
+const GATE_NOON_FROM = 300;
+const GATE_NOON_TO = 420;
+
+/** Derives time, elevation, sun vector and Nubs' position from (day, dayTick, θ). */
+export function syncTime(s: SimState): void {
+  const daylight = s.dayTick < dayTicks(s.day);
+  s.tDay = s.dayTick / TICK_HZ;
+  s.tickAbs = dayStartTick(s.day) + s.dayTick;
+  s.tAbs = s.tickAbs / TICK_HZ;
+  s.minutes = scoreMinutes(s.day, s.dayTick);
+  s.eps = daylight ? elevation(s.params, s.tDay) : 0;
+  s.sunUp = s.eps > 0;
+  s.tanEps = s.sunUp ? tanD(s.eps) : 0;
+  s.cot = s.sunUp ? 1 / s.tanEps : 0;
+  s.ux = cosD(s.sun.theta);
+  s.uy = sinD(s.sun.theta);
+  s.nubs.y = yAtDayTick(s.day, s.dayTick);
+  s.nubs.x = trailX(s.world.trail, s.nubs.y);
+}
+
+/** Closes the in-game hour that just ended and emits hourEnd. */
+function endHour(s: SimState, hour: number): void {
+  const glyph = hourGlyph(s.hourLit, s.hourHot);
+  s.hourGlyphs[s.hourGlyphs.length - 1]?.push(glyph);
+  s.events.push({ e: 'hourEnd', day: s.day, hour, glyph });
+  s.hourLit = 0;
+  s.hourHot = s.nubs.chill < TUNING.nubs.lowChill;
+}
+
+/** Advances the clock one tick and fires its transitions. */
+function advanceClock(s: SimState): void {
+  s.tick++;
+  s.dayTick++;
+  const dl = dayTicks(s.day);
+  if (s.dayTick === dl + nightTicks(s.day)) {
+    s.day++;
+    s.dayTick = 0;
+    s.params = dayParams(s.day, s.cfg.profile);
+    s.phase = 'day';
+    s.nubs.chill = s.nubs.maxChill;
+    s.flakesToday = 0;
+    s.stats.dayReached = s.day;
+    s.stats.nightsReached++;
+    s.hourGlyphs.push([]);
+    s.hourLit = 0;
+    s.hourHot = false;
+    s.events.push({ e: 'dawn', day: s.day });
+    return;
+  }
+  if (s.dayTick === dl) {
+    s.phase = 'night';
+    s.events.push({ e: 'nightStart', day: s.day });
+  }
+  if (s.dayTick === noonBannerTick(s.day)) s.events.push({ e: 'noonBanner' });
+  if (s.dayTick === noonPassedTick(s.day)) s.events.push({ e: 'noonPassed' });
+  const ht = hourTicks(s.day);
+  if (s.dayTick <= dl && s.dayTick % ht === 0) endHour(s, s.dayTick / ht - 1);
+}
+
+/** Gate arches walked under and gazing balls left behind between prevY and Nubs' y. */
+function passObjects(s: SimState, prevY: number): void {
+  const y = s.nubs.y;
+  const cs = s.world.casters;
+  for (let i = lowerBound(cs, prevY); i < cs.length; i++) {
+    const c = cs[i] as Caster;
+    if (c.y > y) break;
+    if (!c.gate || c.y <= prevY) continue;
+    const m = minutesOfDay(s.day, s.dayTick);
+    const noon = s.phase === 'day' && m >= GATE_NOON_FROM && m <= GATE_NOON_TO;
+    if (noon) s.stats.gateNoon = true;
+    s.events.push({ e: 'gateArch', noon });
+  }
+  const bs = s.world.balls;
+  for (let i = lowerBound(bs, prevY - BALL_PASS); i < bs.length; i++) {
+    const b = bs[i] as GazingBall;
+    if (b.y + BALL_PASS > y) break;
+    if (b.y + BALL_PASS <= prevY) continue;
+    const clean = !s.glaredBalls.has(b.id);
+    if (clean) s.stats.ballsPassedClean++;
+    s.events.push({ e: 'ballPassed', clean });
+  }
+}
+
+function pushRecent(s: SimState): void {
+  const o = (s.recentCount % RECENT) * 4;
+  const nb = s.nubs;
+  s.recent[o] = s.sun.theta;
+  s.recent[o + 1] = nb.f * 5;
+  s.recent[o + 2] = nb.glare * 2;
+  s.recent[o + 3] = nb.glareBallId;
+  s.recentCount++;
+}
+
+function die(s: SimState): void {
+  s.phase = 'dead';
+  s.nubs.chill = 0;
+  s.stats.minutes = s.minutes;
+  s.hourGlyphs[s.hourGlyphs.length - 1]?.push('melt');
+  const info = deathCause(s);
+  s.death = info;
+  s.events.push({ e: 'death', info });
+}
+
+// Scratch frame for the run-start tick (its rotation is discarded so θ stays exactly θ0).
+const startFrame: InputFrame = { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
+
+/** Advances the run by one tick. s.events holds this tick's events afterwards. */
+export function step(s: SimState, input: InputFrame): void {
+  s.events.length = 0;
+  if (s.phase === 'dead') return;
+  let inp = input;
+  if (s.phase === 'hold') {
+    // Any touch (or a rotation key) starts the run with catch semantics; θ stays θ0 this tick.
+    if (!input.downEdge && input.key === 0) return;
+    s.phase = 'day';
+    s.events.push({ e: 'start' });
+    startFrame.down = input.down;
+    startFrame.downEdge = input.downEdge;
+    startFrame.upEdge = input.upEdge;
+    startFrame.release = input.release;
+    inp = startFrame;
+  }
+
+  updateSun(s, inp);
+  advanceClock(s);
+  const prevY = s.nubs.y;
+  syncTime(s);
+  const daylight = s.phase === 'day';
+
+  ensureGenerated(s.world, s.nubs.y + W.hardAhead);
+  if (s.tick % TICK_HZ === 0) pruneWorld(s.world, s.nubs.y - W.pruneBehind, s.tAbs - 2);
+
+  computeCoverage(s);
+  if (daylight) applyDaylight(s);
+  else applyNight(s);
+  updatePickups(s, daylight);
+  passObjects(s, prevY);
+  pushHistory(s);
+  pushRecent(s);
+
+  if (daylight && s.nubs.chill <= 0) {
+    die(s);
+    return;
+  }
+  if (guideDue(s)) updateGuide(s);
+}

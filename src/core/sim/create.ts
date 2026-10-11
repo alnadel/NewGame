@@ -1,0 +1,120 @@
+// createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
+
+import { dayParams } from '../../config/days.ts';
+import { TUNING } from '../../config/tuning.ts';
+import { dayTicks } from '../clock.ts';
+import { ensureGenerated, createWorld } from '../gen/world.ts';
+import { syncTime } from './step.ts';
+import { computeCoverage } from './nubs.ts';
+import { updateGuide } from './guide.ts';
+import type { RunStats } from './events.ts';
+import type { RunConfig, SimState } from './types.ts';
+
+function freshStats(day: number): RunStats {
+  return {
+    flakes: 0,
+    flakesMelted: 0,
+    crystals: 0,
+    flowers: 0,
+    phews: 0,
+    snow: 0,
+    maxMult: 1,
+    x5HoldBest: 0,
+    cloudRideBest: 0,
+    cloudSeconds: 0,
+    ballsPassedClean: 0,
+    ballGlared: false,
+    gateNoon: false,
+    dayReached: day,
+    nightsReached: 0,
+    minutes: 0,
+    litTotal: 0,
+  };
+}
+
+/**
+ * Creates a run: builds the world (validated through Nubs + 1600 u), puts Nubs at the start (or at
+ * cfg.startDay/startT for debugging) with the sun at θ0, and computes coverage and the guide so the
+ * Title can render the live scene. The clock stays frozen until the first touch.
+ */
+export function createRun(cfg: RunConfig): SimState {
+  const world = createWorld(cfg.seed, cfg.profile, cfg.tutorial);
+  const day = Math.max(1, Math.floor(cfg.startDay ?? 1));
+  const dayTick = Math.min(dayTicks(day) - 1, Math.max(0, Math.round((cfg.startT ?? 0) * TUNING.tick.hz)));
+  const maxChill = TUNING.nubs.maxChill;
+  const theta0 = world.theta0;
+  const s: SimState = {
+    cfg: { ...cfg },
+    params: dayParams(day, cfg.profile),
+    phase: 'hold',
+    tick: 0,
+    day,
+    dayTick,
+    tDay: 0,
+    tickAbs: 0,
+    tAbs: 0,
+    minutes: 0,
+    eps: 0,
+    tanEps: 0,
+    cot: 0,
+    sunUp: false,
+    ux: 1,
+    uy: 0,
+    theta0,
+    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0 },
+    nubs: {
+      x: 0,
+      y: 0,
+      chill: Math.min(maxChill, Math.max(1, cfg.startChill ?? maxChill)),
+      maxChill,
+      w: new Float64Array(5),
+      f: 0,
+      glare: 0,
+      mult: 1,
+      shadeTicks: 0,
+      litTicks: 0,
+      x5Ticks: 0,
+      phewOpen: true,
+      highChillTick: (cfg.startChill ?? maxChill) >= TUNING.phew.armChill ? 0 : -1e9,
+      litSince: -1,
+      shaderId: -1,
+      lastShaderId: -1,
+      lastShaderName: '',
+      lastShaderTick: -1e9,
+      cloudId: -1,
+      rideId: -1,
+      rideTicks: 0,
+      glareBallId: -1,
+      prevGlareBallId: -1,
+    },
+    guide: {
+      now: new Uint8Array(360),
+      next: new Uint8Array(360),
+      glare: new Uint8Array(360),
+      lit: new Uint8Array(360),
+      tick: 0,
+      sunUp: false,
+    },
+    world,
+    stats: freshStats(day),
+    hourGlyphs: [[]],
+    hourLit: 0,
+    hourHot: false,
+    history: new Float64Array(TUNING.history.capacity * 4),
+    historyCount: 0,
+    nextHistoryY: 0,
+    recent: new Float64Array(TUNING.death.recentTicks * 4),
+    recentCount: 0,
+    events: [],
+    death: null,
+    flakesToday: 0,
+    captured: new Set(),
+    glaredBalls: new Set(),
+  };
+  syncTime(s);
+  s.nextHistoryY = s.nubs.y;
+  ensureGenerated(world, s.nubs.y + TUNING.world.hardAhead);
+  computeCoverage(s);
+  updateGuide(s);
+  return s;
+}
