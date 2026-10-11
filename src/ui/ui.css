@@ -706,7 +706,8 @@
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  max-height: calc(100% - (var(--nubs-y, 68%) - var(--wt)) - var(--halo-r, 44px));
+  /* 1 px of slack: --nubs-y and --halo-r arrive rounded to whole px. */
+  max-height: calc(100% - (var(--nubs-y, 68%) - var(--wt)) - var(--halo-r, 44px) - 1px);
   padding: 0 var(--pad-x-r) calc(var(--in-bottom) + 14px) var(--pad-x-l);
 }
 

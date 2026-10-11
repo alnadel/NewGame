@@ -224,8 +224,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const nubsY = ctx.rootPx('--nubs-y');
     const haloR = ctx.rootPx('--halo-r');
     if (nubsY !== null && haloR !== null) {
-      const limit = nubsY + haloR;
-      if (bottomCluster.getBoundingClientRect().top < limit) bottomCluster.classList.add('no-labels');
+      // The chips are the cluster's top row; when the column can't hold it all they overflow
+      // upward, so measure them rather than the (capped) cluster box. 1 px covers the rounding of
+      // the published vars.
+      const limit = nubsY + haloR + 1;
+      if (chips.getBoundingClientRect().top < limit) bottomCluster.classList.add('no-labels');
     }
 
     // A tall banner (large text, small phone) must not reach the chips: shrink the logo, then drop
@@ -251,13 +254,16 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       const c = t.top + t.height / 2;
       return new DOMRect(t.left, c - 18, t.width, 68);
     };
+    const wordHits = (): boolean => hitsAny(word?.getBoundingClientRect());
+    const handHits = (): boolean => hitsAny(handBox());
     // The key line sits between the word and the hand: dropping it lowers the word, so try that first.
-    if (hitsAny(keys?.getBoundingClientRect()) || hitsAny(word?.getBoundingClientRect())) el.classList.add('no-ghost-keys');
-    if (hitsAny(word?.getBoundingClientRect())) el.classList.add('no-ghost-word');
-    if (hitsAny(handBox())) {
-      el.classList.add('no-ghost-word', 'is-compact');
-      if (hitsAny(handBox())) el.classList.add('no-ghost');
-    }
+    if (hitsAny(keys?.getBoundingClientRect()) || wordHits()) el.classList.add('no-ghost-keys');
+    // "drag" and the hand teach the game, so make room before dropping them: a smaller logo, then
+    // no tagline (small phones with a notch, large text, a tall banner).
+    if (wordHits() || handHits()) el.classList.add('is-compact');
+    if (wordHits() || handHits()) el.classList.add('no-tagline');
+    if (wordHits()) el.classList.add('no-ghost-word');
+    if (handHits()) el.classList.add('no-ghost-word', 'no-ghost');
   }
 
   function refresh(): void {
