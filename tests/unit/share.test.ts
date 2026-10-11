@@ -9,6 +9,7 @@ import {
   dayStripLines,
   endlessShareText,
   glyphStrip,
+  resolveShareBase,
 } from '../../src/meta/share.ts';
 import { decodeChallenge } from '../../src/meta/challenge.ts';
 
@@ -123,8 +124,8 @@ describe('buildShare', () => {
   it('links an endless run to its seed', () => {
     const p = buildShare(result({}), 'https://shady.example/play/');
     expect(p.challenge).toEqual({ v: 1, k: 'e', seed: 123456789, m: 1240, s: 61 });
-    expect(p.url.startsWith('https://shady.example/play/#c=')).toBe(true);
-    expect(decodeChallenge(p.url.split('#c=')[1]!)).toEqual(p.challenge);
+    expect(p.url?.startsWith('https://shady.example/play/#c=')).toBe(true);
+    expect(decodeChallenge(p.url!.split('#c=')[1]!)).toEqual(p.challenge);
     expect(p.text.split('\n')).toEqual([
       'SHADY: Nubs made it to Day 2 · 2:40 PM',
       '❄️❄️🟨🟨🔥🔥🟨🟨💧',
@@ -143,5 +144,43 @@ describe('buildShare', () => {
   it('shares a replayed daily challenge as practice', () => {
     const p = buildShare(result({ mode: 'challenge', dailyDate: '2026-10-01' }), 'https://x/', 2);
     expect(p.text.split('\n')[0]).toBe('SHADY Daily #274: Day 2 · 2:40 PM (practice)');
+  });
+
+  it('leaves the link line out without a base URL', () => {
+    const e = buildShare(result({}), null);
+    expect(e.url).toBeNull();
+    expect(e.text.split('\n')).toEqual(['SHADY: Nubs made it to Day 2 · 2:40 PM', '❄️❄️🟨🟨🔥🔥🟨🟨💧', 'Snow 61 · 2 PHEWs']);
+    const d = buildShare(result({ mode: 'daily', dailyDate: '2026-10-11' }), null, 1);
+    expect(d.text.split('\n')).toHaveLength(3);
+    expect(d.text).not.toMatch(/#c=|https?:|file:/);
+  });
+});
+
+describe('canonical share base URL', () => {
+  const CONFIGURED = 'https://alnadel.github.io/NewGame/';
+  const at = (over: Partial<Parameters<typeof resolveShareBase>[0]>) =>
+    resolveShareBase({ protocol: 'https:', origin: 'https://shady.example', pathname: '/play/', native: false, configured: CONFIGURED, ...over });
+
+  it('links a web page to itself', () => {
+    expect(at({})).toBe('https://shady.example/play/');
+    expect(at({ protocol: 'http:', origin: 'http://localhost:4173', pathname: '/' })).toBe('http://localhost:4173/');
+    expect(at({ configured: undefined })).toBe('https://shady.example/play/');
+  });
+
+  it('uses the configured URL off the web (file:, capacitor://, native shells)', () => {
+    expect(at({ protocol: 'file:', origin: 'null', pathname: '/home/me/dist-single/index.html' })).toBe(CONFIGURED);
+    expect(at({ protocol: 'capacitor:', origin: 'capacitor://localhost', pathname: '/' })).toBe(CONFIGURED);
+    // Android's Capacitor serves https://localhost: still native, so not a link anyone can open.
+    expect(at({ origin: 'https://localhost', pathname: '/', native: true })).toBe(CONFIGURED);
+  });
+
+  it('shares no link at all when nothing is configured off the web', () => {
+    const base = at({ protocol: 'file:', origin: 'null', pathname: '/x/index.html', configured: '' });
+    expect(base).toBeNull();
+    expect(at({ protocol: 'file:', origin: 'null', pathname: '/x/index.html', configured: undefined })).toBeNull();
+    const p = buildShare(result({}), base);
+    expect(p.text).not.toContain('file:');
+    expect(p.text).not.toContain('Beat my run');
+    expect(p.url).toBeNull();
   });
 });
