@@ -30,7 +30,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
         'div',
         { class: 'mcard-top' },
         h('span', { class: 'mcard-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
-        h('span', { class: 'reward reward--chip', 'aria-label': `Reward ${m.reward} Snow` }, icon('snow'), `+${m.reward}`),
+        h('span', { class: 'reward reward--chip' }, icon('snow'), h('span', { 'aria-hidden': 'true' }, `+${m.reward}`), h('span', { class: 'sr-only' }, `Reward ${m.reward} Snow`)),
       ),
       h(
         'div',

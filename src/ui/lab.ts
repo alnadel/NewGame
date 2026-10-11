@@ -13,7 +13,7 @@ import { equippedLooks, type CosmeticId, type Equipped, type HatLook, type NoseL
 import { addDays, localDate } from '../meta/daily.ts';
 import { applyRunResult, buyCosmetic, equipCosmetic, resetProgress } from '../meta/progression.ts';
 import { backupErrorMessage, exportBackup, importBackup } from '../meta/backup.ts';
-import { buildShare } from '../meta/share.ts';
+import { buildShare, shareBase } from '../meta/share.ts';
 import { shareText } from '../platform/share.ts';
 import { simulateSafeArea } from '../platform/safeArea.ts';
 import { createUi } from './ui.ts';
@@ -403,7 +403,7 @@ function mount(screen: LabScreen, variant: string): void {
   const log = (...args: unknown[]): void => console.info('[lab]', ...args);
   let lastResults: ResultsView | null = null;
   const callbacks: UiCallbacks = {
-    startRun: (kind) => log('startRun', kind),
+    startRun: (kind, date) => log('startRun', kind, date ?? ''),
     retry: () => log('retry'),
     home: () => log('home'),
     pause: () => log('pause'),
@@ -417,7 +417,7 @@ function mount(screen: LabScreen, variant: string): void {
     },
     share: async () => {
       const run = lastResults?.result;
-      return run ? shareText({ text: buildShare(run, location.origin + location.pathname).text }) : 'failed';
+      return run ? shareText({ text: buildShare(run, shareBase()).text }) : 'failed';
     },
     settingsChanged: (settings) => {
       save = { ...save, settings: sanitizeSettings(settings) };
@@ -449,6 +449,7 @@ function mount(screen: LabScreen, variant: string): void {
     resetProgress: () => {
       save = resetProgress(save);
       ui?.setSave(save);
+      return { ok: true };
     },
     dismissChallenge: () => log('dismissChallenge'),
     dragHandoff: (e) => {

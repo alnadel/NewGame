@@ -2,6 +2,9 @@
 // try-on preview whose drawing is injected by the integrator (callbacks.renderWardrobePreview).
 // Tapping an owned item equips it; tapping anything else previews it and the action button shows
 // what it takes (buy / not enough Snow / achievement).
+//
+// The grid is built once per slot tab; selecting, buying and equipping update the tile buttons in
+// place, so keyboard focus stays on the tile that was pressed.
 
 import {
   COSMETIC_SLOTS,
@@ -22,25 +25,28 @@ import { button, menuHeader, setButtonLabel, setDisabled, snowChip } from '../wi
 
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose' };
 const PREVIEW_CSS = 168;
+const STATES: readonly ItemState[] = ['equipped', 'owned', 'buyable', 'expensive', 'locked'];
 
-function statusOf(c: Cosmetic, state: ItemState): HTMLElement {
+const costOf = (c: Cosmetic): number => (c.unlock.kind === 'snow' ? c.unlock.cost : 0);
+
+/** The tile's status line. Unaffordable prices carry a lock glyph, not just a muted color. */
+function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (Node | string)[] } {
   switch (state) {
     case 'equipped':
-      return h('span', { class: 'tile-status is-equipped' }, icon('check'), 'Wearing');
+      return { cls: 'is-equipped', nodes: [icon('check'), 'Wearing'] };
     case 'owned':
-      return h('span', { class: 'tile-status' }, 'Owned');
+      return { cls: '', nodes: ['Owned'] };
     case 'buyable':
+      return { cls: 'is-cost', nodes: [icon('snow'), String(costOf(c))] };
     case 'expensive':
-      return h('span', { class: `tile-status is-cost${state === 'expensive' ? ' is-short' : ''}` },
-        icon('snow'), c.unlock.kind === 'snow' ? String(c.unlock.cost) : '');
+      return { cls: 'is-cost is-short', nodes: [icon('lock'), String(costOf(c))] };
     case 'locked':
-      return h('span', { class: 'tile-status is-locked' }, icon('lock'),
-        c.unlock.kind === 'achievement' ? (getAchievement(c.unlock.achievement)?.name ?? 'Locked') : 'Locked');
+      return { cls: 'is-locked', nodes: [icon('lock'), c.unlock.kind === 'achievement' ? (getAchievement(c.unlock.achievement)?.name ?? 'Locked') : 'Locked'] };
   }
 }
 
 /** How a tile's state is announced by screen readers. */
-function spokenState(c: Cosmetic, state: ItemState): string {
+function spokenState(c: Cosmetic, state: ItemState, wallet: number): string {
   switch (state) {
     case 'equipped':
       return 'wearing';
@@ -49,19 +55,29 @@ function spokenState(c: Cosmetic, state: ItemState): string {
     case 'locked':
       return c.unlock.kind === 'achievement' ? `locked until ${getAchievement(c.unlock.achievement)?.name ?? 'an achievement'}` : 'locked';
     case 'buyable':
+      return `costs ${costOf(c)} Snow`;
     case 'expensive':
-      return `costs ${c.unlock.kind === 'snow' ? c.unlock.cost : 0} Snow`;
+      return `costs ${costOf(c)} Snow, you need ${costOf(c) - wallet} more`;
   }
+}
+
+interface Tile {
+  c: Cosmetic;
+  btn: HTMLButtonElement;
+  status: HTMLElement;
 }
 
 export function createWardrobeScreen(ctx: UiContext): Screen {
   let slot: CosmeticSlot = 'scarf';
   /** Try-on selection per slot (starts at what's equipped). */
   let selected: Equipped = { ...ctx.save().equipped };
+  /** The slot the grid's tiles were built for. */
+  let builtFor: CosmeticSlot | null = null;
+  const tiles = new Map<string, Tile>();
 
   const wallet = snowChip('0');
   const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, 'aria-hidden': 'true' });
-  const itemName = h('p', { class: 'preview-name', 'aria-live': 'polite' });
+  const itemName = h('p', { class: 'preview-name' });
   const itemNote = h('p', { class: 'preview-note' });
   const action = button(ctx, { label: 'Wearing', icon: 'check', variant: 'primary', size: 'lg', block: true, sound: null, onPress: () => act() });
 
@@ -117,11 +133,14 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     if (state === 'owned') {
       ctx.sound('equip');
       ctx.cb.equip(id);
+      refresh();
+      ctx.announce(`Wearing the ${c.name}.`);
     } else if (state === 'buyable') {
       if (ctx.cb.buy(id)) {
         ctx.sound('buy');
+        refresh();
         ctx.toast(`${c.name}: yours! Looking sharp, Nubs.`, { icon: 'gift', tone: 'accent' });
-        grid.querySelector(`[data-id="${id}"]`)?.classList.add('is-bought');
+        tiles.get(id)?.btn.classList.add('is-bought');
       } else {
         ctx.sound('deny');
       }
@@ -143,6 +162,50 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       ctx.sound('tap');
     }
     refresh();
+    const now = itemState(ctx.save(), c.id);
+    ctx.announce(now === 'equipped' ? `Wearing the ${c.name}.` : `${c.name} selected, ${spokenState(c, now, ctx.save().stats.wallet)}.`);
+  }
+
+  /** Builds the tile buttons for the current slot (tab switches only). */
+  function buildGrid(): void {
+    const active = document.activeElement;
+    const focusedId = active instanceof HTMLElement && grid.contains(active) ? (active.dataset.id ?? null) : null;
+    tiles.clear();
+    setChildren(
+      grid,
+      ...cosmeticsForSlot(slot).map((c) => {
+        const status = h('span', { class: 'tile-status' });
+        const btn = h(
+          'button',
+          { class: 'tile', type: 'button', 'data-id': c.id },
+          h('span', { class: 'tile-art', 'aria-hidden': 'true' }, cosmeticSwatch(c)),
+          h('span', { class: 'tile-name', 'aria-hidden': 'true' }, c.name),
+          status,
+        );
+        btn.addEventListener('click', () => select(c));
+        tiles.set(c.id, { c, btn, status });
+        return h('li', null, btn);
+      }),
+    );
+    builtFor = slot;
+    if (focusedId !== null) tiles.get(focusedId)?.btn.focus({ preventScroll: true });
+  }
+
+  /** Updates every tile's state classes, label and status in place (focus stays put). */
+  function updateTiles(): void {
+    const save = ctx.save();
+    for (const { c, btn, status } of tiles.values()) {
+      const state = itemState(save, c.id);
+      const isSel = selected[slot] === c.id;
+      for (const s of STATES) btn.classList.toggle(`is-${s}`, s === state);
+      btn.classList.toggle('is-selected', isSel);
+      btn.setAttribute('aria-pressed', String(isSel));
+      btn.setAttribute('aria-label', `${c.name}, ${spokenState(c, state, save.stats.wallet)}`);
+      const s = statusContent(c, state);
+      status.className = `tile-status${s.cls ? ` ${s.cls}` : ''}`;
+      status.setAttribute('aria-hidden', 'true');
+      status.replaceChildren(...s.nodes);
+    }
   }
 
   function refresh(): void {
@@ -157,31 +220,8 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     }
     grid.setAttribute('aria-labelledby', `tab-${slot}`);
 
-    setChildren(
-      grid,
-      ...cosmeticsForSlot(slot).map((c) => {
-        const state = itemState(save, c.id);
-        const tile = h(
-          'li',
-          null,
-          h(
-            'button',
-            {
-              class: `tile is-${state}${selected[slot] === c.id ? ' is-selected' : ''}`,
-              type: 'button',
-              'data-id': c.id,
-              'aria-pressed': String(selected[slot] === c.id),
-              'aria-label': `${c.name}, ${spokenState(c, state)}`,
-            },
-            h('span', { class: 'tile-art' }, cosmeticSwatch(c)),
-            h('span', { class: 'tile-name' }, c.name),
-            statusOf(c, state),
-          ),
-        );
-        tile.firstElementChild?.addEventListener('click', () => select(c));
-        return tile;
-      }),
-    );
+    if (builtFor !== slot) buildGrid();
+    updateTiles();
 
     // Action button and caption for the selected item in this slot.
     const id = selected[slot] as CosmeticId;
@@ -204,19 +244,17 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
         itemNote.textContent = 'In your closet.';
         break;
       case 'buyable':
-        setButtonLabel(action, `Buy for ${c.unlock.kind === 'snow' ? c.unlock.cost : 0} Snow`);
+        setButtonLabel(action, `Buy for ${costOf(c)} Snow`);
         action.classList.add('btn--gold');
         setDisabled(action, false);
         itemNote.textContent = 'Trying it on. Like it?';
         break;
-      case 'expensive': {
-        const cost = c.unlock.kind === 'snow' ? c.unlock.cost : 0;
-        setButtonLabel(action, `Need ${cost - save.stats.wallet} more Snow`);
+      case 'expensive':
+        setButtonLabel(action, `Need ${costOf(c) - save.stats.wallet} more Snow`);
         action.classList.add('btn--plain');
         setDisabled(action, true);
         itemNote.textContent = 'Collect flakes and finish missions to earn Snow.';
         break;
-      }
       case 'locked': {
         const a = c.unlock.kind === 'achievement' ? getAchievement(c.unlock.achievement) : undefined;
         setButtonLabel(action, a ? `Earn “${a.name}”` : 'Locked');

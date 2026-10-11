@@ -46,6 +46,7 @@ const ICONS = {
   warn: `<path d="M12 4.2 21 19.6H3Z"/><path d="M12 10v4.6M12 17.1v.1"/>`,
   bolt: `<path d="M13 3.2 5.6 13.4H12l-1 7.4 7.4-10.2H12Z"/>`,
   phew: `<path d="M3.5 9h10.6a3 3 0 1 0-3-3M3.5 13h14.6a3 3 0 1 1-3 3M3.5 17h6"/>`,
+  keyboard: `<rect x="2.6" y="6" width="18.8" height="12" rx="2.6"/><path d="M6.4 10h.1M9.2 10h.1M12 10h.1M14.8 10h.1M17.6 10h.1M6.4 13.8h.1M17.6 13.8h.1M9.4 13.8h5.2"/>`,
 } as const;
 
 export type IconName = keyof typeof ICONS;

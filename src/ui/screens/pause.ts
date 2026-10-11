@@ -3,9 +3,11 @@
 import { h } from '../dom.ts';
 import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
+import type { ScreenId } from '../types.ts';
 import { button } from '../widgets.ts';
 
 export function createPauseScreen(ctx: UiContext): Screen {
+  let from: ScreenId = 'play';
   const resume = (): void => {
     ctx.go('play');
     ctx.cb.resume();
@@ -49,12 +51,17 @@ export function createPauseScreen(ctx: UiContext): Screen {
 
   return {
     el,
-    enter() {},
+    enter(prev) {
+      from = prev;
+      // Coming back from Settings isn't news; arriving from play is.
+      if (prev !== 'settings') ctx.announce('Paused');
+    },
     back: resume,
     activate() {
       resume();
       return true;
     },
-    initialFocus: () => resumeBtn,
+    // Back from Settings: the button that opened it.
+    initialFocus: () => (from === 'settings' ? settingsBtn : resumeBtn),
   };
 }

@@ -9,7 +9,23 @@ import {
   promptInstall,
   type SwEnvironment,
 } from '../../src/platform/pwa.ts';
-import { appIconSvg, logoSvg } from '../../src/ui/art.ts';
+import { appIconSvg, logoLayers, logoSvg } from '../../src/ui/art.ts';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { RunResult } from '../../src/core/sim/events.ts';
+import { defaults } from '../../src/meta/save.ts';
+import type { SaveV1 } from '../../src/meta/saveTypes.ts';
+import {
+  challengeGoalText,
+  dailyRunLabel,
+  multiplierTile,
+  NOT_COUNTED_NOTE,
+  resultsAnnouncement,
+  retryLabel,
+  settingsSections,
+} from '../../src/ui/labels.ts';
+import type { ResultsView } from '../../src/ui/types.ts';
 
 describe('screen transitions', () => {
   const legal: [ScreenId, ScreenId][] = [
@@ -149,5 +165,101 @@ describe('brand art', () => {
 
   it('labels the logo for assistive tech', () => {
     expect(logoSvg()).toContain('aria-label="SHADY"');
+    // The Title's layered logo: only the wordmark is the image; the other layers are hidden.
+    const l = logoLayers();
+    expect(l.word).toContain('aria-label="SHADY"');
+    for (const layer of [l.bloom, l.rays, l.face, l.shadow]) expect(layer).toContain('aria-hidden="true"');
+    expect(l.origin).toEqual({ x: '83.3333%', y: '37.2093%' });
+  });
+});
+
+describe('Results labels (U3, U8, U17)', () => {
+  const TODAY = '2026-10-11';
+  const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 3, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 2, nightsReached: 1, minutes: 1240, litTotal: 0 };
+  const view = (over: Partial<ResultsView> = {}, result: Partial<RunResult> = {}): ResultsView => ({
+    result: {
+      mode: 'daily', seed: 1, profile: 3, minutes: 1240, day: 2, clock: '', stats, hourGlyphs: [], melody: [], assisted: false, dailyDate: TODAY,
+      death: { day: 2, tDay: 0, minutes: 1240, time: '2:40 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 2:40 PM.' },
+      ...result,
+    },
+    outcome: { newBest: false, prevBestMinutes: 0, runSnow: 0, missionSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [] },
+    ...over,
+  });
+  const saveWith = (tries: number): SaveV1 => {
+    const s = defaults(1);
+    if (tries > 0) s.daily[TODAY] = { tries, bestMinutes: 0, bestSnow: 0, glyphs: '' };
+    return s;
+  };
+
+  it('names how a Daily run counted', () => {
+    expect(dailyRunLabel(2, true)).toBe('Try 2/3');
+    expect(dailyRunLabel(1, undefined)).toBe('Try 1/3');
+    expect(dailyRunLabel(null, true)).toBe('Not counted');
+    expect(dailyRunLabel(undefined, true)).toBe('Not counted');
+    expect(dailyRunLabel(null, false)).toBe('Practice');
+    expect(dailyRunLabel(undefined, undefined)).toBe('Practice');
+    expect(NOT_COUNTED_NOTE).toBe('Melted before 6:30 AM, so no try was used');
+  });
+
+  it("says 'Retry · practice' exactly when the next Daily retry can't count", () => {
+    const v = view({ dailyTry: 1, dailyScored: true, dailyDate: TODAY });
+    expect(retryLabel(v, saveWith(1), TODAY)).toBe('Retry');
+    expect(retryLabel(v, saveWith(2), TODAY)).toBe('Retry');
+    expect(retryLabel(v, saveWith(3), TODAY)).toBe('Retry · practice');
+    // Another date (yesterday's run after midnight, or a past date).
+    expect(retryLabel(v, saveWith(1), '2026-10-12')).toBe('Retry · practice');
+    expect(retryLabel(view({ dailyDate: '2026-10-01' }, { dailyDate: '2026-10-01' }), saveWith(0), TODAY)).toBe('Retry · practice');
+    // Endless, challenge and debug runs: plain Retry.
+    expect(retryLabel(view({}, { mode: 'endless', dailyDate: undefined }), saveWith(3), TODAY)).toBe('Retry');
+    expect(retryLabel(view({}, { mode: 'challenge' }), saveWith(3), TODAY)).toBe('Retry');
+    expect(retryLabel(view({ debug: true }), saveWith(3), TODAY)).toBe('Retry');
+  });
+
+  it('shows the best multiplier, or the seconds held at ×5', () => {
+    expect(multiplierTile({ x5HoldBest: 0, maxMult: 3 })).toEqual({ value: '×3', caption: 'best multiplier' });
+    expect(multiplierTile({ x5HoldBest: 0, maxMult: 0 })).toEqual({ value: '×1', caption: 'best multiplier' });
+    expect(multiplierTile({ x5HoldBest: 6.44, maxMult: 5 })).toEqual({ value: '6.4 s', caption: 'longest ×5' });
+  });
+
+  it('announces the run for screen readers', () => {
+    expect(resultsAnnouncement(view({ dailyTry: 2, dailyScored: true }))).toBe('Nubs melted at Day 2 · 2:40 PM. Daily try 2 of 3.');
+    expect(resultsAnnouncement(view({ dailyTry: null, dailyScored: true }))).toBe('Nubs melted at Day 2 · 2:40 PM. Daily not counted.');
+    const best = view({}, { mode: 'endless', dailyDate: undefined });
+    best.outcome.newBest = true;
+    expect(resultsAnnouncement(best)).toBe('Nubs melted at Day 2 · 2:40 PM. New best!');
+    expect(resultsAnnouncement(view({ challengeTarget: 1200 }, { mode: 'challenge', dailyDate: undefined }))).toBe('Nubs melted at Day 2 · 2:40 PM. Challenge beaten.');
+    expect(resultsAnnouncement(view({ challengeTarget: 1300 }, { mode: 'challenge', dailyDate: undefined }))).toBe('Nubs melted at Day 2 · 2:40 PM. Challenge not beaten.');
+  });
+});
+
+describe('Settings sections (U16)', () => {
+  it('hides backup, restore and reset mid-run', () => {
+    expect(settingsSections('title')).toEqual({ backup: true, danger: true, backupNote: false });
+    expect(settingsSections('pause')).toEqual({ backup: false, danger: false, backupNote: true });
+  });
+});
+
+describe('challenge banner goal (U10)', () => {
+  it('wraps only after "Beat" and after "·"', () => {
+    const t = challengeGoalText(1240);
+    expect(t.replace(/ /g, ' ')).toBe('Beat Day 2 · 2:40 PM');
+    // Breakable spaces: after "Beat" and after "·" only.
+    expect(t.split(' ')).toEqual(['Beat', 'Day 2 ·', '2:40 PM']);
+  });
+});
+
+describe('no aria-label on role-less spans (U17)', () => {
+  it('src/ui never labels a span without a role', () => {
+    const dir = fileURLToPath(new URL('../../src/ui/', import.meta.url));
+    const files = readdirSync(dir, { recursive: true }).map(String).filter((f) => f.endsWith('.ts'));
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(join(dir, f), 'utf8');
+      for (const m of src.matchAll(/h\('span',\s*\{([^}]*)\}/g)) {
+        const attrs = m[1] ?? '';
+        if (/'aria-label'/.test(attrs) && !/role:/.test(attrs)) offenders.push(`${f}: ${attrs.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

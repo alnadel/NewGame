@@ -38,19 +38,18 @@ export interface SunOptions {
   cy: number;
   /** Core disc radius; rays reach 1.62× and the bloom 1.95×. */
   r: number;
-  /** Adds the CSS hooks `.sun-rays` (slow spin) and `.sun-bob` used on the Title. */
+  /** Adds the class hooks `.sun-rays` and `.sun-bob` (for animating a standalone logo). */
   animated?: boolean;
 }
 
-/** The smug sun in sunglasses as an SVG <g> (plus its <defs>). Drawn in unit space, then scaled. */
-export function sunMascot(o: SunOptions): string {
-  const bloom = `${o.id}-bloom`;
-  const raysGroup = `<g${o.animated ? ' class="sun-rays"' : ''}><path d="${rays(12, 1.1, 1.62, 11)}" fill="${SUN.rays}" stroke="${SUN.rays}" stroke-width="0.08" stroke-linejoin="round"/></g>`;
-  return `<defs><radialGradient id="${bloom}"><stop offset="0" stop-color="${SUN.bloom}" stop-opacity="0.38"/><stop offset="1" stop-color="${SUN.bloom}" stop-opacity="0"/></radialGradient></defs>
-<g transform="translate(${o.cx} ${o.cy}) scale(${o.r})"><g${o.animated ? ' class="sun-bob"' : ''}>
-<circle r="1.95" fill="url(#${bloom})"/>
-${raysGroup}
-<circle r="1" fill="${SUN.core}" stroke="${SUN.rim}" stroke-width="0.1"/>
+/** The mascot's pieces in unit space, bottom to top: bloom, rays, then the disc with its face. */
+function sunPieces(id: string): { defs: string; bloom: string; rays: string; face: string } {
+  const bloom = `${id}-bloom`;
+  return {
+    defs: `<defs><radialGradient id="${bloom}"><stop offset="0" stop-color="${SUN.bloom}" stop-opacity="0.38"/><stop offset="1" stop-color="${SUN.bloom}" stop-opacity="0"/></radialGradient></defs>`,
+    bloom: `<circle r="1.95" fill="url(#${bloom})"/>`,
+    rays: `<path d="${rays(12, 1.1, 1.62, 11)}" fill="${SUN.rays}" stroke="${SUN.rays}" stroke-width="0.08" stroke-linejoin="round"/>`,
+    face: `<circle r="1" fill="${SUN.core}" stroke="${SUN.rim}" stroke-width="0.1"/>
 <ellipse cx="-0.52" cy="0.3" rx="0.17" ry="0.1" fill="${SUN.cheek}" opacity="0.45"/>
 <ellipse cx="0.52" cy="0.3" rx="0.17" ry="0.1" fill="${SUN.cheek}" opacity="0.45"/>
 <path d="M-0.88 -0.25Q0 -0.33 0.88 -0.25" fill="none" stroke="${SUN.glasses}" stroke-width="0.09" stroke-linecap="round"/>
@@ -58,22 +57,78 @@ ${raysGroup}
 <path d="${LENS}" transform="translate(0.41 -0.1) scale(-1 1)" fill="${SUN.glasses}"/>
 <path d="M-0.11 -0.2Q0 -0.27 0.11 -0.2" fill="none" stroke="${SUN.glasses}" stroke-width="0.08" stroke-linecap="round"/>
 <path d="M-0.6 -0.08L-0.5 -0.19M-0.5 -0.01L-0.34 -0.18M0.24 -0.08L0.34 -0.19M0.34 -0.01L0.5 -0.18" stroke="${SUN.glint}" stroke-width="0.055" stroke-linecap="round"/>
-<path d="M-0.3 0.4Q0.02 0.6 0.32 0.36Q0.38 0.31 0.41 0.25" fill="none" stroke="${SUN.mouth}" stroke-width="0.085" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M-0.3 0.4Q0.02 0.6 0.32 0.36Q0.38 0.31 0.41 0.25" fill="none" stroke="${SUN.mouth}" stroke-width="0.085" stroke-linecap="round" stroke-linejoin="round"/>`,
+  };
+}
+
+/** The smug sun in sunglasses as an SVG <g> (plus its <defs>). Drawn in unit space, then scaled. */
+export function sunMascot(o: SunOptions): string {
+  const p = sunPieces(o.id);
+  const raysGroup = `<g${o.animated ? ' class="sun-rays"' : ''}>${p.rays}</g>`;
+  return `${p.defs}
+<g transform="translate(${o.cx} ${o.cy}) scale(${o.r})"><g${o.animated ? ' class="sun-bob"' : ''}>
+${p.bloom}
+${raysGroup}
+${p.face}
 </g></g>`;
 }
 
+/** Title logo geometry: viewBox 360 × 172, the sun at (300, 64) with radius 36. */
+const LOGO = { w: 360, h: 172, sunX: 300, sunY: 64, sunR: 36 } as const;
+
+function logoText(attrs: string): string {
+  return `<text x="180" y="150" text-anchor="middle" font-family="${FONT}" font-weight="900" font-size="94" textLength="300" lengthAdjust="spacingAndGlyphs" rotate="-5 3 -3 4 -4" ${attrs}>SHADY</text>`;
+}
+
+const WORD_ATTRS = `fill="${PAPER}" stroke="${INK}" stroke-width="11" stroke-linejoin="round" paint-order="stroke"`;
+const SHADOW_ATTRS = `fill="${INDIGO}" stroke="${INDIGO}" stroke-width="12" stroke-linejoin="round" opacity="0.45" transform="translate(-9 8)"`;
+
 /**
- * The Title logo: the SHADY wordmark in paper with an ink outline, casting a soft indigo shadow
- * down-left, away from the sun peeking over its top-right corner.
+ * The Title logo as one SVG: the SHADY wordmark in paper with an ink outline, casting a soft indigo
+ * shadow down-left, away from the sun peeking over its top-right corner. (The Title itself uses
+ * logoLayers(), the same picture split so its motions run on the compositor.)
  */
 export function logoSvg(): string {
-  const text = (attrs: string): string =>
-    `<text x="180" y="150" text-anchor="middle" font-family="${FONT}" font-weight="900" font-size="94" textLength="300" lengthAdjust="spacingAndGlyphs" rotate="-5 3 -3 4 -4" ${attrs}>SHADY</text>`;
-  return `<svg class="logo-svg" viewBox="0 0 360 172" role="img" aria-label="SHADY" xmlns="http://www.w3.org/2000/svg">
-${sunMascot({ id: 'logo-sun', cx: 300, cy: 64, r: 36, animated: true })}
-<g class="logo-shadow">${text(`fill="${INDIGO}" stroke="${INDIGO}" stroke-width="12" stroke-linejoin="round" opacity="0.45" transform="translate(-9 8)"`)}</g>
-${text(`fill="${PAPER}" stroke="${INK}" stroke-width="11" stroke-linejoin="round" paint-order="stroke"`)}
+  return `<svg class="logo-svg" viewBox="0 0 ${LOGO.w} ${LOGO.h}" role="img" aria-label="SHADY" xmlns="http://www.w3.org/2000/svg">
+${sunMascot({ id: 'logo-sun', cx: LOGO.sunX, cy: LOGO.sunY, r: LOGO.sunR, animated: true })}
+<g class="logo-shadow">${logoText(SHADOW_ATTRS)}</g>
+${logoText(WORD_ATTRS)}
 </svg>`;
+}
+
+export interface LogoLayers {
+  /** Sun bloom, rays and face: three stacked layers that bob together; the rays also spin. */
+  bloom: string;
+  rays: string;
+  face: string;
+  /** The wordmark's shadow, which sways. */
+  shadow: string;
+  /** The wordmark (the accessible image, labeled "SHADY"). */
+  word: string;
+  /** Sun center as percentages of the logo box: the transform-origin of the bob and the spin. */
+  origin: { x: string; y: string };
+}
+
+/**
+ * logoSvg() as separate full-size SVG layers with the same viewBox, so the Title can stack them in
+ * HTML wrappers and animate only the wrappers' transforms (composited, no SVG repaints). Sharing the
+ * full viewBox keeps every layer on the same pixel grid as the single SVG, so a still frame is
+ * pixel-identical to logoSvg().
+ */
+export function logoLayers(): LogoLayers {
+  const p = sunPieces('logo-sun');
+  const layer = (body: string, label?: string): string =>
+    `<svg class="logo-svg" viewBox="0 0 ${LOGO.w} ${LOGO.h}" ${label ? `role="img" aria-label="${label}"` : 'aria-hidden="true" focusable="false"'} xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+  const sun = (body: string): string => `<g transform="translate(${LOGO.sunX} ${LOGO.sunY}) scale(${LOGO.sunR})">${body}</g>`;
+  const pct = (v: number, of: number): string => `${((v / of) * 100).toFixed(4)}%`;
+  return {
+    bloom: layer(`${p.defs}${sun(p.bloom)}`),
+    rays: layer(sun(p.rays)),
+    face: layer(sun(p.face)),
+    shadow: layer(logoText(SHADOW_ATTRS)),
+    word: layer(logoText(WORD_ATTRS), 'SHADY'),
+    origin: { x: pct(LOGO.sunX, LOGO.w), y: pct(LOGO.sunY, LOGO.h) },
+  };
 }
 
 /**
