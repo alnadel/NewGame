@@ -2,6 +2,11 @@
 // a cut under reduced motion) to frame the last ~600 u of trail above the Results sheet. Footprint
 // dots are colored by Chill, the lit gap gets a red bracket, the named casters from the death line
 // are pinned with callout labels, and the puddle gets a marker with a little carrot.
+//
+// K10: nothing of the overlay ever shows under the Results sheet. The whole overlay is clipped to
+// the view above the sheet's top − 4 px; a callout that would cross the sheet's top − 6 px moves
+// above its pin head, and is left out (the pin dot stays) when it still doesn't fit. The callouts
+// fade in only once the camera pull has finished, so they never slide across the screen.
 
 import { historyAt, historyLength, type Caster, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
@@ -14,6 +19,48 @@ const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const BLUE = hex('#5AB8FF');
 const GOLD = hex('#FFC23D');
 const RED = hex('#FF5D5D');
+
+/** Camera pull (s; a cut under reduced motion), overlay fade-in, then the callouts' fade-in. */
+export const MAP_PULL_S = 1.4;
+export const MAP_FADE_S = 0.8;
+export const MAP_LABEL_FADE_S = 0.4;
+/** Overlay clip and callout limit above the Results sheet's top edge (CSS px). */
+const SHEET_CLIP_GAP = 4;
+const SHEET_LABEL_GAP = 6;
+
+/** Overlay and callout alphas at `mapT` seconds into the Results (into `out`). */
+export function mapAlphas(mapT: number, reducedMotion: boolean, out: MapOverlay): MapOverlay {
+  const pullEnd = reducedMotion ? 0 : MAP_PULL_S;
+  out.a = Math.max(0, Math.min(1, mapT / MAP_FADE_S));
+  out.labelA = Math.max(0, Math.min(1, (mapT - pullEnd) / MAP_LABEL_FADE_S));
+  return out;
+}
+
+/** From this mapT on, the map no longer moves or fades (only the puddle ring pulses). */
+export function mapSettleT(reducedMotion: boolean): number {
+  return Math.max(MAP_FADE_S, (reducedMotion ? 0 : MAP_PULL_S) + MAP_LABEL_FADE_S);
+}
+
+export interface MapOverlay {
+  /** Overlay alpha: wash, dots, bracket, pin heads, the puddle marker. */
+  a: number;
+  /** Callout alpha: labels and leader lines (0 during the pull). */
+  labelA: number;
+  /** The Results sheet's top edge (CSS px), or null. */
+  sheetTop: number | null;
+  time: number;
+  /** Draw the puddle ring and carrot (the Results backdrop cache leaves them out and draws them per frame). */
+  puddle: boolean;
+}
+
+/** Clips to the view above the Results sheet (K10). Call inside save()/restore(). */
+export function clipAboveSheet(g: CanvasRenderingContext2D, v: View, sheetTop: number | null): void {
+  if (sheetTop === null) return;
+  const bottom = Math.min(v.vy + v.vh, sheetTop - SHEET_CLIP_GAP);
+  g.beginPath();
+  g.rect(v.vx, v.vy, v.vw, Math.max(0, bottom - v.vy));
+  g.clip();
+}
 
 export interface MapFrame {
   /** World window. */
@@ -105,9 +152,12 @@ function chillColor(c: number): Rgb {
   return c >= 50 ? mix(GOLD, BLUE, (c - 50) / 50) : mix(RED, GOLD, c / 50);
 }
 
-/** Overlays on the world once the map is up (`a` fades them in). */
-export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame, a: number, time: number): void {
+/** Overlays on the world once the map is up (`o.a` fades them in), clipped above the sheet. */
+export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame, o: MapOverlay): void {
+  const a = o.a;
   if (a <= 0.01) return;
+  g.save();
+  clipAboveSheet(g, v, o.sheetTop);
   const S = v.S;
   // Paper wash so the overlays pop.
   g.globalAlpha = 0.22 * a;
@@ -175,6 +225,8 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
   // Pins for the named casters.
   const d = s.death;
   if (d) {
+    const limit = o.sheetTop === null ? Number.POSITIVE_INFINITY : o.sheetTop - SHEET_LABEL_GAP;
+    const top = v.vy + v.safe.top + 4;
     const pins: [number | undefined, string | undefined][] = [
       [d.lastId, d.lastName],
       [d.nextId, d.nextName],
@@ -182,52 +234,116 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
     for (const [id, name] of pins) {
       if (id === undefined || !name) continue;
       const c = s.world.byId.get(id);
-      if (c) pin(g, v, c, name, s.nubs.x, a);
+      if (c) pin(g, v, c, name, s.nubs.x, a, o.labelA, top, limit);
     }
     if (d.ballId !== undefined) {
       const ball = s.world.balls.find((b) => b.id === d.ballId);
       const c = ball ? s.world.byId.get(ball.casterId) : undefined;
-      if (c) pin(g, v, c, c.name, s.nubs.x, a);
+      if (c) pin(g, v, c, c.name, s.nubs.x, a, o.labelA, top, limit);
     }
-    // Puddle marker: a pulsing ring and a carrot.
-    const px = v.ox + d.x * S;
-    const py = v.oy - d.y * S;
-    const pr = 14 + 3 * Math.sin(time * 4);
-    g.strokeStyle = cssa(0xffffff, 0.9 * a);
-    g.lineWidth = 3;
-    g.beginPath();
-    g.arc(px, py, pr, 0, TAU);
-    g.stroke();
-    g.strokeStyle = cssa(0x2b2140, 0.5 * a);
-    g.lineWidth = 1.2;
-    g.beginPath();
-    g.arc(px, py, pr + 2, 0, TAU);
-    g.stroke();
-    carrotIcon(g, px + 16, py - 18, a);
+    if (o.puddle) drawPuddle(g, v, s, a, o.time);
   }
+  g.globalAlpha = 1;
+  g.restore();
+}
+
+/** The puddle marker: a pulsing ring and a carrot (the only part of a settled map that moves). */
+export function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number, time: number): void {
+  const d = s.death;
+  if (!d) return;
+  const px = v.ox + d.x * v.S;
+  const py = v.oy - d.y * v.S;
+  const pr = 14 + 3 * Math.sin(time * 4);
+  // As inside the overlay: the global alpha and the stroke colors both carry the fade. The line
+  // style is set here, so the Results cache and a full frame draw the very same pixels.
+  g.globalAlpha = a;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.strokeStyle = cssa(0xffffff, 0.9 * a);
+  g.lineWidth = 3;
+  g.beginPath();
+  g.arc(px, py, pr, 0, TAU);
+  g.stroke();
+  g.strokeStyle = cssa(0x2b2140, 0.5 * a);
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(px, py, pr + 2, 0, TAU);
+  g.stroke();
+  carrotIcon(g, px + 16, py - 18, a);
   g.globalAlpha = 1;
 }
 
-function pin(g: CanvasRenderingContext2D, v: View, c: Caster, name: string, trailX: number, a: number): void {
+/**
+ * Screen box (CSS px: x0, y0, x1, y1) holding every pixel drawPuddle can touch: the ring at its
+ * widest (r 17 + 2, plus half its 3 px stroke) and the carrot (from px + 16, py − 18, ~13 px out).
+ */
+export function puddleBox(v: View, s: SimState, out: Float64Array): boolean {
+  const d = s.death;
+  if (!d) return false;
+  const px = v.ox + d.x * v.S;
+  const py = v.oy - d.y * v.S;
+  out[0] = px - 23;
+  out[1] = py - 34;
+  out[2] = px + 32;
+  out[3] = py + 23;
+  return true;
+}
+
+function pin(
+  g: CanvasRenderingContext2D,
+  v: View,
+  c: Caster,
+  name: string,
+  trailX: number,
+  a: number,
+  labelA: number,
+  top: number,
+  limit: number,
+): void {
   const S = v.S;
   const sx = v.ox + c.x * S;
   const sy = v.oy - (c.y + 0.25 * Math.min(c.maxZ, 90)) * S;
-  const right = c.x >= trailX;
-  g.font = `800 13px ${FONT}`;
-  const label = name.charAt(0).toUpperCase() + name.slice(1);
-  const tw = g.measureText(label).width;
-  const w = tw + 18;
-  const h = 26;
-  let lx = right ? sx + 18 : sx - 18 - w;
-  lx = Math.max(v.vx + 6, Math.min(v.vx + v.vw - 6 - w, lx));
-  const ly = sy - 30;
-  // Leader line and pin head.
-  g.strokeStyle = cssa(0x2b2140, 0.75 * a);
-  g.lineWidth = 1.6;
-  g.beginPath();
-  g.moveTo(sx, sy);
-  g.lineTo(right ? lx : lx + w, ly + h / 2);
-  g.stroke();
+  // The callout: beside the pin (its bottom 4 px above the head), or straight above the head when
+  // that would reach under the sheet; left out when neither fits (or the head itself is hidden).
+  if (labelA > 0.01 && sy <= limit) {
+    const right = c.x >= trailX;
+    g.font = `800 13px ${FONT}`;
+    const label = name.charAt(0).toUpperCase() + name.slice(1);
+    const tw = g.measureText(label).width;
+    const w = tw + 18;
+    const h = 26;
+    let lx = right ? sx + 18 : sx - 18 - w;
+    let ly = sy - 30;
+    let above = false;
+    if (ly + h > limit) {
+      ly = Math.min(sy - 12, limit) - h;
+      lx = sx - w / 2;
+      above = true;
+    }
+    lx = Math.max(v.vx + 6, Math.min(v.vx + v.vw - 6 - w, lx));
+    // Leader end: the box's near side, or its bottom edge over the head.
+    const ax = above ? Math.max(lx + 13, Math.min(lx + w - 13, sx)) : right ? lx : lx + w;
+    const ay = above ? ly + h : ly + h / 2;
+    if (ly >= top) {
+      g.strokeStyle = cssa(0x2b2140, 0.75 * a * labelA);
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(sx, sy);
+      g.lineTo(ax, ay);
+      g.stroke();
+      g.fillStyle = cssa(0x2b2140, 0.18 * a * labelA);
+      roundRect(g, lx, ly + 2, w, h, 13);
+      g.fill();
+      g.fillStyle = cssa(0xffffff, 0.96 * a * labelA);
+      roundRect(g, lx, ly, w, h, 13);
+      g.fill();
+      g.fillStyle = cssa(0x2b2140, a * labelA);
+      g.textAlign = 'left';
+      g.textBaseline = 'middle';
+      g.fillText(label, lx + 9, ly + h / 2 + 1);
+    }
+  }
+  // Pin head.
   g.fillStyle = cssa(0x2b2140, a);
   g.beginPath();
   g.arc(sx, sy, 4.5, 0, TAU);
@@ -236,16 +352,6 @@ function pin(g: CanvasRenderingContext2D, v: View, c: Caster, name: string, trai
   g.beginPath();
   g.arc(sx, sy, 2, 0, TAU);
   g.fill();
-  g.fillStyle = cssa(0x2b2140, 0.18 * a);
-  roundRect(g, lx, ly + 2, w, h, 13);
-  g.fill();
-  g.fillStyle = cssa(0xffffff, 0.96 * a);
-  roundRect(g, lx, ly, w, h, 13);
-  g.fill();
-  g.fillStyle = cssa(0x2b2140, a);
-  g.textAlign = 'left';
-  g.textBaseline = 'middle';
-  g.fillText(label, lx + 9, ly + h / 2 + 1);
 }
 
 function carrotIcon(g: CanvasRenderingContext2D, x: number, y: number, a: number): void {

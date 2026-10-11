@@ -105,7 +105,15 @@ export function updatePalette(p: Palette, dayFrac: number, night: number, town: 
   p.tintColor = mix(k.tint, NIGHT.tint, n);
   p.tintMix = DAY_TINT_MIX + (NIGHT_TINT_MIX - DAY_TINT_MIX) * n;
   p.bar = darken(ground, 0.35);
-  p.nubsShade = mix(hex('#C9D6F2'), hex('#8E9AD0'), n * 0.6);
+  p.nubsShade = nubsShadeAt(n);
+}
+
+const NUBS_SHADE_DAY = hex('#C9D6F2');
+const NUBS_SHADE_NIGHT = hex('#8E9AD0');
+
+/** Nubs' cool shade tint at a night blend (0..1): 60 % of the way to the night tint at full night. */
+export function nubsShadeAt(night: number): Rgb {
+  return mix(NUBS_SHADE_DAY, NUBS_SHADE_NIGHT, night * 0.6);
 }
 
 /** A material color seen under the current light. */
