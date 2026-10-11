@@ -248,19 +248,62 @@ export function makePanner(ctx: BaseAudioContext, pan: number): AudioNode & { pa
 export const CRACKLE_GRAINS = 16;
 export const CRACKLE_SLOT = 0.006;
 
-function whiteNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
-  const n = Math.floor(ctx.sampleRate * seconds);
+/** Seconds of looped white and pink noise per context. */
+const NOISE_SECONDS = 2;
+/** Prewarm rate: the usual hardware rate; a 44.1 kHz context uses a prefix of the same samples. */
+const PREWARM_RATE = 48000;
+
+/**
+ * Noise samples computed ahead of the first tap (first-tap-audio-graph-in-gesture): the context
+ * and graph are built inside that gesture, and filling ~200k random samples there cost tens of ms
+ * on slow phones. prewarmNoise() fills them during the Title's idle time; AudioGraph then copies
+ * them into its buffers (copyToChannel) and falls back to computing them if they aren't ready or
+ * don't fit (a context faster than 48 kHz; crackle grains, whose envelope is in samples, need the
+ * exact rate).
+ */
+let warm: { rate: number; white: Float32Array<ArrayBuffer>; pink: Float32Array<ArrayBuffer>; crackle: Float32Array<ArrayBuffer> } | null = null;
+
+/** Computes the noise tables once (idempotent). */
+export function prewarmNoise(rate: number = PREWARM_RATE): void {
+  if (warm && warm.rate === rate) return;
+  const n = Math.floor(rate * NOISE_SECONDS);
+  warm = { rate, white: fillWhite(new Float32Array(n)), pink: fillPink(new Float32Array(n)), crackle: fillCrackle(new Float32Array(crackleLength(rate)), rate) };
+}
+
+/** True once prewarmNoise() has run (tests). */
+export function noiseWarm(): boolean {
+  return warm !== null;
+}
+
+function fillWhite(d: Float32Array): Float32Array<ArrayBuffer> {
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return d as Float32Array<ArrayBuffer>;
+}
+
+/** A mono buffer filled from `prefix` (when it is long enough) or by `fill`. */
+function noiseBuffer(
+  ctx: BaseAudioContext,
+  n: number,
+  prefix: Float32Array<ArrayBuffer> | null,
+  fill: (d: Float32Array) => void,
+): AudioBuffer {
   const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  if (prefix && prefix.length >= n) buf.copyToChannel(prefix.length === n ? prefix : prefix.subarray(0, n), 0);
+  else fill(buf.getChannelData(0));
   return buf;
+}
+
+function whiteNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
+  return noiseBuffer(ctx, Math.floor(ctx.sampleRate * seconds), warm?.white ?? null, fillWhite);
 }
 
 /** Pink noise via Paul Kellet's refined filter, normalised to a ±0.9 peak. */
 function pinkNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
-  const n = Math.floor(ctx.sampleRate * seconds);
-  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const d = buf.getChannelData(0);
+  return noiseBuffer(ctx, Math.floor(ctx.sampleRate * seconds), warm?.pink ?? null, fillPink);
+}
+
+function fillPink(d: Float32Array): Float32Array<ArrayBuffer> {
+  const n = d.length;
   let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
   let peak = 0;
   for (let i = 0; i < n; i++) {
@@ -278,16 +321,18 @@ function pinkNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
   }
   const k = peak > 0 ? 0.9 / peak : 1;
   for (let i = 0; i < n; i++) d[i] = (d[i] as number) * k;
-  return buf;
+  return d as Float32Array<ArrayBuffer>;
+}
+
+function crackleLength(rate: number): number {
+  return Math.floor(rate * CRACKLE_SLOT) * CRACKLE_GRAINS;
 }
 
 /** Short noise ticks with a 0.2 ms attack and a ~0.6 ms decay, random level and polarity. */
-function crackleGrains(ctx: BaseAudioContext): AudioBuffer {
-  const slot = Math.floor(ctx.sampleRate * CRACKLE_SLOT);
-  const buf = ctx.createBuffer(1, slot * CRACKLE_GRAINS, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  const atk = Math.max(1, Math.floor(ctx.sampleRate * 0.0002));
-  const tau = ctx.sampleRate * 0.0006;
+function fillCrackle(d: Float32Array, rate: number): Float32Array<ArrayBuffer> {
+  const slot = Math.floor(rate * CRACKLE_SLOT);
+  const atk = Math.max(1, Math.floor(rate * 0.0002));
+  const tau = rate * 0.0006;
   for (let g = 0; g < CRACKLE_GRAINS; g++) {
     const amp = 0.45 + 0.55 * Math.random();
     for (let i = 0; i < slot; i++) {
@@ -295,7 +340,13 @@ function crackleGrains(ctx: BaseAudioContext): AudioBuffer {
       d[g * slot + i] = amp * env * (Math.random() * 2 - 1);
     }
   }
-  return buf;
+  return d as Float32Array<ArrayBuffer>;
+}
+
+function crackleGrains(ctx: BaseAudioContext): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const prefix = warm && warm.rate === rate ? warm.crackle : null;
+  return noiseBuffer(ctx, crackleLength(rate), prefix, (d) => fillCrackle(d, rate));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -356,8 +407,8 @@ export class AudioGraph {
       music: new VoicePool(VOICE_CAPS.music),
       amb: new VoicePool(VOICE_CAPS.amb),
     };
-    this.white = whiteNoise(ctx, 2);
-    this.pink = pinkNoise(ctx, 2);
+    this.white = whiteNoise(ctx, NOISE_SECONDS);
+    this.pink = pinkNoise(ctx, NOISE_SECONDS);
     this.crackle = crackleGrains(ctx);
   }
 
@@ -416,6 +467,8 @@ export class AudioEngine {
   private unavailable = false;
   private disposed = false;
   private armed = false;
+  /** A first-gesture ensure() is queued (see onGesture). */
+  private deferred = false;
   private suspendedForHidden = false;
   private lastStatus: AudioStatus = 'locked';
   private readonly targets: EventTarget[] = [];
@@ -512,7 +565,25 @@ export class AudioEngine {
     return true;
   }
 
-  private readonly onGesture = (): void => {
+  /**
+   * The first pointerdown or keydown builds the context and graph in a task right after the event
+   * (first-tap-audio-graph-in-gesture): creating an AudioContext costs tens of ms on phones, and
+   * that would otherwise sit inside the press that starts the run. Chrome accepts the late start
+   * (the activation is still live); if a browser doesn't, the pointerup/touchend/click that follows
+   * calls ensure() inside its own handler, which also covers iOS (its touches only activate on the
+   * way up). Once a context exists, every gesture resumes it synchronously.
+   */
+  private readonly onGesture = (e: Event): void => {
+    if (!this.ctx && (e.type === 'pointerdown' || e.type === 'keydown')) {
+      if (!this.deferred) {
+        this.deferred = true;
+        setTimeout(() => {
+          this.deferred = false;
+          this.ensure();
+        }, 0);
+      }
+      return;
+    }
     this.ensure();
   };
 

@@ -1,10 +1,12 @@
 // The one object the game wires: createAudio() → ShadyAudio. It owns the engine (context,
 // unlock, mix), the router (events → cues, view → scene), the music and the ambience, and the
-// 25 ms scheduler interval. See src/audio/README.md for the per-frame and per-event contract.
+// scheduler pump: every update() (once per frame) pumps; a watchdog timer falls back to a 25 ms
+// interval only while frames stop coming. See src/audio/README.md for the per-frame and per-event
+// contract.
 
 import type { SimEvent } from '../core/sim/events.ts';
 import { Ambience } from './ambience.ts';
-import { AudioEngine } from './engine.ts';
+import { AudioEngine, prewarmNoise } from './engine.ts';
 import type { AudioStatus } from './engine.ts';
 import { Music } from './music.ts';
 import { RECIPES } from './recipes.ts';
@@ -22,6 +24,14 @@ export { createAudioView } from './scene.ts';
 /** Scheduler cadence and lookahead (TECH_SPEC §10). */
 const PUMP_MS = 25;
 const LOOKAHEAD_S = 0.12;
+/**
+ * The pump watchdog: one timeout every WATCHDOG_MS checks that update() ran in the last STALE_MS;
+ * if not (no frames: a stalled main thread, a hidden page whose context still runs), the 25 ms
+ * interval pump takes over until update() comes back. While frames run, that is 4 timer wake-ups
+ * a second instead of 40.
+ */
+const WATCHDOG_MS = 250;
+const STALE_MS = 100;
 /** One-shots start this far ahead of currentTime so their attack is never cut off. */
 const START_AHEAD_S = 0.01;
 
@@ -53,8 +63,10 @@ export interface ShadyAudio {
 
   /** Every SimEvent of the frame (all ticks), in order, with the current view. */
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void;
-  /** Once per rendered frame (also while paused or on menus) with real seconds elapsed. */
+  /** Once per rendered frame (also while paused or on menus) with real seconds elapsed. Pumps the scheduler. */
   update(view: Readonly<AudioView>, dtReal: number): void;
+  /** Precomputes the noise tables (call when idle, before the first tap: e.g. requestIdleCallback). */
+  prewarm(): void;
   /** New run (start or retry): clears throttles, timers and the results melody. */
   resetRun(): void;
 
@@ -73,6 +85,10 @@ export interface ShadyAudio {
   dispose(): void;
 }
 
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 export function createAudio(opts: AudioOptions = {}): ShadyAudio {
   return new ShadyAudioImpl(opts);
 }
@@ -88,7 +104,11 @@ class ShadyAudioImpl implements ShadyAudio {
   private readonly router: SfxRouter;
   private music: Music | null = null;
   private amb: Ambience | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  /** The fallback 25 ms pump (only while update() has stopped coming) and the watchdog timeout. */
+  private fallback: ReturnType<typeof setInterval> | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
+  private lastUpdate = Number.NEGATIVE_INFINITY;
+  private disposed = false;
   private analyser: AnalyserNode | null = null;
   private sfxVolume: number;
   private musicVolume: number;
@@ -109,8 +129,9 @@ class ShadyAudioImpl implements ShadyAudio {
       g.setVolumes(this.sfxVolume, this.musicVolume);
       g.setMuted(this.isMuted);
       this.music = new Music(g);
+      // Cheap: its layers are built when first wanted, not inside the unlocking gesture.
       this.amb = new Ambience(g);
-      this.timer = setInterval(this.pump, PUMP_MS);
+      this.armWatchdog();
     });
     const target = opts.unlockTarget === undefined ? (typeof window === 'undefined' ? null : window) : opts.unlockTarget;
     if (target) this.engine.attachUnlock(target);
@@ -157,8 +178,17 @@ class ShadyAudioImpl implements ShadyAudio {
 
   update(view: Readonly<AudioView>, dtReal: number): void {
     this.day = view.day;
+    this.lastUpdate = now();
+    if (this.fallback !== null) {
+      clearInterval(this.fallback);
+      this.fallback = null;
+    }
     this.router.update(view, dtReal);
     this.pump();
+  }
+
+  prewarm(): void {
+    prewarmNoise();
   }
 
   resetRun(): void {
@@ -195,10 +225,29 @@ class ShadyAudioImpl implements ShadyAudio {
   }
 
   dispose(): void {
-    if (this.timer !== null) clearInterval(this.timer);
-    this.timer = null;
+    this.disposed = true;
+    if (this.fallback !== null) clearInterval(this.fallback);
+    if (this.watchdog !== null) clearTimeout(this.watchdog);
+    this.fallback = null;
+    this.watchdog = null;
+    const g = this.engine.graph;
+    if (g && this.amb) this.amb.stopAll(g.now);
     this.engine.dispose();
   }
+
+  private armWatchdog(): void {
+    if (this.disposed || this.watchdog !== null) return;
+    this.watchdog = setTimeout(this.onWatchdog, WATCHDOG_MS);
+  }
+
+  private readonly onWatchdog = (): void => {
+    this.watchdog = null;
+    const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (this.engine.running && this.fallback === null && (now() - this.lastUpdate > STALE_MS || hidden)) {
+      this.fallback = setInterval(this.pump, PUMP_MS);
+    }
+    this.armWatchdog();
+  };
 
   /** Plays a recipe now or on the grid. Dropped while the context isn't running, so nothing piles up. */
   private start(name: SfxName, params: SfxParams, quantize: boolean): void {

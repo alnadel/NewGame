@@ -5,6 +5,8 @@ import {
   arpLevel,
   crackleRate,
   heartbeatPeriod,
+  NOON_WINDOW_END,
+  NOON_WINDOW_START,
   noonWindow,
   padCutoffHz,
   sizzleAmount,
@@ -92,7 +94,14 @@ export interface Scene {
   crickets: number;
   /** Heartbeat period (s); 0 = off. */
   heartbeat: number;
+  /** The sizzle bed (and crackle) should exist: the screen is in play (built lazily, ambience.ts). */
+  sizzleOn: boolean;
+  /** The cicada choruses should exist: from 0.5 s before the noon window until it ends. */
+  cicadasOn: boolean;
 }
+
+/** The cicada layer is built this long (s) before the noon window opens, so it fades in from 0. */
+export const CICADA_LEAD_S = 0.5;
 
 export const MUFFLE_OPEN = 18000;
 /** Music-bus lowpass while paused: the score keeps breathing, but from another room. */
@@ -114,6 +123,8 @@ export function createScene(): Scene {
     cicadas: 0,
     crickets: 0,
     heartbeat: 0,
+    sizzleOn: false,
+    cicadasOn: false,
   };
 }
 
@@ -137,6 +148,8 @@ export function sceneFor(v: Readonly<AudioView>, out: Scene): Scene {
   out.cicadas = 0;
   out.crickets = 0;
   out.heartbeat = 0;
+  out.sizzleOn = false;
+  out.cicadasOn = false;
 
   const night = v.phase === 'night';
   const dayCutoff = padCutoffHz(v.eps, v.epsNoon, night);
@@ -164,6 +177,7 @@ export function sceneFor(v: Readonly<AudioView>, out: Scene): Scene {
       break;
   }
 
+  out.sizzleOn = true;
   if (v.phase === 'dead') {
     out.pad = 0.65;
     out.padCutoff = 380;
@@ -182,6 +196,7 @@ export function sceneFor(v: Readonly<AudioView>, out: Scene): Scene {
   out.sizzleHz = sizzleHz(v.f);
   out.crackle = crackleRate(v.f, v.glareW);
   out.cicadas = v.dayLength > 0 ? noonWindow(v.tDay / v.dayLength) : 0;
+  out.cicadasOn = v.dayLength > 0 && v.tDay >= NOON_WINDOW_START * v.dayLength - CICADA_LEAD_S && v.tDay <= NOON_WINDOW_END * v.dayLength;
   out.heartbeat = heartbeatPeriod(v.chill);
   return out;
 }
