@@ -224,10 +224,9 @@ export type MissionMetric =
   | 'cloudRide'
   | 'phews'
   | 'crystals'
-  | 'x5Hold'
   | 'gateNoon'
   | 'cleanBalls'
-  | 'dailyToday';
+  | 'dailyTry';
 
 export interface MissionDef {
   id: MissionId;
@@ -239,21 +238,26 @@ export interface MissionDef {
   reward: number;
 }
 
-/** The ordered pool (V1_PLAN §11.1). Three are active; completed ones are replaced from here. */
+/**
+ * The ordered pool (V1_PLAN §11.1). Three are active; completed ones are replaced from here. The
+ * order deals one easy, one medium and one stretch goal together and keeps the rare feats (gate
+ * arch, gazing balls, a ×4 multiplier) for once the player can reach Day 2. hold-x5 keeps its id
+ * (saves persist it) but is now "Reach a ×4 multiplier"; save.ts converts its old seconds progress.
+ */
 export const MISSIONS: readonly MissionDef[] = [
   { id: 'reach-9am', metric: 'minutes', scale: 'reach', base: 180, reward: 10 },
   { id: 'flakes-10', metric: 'flakes', scale: 'count', base: 10, reward: 10 },
-  { id: 'mult-3', metric: 'maxMult', scale: 'mult', base: 3, reward: 15 },
   { id: 'survive-noon', metric: 'minutes', scale: 'reach', base: 390, reward: 20 },
+  { id: 'mult-3', metric: 'maxMult', scale: 'mult', base: 3, reward: 15 },
   { id: 'cloud-ride', metric: 'cloudRide', scale: 'seconds', base: 3, reward: 20 },
   { id: 'reach-day-2', metric: 'minutes', scale: 'reach', base: 720, reward: 30 },
-  { id: 'two-phews', metric: 'phews', scale: 'count', base: 2, reward: 25 },
   { id: 'ice-crystal', metric: 'crystals', scale: 'count', base: 1, reward: 20 },
-  { id: 'hold-x5', metric: 'x5Hold', scale: 'seconds', base: 8, reward: 30 },
+  { id: 'two-phews', metric: 'phews', scale: 'count', base: 2, reward: 25 },
   { id: 'gate-arch', metric: 'gateNoon', scale: 'flag', base: 1, reward: 30 },
-  { id: 'clean-balls', metric: 'cleanBalls', scale: 'count', base: 4, reward: 30 },
+  { id: 'clean-balls', metric: 'cleanBalls', scale: 'count', base: 2, reward: 30 },
   { id: 'reach-day-3', metric: 'minutes', scale: 'reach', base: 1440, reward: 50 },
-  { id: 'play-daily', metric: 'dailyToday', scale: 'flag', base: 1, reward: 15 },
+  { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 4, reward: 30 },
+  { id: 'play-daily', metric: 'dailyTry', scale: 'flag', base: 1, reward: 15 },
 ];
 
 export const ACTIVE_MISSIONS = 3;

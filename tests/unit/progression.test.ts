@@ -17,8 +17,11 @@ import {
   isDailyUnlocked,
   itemState,
   resetProgress,
+  shouldOfferRestoreSheet,
   shouldShowInstallSheet,
 } from '../../src/meta/progression.ts';
+import { dayStripLines } from '../../src/meta/share.ts';
+import { isInAppBrowser } from '../../src/platform/lifecycle.ts';
 
 const TODAY = '2026-10-11';
 
@@ -148,20 +151,29 @@ describe('missions', () => {
     expect(activeMissionViews(s)[0]?.progressText).toBe('7:00 AM');
   });
 
+  it('opens a fresh save with an easy, a medium and a stretch goal', () => {
+    expect(defaults(1).missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'survive-noon']);
+    expect(activeMissionViews(defaults(1)).map((v) => v.label)).toEqual([
+      'Reach 9:00 AM',
+      'Collect 10 flakes in one run',
+      'Survive a noon (reach 12:30 PM)',
+    ]);
+  });
+
   it('stamps completions and replaces them only at the next run start', () => {
-    const { save, outcome } = applyRunResult(defaults(1), run(185, { maxMult: 3 }), { today: TODAY });
-    expect(outcome.missionsCompleted.map((m) => m.id)).toEqual(['reach-9am', 'mult-3']);
+    const { save, outcome } = applyRunResult(defaults(1), run(400, { maxMult: 3 }), { today: TODAY });
+    expect(outcome.missionsCompleted.map((m) => m.id)).toEqual(['reach-9am', 'survive-noon']);
     expect(outcome.missions.map((m) => [m.id, m.done, m.justCompleted])).toEqual([
       ['reach-9am', true, true],
       ['flakes-10', false, false],
-      ['mult-3', true, true],
+      ['survive-noon', true, true],
     ]);
     // Still visible (stamped) until the next run begins.
-    expect(save.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'mult-3']);
+    expect(save.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'survive-noon']);
     const started = beginRun(save);
-    expect(started.save.missions.active.map((m) => m.id)).toEqual(['survive-noon', 'flakes-10', 'cloud-ride']);
+    expect(started.save.missions.active.map((m) => m.id)).toEqual(['mult-3', 'flakes-10', 'cloud-ride']);
     expect(started.dealt.map((m) => m.label)).toEqual([
-      'Survive a noon (reach 12:30 PM)',
+      'Reach a ×3 multiplier',
       "Ride a cloud's shadow for 3\u00A0s straight",
     ]);
     expect(started.save.missions.cursor).toBe(5);
@@ -187,13 +199,45 @@ describe('missions', () => {
     expect(s.missions.active[0]?.done).toBe(true);
   });
 
-  it("completes \"Play today's Daily\" only with today's daily", () => {
+  it("completes \"Play today's Daily\" with a counted try, not with practice", () => {
     const s = defaults(1);
     s.missions.active[0] = { id: 'play-daily', progress: 0, done: false };
-    const other = run(10, {}, { mode: 'daily', dailyDate: '2026-10-10' });
-    expect(applyRunResult(s, other, { today: TODAY }).save.missions.active[0]?.done).toBe(false);
-    const today = run(10, {}, { mode: 'daily', dailyDate: TODAY });
-    expect(applyRunResult(s, today, { today: TODAY }).save.missions.active[0]?.done).toBe(true);
+    const daily = run(400, {}, { mode: 'daily', dailyDate: TODAY });
+    // Practice (all tries used, a past date) and runs that melted before 6:30 AM aren't counted.
+    expect(applyRunResult(s, daily, { today: TODAY, dailyTry: null }).save.missions.active[0]?.done).toBe(false);
+    expect(applyRunResult(s, daily, { today: TODAY }).save.missions.active[0]?.done).toBe(false);
+    expect(applyRunResult(s, run(400), { today: TODAY, dailyTry: 1 }).save.missions.active[0]?.done).toBe(false);
+    expect(applyRunResult(s, daily, { today: TODAY, dailyTry: 2 }).save.missions.active[0]?.done).toBe(true);
+  });
+
+  it("credits a Daily try that starts at 23:59 and ends at 00:02", () => {
+    const s = defaults(1);
+    s.missions.active[2] = { id: 'play-daily', progress: 0, done: false };
+    // The try was counted for the 10th; the run ends (and is applied) on the 11th.
+    const counted = dailyTryStarted(s, '2026-10-10');
+    expect(counted.tryNumber).toBe(1);
+    const late = run(500, {}, { mode: 'daily', dailyDate: '2026-10-10' });
+    const r = applyRunResult(counted.save, late, { today: '2026-10-11', dailyTry: counted.tryNumber });
+    expect(r.save.missions.active[2]).toEqual({ id: 'play-daily', progress: 1, done: true });
+    expect(r.outcome.missionsCompleted.map((m) => m.id)).toContain('play-daily');
+    expect(r.save.daily['2026-10-10']?.bestMinutes).toBe(500);
+  });
+
+  it("measures 'Reach a ×4 multiplier' (hold-x5) by the best multiplier", () => {
+    const s = defaults(1);
+    s.missions.active[0] = { id: 'hold-x5', progress: 0, done: false };
+    s.missions.active[1] = { id: 'hold-x5@2', progress: 0, done: false };
+    const three = applyRunResult(s, run(10, { maxMult: 3, x5HoldBest: 0 }), { today: TODAY }).save;
+    expect(three.missions.active.slice(0, 2)).toEqual([
+      { id: 'hold-x5', progress: 3, done: false },
+      { id: 'hold-x5@2', progress: 3, done: false },
+    ]);
+    expect(activeMissionViews(three).slice(0, 2).map((v) => [v.label, v.progressText])).toEqual([
+      ['Reach a ×4 multiplier', '×3/×4'],
+      ['Reach a ×5 multiplier', '×3/×5'],
+    ]);
+    const four = applyRunResult(three, run(10, { maxMult: 4 }), { today: TODAY }).save;
+    expect(four.missions.active.slice(0, 2).map((m) => m.done)).toEqual([true, false]);
   });
 
   it('repeats the pool as tier II with scaled goals and rewards', () => {
@@ -210,18 +254,18 @@ describe('missions', () => {
     });
     const daily = { ...all, mode: 'daily' as const, dailyDate: TODAY };
     let s = defaults(1);
-    for (let i = 0; i < 5; i++) s = play(s, i === 4 ? daily : all);
+    for (let i = 0; i < 5; i++) s = i === 4 ? play(s, daily, 1) : play(s, all);
     // 13 missions in the pool, 3 per lap: the cursor has wrapped once.
     expect(s.missions.tier).toBe(2);
     const ids = s.missions.active.map((m) => m.id);
-    expect(ids.every((id) => id.endsWith('@2'))).toBe(true);
+    expect(ids).toEqual(['survive-noon@2', 'mult-3@2', 'cloud-ride@2']);
     const views = activeMissionViews(s);
     expect(views.map((v) => v.label)).toEqual([
-      'Reach a ×5 multiplier',
       "Survive Day 2's noon (reach 12:30 PM)",
+      'Reach a ×5 multiplier',
       "Ride a cloud's shadow for 6\u00A0s straight",
     ]);
-    expect(views.map((v) => v.reward)).toEqual([30, 40, 40]);
+    expect(views.map((v) => v.reward)).toEqual([40, 30, 40]);
     expect(views.map((v) => v.tierLabel)).toEqual(['II', 'II', 'II']);
   });
 
@@ -310,9 +354,37 @@ describe('achievements and cosmetic unlocks', () => {
     expect(r.outcome.toasts.map((t) => t.text)).toEqual(['Daily Solstice unlocked!', 'You can afford the Mint Scarf!']);
   });
 
-  it('unlocks the Daily early after the first night', () => {
+  it('no longer unlocks the Daily early after the first night', () => {
     const r = applyRunResult(defaults(1), run(800), { today: TODAY });
-    expect(r.outcome.dailyUnlocked).toBe(true);
+    expect(r.save.stats.reachedNight).toBe(true);
+    expect(r.save.stats.runs).toBe(1);
+    expect(r.outcome.dailyUnlocked).toBe(false);
+    expect(isDailyUnlocked(r.save)).toBe(false);
+    expect(r.outcome.toasts.map((t) => t.text)).not.toContain('Daily Solstice unlocked!');
+  });
+
+  it('unlocks the Daily on the 3rd completed run, whatever the runs reached', () => {
+    let s = defaults(1);
+    s = applyRunResult(s, run(900), { today: TODAY }).save;
+    s = applyRunResult(s, run(1500), { today: TODAY }).save;
+    expect(s.stats.runs).toBe(2);
+    expect(isDailyUnlocked(s)).toBe(false);
+    const third = applyRunResult(s, run(5), { today: TODAY });
+    expect(third.save.stats.runs).toBe(3);
+    expect(isDailyUnlocked(third.save)).toBe(true);
+    expect(third.outcome.dailyUnlocked).toBe(true);
+    expect(third.outcome.toasts.map((t) => t.text)).toContain('Daily Solstice unlocked!');
+    // Never announced twice.
+    expect(applyRunResult(third.save, run(5), { today: TODAY }).outcome.dailyUnlocked).toBe(false);
+  });
+
+  it('keeps the Daily unlocked for saves that already played one', () => {
+    const s = defaults(1);
+    s.stats.runs = 1;
+    s.stats.reachedNight = true;
+    expect(isDailyUnlocked(s)).toBe(false);
+    s.daily[TODAY] = { tries: 1, bestMinutes: 300, bestSnow: 4, glyphs: '' };
+    expect(isDailyUnlocked(s)).toBe(true);
   });
 });
 
@@ -330,6 +402,26 @@ describe('daily tries', () => {
     expect(s.stats.dailyDaysPlayed).toBe(1);
     const status = dailyStatus(s, TODAY);
     expect(status).toMatchObject({ number: 284, tries: 3, scored: false, played: true });
+  });
+
+  it('stores the checkpoint strip with a new best, in applyRunResult\'s format', () => {
+    let s = defaults(1);
+    s.daily[TODAY] = { tries: 1, bestMinutes: 120, bestSnow: 3, glyphs: 'old try 1 strip' };
+    s = dailyTryStarted(s, TODAY).save;
+    expect(s.daily[TODAY]?.tries).toBe(2);
+    const strip = { hourGlyphs: [Array<HourGlyph>(12).fill('cool'), ['cool', 'warm', 'hot'] as HourGlyph[]], assisted: true };
+    const next = dailyProgress(s, TODAY, 900, 40, strip);
+    expect(next.daily[TODAY]).toEqual({
+      tries: 2,
+      bestMinutes: 900,
+      bestSnow: 40,
+      glyphs: dayStripLines(strip.hourGlyphs, strip.assisted).join('\n'),
+    });
+    expect(next.daily[TODAY]?.glyphs.split('\n')).toHaveLength(2);
+    // Not a new best: the stored strip stays.
+    expect(dailyProgress(next, TODAY, 600, 90, { hourGlyphs: [['melt']], assisted: false })).toBe(next);
+    // Without a strip the old glyphs are kept (callers that predate the strip argument).
+    expect(dailyProgress(s, TODAY, 900, 40).daily[TODAY]?.glyphs).toBe('old try 1 strip');
   });
 
   it('saves hourly progress for scored tries only', () => {
@@ -411,6 +503,31 @@ describe('misc', () => {
     expect(r.settings.music).toBe(0.1);
     expect(r.flags.installSheetShown).toBe(true);
     expect(r.createdAt).toBe(5);
+  });
+
+  it('gates the install and restore sheets by browser, display mode and runs', () => {
+    const SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const CRIOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0.6668.69 Mobile/15E148 Safari/604.1';
+    const FBAN = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/482.0.0.40.104;FBBV/650000000]';
+    expect([SAFARI, CRIOS, FBAN].map((ua) => isInAppBrowser(ua))).toEqual([false, false, true]);
+    expect(isInAppBrowser('Mozilla/5.0 (Linux; Android 14) Instagram 300.0')).toBe(true);
+    expect(isInAppBrowser('Mozilla/5.0 (iPhone) GSA/300.0.0 Mobile/15E148 Safari/604.1')).toBe(true);
+    const save = (runs: number): SaveV1 => {
+      const s = defaults(1);
+      s.stats.runs = runs;
+      return s;
+    };
+    for (const ua of [SAFARI, CRIOS, FBAN]) {
+      const inApp = isInAppBrowser(ua);
+      for (const standalone of [false, true]) {
+        for (const runs of [0, 5]) {
+          const env = { ios: true, standalone, inApp };
+          expect(shouldShowInstallSheet(save(runs), env), `install ${ua.slice(-20)} ${standalone} ${runs}`).toBe(!inApp && !standalone && runs === 5);
+          expect(shouldOfferRestoreSheet(save(runs), env), `restore ${standalone} ${runs}`).toBe(standalone && runs === 0);
+        }
+      }
+    }
+    expect(shouldOfferRestoreSheet(save(0), { ios: false, standalone: true })).toBe(false);
   });
 
   it('offers the iOS install sheet once after run 3 when not standalone', () => {

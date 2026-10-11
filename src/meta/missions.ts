@@ -85,7 +85,8 @@ export function missionLabel(def: MissionDef, tier: number): string {
     case 'ice-crystal':
       return t === 1 ? 'Collect an Ice Crystal' : `Collect ${t} Ice Crystals in one run`;
     case 'hold-x5':
-      return `Hold ×5 for ${t}${NBSP}s`;
+      // The id predates the "Reach ×4" goal; saves keep it (see save.ts for the progress migration).
+      return `Reach a ×${t} multiplier`;
     case 'gate-arch':
       return 'Walk under a gate arch between 11 AM and 1 PM';
     case 'clean-balls':
@@ -95,8 +96,14 @@ export function missionLabel(def: MissionDef, tier: number): string {
   }
 }
 
+/** What a run's measurement needs besides the result itself. */
+export interface MissionRunContext {
+  /** Daily runs: the try counted at 6:30 AM, or null/undefined when the run was not counted. */
+  dailyTry?: number | null;
+}
+
 /** Measures one finished run against a mission's metric. */
-export function missionValue(def: MissionDef, result: RunResult, today: string): number {
+export function missionValue(def: MissionDef, result: RunResult, run: MissionRunContext = {}): number {
   const s = result.stats;
   switch (def.metric) {
     case 'minutes':
@@ -111,15 +118,14 @@ export function missionValue(def: MissionDef, result: RunResult, today: string):
       return s.phews;
     case 'crystals':
       return s.crystals;
-    case 'x5Hold':
-      return s.x5HoldBest;
     case 'gateNoon':
       return s.gateNoon ? 1 : 0;
     case 'cleanBalls':
       // "with no glare contact": a single glare in the run voids it.
       return s.ballGlared ? 0 : s.ballsPassedClean;
-    case 'dailyToday':
-      return result.mode === 'daily' && result.dailyDate === today ? 1 : 0;
+    case 'dailyTry':
+      // A counted try is always today's Daily when it starts; a try that crosses midnight still counts.
+      return result.mode === 'daily' && run.dailyTry != null ? 1 : 0;
   }
 }
 

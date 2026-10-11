@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   challengeVerdict,
   challengeFromHash,
@@ -48,6 +48,36 @@ describe('challenge codes', () => {
       'A'.repeat(400),
     ];
     for (const code of bad) expect(decodeChallenge(code), code).toBeNull();
+  });
+
+  describe('daily dates', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      // Local noon on 2026-10-11 (Daily #284).
+      vi.setSystemTime(new Date(2026, 9, 11, 12, 0, 0));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    const code = (d: string): string => encodeChallenge({ v: 1, k: 'd', d, m: 1240, s: 3 });
+
+    it('accepts Daily #1 up to tomorrow', () => {
+      for (const d of ['2026-10-11', '2026-10-10', '2026-10-12', '2026-01-01']) {
+        expect(decodeChallenge(code(d)), d).toEqual({ v: 1, k: 'd', d, m: 1240, s: 3 });
+      }
+    });
+
+    it('rejects dates before Daily #1 or after tomorrow', () => {
+      for (const d of ['0100-01-01', '9999-12-31', '2027-06-01', '2026-10-13', '2025-12-31']) {
+        expect(decodeChallenge(code(d)), d).toBeNull();
+        expect(challengeFromHash(`#c=${code(d)}`), d).toBeNull();
+      }
+    });
+
+    it('takes the bounding date as a parameter', () => {
+      expect(decodeChallenge(code('2027-06-01'), '2027-06-01')).not.toBeNull();
+      expect(decodeChallenge(code('2027-06-02'), '2027-06-01')).not.toBeNull();
+      expect(decodeChallenge(code('2027-06-03'), '2027-06-01')).toBeNull();
+    });
   });
 
   it('reads the code from a location hash', () => {

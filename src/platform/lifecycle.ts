@@ -79,6 +79,17 @@ export function isIOS(): boolean {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
 }
 
+/** Facebook, Instagram, LINE, X/Twitter, LinkedIn and Google app web views. */
+const IN_APP_UA = /FBAN|FBAV|Instagram|Line\/|Twitter|LinkedInApp|GSA/;
+
+/**
+ * True inside a social or search app's embedded browser. Those can't add a page to the Home
+ * Screen (and keep their own storage), so install prompts make no sense there.
+ */
+export function isInAppBrowser(userAgent: string = typeof navigator === 'undefined' ? '' : navigator.userAgent): boolean {
+  return IN_APP_UA.test(userAgent);
+}
+
 /** The OS-level reduced-motion preference. */
 export function prefersReducedMotion(): boolean {
   return media('(prefers-reduced-motion: reduce)');
