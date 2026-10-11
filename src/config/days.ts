@@ -39,7 +39,12 @@ export interface DayParams {
 export interface ProfileParams {
   readonly drain: number;
   readonly day1EpsNoon: number;
-  /** Validator floor override for Day 1 (0 = use the day table). */
+  /**
+   * Validator floor override for Day 1 (0 = use the day table). Currently non-binding: profile 0's
+   * Day 1 (εnoon 40°, drain 30, the authored tutorial chunk and the parked noon cloud) never needs a
+   * rescue at its floor, so 70 and the table's 50 give byte-identical worlds and sim output
+   * (verified with `node scripts/sim.ts` and the golden hashes). Kept as the knob for a harder p0.
+   */
   readonly day1Floor: number;
   /** A cloud rides with Nubs over 11 AM-1 PM on Day 1, reachable with the sun roughly north. */
   readonly parkedNoonCloud: boolean;

@@ -15,7 +15,7 @@ import {
   TUTORIAL,
   type CasterKind,
 } from '../../config/casters.ts';
-import { dayParams, type BiomeId } from '../../config/days.ts';
+import { dayParams, PROFILES, type BiomeId, type ProfileParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { cloudOffset } from '../shadows.ts';
 import {
@@ -321,7 +321,8 @@ export function placeStart(w: World): void {
  */
 export function generateDay(w: World, day: number): void {
   const p = dayParams(day, w.profile);
-  const prof = { overtakeFirst: w.profile === 0 && day === 1, parked: w.profile === 0 && day === 1 };
+  const pp = PROFILES[w.profile] as ProfileParams;
+  const prof = { overtakeFirst: pp.firstCloudOvertakes && day === 1, parked: pp.parkedNoonCloud && day === 1 };
   const tDay0 = dayStartTick(day) / TICK_HZ;
   const C = TUNING.cloud;
   const chunk = Math.floor(dayStartY(day) / CH);
