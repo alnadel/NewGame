@@ -541,8 +541,8 @@
 .challenge-goal {
   font-weight: 900;
   font-size: 1.0625rem;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .challenge-note {
@@ -719,10 +719,27 @@
   pointer-events: none;
 }
 
-/* On the Title, short screens raise the hint so the hand and the word "drag" (which end ~96 px
-   below the fingertip path) always clear the chips and tray. --title-bottom-h is measured live. */
+/* On the Title the hint sits above Nubs and his halo dial — the word "drag" on top, the swiping
+   hand below it — so neither covers him or the dial's sun pointer. The hand hangs ~50 px below its
+   fingertip path (18 px past the track), so the track ends 26 px above the dial. --nubs-y and
+   --halo-r are set by the game from the camera layout; the fallback is the 68 % Nubs line. */
 .sui[data-screen='title'] .ghost {
-  top: min(65%, calc(100% - var(--title-bottom-h, 170px) - 104px));
+  top: auto;
+  bottom: calc(100% - var(--nubs-y, 68%) + var(--halo-r, 44px) + 26px);
+  flex-direction: column-reverse;
+  transform: none;
+}
+
+.sui[data-screen='title'] .ghost-word {
+  margin: 0 0 2px;
+}
+
+/* Short screens with a challenge banner: the banner reaches down to the hint, so only the hand
+   shows (the banner's own Play button and the hand carry the message). */
+@media (max-height: 700px) {
+  .sui[data-screen='title']:has(.challenge:not([hidden])) .ghost-word {
+    visibility: hidden;
+  }
 }
 
 /* In play Nubs and his halo dial sit at 68-70% of the height: keep the hint just below them. */
@@ -880,10 +897,13 @@
   pointer-events: auto;
 }
 
+/* The card is centered in the space above Nubs' halo dial (--nubs-clear: from the dial's top to
+   the bottom of the screen, set by the game), so the player can see whether he is lit before
+   resuming. */
 .scr-pause {
   display: grid;
   place-items: center;
-  padding: calc(var(--safe-top) + 16px) var(--pad-x-r) calc(var(--safe-bottom) + 16px) var(--pad-x-l);
+  padding: calc(var(--safe-top) + 16px) var(--pad-x-r) max(calc(var(--safe-bottom) + 16px), calc(var(--nubs-clear, 0px) + 12px)) var(--pad-x-l);
 }
 
 .dialog,

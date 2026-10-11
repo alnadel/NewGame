@@ -1,6 +1,7 @@
 // Layout checks (TECH_SPEC §16.3): at 360×640, 390×844 and 430×932 with a simulated 47 px notch,
-// the pause button and the Results buttons sit inside the viewport and below the inset; a phone
-// held landscape shows the rotate overlay. Screenshots are attached, not asserted.
+// the pause button and the Results buttons sit inside the viewport and below the inset, and the
+// Title's ghost hint and the Pause card stay clear of Nubs and his halo dial; a phone held
+// landscape shows the rotate overlay. Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { drag, openGame, waitForScreen } from './helpers.ts';
 
@@ -16,6 +17,17 @@ async function simulateNotch(page: Page): Promise<void> {
     document.documentElement.style.setProperty('--safe-top', `${top}px`);
     window.dispatchEvent(new Event('resize'));
   }, INSET);
+}
+
+/** The overlay's bottom edge stays above the top of Nubs' halo dial (his ground point − ring radius). */
+async function expectAboveNubs(page: Page, loc: Locator, label: string): Promise<void> {
+  const box = await loc.boundingBox();
+  expect(box, `${label} has a box`).not.toBeNull();
+  if (!box) return;
+  const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
+  const haloR = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('ui')!).getPropertyValue('--halo-r')));
+  expect(haloR, 'halo radius published').toBeGreaterThan(20);
+  expect(box.y + box.height, `${label} clears Nubs' halo`).toBeLessThanOrEqual(nubs.y - haloR);
 }
 
 async function expectInside(page: Page, loc: Locator, label: string): Promise<void> {
@@ -36,12 +48,22 @@ for (const size of SIZES) {
     await simulateNotch(page);
     await page.waitForTimeout(200);
     await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await expectAboveNubs(page, page.locator('.ghost-hand'), 'Title ghost hand');
+    await expectAboveNubs(page, page.locator('.ghost-word'), 'Title "drag" word');
 
-    await drag(page, Math.round(size.width / 2), Math.round(size.height * 0.55), -40);
+    await drag(page, Math.round(size.width / 2), Math.round(size.height * 0.4), -40);
     await waitForScreen(page, 'play');
     await page.waitForTimeout(800);
     await expectInside(page, page.locator('button[aria-label="Pause"]'), 'pause button');
     await info.attach(`play-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
+
+    await page.locator('button[aria-label="Pause"]').click();
+    await waitForScreen(page, 'pause');
+    await page.waitForTimeout(300);
+    await expectAboveNubs(page, page.locator('.scr-pause .dialog'), 'Pause card');
+    await info.attach(`pause-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await page.getByRole('button', { name: 'Resume' }).click();
+    await waitForScreen(page, 'play');
 
     await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
     await waitForScreen(page, 'results', 4000);

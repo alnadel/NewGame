@@ -100,12 +100,6 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const rotateEl = createRotateOverlay();
   root.append(screenLayer, ghostEl, toasts.el, modals.el, rotateEl);
 
-  // The Title's ghost hint stays above the chips + tray, whatever height they wrap to.
-  const bottomObserver = new ResizeObserver(() => {
-    root.style.setProperty('--title-bottom-h', `${title.bottomCluster.offsetHeight}px`);
-  });
-  bottomObserver.observe(title.bottomCluster);
-
   function setHidden(el: HTMLElement, hidden: boolean): void {
     el.classList.toggle('is-on', !hidden);
     // inert keeps hidden screens out of the tab order and the accessibility tree.
@@ -232,8 +226,6 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       window.removeEventListener('pointerdown', onPointerDown, true);
       stopViewport();
       stopMotion();
-      bottomObserver.disconnect();
-      root.style.removeProperty('--title-bottom-h');
       for (const s of Object.values(screens)) s.leave?.();
       root.replaceChildren();
       root.classList.remove('sui', 'is-rm');

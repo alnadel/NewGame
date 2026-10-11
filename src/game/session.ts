@@ -383,6 +383,15 @@ export class Session {
     this.cssH = h;
     this.dpr = dpr;
     this.renderer.resize(w, h, dpr, readSafeArea());
+    // Where Nubs and his halo dial sit, for DOM overlays that must keep them visible (the Title's
+    // ghost hint goes above them, the Pause card is centered in the space above the dial).
+    const v = this.renderer.scene.view;
+    const nubsY = v.vy + v.nubsFrac * v.vh;
+    const haloR = 40 * v.k;
+    const root = this.d.uiRoot.style;
+    root.setProperty('--nubs-y', `${Math.round(nubsY)}px`);
+    root.setProperty('--halo-r', `${Math.round(haloR)}px`);
+    root.setProperty('--nubs-clear', `${Math.round(h - nubsY + haloR)}px`);
   }
 
   private frame(now: number): void {

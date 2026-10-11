@@ -20,7 +20,7 @@ const HANDOFF_DX = 10;
 const BEST_CHIP_RUNS = 3;
 
 export interface TitleScreen extends Screen {
-  /** Chips + tray at the bottom; the ghost-thumb hint is kept above it. */
+  /** Chips + tray at the bottom of the Title. */
   readonly bottomCluster: HTMLElement;
 }
 
@@ -198,7 +198,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const banner = ctx.challenge();
     hide(challenge, banner === null);
     if (banner) {
-      challengeGoal.textContent = `Beat ${formatScore(banner.minutes)}`;
+      // Only "Beat" may wrap away from the score, so narrow phones show "Beat / Day 2 · 2:40 PM".
+      challengeGoal.textContent = `Beat ${formatScore(banner.minutes).replace(/ /g, '\u00a0')}`;
       challengeNote.textContent = banner.note ?? '';
       hide(challengeNote, !banner.note);
     }

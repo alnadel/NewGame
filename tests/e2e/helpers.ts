@@ -65,6 +65,7 @@ declare global {
       paused(): boolean;
       presses(): number;
       demo(name: string): void;
+      nubsScreen(): { x: number; y: number };
     };
   }
 }
