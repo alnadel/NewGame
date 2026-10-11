@@ -1,0 +1,60 @@
+// Pause card: Resume / Restart / Settings / Home (GDD §5). Escape resumes.
+
+import { h } from '../dom.ts';
+import { icon } from '../icons.ts';
+import type { Screen, UiContext } from '../screen.ts';
+import { button } from '../widgets.ts';
+
+export function createPauseScreen(ctx: UiContext): Screen {
+  const resume = (): void => {
+    ctx.go('play');
+    ctx.cb.resume();
+  };
+  const resumeBtn = button(ctx, { label: 'Resume', icon: 'play', variant: 'primary', size: 'lg', block: true, onPress: resume });
+  const restartBtn = button(ctx, {
+    label: 'Restart',
+    icon: 'retry',
+    block: true,
+    onPress: () => {
+      ctx.go('play');
+      ctx.cb.restart();
+    },
+  });
+  const settingsBtn = button(ctx, { label: 'Settings', icon: 'settings', block: true, onPress: () => ctx.go('settings') });
+  const homeBtn = button(ctx, {
+    label: 'Home',
+    icon: 'home',
+    block: true,
+    onPress: () => {
+      ctx.go('title');
+      ctx.cb.home();
+    },
+  });
+
+  const el = h(
+    'section',
+    { class: 'scr scr-pause' },
+    h('div', { class: 'scrim' }),
+    h(
+      'div',
+      { class: 'dialog pause-card pe', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pause-title' },
+      h('div', { class: 'pause-badge', 'aria-hidden': 'true' }, icon('pause')),
+      h('h2', { class: 'dialog-title', id: 'pause-title' }, 'Paused'),
+      h('p', { class: 'dialog-sub' }, 'Nubs is chilling. Take your time.'),
+      resumeBtn,
+      restartBtn,
+      h('div', { class: 'row-2' }, settingsBtn, homeBtn),
+    ),
+  );
+
+  return {
+    el,
+    enter() {},
+    back: resume,
+    activate() {
+      resume();
+      return true;
+    },
+    initialFocus: () => resumeBtn,
+  };
+}

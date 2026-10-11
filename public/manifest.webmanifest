@@ -1,0 +1,20 @@
+{
+  "name": "SHADY: Don't Melt Nubs",
+  "short_name": "SHADY",
+  "description": "You are the sun. Swing every shadow in the world to keep Nubs the snowman cool. How far into the week can he get?",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6B07C",
+  "theme_color": "#34306B",
+  "lang": "en",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

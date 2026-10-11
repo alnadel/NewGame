@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 512 512">
+<defs><radialGradient id="bg" cx="0.44" cy="0.42" r="0.75"><stop offset="0" stop-color="#4A4599"/><stop offset="0.7" stop-color="#34306B"/><stop offset="1" stop-color="#2A2759"/></radialGradient></defs>
+<rect width="512" height="512" rx="114" fill="url(#bg)"/>
+<g>
+<defs><radialGradient id="icon-sun-bloom"><stop offset="0" stop-color="#FFB547" stop-opacity="0.38"/><stop offset="1" stop-color="#FFB547" stop-opacity="0"/></radialGradient></defs>
+<g transform="translate(226 214) scale(100)"><g>
+<circle r="1.95" fill="url(#icon-sun-bloom)"/>
+<g><path d="M1.080 -0.210L1.620 0.000L1.080 0.210ZM1.040 0.358L1.403 0.810L0.830 0.722ZM0.722 0.830L0.810 1.403L0.358 1.040ZM0.210 1.080L0.000 1.620L-0.210 1.080ZM-0.358 1.040L-0.810 1.403L-0.722 0.830ZM-0.830 0.722L-1.403 0.810L-1.040 0.358ZM-1.080 0.210L-1.620 0.000L-1.080 -0.210ZM-1.040 -0.358L-1.403 -0.810L-0.830 -0.722ZM-0.722 -0.830L-0.810 -1.403L-0.358 -1.040ZM-0.210 -1.080L-0.000 -1.620L0.210 -1.080ZM0.358 -1.040L0.810 -1.403L0.722 -0.830ZM0.830 -0.722L1.403 -0.810L1.040 -0.358Z" fill="#FFD36B" stroke="#FFD36B" stroke-width="0.08" stroke-linejoin="round"/></g>
+<circle r="1" fill="#FFE27A" stroke="#FFC94A" stroke-width="0.1"/>
+<ellipse cx="-0.52" cy="0.3" rx="0.17" ry="0.1" fill="#FF9E6B" opacity="0.45"/>
+<ellipse cx="0.52" cy="0.3" rx="0.17" ry="0.1" fill="#FF9E6B" opacity="0.45"/>
+<path d="M-0.88 -0.25Q0 -0.33 0.88 -0.25" fill="none" stroke="#1E1E28" stroke-width="0.09" stroke-linecap="round"/>
+<path d="M-0.34 -0.15H0.3Q0.37 -0.15 0.35 -0.05Q0.3 0.21 0.03 0.22Q-0.29 0.22 -0.35 -0.02Q-0.37 -0.15 -0.34 -0.15Z" transform="translate(-0.41 -0.1)" fill="#1E1E28"/>
+<path d="M-0.34 -0.15H0.3Q0.37 -0.15 0.35 -0.05Q0.3 0.21 0.03 0.22Q-0.29 0.22 -0.35 -0.02Q-0.37 -0.15 -0.34 -0.15Z" transform="translate(0.41 -0.1) scale(-1 1)" fill="#1E1E28"/>
+<path d="M-0.11 -0.2Q0 -0.27 0.11 -0.2" fill="none" stroke="#1E1E28" stroke-width="0.08" stroke-linecap="round"/>
+<path d="M-0.6 -0.08L-0.5 -0.19M-0.5 -0.01L-0.34 -0.18M0.24 -0.08L0.34 -0.19M0.34 -0.01L0.5 -0.18" stroke="#5A5A70" stroke-width="0.055" stroke-linecap="round"/>
+<path d="M-0.3 0.4Q0.02 0.6 0.32 0.36Q0.38 0.31 0.41 0.25" fill="none" stroke="#7A3B00" stroke-width="0.085" stroke-linecap="round" stroke-linejoin="round"/>
+</g></g>
+<ellipse cx="414" cy="454" rx="56" ry="12" fill="#1F1B4A" opacity="0.55"/>
+<circle cx="392" cy="410" r="44" fill="#FFFFFF"/>
+<circle cx="392" cy="352" r="30" fill="#FFFFFF"/>
+</g>
+</svg>
