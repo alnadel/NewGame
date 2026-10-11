@@ -1,0 +1,133 @@
+// World object types shared by generation, the sim and the renderer. Coordinates are world u
+// (x east, y north, z up); polygons are flat CCW arrays [x0, y0, x1, y1, ...].
+//
+// Casters, clouds and balls are immutable once generated. Pickups carry their own melt/collect state
+// because every run owns its world.
+
+import type { BiomeId } from '../config/days.ts';
+import type { CasterKind } from '../config/casters.ts';
+
+export type { BiomeId, CasterKind };
+
+interface PartBounds {
+  /** Ground-plane bounds of the part's footprint (discs: the canopy circle). */
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+/** A solid block standing on the ground: convex footprint, height h. */
+export interface PrismPart extends PartBounds {
+  readonly t: 'prism';
+  readonly pts: Float64Array;
+  readonly n: number;
+  readonly h: number;
+}
+
+/** A floating convex plate between heights z0 and z1 (arch lintels, stall roofs). */
+export interface SlabPart extends PartBounds {
+  readonly t: 'slab';
+  readonly pts: Float64Array;
+  readonly n: number;
+  readonly z0: number;
+  readonly z1: number;
+}
+
+/** A floating disc (tree canopy) of radius r at height z. */
+export interface DiscPart extends PartBounds {
+  readonly t: 'disc';
+  readonly cx: number;
+  readonly cy: number;
+  readonly r: number;
+  readonly z: number;
+}
+
+export type Part = PrismPart | SlabPart | DiscPart;
+
+export interface Caster {
+  /** Unique, deterministic id (generation order). */
+  readonly id: number;
+  readonly kind: CasterKind;
+  /** Seeded display name, e.g. "the Mossy Oak". */
+  readonly name: string;
+  readonly biome: BiomeId;
+  /** Center of the caster (for trees: the trunk). */
+  readonly x: number;
+  readonly y: number;
+  /** Rotation in degrees (multiple of 15; 0 for trees, rocks, gate arches). */
+  readonly rot: number;
+  readonly parts: readonly Part[];
+  /** Ground footprint hull of the solid parts (prisms + slabs), CCW; hullN vertices. */
+  readonly hull: Float64Array;
+  readonly hullN: number;
+  /** Ground bounds of every part, discs included. */
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  /** Tallest point of any part (u). */
+  readonly maxZ: number;
+  /** Which side of the trail it stands on: −1 west, +1 east, 0 straddling (gate arch). */
+  readonly side: -1 | 0 | 1;
+  /** Inserted by the validator. */
+  readonly rescue: boolean;
+  /** A gate arch straddling the trail. */
+  readonly gate: boolean;
+  /** Pedestal of a gazing ball: that ball's id, else −1. */
+  readonly ballId: number;
+  /** Chunk index that placed it. */
+  readonly chunk: number;
+}
+
+export type CloudKind = 'overtaker' | 'waiter' | 'parked';
+
+/** A cloud at altitude z. Its position is analytic in absolute time (s since Day 1 dawn). */
+export interface Cloud {
+  readonly id: number;
+  readonly kind: CloudKind;
+  /** Spawn time (absolute s) and lifetime (s): it exists for tAbs ∈ [t0, t0 + life]. */
+  readonly t0: number;
+  readonly life: number;
+  /** Center at t0 and velocity (u/s). */
+  readonly x0: number;
+  readonly y0: number;
+  readonly vx: number;
+  readonly vy: number;
+  /** Ellipse radii (axis-aligned). */
+  readonly rx: number;
+  readonly ry: number;
+  readonly z: number;
+  /** Render-only lumps relative to the center: (dx, dy, r) × n, inside the ellipse. */
+  readonly lumps: Float64Array;
+}
+
+export interface GazingBall {
+  readonly id: number;
+  /** Ball center on the ground plane; the mirror sits at height BALL_Z. */
+  readonly x: number;
+  readonly y: number;
+  readonly name: string;
+  /** Its pedestal caster. */
+  readonly casterId: number;
+  readonly day: number;
+}
+
+export type PickupKind = 'flake' | 'crystal' | 'flower';
+
+export const PICKUP_ALIVE = 0;
+export const PICKUP_TAKEN = 1;
+export const PICKUP_MELTED = 2;
+export type PickupState = 0 | 1 | 2;
+
+export interface Pickup {
+  readonly id: number;
+  readonly kind: PickupKind;
+  readonly x: number;
+  readonly y: number;
+  readonly day: number;
+  /** Accumulated lit seconds (melts at TUNING.pickups.meltBudget). Render: shrink with melt. */
+  melt: number;
+  /** 0 alive, 1 taken, 2 melted. */
+  state: PickupState;
+}

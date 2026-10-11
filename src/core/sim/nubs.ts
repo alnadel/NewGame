@@ -1,0 +1,248 @@
+// Nubs: shade coverage, Chill, Frost multiplier, PHEW, shade/glare/cloud events and the hour log
+// (V1_PLAN §5). Per-tick work is allocation-free (scratch arrays are module-level).
+
+import { TUNING } from '../../config/tuning.ts';
+import { DT } from '../clock.ts';
+import { lowerBound } from '../gen/store.ts';
+import { SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
+import type { Caster, Cloud, GazingBall } from '../objects.ts';
+import {
+  casterReach,
+  casterShades,
+  cloudAlive,
+  cloudOffset,
+  cloudShades,
+  distToCasterBounds,
+  glareActive,
+  glareOffset,
+  inGlare,
+  shadowLength,
+} from '../shadows.ts';
+import type { HourGlyph } from './events.ts';
+import type { SimState } from './types.ts';
+
+const N = TUNING.nubs;
+const M = TUNING.mult;
+const P = TUNING.phew;
+const MAX_R = TUNING.world.maxCasterRadius;
+/** Max distance of a coverage sample from Nubs' center. */
+const SAMPLE_R = N.sampleOffset * 1.5;
+
+// Candidate scratch, reused every tick.
+const cand: Caster[] = [];
+const candClouds: Cloud[] = [];
+const cloudHits = new Int32Array(64);
+const candBalls: GazingBall[] = [];
+
+/**
+ * Computes the per-sample lit weights w, f, the glare count, the caster shading the center sample,
+ * the cloud fully covering Nubs, and the glaring ball, at Nubs' current position.
+ */
+export function computeCoverage(s: SimState): void {
+  const nb = s.nubs;
+  const w = s.world;
+  nb.shaderId = -1;
+  nb.cloudId = -1;
+  nb.glareBallId = -1;
+  if (!s.sunUp) {
+    nb.w.fill(0);
+    nb.f = 0;
+    nb.glare = 0;
+    return;
+  }
+  const { ux, uy, cot } = s;
+  const x = nb.x;
+  const y = nb.y;
+
+  let nc = 0;
+  const reach = shadowLength(w.maxZ, cot) + SAMPLE_R;
+  const cs = w.casters;
+  for (let i = lowerBound(cs, y - reach - MAX_R); i < cs.length; i++) {
+    const c = cs[i] as Caster;
+    if (c.y > y + reach + MAX_R) break;
+    if (distToCasterBounds(c, x, y) > casterReach(c, cot) + SAMPLE_R) continue;
+    if (nc < cand.length) cand[nc] = c;
+    else cand.push(c);
+    nc++;
+  }
+
+  let ncl = 0;
+  const R = cloudOffset(TUNING.shadow.cloudZ, cot);
+  for (const cl of w.clouds) {
+    if (!cloudAlive(cl, s.tAbs) || ncl >= cloudHits.length) continue;
+    const dt = s.tAbs - cl.t0;
+    const dx = cl.x0 + cl.vx * dt - x;
+    const dy = cl.y0 + cl.vy * dt - y;
+    if (Math.abs(Math.sqrt(dx * dx + dy * dy) - R) > cl.rx + SAMPLE_R) continue;
+    if (ncl < candClouds.length) candClouds[ncl] = cl;
+    else candClouds.push(cl);
+    cloudHits[ncl] = 0;
+    ncl++;
+  }
+
+  let nbl = 0;
+  if (glareActive(s.eps)) {
+    const g = glareOffset(cot) + TUNING.glare.radius + SAMPLE_R;
+    const bs = w.balls;
+    for (let i = lowerBound(bs, y - g); i < bs.length; i++) {
+      const b = bs[i] as GazingBall;
+      if (b.y > y + g) break;
+      if (nbl < candBalls.length) candBalls[nbl] = b;
+      else candBalls.push(b);
+      nbl++;
+    }
+  }
+
+  let sum = 0;
+  let glare = 0;
+  let bestShaderD = Infinity;
+  for (let k = 0; k < SAMPLES; k++) {
+    const px = x + (SAMPLE_DX[k] as number);
+    const py = y + (SAMPLE_DY[k] as number);
+    let shaded = false;
+    for (let i = 0; i < nc; i++) {
+      const c = cand[i] as Caster;
+      if (!casterShades(c, px, py, ux, uy, cot)) continue;
+      shaded = true;
+      if (k !== 0) break;
+      // Center sample: remember the nearest caster providing its shade (death line, Melt Map).
+      const d = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
+      if (d < bestShaderD) {
+        bestShaderD = d;
+        nb.shaderId = c.id;
+      }
+    }
+    for (let i = 0; i < ncl; i++) {
+      if (cloudShades(candClouds[i] as Cloud, s.tAbs, px, py, ux, uy, cot)) {
+        shaded = true;
+        cloudHits[i] = (cloudHits[i] as number) + 1;
+      }
+    }
+    let inG = false;
+    for (let i = 0; i < nbl; i++) {
+      const b = candBalls[i] as GazingBall;
+      if (inGlare(b, px, py, ux, uy, cot)) {
+        inG = true;
+        nb.glareBallId = b.id;
+        break;
+      }
+    }
+    const wk = inG ? 2 : shaded ? 0 : 1;
+    nb.w[k] = wk;
+    sum += wk;
+    if (inG) glare++;
+  }
+  nb.f = sum / SAMPLES;
+  nb.glare = glare;
+  for (let i = 0; i < ncl; i++) {
+    if (cloudHits[i] === SAMPLES) {
+      nb.cloudId = (candClouds[i] as Cloud).id;
+      break;
+    }
+  }
+}
+
+/** Daylight tick: Chill, multiplier, PHEW, shade/glare/cloud events and timers, hour log. */
+export function applyDaylight(s: SimState): void {
+  const nb = s.nubs;
+  const st = s.stats;
+  const f = nb.f;
+  const lit = f > 0;
+  const wasLit = nb.litSince >= 0;
+  const prevChill = nb.chill;
+
+  let c = nb.chill + (-s.params.drain * f + N.regen * Math.max(0, 1 - f)) * DT;
+  if (c > nb.maxChill) c = nb.maxChill;
+  nb.chill = c;
+
+  // Shade transitions.
+  if (lit && !wasLit) {
+    nb.litSince = s.tick;
+    s.events.push({ e: 'shadeExit' });
+  } else if (!lit && wasLit) {
+    const litFor = (s.tick - nb.litSince) * DT;
+    nb.litSince = -1;
+    s.events.push({ e: 'shadeEnter', litFor });
+    // PHEW (V1_PLAN §5.3): Chill was below T when shade was found, Chill was ≥ 40 within the last
+    // 3 s, and the latch is open.
+    if (prevChill < s.params.phewT && nb.phewOpen && s.tick - nb.highChillTick <= P.armWindowTicks) {
+      nb.phewOpen = false;
+      st.phews++;
+      st.snow += P.snow;
+      s.events.push({ e: 'phew' });
+    }
+  }
+  if (c >= P.armChill) nb.highChillTick = s.tick;
+  if (!nb.phewOpen && c > P.relatchChill) nb.phewOpen = true;
+  if (c < N.lowChill && prevChill >= N.lowChill) s.events.push({ e: 'lowChill' });
+  if (c < N.lowChill) s.hourHot = true;
+
+  // Frost multiplier.
+  if (!lit) {
+    nb.litTicks = 0;
+    if (nb.mult < M.max) {
+      nb.shadeTicks++;
+      if (nb.shadeTicks >= M.stepTicks) {
+        nb.shadeTicks = 0;
+        nb.mult++;
+        if (nb.mult > st.maxMult) st.maxMult = nb.mult;
+        s.events.push({ e: 'multUp', level: nb.mult });
+      }
+    }
+  } else {
+    nb.litTicks++;
+    if (nb.litTicks >= M.resetLitTicks && (nb.mult > 1 || nb.shadeTicks > 0)) {
+      if (nb.mult > 1) s.events.push({ e: 'multReset', from: nb.mult });
+      nb.mult = 1;
+      nb.shadeTicks = 0;
+    }
+  }
+  nb.x5Ticks = nb.mult === M.max ? nb.x5Ticks + 1 : 0;
+  if (nb.x5Ticks * DT > st.x5HoldBest) st.x5HoldBest = nb.x5Ticks * DT;
+
+  // Glare touch and the death line's memory of who shaded Nubs.
+  if (nb.glareBallId >= 0) {
+    s.glaredBalls.add(nb.glareBallId);
+    if (nb.prevGlareBallId < 0) s.events.push({ e: 'glareTouch', ballId: nb.glareBallId });
+    st.ballGlared = true;
+  }
+  nb.prevGlareBallId = nb.glareBallId;
+  if (nb.shaderId >= 0) {
+    nb.lastShaderId = nb.shaderId;
+    nb.lastShaderTick = s.tick;
+    nb.lastShaderName = s.world.byId.get(nb.shaderId)?.name ?? '';
+  }
+
+  // Cloud rides.
+  if (nb.cloudId >= 0) {
+    if (!s.captured.has(nb.cloudId)) {
+      s.captured.add(nb.cloudId);
+      s.events.push({ e: 'cloudCapture', id: nb.cloudId });
+    }
+    nb.rideTicks = nb.cloudId === nb.rideId ? nb.rideTicks + 1 : 1;
+    if (!lit) st.cloudSeconds += DT;
+  } else {
+    nb.rideTicks = 0;
+  }
+  nb.rideId = nb.cloudId;
+  if (nb.rideTicks * DT > st.cloudRideBest) st.cloudRideBest = nb.rideTicks * DT;
+
+  s.hourLit += f * DT;
+  st.litTotal += f * DT;
+}
+
+/** Night tick: Chill refills at +30/s; the multiplier is frozen. */
+export function applyNight(s: SimState): void {
+  const nb = s.nubs;
+  nb.chill = Math.min(nb.maxChill, nb.chill + N.nightRegen * DT);
+  nb.litSince = -1;
+  nb.rideTicks = 0;
+  nb.rideId = -1;
+  nb.prevGlareBallId = -1;
+}
+
+/** Glyph of a finished in-game hour from its lit seconds and the low-Chill flag. */
+export function hourGlyph(lit: number, hot: boolean): HourGlyph {
+  if (hot || lit > TUNING.glyph.warmMax) return 'hot';
+  return lit <= TUNING.glyph.coolMax ? 'cool' : 'warm';
+}
