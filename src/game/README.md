@@ -61,7 +61,8 @@ the rAF interval, so a real mid-range phone profile is still the open check).
 the next daylight tick), `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; extras
 for tooling: `paused()`, `presses()`, `demo(name)` (replays `phew`, `mult`, `mult5`, `noon`, `dawn`,
 `night`, `cloud`, `glare`, `flake` or `best` through fx/audio only — the sim is untouched), `perf()`
-(frame/sim/gen/render ms plus Nubs layer redraw and compose counters), `nubsScreen()`, `timeScale()`
+(frame/sim/gen/render ms, Nubs layer redraw and compose counters, ground tile repaints, the canvas
+DPR and the governor level), `nubsScreen()`, `timeScale()`
 (slow-mo × lesson × hit-stop) and `hint()` (ghost mode, target arc, way round, lesson on, hints
 shown). `?perf=0` is full quality: no governor and no device-class cap (useful for captures and A/B
 timing).
