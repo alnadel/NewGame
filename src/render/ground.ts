@@ -16,7 +16,7 @@ export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, det
   g.fillRect(0, 0, v.cssW, v.cssH);
   if (v.vx <= 0.5 && v.vy + v.vh >= v.cssH - 0.5) return;
   if (!detail) return;
-  const tiles = groundTiles(v.S * v.dpr);
+  const tiles = groundTiles(v.k * v.dpr);
   const x0 = (0 - v.ox) / v.S;
   const x1 = (v.cssW - v.ox) / v.S;
   const y1 = v.oy / v.S;
@@ -53,7 +53,7 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
   g.fillStyle = css(pal.ground);
   g.fillRect(v.vx, v.vy, v.vw, v.vh);
   if (!detail) return;
-  const tiles = groundTiles(v.S * v.dpr);
+  const tiles = groundTiles(v.k * v.dpr);
   const tx0 = Math.floor(v.x0 / TILE_U) * TILE_U;
   const ty0 = Math.floor(v.y0 / TILE_U) * TILE_U;
   // Night hides the detail a little (it stays as texture, not noise).

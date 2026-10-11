@@ -837,6 +837,9 @@ export class Session {
     this.setGhost('off');
     this.input.releaseAll();
     if (this.ui.current() === 'play') this.ui.show('dying');
+    // Build the next endless run now, inside the death hit-stop where a hitch can't be seen, so
+    // Retry is instant however fast it is tapped.
+    if (this.kind === 'endless' && !this.nextRun) this.nextRun = this.makeRunQuiet();
   }
 
   private updateDeathFlow(): void {

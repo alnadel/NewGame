@@ -839,8 +839,12 @@ function drawTree(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster, oak
   const alpha = near ? 0.62 + 0.38 * Math.min(1, Math.max(0, (d - canopy.r + 6) / 32)) : 1;
   g.globalAlpha = alpha;
   const l = lumps(c.id);
-  const base = tint(L.pal, oak ? MAT.oak : MAT.canopy);
-  const shade = tint(L.pal, oak ? MAT.oakShade : MAT.canopyShade);
+  // Seeded variation so a meadow of trees isn't stamped from one mould.
+  const vary = (((c.id * 2654435761) >>> 0) % 1000) / 1000;
+  const shift = vary < 0.33 ? hex('#8FC36A') : vary < 0.66 ? hex('#4FA88A') : 0;
+  const amt = shift === 0 ? 0 : 0.18;
+  const base = tint(L.pal, mix(oak ? MAT.oak : MAT.canopy, shift, amt));
+  const shade = tint(L.pal, mix(oak ? MAT.oakShade : MAT.canopyShade, shift, amt * 0.8));
   // Underside (gives the canopy thickness), then the shaded mass, then the lit mass toward the sun.
   g.fillStyle = css(darken(shade, 0.12));
   lumpPath(g, l, cx, cy + 4 * v.S, R, 0, 0, 1);

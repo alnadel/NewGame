@@ -93,7 +93,7 @@ export function drawClouds(
 ): void {
   const n = queryClouds(world, tAbs, buf);
   if (n === 0) return;
-  const scale = Math.min(3, v.S * v.dpr);
+  const scale = Math.min(3, v.k * v.dpr);
   for (let i = 0; i < n; i++) {
     const cl = buf[i] as Cloud;
     cloudCenter(cl, tAbs, c2);
