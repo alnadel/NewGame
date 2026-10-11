@@ -109,7 +109,7 @@ export class Fx {
         case 'phew': {
           this.clock.slowMo(0.4, 0.35);
           addPop(sc.pops, 'PHEW!', POP_PHEW, nx, ny, 190, 1.1);
-          addPop(sc.pops, '+3', POP_PLUS, nx + 26, ny, 120, 0.9);
+          addPop(sc.pops, '+3', POP_PLUS, nx + 34, ny, 30, 0.9);
           for (let i = 0; i < 24; i++) {
             const a = (i / 24) * Math.PI * 2 + rnd(-0.1, 0.1);
             const sp = rnd(80, 150);
