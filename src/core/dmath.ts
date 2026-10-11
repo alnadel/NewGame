@@ -279,6 +279,17 @@ export function angleDiff(a: number, b: number): number {
   return d > 180 ? d - 360 : d;
 }
 
+/**
+ * Hermite smoothstep: 0 for x ≤ a, 1 for x ≥ b, t²(3 − 2t) with t = (x − a)/(b − a) between.
+ * Plain arithmetic, so it is bit-identical on every engine. Requires a < b.
+ */
+export function smoothstep(a: number, b: number, x: number): number {
+  let t = (x - a) / (b - a);
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  return t * t * (3 - 2 * t);
+}
+
 /** cos/sin of whole degrees: SUN_COS[b] = cosD(b), b ∈ [0, 360). Angular-mask bin centers. */
 export const SUN_COS = new Float64Array(360);
 export const SUN_SIN = new Float64Array(360);

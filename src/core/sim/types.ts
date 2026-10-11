@@ -49,6 +49,13 @@ export interface RunConfig {
   startChill?: number;
   /** Daily runs: the local date, YYYY-MM-DD. */
   dailyDate?: string;
+  /**
+   * Endless onboarding override of the drain (Chill/s at f = 1), normally endlessDrain(lifetime
+   * runs). Unset means the profile drain (dayParams(day, profile).drain). Daily, challenge and bot
+   * runs leave it unset. It changes Chill only: the world and its validator always use the profile
+   * drain, so the same seed builds the same world with or without it. Read it via effectiveDrain(s).
+   */
+  drain?: number;
 }
 
 /**

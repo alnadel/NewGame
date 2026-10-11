@@ -36,6 +36,14 @@ const tuning = {
     /** Release angular velocity clamp (°/s). */
     releaseCap: 360,
     releaseCapReduced: 180,
+    /**
+     * Only genuine flicks coast (K1). The release speed (°/s of requested angle over the last
+     * ~80 ms) is scaled by smoothstep(flickMin, flickFull, |release|) before the cap: below
+     * flickMin a lift stops the sun where the finger left it (a slow drag's tail never drifts on),
+     * from flickFull up it coasts at full speed, and in between it eases in (400 → 200°/s).
+     */
+    flickMin: 200,
+    flickFull: 600,
     /** Coasting friction per tick: e^(−3.5/60). */
     friction: 0.9433354499,
     /** Coasting stops below this |ω| (°/s). */
@@ -115,8 +123,12 @@ const tuning = {
     clusterTMax: 0.92,
     /** A pickup melts only while it is at most this many seconds of walking ahead of Nubs. */
     meltAheadSec: 1.6,
-    /** Lit seconds (×2 in glare) until a flake or crystal melts. */
-    meltBudget: 1.0,
+    /**
+     * Lit seconds (×2 in glare) until a flake or crystal melts (GDD §5.4: 1.2). Never above 1.3: a
+     * flake only melts while it is 14 u to meltAheadSec of walking ahead (≈ 1.4 s on Day 1), so at
+     * 1.4 or more it must stay lit for that whole window and flakes become effectively unmeltable.
+     */
+    meltBudget: 1.2,
     flakeChill: 6,
     crystalSnowMult: 5,
     crystalChill: 35,
@@ -248,8 +260,12 @@ const tuning = {
     glareWindowTicks: 60,
     glareShare: 0.5,
     cloudLookbackTicks: 60,
-    /** "within ±(180°/s × 1 s) of θ(−60)". */
-    cloudTurnRate: 180,
+    /**
+     * A cloud is blamed only if it fully covered Nubs within ±(cloudTurnRate × cloudTurnSec) = ±60°
+     * of θ(−60) (GDD §10 row 3: "within ±60° of the current θ"). At 180 nearly any cloud on screen
+     * qualified, so plain gaps were misattributed to clouds the player could not have reached.
+     */
+    cloudTurnRate: 60,
     cloudTurnSec: 1,
     gapLastSec: 5,
     gapAheadSec: 0.5,
@@ -262,6 +278,12 @@ const tuning = {
     novice: { lagTicks: 12, rate: 180, blur: 6, penalty: 0.2 },
     reactive: { lagTicks: 0, rate: 200, blur: 4, penalty: 0.5, nextWeight: 1, nowWeight: 2 },
     oracle: { rate: 240, horizonSteps: 40, planBins: 18, slackCap: 30, penalty: 0.02, margin: 1 },
+    /**
+     * Seeded human model (tooling only, never an acceptance gate): reaction lag U(lagMin, lagMax)
+     * per decision, aim error N(0, aimSigma)° plus a ±N(0, gainSigma) over/undershoot, min-jerk
+     * drags lasting moveBase + moveMsPerDeg·|Δθ| ms, then a settle pause; lifts at ω = 0.
+     */
+    human: { lagMinMs: 250, lagMaxMs: 350, aimSigmaDeg: 10, gainSigma: 0.2, settleMs: 120, moveBaseMs: 120, moveMsPerDeg: 0.9 },
   },
 };
 

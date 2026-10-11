@@ -3,7 +3,7 @@
 
 // Configuration and constants
 export { TUNING } from '../config/tuning.ts';
-export { dayParams, PROFILES } from '../config/days.ts';
+export { dayParams, endlessDrain, ONBOARD_DRAIN, PROFILES } from '../config/days.ts';
 export type { BiomeId, DayParams, ProfileId, ProfileParams } from '../config/days.ts';
 export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';
 export type { CasterKind } from '../config/casters.ts';
@@ -37,7 +37,7 @@ export type { YTime } from './clock.ts';
 export { MINUTES_PER_DAY, formatScore, formatTimeOfDay, formatTimeOfDay10, splitMinutes } from './format.ts';
 
 // Deterministic maths and randomness
-export { angleDiff, atan2D, cosD, sinD, tanD, wrapDeg } from './dmath.ts';
+export { angleDiff, atan2D, cosD, sinD, smoothstep, tanD, wrapDeg } from './dmath.ts';
 export { Rng, hashString, rngFor, splitmix32, xmur3 } from './rng.ts';
 
 // World objects, geometry and shadows
@@ -101,6 +101,7 @@ export type {
   SimEventName,
 } from './sim/events.ts';
 export { sunMaxRate } from './sim/sun.ts';
+export { effectiveDrain } from './sim/nubs.ts';
 export { createSnap, lerpSnap, takeSnap } from './sim/snapshot.ts';
 export type { RenderSnap } from './sim/snapshot.ts';
 export { historyAt, historyLength } from './sim/history.ts';

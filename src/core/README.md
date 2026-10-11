@@ -16,9 +16,19 @@ import { createRun, step, takeSnap, lerpSnap, queryCasters, partShadow, TUNING }
 ## 1. Ground rules
 
 - **Layering.** `src/config` imports nothing. `src/core` imports only `src/core` and `src/config`.
-  Enforced by `tests/unit/architecture.test.ts`, which also bans `Math.random`, `Date`,
-  `performance`, `Math.sin/cos/tan/asin/acos/atan/atan2/exp/log/pow/hypot/cbrt`, the `**` operator,
-  `toFixed`, `parseFloat`, `window`, `document`, `localStorage` and `Float32Array` in both folders.
+  `tests/unit/architecture.test.ts` enforces the whole table on every layer, reading imports from
+  the AST (type-only imports count too): platform → platform; meta → meta/core/config/platform;
+  ui → ui/meta/core/config/platform; audio → audio/core/config/platform; render →
+  render/core/config/meta/platform plus `../game/camera.ts` and `../game/assist.ts`; game (and
+  `main.ts`) may import anything. One type-only exception is listed in the test
+  (`platform/haptics.ts` → `core/sim/events.ts`) until its owner moves the type.
+- **Banned tokens** in both folders (same test): `Math.random`, `Date`, `performance`,
+  `Math.sin/cos/tan/asin/acos/atan/atan2/exp/log/pow/hypot/cbrt`, the hyperbolic
+  `sinh/cosh/tanh/asinh/acosh/atanh`, `log2/log10/log1p/expm1`, the `**` operator, `toFixed`,
+  `toPrecision`, `toExponential`, `toLocale*`, `parseFloat`, `Intl`, `crypto`, `globalThis`,
+  `self`, `window`, `document`, `localStorage` and `Float32Array`. The check runs on a TypeScript
+  scanner pass that drops only comments, string literals and template text, so code inside
+  template `${…}` expressions and after regex literals is checked too.
 - **Determinism.** Only `+ − * /`, `Math.sqrt/floor/ceil/round/trunc/abs/min/max/sign/imul` and the
   fdlibm ports in `dmath.ts`. Same seed + same input frames ⇒ bit-identical state on V8, JSC and
   Node. Time is integer ticks; dTheta/release arrive pre-quantized.
@@ -58,9 +68,20 @@ for (const e of s.events) route(e);   // valid until the next step()
 
 ### `RunConfig`
 `{ seed, mode: 'endless'|'daily'|'challenge', profile: 0|1|2|3, tutorial, reducedMotion,
-startDay?, startT?, startChill?, dailyDate? }`. `tutorial` should be `true` exactly for profile 0
-(first run). Daily/challenge runs use profile 3. `startDay`/`startT` (seconds after that dawn) and
-`startChill` are debug hooks; a start on Day 8 generates the world from Day 1 (≈100 ms).
+startDay?, startT?, startChill?, dailyDate?, drain? }`. `tutorial` should be `true` exactly for
+profile 0 (first run). Daily/challenge runs use profile 3. `startDay`/`startT` (seconds after that
+dawn) and `startChill` are debug hooks; a start on Day 8 generates the world from Day 1 (≈100 ms).
+
+**Drain (K2).** Profile drains (Chill/s at f = 1) are **30 / 40 / 47 / 55** for profiles 0-3.
+`drain?` is the endless onboarding override: the session sets `cfg.drain =
+endlessDrain(save.stats.runs)` for `mode: 'endless'` runs with no `?profile=`/`?bot=` override;
+daily, challenge and bot runs leave it unset (= the profile drain). `endlessDrain(runs)` =
+`min(PROFILES[min(3, n)].drain, ONBOARD_DRAIN.start + ONBOARD_DRAIN.perRun·n, ONBOARD_DRAIN.max)`
+with `ONBOARD_DRAIN = { start: 30, perRun: 3, max: 55 }` and n = max(0, floor(runs)): runs 0..9
+give 30, 33, 36, 39, 42, 45, 48, 51, 54, 55, and 55 from then on. The sim reads the drain only
+through `effectiveDrain(s)` (`s.cfg.drain ?? s.params.drain`); the world and its validator always
+use the profile drain, so the same seed builds the same world with or without the override.
+Replays copy the config, so they carry it. All three are exported from `index.ts`.
 
 ### Building a run in slices
 `createRun(cfg)` generates the world through Nubs + 1600 u at once (≈ 20-60 ms in Node for Day 1).
@@ -99,6 +120,13 @@ is the run's first lesson. `world.startSide` is the hut's side.
 (lag is unwrapped so a fast 270° swipe goes the long way). `mode` is `'idle'|'dragging'|'chasing'|
 'coasting'` — show detent ticks/rotation arrow while `dragging`; `sun.dTheta` is this tick's signed
 change. Follow rate `sunMaxRate(reducedMotion, eps)`: 600°/s, 450 while ε < 15°, 300 reduced.
+
+**Only genuine flicks coast (K1).** On `upEdge` the stored release speed is
+`ω_rel = clamp(release · smoothstep(flickMin, flickFull, |release|), ±cap)` with
+`TUNING.sun.flickMin/flickFull` = **200/600 °/s** of requested angle and cap 360°/s (180 under
+reduced motion). A lift below 200°/s stops where the finger left it, 400°/s coasts at 200°/s,
+300°/s drifts < 15°, and 600°/s and up coast at the full cap (≈ 104° of travel at 360°/s). Catching
+a coasting sun is unchanged. `smoothstep(a, b, x)` lives in `dmath.ts`.
 
 ### Phases
 `'hold' → 'day' ⇄ 'night' → … → 'dead'`. Daylight ticks are `dayTick ∈ [0, dayTicks(day))`; the
@@ -269,15 +297,27 @@ that fully shades the DP's best reachable angles for 3 consecutive steps wins.
 
 ## 10. Bots, headless runs, replays, hashes
 
-- `createBot(kind)` → `{ kind, next(s): InputFrame }` for `'idle'|'novice'|'reactive'|'oracle'`
-  (`BOT_KINDS`); `next` returns a reused frame. Parameters in `TUNING.bots`.
+- `createBot(kind)` → `{ kind, next(s): InputFrame }` for
+  `'idle'|'novice'|'reactive'|'oracle'|'human'` (`BOT_KINDS`); `next` returns a reused frame.
+  Parameters in `TUNING.bots`.
+- **`human`** is a seeded model of a new player, for tooling only (the sim's advisory rows and
+  `?bot=human`). It seeds itself from `s.cfg.seed` on its first `next()` (`rngFor(seed, 'bot',
+  'human')`), draws a reaction lag of 250-350 ms per decision and sees the guide masks that late,
+  acts only when that stale view shows Nubs lit or the sun's current angle unsafe, aims with
+  N(0, 10°) noise and a ±N(0, 0.2) over/undershoot, drags with a minimum-jerk profile lasting
+  120 ms + 0.9 ms/°, lifts at ω = 0 and pauses 120 ms (`TUNING.bots.human`). Deterministic per seed.
 - `runBot(cfg, ticks, kind)` → final state; `runHeadless(seed, ticks, kind, profile = 3)` → hash
-  (the `__SHADY_TEST__.runHeadless` hook); `headlessConfig(seed, profile)`.
+  (the `__SHADY_TEST__.runHeadless` hook); `headlessConfig(seed, profile, drain?)`.
 - `hashState(s)` — 16-hex digest of tick-determined state only (clock, Nubs, sun, Snow/pickup
   counters, casters and pickups < 1000 u ahead); generation progress is deliberately excluded.
 - `createReplay(cfg)`, `recordFrame(replay, frame)`, `playReplay(replay, onStep?)` — in-memory.
-- `node scripts/sim.ts [--seeds N] [--days D] [--bot idle|novice|reactive|oracle|all] [--profile P]
-  [--check] [--workers W]` — balance report and V1_PLAN §13 acceptance check (exit 1 on failure).
+- `node scripts/sim.ts [--seeds N] [--days D] [--bot idle|novice|reactive|oracle|human|all]
+  [--profile P] [--check] [--workers W]` — balance report and V1_PLAN §13 acceptance check (exit 1
+  on failure). Each row prints death-time quantiles, `melted%` (flakes melted ÷ (melted +
+  collected)), first-night share and median run length in real seconds (ticks/60). Three
+  **ADVISORY** rows run the human model at p0 (profile drain), p1 @ `endlessDrain(1)` = 33 and
+  p3 @ `endlessDrain(4)` = 42 and print PASS/MISS against onboarding goals (≥ 50% first night;
+  median run ≥ 30 s; ≥ 25 s). They never fail `--check`.
 - `node scripts/golden.ts` — rewrites `tests/golden/hashes.json` (do it only deliberately).
 
 ## 11. Tuning
@@ -291,6 +331,24 @@ Tuned from the V1_PLAN table (to meet §13 with margin): Day 1 caster spacing 55
 20-50 → 20-46, an extra Day 1 cloud at t = 9 s, and the start hut's side kept clear for 140 u.
 `npm run sim -- --check` fails a target that passes by less than 3 percentage points of seeds
 (`--margin`); at 40/50/100 seeds idle p3 dies before 8 AM on 97.5/98/98%.
+
+Polish wave (all in the golden hashes regenerated with it):
+- **Day-1 wave.** Day rows carry `waveA`/`waveB` (Day 1: 0.75 / 0.65; later days 1 / 0). The gap
+  after a caster at daylight time t is `spacing · (waveA + waveB·sin⁴(180°·t/Dl)) · U(0.7, 1.3)`
+  (t clamped to [0, Dl]; nights use 1; the authored tutorial chunk is untouched), so Day 1 is dense
+  at dawn and dusk and 1.4× sparser at noon with a day mean of 0.994. Over 30 seeds the share of sun
+  angles that fully shade Nubs is 30.9% at 7-8 AM vs 19.2% at 11 AM-1 PM (was 25.4% vs 24.3%).
+- **Flakes** melt after `TUNING.pickups.meltBudget` = 1.2 lit seconds (GDD §5.4; never above 1.3).
+- **Death line**: a cloud is blamed only within ±`cloudTurnRate`·`cloudTurnSec` = ±60° of θ one
+  second before death (GDD §10 row 3).
+- `PROFILES[p].firstCloudOvertakes` / `parkedNoonCloud` are honoured as flags (only p0 sets them).
+  `day1Floor` (70 for p0) is currently non-binding: the table's 50 gives byte-identical output.
+
+`sim --check` after the wave (40 / 50 / 100 seeds): idle p3 dies before 8 AM on 97.5 / 98 / 98%;
+novice p3 median Day 1 10:57 / 11:07 / 11:02 AM; novice p0 first night 100%; reactive p3 median
+Day 3 11:12 AM; oracle 100% to Day 8; rescues/chunk p3 0.514 / 0.524 / 0.545, unresolved 0. melted%:
+novice p3 25.2-26.5%, reactive p3 27.7-28.6%. Advisory human rows (40 seeds): p0 first night 68%
+(PASS); p1@33 median 24.0 s (MISS, goal 30); p3@42 median 16.7 s (MISS, goal 25).
 
 ## 12. Decisions beyond the docs
 

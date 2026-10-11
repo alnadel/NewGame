@@ -17,6 +17,14 @@ export interface DayParams {
   readonly nightLen: number;
   /** Mean caster gap along y (u). */
   readonly spacing: number;
+  /**
+   * Daylight difficulty wave on caster spacing: the gap after a caster at daylight time t is
+   * spacing · (waveA + waveB · sin⁴(180°·t/Dl)) · U(gapMin, gapMax); nights use 1. Day 1 is
+   * 0.75 / 0.65 (dense at dawn and dusk, 1.4× sparser at noon, day mean 0.75 + 0.65·3/8 ≈ 0.994, so
+   * noon is the boss from the very first day); later days are 1 / 0 (flat).
+   */
+  readonly waveA: number;
+  readonly waveB: number;
   /** Lateral distance from the centerline to the nearest footprint point, U(latMin, latMax) (u). */
   readonly latMin: number;
   readonly latMax: number;
@@ -28,7 +36,11 @@ export interface DayParams {
   readonly flakesPerCluster: number;
   /** Validator floor: the best achievable Chill must stay at or above this. */
   readonly floor: number;
-  /** Profile drain (Chill/s at f = 1). Persists for the whole run. */
+  /**
+   * Profile drain (Chill/s at f = 1). Persists for the whole run. The sim reads the drain through
+   * effectiveDrain(s), which prefers RunConfig.drain (the endless onboarding ramp) when it is set;
+   * the validator always uses this profile value.
+   */
   readonly drain: number;
   /** PHEW fires below this Chill. */
   readonly phewT: number;
@@ -39,7 +51,12 @@ export interface DayParams {
 export interface ProfileParams {
   readonly drain: number;
   readonly day1EpsNoon: number;
-  /** Validator floor override for Day 1 (0 = use the day table). */
+  /**
+   * Validator floor override for Day 1 (0 = use the day table). Currently non-binding: profile 0's
+   * Day 1 (εnoon 40°, drain 30, the authored tutorial chunk and the parked noon cloud) never needs a
+   * rescue at its floor, so 70 and the table's 50 give byte-identical worlds and sim output
+   * (verified with `node scripts/sim.ts` and the golden hashes). Kept as the knob for a harder p0.
+   */
   readonly day1Floor: number;
   /** A cloud rides with Nubs over 11 AM-1 PM on Day 1, reachable with the sun roughly north. */
   readonly parkedNoonCloud: boolean;
@@ -49,19 +66,44 @@ export interface ProfileParams {
   readonly guideAlways: boolean;
 }
 
-/** Onboarding profiles (V1_PLAN §6). Daily and challenge runs always use profile 3. */
+/**
+ * Onboarding profiles (V1_PLAN §6). Daily and challenge runs always use profile 3. Drains step
+ * 30 / 40 / 47 / 55 (K2) so the run-3 jump to the full drain is no longer a cliff; endless runs also
+ * cap it per lifetime run with endlessDrain() below.
+ */
 export const PROFILES: readonly ProfileParams[] = Object.freeze([
   Object.freeze({ drain: 30, day1EpsNoon: 40, day1Floor: 70, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: true }),
   Object.freeze({ drain: 40, day1EpsNoon: 44, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
-  Object.freeze({ drain: 40, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
+  Object.freeze({ drain: 47, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 20, guideAlways: false }),
   Object.freeze({ drain: 55, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 15, guideAlways: false }),
 ]);
+
+/**
+ * Endless onboarding drain ramp (K2 addendum): run n (0-based lifetime runs) drains at most
+ * start + perRun·n Chill/s, never above max or its profile's drain.
+ */
+export const ONBOARD_DRAIN = Object.freeze({ start: 30, perRun: 3, max: 55 });
+
+/**
+ * Drain (Chill/s at f = 1) for an endless run started after `lifetimeRuns` finished runs:
+ * min(PROFILES[min(3, n)].drain, start + perRun·n, max) with n = max(0, floor(runs)).
+ * Runs 0..9 give 30, 33, 36, 39, 42, 45, 48, 51, 54, 55; 9 and later give 55. The session passes it
+ * as RunConfig.drain for endless runs only; daily, challenge and bots keep the profile drain.
+ */
+export function endlessDrain(lifetimeRuns: number): number {
+  const n = lifetimeRuns > 0 ? Math.floor(lifetimeRuns) : 0;
+  const prof = (PROFILES[n < 3 ? n : 3] as ProfileParams).drain;
+  const ramp = ONBOARD_DRAIN.start + ONBOARD_DRAIN.perRun * n;
+  return Math.min(prof, ramp, ONBOARD_DRAIN.max);
+}
 
 interface Row {
   epsNoon: number;
   v: number;
   dayLen: number;
   spacing: number;
+  waveA: number;
+  waveB: number;
   latMin: number;
   latMax: number;
   clouds: readonly number[];
@@ -73,12 +115,12 @@ interface Row {
 
 /** Standard table for Days 1-6 (profile 3). Day 7+ use the ramp in rampRow(). */
 const TABLE: readonly Row[] = [
-  { epsNoon: 48, v: 70, dayLen: 50, spacing: 45, latMin: 20, latMax: 46, clouds: [9, 19, 38], ballStart: 0, ballEvery: 0, flakes: 3, floor: 50 },
-  { epsNoon: 58, v: 80, dayLen: 50, spacing: 60, latMin: 20, latMax: 55, clouds: [8, 24, 40], ballStart: 6, ballEvery: 14, flakes: 3, floor: 45 },
-  { epsNoon: 66, v: 90, dayLen: 50, spacing: 65, latMin: 20, latMax: 60, clouds: [6, 19, 32, 45], ballStart: 0, ballEvery: 0, flakes: 4, floor: 40 },
-  { epsNoon: 72, v: 100, dayLen: 50, spacing: 70, latMin: 20, latMax: 65, clouds: [5, 16, 27, 38, 49], ballStart: 5, ballEvery: 10, flakes: 4, floor: 40 },
-  { epsNoon: 76, v: 110, dayLen: 50, spacing: 75, latMin: 20, latMax: 70, clouds: [4, 13, 22, 31, 40, 49], ballStart: 0, ballEvery: 0, flakes: 4, floor: 35 },
-  { epsNoon: 76, v: 120, dayLen: 45, spacing: 75, latMin: 20, latMax: 70, clouds: evenly(6, 4, 44), ballStart: 4, ballEvery: 8, flakes: 4, floor: 35 },
+  { epsNoon: 48, v: 70, dayLen: 50, spacing: 45, waveA: 0.75, waveB: 0.65, latMin: 20, latMax: 46, clouds: [9, 19, 38], ballStart: 0, ballEvery: 0, flakes: 3, floor: 50 },
+  { epsNoon: 58, v: 80, dayLen: 50, spacing: 60, waveA: 1, waveB: 0, latMin: 20, latMax: 55, clouds: [8, 24, 40], ballStart: 6, ballEvery: 14, flakes: 3, floor: 45 },
+  { epsNoon: 66, v: 90, dayLen: 50, spacing: 65, waveA: 1, waveB: 0, latMin: 20, latMax: 60, clouds: [6, 19, 32, 45], ballStart: 0, ballEvery: 0, flakes: 4, floor: 40 },
+  { epsNoon: 72, v: 100, dayLen: 50, spacing: 70, waveA: 1, waveB: 0, latMin: 20, latMax: 65, clouds: [5, 16, 27, 38, 49], ballStart: 5, ballEvery: 10, flakes: 4, floor: 40 },
+  { epsNoon: 76, v: 110, dayLen: 50, spacing: 75, waveA: 1, waveB: 0, latMin: 20, latMax: 70, clouds: [4, 13, 22, 31, 40, 49], ballStart: 0, ballEvery: 0, flakes: 4, floor: 35 },
+  { epsNoon: 76, v: 120, dayLen: 45, spacing: 75, waveA: 1, waveB: 0, latMin: 20, latMax: 70, clouds: evenly(6, 4, 44), ballStart: 4, ballEvery: 8, flakes: 4, floor: 35 },
 ];
 
 /** n spawn times evenly spaced over [a, b]. */
@@ -97,6 +139,8 @@ function rampRow(day: number): Row {
     v: 130,
     dayLen: 45,
     spacing: 75 + 4 * n,
+    waveA: 1,
+    waveB: 0,
     latMin: 20,
     latMax: 70 + 4 * n,
     clouds: evenly(Math.max(3, 6 - n), 4, 44),
@@ -135,6 +179,8 @@ export function dayParams(day: number, profile: ProfileId): DayParams {
     dayLen: row.dayLen,
     nightLen: nightLength(d),
     spacing: row.spacing,
+    waveA: row.waveA,
+    waveB: row.waveB,
     latMin: row.latMin,
     latMax: row.latMax,
     clouds: Object.freeze(row.clouds.slice()),

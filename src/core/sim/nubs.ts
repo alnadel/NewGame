@@ -142,6 +142,14 @@ export function computeCoverage(s: SimState): void {
   }
 }
 
+/**
+ * Drain this run applies (Chill/s at f = 1): RunConfig.drain when set (the endless onboarding
+ * ramp), else the profile drain. Every sim reader of the drain goes through this.
+ */
+export function effectiveDrain(s: SimState): number {
+  return s.cfg.drain ?? s.params.drain;
+}
+
 /** Daylight tick: Chill, multiplier, PHEW, shade/glare/cloud events and timers, hour log. */
 export function applyDaylight(s: SimState): void {
   const nb = s.nubs;
@@ -151,7 +159,7 @@ export function applyDaylight(s: SimState): void {
   const wasLit = nb.litSince >= 0;
   const prevChill = nb.chill;
 
-  let c = nb.chill + (-s.params.drain * f + N.regen * Math.max(0, 1 - f)) * DT;
+  let c = nb.chill + (-effectiveDrain(s) * f + N.regen * Math.max(0, 1 - f)) * DT;
   if (c > nb.maxChill) c = nb.maxChill;
   nb.chill = c;
 

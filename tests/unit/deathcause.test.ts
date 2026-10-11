@@ -1,13 +1,17 @@
 // Death line (V1_PLAN §10): one crafted scenario per cause, plus cases where a cause must not fire.
 import { describe, expect, it } from 'vitest';
 import { dayParams } from '../../src/config/days.ts';
-import { elevation, yAtDayTick } from '../../src/core/clock.ts';
-import { cosD, sinD, tanD } from '../../src/core/dmath.ts';
+import { elevation, TICK_HZ, yAtDayTick } from '../../src/core/clock.ts';
+import { TUNING } from '../../src/config/tuning.ts';
+import { angleDiff, cosD, sinD, tanD } from '../../src/core/dmath.ts';
 import { makeCaster, makePrism } from '../../src/core/gen/catalog.ts';
 import { addCloud } from '../../src/core/gen/placer.ts';
 import { insertBall, insertCaster } from '../../src/core/gen/store.ts';
+import { BINS, markEllipse, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../../src/core/intervals.ts';
+import { createBot } from '../../src/core/sim/bots.ts';
 import { rectPoly } from '../../src/core/geom.ts';
-import { cloudOffset, glareOffset } from '../../src/core/shadows.ts';
+import type { Cloud } from '../../src/core/objects.ts';
+import { cloudAlive, cloudCenter, cloudOffset, glareOffset } from '../../src/core/shadows.ts';
 import { createRun } from '../../src/core/sim/create.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { step } from '../../src/core/sim/step.ts';
@@ -72,19 +76,35 @@ describe('death cause', () => {
     expect(d.line).toBe(`Glared by the Glary Ball ${d.ballId! - 90_000} at ${d.time}.`);
   });
 
-  it('cloud: a cloud could have shaded Nubs one second before death', () => {
-    const s = lab();
-    // A cloud riding along at v whose shadow covers Nubs if the sun turns 90° (sun north of θ0).
+  /** A cloud riding along at v whose shadow covers Nubs at tick 50 with the sun at θ0 + turn. */
+  function ridingCloud(s: SimState, turn: number): void {
     const v = dayParams(1, 3).v;
     const tAt = 50 / 60; // aim at tick 50, about a second before the ~110-tick death
     const y = yAtDayTick(1, 50);
     const x = trailX(s.world.trail, y);
     const R = cloudOffset(300, 1 / tanD(elevation(dayParams(1, 3), tAt)));
-    const a = s.theta0 + 90;
+    const a = s.theta0 + turn;
     addCloud(s.world, 'parked', 0, 10, x + cosD(a) * R, y + sinD(a) * R - v * tAt, 0, v, 80);
-    runToDeath(s);
-    expect(s.death!.cause).toBe('cloud');
-    expect(s.death!.line).toBe(`Melted by You at ${s.death!.time}. That cloud was right there.`);
+  }
+
+  it('cloud: a cloud could have shaded Nubs within ±60° one second before death', () => {
+    expect(TUNING.death.cloudTurnRate * TUNING.death.cloudTurnSec).toBe(60);
+    for (const turn of [45, -45]) {
+      const s = lab();
+      ridingCloud(s, turn);
+      runToDeath(s);
+      expect(s.death!.cause).toBe('cloud');
+      expect(s.death!.line).toBe(`Melted by You at ${s.death!.time}. That cloud was right there.`);
+    }
+  });
+
+  it('must not fire: a cloud that needed a 90° turn (beyond ±60°) is not blamed', () => {
+    for (const turn of [90, -90, 180]) {
+      const s = lab();
+      ridingCloud(s, turn);
+      runToDeath(s);
+      expect(s.death!.cause).toBe('plain');
+    }
   });
 
   it('gap: between the last caster that shaded Nubs and the next one that could', () => {
@@ -128,4 +148,66 @@ describe('death cause', () => {
     expect(s.tick).toBeGreaterThan(7 * 60);
     expect(s.death!.cause).toBe('plain');
   });
+});
+
+/**
+ * Bins where cloud `cl` fully covers all 5 coverage samples of Nubs at (x, y) with the sun at
+ * elevation eps and the clouds at tAbs: the same geometry the sim's coverage and the death line use.
+ */
+function cloudFullCover(cl: Cloud, x: number, y: number, eps: number, tAbs: number): Uint8Array {
+  const R = cloudOffset(TUNING.shadow.cloudZ, 1 / tanD(eps));
+  const c = new Float64Array(2);
+  cloudCenter(cl, tAbs, c);
+  const count = new Uint8Array(BINS);
+  const mask = new Uint8Array(BINS);
+  for (let k = 0; k < SAMPLES; k++) {
+    mask.fill(0);
+    markEllipse(mask, x + SAMPLE_DX[k]!, y + SAMPLE_DY[k]!, R, c[0]!, c[1]!, cl.rx, cl.ry);
+    for (let b = 0; b < BINS; b++) count[b]! += mask[b]!;
+  }
+  const out = new Uint8Array(BINS);
+  for (let b = 0; b < BINS; b++) out[b] = count[b] === SAMPLES ? 1 : 0;
+  return out;
+}
+
+describe('death cause over real runs', () => {
+  it('novice p3, seeds 1-20: a cloud is blamed exactly when one fully covered Nubs within 60° of θ 60 ticks before death', () => {
+    const back = TUNING.death.cloudLookbackTicks;
+    const causes: Record<string, number> = {};
+    let cloudDeaths = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = createRun(headlessConfig(seed, 3));
+      const bot = createBot('novice');
+      // θ after every tick of the clock (start-beat ticks don't advance it, like the sim's ring).
+      const theta: number[] = [];
+      for (let i = 0; i < 60 * 60 * 8 && s.phase !== 'dead'; i++) {
+        step(s, bot.next(s));
+        if (s.ready === 0 && s.phase !== 'hold') theta.push(s.sun.theta);
+      }
+      expect(s.phase, `seed ${seed}`).toBe('dead');
+      const d = s.death!;
+      causes[d.cause] = (causes[d.cause] ?? 0) + 1;
+      if (d.cause === 'glare' || s.dayTick < back) continue;
+      const th = theta[theta.length - 1 - back]!;
+      const dt = s.dayTick - back;
+      const y = yAtDayTick(s.day, dt);
+      const eps = elevation(s.params, dt / TICK_HZ);
+      const tAbs = s.tAbs - back / TICK_HZ;
+      let near = false;
+      for (const cl of s.world.clouds) {
+        if (!cloudAlive(cl, tAbs)) continue;
+        const full = cloudFullCover(cl, trailX(s.world.trail, y), y, eps, tAbs);
+        for (let b = 0; b < BINS && !near; b++) if (full[b] && Math.abs(angleDiff(b, th)) <= 60) near = true;
+      }
+      if (d.cause === 'cloud') {
+        cloudDeaths++;
+        expect(near, `seed ${seed}: blamed a cloud that was not within 60°`).toBe(true);
+      } else {
+        expect(near, `seed ${seed}: ${d.cause} death although a cloud was within 60°`).toBe(false);
+      }
+    }
+    // The run set must actually exercise the cloud line (and the other causes).
+    expect(cloudDeaths, JSON.stringify(causes)).toBeGreaterThan(0);
+    expect(cloudDeaths, JSON.stringify(causes)).toBeLessThan(20);
+  }, 60_000);
 });

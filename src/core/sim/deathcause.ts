@@ -39,11 +39,12 @@ function glareCause(s: SimState): number {
 
 /**
  * One second before death, some cloud could have fully shaded Nubs at an azimuth within
- * ±(180°/s × 1 s) of the sun's azimuth then.
+ * ±min(180, cloudTurnRate × cloudTurnSec) = ±60° of the sun's azimuth then (GDD §10 row 3).
  */
 function cloudCause(s: SimState): boolean {
   const back = D.cloudLookbackTicks;
-  if (s.recentCount < back || s.dayTick - back < 0) return false;
+  // recent(s, 1) is the death tick itself, so the tick `back` ticks earlier is ago = back + 1.
+  if (s.recentCount <= back || s.dayTick - back < 0) return false;
   const dt = s.dayTick - back;
   const y = yAtDayTick(s.day, dt);
   const x = trailX(s.world.trail, y);
@@ -51,7 +52,7 @@ function cloudCause(s: SimState): boolean {
   if (eps <= 0) return false;
   const tAbs = s.tAbs - back / TICK_HZ;
   const R = cloudOffset(TUNING.shadow.cloudZ, 1 / tanD(eps));
-  const theta = recent(s, back, 0);
+  const theta = recent(s, back + 1, 0);
   const reach = Math.min(180, D.cloudTurnRate * D.cloudTurnSec);
   for (const cl of s.world.clouds as readonly Cloud[]) {
     if (!cloudAlive(cl, tAbs)) continue;

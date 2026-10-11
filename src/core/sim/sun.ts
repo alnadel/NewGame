@@ -4,15 +4,18 @@
 // - dragging: target += dTheta; θ follows the target at ≤ maxRate (600°/s; 450 while ε < 15°;
 //   300 under reduced motion). The target is kept as an unwrapped lag so a fast 270° swipe never
 //   takes the short way round.
-// - upEdge: that tick's dTheta is applied first, then ω_rel = clamp(release, ±cap) is stored and
-//   the sun keeps chasing the remaining target; once caught up it coasts at ω_rel.
+// - upEdge: that tick's dTheta is applied first, then
+//   ω_rel = clamp(release · smoothstep(200, 600, |release|), ±cap) is stored (cap 360°/s, 180
+//   under reduced motion) and the sun keeps chasing the remaining target; once caught up it coasts
+//   at ω_rel. Only genuine flicks coast (K1): a lift below 200°/s stops dead, 400°/s coasts at
+//   200°/s, 600°/s and up at full speed.
 // - coasting: θ += ω·DT, ω *= e^(−3.5/60); idle below 5°/s.
 // - key ≠ 0: θ += key·180·DT and the target snaps to θ, overriding chasing/coasting, so a held key
 //   and a held finger add up instead of fighting.
 // - Detents (every 15°) emit `detent` events; they are feedback only.
 
 import { TUNING } from '../../config/tuning.ts';
-import { angleDiff, wrapDeg } from '../dmath.ts';
+import { angleDiff, smoothstep, wrapDeg } from '../dmath.ts';
 import { DT } from '../clock.ts';
 import type { InputFrame, SimState } from './types.ts';
 
@@ -41,7 +44,9 @@ export function updateSun(s: SimState, inp: InputFrame): void {
     sun.lag += inp.dTheta;
     if (inp.upEdge) {
       const cap = s.cfg.reducedMotion ? S.releaseCapReduced : S.releaseCap;
-      sun.omegaRel = inp.release > cap ? cap : inp.release < -cap ? -cap : inp.release;
+      // (+ 0 turns the −0 of a slow negative lift into 0.)
+      const coast = inp.release * smoothstep(S.flickMin, S.flickFull, Math.abs(inp.release)) + 0;
+      sun.omegaRel = coast > cap ? cap : coast < -cap ? -cap : coast;
       sun.mode = 'chasing';
     }
   }

@@ -1,11 +1,13 @@
 // Bots and guide (fast subset of the sim acceptance; the full check is `npm run sim -- --check`).
 import { describe, expect, it } from 'vitest';
 import { cosD, sinD } from '../../src/core/dmath.ts';
-import { createBot } from '../../src/core/sim/bots.ts';
+import { BOT_KINDS, createBot } from '../../src/core/sim/bots.ts';
 import { createRun } from '../../src/core/sim/create.ts';
-import { headlessConfig, runBot } from '../../src/core/sim/headless.ts';
+import { hashState } from '../../src/core/sim/hash.ts';
+import { headlessConfig, runBot, runHeadless } from '../../src/core/sim/headless.ts';
 import { computeCoverage } from '../../src/core/sim/nubs.ts';
 import { step } from '../../src/core/sim/step.ts';
+import type { SimState } from '../../src/core/sim/types.ts';
 
 describe('bots', () => {
   it('idle (holds θ0) melts before 8:00 AM on Day 1 on at least 9 of seeds 1-10', () => {
@@ -24,6 +26,43 @@ describe('bots', () => {
       expect(s.phase).not.toBe('dead');
       expect(s.day).toBeGreaterThanOrEqual(4);
     }
+  }, 60_000);
+
+  it('human: a seeded model, deterministic per seed, that never flicks or uses keys', () => {
+    expect(BOT_KINDS).toContain('human');
+    const trace = (seed: number): { hashes: string[]; s: SimState } => {
+      const s = createRun(headlessConfig(seed, 3));
+      const bot = createBot('human');
+      const hashes: string[] = [];
+      let moves = 0;
+      for (let i = 0; i < 60 * 90 && s.phase !== 'dead'; i++) {
+        const f = bot.next(s);
+        expect(f.release).toBe(0);
+        expect(f.key).toBe(0);
+        if (f.downEdge && i > 0) moves++;
+        step(s, f);
+        if ((i + 1) % 300 === 0) hashes.push(hashState(s));
+      }
+      hashes.push(hashState(s));
+      expect(moves, `seed ${seed} drags`).toBeGreaterThan(5);
+      return { hashes, s };
+    };
+    for (const seed of [3, 8]) expect(trace(seed).hashes).toEqual(trace(seed).hashes);
+    // Different seeds give different players (and different worlds).
+    expect(trace(3).hashes).not.toEqual(trace(8).hashes);
+    // The same seed through runHeadless matches too (?bot=human and the test hook use this path).
+    expect(runHeadless(5, 2400, 'human')).toBe(runHeadless(5, 2400, 'human'));
+  });
+
+  it('human survives longer than idle (median over seeds 1-12, profile 3)', () => {
+    const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+    const idle: number[] = [];
+    const human: number[] = [];
+    for (let seed = 1; seed <= 12; seed++) {
+      idle.push(runBot(headlessConfig(seed, 3), 60 * 600, 'idle').tick);
+      human.push(runBot(headlessConfig(seed, 3), 60 * 600, 'human').tick);
+    }
+    expect(median(human)).toBeGreaterThan(2 * median(idle));
   }, 60_000);
 
   it('bots only ever turn at their capped rate', () => {
