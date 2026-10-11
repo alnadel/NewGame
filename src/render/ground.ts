@@ -1,0 +1,137 @@
+// Ground fill, biome detail tiles, the trail ribbon and footprint decals (GDD §10, TECH_SPEC §9.2
+// steps 3-6). The ground scrolls with the world: tiles are anchored to multiples of 256 u.
+
+import { biomeAtY, trailX, type World } from '../core/index.ts';
+import type { View } from '../game/camera.ts';
+import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
+import type { Palette } from './palette.ts';
+import { groundTiles, TILE_U } from './sprites.ts';
+
+export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, detail: boolean): void {
+  g.fillStyle = css(pal.ground);
+  g.fillRect(v.vx, v.vy, v.vw, v.vh);
+  if (!detail) return;
+  const tiles = groundTiles(v.S * v.dpr);
+  const tx0 = Math.floor(v.x0 / TILE_U) * TILE_U;
+  const ty0 = Math.floor(v.y0 / TILE_U) * TILE_U;
+  // Night hides the detail a little (it stays as texture, not noise).
+  g.globalAlpha = 1 - pal.night * 0.4;
+  for (let ty = ty0; ty < v.y1; ty += TILE_U) {
+    const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
+    const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
+    const h = Math.ceil(v.oy - ty * v.S) - sy;
+    for (let tx = tx0; tx < v.x1; tx += TILE_U) {
+      const sx = Math.floor(v.ox + tx * v.S);
+      const w = Math.ceil(v.ox + (tx + TILE_U) * v.S) - sx;
+      g.drawImage(tile, sx, sy, w + 0.5, h + 0.5);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+const STEP = 8;
+
+/** The trail: a darker 34 u edge under a 30 u ribbon, plus a faint worn center line. */
+export function drawTrail(g: CanvasRenderingContext2D, v: View, w: World, pal: Palette): void {
+  const yA = Math.floor((v.y0 - 60) / STEP) * STEP;
+  const yB = v.y1 + 60;
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.beginPath();
+  for (let y = yA; y <= yB; y += STEP) {
+    const sx = v.ox + trailX(w.trail, y) * v.S;
+    const sy = v.oy - y * v.S;
+    if (y === yA) g.moveTo(sx, sy);
+    else g.lineTo(sx, sy);
+  }
+  g.strokeStyle = css(pal.trailEdge);
+  g.lineWidth = 34 * v.S;
+  g.stroke();
+  g.strokeStyle = css(pal.trail);
+  g.lineWidth = 30 * v.S;
+  g.stroke();
+  // Worn center: a lighter band where feet go.
+  g.strokeStyle = cssa(lighten(pal.trail, 0.5), 0.16 * (1 - pal.night));
+  g.lineWidth = 12 * v.S;
+  g.stroke();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Footprints: paired 3×5 u ellipses every 14 u; frosty white in shade, dark and wet in sun.
+// ---------------------------------------------------------------------------------------------
+
+const FP_CAP = 64;
+const FROST_LIFE = 4;
+const WET_LIFE = 1.5;
+
+export interface Footprints {
+  readonly x: Float32Array;
+  readonly y: Float32Array;
+  readonly age: Float32Array;
+  /** 1 frosty (shaded), 0 wet (lit). */
+  readonly frost: Uint8Array;
+  readonly angle: Float32Array;
+  cursor: number;
+  nextY: number;
+  side: number;
+}
+
+export function createFootprints(): Footprints {
+  return {
+    x: new Float32Array(FP_CAP),
+    y: new Float32Array(FP_CAP),
+    age: new Float32Array(FP_CAP).fill(99),
+    frost: new Uint8Array(FP_CAP),
+    angle: new Float32Array(FP_CAP),
+    cursor: 0,
+    nextY: -Infinity,
+    side: 1,
+  };
+}
+
+export function resetFootprints(f: Footprints, y: number): void {
+  f.age.fill(99);
+  f.nextY = y + 14;
+  f.side = 1;
+}
+
+/** Leaves prints as Nubs walks (call every frame with his position and shade state). */
+export function stepFootprints(f: Footprints, x: number, y: number, slope: number, shaded: boolean, dt: number): void {
+  for (let i = 0; i < FP_CAP; i++) f.age[i] = f.age[i]! + dt;
+  if (!Number.isFinite(f.nextY) || y < f.nextY - 40) f.nextY = y;
+  while (y >= f.nextY) {
+    const i = f.cursor;
+    f.cursor = (i + 1) % FP_CAP;
+    // Offset sideways from the walking direction (slope = dx/dy).
+    const len = Math.sqrt(1 + slope * slope);
+    const px = 1 / len;
+    const py = -slope / len;
+    f.x[i] = x + px * 3.6 * f.side;
+    f.y[i] = f.nextY + py * 3.6 * f.side;
+    f.age[i] = 0;
+    f.frost[i] = shaded ? 1 : 0;
+    f.angle[i] = Math.atan2(1, slope);
+    f.side = -f.side;
+    f.nextY += 7;
+  }
+}
+
+export function drawFootprints(g: CanvasRenderingContext2D, f: Footprints, v: View, pal: Palette): void {
+  const wet: Rgb = darken(pal.trail, 0.35);
+  const frost: Rgb = mix(0xffffff, 0xdff1ff, 0.4);
+  for (let i = 0; i < FP_CAP; i++) {
+    const age = f.age[i]!;
+    const isFrost = f.frost[i] === 1;
+    const life = isFrost ? FROST_LIFE : WET_LIFE;
+    if (age >= life) continue;
+    const y = f.y[i]!;
+    if (y < v.y0 - 10 || y > v.y1 + 10) continue;
+    const fade = 1 - age / life;
+    const sx = v.ox + f.x[i]! * v.S;
+    const sy = v.oy - y * v.S;
+    g.fillStyle = isFrost ? cssa(frost, 0.75 * fade) : cssa(wet, 0.45 * fade);
+    g.beginPath();
+    g.ellipse(sx, sy, 1.6 * v.S, 2.6 * v.S, Math.PI / 2 - f.angle[i]!, 0, Math.PI * 2);
+    g.fill();
+  }
+}

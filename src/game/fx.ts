@@ -1,0 +1,255 @@
+// FX router (GDD §11 juice list, V1_PLAN changes): SimEvents → particles, rings, text pops, HUD and
+// banner timers, Nubs' reactions, camera shake/zoom, slow-mo and hit-stop; plus the continuous
+// effects (steam while lit, sweat below 60 Chill, frost sparkles in shade, fireflies at night).
+// Particles are render-only and may use Math.random.
+
+import type { SimEvent, SimState } from '../core/index.ts';
+import { addPop, addRing, P_BURST, P_CONFETTI, P_DRIP, P_FIREFLY, P_FLAKE_FLY, P_FROST, P_PETAL, P_PUFF, P_SPARKLE, P_STEAM, POP_BANG, POP_MULT, POP_PHEW, POP_PLUS, spawn } from '../render/particles.ts';
+import { flashDetent } from '../render/halo.ts';
+import { showDayCard } from '../render/banners.ts';
+import type { RenderScene } from '../render/renderer.ts';
+import { addShake, addZoomPulse } from './camera.ts';
+import type { FixedClock } from './loop.ts';
+
+const PLUS = ['+0', '+1', '+2', '+3', '+4', '+5', '+6', '+7', '+8', '+9', '+10'];
+const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
+const FROST: number = 0xe6f6ff;
+const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
+const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
+
+function plus(n: number): string {
+  return n >= 0 && n < PLUS.length ? (PLUS[n] as string) : `+${n}`;
+}
+
+function rnd(a: number, b: number): number {
+  return a + Math.random() * (b - a);
+}
+
+export class Fx {
+  private readonly sc: RenderScene;
+  private readonly clock: FixedClock;
+  reducedMotion = false;
+  private steamAcc = 0;
+  private sweatAcc = 0;
+  private frostAcc = 0;
+  private fireflyAcc = 0;
+
+  constructor(scene: RenderScene, clock: FixedClock) {
+    this.sc = scene;
+    this.clock = clock;
+  }
+
+  /** Routes one frame's events. */
+  onEvents(events: readonly SimEvent[], s: SimState): void {
+    const sc = this.sc;
+    const nx = s.nubs.x;
+    const ny = s.nubs.y;
+    for (const ev of events) {
+      switch (ev.e) {
+        case 'detent':
+          flashDetent(sc.halo, ev.index);
+          break;
+        case 'catch':
+          sc.sun.squash = 0.08;
+          break;
+        case 'flake': {
+          const p = sc.particles;
+          spawn(p, P_FLAKE_FLY, ev.x, ev.y, 8, 0, 0, 0, 0.15, 7, 5, 0xffffff);
+          for (let i = 0; i < 8; i++) {
+            const a = rnd(0, Math.PI * 2);
+            const sp = rnd(60, 120);
+            spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 60), 0.4, 4, 1.5, 0xffffff);
+          }
+          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 34, 0.75);
+          break;
+        }
+        case 'crystal': {
+          const p = sc.particles;
+          spawn(p, P_FLAKE_FLY, ev.x, ev.y, 8, 0, 0, 0, 0.18, 9, 6, 0xbdf3ff);
+          for (let i = 0; i < 18; i++) {
+            const a = rnd(0, Math.PI * 2);
+            const sp = rnd(70, 150);
+            spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 80), 0.55, 5, 1.5, 0xbdf3ff);
+          }
+          addRing(sc.rings, nx, ny, 4, 34, 0.35, 2.5, 0.9, 0xbdf3ff);
+          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 34, 0.9);
+          break;
+        }
+        case 'flower': {
+          for (let i = 0; i < 6; i++) {
+            const a = rnd(0, Math.PI * 2);
+            spawn(sc.particles, P_SPARKLE, ev.x, ev.y, 6, Math.cos(a) * 40, Math.sin(a) * 40, 30, 0.45, 3.5, 1, 0xe6f7ff);
+          }
+          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 30, 0.7);
+          break;
+        }
+        case 'flakeMelt':
+          for (let i = 0; i < 6; i++) {
+            spawn(sc.particles, P_PUFF, ev.x + rnd(-4, 4), ev.y + rnd(-3, 3), 6, rnd(-8, 8), rnd(-4, 4), rnd(18, 34), 0.6, 2.5, 7, 0xffffff);
+          }
+          break;
+        case 'shadeEnter':
+          if (ev.litFor >= 0.25) {
+            addRing(sc.rings, nx, ny, 0, 40, 0.3, 2.2, 0.8, 0xffffff);
+            sc.nubs.shiver = 0.14;
+          }
+          break;
+        case 'multUp':
+          sc.hud.multPop = 0.3;
+          sc.banners.coolPulse = 0.25;
+          addPop(sc.pops, MULT[Math.min(5, ev.level)] as string, POP_MULT, nx, ny, 46, 0.8);
+          if (ev.level >= 5) {
+            this.clock.addHitStop(0.04);
+            sc.banners.goldPulse = 0.45;
+          }
+          break;
+        case 'multReset':
+          if (ev.from > 1) sc.hud.multShake = 0.2;
+          break;
+        case 'phew': {
+          this.clock.slowMo(0.4, 0.35);
+          addPop(sc.pops, 'PHEW!', POP_PHEW, nx, ny, 58, 1.1);
+          addPop(sc.pops, '+3', POP_PLUS, nx + 14, ny, 34, 0.8);
+          for (let i = 0; i < 24; i++) {
+            const a = (i / 24) * Math.PI * 2 + rnd(-0.1, 0.1);
+            const sp = rnd(80, 150);
+            spawn(sc.particles, P_BURST, nx, ny, 2, Math.cos(a) * sp, Math.sin(a) * sp, 0, 0.6, 5, 2, FROST);
+          }
+          addRing(sc.rings, nx, ny, 6, 52, 0.4, 3, 0.9, 0xdff1ff);
+          sc.relief = 1.2;
+          sc.nubs.phew = 1;
+          break;
+        }
+        case 'noonBanner':
+          sc.banners.noon = 0;
+          break;
+        case 'noonPassed':
+          sc.hud.noonSparkle = 1.2;
+          break;
+        case 'nightStart':
+          sc.banners.night = 0;
+          break;
+        case 'dawn': {
+          showDayCard(sc.banners, ev.day);
+          this.petals(30);
+          break;
+        }
+        case 'cloudCapture':
+          addZoomPulse(sc.cam, 0.04, 0.4);
+          sc.nubs.happy = 0.9;
+          break;
+        case 'glareTouch':
+          sc.nubs.glare = 0.25;
+          addShake(sc.cam, 2, 0.1);
+          addPop(sc.pops, '!', POP_BANG, nx, ny, 50, 0.5);
+          break;
+        case 'gateArch':
+          if (ev.noon) {
+            for (let i = 0; i < 10; i++) {
+              const a = rnd(0, Math.PI * 2);
+              spawn(sc.particles, P_SPARKLE, nx, ny, 30, Math.cos(a) * 70, Math.sin(a) * 70, 20, 0.5, 4, 1.5, 0xffe27a);
+            }
+          }
+          break;
+        case 'death': {
+          this.clock.addHitStop(0.08);
+          this.clock.slowMo(0.3, 0.58);
+          addShake(sc.cam, 6, 0.25);
+          addRing(sc.rings, ev.info.x, ev.info.y, 6, 30, 0.9, 2, 0.8, 0xffffff);
+          for (let i = 0; i < 14; i++) {
+            spawn(sc.particles, P_STEAM, nx + rnd(-8, 8), ny + rnd(-4, 4), rnd(4, 18), rnd(-10, 10), rnd(-4, 4), rnd(25, 45), rnd(0.8, 1.3), 3, 11, 0xffffff);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+
+  /** Continuous effects, once per frame with game dt. */
+  update(dt: number, s: SimState, playing: boolean): void {
+    if (dt <= 0 || !playing) return;
+    const sc = this.sc;
+    const nb = s.nubs;
+    const p = sc.particles;
+    const daylight = s.phase === 'day';
+    if (daylight && nb.f > 0) {
+      // Steam at 30·f per second, rising 30 u/s and growing 3 → 9 u over 0.8 s.
+      this.steamAcc += dt * 30 * Math.min(2, nb.f);
+      while (this.steamAcc >= 1) {
+        this.steamAcc -= 1;
+        spawn(p, P_STEAM, nb.x + rnd(-7, 7), nb.y + rnd(-4, 4), rnd(14, 26), rnd(-6, 6), rnd(-2, 4), 30, 0.8, 3, 9, 0xffffff);
+      }
+    } else {
+      this.steamAcc = 0;
+    }
+    if (daylight && nb.chill < 60) {
+      this.sweatAcc += dt;
+      if (this.sweatAcc >= 0.4) {
+        this.sweatAcc = 0;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        spawn(p, P_DRIP, nb.x + side * rnd(4, 7), nb.y, rnd(30, 40), side * rnd(10, 22), rnd(-4, 4), rnd(30, 60), 1.2, 1.3, 1.1, 0x9ad8ff);
+      }
+    }
+    if (daylight && nb.f === 0) {
+      // Frost sparkles: 2 per second on the ground within 16 u, living 1.2 s.
+      this.frostAcc += dt * 2;
+      while (this.frostAcc >= 1) {
+        this.frostAcc -= 1;
+        const a = rnd(0, Math.PI * 2);
+        const r = rnd(4, 16);
+        spawn(p, P_FROST, nb.x + Math.cos(a) * r, nb.y + Math.sin(a) * r, 0, 0, 0, 0, 1.2, 3.2, 3.2, FROST);
+      }
+    }
+    if (s.phase === 'night') {
+      this.fireflyAcc += dt * 3;
+      while (this.fireflyAcc >= 1) {
+        this.fireflyAcc -= 1;
+        spawn(p, P_FIREFLY, nb.x + rnd(-170, 170), nb.y + rnd(-120, 420), rnd(8, 30), rnd(-8, 8), rnd(-8, 8), rnd(-3, 3), rnd(2.5, 4.5), 4.5, 4.5, 0xffec96);
+      }
+    }
+  }
+
+  /** Dawn petals (screen space). */
+  petals(n: number): void {
+    const v = this.sc.view;
+    for (let i = 0; i < n; i++) {
+      spawn(
+        this.sc.particles,
+        P_PETAL,
+        v.vx + rnd(0, v.vw),
+        v.vy - rnd(10, 160),
+        0,
+        rnd(-30, 30),
+        rnd(40, 110),
+        0,
+        rnd(3.5, 5),
+        rnd(3.5, 6),
+        0,
+        PETALS[i % PETALS.length] as number,
+      );
+    }
+  }
+
+  /** New-best confetti (screen space). */
+  confetti(n: number): void {
+    const v = this.sc.view;
+    for (let i = 0; i < n; i++) {
+      spawn(
+        this.sc.particles,
+        P_CONFETTI,
+        v.vx + v.vw / 2 + rnd(-40, 40),
+        v.vy + v.vh * 0.32,
+        0,
+        rnd(-260, 260),
+        rnd(-520, -220),
+        0,
+        rnd(1.8, 2.8),
+        rnd(7, 11),
+        0,
+        CONFETTI[i % CONFETTI.length] as number,
+      );
+    }
+  }
+}
