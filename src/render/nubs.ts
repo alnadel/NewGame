@@ -6,7 +6,8 @@
 // death a melt into a puddle with the eyes and nose bobbing in it. Also the Wardrobe preview.
 
 import { equippedLooks, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
-import { css, cssa, darken, hex, lighten, mix, type Rgb } from './color.ts';
+import { css, cssa, darken, hex, mix, type Rgb } from './color.ts';
+import { nubsShadeAt } from './palette.ts';
 import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -991,10 +992,13 @@ const BOX_W = 80;
 const BOX_H = 84;
 const ORIGIN_X = 40;
 const ORIGIN_Y = 64;
-/** Quantization of the cached layers' inputs. */
+/**
+ * Quantization of the cached layers' inputs: Chill in 1/40, the look in 5° steps, the night (its
+ * tint and shade) in 1/16, so a 1.5 s dusk or dawn costs about 11 layer redraws a second.
+ */
 const CHILL_STEPS = 40;
 const LOOK_STEP_DEG = 5;
-const NIGHT_STEPS = 32;
+const NIGHT_STEPS = 16;
 
 export interface NubsSprite {
   /** The composed image (x-ray, glare flash, melt). */
@@ -1008,7 +1012,6 @@ export interface NubsSprite {
   front: Canvas2D;
   frontG: CanvasRenderingContext2D;
   key: number;
-  keyShade: number;
   keyLooks: Looks | null;
   /** This frame: draw from the composed canvas (melt, glare flash), and whether it is up to date. */
   whole: boolean;
@@ -1040,7 +1043,6 @@ export function createNubsSprite(): NubsSprite {
     front,
     frontG: ctx2d(front),
     key: NaN,
-    keyShade: -1,
     keyLooks: null,
     whole: false,
     composed: false,
@@ -1123,6 +1125,9 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   spritePose.lookY = Math.sin(la);
   const nightQ = Math.round(Math.max(0, Math.min(1, p.night)) * NIGHT_STEPS);
   spritePose.night = nightQ / NIGHT_STEPS;
+  // The shade tint follows the quantized night too (the palette's continuous one would redraw the
+  // layers every frame through dusk and dawn).
+  spritePose.shade = nubsShadeAt(spritePose.night);
   const lit = p.f > 0 && p.sunUp ? 1 : 0;
   const glare = p.w0 === 2 || p.w1 === 2 || p.w2 === 2 || p.w3 === 2 || p.w4 === 2 ? 1 : 0;
   const tints = (p.w0 === 0 ? 1 : 0) | (p.w1 === 0 ? 2 : 0) | (p.w2 === 0 ? 4 : 0) | (p.w3 === 0 ? 8 : 0) | (p.w4 === 0 ? 16 : 0);
@@ -1134,9 +1139,8 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
     (p.sunUp ? 1 : 0);
 
   const G = nubsGeom(spritePose, sp.geom);
-  if (resized || key !== sp.key || p.shade !== sp.keyShade || looks !== sp.keyLooks) {
+  if (resized || key !== sp.key || looks !== sp.keyLooks) {
     sp.key = key;
-    sp.keyShade = p.shade;
     sp.keyLooks = looks;
     prepare(sp.back, sp.backG, w, h, ox, oy);
     drawBackLayer(sp.backG, spritePose, G);
@@ -1250,7 +1254,3 @@ export function renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equip
   drawNubs(g, pose, previewAnim, looksFor(equipped));
 }
 
-/** Lightens/darkens helper kept for callers that tint Nubs-adjacent props. */
-export function snowTint(t: number): Rgb {
-  return t >= 0 ? lighten(SNOW_RIM, t) : darken(SNOW_RIM, -t);
-}

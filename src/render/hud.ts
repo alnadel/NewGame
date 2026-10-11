@@ -250,11 +250,12 @@ export interface HudInput {
   time: number;
 }
 
-/** Draws the HUD row. Updates h.bottom (bottom edge of the band in CSS px). */
-export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
-  const top = v.safe.top + 8;
-  h.bottom = top + ROW_H + 8;
-  if (inp.alpha <= 0.01) return;
+/**
+ * Brings the cached row layer and the multiplier badge up to date for `inp` (text, flags, layout)
+ * without drawing anything. drawHud calls it every frame; the Title calls it on idle frames, so
+ * the first play frame finds the layer, its width tables and the ruler already built.
+ */
+export function syncHud(h: HudState, v: View, inp: HudInput): void {
   const s = inp.s;
 
   // Text that changes with the run (cached strings; no per-frame allocation).
@@ -294,6 +295,18 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   ) {
     buildLayer(h, v, inp, passed, night);
   }
+  if (h.badgeKey !== s.nubs.mult) renderBadge(h, v, s.nubs.mult);
+}
+
+/** Draws the HUD row. Updates h.bottom (bottom edge of the band in CSS px). */
+export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
+  const top = v.safe.top + 8;
+  h.bottom = top + ROW_H + 8;
+  if (inp.alpha <= 0.01) return;
+  const s = inp.s;
+  syncHud(h, v, inp);
+  const dl = dayTicks(s.day);
+  const night = s.dayTick >= dl ? 1 : 0;
 
   g.globalAlpha = inp.alpha;
   const layer = h.layer as Canvas2D;
@@ -307,7 +320,6 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
 
   // Multiplier badge: pops 1 → 1.4 → 1 on ×up (elastic), shakes ±4 px on reset; gold from ×2.
   const m = s.nubs.mult;
-  if (h.badgeKey !== m) renderBadge(h, v, m);
   let bs = 1;
   if (h.multPop > 0) {
     const t = 1 - h.multPop / 0.3;

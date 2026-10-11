@@ -76,6 +76,23 @@ describe('sceneFor', () => {
     expect(day({ day: 0 }).day).toBe(1);
   });
 
+  it('asks for each ambience layer only where it can be heard (lazy layers)', () => {
+    // Sizzle bed: only while the screen is in play (any phase); never on the Title, menus or pause.
+    expect(day({ f: 0 }).sizzleOn).toBe(true);
+    expect(scene({ screen: 'play', phase: 'hold' }).sizzleOn).toBe(true);
+    for (const screen of ['title', 'menu', 'paused', 'dying', 'results'] as const) {
+      const s = scene({ screen, phase: 'day', f: 1 });
+      expect([s.sizzleOn, s.cicadasOn]).toEqual([false, false]);
+    }
+    // Cicadas: from 0.5 s before the noon window (0.4·Dl) to its end (0.6·Dl).
+    expect(day({ tDay: 19.4 }).cicadasOn).toBe(false);
+    expect(day({ tDay: 19.6 }).cicadasOn).toBe(true);
+    expect(day({ tDay: 19.6 }).cicadas).toBe(0);
+    expect(day({ tDay: 30 }).cicadasOn).toBe(true);
+    expect(day({ tDay: 30.1 }).cicadasOn).toBe(false);
+    expect(scene({ screen: 'play', phase: 'night', tDay: 25, dayLength: 50 }).cicadasOn).toBe(false);
+  });
+
   it('writes into the scene it is given (no per-frame allocation)', () => {
     const out = createScene();
     expect(sceneFor(createAudioView(), out)).toBe(out);

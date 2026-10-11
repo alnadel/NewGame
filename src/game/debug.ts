@@ -1,9 +1,10 @@
 // Debug overlay (?debug=1) and the test hook (?test=1, window.__SHADY_TEST__) — V1_PLAN §14.
 
-import { runHeadless, type BotKind } from '../core/index.ts';
+import { BOT_KINDS, runHeadless, type BotKind } from '../core/index.ts';
 import type { ShadyAudio } from '../audio/index.ts';
 import type { DebugDraw } from '../render/renderer.ts';
-import type { Session } from './session.ts';
+import { shakeOf, zoomOf } from './camera.ts';
+import type { MapProbe, Session } from './session.ts';
 
 export interface ShadyTestHook {
   screen(): string;
@@ -32,12 +33,33 @@ export interface ShadyTestHook {
     fps: number;
     nubsLayerDraws: number;
     nubsComposes: number;
-    /** Ground tile repaints so far (render/ground.ts GroundPaint). */
+    /** Ground tile repaints so far, one per biome tile painted (render/ground.ts GroundPaint). */
     groundPaints: number;
     /** Canvas DPR and governor level now. */
     dpr: number;
     govLevel: number;
+    /** renderer.draw calls so far (the render cadence skips the rest of the rAFs). */
+    draws: number;
+    /** Settled-Results frames that only repainted the puddle ring from the cached backdrop. */
+    ringDraws: number;
   };
+  /** The current run's config (the Title's held run between runs); drain = cfg.drain ?? the profile's. */
+  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number };
+  /** Camera effects now: zoom factor (1 = none) and shake offset (u). */
+  cameraFx(): { zoom: number; shakeX: number; shakeY: number };
+  /** The best flag the HUD shows (frozen for the run in progress). */
+  hudPb(): number;
+  /** Render switches for A/B checks: the settled-Results backdrop cache and the Melt Map overlay. */
+  renderOptions(o: { resultsCache?: boolean; mapOverlay?: boolean }): void;
+  /**
+   * Results: draws the Melt Map at `mapT` with and without its overlay (time frozen) and counts the
+   * device pixels that differ above and below the sheet's top edge (K10 checks).
+   */
+  mapProbe(mapT: number): MapProbe | null;
+  /** Settled Results: cached-backdrop frame vs a full redraw at the same instant (device px that differ). */
+  resultsAB(): { diff: number; ringPath: boolean } | null;
+  /** A core bot plays the runs from now on ('reactive', 'oracle'…; null stops it). The runs stay scored. */
+  bot(kind: string | null): void;
 }
 
 declare global {
@@ -77,7 +99,22 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       groundPaints: session.renderer.scene.ground.paints,
       dpr: session.renderer.scene.view.dpr,
       govLevel: session.gov.level,
+      draws: session.renderer.draws,
+      ringDraws: session.renderer.ringDraws,
     }),
+    runCfg: () => session.runCfg(),
+    cameraFx: () => {
+      const c = session.renderer.scene.cam;
+      return { zoom: zoomOf(c), shakeX: shakeOf(c, 0), shakeY: shakeOf(c, 1) };
+    },
+    hudPb: () => session.hudPb(),
+    renderOptions: (o) => {
+      if (o.resultsCache !== undefined) session.renderer.resultsCache = o.resultsCache;
+      if (o.mapOverlay !== undefined) session.renderer.mapOverlay = o.mapOverlay;
+    },
+    mapProbe: (mapT) => session.mapProbe(mapT),
+    resultsAB: () => session.resultsAB(),
+    bot: (kind) => session.setTestBot(kind !== null && (BOT_KINDS as readonly string[]).includes(kind) ? (kind as BotKind) : null),
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
     timeScale: () => session.clock.timeScale,
     hint: () => session.hintState(),

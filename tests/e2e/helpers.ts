@@ -54,6 +54,70 @@ export async function drag(page: Page, x: number, y: number, dx: number, steps =
 /** A save that has unlocked the Daily (3 lifetime runs). */
 export const UNLOCKED_SAVE = JSON.stringify({ v: 1, createdAt: 1, stats: { runs: 3 } });
 
+/** Seeds localStorage's save before the page's scripts run (every navigation of this page). */
+export async function seedSave(page: Page, save: unknown): Promise<void> {
+  await page.addInitScript((raw) => {
+    if (!sessionStorage.getItem('shady.seeded')) {
+      localStorage.setItem('shady.save', raw);
+      sessionStorage.setItem('shady.seeded', '1');
+    }
+  }, typeof save === 'string' ? save : JSON.stringify(save));
+}
+
+/** The local date (YYYY-MM-DD) in the page, `days` from today. */
+export async function pageDate(page: Page, days = 0): Promise<string> {
+  return page.evaluate((n) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    const p = (x: number): string => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }, days);
+}
+
+/** base64url of a challenge object, as meta/challenge.ts encodes it. */
+export function challengeCode(c: object): string {
+  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
+}
+
+export async function runCfg(page: Page): Promise<RunCfg> {
+  return page.evaluate(() => window.__SHADY_TEST__!.runCfg());
+}
+
+export interface RunCfg {
+  mode: string;
+  profile: number;
+  tutorial: boolean;
+  reducedMotion: boolean;
+  seed: number;
+  dailyDate: string | null;
+  drain: number;
+}
+
+export interface ShadyPerf {
+  frameMs: number;
+  simMs: number;
+  genMs: number;
+  renderMs: number;
+  fps: number;
+  nubsLayerDraws: number;
+  nubsComposes: number;
+  groundPaints: number;
+  dpr: number;
+  govLevel: number;
+  draws: number;
+  ringDraws: number;
+}
+
+export interface MapProbe {
+  sheetTop: number;
+  cutRow: number;
+  dpr: number;
+  above: number;
+  below: number;
+  belowBox: number[] | null;
+  png: string;
+}
+
 declare global {
   interface Window {
     __SHADY_TEST__?: {
@@ -69,6 +133,14 @@ declare global {
       nubsScreen(): { x: number; y: number };
       timeScale(): number;
       hint(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number };
+      perf(): ShadyPerf;
+      runCfg(): RunCfg;
+      cameraFx(): { zoom: number; shakeX: number; shakeY: number };
+      hudPb(): number;
+      renderOptions(o: { resultsCache?: boolean; mapOverlay?: boolean }): void;
+      mapProbe(mapT: number): MapProbe | null;
+      resultsAB(): { diff: number; ringPath: boolean } | null;
+      bot(kind: string | null): void;
     };
   }
 }

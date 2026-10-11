@@ -1003,8 +1003,3 @@ export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Ca
     }
   }
 }
-
-/** Screen-space top of a caster (for culling and callouts): the highest projected point. */
-export function casterTopY(v: View, c: Caster): number {
-  return py(v, c.maxY, c.maxZ + 24);
-}

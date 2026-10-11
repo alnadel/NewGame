@@ -97,8 +97,6 @@ const LESSON_LOST = 0.5;
 /** Gaps of up to this many degrees inside a safe region don't split it into two targets. */
 const MERGE_GAP = 6;
 
-/** One ghost-thumb swipe in play, in seconds (ui.css `ghost-once`). */
-export const HINT_CYCLE = 1.5;
 /** Game time scale while the first lesson plays (V1_PLAN §6.2 forgiveness, CRITIQUE first minute). */
 export const LESSON_TIME_SCALE = 0.5;
 

@@ -5,7 +5,7 @@ import { biomeAtY, trailX, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
-import { exactGroundTiles, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
+import { exactGroundTile, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
 
 /**
  * Letterbox bars (TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
@@ -60,21 +60,38 @@ export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, det
 // palette to 1/64 of the day, so about once a second); while the zoom is moving (cloud-capture pulse,
 // Melt Map pull) the existing tiles are drawn scaled.
 
-export interface GroundPaint {
-  meadow: Canvas2D | null;
-  town: Canvas2D | null;
-  /** Tile size in device px, and what it was painted with. */
+/** One biome's painted tile and what it was painted with (T 0 = never). */
+interface BiomeTile {
+  canvas: Canvas2D | null;
   T: number;
   ground: number;
   marksAlpha: number;
+}
+
+export interface GroundPaint {
+  meadow: BiomeTile;
+  town: BiomeTile;
+  /** Tile size in device px of the current zoom (0 before the first stable frame). */
+  T: number;
   /** The view's S on the previous frame (whole-pixel blits only while the zoom holds still). */
   lastS: number;
-  /** Tile repaints so far (perf counter). */
+  /** Tile repaints so far, one per biome tile painted (perf counter). */
   paints: number;
 }
 
 export function createGroundPaint(): GroundPaint {
-  return { meadow: null, town: null, T: 0, ground: -1, marksAlpha: -1, lastS: 0, paints: 0 };
+  const tile = (): BiomeTile => ({ canvas: null, T: 0, ground: -1, marksAlpha: -1 });
+  return { meadow: tile(), town: tile(), T: 0, lastS: 0, paints: 0 };
+}
+
+/** Paints `bt` for the current tile size, ground color and marks alpha if it is stale. */
+function freshen(gp: GroundPaint, bt: BiomeTile, town: boolean, T: number, ground: Rgb, alpha: number): void {
+  if (bt.canvas && bt.T === T && bt.ground === ground && bt.marksAlpha === alpha) return;
+  bt.canvas = paintTile(bt.canvas, T, ground, exactGroundTile(T, town), alpha);
+  bt.T = T;
+  bt.ground = ground;
+  bt.marksAlpha = alpha;
+  gp.paints++;
 }
 
 function paintTile(c: Canvas2D | null, T: number, ground: Rgb, marks: Canvas2D, alpha: number): Canvas2D {
@@ -88,7 +105,7 @@ function paintTile(c: Canvas2D | null, T: number, ground: Rgb, marks: Canvas2D, 
   g.fillStyle = css(ground);
   g.fillRect(0, 0, T, T);
   g.globalAlpha = alpha;
-  // The marks are drawn at exactly T px (sprites.ts exactGroundTiles): an unscaled blend.
+  // The marks are drawn at exactly T px (sprites.ts exactGroundTile): an unscaled blend.
   g.drawImage(marks, 0, 0);
   g.globalAlpha = 1;
   return cv;
@@ -108,20 +125,24 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
   const stable = gp !== null && (v.S === gp.lastS || gp.T === 0);
   if (gp) gp.lastS = v.S;
   if (gp) {
+    // A biome's tile is built and kept fresh only while one of its rows is on screen or within one
+    // screen ahead (Day 1 never paints the Old Town tile); a stale one is repainted when it is next
+    // needed. (The scaled path below fills a never-painted tile's rows with the plain ground color.)
     if (stable) {
       const T = Math.max(8, Math.round(TILE_U * v.S * v.dpr));
-      if (T !== gp.T || gp.ground !== pal.ground || gp.marksAlpha !== alpha || !gp.meadow || !gp.town) {
-        const marks = exactGroundTiles(T);
-        gp.meadow = paintTile(gp.meadow, T, pal.ground, marks.meadow, alpha);
-        gp.town = paintTile(gp.town, T, pal.ground, marks.town, alpha);
-        gp.T = T;
-        gp.ground = pal.ground;
-        gp.marksAlpha = alpha;
-        gp.paints++;
+      gp.T = T;
+      let needMeadow = false;
+      let needTown = false;
+      const ahead = v.y1 + (v.y1 - v.y0);
+      for (let ty = ty0 - TILE_U; ty < ahead && !(needMeadow && needTown); ty += TILE_U) {
+        if (biomeAtY(ty + TILE_U / 2) === 'oldtown') needTown = true;
+        else needMeadow = true;
       }
+      if (needMeadow) freshen(gp, gp.meadow, false, T, pal.ground, alpha);
+      if (needTown) freshen(gp, gp.town, true, T, pal.ground, alpha);
     }
-    const meadow = gp.meadow as Canvas2D;
-    const town = gp.town as Canvas2D;
+    const meadow = gp.meadow.canvas;
+    const town = gp.town.canvas;
     const dpr = v.dpr;
     if (stable) {
       // Whole-pixel grid anchored at the world tile (tx0, ty0): one copy per tile.
@@ -136,6 +157,7 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
       for (let k = -1, ty = ty0 - TILE_U; ay - k * T + T > top; k++, ty += TILE_U) {
         const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? town : meadow;
         const sy = ay - k * T;
+        if (!tile) continue;
         for (let x = ax > left ? ax - T : ax; x < right; x += T) g.drawImage(tile, x, sy);
       }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -146,10 +168,12 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, d
       const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? town : meadow;
       const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
       const h = Math.ceil(v.oy - ty * v.S) - sy;
+      if (!tile) g.fillStyle = css(pal.ground);
       for (let tx = tx0; tx < v.x1; tx += TILE_U) {
         const sx = Math.floor(v.ox + tx * v.S);
         const w = Math.ceil(v.ox + (tx + TILE_U) * v.S) - sx;
-        g.drawImage(tile, sx, sy, w + 0.5, h + 0.5);
+        if (tile) g.drawImage(tile, sx, sy, w + 0.5, h + 0.5);
+        else g.fillRect(sx, sy, w + 0.5, h + 0.5);
       }
     }
     return;

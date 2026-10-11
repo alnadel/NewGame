@@ -158,19 +158,22 @@ export function groundTiles(pxPerU: number): TileSet {
   return tiles;
 }
 
-const exact = new Map<number, TileSet>();
+const exactMeadow = new Map<number, Canvas2D>();
+const exactTown = new Map<number, Canvas2D>();
 
 /**
- * Tiles drawn at exactly `T` device pixels square (for the pre-tinted ground in ground.ts, so its
- * repaint composites them unscaled). The last three sizes are kept: play and the Melt Map zoom.
+ * One biome's marks drawn at exactly `T` device pixels square (for the pre-tinted ground in
+ * ground.ts, so its repaint composites them unscaled), built only when that biome is first needed.
+ * The last three sizes per biome are kept: play and the Melt Map zoom.
  */
-export function exactGroundTiles(T: number): TileSet {
-  let t = exact.get(T);
+export function exactGroundTile(T: number, town: boolean): Canvas2D {
+  const cache = town ? exactTown : exactMeadow;
+  let t = cache.get(T);
   if (t) return t;
-  if (exact.size >= 3) exact.delete(exact.keys().next().value as number);
+  if (cache.size >= 3) cache.delete(cache.keys().next().value as number);
   const scale = T / TILE_U;
-  t = { scale, meadow: meadowTile(scale), town: townTile(scale) };
-  exact.set(T, t);
+  t = town ? townTile(scale) : meadowTile(scale);
+  cache.set(T, t);
   return t;
 }
 

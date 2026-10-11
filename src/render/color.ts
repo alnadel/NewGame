@@ -42,11 +42,6 @@ export function lighten(c: Rgb, t: number): Rgb {
   return mix(c, 0xffffff, t);
 }
 
-/** Relative luminance-ish (0..1), good enough for contrast decisions. */
-export function luma(c: Rgb): number {
-  return (0.2126 * red(c) + 0.7152 * green(c) + 0.0722 * blue(c)) / 255;
-}
-
 const cssCache = new Map<number, string>();
 
 /** '#rrggbb' for a packed color (cached; the cache is cleared when it grows large). */
@@ -60,17 +55,22 @@ export function css(c: Rgb): string {
   return s;
 }
 
-const cssaCache = new Map<number, string>();
+/** Per color, its rgba() strings by alpha step (keys stay small integers: no boxed number per lookup). */
+const cssaCache = new Map<number, (string | undefined)[]>();
 
 /** 'rgba(r,g,b,a)' with alpha quantized to 1/100 (cached). */
 export function cssa(c: Rgb, a: number): string {
   const q = a <= 0 ? 0 : a >= 1 ? 100 : Math.round(a * 100);
-  const key = c * 128 + q;
-  let s = cssaCache.get(key);
+  let row = cssaCache.get(c);
+  if (row === undefined) {
+    if (cssaCache.size > 512) cssaCache.clear();
+    row = new Array<string | undefined>(101);
+    cssaCache.set(c, row);
+  }
+  let s = row[q];
   if (s === undefined) {
-    if (cssaCache.size > 4096) cssaCache.clear();
     s = `rgba(${red(c)},${green(c)},${blue(c)},${q / 100})`;
-    cssaCache.set(key, s);
+    row[q] = s;
   }
   return s;
 }

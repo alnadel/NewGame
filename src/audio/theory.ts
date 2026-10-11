@@ -145,12 +145,16 @@ export function padCutoffHz(eps: number, epsNoon: number, night: boolean): numbe
   return 300 + 2200 * r * r;
 }
 
+/** The noon window, as fractions of the daylight: cicadas swell from 0.4 to 0.5 and fade by 0.6. */
+export const NOON_WINDOW_START = 0.4;
+export const NOON_WINDOW_END = 0.6;
+
 /**
  * Noon cicada envelope over the day fraction u = tDay/Dl: fades in over [0.4, 0.5] and out by 0.6,
  * smoothstep-shaped so the swell never has a corner.
  */
 export function noonWindow(u: number): number {
-  const x = u <= 0.5 ? (u - 0.4) / 0.1 : (0.6 - u) / 0.1;
+  const x = u <= 0.5 ? (u - NOON_WINDOW_START) / 0.1 : (NOON_WINDOW_END - u) / 0.1;
   if (x <= 0) return 0;
   if (x >= 1) return 1;
   return x * x * (3 - 2 * x);
