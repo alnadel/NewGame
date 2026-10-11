@@ -59,9 +59,9 @@ test('the single-file build plays from file:// and shares the hosted link', asyn
   await expect.poll(() => page.evaluate(() => (window as unknown as { __shared: string | null }).__shared)).not.toBeNull();
   const text = (await page.evaluate(() => (window as unknown as { __shared: string | null }).__shared)) as string;
   expect(text).not.toContain('file:');
-  const link = text.split('\n').find((l) => /^https?:\/\//.test(l));
-  expect(link, `a link line in:\n${text}`).toBeDefined();
-  expect(link!.startsWith(shareUrlFromEnv())).toBe(true);
+  const link = /https?:\/\/\S+/.exec(text)?.[0];
+  expect(link, `a link in:\n${text}`).toBeDefined();
+  expect(link!.startsWith(shareUrlFromEnv()), `${link} starts with the .env VITE_SHARE_URL`).toBe(true);
 
   expect(errors).toEqual([]);
   const bad = requests.filter((u) => /sw\.js|manifest\.webmanifest|\/assets\//.test(u));

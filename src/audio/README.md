@@ -7,10 +7,10 @@ Everything you hear is built at runtime with WebAudio: no asset files, no depend
 | File | What it is |
 |---|---|
 | `index.ts` | The facade: `createAudio(): ShadyAudio`, plus re-exported types. **The only import the game needs.** |
-| `engine.ts` | Lazy `AudioContext`, unlock on gestures, visibility suspend/resume, the mix graph, noise buffers, one-shot `Voice`s and the per-bus voice limiter. |
+| `engine.ts` | Lazy `AudioContext`, unlock on gestures, visibility suspend/resume, the mix graph, noise buffers (prewarmed tables), one-shot `Voice`s and the per-bus voice limiter. |
 | `recipes.ts` | One function per sound (GDD §12 plus UI and moment cues), registry `RECIPES`, names `SFX_NAMES`. |
 | `music.ts` | 16th-note lookahead scheduler, pad (I-vi-IV-V), multiplier arpeggio, key change per day, results melody. |
-| `ambience.ts` | Sizzle + crackle, noon cicadas, night crickets. |
+| `ambience.ts` | Sizzle + crackle, noon cicadas, night crickets: each layer built only while it can be heard. |
 | `scene.ts` | `AudioView` (what the game sends each frame) and the pure `sceneFor()` mapping to layer targets. |
 | `sfxRouter.ts` | `SimEvent` → cue mapping with throttles; drives the scene and the heartbeat each frame. Pure. |
 | `theory.ts`, `timing.ts` | Pure maths: keys, scales, chords, patterns, curves; rate limiters, step clock, heartbeat pulse. |
@@ -33,6 +33,9 @@ audio.onEvents(frameEvents, view);                       // every SimEvent of th
 haptics.onEvents(frameEvents, state.sun.omega);
 audio.update(view, realDtSeconds);                       // EVERY rendered frame, also paused/menus
 
+// Once the Title is up and the page is idle (requestIdleCallback, else a timeout):
+audio.prewarm();                                         // noise tables, off the first tap
+
 // Lifecycle hooks:
 audio.resetRun();                                        // on run start / retry
 resumeButton.onclick = () => { audio.ensure(); /* … */ };// call ensure() inside gesture handlers
@@ -45,6 +48,18 @@ hud.showMutedIcon = !audio.running;                      // or subscribe: audio.
 context drops out of running (iOS `'interrupted'`, visibility suspend). Pass `unlockTarget: null` to
 manage it yourself.
 
+**The first gesture stays light** (first-tap-audio-graph-in-gesture). Creating an `AudioContext`
+and the mix graph costs tens of ms on phones, and the first tap on the Title is also the press that
+starts a run. So the first `pointerdown` or `keydown` (while no context exists) only queues
+`ensure()` in a task right after the event; Chrome accepts the start there (the activation is still
+live), and if a browser doesn't, the `pointerup`/`touchend`/`click` that follows calls `ensure()`
+inside its own handler, which is also what iOS needs (its touches only activate on the way up).
+The noise buffers (2 s of white and pink noise, the crackle grains) are computed by `prewarm()`
+during the Title's idle time and copied into the graph's buffers (`copyToChannel`; computed on the
+spot if `prewarm()` hasn't run or the context runs faster than 48 kHz), and the ambience builds no
+node until a layer is first wanted. At 4× CPU throttle the first tap's `pointerdown` processing
+went from ~70-100 ms to ~1-10 ms (Event Timing).
+
 ## API (`ShadyAudio`)
 
 | Member | Contract |
@@ -56,7 +71,8 @@ manage it yourself.
 | `setVolumes(sfx, music)` | `Settings.sfx` / `Settings.music`, 0..1, applied as linear bus gains (defaults 0.8 / 0.6 = GDD bus levels). Ambience follows the music slider. Smoothed, so sliders can call it on every input event. |
 | `setMuted(m)` | Silences the final output (the context keeps running). Defaults to `?mute=1`. |
 | `onEvents(events, view)` | All `SimEvent`s emitted this frame (any number of ticks, in order). See the table below. |
-| `update(view, dtReal)` | Once per rendered frame with **real** seconds (not slow-mo-scaled). Drives every continuous layer and the heartbeat, and pumps the scheduler. Call it on every screen, paused included. |
+| `update(view, dtReal)` | Once per frame (every rAF, drawn or not) with **real** seconds (not slow-mo-scaled). Drives every continuous layer and the heartbeat, and pumps the scheduler. Call it on every screen, paused included. |
+| `prewarm()` | Computes the noise tables ahead of the first gesture. Call it once the page is idle (the session uses `requestIdleCallback` after the first frame). Idempotent. |
 | `resetRun()` | New run: clears throttles, the heartbeat clock, slow-mo/duck timers and any results melody. |
 | `play(name, params?)` | Fire any cue directly. For UI: `'uiTap'` (buttons), `'uiBuy'` (buy/equip), `'uiError'` (can't afford, locked), `'newBest'` (results ribbon). Tonal cues use the key of the last view's day unless `params.day` is given. |
 | `playMelody(degrees, day)` | Results replay of `RunResult.melody` (≤ 32 pentatonic degrees) as 8th notes at 120 BPM over the pad, in `day`'s key. Returns its length in seconds (0 if audio isn't running), handy for timing the stats count-up. |
@@ -64,7 +80,7 @@ manage it yourself.
 | `onHeartbeat` | Called on each heartbeat with `strong` (Chill < 10). Wire it to `haptics.play('heartbeat')`. Fires even when audio is locked or muted. |
 | `onStatusChange(cb)` | Status-change subscription. |
 | `meter()` | Debug: an `AnalyserNode` on the final output (null until unlocked), for the `?debug=1` overlay. |
-| `dispose()` | Stops the scheduler, removes listeners, closes the context. |
+| `dispose()` | Stops the pump and its watchdog and every ambience layer, removes listeners, closes the context. |
 
 `muteParam()` reads `?mute=1`. `createAudioView()` returns a neutral view (title, Day 1, dawn).
 `SFX_NAMES` lists every cue.
@@ -103,6 +119,18 @@ danger cues would lie (nothing is happening), but dead silence makes the game fe
 resuming a jolt. The muffle opens over ~0.4 s on resume, so the score glides back. **Menus** get
 the same calm pad as the title, so the game has one consistent "home" sound.
 
+**Ambience layers exist only while they can be heard** (silent-ambience-dsp-always-on). A layer
+whose gain sits at 0 still costs the audio thread its sources, filters and LFOs, so each is built
+and started on demand and torn down after: the sizzle bed and its crackle chain while the screen is
+in play (`Scene.sizzleOn`), the two cicada choruses from 0.5 s before the noon window (0.4·Dl) until
+it ends (`Scene.cicadasOn`), the two cricket oscillators at night. A start glides up from gain 0
+with the layer's usual fade (sizzle 30 ms, cicadas 0.4 s, crickets 0.6 s). A layer unwanted for at
+least 1 s and five of its fade constants (sizzle 1 s, cicadas 2 s, crickets 3 s, so it is below
+−60 dBFS) fades to 0 over 50 ms, stops its sources and disconnects its nodes; offline renders show
+no step above −60 dBFS at any start or stop. On the Title and menus nothing but the music runs: an
+offline render of 30 s of the Title (menu) score with the ambience takes 45 % (34 %) less time than
+with the always-on layers, and the lab's level check is unchanged within its run-to-run noise.
+
 ## SimEvent → sound
 
 | Event | Cue | Rule |
@@ -132,8 +160,11 @@ those degrees into `RunResult.melody` for `playMelody`.
 
 ## Music system
 
-- **Grid:** 90 BPM, 16th = 1/6 s. A 25 ms `setInterval` plus every `update()` call pump a scheduler
-  with a 120 ms lookahead. Steps that fall in the past (throttled timer, suspended context) are
+- **Grid:** 90 BPM, 16th = 1/6 s. Every `update()` call (once per frame) pumps a scheduler with a
+  120 ms lookahead. A single watchdog timeout every 250 ms checks that `update()` ran in the last
+  100 ms; when it hasn't (a stalled main thread, a hidden page whose context still runs) a 25 ms
+  interval pumps instead, until `update()` comes back. While frames run that is 4 timer wake-ups a
+  second instead of 40. Steps that fall in the past (throttled timer, suspended context) are
   **skipped, never burst-played**, and the bar phase is kept.
 - **Key:** Day 1 is C (C4 = 261.63 Hz). Each day moves up a fifth, folded into −5…+6 semitones
   around C4 (C, G3, D, A3, E, B3, F#, C#…), so late days never drift shrill or muddy.
