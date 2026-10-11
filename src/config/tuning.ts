@@ -260,8 +260,12 @@ const tuning = {
     glareWindowTicks: 60,
     glareShare: 0.5,
     cloudLookbackTicks: 60,
-    /** "within ±(180°/s × 1 s) of θ(−60)". */
-    cloudTurnRate: 180,
+    /**
+     * A cloud is blamed only if it fully covered Nubs within ±(cloudTurnRate × cloudTurnSec) = ±60°
+     * of θ(−60) (GDD §10 row 3: "within ±60° of the current θ"). At 180 nearly any cloud on screen
+     * qualified, so plain gaps were misattributed to clouds the player could not have reached.
+     */
+    cloudTurnRate: 60,
     cloudTurnSec: 1,
     gapLastSec: 5,
     gapAheadSec: 0.5,
