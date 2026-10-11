@@ -8,6 +8,7 @@ export interface ShadyState {
   chill: number;
   snow: number;
   theta: number;
+  f: number;
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
@@ -66,6 +67,8 @@ declare global {
       presses(): number;
       demo(name: string): void;
       nubsScreen(): { x: number; y: number };
+      timeScale(): number;
+      hint(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number };
     };
   }
 }

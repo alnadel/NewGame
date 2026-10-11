@@ -72,7 +72,7 @@ export function defaults(now: number = Date.now()): SaveV1 {
     equipped: { ...DEFAULT_EQUIPPED },
     missions,
     daily: {},
-    flags: { hintsShown: 0, installSheetShown: false, persistRequested: false, storageWarned: false },
+    flags: { hintsShown: 0, tutorialDone: false, installSheetShown: false, persistRequested: false, storageWarned: false },
   };
 }
 
@@ -220,6 +220,7 @@ function sanitize(r: Rec, now: number): SaveV1 {
     daily: sanitizeDaily(r.daily),
     flags: {
       hintsShown: int(flags.hintsShown, 0, 0, BIG),
+      tutorialDone: bool(flags.tutorialDone, false),
       installSheetShown: bool(flags.installSheetShown, false),
       persistRequested: bool(flags.persistRequested, false),
       storageWarned: bool(flags.storageWarned, false),

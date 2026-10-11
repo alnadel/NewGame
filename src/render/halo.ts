@@ -2,8 +2,11 @@
 // around his ground point carries the sun pointer (never fades), teal safe arcs (solid = shaded
 // now, dashed = in 0.6 s), red hatched glare arcs (always shown), 24 detent ticks and a curved
 // rotation arrow while dragging, and an inner Chill gauge whose color follows the GDD bands. The
-// whole dial fades to 35 % while idle at full Chill.
+// whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays (V1_PLAN §6.2)
+// the dial shows where to put the sun: the target arc pulses, dots mark the way round, and a ghost
+// sun glides from the sun pointer into the arc in step with the ghost thumb's swipe.
 
+import { ghostSwipe } from '../game/assist.ts';
 import { cssa, hex, type Rgb } from './color.ts';
 
 const TAU = Math.PI * 2;
@@ -46,7 +49,19 @@ export interface HaloInput {
   /** Overall multiplier (title/dying fades). */
   fade: number;
   time: number;
+  /** Ghost-hint target arc center and width (degrees); NaN center = no hint. */
+  hintTarget: number;
+  hintWidth: number;
+  /** The way round to the target: +1 counter-clockwise, −1 clockwise. */
+  hintTurn: number;
+  /** Progress (0..1) through the ghost thumb's swipe loop, or −1 (no swipe on screen). */
+  hintPhase: number;
+  /** Hint visibility (eased 0..1). */
+  hintAlpha: number;
+  reducedMotion: boolean;
 }
+
+const swipe = new Float64Array(2);
 
 export function updateHalo(h: HaloState, dt: number, dragging: boolean, chill: number, dTheta: number): void {
   const target = dragging || chill < 99 ? 1 : 0.35;
@@ -171,6 +186,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
 
+  if (inp.sunUp) drawHint(g, inp, A);
+
   // Chill gauge inside the ring: clockwise from the top, dashed red when low.
   const chill = Math.max(0, Math.min(100, inp.chill));
   const col = chillColor(chill);
@@ -249,36 +266,127 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   const sy = cy + Math.sin(a) * R;
   const f = inp.fade;
   if (inp.sunUp) {
-    g.fillStyle = cssa(0xffd36b, f);
-    g.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const ra = (i * TAU) / 8 + inp.time * 0.6;
-      g.moveTo(sx + Math.cos(ra - 0.25) * 6.5, sy + Math.sin(ra - 0.25) * 6.5);
-      g.lineTo(sx + Math.cos(ra) * 10.5, sy + Math.sin(ra) * 10.5);
-      g.lineTo(sx + Math.cos(ra + 0.25) * 6.5, sy + Math.sin(ra + 0.25) * 6.5);
-    }
-    g.fill();
-    g.fillStyle = cssa(0xffe27a, f);
-    g.strokeStyle = cssa(0xe8a21f, f);
-    g.lineWidth = 1.5;
-    g.beginPath();
-    g.arc(sx, sy, 6.5, 0, TAU);
-    g.fill();
-    g.stroke();
-    // A tiny inward notch so it reads as a pointer.
-    g.fillStyle = cssa(0xe8a21f, f);
-    g.beginPath();
-    const ix = cx + Math.cos(a) * (R - 9);
-    const iy = cy + Math.sin(a) * (R - 9);
-    g.moveTo(ix, iy);
-    g.lineTo(sx + Math.cos(a + 1.9) * 6, sy + Math.sin(a + 1.9) * 6);
-    g.lineTo(sx + Math.cos(a - 1.9) * 6, sy + Math.sin(a - 1.9) * 6);
-    g.closePath();
-    g.fill();
+    sunPointer(g, cx, cy, R, inp.theta, f, inp.time, false);
   } else {
     g.fillStyle = cssa(0xe8ecff, 0.5 * f);
     g.beginPath();
     g.arc(sx, sy, 5, 0, TAU);
     g.fill();
+  }
+}
+
+/** The little sun on the ring at θ (rays, disc, an inward notch). `ghost` draws a pale copy. */
+function sunPointer(g: CanvasRenderingContext2D, cx: number, cy: number, R: number, theta: number, f: number, time: number, ghost: boolean): void {
+  const a = -theta * DEG;
+  const sx = cx + Math.cos(a) * R;
+  const sy = cy + Math.sin(a) * R;
+  g.fillStyle = cssa(ghost ? 0xfff1c2 : 0xffd36b, f);
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const ra = (i * TAU) / 8 + time * 0.6;
+    g.moveTo(sx + Math.cos(ra - 0.25) * 6.5, sy + Math.sin(ra - 0.25) * 6.5);
+    g.lineTo(sx + Math.cos(ra) * 10.5, sy + Math.sin(ra) * 10.5);
+    g.lineTo(sx + Math.cos(ra + 0.25) * 6.5, sy + Math.sin(ra + 0.25) * 6.5);
+  }
+  g.fill();
+  g.fillStyle = cssa(ghost ? 0xffefb0 : 0xffe27a, f);
+  g.strokeStyle = cssa(ghost ? 0xffffff : 0xe8a21f, f);
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.arc(sx, sy, 6.5, 0, TAU);
+  g.fill();
+  g.stroke();
+  if (ghost) return;
+  // A tiny inward notch so it reads as a pointer.
+  g.fillStyle = cssa(0xe8a21f, f);
+  g.beginPath();
+  const ix = cx + Math.cos(a) * (R - 9);
+  const iy = cy + Math.sin(a) * (R - 9);
+  g.moveTo(ix, iy);
+  g.lineTo(sx + Math.cos(a + 1.9) * 6, sy + Math.sin(a + 1.9) * 6);
+  g.lineTo(sx + Math.cos(a - 1.9) * 6, sy + Math.sin(a - 1.9) * 6);
+  g.closePath();
+  g.fill();
+}
+
+/**
+ * The ghost hint on the dial: "put the little sun here". The target arc glows and pulses as the ghost
+ * sun arrives; dots mark the way round from the sun pointer; the ghost sun glides along them in
+ * step with the ghost thumb (or waits in the arc under reduced motion).
+ */
+function drawHint(g: CanvasRenderingContext2D, inp: HaloInput, A: number): void {
+  const ha = inp.hintAlpha * Math.max(0.6, A) * inp.fade;
+  if (ha < 0.01 || Number.isNaN(inp.hintTarget) || inp.hintTurn === 0) return;
+  const { cx, cy, R } = inp;
+  const c = inp.hintTarget;
+  const half = Math.max(5, inp.hintWidth / 2);
+  const turn = inp.hintTurn > 0 ? 1 : -1;
+  // Degrees from the sun pointer to the target center the hinted way round.
+  const route = ((((c - inp.theta) * turn) % 360) + 360) % 360;
+  let travel = -1;
+  let ghostA = 0;
+  let pulse: number;
+  if (inp.hintPhase >= 0 && !inp.reducedMotion) {
+    ghostSwipe(inp.hintPhase, swipe);
+    travel = swipe[0] as number;
+    ghostA = swipe[1] as number;
+    // The arc lights up as the ghost sun arrives in it.
+    pulse = Math.max(0, Math.min(1, (travel - 0.6) / 0.4)) * ghostA;
+  } else {
+    pulse = 0.5 + 0.5 * Math.sin(inp.time * TAU * 0.8);
+  }
+
+  // Target arc: a soft wide glow and a bright bracket just outside the ring.
+  g.lineCap = 'round';
+  g.lineWidth = 16;
+  g.strokeStyle = cssa(TEAL, ha * (0.16 + 0.3 * pulse));
+  g.beginPath();
+  arcPath(g, cx, cy, R, c - half, c + half);
+  g.stroke();
+  g.lineWidth = 3;
+  g.strokeStyle = cssa(0xffffff, ha * (0.55 + 0.45 * pulse));
+  g.beginPath();
+  arcPath(g, cx, cy, R + 9, c - half, c + half);
+  g.stroke();
+  g.lineCap = 'butt';
+
+  // The way round: dots from just past the sun pointer to the arc's near edge.
+  const end = route - half;
+  if (end > 14) {
+    g.fillStyle = cssa(0xffffff, ha * 0.7);
+    g.beginPath();
+    for (let d = 14; d <= end; d += 10) {
+      const t = -(inp.theta + turn * d) * DEG;
+      const x = cx + Math.cos(t) * R;
+      const y = cy + Math.sin(t) * R;
+      g.moveTo(x + 1.7, y);
+      g.arc(x, y, 1.7, 0, TAU);
+    }
+    g.fill();
+  }
+
+  // The ghost sun, with a short fading trail so the way it goes reads at a glance.
+  if (travel >= 0) {
+    if (ghostA > 0.01) {
+      const at = inp.theta + turn * route * travel;
+      const tail = Math.min(36, route * travel);
+      if (tail > 2) {
+        g.lineCap = 'round';
+        for (let k = 0; k < 3; k++) {
+          const a0 = at - turn * tail * ((k + 1) / 3);
+          const a1 = at - turn * tail * (k / 3);
+          g.lineWidth = 5 - k * 1.3;
+          g.strokeStyle = cssa(0xffffff, ha * ghostA * (0.55 - k * 0.16));
+          g.beginPath();
+          if (turn > 0) arcPath(g, cx, cy, R, a0, a1);
+          else arcPath(g, cx, cy, R, a1, a0);
+          g.stroke();
+        }
+        g.lineCap = 'butt';
+      }
+      sunPointer(g, cx, cy, R, at, ha * ghostA * 0.9, inp.time, true);
+    }
+  } else if (inp.reducedMotion) {
+    sunPointer(g, cx, cy, R, c, ha * (0.45 + 0.35 * pulse), 0, true);
   }
 }

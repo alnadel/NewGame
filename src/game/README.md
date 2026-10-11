@@ -7,11 +7,11 @@ removes the `#boot` splash after the first frame.
 | File | What it does |
 |---|---|
 | `game/session.ts` | Owns the `SimState` and the run lifecycle: Title hold → play → dying (1.1 s) → Results → retry/home; pause, visibility, the Back trap, dailies, challenges, profiles, meta, audio/haptics routing, the frame loop. |
-| `game/loop.ts` | `FixedClock`: 60 Hz accumulator, max 5 ticks/frame (× `?fast`), slow-mo, hit-stop, interpolation alpha. |
+| `game/loop.ts` | `FixedClock`: 60 Hz accumulator, max 5 ticks/frame (× `?fast`), slow-mo, hit-stop, the sustained `assist` scale (the first lesson's slow time), interpolation alpha. |
 | `game/input.ts` | Pointer Events (+ coalesced) and arrow/A-D keys → per-tick `InputFrame`s (quantized dTheta/release, edge-ignore zones, latest pointer wins, release velocity). |
 | `game/camera.ts` | View metrics and letterboxing, Nubs at 68 %/70 %, shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
 | `game/fx.ts` | SimEvents → particles, rings, pops, HUD/banner timers, Nubs reactions, slow-mo and hit-stop; continuous steam, sweat, frost sparkles and fireflies. |
-| `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3) and the ghost-thumb hint tracker (§6.2). |
+| `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3), the ghost-thumb hint tracker (§6.2) with its sticky target arc and the first lesson, and the ui.css ghost keyframes as functions (so the canvas moves in step with the DOM hand). |
 | `game/perf.ts` | Frame-time governor (crisp shadows → DPR × 0.75 → particles 400 → 200 → DPR × 0.625 → detail tiles off; never below 1 device px per CSS px): late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
@@ -61,13 +61,31 @@ the rAF interval, so a real mid-range phone profile is still the open check).
 the next daylight tick), `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; extras
 for tooling: `paused()`, `presses()`, `demo(name)` (replays `phew`, `mult`, `mult5`, `noon`, `dawn`,
 `night`, `cloud`, `glare`, `flake` or `best` through fx/audio only — the sim is untouched), `perf()`
-(frame/sim/gen/render ms plus Nubs layer redraw and compose counters) and `nubsScreen()`. `?perf=0`
-is full quality: no governor and no device-class cap (useful for captures and A/B timing).
+(frame/sim/gen/render ms plus Nubs layer redraw and compose counters), `nubsScreen()`, `timeScale()`
+(slow-mo × lesson × hit-stop) and `hint()` (ghost mode, target arc, way round, lesson on, hints
+shown). `?perf=0` is full quality: no governor and no device-class cap (useful for captures and A/B
+timing).
 
 ## Deliberate deviations from the docs
 
+- **First lesson** (V1_PLAN §6.2, CRITIQUE first minute): in profiles 0-1, until the save's
+  `flags.tutorialDone`, the first hint of a run does not time out: it loops while game time runs at
+  0.5× (`clock.assist`, eased) until a swing of ≥ 15° ends with Nubs fully shaded for 0.25 s (then
+  `tutorialDone` is saved), its target is gone for 0.5 s, or the sun sets. A shadow that passes over
+  an idle Nubs ends it unpassed; it returns the next time he is lit. The sim is untouched (replays and
+  bots are unaffected); an idle first-timer now melts after ~10 s instead of ~7 s and a player who
+  follows the hint 4 s late still makes it.
+- **Hint target and direction**: the hint aims at the widest arc that is safe now *and* 0.6 s ahead
+  (gaps ≤ 6° merged), tracked as it drifts, and keeps its first way round while that arc exists and
+  the two ways differ by less than 20° of a half-turn (it used to aim at the nearest safe bin, which
+  flipped sides on an unchanged sun when the arc sat ~180° away). The direction now honours
+  Settings → invert (it ignored it). While a hint plays, the halo shows the target: a glow and a white bracket on the arc, dots
+  along the way round, and a ghost sun that glides from the sun pointer into the arc in step with the
+  ghost thumb (read from its CSS animation clock, `ui.ghostProgress()`).
+- **Title**: the ±25° sway follows the ghost hand's swing (hand right → sun clockwise, or the other
+  way with invert) instead of a free 0.3 Hz sine, and Nubs' footprint rim and tint follow the swaying
+  sun through the guide's lit counts, so the Title shows drag → sun → shade → cool Nubs.
 - **Crisp shadow mode** (V1_PLAN §9 specifies only the soft half-res layer): see the cost notes above.
-
 - **Start beat** (core, `TUNING.start.readyTicks`): every run opens with 0.8 s in which the sun
   answers the finger but the clock, Nubs and Chill wait; Nubs stands until the `go` event, then sets
   off with a little cheer. Retry/Restart start the run on the tap, so without it Nubs walked out of

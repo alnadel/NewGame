@@ -56,7 +56,7 @@ import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
 import type { RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
-import { guideAlpha, HintTracker, type GuideSetting } from './assist.ts';
+import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Fx } from './fx.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
@@ -76,6 +76,8 @@ const PREBUILD_MAX_MS = 10;
 /** Work units per prebuild slice (each slice is checked against PREBUILD_MS). */
 const PREBUILD_SLICE = 4;
 const DAILY_COUNT_MINUTES = 30;
+/** Title sway amplitude (GDD §4: ±25° around θ0), following the ghost hand's swing. */
+const SWAY_DEG = 25;
 
 export interface SessionDeps {
   canvas: HTMLCanvasElement;
@@ -128,6 +130,11 @@ export class Session {
   private readonly frameEvents: SimEvent[] = [];
   private readonly audioView: AudioView = createAudioView();
   private readonly hints = new HintTracker();
+  private readonly hintIn: HintInput;
+  /** The first lesson is still to be passed in this run (profiles 0-1 until the save says done). */
+  private lessonPending = false;
+  /** Eased visibility of the hint on the halo dial. */
+  private hintAlpha = 0;
   private readonly renderIn: RenderInput;
 
   // Run bookkeeping.
@@ -276,6 +283,17 @@ export class Session {
     this.lifetimeRuns = save.stats.runs;
     this.resetSnaps();
 
+    this.hintIn = {
+      profile: 3,
+      f: 0,
+      sunUp: false,
+      now: this.s.guide.now,
+      next: this.s.guide.next,
+      theta: 0,
+      dragging: false,
+      invert: false,
+      lessonPending: false,
+    };
     this.renderIn = {
       s: this.s,
       snap: this.snap,
@@ -283,6 +301,7 @@ export class Session {
       sway: 0,
       dragging: false,
       guideAlpha: 0,
+      hint: { target: Number.NaN, width: 0, turn: 0, phase: -1, alpha: 0 },
       pbMinutes: -1,
       challengeMinutes: -1,
       dying: -1,
@@ -489,8 +508,13 @@ export class Session {
     r.screen = this.renderScreen(screen);
     this.swayPhase += real;
     if (screen === 'title' || (screen === 'play' && s.phase === 'hold')) {
+      // The sun turns with the ghost hand's swing (a rightward drag turns it clockwise), so the
+      // Title shows what a drag does; without the hand's clock, a plain 0.3 Hz sway.
       const rm = this.reducedMotion();
-      r.sway = rm ? 0 : 25 * Math.sin(this.swayPhase * Math.PI * 2 * 0.3);
+      const p = rm ? -1 : this.ui.ghostProgress();
+      if (rm) r.sway = 0;
+      else if (p >= 0) r.sway = (this.input.invert ? SWAY_DEG : -SWAY_DEG) * ghostSwingX(p);
+      else r.sway = SWAY_DEG * Math.sin(this.swayPhase * Math.PI * 2 * 0.3);
       this.swayOut = r.sway;
     } else {
       this.swayOut *= Math.exp(-real / 0.12);
@@ -499,6 +523,7 @@ export class Session {
     }
     r.dragging = this.input.pointerDown || this.input.keyDown || s.sun.mode === 'dragging';
     r.guideAlpha = this.currentGuideAlpha();
+    this.fillHintView(real, screen);
     const save = this.d.store.get();
     r.pbMinutes = this.pbMinutes();
     r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
@@ -688,6 +713,8 @@ export class Session {
     this.d.audio.resetRun();
     this.melody = [];
     this.hints.reset();
+    this.hintAlpha = 0;
+    this.lessonPending = run.cfg.profile <= 1 && !this.d.store.get().flags.tutorialDone;
     this.dailyTry = null;
     this.dailyCounted = false;
     this.deathAt = -1;
@@ -869,6 +896,9 @@ export class Session {
   private onDeath(): void {
     if (this.deathAt >= 0) return;
     this.deathAt = this.time;
+    // The death plays at its own pace (hit-stop, slow-mo), never inside the lesson's slow time.
+    this.hints.stop();
+    this.clock.assist = 1;
     this.dyingGame = 0;
     this.checkDailyTry();
     const save = this.d.store.get();
@@ -1013,29 +1043,77 @@ export class Session {
   }
 
   private updateHints(dt: number, screen: ScreenId): void {
+    // Paused (or a menu over a paused run): the hint and the lesson's time scale hold still.
+    if (this.paused || screen === 'pause' || screen === 'settings') return;
+    let lessonOn = false;
     if (screen === 'title') {
       this.setGhost('both');
-      return;
-    }
-    if (screen !== 'play' || this.paused) return;
-    const s = this.s;
-    if (s.phase === 'hold') {
-      this.setGhost('both');
-      return;
-    }
-    if (this.ghost === 'both') this.setGhost('off');
-    const was = this.hints.active > 0;
-    const start = this.hints.update(dt, s.cfg.profile, s.nubs.f, s.sunUp, s.guide.now, s.sun.theta, this.input.pointerDown || this.input.keyDown);
-    if (start) {
-      this.setGhost(this.hints.dir);
-      if (!this.debugRuns) {
-        this.d.store.update((sv) => {
-          sv.flags.hintsShown += 1;
-        });
+    } else if (screen === 'play') {
+      const s = this.s;
+      if (s.phase === 'hold') {
+        this.setGhost('both');
+      } else {
+        const dragging = this.input.pointerDown || this.input.keyDown;
+        const h = this.hintIn;
+        h.profile = s.cfg.profile;
+        h.f = s.nubs.f;
+        h.sunUp = s.sunUp;
+        h.now = s.guide.now;
+        h.next = s.guide.next;
+        h.theta = s.sun.theta;
+        h.dragging = dragging;
+        h.invert = this.input.invert;
+        h.lessonPending = this.lessonPending;
+        if (this.hints.update(dt, h) && !this.debugRuns) {
+          this.d.store.update((sv) => {
+            sv.flags.hintsShown += 1;
+          });
+        }
+        if (this.hints.lessonPassed && this.lessonPending) {
+          // The first successful swing: no more slow time or looping lesson, in this run or later.
+          this.lessonPending = false;
+          if (!this.debugRuns) {
+            this.d.store.update((sv) => {
+              sv.flags.tutorialDone = true;
+            });
+          }
+        }
+        this.setGhost(this.hints.showing(dragging) ? this.hints.dir : 'off');
+        lessonOn = this.hints.lesson;
       }
-    } else if (was && this.hints.active <= 0) {
-      this.setGhost('off');
+    } else {
+      this.hints.stop();
     }
+    // Ease the lesson's slow time in and out (about 0.2 s).
+    const target = lessonOn ? LESSON_TIME_SCALE : 1;
+    const c = this.clock;
+    c.assist += (target - c.assist) * Math.min(1, dt * 10);
+    if (Math.abs(c.assist - target) < 0.005) c.assist = target;
+  }
+
+  /** The hint as the halo dial shows it: the target while a hint or the lesson is on, eased. */
+  private fillHintView(dt: number, screen: ScreenId): void {
+    const hv = this.renderIn.hint;
+    const h = this.hints;
+    const on = screen === 'play' && this.s.phase !== 'hold' && (h.lesson || h.active > 0) && !Number.isNaN(h.target);
+    if (on) {
+      // Ease the target as its arc drifts and grows, so the glow glides instead of jumping.
+      if (Number.isNaN(hv.target) || this.hintAlpha < 0.05 || hv.turn !== h.turn) {
+        hv.target = h.target;
+        hv.width = h.targetW;
+      } else {
+        const k = Math.min(1, dt * 8);
+        let d = h.target - hv.target;
+        d -= Math.round(d / 360) * 360;
+        hv.target = (((hv.target + d * k) % 360) + 360) % 360;
+        hv.width += (h.targetW - hv.width) * k;
+      }
+      hv.turn = h.turn;
+    }
+    if (!this.paused) this.hintAlpha += ((on ? 1 : 0) - this.hintAlpha) * Math.min(1, dt * 8);
+    if (this.hintAlpha < 0.01 && !on) this.hintAlpha = 0;
+    hv.alpha = this.hintAlpha;
+    hv.phase = on && this.ghost !== 'off' && this.ghost !== 'both' ? this.ui.ghostProgress() : -1;
   }
 
   private settingsChanged(st: Settings): void {
@@ -1098,6 +1176,12 @@ export class Session {
 
   get active(): boolean {
     return this.runActive;
+  }
+
+  /** Test hook: the ghost hint's state. */
+  hintState(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number } {
+    const h = this.hints;
+    return { mode: this.ghost, target: h.target, width: h.targetW, turn: h.turn, lesson: h.lesson, shown: h.shown };
   }
 
   /** Test hook: replays a moment through fx and audio only (the sim is untouched). */

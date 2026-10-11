@@ -140,6 +140,11 @@ export interface Ui {
   setToday(date: string): void;
   setChallenge(banner: ChallengeBanner | null): void;
   setGhostThumb(mode: GhostMode): void;
+  /**
+   * Progress (0..1) through the current loop of the ghost hand's swipe animation, so the canvas can
+   * move the sun in step with it; −1 while the hand is hidden or not sliding (reduced motion).
+   */
+  ghostProgress(): number;
   /** Shows the small muted indicator in play while audio isn't running. */
   setAudioMuted(muted: boolean): void;
   toast(text: string, options?: ToastOptions): void;

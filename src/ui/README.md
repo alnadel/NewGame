@@ -78,6 +78,7 @@ Input ownership:
 | `setToday(date)` | Local date changed while open (midnight rollover). |
 | `setChallenge(banner \| null)` | Title banner "Beat Day 2 · 2:40 PM" + Play, from a `#c=` link (section 6). |
 | `setGhostThumb(mode)` | `'both'`: looping swipe above the word "drag" (Title). `'left'` / `'right'`: one-way swipe hint in play (V1_PLAN §6.2). `'off'`. Shown only on `title`/`play`. |
+| `ghostProgress()` | Progress 0..1 through the ghost hand's current animation loop (read from its CSS animation clock), or −1 while it is hidden or only pulsing (reduced motion). The game moves the Title sway and the halo's ghost sun in step with it. |
 | `setAudioMuted(muted)` | Small muted icon under the pause button while the AudioContext isn't running. |
 | `toast(text, { icon?, tone?, duration? })` | Top-center stack, 2.5 s. Icons/tones as in `meta/progression` `ToastSpec`. |
 | `showInstallSheet()` | iOS "Add to Home Screen" instructions. Use `shouldShowInstallSheet()` and set `flags.installSheetShown`. |

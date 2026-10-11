@@ -2,7 +2,7 @@
 // (TECH_SPEC §9.10), URL params (V1_PLAN §14), view letterboxing (TECH_SPEC §9.1), the input
 // frame splitting/quantization (V1_PLAN §3.1) and the perf governor (TECH_SPEC §15).
 import { describe, expect, it } from 'vitest';
-import { guideAlpha, HintTracker, nearestSafe, widestArc } from '../../src/game/assist.ts';
+import { cssEaseInOut, ghostSwingX, ghostSwipe, guideAlpha, HintTracker, nearestSafe, widestArc, type HintInput } from '../../src/game/assist.ts';
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
@@ -47,17 +47,106 @@ describe('ghost-thumb hints (V1_PLAN §6.2)', () => {
     expect(nearestSafe(mask(100, 120), 20)).toBe(80);
     expect(nearestSafe(mask(300, 310), 20)).toBe(-70);
   });
+  const input = (over: Partial<HintInput>): HintInput => ({
+    profile: 0,
+    f: 1,
+    sunUp: true,
+    now: mask(100, 130),
+    next: mask(100, 130),
+    theta: 20,
+    dragging: false,
+    invert: false,
+    lessonPending: false,
+    ...over,
+  });
   it('shows after 0.3 s lit, toward the shade, at most 3 times, profiles 0-1 only', () => {
     const h = new HintTracker();
-    const now = mask(100, 130);
-    expect(h.update(0.2, 0, 1, true, now, 20, false)).toBe(false);
-    expect(h.update(0.15, 0, 1, true, now, 20, false)).toBe(true);
+    const inp = input({});
+    expect(h.update(0.2, inp)).toBe(false);
+    expect(h.update(0.15, inp)).toBe(true);
     expect(h.dir).toBe('left'); // +θ (counter-clockwise) needs a leftward drag
+    expect(h.turn).toBe(1);
+    expect(h.target).toBe(115);
+    expect(h.targetW).toBe(31);
     let shown = 1;
-    for (let i = 0; i < 200; i++) if (h.update(0.1, 0, 1, true, now, 20, false)) shown++;
+    for (let i = 0; i < 200; i++) if (h.update(0.1, inp)) shown++;
     expect(shown).toBe(3);
     const p3 = new HintTracker();
-    for (let i = 0; i < 50; i++) expect(p3.update(0.1, 3, 1, true, now, 20, false)).toBe(false);
+    for (let i = 0; i < 50; i++) expect(p3.update(0.1, input({ profile: 3 }))).toBe(false);
+  });
+  it('aims at the arc that lasts (safe now and 0.6 s ahead) and honours invert', () => {
+    const h = new HintTracker();
+    // Now: a wide arc clockwise that is about to vanish, and one counter-clockwise that stays.
+    const now = mask(280, 359);
+    for (let b = 100; b <= 140; b++) now[b] = 1;
+    const inp = input({ now, next: mask(95, 150), invert: true });
+    h.update(0.31, inp);
+    expect(h.turn).toBe(1);
+    expect(h.dir).toBe('right'); // inverted controls: counter-clockwise is a rightward drag
+  });
+  it('keeps its first direction while the target sits about a half-turn away', () => {
+    const h = new HintTracker();
+    // Target centered at 195 with θ = 20: 175° counter-clockwise, 185° clockwise.
+    h.update(0.31, input({ now: mask(185, 205), next: mask(185, 205) }));
+    expect(h.turn).toBe(1);
+    // The arc drifts past the half-turn (center 215: now 165° clockwise is shorter, by 30°).
+    for (let c = 196; c <= 215; c++) h.update(0.05, input({ now: mask(c - 10, c + 10), next: mask(c - 10, c + 10) }));
+    expect(h.turn).toBe(1);
+    // Far past the hysteresis band the short way wins.
+    for (let c = 216; c <= 260; c++) h.update(0.05, input({ now: mask(c - 10, c + 10), next: mask(c - 10, c + 10) }));
+    expect(h.turn).toBe(-1);
+  });
+  it('treats small gaps inside a safe region as one target', () => {
+    const h = new HintTracker();
+    const m = mask(100, 130);
+    for (let b = 135; b <= 160; b++) m[b] = 1; // a 4° sliver gap at 131..134
+    h.update(0.31, input({ now: m, next: m }));
+    expect(h.targetW).toBe(61);
+  });
+  it('runs the first lesson until a swing ends in shade, then plain hints', () => {
+    const h = new HintTracker();
+    const lit = input({ lessonPending: true });
+    expect(h.update(0.31, lit)).toBe(true);
+    expect(h.lesson).toBe(true);
+    // No timeout: still on long after a plain hint would have ended.
+    for (let i = 0; i < 50; i++) h.update(0.1, lit);
+    expect(h.lesson).toBe(true);
+    expect(h.showing(false)).toBe(true);
+    expect(h.showing(true)).toBe(false); // the thumb hides while a finger is down
+    // A shadow passing over an idle Nubs ends it without passing.
+    for (let i = 0; i < 4; i++) h.update(0.1, input({ lessonPending: true, f: 0 }));
+    expect(h.lesson).toBe(false);
+    expect(h.lessonPassed).toBe(false);
+    // Lit again: the lesson returns; a 100° swing into the arc passes it.
+    expect(h.update(0.31, lit)).toBe(true);
+    expect(h.lesson).toBe(true);
+    for (let th = 20; th <= 120; th += 10) h.update(0.05, input({ lessonPending: true, theta: th, dragging: true }));
+    for (let i = 0; i < 6; i++) h.update(0.05, input({ lessonPending: true, theta: 120, f: 0 }));
+    expect(h.lesson).toBe(false);
+    expect(h.lessonPassed).toBe(true);
+    // Later hints are plain ones (they time out).
+    expect(h.update(0.31, input({ lessonPending: false }))).toBe(true);
+    expect(h.lesson).toBe(false);
+    expect(h.active).toBeGreaterThan(0);
+  });
+  it('follows the ui.css ghost keyframes', () => {
+    expect(cssEaseInOut(0)).toBe(0);
+    expect(cssEaseInOut(1)).toBe(1);
+    expect(cssEaseInOut(0.5)).toBeCloseTo(0.5, 5);
+    expect(cssEaseInOut(0.25)).toBeCloseTo(0.1291, 3);
+    expect(ghostSwingX(0.04)).toBe(-1);
+    expect(ghostSwingX(0.29)).toBeCloseTo(0, 5);
+    expect(ghostSwingX(0.54)).toBe(1);
+    expect(ghostSwingX(0.96)).toBe(-1);
+    const out = new Float64Array(2);
+    ghostSwipe(0.1, out);
+    expect(out[0]).toBe(0);
+    ghostSwipe(0.45, out);
+    expect(out[0]).toBeCloseTo(0.5, 5);
+    expect(out[1]).toBe(1);
+    ghostSwipe(0.99, out);
+    expect(out[0]).toBe(1);
+    expect(out[1]).toBeLessThan(0.05);
   });
 });
 

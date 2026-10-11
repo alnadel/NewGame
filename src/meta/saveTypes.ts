@@ -56,6 +56,8 @@ export interface SaveV1 {
   daily: Record<string, DailyEntry>;
   flags: {
     hintsShown: number;
+    /** TECH_SPEC §12: the first lesson (the ghost hint that slows time until a successful swing) was passed. */
+    tutorialDone: boolean;
     installSheetShown: boolean;
     persistRequested: boolean;
     storageWarned: boolean;

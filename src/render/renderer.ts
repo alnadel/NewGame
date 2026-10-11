@@ -81,6 +81,19 @@ export interface DebugDraw {
   outlines: boolean;
 }
 
+/** The ghost-thumb hint as the halo shows it (game/assist.ts HintTracker, V1_PLAN §6.2). */
+export interface HintView {
+  /** Target arc center and width (degrees); NaN = none. */
+  target: number;
+  width: number;
+  /** +1 counter-clockwise, −1 clockwise, 0 none. */
+  turn: number;
+  /** Ghost-thumb swipe progress 0..1, or −1 when the thumb isn't sliding. */
+  phase: number;
+  /** Eased visibility 0..1. */
+  alpha: number;
+}
+
 export interface RenderInput {
   s: SimState;
   snap: RenderSnap;
@@ -89,6 +102,7 @@ export interface RenderInput {
   sway: number;
   dragging: boolean;
   guideAlpha: number;
+  hint: HintView;
   pbMinutes: number;
   challengeMinutes: number;
   /** Game seconds since the death (after hit-stop), or −1. */
@@ -336,10 +350,14 @@ export class Renderer {
     pose.melt = inp.dying;
     pose.shade = sc.pal.nubsShade;
     pose.reducedMotion = inp.reducedMotion;
-    if (inp.screen === 'title' && sunUp) {
-      // The Title sway is render-only: show Nubs as shaded (he idles in the hut's shadow).
-      pose.w0 = pose.w1 = pose.w2 = pose.w3 = pose.w4 = 0;
-      pose.f = 0;
+    if ((inp.screen === 'title' || s.phase === 'hold') && sunUp) {
+      // The Title sway is render-only and the sim is held, so read Nubs' shade at the swaying sun
+      // from the guide's lit counts: he cools while the sun sits in the teal arc and warms outside
+      // it, which is the whole game in one look.
+      const lit = s.guide.lit[(((Math.round(theta) % 360) + 360) % 360)] as number;
+      const w = lit > 0 ? 1 : 0;
+      pose.w0 = pose.w1 = pose.w2 = pose.w3 = pose.w4 = w;
+      pose.f = lit / 5;
     }
 
     drawOwnShadow(g, pose, sc.pal.shadow, sc.pal.shadowAlpha);
@@ -408,6 +426,12 @@ export class Renderer {
         glare: s.guide.glare,
         fade,
         time: inp.time,
+        hintTarget: inp.hint.target,
+        hintWidth: inp.hint.width,
+        hintTurn: inp.hint.turn,
+        hintPhase: inp.hint.phase,
+        hintAlpha: inp.screen === 'play' || inp.screen === 'pause' ? inp.hint.alpha : 0,
+        reducedMotion: inp.reducedMotion,
       });
     }
     g.restore();

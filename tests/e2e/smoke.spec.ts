@@ -42,6 +42,42 @@ test.describe('smoke', () => {
     expect(errors).toEqual([]);
   });
 
+  test('first run: the ghost hint keeps one way round and slows time until a swing finds shade', async ({ page }) => {
+    const errors = watchErrors(page);
+    // Fresh save: profile 0, the tutorial chunk, the first lesson.
+    await openGame(page, 'test=1&seed=5');
+    const c = center(page);
+    await page.mouse.click(c.x, c.y);
+    await waitForScreen(page, 'play');
+    const hint = (): Promise<{ mode: string; lesson: boolean; turn: number }> => page.evaluate(() => window.__SHADY_TEST__!.hint());
+    await expect.poll(async () => (await hint()).mode, { timeout: 10_000 }).toMatch(/^(left|right)$/);
+    const first = await hint();
+    expect(first.lesson).toBe(true);
+    // Holding still: the hint never changes sides, and time runs at half speed.
+    for (let i = 0; i < 8; i++) {
+      await page.waitForTimeout(200);
+      const h = await hint();
+      expect([h.mode, h.turn]).toEqual([first.mode, first.turn]);
+    }
+    expect(await page.evaluate(() => window.__SHADY_TEST__!.timeScale())).toBeLessThan(0.6);
+    // Follow it: drag the hinted way until Nubs is fully shaded.
+    const sgn = first.mode === 'left' ? -1 : 1;
+    let x = sgn < 0 ? c.x + 140 : c.x - 140;
+    await page.mouse.move(x, c.y);
+    await page.mouse.down();
+    for (let i = 0; i < 120; i++) {
+      x += sgn * 4;
+      await page.mouse.move(x, c.y);
+      await page.waitForTimeout(16);
+      if ((await state(page)).f === 0) break;
+    }
+    await page.mouse.up();
+    await expect.poll(async () => (await hint()).lesson, { timeout: 3000 }).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.timeScale()), { timeout: 3000 }).toBe(1);
+    expect((await state(page)).phase).toBe('day');
+    expect(errors).toEqual([]);
+  });
+
   test('death shows Results with the death line; Retry plays again', async ({ page }) => {
     const errors = watchErrors(page);
     await openGame(page);

@@ -106,9 +106,37 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     setFlag(el, 'inert', hidden);
   }
 
+  // The hand's CSS animation, looked up when the mode changes, so ghostProgress() can read its clock.
+  const ghostHand = ghostEl.querySelector('.ghost-hand') as HTMLElement | null;
+  let ghostAnim: Animation | null = null;
+  let ghostDur = 0;
+
   function updateGhost(): void {
     const visible = ghost !== 'off' && (current === 'title' || current === 'play') && !rotateBlocking;
-    ghostEl.dataset.mode = visible ? ghost : 'off';
+    const mode = visible ? ghost : 'off';
+    if (ghostEl.dataset.mode === mode) return;
+    ghostEl.dataset.mode = mode;
+    ghostAnim = null;
+    ghostDur = 0;
+    if (mode === 'off' || !ghostHand || typeof ghostHand.getAnimations !== 'function') return;
+    try {
+      const a = ghostHand.getAnimations()[0];
+      const d = a ? Number(a.effect?.getComputedTiming().duration) : 0;
+      // Under reduced motion the hand only pulses in place: nothing to follow.
+      if (a && d > 0 && !root.classList.contains('is-rm')) {
+        ghostAnim = a;
+        ghostDur = d;
+      }
+    } catch {
+      // Web Animations unavailable: the canvas falls back to its own timing.
+    }
+  }
+
+  function ghostProgress(): number {
+    if (!ghostAnim || ghostDur <= 0) return -1;
+    const t = Number(ghostAnim.currentTime);
+    if (!Number.isFinite(t) || t < 0) return -1;
+    return (t % ghostDur) / ghostDur;
   }
 
   function go(id: ScreenId, data?: unknown): void {
@@ -209,6 +237,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       ghost = mode;
       updateGhost();
     },
+    ghostProgress,
     setAudioMuted(muted) {
       play.setMuted(muted);
     },

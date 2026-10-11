@@ -1,5 +1,6 @@
 // Onboarding assists (V1_PLAN §6.2-§6.3): the safe-arc guide's Auto alpha rules and the in-play
-// ghost-thumb hint. Pure functions plus a tiny per-run hint tracker, so they are unit-testable.
+// ghost-thumb hint with its first lesson. Pure functions plus a small per-run hint tracker, so they
+// are unit-testable.
 
 import { angleDiff, type ProfileId } from '../core/index.ts';
 
@@ -83,42 +84,320 @@ const MAX_HINTS = 3;
 const LIT_BEFORE_HINT = 0.3;
 const MIN_ARC = 10;
 const HINT_SECONDS = 1.6;
+/** Within this many degrees of the half-turn, the two ways round count as equal: keep the old way. */
+const TURN_HYSTERESIS = 20;
+/** A tracked target is the same arc while a candidate arc reaches within this many degrees of it. */
+const TRACK_SLACK = 15;
+/** The lesson is passed by a swing of at least this many degrees that ends in full shade... */
+const LESSON_SWING = 15;
+/** ...held for this long (s). */
+const LESSON_SHADE = 0.25;
+/** A lesson whose target has been gone this long (s) ends unpassed. */
+const LESSON_LOST = 0.5;
+/** Gaps of up to this many degrees inside a safe region don't split it into two targets. */
+const MERGE_GAP = 6;
 
-/** Per-run ghost-thumb hint state (profiles 0-1 only, at most 3 per run). */
+/** One ghost-thumb swipe in play, in seconds (ui.css `ghost-once`). */
+export const HINT_CYCLE = 1.5;
+/** Game time scale while the first lesson plays (V1_PLAN §6.2 forgiveness, CRITIQUE first minute). */
+export const LESSON_TIME_SCALE = 0.5;
+
+export interface HintInput {
+  profile: ProfileId;
+  /** Nubs' lit fraction (0 = fully shaded). */
+  f: number;
+  sunUp: boolean;
+  /** Guide masks: safe now and 0.6 s ahead. */
+  now: Uint8Array;
+  next: Uint8Array;
+  theta: number;
+  /** A finger or rotation key is down. */
+  dragging: boolean;
+  /** Settings → invert: a rightward drag turns the sun counter-clockwise. */
+  invert: boolean;
+  /** The first lesson has not been passed yet (it is offered in profiles 0-1 until it is). */
+  lessonPending: boolean;
+}
+
+const MAX_ARCS = 180;
+
+/**
+ * Per-run ghost-thumb hint state (profiles 0-1 only, at most 3 per run), V1_PLAN §6.2.
+ *
+ * - **Target:** the widest arc that is safe now and still safe 0.6 s ahead (the arc that lasts),
+ *   else the widest arc safe now; at least 10° wide.
+ * - **Direction:** the short way round to the target's center, but sticky: while the same arc
+ *   exists (tracked as it drifts) and the two ways round are within 20° of a half-turn, the first
+ *   direction is kept, so a hint never flips sides on an unchanged sun.
+ * - **Lesson:** while the first lesson is pending, the first hint of a run does not time out. It
+ *   loops (the session slows time to LESSON_TIME_SCALE meanwhile) until a swing of ≥ 15° ends with
+ *   Nubs fully shaded for 0.25 s (passed), the target arc is gone for 0.5 s, or the sun sets.
+ */
 export class HintTracker {
   shown = 0;
-  private lit = 0;
-  /** Seconds left on the hint being shown, and its direction. */
+  /** Seconds left on a plain (non-lesson) hint. */
   active = 0;
+  /** Drag direction for the ghost thumb (from `turn` and the invert setting). */
   dir: 'left' | 'right' = 'left';
-  private readonly arc = new Float64Array(2);
+  /** Rotation toward the target: +1 counter-clockwise (θ grows), −1 clockwise, 0 none. */
+  turn: -1 | 0 | 1 = 0;
+  /** Target arc center and width (degrees); NaN center when there is no target. */
+  target = NaN;
+  targetW = 0;
+  /** The first lesson is playing (time runs slow, the hint loops until a successful swing). */
+  lesson = false;
+  /** Latched when the lesson is passed in this run (the session saves it once). */
+  lessonPassed = false;
+  private lit = 0;
+  private lessonLost = 0;
+  private lessonMoved = 0;
+  private lessonShade = 0;
+  private lastTheta = NaN;
+  private readonly arcStart = new Int16Array(MAX_ARCS);
+  private readonly arcWidth = new Int16Array(MAX_ARCS);
+  private readonly stable = new Uint8Array(360);
 
   reset(): void {
     this.shown = 0;
     this.lit = 0;
     this.active = 0;
+    this.turn = 0;
+    this.target = NaN;
+    this.targetW = 0;
+    this.lesson = false;
+    this.lessonPassed = false;
+    this.lessonLost = 0;
+    this.lastTheta = NaN;
+  }
+
+  /** The ghost thumb should be on screen now (the lesson hides it while a finger is down). */
+  showing(dragging: boolean): boolean {
+    if (Number.isNaN(this.target)) return false;
+    return this.lesson ? !dragging : this.active > 0;
+  }
+
+  /** Degrees from θ to the target center going the `turn` way (0 when there is no target). */
+  route(theta: number): number {
+    if (Number.isNaN(this.target) || this.turn === 0) return 0;
+    const d = (((this.target - theta) * this.turn) % 360 + 360) % 360;
+    return d;
+  }
+
+  /** Ends the lesson (unpassed) and any hint: death, the Results, a pause on the way out, night. */
+  stop(): void {
+    this.lesson = false;
+    this.active = 0;
+    this.lit = 0;
   }
 
   /**
-   * Call once per frame in play. Returns true when a new hint should start (direction in `dir`).
-   * A rotation of +θ (counter-clockwise) needs a leftward drag.
+   * Call once per frame in play (real seconds). Returns true when a new hint starts (direction in
+   * `dir`, target in `target`/`targetW`).
    */
-  update(dt: number, profile: ProfileId, f: number, sunUp: boolean, now: Uint8Array, theta: number, dragging: boolean): boolean {
+  update(dt: number, p: HintInput): boolean {
     if (this.active > 0) this.active = Math.max(0, this.active - dt);
-    if (profile > 1 || !sunUp) {
-      this.lit = 0;
+    const moved = Number.isNaN(this.lastTheta) ? 0 : Math.abs(angleDiff(p.theta, this.lastTheta));
+    this.lastTheta = p.theta;
+    if (p.profile > 1 || !p.sunUp) {
+      this.stop();
       return false;
     }
-    this.lit = f > 0 ? this.lit + dt : 0;
-    if (this.active > 0 || this.shown >= MAX_HINTS || dragging || this.lit < LIT_BEFORE_HINT) return false;
-    widestArc(now, this.arc);
-    if ((this.arc[0] as number) < MIN_ARC) return false;
-    const d = nearestSafe(now, theta);
-    if (!Number.isFinite(d) || d === 0) return false;
-    this.dir = d > 0 ? 'left' : 'right';
-    this.active = HINT_SECONDS;
+    this.lit = p.f > 0 ? this.lit + dt : 0;
+
+    if (this.lesson) {
+      this.lessonMoved += moved;
+      this.lessonShade = p.f === 0 ? this.lessonShade + dt : 0;
+      if (this.lessonShade >= LESSON_SHADE) {
+        // Shaded again: passed if the player swung the sun there, otherwise a shadow came by (the
+        // lesson stays pending and returns the next time Nubs is lit).
+        if (this.lessonMoved >= LESSON_SWING) this.lessonPassed = true;
+        this.lesson = false;
+        this.lit = 0;
+        return false;
+      }
+      if (this.track(p)) this.lessonLost = 0;
+      else if ((this.lessonLost += dt) >= LESSON_LOST) this.stop();
+      return false;
+    }
+    if (this.active > 0) {
+      this.track(p);
+      return false;
+    }
+    if (this.shown >= MAX_HINTS || p.dragging || this.lit < LIT_BEFORE_HINT) return false;
+    if (!this.track(p)) return false;
     this.shown++;
     this.lit = 0;
+    if (p.lessonPending && !this.lessonPassed) {
+      this.lesson = true;
+      this.lessonLost = 0;
+      this.lessonMoved = 0;
+      this.lessonShade = 0;
+    } else {
+      this.active = HINT_SECONDS;
+    }
     return true;
+  }
+
+  /**
+   * Picks (or keeps tracking) the target arc and the way round. Returns false when no safe arc of
+   * at least MIN_ARC exists (the target is cleared).
+   */
+  private track(p: HintInput): boolean {
+    const st = this.stable;
+    let anyStable = false;
+    for (let b = 0; b < 360; b++) {
+      const v = p.now[b] !== 0 && p.next[b] !== 0 ? 1 : 0;
+      st[b] = v;
+      if (v) anyStable = true;
+    }
+    let n = anyStable ? this.arcs(st) : 0;
+    if (n === 0) n = this.arcs(p.now);
+    if (n === 0) {
+      this.target = NaN;
+      this.targetW = 0;
+      return false;
+    }
+    // Same arc as before (it drifts and grows as Nubs walks): the candidate nearest the old center.
+    let pick = -1;
+    if (!Number.isNaN(this.target)) {
+      let best = Infinity;
+      for (let i = 0; i < n; i++) {
+        const w = this.arcWidth[i] as number;
+        const c = (this.arcStart[i] as number) + (w - 1) / 2;
+        const gap = Math.max(0, Math.abs(angleDiff(this.target, c)) - (w + this.targetW) / 2);
+        if (gap <= TRACK_SLACK && gap < best) {
+          best = gap;
+          pick = i;
+        }
+      }
+    }
+    const tracked = pick >= 0;
+    if (!tracked) {
+      let bestW = 0;
+      for (let i = 0; i < n; i++) {
+        if ((this.arcWidth[i] as number) > bestW) {
+          bestW = this.arcWidth[i] as number;
+          pick = i;
+        }
+      }
+    }
+    const w = this.arcWidth[pick] as number;
+    this.targetW = w;
+    this.target = ((((this.arcStart[pick] as number) + (w - 1) / 2) % 360) + 360) % 360;
+    const d = angleDiff(this.target, p.theta);
+    const ad = Math.abs(d);
+    if (ad <= w / 2) {
+      // Already pointing into it: keep the way we were going.
+      if (this.turn === 0) this.turn = d >= 0 ? 1 : -1;
+    } else if (!(tracked && this.turn !== 0 && ad > 180 - TURN_HYSTERESIS)) {
+      this.turn = d > 0 ? 1 : -1;
+    }
+    // A counter-clockwise turn (θ grows) is a leftward drag, unless the controls are inverted.
+    this.dir = this.turn > 0 !== p.invert ? 'left' : 'right';
+    return true;
+  }
+
+  /**
+   * Lists the circular runs of set bins at least MIN_ARC wide, treating gaps of up to MERGE_GAP
+   * degrees as part of the run (the masks have slivers at part edges that would make the target
+   * jump between halves of one teal region); returns how many.
+   */
+  private arcs(mask: Uint8Array): number {
+    // Start scanning just after a gap longer than MERGE_GAP, so no merged run wraps past the start.
+    let first = -1;
+    let gapRun = 0;
+    for (let k = 0; k < 720 && first < 0; k++) {
+      const b = k % 360;
+      gapRun = mask[b] === 0 ? gapRun + 1 : 0;
+      if (gapRun > MERGE_GAP) first = b;
+    }
+    if (first < 0) {
+      this.arcStart[0] = 0;
+      this.arcWidth[0] = 360;
+      return 1;
+    }
+    let n = 0;
+    let start = -1;
+    let lastOn = -1;
+    for (let k = 1; k <= 360; k++) {
+      const b = (first + k) % 360;
+      if (mask[b] === 0) {
+        if (start >= 0 && first + k - lastOn > MERGE_GAP) {
+          this.push(start, lastOn - start + 1, n++);
+          start = -1;
+        }
+        continue;
+      }
+      if (start < 0) start = first + k;
+      lastOn = first + k;
+    }
+    if (start >= 0) this.push(start, lastOn - start + 1, n++);
+    // Drop the narrow ones (in place).
+    let m = 0;
+    for (let i = 0; i < n && i < MAX_ARCS; i++) {
+      if ((this.arcWidth[i] as number) < MIN_ARC) continue;
+      this.arcStart[m] = this.arcStart[i] as number;
+      this.arcWidth[m] = this.arcWidth[i] as number;
+      m++;
+    }
+    return m;
+  }
+
+  private push(start: number, width: number, i: number): void {
+    if (i >= MAX_ARCS) return;
+    this.arcStart[i] = start % 360;
+    this.arcWidth[i] = width;
+  }
+}
+
+/** CSS `ease-in-out` (cubic-bezier(0.42, 0, 0.58, 1)) at t ∈ [0, 1]. */
+export function cssEaseInOut(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  // Solve x(u) = t for the bezier parameter u (Newton, then bisection as a fallback).
+  const x1 = 0.42;
+  const x2 = 0.58;
+  const bx = (u: number): number => 3 * (1 - u) * (1 - u) * u * x1 + 3 * (1 - u) * u * u * x2 + u * u * u;
+  let u = t;
+  for (let i = 0; i < 6; i++) {
+    const x = bx(u) - t;
+    const dx = 3 * (1 - u) * (1 - u) * x1 + 6 * (1 - u) * u * (x2 - x1) + 3 * u * u * (1 - x2);
+    if (Math.abs(x) < 1e-5 || dx < 1e-6) break;
+    u -= x / dx;
+  }
+  u = Math.min(1, Math.max(0, u));
+  // y(u) with y1 = 0, y2 = 1.
+  return 3 * (1 - u) * u * u + u * u * u;
+}
+
+/**
+ * Horizontal position (−1 left … +1 right) of the Title's ghost hand at progress p of its 2.4 s
+ * `ghost-swing` loop (ui.css keyframes: hold left to 8 %, glide right to 50 %, hold to 58 %, glide
+ * back to 92 %). The Title sway follows it, so the sun turns as the hand drags.
+ */
+export function ghostSwingX(p: number): number {
+  const q = p - Math.floor(p);
+  if (q < 0.08) return -1;
+  if (q < 0.5) return -1 + 2 * cssEaseInOut((q - 0.08) / 0.42);
+  if (q < 0.58) return 1;
+  if (q < 0.92) return 1 - 2 * cssEaseInOut((q - 0.58) / 0.34);
+  return -1;
+}
+
+/**
+ * Progress (0..1) of the in-play ghost swipe at progress p of its `ghost-once` loop (ui.css: fade in
+ * at the start to 15 %, glide to 75 %, fade out at the end), and its opacity in out[1].
+ */
+export function ghostSwipe(p: number, out: Float64Array): void {
+  const q = p - Math.floor(p);
+  if (q < 0.15) {
+    out[0] = 0;
+    out[1] = cssEaseInOut(q / 0.15);
+  } else if (q < 0.75) {
+    out[0] = cssEaseInOut((q - 0.15) / 0.6);
+    out[1] = 1;
+  } else {
+    out[0] = 1;
+    out[1] = 1 - cssEaseInOut((q - 0.75) / 0.25);
   }
 }

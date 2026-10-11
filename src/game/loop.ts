@@ -1,6 +1,7 @@
 // Fixed-step clock (TECH_SPEC §9.10): a 60 Hz accumulator fed by real frame time scaled by slow-mo,
 // paused by hit-stop, capped at 5 ticks per frame (×fast for soak runs). Slow-mo and hit-stop
-// timers run in real time. The interpolation alpha is acc / DT.
+// timers run in real time. The interpolation alpha is acc / DT. `assist` is a sustained time scale
+// the session eases in and out (the first lesson's slow time, game/assist.ts); it multiplies the rest.
 
 import { DT } from '../core/index.ts';
 
@@ -11,6 +12,8 @@ export class FixedClock {
   fast = 1;
   /** Test hook / debug multiplier on time. */
   debugScale = 1;
+  /** Sustained assist time scale (1 = normal), eased by the session. */
+  assist = 1;
   private hitStop = 0;
   private slowScale = 1;
   private slowLeft = 0;
@@ -34,7 +37,7 @@ export class FixedClock {
 
   get timeScale(): number {
     if (this.hitStop > 0) return 0;
-    return (this.slowLeft > 0 ? this.slowScale : 1) * this.debugScale;
+    return (this.slowLeft > 0 ? this.slowScale : 1) * this.assist * this.debugScale;
   }
 
   reset(): void {
@@ -43,6 +46,7 @@ export class FixedClock {
     this.slowLeft = 0;
     this.slowScale = 1;
     this.gameDt = 0;
+    this.assist = 1;
   }
 
   /** Advances by `real` seconds; returns the number of ticks to run this frame. */
@@ -54,7 +58,7 @@ export class FixedClock {
     } else {
       const s = this.slowLeft > 0 ? this.slowScale : 1;
       if (this.slowLeft > 0) this.slowLeft -= real;
-      scaled = real * s * this.debugScale;
+      scaled = real * s * this.assist * this.debugScale;
     }
     this.gameDt = scaled;
     this.acc += scaled * this.fast;

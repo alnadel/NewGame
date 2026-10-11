@@ -19,6 +19,10 @@ export interface ShadyTestHook {
   demo(name: string): void;
   /** Nubs' ground point on screen (CSS px), for review tooling. */
   nubsScreen(): { x: number; y: number };
+  /** The game clock's current time scale (slow-mo, the lesson's slow time, hit-stop = 0). */
+  timeScale(): number;
+  /** The ghost hint: thumb mode, target arc, way round (+1 CCW) and whether the lesson is on. */
+  hint(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number };
   /** Frame timing (ms) of the last frame: frame, sim, gen, render. */
   perf(): { frameMs: number; simMs: number; genMs: number; renderMs: number; fps: number; nubsLayerDraws: number; nubsComposes: number };
 }
@@ -59,6 +63,8 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       nubsComposes: session.renderer.scene.nubsSprite.composes,
     }),
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
+    timeScale: () => session.clock.timeScale,
+    hint: () => session.hintState(),
   };
   window.__SHADY_TEST__ = hook;
 }

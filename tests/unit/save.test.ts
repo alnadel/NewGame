@@ -132,6 +132,9 @@ describe('migrate', () => {
     expect(s.stats.reachedNight).toBe(false);
     expect(s.flags.hintsShown).toBe(0);
     expect(s.flags.installSheetShown).toBe(true);
+    // Saves from before the first-lesson flag still offer the lesson.
+    expect(s.flags.tutorialDone).toBe(false);
+    expect(migrate({ v: 1, flags: { tutorialDone: true } }, NOW).save.flags.tutorialDone).toBe(true);
   });
 
   it('filters ids against the content catalog and repairs equipment', () => {
