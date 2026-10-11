@@ -8,6 +8,8 @@ import {
   createRun,
   createSnap,
   dayTicks,
+  effectiveDrain,
+  endlessDrain,
   generateSome,
   lerpSnap,
   prepareRun,
@@ -36,6 +38,7 @@ import {
   buyCosmetic,
   debugRunOutcome,
   dailyStatus,
+  dailyProgress,
   dailyTryStarted,
   equipCosmetic,
   resetProgress,
@@ -43,8 +46,10 @@ import {
   type RunOutcome,
 } from '../meta/progression.ts';
 import type { SaveStore } from '../meta/save.ts';
+import { buildShare, shareBase } from '../meta/share.ts';
 import type { SaveV1, Settings } from '../meta/saveTypes.ts';
 import {
+  isInAppBrowser,
   isIOS,
   isStandalone,
   onPageHidden,
@@ -66,18 +71,6 @@ import type { ChallengeBanner, ImportOutcome, RunKind, ScreenId, Ui, UiSoundName
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
-import {
-  buildShareText,
-  cfgDrain,
-  dailyProgressStrip,
-  endlessDrainFor,
-  setCfgDrain,
-  shareBaseUrl,
-  storeCanPersist,
-  storeOnDegraded,
-  storeOnExternalChange,
-  uiIsModalOpen,
-} from './compat.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { Input } from './input.ts';
@@ -347,7 +340,7 @@ export class Session {
         },
         exportBackup: () => exportBackup(store.get()),
         importBackup: sync((code: string): ImportOutcome => {
-          if (!storeCanPersist(store)) return { ok: false, message: NEWER_SAVE_MESSAGE };
+          if (!store.canPersist) return { ok: false, message: NEWER_SAVE_MESSAGE };
           const r = importBackup(code);
           if (!r.ok) return { ok: false, message: backupErrorMessage(r.error) };
           store.set(r.save);
@@ -358,7 +351,7 @@ export class Session {
           return { ok: true };
         }),
         resetProgress: sync((): ImportOutcome => {
-          if (!storeCanPersist(store)) return { ok: false, message: NEWER_SAVE_MESSAGE };
+          if (!store.canPersist) return { ok: false, message: NEWER_SAVE_MESSAGE };
           const next = resetProgress(store.get());
           store.set(next);
           store.flush();
@@ -452,8 +445,8 @@ export class Session {
       onWindowBlur(() => this.pauseIfPlaying()),
       onPageVisible(() => this.checkToday()),
       // Another tab or instance saved: adopt its save instead of overwriting it later.
-      storeOnExternalChange(store, (next) => this.adoptSave(next)),
-      storeOnDegraded(store, () => this.ui.notifyStorageDegraded()),
+      store.onExternalChange((next) => this.adoptSave(next)),
+      store.onDegraded(() => this.ui.notifyStorageDegraded()),
     );
     const onPop = (): void => this.onPopState();
     window.addEventListener('popstate', onPop);
@@ -864,7 +857,7 @@ export class Session {
       cfg = { seed, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: rm };
       // K2: endless runs ramp the drain run by run (Daily, challenges, ?profile= and bots keep the
       // profile's drain).
-      if (p.profile === null && !p.bot) setCfgDrain(cfg, endlessDrainFor(save.stats.runs));
+      if (p.profile === null && !p.bot) cfg.drain = endlessDrain(save.stats.runs);
       this.kind = 'endless';
     }
     this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
@@ -1001,7 +994,7 @@ export class Session {
   /** Back has something to do in the game: any screen but the Title (and boot), or an open modal. */
   private wantsSentinel(): boolean {
     const sc = this.ui.current();
-    return (sc !== 'boot' && sc !== 'title') || uiIsModalOpen(this.ui);
+    return (sc !== 'boot' && sc !== 'title') || this.ui.isModalOpen();
   }
 
   /**
@@ -1059,7 +1052,7 @@ export class Session {
   /** The app's Back action (also what a native back button should call). */
   handleBack(): void {
     const ui = this.ui;
-    if (uiIsModalOpen(ui)) {
+    if (ui.isModalOpen()) {
       ui.back();
       return;
     }
@@ -1231,7 +1224,7 @@ export class Session {
         if (this.dailyTry !== null && this.dailyDate) {
           const store = this.d.store;
           const strip = { hourGlyphs: this.s.hourGlyphs, assisted: this.runAssisted };
-          const next = dailyProgressStrip(store.get(), this.dailyDate, this.s.minutes, this.s.stats.snow, strip);
+          const next = dailyProgress(store.get(), this.dailyDate, this.s.minutes, this.s.stats.snow, strip);
           if (next !== store.get()) {
             store.set(next);
             store.flush();
@@ -1326,7 +1319,7 @@ export class Session {
       this.fx.confetti(40);
     }
     const save = this.d.store.get();
-    if (!this.debugRuns && shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone() })) {
+    if (!this.debugRuns && shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone(), inApp: isInAppBrowser() })) {
       this.ui.showInstallSheet();
       this.d.store.update((sv) => {
         sv.flags.installSheetShown = true;
@@ -1389,7 +1382,7 @@ export class Session {
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
     if (!this.result || this.debugRuns) return 'failed';
     // No web address (a file: build, a native shell without VITE_SHARE_URL): no link line.
-    const text = buildShareText(this.result, shareBaseUrl(), this.dailyTry);
+    const text = buildShare(this.result, shareBase(), this.dailyTry).text;
     return shareText({ text });
   }
 
@@ -1574,7 +1567,7 @@ export class Session {
       reducedMotion: c.reducedMotion,
       seed: c.seed,
       dailyDate: c.dailyDate ?? null,
-      drain: cfgDrain(c) ?? s.params.drain,
+      drain: effectiveDrain(s),
     };
   }
 

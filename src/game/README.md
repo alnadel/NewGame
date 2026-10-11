@@ -10,7 +10,6 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 |---|---|
 | `game/session.ts` | Owns the `SimState` and the run lifecycle: Title hold → play → dying (1.1 s) → Results → retry/home; pause (visibility, blur, Back), the history sentinel, dailies, challenges, profiles, meta, other tabs' saves, audio/haptics routing, the frame loop and its crash containment. |
 | `game/cadence.ts` | The render cadence: which rAFs call `renderer.draw` (pure; unit-tested). |
-| `game/compat.ts` | Accessors for the APIs the other wave-3 batches add (`RunConfig.drain`/`endlessDrain`, the SaveStore hooks, `Ui.isModalOpen`, `shareBase`, the `dailyProgress` strip): the real call when present, the old behaviour otherwise. Once every batch is merged each can collapse to a direct call. |
 | `game/crash.ts` | The self-contained crash overlay (`#crash`) and the boot-failure splash, built with inline styles. |
 | `game/loop.ts` | `FixedClock`: 60 Hz accumulator, max 5 ticks/frame (× `?fast`), slow-mo, hit-stop, the sustained `assist` scale (the first lesson's slow time), interpolation alpha. |
 | `game/input.ts` | Pointer Events (+ coalesced) and arrow/A-D keys → per-tick `InputFrame`s (quantized dTheta/release, edge-ignore zones, latest pointer wins, release velocity). |
