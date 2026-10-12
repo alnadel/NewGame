@@ -128,6 +128,87 @@ async function openAtTick(page: Page, seed: number, tick: number): Promise<void>
   await page.waitForTimeout(300);
 }
 
+/**
+ * The dial around Nubs (220×220 CSS px): per ring band, how many device pixels are strong teal,
+ * old-gauge blue, frost white and amber, and the longest radial run of strong teal (CSS px).
+ */
+async function dialPixels(page: Page): Promise<{ teal: number; tealRun: number; blue: number; frost: number; amber: number }> {
+  return page.evaluate(() => {
+    const canvas = document.getElementById('game') as HTMLCanvasElement;
+    const dpr = canvas.width / canvas.clientWidth;
+    const n = window.__SHADY_TEST__!.nubsScreen();
+    const R = 40 * (canvas.clientWidth / 360);
+    const x0 = Math.round((n.x - 110) * dpr);
+    const y0 = Math.round((n.y - 110) * dpr);
+    const S = Math.round(220 * dpr);
+    const d = canvas.getContext('2d')!.getImageData(x0, y0, S, S).data;
+    const at = (x: number, y: number): [number, number, number] => {
+      const i = (Math.round(y) * S + Math.round(x)) * 4;
+      return [d[i]!, d[i + 1]!, d[i + 2]!];
+    };
+    const near = (c: [number, number, number], r: number, g: number, b: number, tol: number): boolean =>
+      Math.abs(c[0] - r) <= tol && Math.abs(c[1] - g) <= tol && Math.abs(c[2] - b) <= tol;
+    const isTeal = (c: [number, number, number]): boolean => c[1] - c[0] > 90 && c[2] - c[0] > 80;
+    const out = { teal: 0, tealRun: 0, blue: 0, frost: 0, amber: 0 };
+    const c = S / 2;
+    for (let deg = 0; deg < 360; deg += 2) {
+      const ca = Math.cos((deg * Math.PI) / 180);
+      const sa = Math.sin((deg * Math.PI) / 180);
+      let run = 0;
+      for (let r = (R - 14) * dpr; r <= (R + 12) * dpr; r += 0.5) {
+        const px = at(c + ca * r, c + sa * r);
+        if (isTeal(px)) {
+          out.teal++;
+          run += 0.5;
+          out.tealRun = Math.max(out.tealRun, run / dpr);
+        } else run = 0;
+        const rr = r / dpr;
+        if (rr > R - 11 && rr < R - 5) {
+          if (near(px, 0x5a, 0xb8, 0xff, 24)) out.blue++;
+          if (near(px, 0xea, 0xf6, 0xff, 14)) out.frost++;
+          if (near(px, 0xff, 0xa5, 0x3d, 30)) out.amber++;
+        }
+      }
+    }
+    return out;
+  });
+}
+
+test.describe('dial v2 (GR6)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+
+  test('thick teal for lasting shade, no gauge at full Chill, amber below 50', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one DPR-2 run is enough');
+    // Full Chill at the start: no gauge ring (and never the old blue one).
+    await openGame(page, 'test=1&seed=42&day=1&t=9:00&perf=0&plan=0');
+    await page.mouse.click(195, 340);
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
+    await page.waitForTimeout(200);
+    const full = await dialPixels(page);
+    expect(full.blue).toBe(0);
+    expect(full.frost).toBe(0);
+    // The human bot plays: some frame shows a thick (≥ 6 px) lasting arc.
+    await page.goto('/?test=1&seed=42&day=1&t=9:00&perf=0&plan=0&bot=human');
+    await waitForScreen(page, 'play', 10_000);
+    let thick = 0;
+    for (let i = 0; i < 30 && thick < 6; i++) {
+      await page.waitForTimeout(150);
+      thick = Math.max(thick, (await dialPixels(page)).tealRun);
+    }
+    expect(thick).toBeGreaterThanOrEqual(6);
+    // Chill 40: an amber gauge.
+    await openGame(page, 'test=1&seed=42&day=1&t=9:00&perf=0&plan=0&chill=40');
+    await page.mouse.click(195, 340);
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
+    await page.waitForTimeout(200);
+    const low = await dialPixels(page);
+    expect(low.amber).toBeGreaterThan(20);
+    expect(low.blue).toBe(0);
+    const n = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
+    await info.attach('dial-chill40', { body: await page.screenshot({ clip: { x: n.x - 110, y: n.y - 110, width: 220, height: 220 } }), contentType: 'image/png' });
+  });
+});
+
 test.describe('shadow composite (GR2)', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 

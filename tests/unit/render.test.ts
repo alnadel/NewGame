@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createBot, createRun, dayTicks, headlessConfig, step, type SimState } from '../../src/core/index.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src/game/camera.ts';
 import { cssa, hex } from '../../src/render/color.ts';
+import { createShadeSplit, splitShade } from '../../src/render/halo.ts';
 import { MAP_FADE_S, MAP_LABEL_FADE_S, MAP_PULL_S, mapAlphas, mapSettleT, type MapOverlay } from '../../src/render/meltMap.ts';
 import { createPalette, nubsShadeAt, updatePalette } from '../../src/render/palette.ts';
 import { matchShadow, traceShadows } from '../../src/render/shadowLayer.ts';
@@ -174,6 +175,37 @@ describe('cool-shade colour script (GR5)', () => {
     const shaded = [16, 8, 0].map((ch) => Math.round(((G >> ch) & 255) * (1 - p.shadowAlpha * (1 - ((p.shadow >> ch) & 255) / 255))));
     // About #829ABD: blue clearly above red.
     expect((shaded[2] as number) - (shaded[0] as number)).toBeGreaterThan(40);
+  });
+});
+
+describe('dial v2 shade split (GR6)', () => {
+  const mask = (...ranges: [number, number][]): Uint8Array => {
+    const m = new Uint8Array(360);
+    for (const [a, b] of ranges) for (let i = a; i < b; i++) m[i % 360] = 1;
+    return m;
+  };
+
+  it('splits now/next into lasting = now ∧ next, ending and coming', () => {
+    const out = createShadeSplit();
+    const now = mask([10, 50], [350, 370]);
+    const next = mask([30, 80]);
+    expect(splitShade(now, next, out)).toBe('lasting');
+    for (let b = 0; b < 360; b++) {
+      expect(out.lasting[b]).toBe(now[b]! & next[b]!);
+      expect(out.ending[b]).toBe(now[b]! & (1 - next[b]!));
+      expect(out.coming[b]).toBe(next[b]! & (1 - now[b]!));
+    }
+    expect(out.lasting[40]).toBe(1);
+    expect(out.ending[355]).toBe(1);
+    expect(out.coming[60]).toBe(1);
+  });
+
+  it('falls back to the now arcs when nothing lasts, and to nothing when nothing is shaded now', () => {
+    const out = createShadeSplit();
+    expect(splitShade(mask([10, 30]), mask([40, 60]), out)).toBe('fallback');
+    expect(out.lasting.every((x) => x === 0)).toBe(true);
+    expect(splitShade(mask(), mask([40, 60]), out)).toBe('none');
+    expect(out.coming[50]).toBe(1);
   });
 });
 
