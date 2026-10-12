@@ -12,9 +12,9 @@
 // the vignettes stay. The layer is redrawn only when a quantized input changes (a drag, the clock's
 // 1/96-day steps, a pulse), and drawn only when something in it is visible.
 
+import type { ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex, mix, type Rgb } from './color.ts';
-import type { ForecastId } from './shims.ts';
 import { ctx2d, makeCanvas, vignette, type Canvas2D } from './sprites.ts';
 
 const WARM_AM = hex('#FFAA6E');

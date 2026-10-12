@@ -1,8 +1,7 @@
 // Pure progression rules (V1_PLAN §11, V1_1_PLAN UM3-UM6, GDD §6-§8). Every function takes a save
 // and returns a new one; inputs are never mutated, so the session can diff, test and persist freely.
 
-import type { HourGlyph, RunResult } from '../core/sim/events.ts';
-import { MINUTES_PER_DAY } from '../core/format.ts';
+import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, MINUTES_PER_DAY, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { DailyEntry, Save } from './saveTypes.ts';
 import {
   ACHIEVEMENTS,
@@ -31,7 +30,6 @@ import { cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest } 
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
 import { markSunnyDay } from './week.ts';
-import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, v11Result, type RunResultV11 } from './shims.ts';
 
 export { recentBest } from './save.ts';
 
@@ -129,7 +127,7 @@ export interface ApplyRunOptions {
   rung?: number;
 }
 
-type AchievementCheck = (save: Save, run: RunResultV11, options: ApplyRunOptions) => boolean;
+type AchievementCheck = (save: Save, run: RunResult, options: ApplyRunOptions) => boolean;
 
 /** Evaluated after the run's stats are merged into the save. */
 const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
@@ -192,7 +190,7 @@ function paceLine(history: Save['history']): string | null {
 }
 
 /** Bits of the forecasts whose noon this run survived (FORECAST_IDS order; Clear never counts). */
-function forecastNoonBits(r: RunResultV11): number {
+function forecastNoonBits(r: RunResult): number {
   let bits = 0;
   r.plan.forEach((p, i) => {
     if (p.forecast !== 'clear' && r.minutes >= i * MINUTES_PER_DAY + NOON_MINUTES) bits |= 1 << FORECAST_IDS.indexOf(p.forecast);
@@ -205,8 +203,7 @@ function forecastNoonBits(r: RunResultV11): number {
  * bonuses (Morning Snow, Welcome back, Sunny Week, Today's errand), missions (progress, staleness),
  * the Daily best, achievements and their cosmetic rewards. Pure.
  */
-export function applyRunResult(save: Save, result: RunResult, options: ApplyRunOptions): { save: Save; outcome: RunOutcome } {
-  const r = v11Result(result); // V11-SHIM: CC-7 (use `result` directly)
+export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOptions): { save: Save; outcome: RunOutcome } {
   const today = options.today;
   const next = cloneSave(save);
   const s = next.stats;

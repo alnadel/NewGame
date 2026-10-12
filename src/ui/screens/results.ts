@@ -18,7 +18,6 @@ import { dailyNumber } from '../../meta/daily.ts';
 import type { ErrandView, MissionView } from '../../meta/missions.ts';
 import { activeMissionViews } from '../../meta/progression.ts';
 import { runPlanOn } from '../../meta/share.ts';
-import { v11Result } from '../../meta/shims.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import {
@@ -121,9 +120,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   };
   // Both run synchronously in the click task (the share sheet needs the tap's user activation).
   const share = (): void => void ctx.cb.share().then(shared);
-  const sharePostcard = (): void => {
-    if (ctx.cb.sharePostcard) void ctx.cb.sharePostcard().then(shared);
-  };
+  const sharePostcard = (): void => void ctx.cb.sharePostcard().then(shared);
 
   // The map area above the sheet: tap = retry. Hidden from assistive tech (Retry is the real control).
   const mapCatch = h('div', { class: 'res-map pe', 'aria-hidden': 'true' });
@@ -260,16 +257,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       ),
     );
   };
-  const swapFor = (m: MissionView): (() => void) | null => {
-    const cb = ctx.cb.swapMission;
-    return m.swappable && cb ? () => cb.call(ctx.cb, m.id) : null;
-  };
+  const swapFor = (m: MissionView): (() => void) | null => (m.swappable ? () => ctx.cb.swapMission(m.id) : null);
   const missionRow = (m: MissionView): HTMLElement => row(m, null, swapFor(m));
   const errandRow = (e: ErrandView): HTMLElement => row(e, "Today's errand", null);
 
   /** Sun Strip rows, tiles popping in one after another as the sheet lands. */
   function renderStrip(view: ResultsView, reduced: boolean): void {
-    const r = v11Result(view.result); // V11-SHIM: CC-7 (use view.result directly)
+    const r = view.result;
     const rows = window.innerHeight < STRIP_SHORT_BELOW_PX ? STRIP_ROWS_SHORT : STRIP_ROWS;
     const model = sunStrip(r.hourGlyphs, runPlanOn(r) ? r.plan : null, rows, r.day);
     strip.setAttribute('aria-label', stripLabel(model));
@@ -328,7 +322,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     hide(note, !notCounted);
     // A debug run's score isn't real: no share text, postcard or challenge link for it.
     hide(shareBtn, view.debug === true);
-    hide(postcardBtn, view.debug === true || !ctx.cb.sharePostcard);
+    hide(postcardBtn, view.debug === true);
     const win = view.challengeTarget !== undefined && challengeVerdict(result.minutes, view.challengeTarget).win;
     const shareLabel = win ? 'Send it back' : 'Share';
     setButtonLabel(shareBtn, shareLabel);
@@ -392,7 +386,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
 
     // Stats (Snow counts up into the wallet); tiles with nothing to show are left out.
     const snowValue = h('span', { class: 'num' }, reduced ? `+${outcome.snowEarned}` : '+0');
-    const st = v11Result(result).stats; // V11-SHIM: CC-4 (use result.stats directly)
+    const st = result.stats;
     const mult = multiplierTile(st);
     setChildren(
       stats,

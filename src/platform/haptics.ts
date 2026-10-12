@@ -9,9 +9,6 @@
 
 import type { SimEvent } from '../core/sim/events.ts';
 
-// V11-SHIM: CC-4 — SimEvent includes { e: 'swing' } (use SimEvent directly).
-type HapticEvent = SimEvent | { e: 'swing' };
-
 export type HapticName =
   | 'detent'
   | 'catch'
@@ -94,7 +91,7 @@ export function isDetentHapticStep(index: number, dir: 1 | -1): boolean {
 }
 
 /** The haptic a SimEvent asks for, or null. Detents still need detent() gating (see onEvents). */
-export function hapticForEvent(ev: HapticEvent): HapticName | null {
+export function hapticForEvent(ev: SimEvent): HapticName | null {
   switch (ev.e) {
     case 'detent':
       return 'detent';
@@ -136,7 +133,7 @@ export interface Haptics {
   /** A sun detent crossing: index = floor(θ/15) after it, dir = ±1, omega = sun speed (°/s). */
   detent(index: number, dir: 1 | -1, omega: number): void;
   /** Forwards a frame's SimEvents; `omega` is the sun's current angular velocity (°/s). */
-  onEvents(events: readonly HapticEvent[], omega: number): void;
+  onEvents(events: readonly SimEvent[], omega: number): void;
 }
 
 /** What the gated player needs from the platform; injectable for tests. */
@@ -246,7 +243,7 @@ export class WebVibrateHaptics implements Haptics {
     this.fire('detent', now);
   }
 
-  onEvents(events: readonly HapticEvent[], omega: number): void {
+  onEvents(events: readonly SimEvent[], omega: number): void {
     if (!this.on) return;
     for (const ev of events) {
       if (ev.e === 'detent') {

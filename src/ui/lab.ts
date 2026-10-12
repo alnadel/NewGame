@@ -5,8 +5,7 @@
 //   &variant=…   (see VARIANTS)   &inset=47 (simulated top inset)   &rm=1 (reduced motion)
 //   &bare=1 (hide the lab toolbar)   &toast=1 (demo toasts)   &sheet=install|confirm
 
-import type { HourGlyph, RunResult } from '../core/sim/events.ts';
-import { formatScore } from '../core/format.ts';
+import { formatScore, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { defaults, sanitizeSettings } from '../meta/save.ts';
 import { equippedLooks, getCosmetic, type CosmeticId, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
@@ -15,8 +14,6 @@ import { applyRunResult, buyCosmetic, equipCosmetic, resetProgress, swapMission 
 import { backupErrorMessage, exportBackup, importBackup } from '../meta/backup.ts';
 import { buildShare, shareBase } from '../meta/share.ts';
 import { mondayOf } from '../meta/week.ts';
-// V11-SHIM: CC-4/CC-7 — RunResultV11 becomes core's RunResult at integration.
-import type { DayPlan, RunResultV11 } from '../meta/shims.ts';
 import { shareText } from '../platform/share.ts';
 import { cosmeticSwatch } from './swatches.ts';
 import { simulateSafeArea } from '../platform/safeArea.ts';
@@ -96,7 +93,7 @@ function richSave(): Save {
   return s;
 }
 
-type Stats = RunResultV11['stats'];
+type Stats = RunResult['stats'];
 
 function stats(over: Partial<Stats>): Stats {
   return {
@@ -115,7 +112,7 @@ const LAB_PLAN: readonly DayPlan[] = [
   { biome: 'meadow', forecast: 'dazzle' },
 ];
 
-function fakeRun(minutes: number, over: Partial<Stats>, extra: Partial<RunResultV11>, line: string): RunResultV11 {
+function fakeRun(minutes: number, over: Partial<Stats>, extra: Partial<RunResult>, line: string): RunResult {
   const day = Math.floor(minutes / 720) + 1;
   const pattern: HourGlyph[] = ['cool', 'cool', 'warm', 'cool', 'hot', 'warm', 'cool', 'cool', 'warm', 'cool', 'cool', 'cool'];
   const glyphs: HourGlyph[][] = [];

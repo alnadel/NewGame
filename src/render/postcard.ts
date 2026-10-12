@@ -5,9 +5,9 @@
 // It is built in stages, one per idle callback (crop, header, tiles and footer, encode), so no stage
 // holds the main thread for long.
 
-import type { HourGlyph } from '../core/index.ts';
+import type { ForecastId, HourGlyph } from '../core/index.ts';
+import type { ShadesLook } from '../meta/content.ts';
 import { drawForecastGlyph } from './glyphs.ts';
-import type { ForecastId, ShadesLook } from './shims.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 import { createSunGlyph, drawSun } from './sun.ts';
 

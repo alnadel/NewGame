@@ -3,7 +3,7 @@
 // effects (steam while lit, sweat below 60 Chill, frost sparkles in shade, fireflies at night).
 // Particles are render-only and may use Math.random.
 
-import { dayParams, dayTicks, type SimState } from '../core/index.ts';
+import { dayParams, dayTicks, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -30,7 +30,6 @@ import {
 } from '../render/particles.ts';
 import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
 import { hop } from '../render/nubs.ts';
-import { forecastOf, worldPlan, type SimEventV11 } from '../render/shims.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
 import { bossWeight } from '../render/sun.ts';
@@ -67,7 +66,7 @@ export class Fx {
   }
 
   /** Routes one frame's events. */
-  onEvents(events: readonly SimEventV11[], s: SimState): void {
+  onEvents(events: readonly SimEvent[], s: SimState): void {
     const sc = this.sc;
     const nx = s.nubs.x;
     const ny = s.nubs.y;
@@ -291,7 +290,7 @@ export class Fx {
     }
     // Heat wisps while the sun is a boss: 7 tries a second 44-160 u from Nubs, rising (18 u/s on
     // screen, 1.4 s) only from lit ground — about 10 in the air at once.
-    const boss = daylight ? bossWeight(s.dayTick / dayTicks(s.day), forecastOf(s.params) === 'heat') : 0;
+    const boss = daylight ? bossWeight(s.dayTick / dayTicks(s.day), s.params.forecast === 'heat') : 0;
     if (boss > 0.3) {
       this.wispAcc += dt * 7;
       while (this.wispAcc >= 1) {

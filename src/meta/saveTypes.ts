@@ -117,6 +117,3 @@ export interface Save {
     missionsV2: boolean;
   };
 }
-
-// V11-SHIM: CC-9 — the v1.0 name, kept until integration renames the other batches' uses to Save.
-export type SaveV1 = Save;

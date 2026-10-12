@@ -50,13 +50,15 @@ async function saved(page: Page): Promise<{ stats: SavedStats; owned: string[]; 
 
 test('runs from two tabs all count', async ({ context }) => {
   test.setTimeout(90_000);
-  const a = await openTab(context, null);
-  const b = await openTab(context, null);
+  // Bests count from lifetime run 3 (UM3).
+  const seed = { v: 1, createdAt: 1, stats: { runs: 3 } };
+  const a = await openTab(context, seed);
+  const b = await openTab(context, seed);
   const m1 = await playRun(b, 700);
   const m2 = await playRun(b, 1200);
   const m3 = await playRun(a, 400);
   const s = await saved(a);
-  expect(s.stats.runs).toBe(3);
+  expect(s.stats.runs).toBe(6);
   expect(s.stats.bestMinutes).toBe(Math.max(m1, m2, m3));
 });
 

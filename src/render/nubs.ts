@@ -7,7 +7,7 @@
 // re-entry, and on death a melt into a puddle with the eyes and nose bobbing in it. Also the
 // Wardrobe preview.
 
-import { equippedLooks, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
+import { equippedLooks, type Equipped, type HatLook, type NoseLook, type ScarfLook, type ShadesLook } from '../meta/content.ts';
 import { css, cssa, darken, hex, mix, type Rgb } from './color.ts';
 import { nubsShadeAt } from './palette.ts';
 import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
@@ -282,19 +282,23 @@ export interface Looks {
   scarf: ScarfLook;
   hat: HatLook;
   nose: NoseLook;
+  /** The sun's Sun Shades (drawn on the sun, not on Nubs). */
+  shades: ShadesLook;
 }
 
 let cachedScarf = '';
 let cachedHat = '';
 let cachedNose = '';
+let cachedShades = '';
 let cachedLooks: Looks | null = null;
 
 /** The looks for `e`, cached (the same object while the equipped set is unchanged). */
 export function looksFor(e: Equipped): Looks {
-  if (!cachedLooks || e.scarf !== cachedScarf || e.hat !== cachedHat || e.nose !== cachedNose) {
+  if (!cachedLooks || e.scarf !== cachedScarf || e.hat !== cachedHat || e.nose !== cachedNose || e.shades !== cachedShades) {
     cachedScarf = e.scarf;
     cachedHat = e.hat;
     cachedNose = e.nose;
+    cachedShades = e.shades;
     cachedLooks = equippedLooks(e);
   }
   return cachedLooks;

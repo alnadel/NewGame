@@ -1,8 +1,7 @@
 // Debug and test URL parameters (V1_PLAN §14, TECH_SPEC §17).
 
-import { BOT_KINDS, dayLength, type BotKind, type ProfileId } from '../core/index.ts';
+import { BOT_KINDS, COMFORT_MAX, dayLength, FORECAST_IDS, type BotKind, type ForecastId, type ProfileId } from '../core/index.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';
-import { COMFORT_MAX, FORECAST_IDS, type ForecastId } from '../render/shims.ts';
 
 export interface Params {
   seed: number | null;

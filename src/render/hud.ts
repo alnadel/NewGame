@@ -10,11 +10,10 @@
 // moving parts on top from small cached sprites: the flake icon (pops), the multiplier badge (pops,
 // shakes, glows at ×5), the elapsed part of the ruler and its progress head.
 
-import { dayTicks, hudClock, minutesOfDay, type SimState } from '../core/index.ts';
+import { dayTicks, hudClock, minutesOfDay, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex } from './color.ts';
 import { drawForecastGlyph } from './glyphs.ts';
-import { forecastOf, type ForecastId } from './shims.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
@@ -289,7 +288,7 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
     h.layer === null ||
     h.builtSnow !== h.snowVal ||
     h.builtDay !== h.dayVal ||
-    h.builtForecast !== forecastOf(s.params) ||
+    h.builtForecast !== s.params.forecast ||
     h.builtClock !== h.clockKey ||
     h.builtPassed !== passed ||
     h.builtNight !== night ||
@@ -410,7 +409,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   h.cy = cy;
   h.builtSnow = h.snowVal;
   h.builtDay = h.dayVal;
-  h.builtForecast = forecastOf(s.params);
+  h.builtForecast = s.params.forecast;
   h.builtClock = h.clockKey;
   h.builtPassed = passed;
   h.builtNight = night;

@@ -2,14 +2,24 @@
 // Retry label, the stats tile for the multiplier, the screen-reader summary of a run, which
 // Settings sections show where, the Sun Strip, the cue line, forecast lines and the Journal chart.
 
-import type { HourGlyph, RunStats } from '../core/sim/events.ts';
-import { formatScore, MINUTES_PER_DAY } from '../core/format.ts';
+import {
+  COMFORT_MAX,
+  FORECASTS,
+  formatScore,
+  MINUTES_PER_DAY,
+  PLAN_START_DATE,
+  planDay,
+  type BiomeId,
+  type DayPlan,
+  type ForecastInfo,
+  type HourGlyph,
+  type RunStats,
+} from '../core/index.ts';
 import { challengeVerdict } from '../meta/challenge.ts';
 import { DAILY_TRIES, dailySeed } from '../meta/daily.ts';
 import { dailyStatus } from '../meta/progression.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { scoreText } from '../meta/share.ts';
-import { COMFORT_MAX, FORECASTS, PLAN_START_DATE, planDay, type BiomeId, type DayPlan, type ForecastInfo } from '../meta/shims.ts';
 import type { CueId, ResultsView, ScreenId } from './types.ts';
 
 const NBSP = '\u00a0';

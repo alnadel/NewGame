@@ -7,10 +7,9 @@
 // vignettes the atmosphere layer draws (atmosphere.ts): low-Chill heat haze, the cool multiplier
 // pulse and the gold ×5 pulse. Photosensitivity: no full-screen flash.
 
-import type { BiomeId } from '../core/index.ts';
+import { FORECASTS, type BiomeId, type ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { drawBiomeGlyph } from './glyphs.ts';
-import { FORECASTS, type ForecastId } from './shims.ts';
 import { roundRect } from './sprites.ts';
 
 const TAU = Math.PI * 2;

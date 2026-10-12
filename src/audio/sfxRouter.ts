@@ -165,6 +165,10 @@ export class SfxRouter {
       case 'ballPassed':
         // Bookkeeping events with no sound of their own.
         return;
+      case 'swing':
+      case 'lessonDone':
+        // v1.1 has no audio work: fx, haptics and the cue line carry these.
+        return;
     }
   }
 }

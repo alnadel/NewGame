@@ -7,7 +7,7 @@
 
 import { smoothstep } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import type { ShadesLook } from './shims.ts';
+import type { ShadesLook } from '../meta/content.ts';
 import { ctx2d, radialSprite } from './sprites.ts';
 
 const TAU = Math.PI * 2;

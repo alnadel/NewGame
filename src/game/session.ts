@@ -3,23 +3,33 @@
 // every frame's events to fx, audio, haptics, meta and the UI.
 
 import {
+  biomeAtY,
   buildRunResult,
+  COMFORT_MAX,
   createBot,
+  createParJob,
   createRun,
   createSnap,
   dayTicks,
+  deathRecap,
+  deathTip,
   effectiveDrain,
+  effectiveNoonCloud,
   formatTimeOfDay,
   generateSome,
   lerpSnap,
+  PLAN_START_DATE,
   prepareRun,
   prepareSome,
+  rungConfig,
   splitMinutes,
   step,
   takeSnap,
   TUNING,
+  worldPlan,
   type Bot,
   type BotKind,
+  type ParJob,
   type RenderSnap,
   type RunBuild,
   type RunConfig,
@@ -42,13 +52,19 @@ import {
   dailyTryStarted,
   equipCosmetic,
   isDailyUnlocked,
+  nextMilestone,
+  recentBest,
   resetProgress,
+  setDailyPar,
   shouldShowInstallSheet,
+  swapMission,
+  type ApplyRunOptions,
   type RunOutcome,
 } from '../meta/progression.ts';
+import { equippedLooks } from '../meta/content.ts';
 import type { SaveStore } from '../meta/save.ts';
 import { buildShare, shareBase } from '../meta/share.ts';
-import type { SaveV1, Settings } from '../meta/saveTypes.ts';
+import type { Save, Settings } from '../meta/saveTypes.ts';
 import {
   isInAppBrowser,
   isIOS,
@@ -60,7 +76,7 @@ import {
   prefersReducedMotion,
 } from '../platform/lifecycle.ts';
 import { readSafeArea, onSafeAreaChange } from '../platform/safeArea.ts';
-import { shareText } from '../platform/share.ts';
+import { shareFiles, shareText, type ShareOutcome } from '../platform/share.ts';
 import { requestPersistence } from '../platform/storage.ts';
 import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
 import { resetDeathBeat } from '../render/deathbeat.ts';
@@ -73,7 +89,7 @@ import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
-import type { ImportOutcome, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
+import type { ChallengeBanner, CueId, ImportOutcome, ResultsView, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
@@ -83,44 +99,6 @@ import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
-import {
-  biomeAtWorld,
-  COMFORT_MAX,
-  createParJob,
-  type ParJob,
-  deathRecap,
-  deathTip,
-  effectiveNoonCloud,
-  forecastOf,
-  lessonOnOf,
-  lessonShimTick,
-  PLAN_START_DATE,
-  planOnOf,
-  rungConfig,
-  shadesLook,
-  worldPlan,
-  type RunConfigV11,
-  type SimEventV11,
-} from '../render/shims.ts';
-import {
-  challengeRules,
-  comfortOn,
-  comfortStat,
-  historyLength,
-  nextMilestone,
-  recentBest,
-  uiV11,
-  type ApplyRunOptionsV11,
-  type ChallengeBannerV11,
-  type CueId,
-  type ResultsViewV11,
-  dailyPar,
-  setDailyPar,
-  shareFiles,
-  type ShareOutcomeV11,
-  swapMission,
-  type UiCallbacksV11,
-} from './shims.ts';
 import type { StampKind } from '../render/banners.ts';
 
 const DYING_S = 1.1;
@@ -400,7 +378,8 @@ export class Session {
         this.syncSentinel();
         return r;
       };
-    const callbacks: UiCallbacksV11 = {
+    this.ui = createUi(deps.uiRoot, {
+      callbacks: {
         startRun: sync((k: RunKind, date?: string) => this.startRun(k, date)),
         retry: sync(() => this.retry()),
         home: sync(() => this.home()),
@@ -467,7 +446,7 @@ export class Session {
         },
         uiSound: (name) => this.uiSound(name),
         renderWardrobePreview: (canvas, equipped, subject) =>
-          subject === 'sun' ? renderSunPreview(canvas, shadesLook(equipped)) : renderWardrobePreview(canvas, equipped),
+          subject === 'sun' ? renderSunPreview(canvas, equippedLooks(equipped).shades) : renderWardrobePreview(canvas, equipped),
         swapMission: (slotId) => {
           const next = swapMission(store.get(), slotId);
           store.set(next);
@@ -475,9 +454,7 @@ export class Session {
           this.ui.setSave(next);
         },
         sharePostcard: () => this.sharePostcard(),
-    };
-    this.ui = createUi(deps.uiRoot, {
-      callbacks,
+      },
       save,
       today: this.today,
       version: deps.version,
@@ -749,8 +726,6 @@ export class Session {
           events.push(ev);
           this.onTickEvent(ev);
         }
-        // V11-SHIM: CC-5 — the v1.0 core has no lesson: emulate its lessonDone (delete with the shim).
-        if (lessonShimTick(s)) this.onTickEvent({ e: 'lessonDone' });
         if (s.phase === 'dead') break;
       }
       if (n > 0) takeSnap(s, this.curr);
@@ -814,7 +789,7 @@ export class Session {
     r.pbMinutes = this.runActive ? this.runPb : this.livePb();
     r.goalMinutes = this.runActive ? this.runGoal : this.liveGoal();
     r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
-    r.challengeName = this.runChallenge ? challengeRules(this.runChallenge).n : '';
+    r.challengeName = this.runChallenge?.n ?? '';
     r.dying = this.deathAt >= 0 ? Math.max(0, this.dyingGame) : -1;
     r.mapT = this.resultsAt >= 0 && screenNow === 'results' ? this.time - this.resultsAt : -1;
     r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
@@ -961,7 +936,7 @@ export class Session {
   private comfortRung(): number {
     const save = this.d.store.get();
     if (save.stats.runs === 0) return 0;
-    return comfortOn(save.settings) ? Math.max(1, comfortStat(save)) : COMFORT_MAX;
+    return save.settings.comfort ? Math.max(1, save.stats.comfort) : COMFORT_MAX;
   }
 
   /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
@@ -969,7 +944,7 @@ export class Session {
     const save = this.d.store.get();
     const p = this.params;
     const rm = this.reducedMotion();
-    let cfg: RunConfigV11;
+    let cfg: RunConfig;
     this.runChallenge = null;
     this.dailyDate = null;
     this.dailyScored = false;
@@ -985,9 +960,10 @@ export class Session {
       if (c.k === 'd') {
         cfg = this.dailyConfig(c.d, rm);
       } else {
-        // The sender's exact rules (CC-8, A1); never a lesson, hint or cue.
-        const r = challengeRules(c);
-        cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: r.p, tutorial: r.p === 0, reducedMotion: rm, drain: r.dr, noonCloud: r.nc, plan: r.pl === 1 };
+        // The sender's exact rules (CC-8, A1; decodeChallenge resolves a v1.0 code's to the v1.0
+        // world's); never a lesson, hint or cue.
+        const profile = c.p ?? 3;
+        cfg = { seed: c.seed >>> 0, mode: 'challenge', profile, tutorial: profile === 0, reducedMotion: rm, drain: c.dr ?? 55, noonCloud: c.nc ?? 0, plan: c.pl === 1 };
       }
       this.kind = 'challenge';
     } else {
@@ -1026,7 +1002,7 @@ export class Session {
   }
 
   /** A Daily on `date`: the standard rules without the noon cloud; the Day Plan from PLAN_START_DATE (A1). */
-  private dailyConfig(date: string, rm: boolean): RunConfigV11 {
+  private dailyConfig(date: string, rm: boolean): RunConfig {
     this.dailyDate = date;
     return { seed: dailySeed(date), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: date, noonCloud: 0, plan: date >= PLAN_START_DATE };
   }
@@ -1083,7 +1059,7 @@ export class Session {
   /** Tells the Title which Day 1 the held run plays (null for plan-off worlds). */
   private previewRun(): void {
     const w = this.s.world;
-    uiV11(this.ui).setRunPreview?.(planOnOf(w) ? worldPlan(w, 1) : null);
+    this.ui.setRunPreview(w.planOn ? worldPlan(w, 1) : null);
   }
 
   private resetSnaps(): void {
@@ -1359,10 +1335,9 @@ export class Session {
   // Challenges, the date, other tabs
   // -------------------------------------------------------------------------------------------
 
-  private challengeBanner(c: Challenge): ChallengeBannerV11 {
-    const b: ChallengeBannerV11 = { minutes: c.m };
-    const name = challengeRules(c).n;
-    if (name) b.name = name;
+  private challengeBanner(c: Challenge): ChallengeBanner {
+    const b: ChallengeBanner = { minutes: c.m };
+    if (c.n) b.name = c.n;
     if (this.inWarmup()) b.warmup = true;
     if (c.k === 'd') {
       const n = dailyNumber(c.d);
@@ -1395,7 +1370,7 @@ export class Session {
   }
 
   /** Another tab or instance wrote the save and the store adopted it. */
-  private adoptSave(next: SaveV1): void {
+  private adoptSave(next: Save): void {
     this.ui.setSave(next);
     this.applySettings(next.settings);
     if (!this.runActive) {
@@ -1409,7 +1384,7 @@ export class Session {
   // Events, daily bookkeeping, death and results
   // -------------------------------------------------------------------------------------------
 
-  private onTickEvent(ev: SimEventV11): void {
+  private onTickEvent(ev: SimEvent): void {
     switch (ev.e) {
       case 'flake':
         if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
@@ -1483,7 +1458,7 @@ export class Session {
       // Debug runs leave the save alone: no Snow, bests, missions, achievements or Daily tries.
       this.outcome = debugRunOutcome(save, result);
     } else {
-      const options: ApplyRunOptionsV11 = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
+      const options: ApplyRunOptions = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
       if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
       if (this.runRung >= 0) options.rung = this.runRung;
       const { save: next, outcome } = applyRunResult(save, result, options);
@@ -1516,14 +1491,14 @@ export class Session {
     if (this.resultsShown || !this.result || !this.outcome) return;
     this.resultsShown = true;
     const daily = this.result.mode === 'daily';
-    const view: ResultsViewV11 = {
+    const view: ResultsView = {
       result: this.result,
       outcome: this.outcome,
       dailyTry: daily ? this.dailyTry : undefined,
       // K5: every Daily (k:'d' challenges too) says which date it was and whether it could count.
       ...(daily && this.dailyDate !== null ? { dailyDate: this.dailyDate, dailyScored: this.dailyScored } : {}),
-      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m, challengeName: challengeRules(this.runChallenge).n } : {}),
-      ...(this.warmup ? { warmupFor: { minutes: this.warmup.m, name: challengeRules(this.warmup).n } } : {}),
+      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m, challengeName: this.runChallenge.n ?? '' } : {}),
+      ...(this.warmup ? { warmupFor: { minutes: this.warmup.m, name: this.warmup.n ?? '' } } : {}),
       ...(this.debugRuns ? { debug: true } : {}),
       ...(this.tip !== null ? { tip: this.tip } : {}),
     };
@@ -1583,7 +1558,7 @@ export class Session {
   private stepPar(): void {
     const save = this.d.store.get();
     const today = this.today;
-    if (!this.d.store.canPersist || !isDailyUnlocked(save) || dailyPar(save, today) !== undefined) {
+    if (!this.d.store.canPersist || !isDailyUnlocked(save) || save.pars[today] !== undefined) {
       this.parJob = null;
       return;
     }
@@ -1659,8 +1634,8 @@ export class Session {
       days,
       forecasts: days.map((_, i) => worldPlan(this.s.world, first + i).forecast),
       daily,
-      url: buildShare(result, shareBase(), this.dailyTry).url ?? '',
-      shades: shadesLook(this.d.store.get().equipped),
+      url: this.sharePayload(result).url ?? '',
+      shades: equippedLooks(this.d.store.get().equipped).shades,
       logo: this.logoImages,
     });
     this.postcardJob = job;
@@ -1678,7 +1653,7 @@ export class Session {
         this.postcardFile = new File([blob], postcardName(day, formatTimeOfDay(minute)), { type: 'image/png' });
         this.postcardUrl = URL.createObjectURL(blob);
         job.stage = 4;
-        uiV11(this.ui).setPostcard?.(this.postcardUrl);
+        this.ui.setPostcard(this.postcardUrl);
       }, 'image/png');
     };
     idle(next);
@@ -1691,7 +1666,7 @@ export class Session {
     if (this.postcardUrl !== null) {
       URL.revokeObjectURL(this.postcardUrl);
       this.postcardUrl = null;
-      uiV11(this.ui).setPostcard?.(null);
+      this.ui.setPostcard(null);
     }
   }
 
@@ -1705,17 +1680,26 @@ export class Session {
    * The Postcard pill: the postcard file plus the share text through the native sheet (or a
    * download and a copied link), called synchronously in the click; the text alone until it is ready.
    */
-  private sharePostcard(): Promise<ShareOutcomeV11> {
+  private sharePostcard(): Promise<ShareOutcome> {
     if (!this.result || this.debugRuns) return Promise.resolve('failed');
-    const text = buildShare(this.result, shareBase(), this.dailyTry).text;
+    const text = this.sharePayload(this.result).text;
     return this.postcardFile ? shareFiles({ file: this.postcardFile, text }) : shareText({ text });
   }
 
-  private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
-    if (!this.result || this.debugRuns) return 'failed';
-    // No web address (a file: build, a native shell without VITE_SHARE_URL): no link line.
-    const text = buildShare(this.result, shareBase(), this.dailyTry).text;
-    return shareText({ text });
+  private share(): Promise<ShareOutcome> {
+    if (!this.result || this.debugRuns) return Promise.resolve('failed');
+    return shareText({ text: this.sharePayload(this.result).text });
+  }
+
+  /**
+   * The finished run's share text and challenge link: the player's name, Snowbot's par on a Daily
+   * and whether the world had the Day Plan. No web address (a file: build, a native shell without
+   * VITE_SHARE_URL) means no link line.
+   */
+  private sharePayload(result: RunResult): { text: string; url: string | null } {
+    const save = this.d.store.get();
+    const par = result.dailyDate !== undefined ? (save.pars[result.dailyDate] ?? null) : null;
+    return buildShare(result, shareBase(), this.dailyTry, { name: save.settings.name, par, plan: this.s.world.planOn });
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1759,11 +1743,11 @@ export class Session {
     const save = this.d.store.get();
     const c = this.runChallenge;
     if (run.cfg.mode === 'challenge' && c) {
-      const name = challengeRules(c).n;
+      const name = c.n ?? '';
       this.stampAt = c.m;
       this.stampKind = 'teal';
       this.stampText = name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!';
-    } else if (run.cfg.mode === 'endless' && historyLength(save) >= 3) {
+    } else if (run.cfg.mode === 'endless' && save.history.length >= 3) {
       this.stampAt = recentBest(save) + 1;
       this.stampKind = 'gold';
       this.stampText = 'PAST YOUR RECENT BEST';
@@ -1795,7 +1779,7 @@ export class Session {
       } else {
         const dragging = this.input.pointerDown || this.input.keyDown;
         const h = this.hintIn;
-        const lessonOn = lessonOnOf(s);
+        const lessonOn = s.lessonOn;
         h.profile = s.cfg.profile;
         h.f = s.nubs.f;
         h.sunUp = s.sunUp;
@@ -1832,15 +1816,14 @@ export class Session {
 
   /** Shows a cue once per run (never in challenge runs); null clears the cue line. */
   private cue(id: CueId | null, dir?: -1 | 1): void {
-    const ui = uiV11(this.ui);
     if (id === null) {
-      ui.showCue?.(null);
+      this.ui.showCue(null);
       return;
     }
     const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : 8;
     if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
     this.cues |= bit;
-    ui.showCue?.(id, dir);
+    this.ui.showCue(id, dir);
   }
 
   /** The hint as the halo dial shows it: the target while a hint or the lesson is on, eased. */
@@ -1869,7 +1852,7 @@ export class Session {
   }
 
   private settingsChanged(st: Settings): void {
-    const comfortChanged = comfortOn(st) !== comfortOn(this.d.store.get().settings);
+    const comfortChanged = st.comfort !== this.d.store.get().settings.comfort;
     this.d.store.update((sv) => {
       sv.settings = st;
     });
@@ -1974,9 +1957,9 @@ export class Session {
       rung: this.runActive ? this.runRung : (this.rungOf.get(s) ?? -1),
       drain: effectiveDrain(s),
       noonCloud: effectiveNoonCloud(s.cfg),
-      forecast: forecastOf(s.params),
-      biome: biomeAtWorld(s.world, s.nubs.y),
-      lessonOn: lessonOnOf(s),
+      forecast: s.params.forecast,
+      biome: biomeAtY(s.world, s.nubs.y),
+      lessonOn: s.lessonOn,
     };
   }
 
@@ -2170,7 +2153,7 @@ export class Session {
         this.fx.confetti(40);
         return;
       case 'passed': {
-        const name = this.runChallenge ? challengeRules(this.runChallenge).n : '';
+        const name = this.runChallenge?.n ?? '';
         this.fx.celebrate('teal', name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!');
         return;
       }

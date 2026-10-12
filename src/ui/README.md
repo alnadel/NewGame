@@ -7,7 +7,7 @@ renderer; the only DOM element during play is the pause button (plus a small mut
 ```
 src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab
 src/meta/      save v2, content catalog, progression, missions and errands, Sunny Week, daily, share text,
-               challenge links, backup (shims.ts: V11-SHIM fallbacks for core contracts until integration)
+               challenge links, backup
 src/platform/  storage, share, pwa, lifecycle, safeArea, native
 ```
 

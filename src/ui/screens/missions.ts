@@ -64,9 +64,8 @@ export function createMissionsScreen(ctx: UiContext): Screen {
 
   const reward = (n: number): (Node | string)[] => [icon('snow'), h('span', { 'aria-hidden': 'true' }, `+${n}`), h('span', { class: 'sr-only' }, `Reward ${n} Snow`)];
 
-  const missionCard = (m: MissionView): HTMLElement => {
-    const swap = ctx.cb.swapMission;
-    return h(
+  const missionCard = (m: MissionView): HTMLElement =>
+    h(
       'li',
       { class: `mcard${m.done ? ' is-done' : ''}` },
       h(
@@ -80,13 +79,12 @@ export function createMissionsScreen(ctx: UiContext): Screen {
         { class: 'mcard-bottom' },
         progressBar(m.fraction, 'bar bar--lg'),
         m.done ? h('span', { class: 'stamp stamp--sm' }, 'Complete') : h('span', { class: 'mcard-prog' }, m.progressText),
-        m.swappable && swap
+        m.swappable
           ? button(ctx, { label: 'Swap', icon: 'swap', className: 'btn--swap', ariaLabel: `Swap “${m.label}” for another mission`,
-              onPress: () => swap.call(ctx.cb, m.id) })
+              onPress: () => ctx.cb.swapMission(m.id) })
           : null,
       ),
     );
-  };
 
   function refresh(): void {
     const save = ctx.save();

@@ -1,10 +1,9 @@
 // Public types of the UI controller. See src/ui/README.md for how the game session drives it.
 
-import type { RunResult } from '../core/sim/events.ts';
+import type { DayPlan, RunResult } from '../core/index.ts';
 import type { Save, Settings } from '../meta/saveTypes.ts';
 import type { CosmeticId, Equipped } from '../meta/content.ts';
 import type { RunOutcome, ToastIcon, ToastTone } from '../meta/progression.ts';
-import type { DayPlan } from '../meta/shims.ts';
 import type { ShareOutcome } from '../platform/share.ts';
 
 export type ScreenId =
@@ -128,9 +127,9 @@ export interface UiCallbacks {
    * Results > Postcard: the postcard PNG plus the share text through platform/share shareFiles
    * ('saved' = downloaded and the text copied). Call shareFiles synchronously (iOS user activation).
    */
-  sharePostcard?(): Promise<ShareOutcome>; // V11-SHIM: A11 — required once gameRender's GR14 is merged.
+  sharePostcard(): Promise<ShareOutcome>;
   /** Missions or Results > Swap on a stale mission: apply meta swapMission, then ui.setSave. */
-  swapMission?(slotId: string): void; // V11-SHIM: CC-11 — required once gameRender's session implements it.
+  swapMission(slotId: string): void;
   /** Any Settings change, with the full new settings. Persist and apply (volumes, sensitivity…). */
   settingsChanged(settings: Settings): void;
   /** Wardrobe purchase; return true on success (then push the new save with ui.setSave). */

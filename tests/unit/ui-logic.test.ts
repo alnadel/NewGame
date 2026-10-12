@@ -13,12 +13,10 @@ import { appIconSvg, logoLayers, logoSvg } from '../../src/ui/art.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { HourGlyph } from '../../src/core/sim/events.ts';
+import type { HourGlyph, RunResult } from '../../src/core/index.ts';
 import { defaults } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
-// V11-SHIM: CC-7 — RunResultV11 becomes core's RunResult at integration.
-import type { RunResultV11 } from '../../src/meta/shims.ts';
 import {
   challengeGoalText,
   cueDuration,
@@ -190,7 +188,7 @@ describe('brand art', () => {
 describe('Results labels (U3, U8, U17)', () => {
   const TODAY = '2026-10-11';
   const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 3, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 2, nightsReached: 1, minutes: 1240, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100 };
-  const view = (over: Partial<ResultsView> = {}, result: Partial<RunResultV11> = {}): ResultsView => ({
+  const view = (over: Partial<ResultsView> = {}, result: Partial<RunResult> = {}): ResultsView => ({
     result: {
       mode: 'daily', seed: 1, profile: 3, drain: 55, noonCloud: 0, plan: [], minutes: 1240, day: 2, clock: '', stats, hourGlyphs: [], melody: [], assisted: false, dailyDate: TODAY,
       death: { day: 2, tDay: 0, minutes: 1240, time: '2:40 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 2:40 PM.' },

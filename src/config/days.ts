@@ -153,13 +153,6 @@ export function rungConfig(rung: number, opts: { readonly tutorialDone: boolean 
   return { profile: c.profile, drain: c.drain, noonCloud: c.noonCloud, tutorial: r === 0, lesson: !opts.tutorialDone && r <= 1 };
 }
 
-// V11-SHIM: CC-1 endlessDrain(lifetimeRuns) — src/game/session.ts still imports it until GR7 moves
-// endless runs to rungConfig(); delete at integration (CC-1 removes it).
-export function endlessDrain(lifetimeRuns: number): number {
-  const n = lifetimeRuns > 0 ? Math.floor(lifetimeRuns) : 0;
-  return Math.min((PROFILES[n < 3 ? n : 3] as ProfileParams).drain, 30 + 3 * n, 55);
-}
-
 interface Row {
   epsNoon: number;
   v: number;

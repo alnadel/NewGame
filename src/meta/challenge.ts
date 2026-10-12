@@ -6,11 +6,10 @@
 // endless code carries the sender's rules (profile p, drain dr, noon cloud nc, Day Plan pl); a v1.0
 // code has none of them and decodes to the v1.0 world's rules. n (the sender's name) is optional.
 
-import type { ProfileId } from '../core/index.ts';
+import type { NoonCloud, ProfileId } from '../core/index.ts';
 import { formatScore, formatTimeOfDay, splitMinutes } from '../core/format.ts';
 import { decodeBase64Url, encodeBase64Url } from './base64url.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from './daily.ts';
-import type { NoonCloud } from './shims.ts';
 
 export type Challenge =
   | { v: 1; k: 'e'; seed: number; m: number; s: number; p?: ProfileId; dr?: number; nc?: NoonCloud; pl?: 0 | 1; n?: string }

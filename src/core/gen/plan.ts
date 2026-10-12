@@ -82,12 +82,7 @@ export function dayAtY(y: number): number {
   return timeAtY(y, yt).day;
 }
 
-// V11-SHIM: CC-3 biomeAtY(y) — src/render/ground.ts calls the v1.0 one-argument form until GR11
-// passes the world; delete this overload (and its number branch) at integration.
-export function biomeAtY(y: number): BiomeId;
 /** Biome of the ground at y in world `w` (the night keeps its day's biome). */
-export function biomeAtY(w: World, y: number): BiomeId;
-export function biomeAtY(a: World | number, y?: number): BiomeId {
-  if (typeof a === 'number') return legacyPlan(dayAtY(a)).biome;
-  return worldPlan(a, dayAtY(y as number)).biome;
+export function biomeAtY(w: World, y: number): BiomeId {
+  return worldPlan(w, dayAtY(y)).biome;
 }

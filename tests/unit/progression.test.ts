@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { HourGlyph, RunStats } from '../../src/core/sim/events.ts';
+import type { DayPlan, HourGlyph, RunResult, RunStats } from '../../src/core/index.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { MISSIONS } from '../../src/meta/content.ts';
@@ -29,12 +29,10 @@ import {
   type ApplyRunOptions,
 } from '../../src/meta/progression.ts';
 import { dayStripLines } from '../../src/meta/share.ts';
-// V11-SHIM: CC-4/CC-7 — RunResultV11 and DayPlan become core's RunResult and DayPlan at integration.
-import type { DayPlan, RunResultV11 } from '../../src/meta/shims.ts';
 import { isInAppBrowser } from '../../src/platform/lifecycle.ts';
 
 const TODAY = '2026-10-11';
-type Stats = RunResultV11['stats'];
+type Stats = RunResult['stats'];
 
 function stats(over: Partial<Stats> = {}): Stats {
   return {
@@ -63,7 +61,7 @@ function stats(over: Partial<Stats> = {}): Stats {
 }
 
 /** Completed days are 6 cool and 6 warm hours (never "Ice Cold"); the last day ends in a melt. */
-function run(minutes: number, over: Partial<Stats> = {}, extra: Partial<RunResultV11> = {}): RunResultV11 {
+function run(minutes: number, over: Partial<Stats> = {}, extra: Partial<RunResult> = {}): RunResult {
   const day = Math.floor(minutes / 720) + 1;
   const glyphs: HourGlyph[][] = [];
   const plan: DayPlan[] = [];
@@ -105,7 +103,7 @@ function quiet(runs = BEST_FROM_RUNS): Save {
 const opts = (o: Partial<ApplyRunOptions> = {}): ApplyRunOptions => ({ today: TODAY, ...o });
 
 /** Plays a run and immediately starts the next one (mission replacement). */
-function play(save: Save, result: RunResultV11, o: Partial<ApplyRunOptions> = {}): Save {
+function play(save: Save, result: RunResult, o: Partial<ApplyRunOptions> = {}): Save {
   return beginRun(applyRunResult(save, result, opts(o)).save).save;
 }
 
@@ -514,7 +512,7 @@ describe('achievements and cosmetic unlocks', () => {
   });
 
   it('checks the eight v1.1 feats and grants their items', () => {
-    const got = (r: RunResultV11, o: Partial<ApplyRunOptions> = {}, s: Save = quiet()): string[] => {
+    const got = (r: RunResult, o: Partial<ApplyRunOptions> = {}, s: Save = quiet()): string[] => {
       s.unlocks.achievements = ['first-light'];
       return applyRunResult(s, r, opts(o)).outcome.achievementsUnlocked;
     };

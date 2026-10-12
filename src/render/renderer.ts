@@ -11,6 +11,7 @@ import {
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
+  worldPlan,
   type Caster,
   type Pickup,
   type RenderSnap,
@@ -91,7 +92,6 @@ import { createDeathBeat, drawGrey, drawHatPop, greyOf, startDeathBeat, type Dea
 import { createDecor, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
-import { forecastOf, shadesLook, worldPlan } from './shims.ts';
 import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
@@ -644,7 +644,7 @@ export class Renderer {
       at.cool = b.coolPulse;
       at.gold = b.goldPulse;
       at.wash = 0.08 * grey;
-      at.forecast = forecastOf(s.params);
+      at.forecast = s.params.forecast;
       at.full = inp.govLevel < 3;
       if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;
     } else if (sc.mapReady && this.options.mapOverlay) {
@@ -697,7 +697,7 @@ export class Renderer {
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);
       // Around noon the sun is the boss (unless Nubs is nearly gone: then it is horrified).
-      const boss = sunUp && night === 0 ? bossWeight(dayFrac, forecastOf(s.params) === 'heat') : 0;
+      const boss = sunUp && night === 0 ? bossWeight(dayFrac, s.params.forecast === 'heat') : 0;
       let mood: SunMood;
       if (dying >= 0) mood = 'guilty';
       else if (sc.relief > 0) mood = 'relief';
@@ -706,7 +706,7 @@ export class Renderer {
       else if (boss > 0.6) mood = 'boss';
       else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
-      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, shadesLook(inp.equipped));
+      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades);
     }
 
     // HUD.

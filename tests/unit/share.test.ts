@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { HourGlyph } from '../../src/core/sim/events.ts';
+import type { HourGlyph, RunResult } from '../../src/core/index.ts';
 import {
   COMPASS,
   GLYPHS,
@@ -13,8 +13,6 @@ import {
 } from '../../src/meta/share.ts';
 import { decodeChallenge } from '../../src/meta/challenge.ts';
 import { shareFiles } from '../../src/platform/share.ts';
-// V11-SHIM: CC-7 — RunResultV11 becomes core's RunResult at integration.
-import type { RunResultV11 } from '../../src/meta/shims.ts';
 
 const C: HourGlyph = 'cool';
 const W: HourGlyph = 'warm';
@@ -107,7 +105,7 @@ describe('share text', () => {
   });
 });
 
-function result(over: Partial<RunResultV11>): RunResultV11 {
+function result(over: Partial<RunResult>): RunResult {
   return {
     mode: 'endless',
     seed: 123456789,

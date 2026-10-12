@@ -23,7 +23,7 @@ import {
 import { getErrand, parseMissionId, refillMissions } from './missions.ts';
 import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
-import { COMFORT_MAX } from './shims.ts';
+import { COMFORT_MAX } from '../core/index.ts';
 
 export const SAVE_KEY = 'shady.save';
 /** Suffixes of the side keys every store keeps next to its main key. */

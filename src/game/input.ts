@@ -286,9 +286,9 @@ export class Input {
     this.out.length = 0;
     if (n <= 0) return this.out;
     while (this.frames.length < n) this.frames.push(newFrame());
-    const dir = this.keyL && !this.keyR ? 1 : this.keyR && !this.keyL ? -1 : 0;
-    // V11-SHIM: CC-6 — InputFrame.key widens to -2 | -1 | 0 | 1 | 2 (drop the cast).
-    const key = (this.shift ? 2 * dir : dir) as InputFrame['key'];
+    // Left/A turns counter-clockwise (+); Shift held is the fine rate (±2).
+    const fine = this.shift;
+    const key: InputFrame['key'] = this.keyL && !this.keyR ? (fine ? 2 : 1) : this.keyR && !this.keyL ? (fine ? -2 : -1) : 0;
     const per = qTheta(this.pending / n);
     this.pending -= per * n;
     if (Math.abs(this.pending) < 1e-9) this.pending = 0;

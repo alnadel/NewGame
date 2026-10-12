@@ -7,7 +7,7 @@
 import { formatScore, formatTimeOfDay, MINUTES_PER_DAY } from '../core/format.ts';
 import { hashString } from '../core/rng.ts';
 import type { ErrandState, MissionSlot } from './saveTypes.ts';
-import type { RunResultV11 } from './shims.ts';
+import type { RunResult } from '../core/index.ts';
 import { ACTIVE_MISSIONS, ERRAND_REWARD, ERRANDS, MISSIONS, type ErrandDef, type ErrandId, type MissionDef, type MissionId } from './content.ts';
 
 /** Keeps "3 s" together when a label wraps. */
@@ -108,7 +108,7 @@ export function missionLabel(def: MissionDef, tier: number): string {
 }
 
 /** Measures one finished run against a mission's metric. */
-export function missionValue(def: MissionDef, result: RunResultV11): number {
+export function missionValue(def: MissionDef, result: RunResult): number {
   const s = result.stats;
   switch (def.metric) {
     case 'minutes':
@@ -307,7 +307,7 @@ export function errandState(stored: ErrandState, date: string, dailyUnlocked: bo
 }
 
 /** What one finished run adds to an errand's day total. */
-export function errandValue(id: ErrandId, result: RunResultV11, dailyTry: number | null | undefined): number {
+export function errandValue(id: ErrandId, result: RunResult, dailyTry: number | null | undefined): number {
   const s = result.stats;
   switch (id) {
     case 'e-flakes-25':

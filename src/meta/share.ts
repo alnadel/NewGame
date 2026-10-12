@@ -10,12 +10,10 @@
 // strip when the guide was forced on ("Always"). Without a canonical base URL (a file: or native
 // build with no VITE_SHARE_URL) the link line is left out.
 
-import type { HourGlyph, RunResult } from '../core/sim/events.ts';
-import { formatScore, formatTimeOfDay, MINUTES_PER_DAY } from '../core/format.ts';
+import { FORECASTS, formatScore, formatTimeOfDay, MINUTES_PER_DAY, PLAN_START_DATE, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import { isNative } from '../platform/native.ts';
 import { challengeUrl, type Challenge } from './challenge.ts';
 import { dailyNumber, DAILY_TRIES } from './daily.ts';
-import { FORECASTS, PLAN_START_DATE, v11Result, type DayPlan, type RunResultV11 } from './shims.ts';
 
 export const GLYPHS: Readonly<Record<HourGlyph, string>> = {
   cool: '❄️', // ❄️ snowflake (shape differs from the squares: colorblind-safe)
@@ -117,7 +115,7 @@ const legacyBiome = (day: number): DayPlan['biome'] => (day % 2 === 0 ? 'oldtown
  * matches the classic alternating clear days. The session knows for sure (World.planOn) and can
  * pass it to buildShare as `plan`.
  */
-export function runPlanOn(r: RunResultV11): boolean {
+export function runPlanOn(r: RunResult): boolean {
   if (r.dailyDate !== undefined && r.mode !== 'endless') return r.dailyDate >= PLAN_START_DATE;
   if (r.profile !== 3) return false;
   return r.mode === 'endless' || r.plan.some((p, i) => p.forecast !== 'clear' || p.biome !== legacyBiome(i + 1));
@@ -145,8 +143,7 @@ export interface ShareExtra {
  * @param baseUrl where links point (see shareBase()), or null to share the text without a link.
  * @param tryNumber for daily runs: the counted try, or null for practice.
  */
-export function buildShare(result: RunResult, baseUrl: string | null, tryNumber: number | null = null, extra: ShareExtra = {}): SharePayload {
-  const r = v11Result(result); // V11-SHIM: CC-7 (use `result` directly)
+export function buildShare(r: RunResult, baseUrl: string | null, tryNumber: number | null = null, extra: ShareExtra = {}): SharePayload {
   const snow = Math.max(0, Math.floor(r.stats.snow));
   const n = extra.name ? { n: extra.name } : {};
   const planOn = extra.plan ?? runPlanOn(r);

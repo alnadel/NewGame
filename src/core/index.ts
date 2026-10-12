@@ -13,8 +13,6 @@ export {
   PROFILES,
   rungConfig,
 } from '../config/days.ts';
-// V11-SHIM: CC-1 endlessDrain — src/game/session.ts imports it until GR7; delete at integration.
-export { endlessDrain } from '../config/days.ts';
 export type { BiomeId, ComfortRung, DayParams, DayPlan, NoonCloud, ProfileId, ProfileParams, RungConfig, SkyParams } from '../config/days.ts';
 export { FORECAST_IDS, FORECAST_TUNING, FORECASTS, forecastFits, PLAN_START_DATE } from '../config/forecasts.ts';
 export type { ForecastId, ForecastInfo, ForecastTuning } from '../config/forecasts.ts';

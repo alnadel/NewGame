@@ -10,11 +10,10 @@
 // from a per-biome atlas built lazily at the device scale. Drawn after the trail and before the
 // shadow layer, so shade darkens them like the ground.
 
-import { queryCasters, trailSlope, trailX, validatedY, type Caster, type SimState, type World } from '../core/index.ts';
+import { biomeAtY, queryCasters, trailSlope, trailX, validatedY, type Caster, type SimState, type World } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import type { View } from '../game/camera.ts';
 import { P_STEAM, spawn, type Particles } from './particles.ts';
-import { biomeAtWorld } from './shims.ts';
 import { ctx2d, makeCanvas, roundRect, sparkle, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -145,7 +144,7 @@ export function decorIn(seed: number, y0: number, y1: number, w: World, out: Dec
   for (let cy = Math.floor(y0 / C); cy * C < y1; cy++) {
     const rowY = cy * C;
     const nc = queryCasters(w, rowY - 30, rowY + C + 30, casters);
-    const b = biomeAtWorld(w, rowY + C / 2) === 'oldtown' ? 1 : 0;
+    const b = biomeAtY(w, rowY + C / 2) === 'oldtown' ? 1 : 0;
     const mid = Math.round(trailX(w.trail, rowY + C / 2) / C);
     const start = out.n;
     for (let cx = mid - SPAN; cx <= mid + SPAN; cx++) {
@@ -361,7 +360,7 @@ export function drawDecor(g: CanvasRenderingContext2D, v: View, d: Decor, s: Sim
     const sy = v.oy - y * v.S;
     const phase = (x * 0.37 + y * 0.11) % 1.2;
     if (!puddleLit(d, s, j, x, y)) {
-      const b = biomeAtWorld(w, y) === 'oldtown' ? 1 : 0;
+      const b = biomeAtY(w, y) === 'oldtown' ? 1 : 0;
       blit(g, atlasFor(d, b, scale, stable), FROST_RIM, 7, sx, sy, v.S);
       if (!f.effects) continue;
       const a = g.globalAlpha;
@@ -379,7 +378,7 @@ export function drawDecor(g: CanvasRenderingContext2D, v: View, d: Decor, s: Sim
   // keep clear of the casters there.
   if (!Number.isNaN(seamY) && seamY > v.y0 - 40 && seamY < v.y1 + 40) {
     if (d.seamY !== seamY) placeSignpost(d, w, seamY);
-    const b = biomeAtWorld(w, seamY + 1) === 'oldtown' ? 1 : 0;
+    const b = biomeAtY(w, seamY + 1) === 'oldtown' ? 1 : 0;
     const atlas = atlasFor(d, b, scale, stable);
     const tx = trailX(w.trail, seamY);
     const sy = v.oy - seamY * v.S;

@@ -1,8 +1,7 @@
 // Small vector glyphs (GR10): the Day Plan's forecast marks (HUD, Day card, postcard) and the two
 // biome marks. Each is designed on a 14-unit grid and drawn `size` px wide centred on (x, y).
 
-import type { BiomeId } from '../core/index.ts';
-import type { ForecastId } from './shims.ts';
+import type { BiomeId, ForecastId } from '../core/index.ts';
 
 const PI = Math.PI;
 const TAU = PI * 2;

@@ -3,11 +3,10 @@
 // biome's tile carries its own ground colour; where the biome changes (at a dawn) the boundary row
 // fades the new biome in over 64 u (GR11).
 
-import { dayAtY, dayStartY, trailX, type BiomeId, type World } from '../core/index.ts';
+import { biomeAtY, dayAtY, dayStartY, trailX, worldPlan, type BiomeId, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
-import { biomeAtWorld, worldPlan } from './shims.ts';
 import { ctx2d, exactGroundTile, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
 
 /**
@@ -27,7 +26,7 @@ export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, w: 
   const y0 = (v.oy - v.cssH) / v.S;
   g.globalAlpha = 0.5 * (1 - pal.night * 0.6);
   for (let ty = Math.floor(y0 / TILE_U) * TILE_U; ty < y1; ty += TILE_U) {
-    const tile = biomeAtWorld(w, ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
+    const tile = biomeAtY(w, ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
     const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
     const h = Math.ceil(v.oy - ty * v.S) - sy;
     for (let tx = Math.floor(x0 / TILE_U) * TILE_U; tx < x1; tx += TILE_U) {
@@ -200,7 +199,7 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, g
     let needTown = false;
     const ahead = v.y1 + (v.y1 - v.y0);
     for (let ty = ty0 - TILE_U; ty < ahead && !(needMeadow && needTown); ty += TILE_U) {
-      if (biomeAtWorld(w, ty + TILE_U / 2) === 'oldtown') needTown = true;
+      if (biomeAtY(w, ty + TILE_U / 2) === 'oldtown') needTown = true;
       else needMeadow = true;
     }
     if (!Number.isNaN(seamY)) needMeadow = needTown = true;
@@ -254,13 +253,13 @@ function tileOf(gp: GroundPaint, b: BiomeId): BiomeTile {
 
 /** The biome just above a boundary. */
 function upperBiome(w: World, yb: number): BiomeId {
-  return biomeAtWorld(w, yb + 1);
+  return biomeAtY(w, yb + 1);
 }
 
 /** A row's base tile: its centre's biome, or the lower biome on the boundary row. */
 function rowTile(gp: GroundPaint, w: World, ty: number, seamY: number): Canvas2D | null {
   const y = seamY >= ty && seamY < ty + TILE_U ? seamY - 1 : ty + TILE_U / 2;
-  return tileOf(gp, biomeAtWorld(w, y)).canvas;
+  return tileOf(gp, biomeAtY(w, y)).canvas;
 }
 
 const STEP = 8;

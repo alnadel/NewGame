@@ -1,6 +1,7 @@
 // Run rules v1.1 (gameRender GR7): the comfort ladder and its debug overrides, the first-run lesson
 // and its cues, wheel and keyboard turns, and the Title's Day Plan chip.
 import { expect, test, type Page } from '@playwright/test';
+import { planDay } from '../../src/core/index.ts';
 import { openGame, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
 /** Records every text the cue line shows (a MutationObserver installed before the page's scripts). */
@@ -132,12 +133,8 @@ test.describe('wheel and keys (CC-6)', () => {
 });
 
 test('the Title shows the forecast chip for a seed whose Day 1 is not clear', async ({ page }) => {
-  // V11-SHIM: CC-3 — import { planDay } from '../../src/core/index.ts' (core's Day Plan).
-  const core = (await import('../../src/core/index.ts')) as unknown as { planDay?: (seed: number, day: number) => { forecast: string } };
-  const planDay = core.planDay;
-  expect(planDay, 'core planDay').toBeDefined();
   let seed = 1;
-  while (planDay!(seed, 1).forecast === 'clear') seed++;
+  while (planDay(seed, 1).forecast === 'clear') seed++;
   await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 9, comfort: 4 } });
   await openGame(page, `test=1&seed=${seed}`);
   await expect(page.getByText(/Forecast:/)).toBeVisible();

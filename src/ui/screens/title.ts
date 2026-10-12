@@ -3,7 +3,7 @@
 // starts the run (the challenge run while a challenge banner is up). Tray buttons activate on click
 // with < 8 px of travel, and a sideways drag that starts on one is handed to the canvas.
 
-import { formatScore, formatTimeOfDay, splitMinutes } from '../../core/format.ts';
+import { formatScore, formatTimeOfDay, splitMinutes, type DayPlan } from '../../core/index.ts';
 import {
   activeMissionViews,
   dailyStatus,
@@ -12,7 +12,6 @@ import {
   nextGoal,
   DAILY_UNLOCK_RUNS,
 } from '../../meta/progression.ts';
-import type { DayPlan } from '../../meta/shims.ts';
 import { logoLayers } from '../art.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';

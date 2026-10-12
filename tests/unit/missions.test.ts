@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { HourGlyph } from '../../src/core/sim/events.ts';
+import type { HourGlyph, RunResult } from '../../src/core/index.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { defaults, migrate } from '../../src/meta/save.ts';
 import { ERRANDS, MISSIONS } from '../../src/meta/content.ts';
 import { addDays } from '../../src/meta/daily.ts';
 import { errandFor, missionGate, refillMissions, type MissionState } from '../../src/meta/missions.ts';
 import { activeMissionViews, applyRunResult, beginRun, errandView, swapMission } from '../../src/meta/progression.ts';
-// V11-SHIM: CC-4/CC-7 — RunResultV11 becomes core's RunResult at integration.
-import type { RunResultV11 } from '../../src/meta/shims.ts';
 
 const TODAY = '2026-10-11';
 const def = (id: string) => MISSIONS.find((m) => m.id === id)!;
 
-function run(minutes: number, over: Partial<RunResultV11['stats']> = {}, extra: Partial<RunResultV11> = {}): RunResultV11 {
+function run(minutes: number, over: Partial<RunResult['stats']> = {}, extra: Partial<RunResult> = {}): RunResult {
   const day = Math.floor(minutes / 720) + 1;
   const glyphs: HourGlyph[][] = [];
   for (let d = 1; d < day; d++) glyphs.push(Array<HourGlyph>(12).fill('warm'));
@@ -178,7 +176,7 @@ describe("Today's errand", () => {
   });
 
   it('counts each errand from the right part of a run', () => {
-    const at = (date: string, r: RunResultV11, dailyTry?: number | null): number => {
+    const at = (date: string, r: RunResult, dailyTry?: number | null): number => {
       const s = withBest(0);
       s.daily[date] = { tries: 1, bestMinutes: 0, bestSnow: 0, glyphs: '' };
       return applyRunResult(s, r, { today: date, dailyTry }).outcome.errand?.progress ?? -1;
