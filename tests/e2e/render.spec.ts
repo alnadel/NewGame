@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
-import { drag, openGame, pageDate, seedSave, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, keepAlive, openGame, pageDate, seedSave, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
@@ -22,7 +22,7 @@ async function startPlay(page: Page): Promise<void> {
 
 async function toResults(page: Page): Promise<void> {
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(page, 'results', 5000);
+  await waitForScreen(page, 'results', 15_000);
 }
 
 const perf = (page: Page): Promise<{ draws: number; groundPaints: number }> =>
@@ -416,6 +416,8 @@ test.describe('death beat (GR12)', () => {
   test('seed 11: the Results carry a recap tip and the callouts keep apart', async ({ page }) => {
     // At noon the recap always has a line (the noon one, unless an earlier rule fits).
     await openGame(page, 'test=1&seed=11&day=1&t=12:00&profile=3');
+    // At noon on profile 3 a slow drag can outlast Nubs: the oracle keeps him alive until the forced melt.
+    await keepAlive(page);
     await startPlay(page);
     await page.waitForTimeout(800);
     await toResults(page);

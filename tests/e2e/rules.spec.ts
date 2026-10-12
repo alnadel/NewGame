@@ -59,7 +59,7 @@ test.describe('first-run lesson (A5)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a swing into shade passes it: the shade-found cue, normal time, and Chill can reach 0 again', async ({ page }) => {
+  test('a swing into shade passes it: the shade-found cue, normal time, and a floor that fades', async ({ page }) => {
     await recordCues(page);
     await openGame(page, 'test=1&seed=5');
     const v = page.viewportSize()!;
@@ -70,27 +70,45 @@ test.describe('first-run lesson (A5)', () => {
     await expect.poll(async () => (await hint()).mode, { timeout: 10_000 }).toMatch(/^(left|right)$/);
     expect((await state(page)).lessonOn).toBe(true);
     const sgn = (await hint()).mode === 'left' ? -1 : 1;
-    let x = sgn < 0 ? c.x + 150 : c.x - 150;
+    // The drag is stepped by angle, not by poll: each move turns the sun 10° (Δθ = −dx/width·360°),
+    // so a lit stretch turns well past A5's 15° however slowly the page answers. One state read
+    // per step. Lit: drag on the hinted way. In shade: hold the sun there; a shade reached less than
+    // 15° after Nubs was last lit can't pass the lesson (A5), so after 1.5 s in it, drag on. Out of
+    // room at the edge: stop, lift (no flick) and take a new grip on the far side.
+    const stepPx = Math.max(6, Math.round(v.width / 36));
+    const x0 = sgn > 0 ? 40 : v.width - 40;
+    let x = x0;
     await page.mouse.move(x, c.y);
     await page.mouse.down();
-    // Drag the hinted way into full shade and hold the sun there (no release flick); if Nubs walks
-    // out of that shade first, keep dragging. A shade reached less than 15° after Nubs was last lit
-    // (a shadow crossed on the way) can't pass the lesson (A5): after a while in it, drag on.
-    let shaded = 0;
-    for (let i = 0; i < 300 && (await state(page)).lessonOn; i++) {
-      shaded = (await state(page)).f > 0 ? 0 : shaded + 1;
-      if ((shaded === 0 || shaded > 40) && x > 30 && x < v.width - 30) {
-        x += sgn * 3;
-        await page.mouse.move(x, c.y);
+    let shadedSince = -1;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 45_000) {
+      const st = await state(page);
+      if (!st.lessonOn) break;
+      const now = Date.now();
+      if (st.f > 0) shadedSince = -1;
+      else if (shadedSince < 0) shadedSince = now;
+      if (shadedSince < 0 || now - shadedSince > 1500) {
+        if (sgn * (x + sgn * stepPx - x0) > v.width - 80) {
+          await page.waitForTimeout(150);
+          await page.mouse.up();
+          x = x0;
+          await page.mouse.move(x, c.y);
+          await page.mouse.down();
+        } else {
+          x += sgn * stepPx;
+          await page.mouse.move(x, c.y);
+        }
+        if (shadedSince >= 0) shadedSince = -1;
       }
-      await page.waitForTimeout(16);
+      await page.waitForTimeout(40);
     }
     await page.mouse.up();
     await expect.poll(async () => (await state(page)).lessonOn, { timeout: 4000 }).toBe(false);
     await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.timeScale()), { timeout: 3000 }).toBe(1);
     await expect.poll(() => cues(page)).toContainEqual(expect.stringMatching(/Shade!/));
     await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-    await waitForScreen(page, 'results', 5000);
+    await waitForScreen(page, 'results', 15_000);
   });
 });
 

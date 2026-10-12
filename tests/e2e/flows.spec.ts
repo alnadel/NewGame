@@ -4,18 +4,7 @@
 // held run, the midnight rollover, the Results' Daily fields (K5), the blur pause, the latched
 // "assisted" marker and the HUD's frozen best flag.
 import { expect, test, type Page } from '@playwright/test';
-import {
-  challengeCode,
-  openGame,
-  pageDate,
-  runCfg,
-  screen,
-  seedSave,
-  state,
-  UNLOCKED_SAVE,
-  waitForScreen,
-  watchErrors,
-} from './helpers.ts';
+import { challengeCode, keepAlive, openGame, pageDate, runCfg, screen, seedSave, state, UNLOCKED_SAVE, waitForScreen, watchErrors } from './helpers.ts';
 
 /** A point on the canvas that no DOM control covers (scans down from 40 % of the height). */
 async function canvasPoint(page: Page): Promise<{ x: number; y: number }> {
@@ -46,7 +35,7 @@ async function dragOnCanvas(page: Page, dx = -60): Promise<void> {
 
 async function forceDeath(page: Page): Promise<void> {
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(page, 'results', 5000);
+  await waitForScreen(page, 'results', 15_000);
 }
 
 async function homeFromResults(page: Page): Promise<void> {
@@ -103,6 +92,7 @@ test.describe('challenge links', () => {
     await openGame(page, `test=1#c=${ENDLESS_CHALLENGE}`);
     await expect(page.locator('.challenge')).toBeVisible();
     expect((await runCfg(page)).mode).toBe('challenge');
+    await keepAlive(page);
     await dragOnCanvas(page);
     await waitForScreen(page, 'play');
     expect(await runCfg(page)).toMatchObject({ mode: 'challenge', seed: 42 });
@@ -119,6 +109,7 @@ test.describe('challenge links', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openGame(page, `test=1#c=${ENDLESS_CHALLENGE}`);
     await page.locator('canvas#game').focus().catch(() => undefined);
+    await keepAlive(page);
     await page.keyboard.press('Space');
     await waitForScreen(page, 'play');
     expect((await runCfg(page)).mode).toBe('challenge');
@@ -178,6 +169,7 @@ test.describe('challenge links', () => {
     await page.waitForTimeout(400);
     await info.attach('passed-stamp', { body: await page.screenshot(), contentType: 'image/png' });
     // Played: the real stamp lands when the run passes 6:15 AM.
+    await keepAlive(page);
     await dragOnCanvas(page);
     await waitForScreen(page, 'play');
     await expect.poll(async () => (await state(page)).minutes, { timeout: 10_000 }).toBeGreaterThanOrEqual(15);
@@ -318,10 +310,10 @@ test.describe('focus loss and run markers', () => {
     const shared = await stubShare(page);
     await seedSave(page, { v: 1, createdAt: 1, stats: { runs: 3 }, settings: { guide: 'always' } });
     await openGame(page, 'test=1');
+    // A bot keeps Nubs alive through the 2.5 s (the run stays scored and shareable).
+    await keepAlive(page);
     await dragOnCanvas(page);
     await waitForScreen(page, 'play');
-    // A bot keeps Nubs alive through the 2.5 s (the run stays scored and shareable).
-    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
     await page.waitForTimeout(2500);
     await page.locator('button[aria-label="Pause"]').click();
     await waitForScreen(page, 'pause');
@@ -342,9 +334,9 @@ test.describe('focus loss and run markers', () => {
     const shared = await stubShare(page);
     await seedSave(page, { v: 1, createdAt: 1, stats: { runs: 3 } });
     await openGame(page, 'test=1');
+    await keepAlive(page);
     await dragOnCanvas(page);
     await waitForScreen(page, 'play');
-    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
     await page.waitForTimeout(500);
     await forceDeath(page);
     await page.locator('.res-sheet button[aria-label="Share"]').click();

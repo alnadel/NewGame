@@ -46,7 +46,7 @@ for (const [label, trayLabel, id] of [
 test('Back from Results goes Home', async ({ page }) => {
   await openFromBlank(page);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(page, 'results', 5000);
+  await waitForScreen(page, 'results', 15_000);
   await page.waitForTimeout(200);
   await back(page);
   await waitForScreen(page, 'title');

@@ -53,7 +53,7 @@ test('the single-file build plays from file:// and shares the hosted link', asyn
   await waitForScreen(page, 'play');
   await page.waitForTimeout(500);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(page, 'results', 5000);
+  await waitForScreen(page, 'results', 15_000);
 
   await page.locator('.res-sheet button[aria-label="Share"]').click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __shared: string | null }).__shared)).not.toBeNull();

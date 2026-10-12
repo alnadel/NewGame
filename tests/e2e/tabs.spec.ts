@@ -3,7 +3,7 @@
 // or Daily tries with an older copy. Pages that lose focus may pause (blur pause); forceDeath
 // resumes a paused run, and bringToFront hands the focus over.
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import { state, waitForScreen } from './helpers.ts';
+import { keepAlive, state, waitForScreen } from './helpers.ts';
 
 interface SavedStats {
   runs: number;
@@ -23,23 +23,23 @@ async function openTab(context: BrowserContext, save: object | null, query = 'te
   return page;
 }
 
-/** One endless run in `page`: start it, let it live a little, melt Nubs, then Home. Returns its minutes. */
+/**
+ * One endless run in `page`: start it, let it live a little, melt Nubs, then Home. Returns its
+ * minutes. Two game tabs share the CPU (one may be starved), so the oracle keeps Nubs alive from the
+ * first tick (the run is still going when forceDeath ends it) and the screen waits are generous.
+ */
 async function playRun(page: Page, liveMs: number): Promise<number> {
   await page.bringToFront();
+  await keepAlive(page);
   const v = page.viewportSize()!;
-  const x = Math.round(v.width / 2);
-  const y = Math.round(v.height * 0.4);
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x - 30, y, { steps: 4 });
-  await page.mouse.up();
-  await waitForScreen(page, 'play');
+  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+  await waitForScreen(page, 'play', 15_000);
   await page.waitForTimeout(liveMs);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(page, 'results', 5000);
+  await waitForScreen(page, 'results', 15_000);
   const minutes = (await state(page)).minutes;
   await page.locator('.res-sheet button[aria-label="Home"]').click();
-  await waitForScreen(page, 'title');
+  await waitForScreen(page, 'title', 15_000);
   return minutes;
 }
 
@@ -112,7 +112,7 @@ test("a Daily try counted in one tab shows on the other's Daily screen", async (
   await b.evaluate(() => window.__SHADY_TEST__!.setTimeScale(3));
   await expect.poll(async () => (await state(b)).minutes, { timeout: 20_000 }).toBeGreaterThanOrEqual(31);
   await b.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(b, 'results', 5000);
+  await waitForScreen(b, 'results', 15_000);
 
   // No reload of A: its Daily screen picks up the try from B's save.
   await a.bringToFront();

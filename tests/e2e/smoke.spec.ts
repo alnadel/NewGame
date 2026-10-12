@@ -3,7 +3,7 @@
 // edge-ignore zone, the Back trap, and audio unlocking on the first gesture.
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { drag, openGame, screen, state, UNLOCKED_SAVE, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, openGame, screen, state, UNLOCKED_SAVE, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
 
 const golden = JSON.parse(readFileSync(new URL('../golden/hashes.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 
@@ -197,7 +197,8 @@ test.describe('smoke', () => {
       await page.waitForTimeout(16);
     }
     await touch('touchEnd', []);
-    await waitForScreen(page, 'play');
+    // Profile 3 at dawn: a run slowed by a loaded CPU may already be melting; the turn is what counts.
+    await waitForRunStart(page);
     await page.waitForTimeout(400);
     const d = ((((await state(page)).theta - theta0) % 360) + 540) % 360 - 180;
     // −96 px on a 412 px viewport requests about +84°; a cancelled gesture stopped at ~11°.

@@ -6,7 +6,7 @@
 // labels apart, a rich save's chips clear Nubs' halo, the challenge banner clears the ghost hint,
 // and a toast clears the menu header. Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { challengeCode, drag, openGame, seedSave, waitForScreen } from './helpers.ts';
+import { challengeCode, drag, keepAlive, openGame, seedSave, waitForScreen } from './helpers.ts';
 
 const SIZES = [
   { width: 320, height: 568 },
@@ -335,9 +335,9 @@ for (const size of [
   test(`HUD ${size.width}x${size.height}: a forecast day with 3- and 4-digit Snow keeps the day ruler`, async ({ page }, info) => {
     await page.setViewportSize(size);
     await openGame(page, 'test=1&seed=7&forecast=breezy&perf=0');
+    await keepAlive(page);
     await page.mouse.click(Math.round(size.width / 2), Math.round(size.height * 0.4));
     await waitForScreen(page, 'play');
-    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
     expect((await page.evaluate(() => window.__SHADY_TEST__!.state())).forecast).toBe('breezy');
     for (const snow of [0, 999, 1234]) {
       await page.evaluate((n) => window.__SHADY_TEST__!.setSnow(n), snow);

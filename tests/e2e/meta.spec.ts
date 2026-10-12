@@ -3,7 +3,7 @@
 // line, and layouts of the Title, Results and the Journal at phone and desktop sizes (no overlaps,
 // no sideways scroll). Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { challengeCode, openGame, seedSave, waitForScreen } from './helpers.ts';
+import { challengeCode, keepAlive, openGame, seedSave, waitForScreen } from './helpers.ts';
 
 const SIZES = [
   { width: 360, height: 640 },
@@ -36,7 +36,9 @@ async function canvasPoint(page: Page): Promise<{ x: number; y: number }> {
   });
 }
 
+/** Starts the Title's run with a drag; the oracle keeps Nubs alive until the test ends it (helpers keepAlive). */
 async function startRun(page: Page): Promise<void> {
+  await keepAlive(page);
   const p = await canvasPoint(page);
   await page.mouse.move(p.x, p.y);
   await page.mouse.down();
@@ -47,7 +49,7 @@ async function startRun(page: Page): Promise<void> {
 
 async function die(page: Page): Promise<void> {
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-  await waitForScreen(page, 'results', 5000);
+  await waitForScreen(page, 'results', 15_000);
 }
 
 /** navigator.share records the text instead of opening a sheet. */

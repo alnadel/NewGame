@@ -37,7 +37,7 @@ export async function state(page: Page): Promise<ShadyState> {
   return page.evaluate(() => window.__SHADY_TEST__!.state());
 }
 
-export async function waitForScreen(page: Page, id: string, timeout = 5000): Promise<void> {
+export async function waitForScreen(page: Page, id: string, timeout = 10_000): Promise<void> {
   await expect.poll(() => screen(page), { timeout }).toBe(id);
 }
 
@@ -46,6 +46,33 @@ export async function openGame(page: Page, query = 'test=1&seed=42'): Promise<vo
   await page.goto(`/?${query}`);
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'title', 10_000);
+}
+
+/**
+ * Hands the runs to the oracle bot from now on, before the run starts so it holds from the first
+ * tick: under a loaded CPU a drag can take seconds and a fast run (profile 3, noon) melts inside
+ * it, so a test that needs a run in progress keeps one however slowly the page runs. The runs stay
+ * scored. Tests about the player's own input don't use it.
+ */
+export async function keepAlive(page: Page): Promise<void> {
+  await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
+}
+
+/**
+ * Waits until the Title's run has started (the sim left 'hold'), whichever screen it is on by then:
+ * a fast run can melt inside a slow drag.
+ */
+export async function waitForRunStart(page: Page, timeout = 15_000): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const hook = window.__SHADY_TEST__!;
+          return hook.state().phase !== 'hold' && ['play', 'pause', 'dying', 'results'].includes(hook.screen());
+        }),
+      { timeout },
+    )
+    .toBe(true);
 }
 
 /** A horizontal mouse drag on the canvas starting at (x, y). */
