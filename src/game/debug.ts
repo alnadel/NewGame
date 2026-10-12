@@ -64,6 +64,8 @@ export interface ShadyTestHook {
   mapCallouts(): number[][];
   /** The death recap's tip handed to the last Results (null: none fitted). */
   resultsTip(): string | null;
+  /** The Results postcard: file ready, its size and name, and each drawing stage's ms. */
+  postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
   /** The current frame drawn under render options `a` and then `b` (time frozen), compared pixel by pixel. */
   pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
   /** A core bot plays the runs from now on ('reactive', 'oracle'…; null stops it). The runs stay scored. */
@@ -112,6 +114,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     },
     mapProbe: (mapT) => session.mapProbe(mapT),
     resultsTip: () => session.resultsTip,
+    postcard: () => session.postcardState(),
     mapCallouts: () => {
       const out: number[][] = [];
       for (let i = 0; i < calloutsDrawn(); i++) out.push(Array.from(calloutBoxes.subarray(4 * i, 4 * i + 4)));

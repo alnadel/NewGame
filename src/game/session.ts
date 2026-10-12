@@ -9,10 +9,12 @@ import {
   createSnap,
   dayTicks,
   effectiveDrain,
+  formatTimeOfDay,
   generateSome,
   lerpSnap,
   prepareRun,
   prepareSome,
+  splitMinutes,
   step,
   takeSnap,
   TUNING,
@@ -62,7 +64,10 @@ import { requestPersistence } from '../platform/storage.ts';
 import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
 import { resetDeathBeat } from '../render/deathbeat.ts';
 import { renderWardrobePreview, resetNubsAnim } from '../render/nubs.ts';
+import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
+import { createPostcardJob, postcardName, stepPostcard, type PostcardJob } from '../render/postcard.ts';
 import { renderSunPreview } from '../render/sun.ts';
+import { logoLayers } from '../ui/art.ts';
 import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
@@ -106,6 +111,8 @@ import {
   type ChallengeBannerV11,
   type CueId,
   type ResultsViewV11,
+  shareFiles,
+  type ShareOutcomeV11,
   swapMission,
   type UiCallbacksV11,
 } from './shims.ts';
@@ -114,6 +121,13 @@ import type { StampKind } from '../render/banners.ts';
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
+
+/** Runs `fn` in idle time (a frame later where requestIdleCallback is missing). */
+function idle(fn: () => void): void {
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (ric) ric(fn, { timeout: 400 });
+  else setTimeout(fn, 16);
+}
 /**
  * Real ms per frame spent building the next run's world while a death or the Results play: 2.5 ms,
  * or up to a tenth of the frame interval on slow devices (≤ 10 ms), so it is done before Retry.
@@ -284,6 +298,12 @@ export class Session {
   private outcome: RunOutcome | null = null;
   /** The death recap's line of advice for the Results (null: none fits). */
   private tip: string | null = null;
+  /** The postcard of `postcardFor` (built in idle stages once its Melt Map settles) and its file. */
+  private postcardFor: RunResult | null = null;
+  private postcardJob: PostcardJob | null = null;
+  private postcardFile: File | null = null;
+  private postcardUrl: string | null = null;
+  private logoImages: HTMLImageElement[] | null = null;
 
   /** Test hook: the last Results' recap tip. */
   get resultsTip(): string | null {
@@ -440,6 +460,7 @@ export class Session {
           store.flush();
           this.ui.setSave(next);
         },
+        sharePostcard: () => this.sharePostcard(),
     };
     this.ui = createUi(deps.uiRoot, {
       callbacks,
@@ -797,6 +818,7 @@ export class Session {
       this.stats.renderMs = performance.now() - tRender;
       this.cadence.drawn(now);
       this.frameDrew = true;
+      if (screenNow === 'results' && this.renderer.settled) this.startPostcard();
     }
     if (r.screen === 'title') {
       // Past the boot frames, keep the play HUD's row built for the held run (change-detected, so
@@ -1062,6 +1084,7 @@ export class Session {
   private beginRun(run: SimState, keepInput = false): void {
     this.s = run;
     this.renderIn.s = run;
+    this.dropPostcard();
     this.resetSnaps();
     this.resetRender();
     this.clock.reset();
@@ -1538,6 +1561,93 @@ export class Session {
     this.rungOf.set(this.nextRun, this.nextBuildRung);
   }
 
+  /**
+   * Starts the postcard of the settled Results (once per run; not for debug runs, which can't be
+   * shared): one idle callback per stage, then the PNG is encoded off the main thread.
+   */
+  private startPostcard(): void {
+    const result = this.result;
+    const sheetTop = this.ui.resultsSheetTop();
+    if (!result || this.debugRuns || this.postcardFor === result || sheetTop === null) return;
+    this.postcardFor = result;
+    const v = this.renderer.scene.view;
+    const dpr = v.dpr;
+    const death = this.s.death;
+    const { day, minute } = splitMinutes(result.minutes);
+    const first = Math.max(1, result.hourGlyphs.length - 1);
+    const days = result.hourGlyphs.slice(first - 1);
+    const daily = result.mode === 'daily' && result.dailyDate !== undefined ? `Daily #${dailyNumber(result.dailyDate)}` : '';
+    this.logoImages ??= [logoLayers().shadow, logoLayers().word].map((svg) => {
+      const img = new Image();
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      return img;
+    });
+    const job = createPostcardJob({
+      source: this.d.canvas,
+      srcX: v.vx * dpr,
+      srcY: v.vy * dpr,
+      srcW: v.vw * dpr,
+      srcH: Math.max(1, (sheetTop - v.vy) * dpr),
+      focusX: (v.ox + (death ? death.x : this.s.nubs.x) * v.S) * dpr,
+      callouts: Array.from(calloutBoxes.subarray(0, 4 * calloutsDrawn()), (x) => x * dpr),
+      day,
+      time: formatTimeOfDay(minute),
+      deathLine: result.death.line,
+      days,
+      forecasts: days.map((_, i) => worldPlan(this.s.world, first + i).forecast),
+      daily,
+      url: buildShare(result, shareBase(), this.dailyTry).url ?? '',
+      shades: shadesLook(this.d.store.get().equipped),
+      logo: this.logoImages,
+    });
+    this.postcardJob = job;
+    const next = (): void => {
+      if (this.postcardJob !== job) return;
+      // The crop needs the settled map still on screen; the footer waits (briefly) for the wordmark.
+      if (job.stage === 0 && this.ui.current() !== 'results') return this.dropPostcard();
+      if (job.stage === 2 && this.logoImages?.some((img) => !img.complete) && job.stageMs.length < 12) {
+        job.stageMs.push(0);
+        return idle(next);
+      }
+      if (!stepPostcard(job)) return idle(next);
+      job.canvas.toBlob((blob) => {
+        if (this.postcardJob !== job || !blob) return;
+        this.postcardFile = new File([blob], postcardName(day, formatTimeOfDay(minute)), { type: 'image/png' });
+        this.postcardUrl = URL.createObjectURL(blob);
+        job.stage = 4;
+        uiV11(this.ui).setPostcard?.(this.postcardUrl);
+      }, 'image/png');
+    };
+    idle(next);
+  }
+
+  /** Forgets the postcard (a new run started): its thumbnail URL is revoked. */
+  private dropPostcard(): void {
+    this.postcardJob = null;
+    this.postcardFile = null;
+    if (this.postcardUrl !== null) {
+      URL.revokeObjectURL(this.postcardUrl);
+      this.postcardUrl = null;
+      uiV11(this.ui).setPostcard?.(null);
+    }
+  }
+
+  /** Test hook: whether the postcard file is ready, and each drawing stage's ms. */
+  postcardState(): { ready: boolean; stageMs: number[]; bytes: number; name: string } {
+    const f = this.postcardFile;
+    return { ready: f !== null, stageMs: this.postcardJob?.stageMs.slice() ?? [], bytes: f?.size ?? 0, name: f?.name ?? '' };
+  }
+
+  /**
+   * The Postcard pill: the postcard file plus the share text through the native sheet (or a
+   * download and a copied link), called synchronously in the click; the text alone until it is ready.
+   */
+  private sharePostcard(): Promise<ShareOutcomeV11> {
+    if (!this.result || this.debugRuns) return Promise.resolve('failed');
+    const text = buildShare(this.result, shareBase(), this.dailyTry).text;
+    return this.postcardFile ? shareFiles({ file: this.postcardFile, text }) : shareText({ text });
+  }
+
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
     if (!this.result || this.debugRuns) return 'failed';
     // No web address (a file: build, a native shell without VITE_SHARE_URL): no link line.
@@ -1959,7 +2069,7 @@ export class Session {
 
   /**
    * Test hook: replays a moment through fx and audio only (the sim is untouched): phew, mult, mult5,
-   * noon (= highnoon), dawn, night, cloud, glare, flake, best, passed, swing.
+   * noon (= highnoon), dawn, night, cloud, glare, flake, best, passed, swing, postcard.
    */
   demo(name: string): void {
     const s = this.s;
@@ -2001,6 +2111,10 @@ export class Session {
         this.fx.celebrate('teal', name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!');
         return;
       }
+      case 'postcard':
+        // What the Postcard pill does (no user activation here: the download path in Chromium).
+        void this.sharePostcard();
+        return;
       case 'swing':
         // The audio layer ignores SWING: fx only.
         this.fx.onEvents([{ e: 'swing', deg: 75, chain: 2, snow: 2, x: s.nubs.x, y: s.nubs.y }], s);

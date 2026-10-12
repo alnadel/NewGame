@@ -2,7 +2,8 @@
 // 20 fps with the puddle ring still pulsing), the world rect published for the DOM (K9), the Melt
 // Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
 // under reduced motion), the lazily painted ground tiles, the matched shadow composite (GR2) and
-// the death beat with its recap tip and callouts that never overlap (GR12).
+// the death beat with its recap tip and callouts that never overlap (GR12), and the postcard (GR14).
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
 import { drag, openGame, seedSave, waitForScreen, watchErrors } from './helpers.ts';
@@ -423,5 +424,54 @@ test.describe('death beat (GR12)', () => {
     }
     // The Results sheet shows it (uiMeta renders ResultsView.tip).
     await expect(page.locator('#ui')).toContainText(tip!);
+  });
+});
+
+test.describe('postcard (GR14)', () => {
+  async function toPostcard(page: Page): Promise<number[]> {
+    await openGame(page);
+    await startPlay(page);
+    await page.waitForTimeout(1200);
+    await toResults(page);
+    await page.waitForFunction(() => window.__SHADY_TEST__!.postcard().ready, undefined, { timeout: 15_000 });
+    return (await page.evaluate(() => window.__SHADY_TEST__!.postcard())).stageMs;
+  }
+
+  test('built in short idle stages; without a share sheet the Postcard pill downloads a 1080×1350 PNG', async ({ page }) => {
+    const stages = await toPostcard(page);
+    expect(stages.length).toBeGreaterThanOrEqual(3);
+    for (const ms of stages) expect(ms).toBeLessThan(50);
+    const download = page.waitForEvent('download');
+    await page.evaluate(() => window.__SHADY_TEST__!.demo('postcard'));
+    const d = await download;
+    expect(d.suggestedFilename()).toMatch(/^shady-day\d+-\d{3,4}(am|pm)\.png$/);
+    const png = readFileSync((await d.path())!);
+    expect(png.length).toBeLessThan(1.2 * 1024 * 1024);
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1080, 1350]);
+  });
+
+  test('with a share sheet that takes files, the pill hands it one PNG and the text in the same task', async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as Window & { shared?: { files: number; name: string; text: string } | null };
+      w.shared = null;
+      Object.defineProperty(navigator, 'canShare', { value: (d: ShareData) => Array.isArray(d.files) && d.files.length > 0, configurable: true });
+      Object.defineProperty(navigator, 'share', {
+        value: (d: ShareData) => {
+          w.shared = { files: d.files?.length ?? 0, name: d.files?.[0]?.name ?? '', text: d.text ?? '' };
+          return Promise.resolve();
+        },
+        configurable: true,
+      });
+    });
+    await toPostcard(page);
+    const shared = await page.evaluate(() => {
+      window.__SHADY_TEST__!.demo('postcard');
+      return (window as Window & { shared?: { files: number; name: string; text: string } | null }).shared;
+    });
+    expect(shared).not.toBeNull();
+    expect(shared!.files).toBe(1);
+    expect(shared!.name).toMatch(/\.png$/);
+    expect(shared!.text).toContain('SHADY');
   });
 });

@@ -7,7 +7,7 @@
 import type { Challenge } from '../meta/challenge.ts';
 import type { ApplyRunOptions } from '../meta/progression.ts';
 import type { SaveV1, Settings } from '../meta/saveTypes.ts';
-import type { ShareOutcome } from '../platform/share.ts';
+import { copyText, type ShareOutcome } from '../platform/share.ts';
 import type { DayPlan, NoonCloud } from '../render/shims.ts';
 import type { ChallengeBanner, ResultsView, Ui, UiCallbacks } from '../ui/types.ts';
 import type { Equipped } from '../meta/content.ts';
@@ -31,7 +31,7 @@ export function uiV11(ui: Ui): UiV11 {
 export type UiCallbacksV11 = Omit<UiCallbacks, 'renderWardrobePreview'> & {
   renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equipped, subject?: 'nubs' | 'sun'): void;
   swapMission(slotId: string): void;
-  sharePostcard?(): Promise<ShareOutcome>;
+  sharePostcard(): Promise<ShareOutcomeV11>;
 };
 
 // V11-SHIM: CC-11 — ChallengeBanner adds `name?` and `warmup?`.
@@ -116,4 +116,30 @@ export function challengeRules(c: Challenge): ChallengeRules {
 // slots, so nothing is swapped here.
 export function swapMission(save: SaveV1, _slotId: string): SaveV1 {
   return save;
+}
+
+// V11-SHIM: CC-13 — `ShareOutcome` adds 'saved' and `shareFiles({ file, text })` lands in
+// src/platform/share.ts: the native sheet with the file when it can take one (called before any
+// await), else the file is downloaded and the text copied ('saved').
+export type ShareOutcomeV11 = ShareOutcome | 'saved';
+export function shareFiles(p: { file: File; text: string }): Promise<ShareOutcomeV11> {
+  const files = [p.file];
+  if (typeof navigator.share === 'function' && navigator.canShare?.({ files }) === true) {
+    return navigator.share({ files, text: p.text }).then(
+      (): ShareOutcomeV11 => 'shared',
+      (err: unknown) => (err instanceof DOMException && err.name === 'AbortError' ? 'cancelled' : saveFile(p)),
+    );
+  }
+  return saveFile(p);
+}
+function saveFile(p: { file: File; text: string }): Promise<ShareOutcomeV11> {
+  const url = URL.createObjectURL(p.file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = p.file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return copyText(p.text).then((): ShareOutcomeV11 => 'saved');
 }

@@ -163,6 +163,7 @@ declare global {
       mapProbe(mapT: number): MapProbe | null;
       mapCallouts(): number[][];
       resultsTip(): string | null;
+      postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
       pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
     };
