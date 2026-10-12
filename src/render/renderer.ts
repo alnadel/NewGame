@@ -371,10 +371,13 @@ export class Renderer {
     const band = this.settled && inp.screen === 'results' && inp.sheetTop !== null;
     if (band) {
       const v = sc.view;
+      // Its bottom edge sits on a whole device pixel: a part-covered row would blend a little more
+      // of each frame into the last and drift.
+      const bottom = Math.floor((inp.sheetTop as number) * v.dpr) / v.dpr;
       this.g.save();
       this.g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
       this.g.beginPath();
-      this.g.rect(v.vx, v.vy, v.vw, Math.max(0, (inp.sheetTop as number) - v.vy));
+      this.g.rect(v.vx, v.vy, v.vw, Math.max(0, bottom - v.vy));
       this.g.clip();
     }
     this.drawScene(inp);
