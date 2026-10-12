@@ -119,13 +119,17 @@ export interface CameraFx {
   zoomPeak: number;
   zoomT: number;
   zoomDur: number;
+  /** Held zoom (the death push-in): extra zoom it eases to, time since it was asked (s), ease time. */
+  holdPeak: number;
+  holdT: number;
+  holdDur: number;
   reducedMotion: boolean;
   /** Time accumulator for the shake noise. */
   clock: number;
 }
 
 export function createCameraFx(): CameraFx {
-  return { shake: 0, shakeT: 0, zoomPeak: 0, zoomT: 0, zoomDur: 0, reducedMotion: false, clock: 0 };
+  return { shake: 0, shakeT: 0, zoomPeak: 0, zoomT: 0, zoomDur: 0, holdPeak: 0, holdT: 0, holdDur: 1, reducedMotion: false, clock: 0 };
 }
 
 /** Adds trauma: shake of `amp` u that decays over roughly `dur` seconds. */
@@ -143,8 +147,21 @@ export function addZoomPulse(c: CameraFx, peak: number, dur: number): void {
   c.zoomDur = dur;
 }
 
+/**
+ * A held zoom: after `delay` s the camera eases (easeOutCubic over `dur` s) to 1 + peak around
+ * Nubs and stays there until the camera is reset (the death push-in; the Melt Map pull starts from
+ * it). None under reduced motion.
+ */
+export function holdZoom(c: CameraFx, peak: number, delay: number, dur: number): void {
+  if (c.reducedMotion) return;
+  c.holdPeak = peak;
+  c.holdT = -delay;
+  c.holdDur = dur;
+}
+
 export function updateCameraFx(c: CameraFx, dt: number): void {
   c.clock += dt;
+  if (c.holdPeak > 0) c.holdT += dt;
   if (c.shakeT > 0) {
     c.shakeT -= dt;
     if (c.shakeT <= 0) {
@@ -160,8 +177,10 @@ export function updateCameraFx(c: CameraFx, dt: number): void {
 
 /** Current zoom factor (1 = none). */
 export function zoomOf(c: CameraFx): number {
-  if (c.zoomDur <= 0) return 1;
-  return 1 + c.zoomPeak * Math.sin((Math.PI * c.zoomT) / c.zoomDur);
+  const u = Math.max(0, Math.min(1, c.holdT / c.holdDur));
+  const hold = c.holdPeak > 0 ? 1 + c.holdPeak * (1 - (1 - u) ** 3) : 1;
+  if (c.zoomDur <= 0) return hold;
+  return hold * (1 + c.zoomPeak * Math.sin((Math.PI * c.zoomT) / c.zoomDur));
 }
 
 /** Current shake offset in u along x (axis 0) or y (axis 1). */

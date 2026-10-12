@@ -1,7 +1,8 @@
 // Render-side checks (gameRender): the render cadence (menus draw once, the settled Results draw at
 // 20 fps with the puddle ring still pulsing), the world rect published for the DOM (K9), the Melt
 // Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
-// under reduced motion), the lazily painted ground tiles, and the matched shadow composite (GR2).
+// under reduced motion), the lazily painted ground tiles, the matched shadow composite (GR2) and
+// the death beat with its recap tip and callouts that never overlap (GR12).
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
 import { drag, openGame, seedSave, waitForScreen, watchErrors } from './helpers.ts';
@@ -342,5 +343,85 @@ test.describe('ground tiles', () => {
     await openGame(page);
     await page.waitForTimeout(500);
     expect((await perf(page)).groundPaints).toBe(1);
+  });
+});
+
+test.describe('death beat (GR12)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+
+  test('the camera pushes in on the puddle and the world greys outside a ring of colour', async ({ page }, info) => {
+    await openGame(page, 'test=1&seed=42&day=1&t=13:00&perf=0&plan=0&profile=3');
+    await startPlay(page);
+    await page.waitForTimeout(500);
+    const r = await page.evaluate(async () => {
+      const hook = window.__SHADY_TEST__!;
+      const c = document.querySelector('canvas') as HTMLCanvasElement;
+      const n = hook.nubsScreen();
+      // Mean saturation (max − min channel) inside 25 px of the puddle and beyond 150 px of it.
+      const sat = (): { near: number; far: number } => {
+        const g = c.getContext('2d')!;
+        const k = c.width / innerWidth;
+        const img = g.getImageData(0, 0, c.width, c.height).data;
+        let near = 0;
+        let nn = 0;
+        let far = 0;
+        let nf = 0;
+        for (let y = 0; y < c.height; y += 6) {
+          for (let x = 0; x < c.width; x += 6) {
+            const d = Math.hypot(x / k - n.x, y / k - n.y);
+            if (d > 25 && d < 150) continue;
+            const i = (y * c.width + x) * 4;
+            const s = Math.max(img[i]!, img[i + 1]!, img[i + 2]!) - Math.min(img[i]!, img[i + 1]!, img[i + 2]!);
+            if (d <= 25) {
+              near += s;
+              nn++;
+            } else {
+              far += s;
+              nf++;
+            }
+          }
+        }
+        return { near: near / nn, far: far / nf };
+      };
+      const before = sat();
+      hook.forceDeath();
+      let zoom = 1;
+      let passes = 0;
+      const t0 = performance.now();
+      while (performance.now() - t0 < 650) {
+        await new Promise((res) => requestAnimationFrame(res));
+        zoom = Math.max(zoom, hook.cameraFx().zoom);
+        passes = Math.max(passes, hook.perf().fullScreenPasses);
+      }
+      return { before, after: sat(), zoom, passes, png: c.toDataURL('image/png') };
+    });
+    await info.attach('death-650ms', { body: Buffer.from(r.png.split(',')[1]!, 'base64'), contentType: 'image/png' });
+    expect(r.zoom).toBeGreaterThan(1.15);
+    expect(r.zoom).toBeLessThanOrEqual(1.18 + 1e-9);
+    expect(r.passes).toBeLessThanOrEqual(3);
+    // The far world loses most of its colour; the puddle's surroundings keep theirs.
+    expect(r.after.far).toBeLessThan(r.before.far * 0.6);
+    expect(r.after.near).toBeGreaterThan(r.after.far);
+  });
+
+  test('seed 11: the Results carry a recap tip and the callouts keep apart', async ({ page }) => {
+    // At noon the recap always has a line (the noon one, unless an earlier rule fits).
+    await openGame(page, 'test=1&seed=11&day=1&t=12:00&profile=3');
+    await startPlay(page);
+    await page.waitForTimeout(800);
+    await toResults(page);
+    await page.waitForTimeout(3000);
+    const tip = await page.evaluate(() => window.__SHADY_TEST__!.resultsTip());
+    expect(tip).toMatch(/^(Shade was \d+° (left|right)\. Drag [←→]\.|In the sun \d+ of the last 10 s\. Short dips add up\.|Noon shadows are stubs\. Ride a cloud or hug tall walls\.|Red arcs are glare\. Keep the little sun out\.)$/);
+    const boxes = await page.evaluate(() => window.__SHADY_TEST__!.mapCallouts());
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const [ax, ay, aw, ah] = boxes[i]!;
+        const [bx, by, bw, bh] = boxes[j]!;
+        expect(ax! < bx! + bw! && bx! < ax! + aw! && ay! < by! + bh! && by! < ay! + ah!, JSON.stringify(boxes)).toBe(false);
+      }
+    }
+    // The Results sheet shows it (uiMeta renders ResultsView.tip).
+    await expect(page.locator('#ui')).toContainText(tip!);
   });
 });

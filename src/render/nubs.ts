@@ -278,7 +278,7 @@ export function drawOwnShadow(g: CanvasRenderingContext2D, p: NubsPose, shadowCo
 // The sprite
 // ---------------------------------------------------------------------------------------------
 
-interface Looks {
+export interface Looks {
   scarf: ScarfLook;
   hat: HatLook;
   nose: NoseLook;
@@ -1287,6 +1287,48 @@ export function nubsBox(x: number, y: number, S: number, out: Float64Array): voi
 
 // ---------------------------------------------------------------------------------------------
 // Wardrobe preview
+/** The hat sprite's size (u) and where the hat's base sits in it (u from the left and top). */
+export const HAT_SPRITE_U = 30;
+export const HAT_BASE_X = 15;
+export const HAT_BASE_Y = 22;
+
+/**
+ * The equipped hat on its own (or, bareheaded, the scarf's knot as a little bow), drawn into `c` at
+ * `pxPerU` device px per u: the death beat's pop-off.
+ */
+export function renderHatSprite(c: Canvas2D, looks: Looks, pxPerU: number): void {
+  const n = Math.ceil(HAT_SPRITE_U * pxPerU);
+  c.width = n;
+  c.height = n;
+  const g = ctx2d(c);
+  const U = pxPerU * NUBS_SCALE;
+  g.setTransform(1, 0, 0, 1, HAT_BASE_X * pxPerU, HAT_BASE_Y * pxPerU);
+  if (looks.hat.shape !== 'none') {
+    // The head's top at the base point: headY − headR = 0.
+    drawHat(g, looks.hat, U, 7.5 * U, 7.5 * U, 0);
+    return;
+  }
+  const s = looks.scarf;
+  const main = s.pattern === 'rainbow' ? (s.stripes[0] as string) : s.main;
+  g.fillStyle = main;
+  g.strokeStyle = s.shade;
+  g.lineWidth = 0.6 * U;
+  g.lineJoin = 'round';
+  g.beginPath();
+  for (const side of [-1, 1]) {
+    g.moveTo(0, -2 * U);
+    g.lineTo(side * 4.2 * U, -4.2 * U);
+    g.lineTo(side * 4.2 * U, 0.2 * U);
+    g.closePath();
+  }
+  g.fill();
+  g.stroke();
+  g.beginPath();
+  g.arc(0, -2 * U, 1.5 * U, 0, TAU);
+  g.fill();
+  g.stroke();
+}
+
 // ---------------------------------------------------------------------------------------------
 
 const previewAnim = createNubsAnim();

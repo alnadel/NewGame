@@ -86,6 +86,7 @@ import {
   type Pops,
   type Rings,
 } from './particles.ts';
+import { createDeathBeat, drawGrey, drawHatPop, greyOf, startDeathBeat, type DeathBeat } from './deathbeat.ts';
 import { createDecor, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
@@ -162,6 +163,8 @@ export interface RenderScene {
   /** Seeded ground decals (decor.ts) and the frame inputs handed to them. */
   decor: Decor;
   decorIn: DecorFrame;
+  /** The death beat: grey-out, cool wash and the popped hat (deathbeat.ts). */
+  death: DeathBeat;
   light: Light;
   shadow: ShadowLayer;
   particles: Particles;
@@ -224,6 +227,7 @@ export function createScene(): RenderScene {
     ground: createGroundPaint(),
     decor: createDecor(),
     decorIn: { time: 0, dt: 0, night: 0, effects: true },
+    death: createDeathBeat(),
     light: createLight(pal),
     shadow: createShadowLayer(),
     particles: createParticles(),
@@ -549,6 +553,9 @@ export class Renderer {
     // Depth-sorted objects, far (north) first, with Nubs inserted at his y.
     const looks = looksFor(inp.equipped);
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr);
+    const beat = sc.death;
+    if (dying >= 0 && beat.t < 0) startDeathBeat(beat, snap.nubsX, snap.nubsY, ux, looks, v.S * v.dpr);
+    else if (beat.t >= 0) beat.t += adt;
     nubsBox(pose.x, pose.y, v.S, box);
     let nubsDrawn = false;
     let occluded = false;
@@ -579,8 +586,15 @@ export class Renderer {
 
     if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
+    drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
+    // The death beat drains the world to grey around the puddle (full rendering quality only, A12).
+    const grey = greyOf(beat, inp.mapT < 0 ? -1 : inp.mapT / MAP_PULL_S);
+    if (grey > 0.005 && inp.govLevel === 0 && v.dpr <= 2) {
+      drawGrey(g, v, beat, grey);
+      sc.passes++;
+    }
 
     // The atmosphere: sun-side light, noon bleach, night pool and the edge vignettes in one layer.
     // On the Results the Melt Map's wash takes its place.
@@ -598,7 +612,7 @@ export class Renderer {
       at.heatPhase = b.heatPhase;
       at.cool = b.coolPulse;
       at.gold = b.goldPulse;
-      at.wash = 0;
+      at.wash = 0.08 * grey;
       at.forecast = forecastOf(s.params);
       at.full = inp.govLevel < 3;
       if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;

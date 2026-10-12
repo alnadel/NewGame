@@ -34,7 +34,7 @@ import { forecastOf, worldPlan, type SimEventV11 } from '../render/shims.ts';
 import { showDayCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
 import { bossWeight } from '../render/sun.ts';
-import { addShake, addZoomPulse, OBLIQUE } from './camera.ts';
+import { addShake, addZoomPulse, holdZoom, OBLIQUE } from './camera.ts';
 import type { FixedClock } from './loop.ts';
 
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
@@ -208,6 +208,8 @@ export class Fx {
           this.clock.addHitStop(0.08);
           this.clock.slowMo(0.3, 0.58);
           addShake(sc.cam, 6, 0.25);
+          // The push-in on the puddle: 1 → 1.18 from 80 to 600 ms, held into the Melt Map pull.
+          holdZoom(sc.cam, 0.18, 0.08, 0.52);
           addRing(sc.rings, ev.info.x, ev.info.y, 6, 30, 0.9, 2, 0.8, 0xffffff);
           for (let i = 0; i < 14; i++) {
             spawn(sc.particles, P_STEAM, nx + rnd(-8, 8), ny + rnd(-4, 4), rnd(4, 18), rnd(-10, 10), rnd(-4, 4), rnd(25, 45), rnd(0.8, 1.3), 3, 11, 0xffffff);

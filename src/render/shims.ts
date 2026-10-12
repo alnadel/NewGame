@@ -4,7 +4,26 @@
 // must come back empty) and deletes this file. On the v1.0 core every world is plan-off, there is
 // no lesson floor, SWING or lessonDone event, and the sun ignores the fine-key flag.
 
-import { angleDiff, biomeAtY, type BiomeId, type DayParams, type ProfileId, type RunConfig, type RunResult, type RunStats, type SimEvent, type SimState, type World } from '../core/index.ts';
+import {
+  angleDiff,
+  BINS,
+  biomeAtY,
+  cosD,
+  historyAt,
+  historyLength,
+  minutesOfDay,
+  TICK_HZ,
+  type BiomeId,
+  type DayParams,
+  type DeathCause,
+  type ProfileId,
+  type RunConfig,
+  type RunResult,
+  type RunStats,
+  type SimEvent,
+  type SimState,
+  type World,
+} from '../core/index.ts';
 
 // V11-SHIM: CC-3 — `export type ForecastId` from src/core/index.ts.
 export type ForecastId = 'clear' | 'breezy' | 'overcast' | 'heat' | 'long' | 'dazzle' | 'market';
@@ -144,3 +163,59 @@ export type RunStatsV11 = RunStats & { swings?: number; swingChainBest?: number;
 
 // V11-SHIM: CC-7 — RunResult adds `drain`, `noonCloud`, `plan: DayPlan[]`.
 export type RunResultV11 = RunResult & { drain?: number; noonCloud?: NoonCloud; plan?: DayPlan[] };
+
+// V11-SHIM: A13 — `deathRecap(s): DeathRecap` and `deathTip(r, invert): string | null` from
+// src/core (sim/recap.ts, with TUNING.recap = { exposureSec 1.5, maxAwayDeg 90, litShare 0.35,
+// noonFrom 300, noonTo 420 }); this copy goes at integration.
+export interface DeathRecap {
+  readonly cause: DeathCause;
+  readonly litShare10: number;
+  readonly theta: number;
+  readonly away: number | null;
+  readonly exposure: number;
+  readonly minuteOfDay: number;
+}
+const recapSample = new Float64Array(4);
+function nearestBin(theta: number, a: Uint8Array, b: Uint8Array | null): number | null {
+  let best: number | null = null;
+  for (let bin = 0; bin < BINS; bin++) {
+    if (a[bin] !== 1 || (b !== null && b[bin] !== 1)) continue;
+    const d = angleDiff(bin, theta);
+    if (best === null || Math.abs(d) < Math.abs(best)) best = d;
+  }
+  return best;
+}
+export function deathRecap(s: SimState): DeathRecap {
+  const nb = s.nubs;
+  const from = nb.y - 10 * s.params.v;
+  let lit = 0;
+  let n = 0;
+  for (let i = historyLength(s) - 1; i >= 0; i--) {
+    historyAt(s, i, recapSample);
+    if ((recapSample[1] as number) < from) break;
+    n++;
+    if ((recapSample[3] as number) > 0) lit++;
+  }
+  const theta = s.sun.theta;
+  return {
+    cause: s.death?.cause ?? 'plain',
+    litShare10: n > 0 ? lit / n : 0,
+    theta,
+    away: nearestBin(theta, s.guide.now, s.guide.next) ?? nearestBin(theta, s.guide.now, null),
+    exposure: nb.litSince >= 0 ? (s.tick - nb.litSince) / TICK_HZ : 0,
+    minuteOfDay: minutesOfDay(s.day, s.dayTick),
+  };
+}
+export function deathTip(r: DeathRecap, invert: boolean): string | null {
+  if (r.cause === 'glare') return 'Red arcs are glare. Keep the little sun out.';
+  if (r.away !== null && r.exposure >= 1.5 && Math.abs(r.away) <= 90 && Math.round(Math.abs(r.away)) > 0) {
+    const ccw = r.away > 0;
+    const arrow = ccw !== invert ? '←' : '→';
+    const dx = cosD(r.theta + r.away) - cosD(r.theta);
+    const side = dx < -1e-9 ? 'left' : dx > 1e-9 ? 'right' : arrow === '←' ? 'left' : 'right';
+    return `Shade was ${Math.round(Math.abs(r.away))}° ${side}. Drag ${arrow}.`;
+  }
+  if (r.litShare10 >= 0.35) return `In the sun ${Math.round(10 * r.litShare10)} of the last 10 s. Short dips add up.`;
+  if (r.minuteOfDay >= 300 && r.minuteOfDay <= 420) return 'Noon shadows are stubs. Ride a cloud or hug tall walls.';
+  return null;
+}

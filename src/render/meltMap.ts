@@ -225,6 +225,7 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
   }
   // Pins for the named casters.
   const d = s.death;
+  calloutCount = 0;
   if (d) {
     const limit = o.sheetTop === null ? Number.POSITIVE_INFINITY : o.sheetTop - SHEET_LABEL_GAP;
     const top = v.vy + v.safe.top + 4;
@@ -273,6 +274,29 @@ function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number
   g.globalAlpha = 1;
 }
 
+/** Callout boxes drawn on this map frame (x, y, w, h each; for the overlap rule and the test hook). */
+export const calloutBoxes = new Float64Array(12);
+let calloutCount = 0;
+
+/** Number of callout boxes in calloutBoxes from the last map frame. */
+export function calloutsDrawn(): number {
+  return calloutCount;
+}
+
+/** A callout's left edge `x` kept 6 px inside the view. */
+function calloutX(v: View, x: number, w: number): number {
+  return Math.max(v.vx + 6, Math.min(v.vx + v.vw - 6 - w, x));
+}
+
+function overlapsDrawn(x: number, y: number, w: number, h: number): boolean {
+  for (let i = 0; i < calloutCount; i++) {
+    const bx = calloutBoxes[4 * i] as number;
+    const by = calloutBoxes[4 * i + 1] as number;
+    if (x < bx + (calloutBoxes[4 * i + 2] as number) && bx < x + w && y < by + (calloutBoxes[4 * i + 3] as number) && by < y + h) return true;
+  }
+  return false;
+}
+
 function pin(
   g: CanvasRenderingContext2D,
   v: View,
@@ -289,22 +313,22 @@ function pin(
   const sy = v.oy - (c.y + 0.25 * Math.min(c.maxZ, 90)) * S;
   // The callout: beside the pin (its bottom 4 px above the head), or straight above the head when
   // that would reach under the sheet; left out when neither fits (or the head itself is hidden).
+  // When it would cover an earlier callout it goes to the other side of its pin.
   if (labelA > 0.01 && sy <= limit) {
-    const right = c.x >= trailX;
+    let right = c.x >= trailX;
     g.font = `800 13px ${FONT}`;
     const label = name.charAt(0).toUpperCase() + name.slice(1);
     const tw = g.measureText(label).width;
     const w = tw + 18;
     const h = 26;
-    let lx = right ? sx + 18 : sx - 18 - w;
-    let ly = sy - 30;
-    let above = false;
-    if (ly + h > limit) {
-      ly = Math.min(sy - 12, limit) - h;
-      lx = sx - w / 2;
-      above = true;
+    const ly0 = sy - 30;
+    const above = ly0 + h > limit;
+    let lx = calloutX(v, above ? sx - w / 2 : right ? sx + 18 : sx - 18 - w, w);
+    const ly = above ? Math.min(sy - 12, limit) - h : ly0;
+    if (!above && overlapsDrawn(lx, ly, w, h)) {
+      right = !right;
+      lx = calloutX(v, right ? sx + 18 : sx - 18 - w, w);
     }
-    lx = Math.max(v.vx + 6, Math.min(v.vx + v.vw - 6 - w, lx));
     // Leader end: the box's near side, or its bottom edge over the head.
     const ax = above ? Math.max(lx + 13, Math.min(lx + w - 13, sx)) : right ? lx : lx + w;
     const ay = above ? ly + h : ly + h / 2;
@@ -325,6 +349,13 @@ function pin(
       g.textAlign = 'left';
       g.textBaseline = 'middle';
       g.fillText(label, lx + 9, ly + h / 2 + 1);
+      if (calloutCount < 3) {
+        calloutBoxes[4 * calloutCount] = lx;
+        calloutBoxes[4 * calloutCount + 1] = ly;
+        calloutBoxes[4 * calloutCount + 2] = w;
+        calloutBoxes[4 * calloutCount + 3] = h;
+        calloutCount++;
+      }
     }
   }
   // Pin head.

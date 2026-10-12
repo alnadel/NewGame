@@ -60,6 +60,7 @@ import { readSafeArea, onSafeAreaChange } from '../platform/safeArea.ts';
 import { shareText } from '../platform/share.ts';
 import { requestPersistence } from '../platform/storage.ts';
 import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
+import { resetDeathBeat } from '../render/deathbeat.ts';
 import { renderWardrobePreview, resetNubsAnim } from '../render/nubs.ts';
 import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
@@ -78,6 +79,8 @@ import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import {
   biomeAtWorld,
   COMFORT_MAX,
+  deathRecap,
+  deathTip,
   effectiveNoonCloud,
   forecastOf,
   lessonOnOf,
@@ -275,6 +278,13 @@ export class Session {
   private resultsAt = -1;
   private result: RunResult | null = null;
   private outcome: RunOutcome | null = null;
+  /** The death recap's line of advice for the Results (null: none fits). */
+  private tip: string | null = null;
+
+  /** Test hook: the last Results' recap tip. */
+  get resultsTip(): string | null {
+    return this.tip;
+  }
   private resultsShown = false;
 
   // Frame state.
@@ -1026,6 +1036,7 @@ export class Session {
     Object.assign(sc.cam, createCameraFx());
     sc.cam.reducedMotion = this.reducedMotion();
     sc.sun.guilty = 0;
+    resetDeathBeat(sc.death);
     sc.relief = 0;
     sc.mapReady = false;
     sc.hud.multPop = 0;
@@ -1394,6 +1405,7 @@ export class Session {
     this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
+    this.tip = deathTip(deathRecap(this.s), save.settings.invert);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
     result.assisted = this.runAssisted;
@@ -1444,6 +1456,7 @@ export class Session {
       ...(this.runChallenge ? { challengeTarget: this.runChallenge.m, challengeName: challengeRules(this.runChallenge).n } : {}),
       ...(this.warmup ? { warmupFor: { minutes: this.warmup.m, name: challengeRules(this.warmup).n } } : {}),
       ...(this.debugRuns ? { debug: true } : {}),
+      ...(this.tip !== null ? { tip: this.tip } : {}),
     };
     this.ui.show('results', view);
     this.resultsAt = this.time;

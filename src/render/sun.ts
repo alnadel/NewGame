@@ -100,7 +100,8 @@ export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood,
   if (alpha <= 0.01) return;
   const night = s.night;
   const r = 20 * scale * (1 + 0.35 * boss);
-  const gx = s.x + guiltDx * 8 * s.guilty;
+  // Guilty: it turns away and slides 24 px toward the edge.
+  const gx = s.x + guiltDx * 24 * s.guilty;
   const gy = s.y;
   if (night > 0.01) drawMoon(g, s.mx, s.my, r * 0.8, alpha * night, time);
   const a = alpha * (1 - 0.8 * night);
@@ -257,13 +258,7 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
       g.moveTo(mx - 0.26 * u, 0.46 * u);
       g.quadraticCurveTo(mx, 0.4 * u, mx + 0.26 * u, 0.46 * u);
       g.stroke();
-      // Sweat bead.
-      g.fillStyle = '#9AD8FF';
-      g.beginPath();
-      g.moveTo(0.78 * u, -0.5 * u + Math.sin(time * 3) * 0.05 * u);
-      g.quadraticCurveTo(0.9 * u, -0.3 * u, 0.78 * u, -0.24 * u);
-      g.quadraticCurveTo(0.66 * u, -0.3 * u, 0.78 * u, -0.5 * u);
-      g.fill();
+      sweatDrop(g, u, time);
       break;
     case 'horrified':
       g.ellipse(mx, 0.48 * u, 0.15 * u, 0.2 * u, 0, 0, TAU);
@@ -284,6 +279,7 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
       g.moveTo(mx - 0.22 * u, 0.5 * u);
       g.quadraticCurveTo(mx, 0.38 * u, mx + 0.22 * u, 0.5 * u);
       g.stroke();
+      sweatDrop(g, u, time);
       break;
     case 'boss':
       // A wide grin with a row of white teeth.
@@ -295,6 +291,16 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
       g.fillRect(mx - 0.27 * u, 0.32 * u, 0.54 * u, 0.1 * u);
       break;
   }
+}
+
+/** A sweat bead at the temple, bobbing. */
+function sweatDrop(g: CanvasRenderingContext2D, u: number, time: number): void {
+  g.fillStyle = '#9AD8FF';
+  g.beginPath();
+  g.moveTo(0.78 * u, -0.5 * u + Math.sin(time * 3) * 0.05 * u);
+  g.quadraticCurveTo(0.9 * u, -0.3 * u, 0.78 * u, -0.24 * u);
+  g.quadraticCurveTo(0.66 * u, -0.3 * u, 0.78 * u, -0.5 * u);
+  g.fill();
 }
 
 function drawMoon(g: CanvasRenderingContext2D, x: number, y: number, r: number, a: number, time: number): void {

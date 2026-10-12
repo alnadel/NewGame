@@ -3,6 +3,7 @@
 import { BOT_KINDS, runHeadless, type BotKind } from '../core/index.ts';
 import type { ShadyAudio } from '../audio/index.ts';
 import type { DebugDraw, RenderOptions } from '../render/renderer.ts';
+import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
 import { shakeOf, zoomOf } from './camera.ts';
 import type { MapProbe, PixelAB, Session } from './session.ts';
 
@@ -59,6 +60,10 @@ export interface ShadyTestHook {
    * device pixels that differ above and below the sheet's top edge (K10 checks).
    */
   mapProbe(mapT: number): MapProbe | null;
+  /** The Melt Map's callout label boxes in the last drawn frame ([x, y, w, h] in CSS px). */
+  mapCallouts(): number[][];
+  /** The death recap's tip handed to the last Results (null: none fitted). */
+  resultsTip(): string | null;
   /** The current frame drawn under render options `a` and then `b` (time frozen), compared pixel by pixel. */
   pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
   /** A core bot plays the runs from now on ('reactive', 'oracle'…; null stops it). The runs stay scored. */
@@ -106,6 +111,12 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       session.cadence.invalidate();
     },
     mapProbe: (mapT) => session.mapProbe(mapT),
+    resultsTip: () => session.resultsTip,
+    mapCallouts: () => {
+      const out: number[][] = [];
+      for (let i = 0; i < calloutsDrawn(); i++) out.push(Array.from(calloutBoxes.subarray(4 * i, 4 * i + 4)));
+      return out;
+    },
     pixelAB: (a, b) => session.pixelAB(a, b),
     bot: (kind) => session.setTestBot(kind !== null && (BOT_KINDS as readonly string[]).includes(kind) ? (kind as BotKind) : null),
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),

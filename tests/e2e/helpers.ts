@@ -161,6 +161,8 @@ declare global {
       hudPb(): number;
       renderOptions(o: Partial<RenderOptions>): void;
       mapProbe(mapT: number): MapProbe | null;
+      mapCallouts(): number[][];
+      resultsTip(): string | null;
       pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
     };
