@@ -53,3 +53,26 @@ test('Enter on a Wardrobe tile keeps the focus on that tile', async ({ page }) =
   expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-id') ?? null)).toBe(id);
   expect(await screen(page)).toBe('wardrobe');
 });
+
+// Reduced motion only fades opacity, never the visibility of buttons: a keyboard player's focus lands
+// on Pause's Resume and on Results' Retry with or without it.
+for (const reducedMotion of ['reduce', 'no-preference'] as const) {
+  test(`keyboard focus moves into Pause and Results (reduced motion: ${reducedMotion})`, async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion });
+    const page = await ctx.newPage();
+    await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 5, comfort: 4 } });
+    await openGame(page, 'test=1&seed=7&plan=0');
+    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
+    await page.keyboard.press('Space');
+    await waitForScreen(page, 'play');
+    await page.keyboard.press('Escape');
+    await waitForScreen(page, 'pause');
+    await expect(page.locator('.scr-pause').getByRole('button', { name: 'Resume' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await waitForScreen(page, 'play');
+    await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
+    await waitForScreen(page, 'results', 15_000);
+    await expect(page.locator('.res-retry')).toBeFocused();
+    await ctx.close();
+  });
+}

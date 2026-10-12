@@ -283,12 +283,23 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     next.relayout?.();
     // Screens choose their focus target from where they were entered (a menu returns focus to the
     // control that opened it).
-    if (keyboardMode) next.initialFocus?.()?.focus({ preventScroll: true });
+    if (keyboardMode) focusInto(id);
     if (from === 'boot' && id === 'title' && !restoreOffered) {
       restoreOffered = true;
       if (shouldOfferRestoreSheet(save, { ios: isIOS(), standalone: isStandalone() })) modals.restoreSheet();
       else if (welcomeBackDue(save, today)) toasts.show(WELCOME_BACK, { icon: 'snow', tone: 'gold', duration: 4000 });
     }
+  }
+
+  /**
+   * Moves the focus to screen `id`'s initial target; if the target can't take it yet (still
+   * fading in), tries again on the next two frames while that screen is current.
+   */
+  function focusInto(id: Exclude<ScreenId, 'boot'>, tries = 2): void {
+    const target = screens[id].initialFocus?.();
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    if (document.activeElement !== target && tries > 0) requestAnimationFrame(() => current === id && focusInto(id, tries - 1));
   }
 
   function back(): void {

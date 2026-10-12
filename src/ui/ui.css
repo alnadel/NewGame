@@ -3531,7 +3531,14 @@
 .sui.is-rm *::before,
 .sui.is-rm *::after {
   animation-name: none !important;
-  transition-property: opacity, visibility, background-color, color, box-shadow !important;
+  transition-property: opacity, background-color, color, box-shadow !important;
+}
+
+/* Only screens fade their visibility. A button that transitioned visibility too (with its own
+   duration) would still be hidden at the instant its screen appears, and focus() on it would fail:
+   Pause and Results opened from the keyboard left the focus on <body>. */
+.sui.is-rm .scr {
+  transition-property: opacity, visibility !important;
 }
 
 .sui.is-rm .ghost-hand {
