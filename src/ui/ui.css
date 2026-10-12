@@ -1351,8 +1351,9 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
-  /* At least 58% (when the content needs it), growing with the content up to the map's 96 px. */
-  max-height: max(58%, calc(100% - 96px));
+  /* Grows with the content up to 68% (the Melt Map keeps a third; at least 96 px on tiny screens,
+     and the sheet may always take 58%); results.ts measure() mirrors this. */
+  max-height: max(58%, min(68%, calc(100% - 96px)));
   margin: 0 auto;
   max-width: 560px;
   container: sheet / inline-size;

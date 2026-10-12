@@ -286,7 +286,7 @@ function blit(g: CanvasRenderingContext2D, a: Atlas, sprite: number, half: numbe
 
 export interface DecorFrame {
   time: number;
-  /** Game seconds this frame: 0 while the world clock stands still (Title, pause, Results). */
+  /** Game seconds this frame while a run plays, else 0 (no steam on the Title, pause or Results). */
   dt: number;
   night: number;
   /** Puddles steam and sparkle only below governor level 2. */

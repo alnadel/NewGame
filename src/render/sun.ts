@@ -432,5 +432,14 @@ export function renderSunPreview(canvas: HTMLCanvasElement, shades: ShadesLook):
   s.y = h / 2;
   s.init = true;
   // The rays reach 1.62 r: fit them in 0.8 of the smaller side.
-  drawSun(g, s, 'smug', 0, (0.8 * Math.min(w, h)) / 2 / (1.62 * 20), 1, 1, 0, shades);
+  const m = Math.min(w, h);
+  drawSun(g, s, 'smug', 0, (0.8 * m) / 2 / (1.62 * 20), 1, 1, 0, shades);
+  // The bloom reaches 3 r, past the canvas: fade it out beyond the rays so no square edge shows.
+  const fade = g.createRadialGradient(w / 2, h / 2, 0.41 * m, w / 2, h / 2, 0.5 * m);
+  fade.addColorStop(0, '#000');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  g.globalCompositeOperation = 'destination-in';
+  g.fillStyle = fade;
+  g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'source-over';
 }

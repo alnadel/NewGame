@@ -46,9 +46,14 @@ const TOAST_GAP_MS = 650;
 const ONE_SCROLL_BELOW_PX = 520;
 /** The stats/missions scroll area must keep at least this much height, or the body scrolls as one. */
 const MIN_SCROLL_PX = 120;
-/** Map kept above a sheet that grows with its content. */
+/**
+ * A sheet that grows with its content stops at 68 % of the screen, so the Melt Map (and the
+ * postcard cropped from it) keeps about a third; on tiny screens it keeps at least 96 px, and the
+ * sheet may always take 58 %. What doesn't fit scrolls.
+ */
 const MAP_MIN_PX = 96;
 const SHEET_MIN_FRACTION = 0.58;
+const SHEET_MAX_FRACTION = 0.68;
 /** Sun Strip rows: the last 4 days, or 2 on screens under 700 px tall. */
 const STRIP_ROWS = 4;
 const STRIP_ROWS_SHORT = 2;
@@ -203,7 +208,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   let sheetTopPx = 0;
   const measure = (): void => {
     const screenH = el.clientHeight;
-    const maxSheet = Math.max(SHEET_MIN_FRACTION * screenH, screenH - MAP_MIN_PX);
+    const maxSheet = Math.max(SHEET_MIN_FRACTION * screenH, Math.min(SHEET_MAX_FRACTION * screenH, screenH - MAP_MIN_PX));
     const cs = getComputedStyle(sheet);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const left = maxSheet - padY - top.offsetHeight - actions.offsetHeight;

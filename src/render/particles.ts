@@ -479,6 +479,8 @@ const SWING_MERGE_S = 1;
 const BUMP_S = 0.16;
 /** PHEW! and SWING! ride a row of their own, clear of the +N / ×N row at z 200 even fully risen. */
 const HEADLINE_Z = 340;
+/** A headline arriving while another is up (a SWING confirmed just after its PHEW) takes the next row up. */
+const HEADLINE_ROW_Z = 150;
 const PLUS_TEXT: readonly string[] = Array.from({ length: 31 }, (_, i) => `+${i}`);
 const SWING_TEXT: readonly string[] = ['SWING!', 'SWING!', 'SWING! ×2', 'SWING! ×3', 'SWING! ×4', 'SWING! ×5'];
 
@@ -554,16 +556,25 @@ export function addPlus(p: Pops, n: number): void {
 
 /**
  * A headline pop (PHEW!, SWING!) on its own row; small pops that have already risen toward it fade
- * out quickly (and take no more values), so the two rows never stack.
+ * out quickly (and take no more values), so the two rows never stack. A headline still up keeps
+ * its row and the new one takes the lowest free row above it (three at most).
  */
 export function addHeadline(p: Pops, text: string, style: number, dur: number): void {
+  let taken = 0;
   for (let i = 0; i < POP_CAP; i++) {
     const s = p.style[i];
-    if (p.dur[i]! <= 0 || s === POP_PHEW || s === POP_SWING || p.t[i]! < 0.2) continue;
+    if (p.dur[i]! <= 0) continue;
+    if (s === POP_PHEW || s === POP_SWING) {
+      taken |= 1 << Math.round((p.z[i]! - HEADLINE_Z) / HEADLINE_ROW_Z);
+      continue;
+    }
+    if (p.t[i]! < 0.2) continue;
     p.dur[i] = Math.min(p.dur[i]!, p.t[i]! + 0.12);
     p.fresh[i] = 1;
   }
-  addPop(p, text, style, 0, HEADLINE_Z, dur);
+  let row = 0;
+  while (row < 2 && taken & (1 << row)) row++;
+  addPop(p, text, style, 0, HEADLINE_Z + row * HEADLINE_ROW_Z, dur);
 }
 
 /** 'SWING!' (with '×N' from a chain of 2) above Nubs; at most one per second, later ones update it. */

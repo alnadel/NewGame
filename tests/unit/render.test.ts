@@ -272,6 +272,20 @@ describe('pops (GR9)', () => {
     expect(live(p).sort()).toEqual(['SWING! ×2', 'SWING! ×3']);
   });
 
+  it('a SWING confirmed while PHEW is up takes the row above it', () => {
+    const p = createPops();
+    addHeadline(p, 'PHEW!', POP_PHEW, 1.1);
+    updatePops(p, 0.25);
+    addSwing(p, 1);
+    const z = (text: string): number => p.z[p.text.indexOf(text)]!;
+    expect(z('PHEW!')).toBe(340);
+    expect(z('SWING!')).toBeGreaterThan(340);
+    // Once PHEW is gone, the next headline takes the first row again.
+    updatePops(p, 1);
+    addHeadline(p, 'PHEW!', POP_PHEW, 1.1);
+    expect(Array.from(p.z).filter((_, i) => p.dur[i]! > 0 && p.text[i] === 'PHEW!')).toEqual([340]);
+  });
+
   it('a headline clears small pops that have risen toward its row, but not fresh ones', () => {
     const p = createPops();
     addPlus(p, 1);

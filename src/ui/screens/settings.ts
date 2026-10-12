@@ -18,7 +18,7 @@ import { button, hide, menuHeader, section, segmented, slider, toggleSwitch } fr
 
 const percent = (v: number): string => `${Math.round(v)}%`;
 
-export const KEYS_LINE = '← → or A D: turn the sun · Space/Enter: start or retry · P or Esc: pause';
+export const KEYS_LINE = '← → or A D: turn the sun · Shift: fine turns · Space/Enter: start or retry · P or Esc: pause';
 export const MID_RUN_BACKUP_NOTE = 'Backup, restore and reset are in Settings on the Title screen.';
 
 export function createSettingsScreen(ctx: UiContext): Screen {

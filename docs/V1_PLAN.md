@@ -238,7 +238,7 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 
 Days 2 and later use the standard table in every profile; only the drain persists for the whole run.
 
-**Endless drain ramp.** Endless runs without a `?profile=` or `?bot=` override also cap the drain by lifetime runs: the session sets `RunConfig.drain = endlessDrain(runs) = min(PROFILES[min(3, runs)].drain, 30 + 3·runs, 55)` (`ONBOARD_DRAIN = { start: 30, perRun: 3, max: 55 }`). Runs 0-9 drain 30, 33, 36, 39, 42, 45, 48, 51, 54, 55, and 55 from then on, so the step to the full drain is never a cliff. Daily, challenge and bot runs keep the profile drain, and world generation and the validator always use the profile drain, so a seed builds the same world either way.
+**Endless runs climb a comfort ladder** (v1.1, replacing v1.0's lifetime-run drain ramp): the session takes profile, drain and noon cloud from core `rungConfig(rung)` on a five-rung ladder, R0 tutorial to R4 standard (`V1_1_PLAN.md` §0 A2). Daily, challenge and bot runs keep their own rules, and world generation and the validator always use the profile drain, so a seed builds the same world whatever the drain.
 
 ### 6.1 Tutorial chunk (profile 0, y ∈ [−120, 480])
 - The trail is straight at x = 180.
@@ -498,13 +498,7 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 | oracle (follows the validator DP), profile 3 | Reaches Day 8 on 100% of seeds |
 | world | Mean rescues per chunk ≤ 1.0; `unresolved` = 0 |
 
-**Advisory onboarding rows** (printed as PASS/MISS; they never fail `--check`). The `human` bot is a seeded model of a new player (250-350 ms reaction lag, aim noise, over/undershoot, minimum-jerk drags):
-
-| Bot | Goal |
-|---|---|
-| human, profile 0 | Reaches the first night on ≥ 50% of seeds |
-| human, profile 1 at `endlessDrain(1)` = 33 | Median run ≥ 30 s of real time |
-| human, profile 3 at `endlessDrain(4)` = 42 | Median run ≥ 25 s of real time |
+**Advisory onboarding rows** (printed as PASS/MISS; they never fail `--check`). The `human` bot is a seeded model of a new player (250-350 ms reaction lag, aim noise, over/undershoot, minimum-jerk drags); v1.1 runs these rows per comfort rung with its perception-limited `humanDial` variant (`V1_1_PLAN.md` §0 A6, targets in its §6).
 
 Each sim row also reports `melted%` (flakes melted ÷ all flakes resolved), the first-night share and the median run length in seconds. Current numbers are in `src/core/README.md` §11.
 

@@ -16,10 +16,10 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/camera.ts` | View metrics and letterboxing, Nubs at 68 %/70 %, shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
 | `game/fx.ts` | SimEvents → particles, rings, pops, HUD/banner timers, Nubs reactions, slow-mo and hit-stop; continuous steam, sweat, frost sparkles and fireflies. |
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3), the ghost-thumb hint tracker (§6.2) with its sticky target arc and the first lesson, and the ui.css ghost keyframes as functions (so the canvas moves in step with the DOM hand). |
-| `game/perf.ts` | Frame-time governor (crisp shadows → DPR × 0.75 → particles 400 → 200 → DPR × 0.625 → detail tiles off; never below 1 device px per CSS px): late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
+| `game/perf.ts` | Frame-time governor, four levels (v1.1 GR4): 0 full → 1 crisp shadows → 2 DPR × 0.75 → 3 DPR × 0.625 and a 200-particle cap (never below 1 device px per CSS px). Late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
-| `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters, clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial, sun mascot, HUD, banners/vignettes, particles, Melt Map, sprites. |
+| `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (forecast and biome glyphs) and `postcard.ts`. |
 
 ## Frame
 
@@ -51,8 +51,10 @@ audio; only the draw is skipped:
   time).
 - The governor samples only drawn frames of play, dying and the Title, with the interval since the
   previous drawn frame, so capped and menu screens never trip it.
-- **Settled Results** (v1.1 GR4): the backdrop cache is gone; once the Melt Map has settled the
-  Results draw at a capped cadence instead (V1_1_PLAN GR4).
+- **Settled Results** (v1.1 GR4): once the Melt Map has settled (`renderer.settled`: the pull is
+  done and no particle, pop, ring or vignette is alive) the Results draw every 50 ms (≤ 20 fps);
+  only the puddle ring still pulses. Puddles steam only during play, so they never keep the
+  Results from settling.
 
 ### World rect (K9)
 
@@ -109,7 +111,7 @@ out every screen, control, sheet, toast and dialog inside it.
 - **Share links** come from `shareBase()`: the page's address on the web, else `VITE_SHARE_URL`,
   else no link line (a `file:` build never shares a `file:` link).
 
-Draw order: bars → ground + tiles → trail → footprints → pickups → shadow layer (one path, one fill,
+Draw order: bars → ground + tiles → trail → decals and puddles → footprints → pickups → shadow layer (one path, one fill,
 multiplied at the LUT alpha) → Nubs' own shadow and footprint disc → glare spots → ground particles,
 rings → depth-sorted casters with Nubs (an offscreen sprite) inserted at his y, plus an "x-ray" pass
 when something in front overlaps him → heat squiggles → clouds → air particles → Melt Map overlays
@@ -125,13 +127,39 @@ the first pointerdown. v1.1 adds one small offscreen atmosphere canvas stretched
 
 ## v1.1 at a glance
 
-See V1_1_PLAN §4.2 for the contracts. The governor has four levels (`perf().govLevel` 0-3); the
-caster sprite cache is optional (A12: a θ-independent key, measured under `?bot=human`); the death
-recap line comes from core `deathTip()` (A13) into `ResultsView.tip`; the Daily par job steps core
-`createParJob()` in idle time (≤ 3 ms or one chunk per callback) and stores it with meta
-`setDailyPar`; the postcard (A11) is a cover-crop of the settled Melt Map built in idle stages and
-shared from its own Results pill through platform `shareFiles`, while Share stays text and link.
-New SimEvents (`swing`, `lessonDone`) drive fx, haptics and the cue line; audio ignores them.
+See V1_1_PLAN §4.2 for the contracts.
+
+- **Boot**: the Title's held run is created 1100 u ahead (`createRun(cfg, undefined, 1100)`, GR19);
+  idle frames build the rest and the first tick completes the hard guarantee, so the world is the
+  same. The caster sprite cache (GR3) is not built (STRETCH under A12).
+- **Ground** (GR11): `decor.ts` lays out seeded decals per 48 u cell (12 per biome, puddles in 8 %
+  of cells, the rare sleeping cat), each ≥ 24 u plus its radius from the trail and ≥ 6 u plus its
+  radius from every caster footprint, into a 64-row ring, and blits them from a lazy per-biome
+  atlas. Puddles freeze in shade and steam in the sun (one `pointLitWeight` test per frame, round
+  robin; no effects from governor level 2). Decals fade out below 0.5 CSS px per u and are skipped
+  below 0.3, so a long run's Melt Map isn't ~2,000 blits a frame. Each biome tile has its own ground
+  colour; the boundary row fades the next biome in over 64 u with a signpost and two lamp posts.
+- **Death beat** (GR12): `CameraFx.holdZoom` eases to 1.18 between 80 and 600 ms and holds into the
+  Melt Map pull (none under reduced motion). One 'saturation' pass greys the world outside a ring
+  around the puddle, only at governor level 0 and DPR ≤ 2 (A12), fading out over the pull; the hat
+  (or scarf knot) pops off. The recap tip is core `deathTip(deathRecap(s), invert)` read on the
+  death tick into `ResultsView.tip`. Melt Map callouts flip sides when they would overlap.
+- **Postcard** (GR14, A11): starts on the first drawn frame of settled Results and runs one stage
+  per idle callback (`requestIdleCallback` with a 400 ms timeout, else `setTimeout` 16): crop,
+  header, tiles and footer, then `toBlob`. Debug runs get none; the object URL is revoked when the
+  next run begins. The Postcard pill calls `shareFiles({ file, text })` synchronously in the click
+  (the text alone until the file is ready); Share stays text and link. Both texts carry the
+  player's name, Snowbot's par on a Daily and the world's Day Plan.
+- **Daily par** (GR15): `createParJob(dailySeed(today), today ≥ PLAN_START_DATE)` steps on the
+  non-play screens (not play, pause, dying or boot), 6 ticks a step for at most 3 ms a frame. It
+  skips when the store can't persist, the Daily is locked or today's par exists, restarts on a new
+  local date, and stores the minutes with meta `setDailyPar`.
+- **Night** (GR16): moon shadows reuse the shadow layer and its pass slot; window light pools
+  south of lit faces (≤ 12), a moonlight rim under Nubs, frost-flower halos, a steady pool of 14
+  fireflies; glows are off from governor level 2.
+- **Title sundial** (GR17): each drawn Title frame sets `--lsx`/`--lsy` on the document element
+  when they move 0.25 px: (−cos θ, +sin θ) · 6 px · (1 + 0.6 · (1 − elevation)).
+- New SimEvents (`swing`, `lessonDone`) drive fx, haptics and the cue line; audio ignores them.
 
 ## Test hook (`?test=1`)
 
@@ -141,9 +169,13 @@ New SimEvents (`swing`, `lessonDone`) drive fx, haptics and the cue line; audio 
 `presses()`, `demo(name)` (fx and audio only: `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`,
 `cloud`, `glare`, `flake`, `best`, and in v1.1 `passed`, `swing`, `highnoon`, `postcard`), `perf()`
 (frame, sim, generation and render ms, layer counters, the DPR, `govLevel`, `draws`, and in v1.1
-`casterRenders, casterHits, casterDirect, fullScreenPasses`), `nubsScreen()`, `timeScale()`,
-`hint()`, `runCfg()`, `cameraFx()`, `hudPb()`, `renderOptions({ mapOverlay, casterSprites })`,
-`mapProbe(mapT)` and `bot(kind)` (a core bot plays; unlike `?bot=` the runs stay scored). URL
+`fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()`, `cameraFx()`,
+`hudPb()`, `renderOptions({ mapOverlay, multiplyShadows, decor })`, `pixelAB(a, b)`,
+`mapProbe(mapT)` (whole device pixels of the world rect only), `mapCallouts()` (Melt Map callout
+boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`) and `bot(kind)`
+(a core bot plays; unlike `?bot=` the runs stay scored). `demo('noon')` is an alias of
+`'highnoon'`, and `demo('postcard')` shares without user activation (the download path).
+`forceDeath()` also ends the first-run lesson, whose Chill floor would keep Nubs alive. URL
 parameters are in V1_PLAN §14.
 
 Decisions that differ from the GDD or V1_PLAN (the first lesson, the hint's target, the Title sway,
