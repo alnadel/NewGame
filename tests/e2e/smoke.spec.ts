@@ -49,7 +49,8 @@ test.describe('smoke', () => {
     const c = center(page);
     await page.mouse.click(c.x, c.y);
     await waitForScreen(page, 'play');
-    const hint = (): Promise<{ mode: string; lesson: boolean; turn: number }> => page.evaluate(() => window.__SHADY_TEST__!.hint());
+    const hint = (): Promise<{ mode: string; lesson: boolean; turn: number; target: number; width: number }> =>
+      page.evaluate(() => window.__SHADY_TEST__!.hint());
     await expect.poll(async () => (await hint()).mode, { timeout: 10_000 }).toMatch(/^(left|right)$/);
     const first = await hint();
     expect(first.lesson).toBe(true);
@@ -60,23 +61,31 @@ test.describe('smoke', () => {
       expect([h.mode, h.turn]).toEqual([first.mode, first.turn]);
     }
     expect(await page.evaluate(() => window.__SHADY_TEST__!.timeScale())).toBeLessThan(0.6);
-    // Follow it: drag the hinted way until Nubs is fully shaded.
-    const sgn = first.mode === 'left' ? -1 : 1;
-    let x = sgn < 0 ? c.x + 140 : c.x - 140;
-    await page.mouse.move(x, c.y);
-    await page.mouse.down();
-    for (let i = 0; i < 120; i++) {
-      x += sgn * 4;
+    // Follow it: drag the hinted way until Nubs is fully shaded inside the hinted arc, and hold the
+    // sun there (no release flick). The sim passes the lesson once the swing since Nubs was last
+    // lit reaches 15° (A5), so a shadow crossed on the way can reset it: the next hint shows again.
+    for (let attempt = 0; attempt < 4 && (await state(page)).lessonOn; attempt++) {
+      await expect.poll(async () => (await hint()).mode, { timeout: 10_000 }).toMatch(/^(left|right)$/);
+      const sgn = (await hint()).mode === 'left' ? -1 : 1;
+      let x = sgn < 0 ? c.x + 140 : c.x - 140;
       await page.mouse.move(x, c.y);
-      await page.waitForTimeout(16);
-      if ((await state(page)).f === 0) break;
+      await page.mouse.down();
+      for (let i = 0; i < 120; i++) {
+        x += sgn * 4;
+        await page.mouse.move(x, c.y);
+        await page.waitForTimeout(16);
+        const [s, h] = await Promise.all([state(page), hint()]);
+        if (!s.lessonOn || (s.f === 0 && Math.abs(((((s.theta - h.target) % 360) + 540) % 360) - 180) <= h.width / 2)) break;
+      }
+      for (let t = 0; t < 16 && (await state(page)).lessonOn; t++) await page.waitForTimeout(50);
+      await page.mouse.up();
     }
-    // Hold the sun there (no release flick) while Nubs stays in the shade.
-    await page.waitForTimeout(800);
-    await page.mouse.up();
+    // Passed alive (the lesson's Chill floor held), and time runs at full speed again (the floor is
+    // gone now, so Nubs may melt soon after in the sun: only the moment of the pass is checked).
+    const passed = await state(page);
+    expect([passed.lessonOn, passed.phase]).toEqual([false, 'day']);
     await expect.poll(async () => (await hint()).lesson, { timeout: 3000 }).toBe(false);
     await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.timeScale()), { timeout: 3000 }).toBe(1);
-    expect((await state(page)).phase).toBe('day');
     expect(errors).toEqual([]);
   });
 

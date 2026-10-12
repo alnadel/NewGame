@@ -34,20 +34,14 @@ async function expectAboveNubs(page: Page, loc: Locator, label: string): Promise
   expect(box.y + box.height, `${label} clears Nubs' halo`).toBeLessThanOrEqual(nubs.y - haloR);
 }
 
-/**
- * The Title's ghost hint stays clear of Nubs' halo dial: above it, or wholly below it (UM9 puts it
- * under the dial when there is room above the tray chips).
- */
-async function expectClearOfHalo(page: Page, loc: Locator, label: string): Promise<void> {
+/** The overlay's top edge sits below the bottom of Nubs' halo dial. */
+async function expectBelowNubs(page: Page, loc: Locator, label: string): Promise<void> {
   const box = await loc.boundingBox();
   expect(box, `${label} has a box`).not.toBeNull();
   if (!box) return;
   const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
   const haloR = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('ui')!).getPropertyValue('--halo-r')));
-  expect(haloR, 'halo radius published').toBeGreaterThan(20);
-  const above = box.y + box.height <= nubs.y - haloR;
-  const below = box.y >= nubs.y + haloR;
-  expect(above || below, `${label} clears Nubs' halo (${box.y}..${box.y + box.height} vs ${nubs.y} ± ${haloR})`).toBe(true);
+  expect(box.y, `${label} clears Nubs' halo`).toBeGreaterThanOrEqual(nubs.y + haloR);
 }
 
 async function expectInside(page: Page, loc: Locator, label: string): Promise<void> {
@@ -68,8 +62,14 @@ for (const size of SIZES) {
     await simulateNotch(page);
     await page.waitForTimeout(200);
     await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
-    await expectClearOfHalo(page, page.locator('.ghost-hand'), 'Title ghost hand');
-    await expectClearOfHalo(page, page.locator('.ghost-word'), 'Title "drag" word');
+    if ((await page.locator('.scr-title.ghost-below').count()) > 0) {
+      // UM9: on touch, when the hand fits above the tray chips, it alone sits under the dial.
+      await expectBelowNubs(page, page.locator('.ghost-hand'), 'Title ghost hand');
+      await expect(page.locator('.ghost-word')).toBeHidden();
+    } else {
+      await expectAboveNubs(page, page.locator('.ghost-hand'), 'Title ghost hand');
+      await expectAboveNubs(page, page.locator('.ghost-word'), 'Title "drag" word');
+    }
 
     await drag(page, Math.round(size.width / 2), Math.round(size.height * 0.4), -40);
     await waitForScreen(page, 'play');

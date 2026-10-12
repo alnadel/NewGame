@@ -496,7 +496,7 @@ export class Renderer {
     drawTrail(g, v, s.world, sc.groundPal);
     const di = sc.decorIn;
     di.time = time;
-    di.dt = udt;
+    di.dt = agdt;
     di.night = night;
     di.effects = inp.govLevel < 2;
     if (this.options.decor) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);

@@ -10,7 +10,7 @@
 // from a per-biome atlas built lazily at the device scale. Drawn after the trail and before the
 // shadow layer, so shade darkens them like the ground.
 
-import { biomeAtY, queryCasters, trailSlope, trailX, validatedY, type Caster, type SimState, type World } from '../core/index.ts';
+import { biomeAtY, queryCasters, smoothstep, trailSlope, trailX, validatedY, type Caster, type SimState, type World } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import type { View } from '../game/camera.ts';
 import { P_STEAM, spawn, type Particles } from './particles.ts';
@@ -24,6 +24,13 @@ const SPAN = 12;
 /** Decals keep this far (u, plus their own radius) from the trail centreline and caster footprints. */
 export const TRAIL_CLEAR = 24;
 export const FOOTPRINT_CLEAR = 6;
+/**
+ * Zoomed far out (the Melt Map of a long run shows ~2,000 cells) a decal is a few device px yet
+ * still one blit: decals fade out from DECOR_FULL_S down to DECOR_MIN_S (CSS px per u) and are
+ * skipped below it, which keeps the map pull inside its budget (A12).
+ */
+const DECOR_MIN_S = 0.3;
+const DECOR_FULL_S = 0.5;
 
 /** Atlas cells (32 u): 0-11 the biome's decals, 12 puddle, 13 its frost rim, 14 lamp post, 16-17 signpost (15 unused). */
 const CELL_U = 32;
@@ -279,6 +286,7 @@ function blit(g: CanvasRenderingContext2D, a: Atlas, sprite: number, half: numbe
 
 export interface DecorFrame {
   time: number;
+  /** Game seconds this frame: 0 while the world clock stands still (Title, pause, Results). */
   dt: number;
   night: number;
   /** Puddles steam and sparkle only below governor level 2. */
@@ -295,6 +303,11 @@ export function drawDecor(g: CanvasRenderingContext2D, v: View, d: Decor, s: Sim
     d.world = w;
     d.rowY.fill(0x7fffffff);
     d.seamY = Number.NaN;
+  }
+  const lod = smoothstep(DECOR_MIN_S, DECOR_FULL_S, v.S);
+  if (lod === 0) {
+    d.drawn = 0;
+    return;
   }
   const scale = Math.min(8, Math.max(0.5, Math.round(v.S * v.dpr * 4) / 4));
   const stable = v.S === d.lastS;
@@ -313,7 +326,7 @@ export function drawDecor(g: CanvasRenderingContext2D, v: View, d: Decor, s: Sim
   let drawn = 0;
   let meadow: Atlas | undefined;
   let town: Atlas | undefined;
-  g.globalAlpha = 1 - 0.7 * f.night;
+  g.globalAlpha = lod * (1 - 0.7 * f.night);
   for (let cy = cy0; cy <= cy1; cy++) {
     const slot = ((cy % RING) + RING) % RING;
     const row = d.rows[slot] as Decals;

@@ -1911,7 +1911,10 @@ export class Session {
     return this.paused;
   }
 
-  /** Test hook: Nubs melts on the next daylight tick (it touches the sim only through its Chill). */
+  /**
+   * Test hook: Nubs melts on the next daylight tick. It touches the sim only through its Chill and
+   * the lesson (whose Chill floor would otherwise keep him alive).
+   */
   forceDeath(): void {
     const s = this.s;
     if (s.phase === 'dead') return;
@@ -1925,6 +1928,8 @@ export class Session {
       this.beginRun(s);
       this.input.tap();
     }
+    s.cfg.lesson = false;
+    s.lessonOn = false;
     s.nubs.chill = -1e6;
   }
 
@@ -2086,9 +2091,14 @@ export class Session {
         rr.options.mapOverlay = false;
         rr.draw(r);
         const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
-        const dpr = rr.scene.view.dpr;
+        const v = rr.scene.view;
+        const dpr = v.dpr;
         const cutRow = Math.floor(sheetTop * dpr);
         const w = canvas.width;
+        // Only whole device pixels of the world rect: at a fractional DPR the backing store's last
+        // column and row are part-covered, and their blend with the page colour isn't the overlay's.
+        const xEnd = Math.floor((v.vx + v.vw) * dpr);
+        const yEnd = Math.floor((v.vy + v.vh) * dpr);
         let above = 0;
         let below = 0;
         /** Device-px box of the differences below the cut (x0, y0, x1, y1), for diagnostics. */
@@ -2097,12 +2107,13 @@ export class Session {
           if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
           const px = i >> 2;
           const y = Math.floor(px / w);
+          const x = px - y * w;
+          if (x >= xEnd || y >= yEnd) continue;
           if (y < cutRow) {
             above++;
             continue;
           }
           below++;
-          const x = px - y * w;
           box[0] = Math.min(box[0] as number, x);
           box[1] = Math.min(box[1] as number, y);
           box[2] = Math.max(box[2] as number, x);
