@@ -1,7 +1,7 @@
-// Wardrobe tile art: a tiny Nubs bust wearing one item, drawn as SVG from the same look data the
-// game renderer uses (meta/content.ts), so tiles always match what Nubs wears in the world.
+// Wardrobe tile art: a tiny Nubs bust wearing one item (or the sun in its Sun Shades), drawn as SVG
+// from the same look data the game renderer uses (meta/content.ts), so tiles always match the world.
 
-import type { Cosmetic, HatLook, NoseLook, ScarfLook } from '../meta/content.ts';
+import type { Cosmetic, HatLook, NoseLook, ScarfLook, ShadesLook } from '../meta/content.ts';
 import { svgFromMarkup } from './dom.ts';
 
 const SNOW = '#FFFFFF';
@@ -96,8 +96,58 @@ function noseArt(l: NoseLook): string {
   }
 }
 
+const f1 = (n: number): string => n.toFixed(1);
+
+/** One lens of a Sun Shades shape, centered at (x, y). */
+function lensPath(shape: ShadesLook['shape'], x: number, y: number): string {
+  switch (shape) {
+    case 'classic':
+      return `M${f1(x - 4.8)} ${f1(y - 2.6)}h9.6q.8 0 .6 1.1q-.6 3.9-4.9 4.1q-4.3.1-5.4-3.7q-.3-1.5.7-1.5z`;
+    case 'round':
+      return `M${f1(x - 4)} ${f1(y)}a4 4 0 1 0 8 0a4 4 0 1 0-8 0z`;
+    case 'aviator':
+      return `M${f1(x - 4.6)} ${f1(y - 3)}h9.2q.9 0 .8 1.3q-.5 5-4.9 5.3q-4.6.2-5.6-5q-.3-1.6.5-1.6z`;
+    case 'star': {
+      let d = '';
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? 5 : 2.2;
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        d += `${i === 0 ? 'M' : 'L'}${f1(x + r * Math.cos(a))} ${f1(y + 0.4 + r * Math.sin(a))}`;
+      }
+      return `${d}z`;
+    }
+    case 'heart':
+      return `M${f1(x)} ${f1(y + 3.8)}C${f1(x - 6.4)} ${f1(y - 0.4)} ${f1(x - 3.4)} ${f1(y - 5.6)} ${f1(x)} ${f1(y - 2.2)}C${f1(x + 3.4)} ${f1(y - 5.6)} ${f1(x + 6.4)} ${f1(y - 0.4)} ${f1(x)} ${f1(y + 3.8)}z`;
+  }
+}
+
+/** The sun's face wearing a pair of Sun Shades. */
+function shadesArt(id: string, l: ShadesLook): string {
+  const grad = `sg-${id}`;
+  const cx = 24;
+  const cy = 25;
+  const ey = 23.4;
+  let rays = '';
+  for (let i = 0; i < 12; i++) {
+    const a = (i * Math.PI) / 6;
+    const p = (r: number, da: number): string => `${f1(cx + r * Math.cos(a + da))} ${f1(cy + r * Math.sin(a + da))}`;
+    rays += `M${p(13.6, -0.2)}L${p(19.5, 0)}L${p(13.6, 0.2)}z`;
+  }
+  const lenses = [cx - 5.2, cx + 5.2].map((x) => lensPath(l.shape, x, ey)).join('');
+  const bridge = l.shape === 'aviator' ? `M${cx - 1.4} ${ey - 2.3}h2.8M${cx - 1.2} ${ey - 0.6}h2.4` : `M${cx - 1.3} ${ey - 1}q1.3-.9 2.6 0`;
+  return `<defs><linearGradient id="${grad}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${l.lens}"/><stop offset="1" stop-color="${l.lens2}"/></linearGradient></defs>
+<path d="${rays}" fill="#FFD36B"/><circle cx="${cx}" cy="${cy}" r="12.6" fill="#FFE27A" stroke="#FFC94A" stroke-width="1.3"/>
+<ellipse cx="${cx - 7}" cy="${cy + 4}" rx="2.3" ry="1.3" fill="#FF9E6B" opacity="0.5"/><ellipse cx="${cx + 7}" cy="${cy + 4}" rx="2.3" ry="1.3" fill="#FF9E6B" opacity="0.5"/>
+<path d="M${cx - 12.2} ${ey - 2.2}L${cx - 9.6} ${ey - 1.4}M${cx + 12.2} ${ey - 2.2}L${cx + 9.6} ${ey - 1.4}${bridge}" stroke="${l.frame}" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+<path d="${lenses}" fill="url(#${grad})" stroke="${l.frame}" stroke-width="1.2" stroke-linejoin="round"/>
+<circle cx="${cx - 7}" cy="${ey - 1.2}" r="0.9" fill="${l.shine}" opacity="0.9"/><circle cx="${cx + 3.4}" cy="${ey - 1.2}" r="0.9" fill="${l.shine}" opacity="0.9"/>
+<path d="M${cx - 4.4} ${cy + 5.2}q4.6 3 9-.6" stroke="#7A3B00" stroke-width="1.5" stroke-linecap="round" fill="none"/>`;
+}
+
 /** A 48×48 swatch for a Wardrobe tile. */
 export function cosmeticSwatch(c: Cosmetic): SVGSVGElement {
-  const art = c.look.slot === 'scarf' ? scarfArt(c.id, c.look) : c.look.slot === 'hat' ? hatArt(c.look) : noseArt(c.look);
+  const l = c.look;
+  const art =
+    l.slot === 'scarf' ? scarfArt(c.id, l) : l.slot === 'hat' ? hatArt(l) : l.slot === 'nose' ? noseArt(l) : shadesArt(c.id, l);
   return svgFromMarkup(`<svg class="swatch" viewBox="0 0 48 48" aria-hidden="true" focusable="false">${art}</svg>`);
 }

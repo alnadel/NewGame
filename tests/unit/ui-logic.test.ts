@@ -13,17 +13,31 @@ import { appIconSvg, logoLayers, logoSvg } from '../../src/ui/art.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { RunResult } from '../../src/core/sim/events.ts';
+import type { HourGlyph } from '../../src/core/sim/events.ts';
 import { defaults } from '../../src/meta/save.ts';
-import type { SaveV1 } from '../../src/meta/saveTypes.ts';
+import type { Save } from '../../src/meta/saveTypes.ts';
+import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
+// V11-SHIM: CC-7 — RunResultV11 becomes core's RunResult at integration.
+import type { RunResultV11 } from '../../src/meta/shims.ts';
 import {
   challengeGoalText,
+  cueDuration,
+  cueText,
+  dailyPlan,
   dailyRunLabel,
+  journalChart,
+  journalSummary,
+  minutesDelta,
   multiplierTile,
   NOT_COUNTED_NOTE,
+  parLine,
+  planText,
+  playTime,
   resultsAnnouncement,
   retryLabel,
   settingsSections,
+  sunStrip,
+  tileFill,
 } from '../../src/ui/labels.ts';
 import type { ResultsView } from '../../src/ui/types.ts';
 
@@ -175,17 +189,17 @@ describe('brand art', () => {
 
 describe('Results labels (U3, U8, U17)', () => {
   const TODAY = '2026-10-11';
-  const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 3, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 2, nightsReached: 1, minutes: 1240, litTotal: 0 };
-  const view = (over: Partial<ResultsView> = {}, result: Partial<RunResult> = {}): ResultsView => ({
+  const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 3, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 2, nightsReached: 1, minutes: 1240, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100 };
+  const view = (over: Partial<ResultsView> = {}, result: Partial<RunResultV11> = {}): ResultsView => ({
     result: {
-      mode: 'daily', seed: 1, profile: 3, minutes: 1240, day: 2, clock: '', stats, hourGlyphs: [], melody: [], assisted: false, dailyDate: TODAY,
+      mode: 'daily', seed: 1, profile: 3, drain: 55, noonCloud: 0, plan: [], minutes: 1240, day: 2, clock: '', stats, hourGlyphs: [], melody: [], assisted: false, dailyDate: TODAY,
       death: { day: 2, tDay: 0, minutes: 1240, time: '2:40 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 2:40 PM.' },
       ...result,
     },
-    outcome: { newBest: false, prevBestMinutes: 0, runSnow: 0, missionSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [] },
+    outcome: { newBest: false, prevBestMinutes: 0, runSnow: 0, missionSnow: 0, bonusSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [], pace: null, errand: null, recentBestBefore: 0, comfortAfter: 4 },
     ...over,
   });
-  const saveWith = (tries: number): SaveV1 => {
+  const saveWith = (tries: number): Save => {
     const s = defaults(1);
     if (tries > 0) s.daily[TODAY] = { tries, bestMinutes: 0, bestSnow: 0, glyphs: '' };
     return s;
@@ -245,6 +259,113 @@ describe('challenge banner goal (U10)', () => {
     expect(t.replace(/ /g, ' ')).toBe('Beat Day 2 · 2:40 PM');
     // Breakable spaces: after "Beat" and after "·" only.
     expect(t.split(' ')).toEqual(['Beat', 'Day 2 ·', '2:40 PM']);
+  });
+});
+
+describe('Sun Strip (UM8)', () => {
+  const C: HourGlyph = 'cool';
+  const W: HourGlyph = 'warm';
+  const H: HourGlyph = 'hot';
+  const M: HourGlyph = 'melt';
+  const DAY: HourGlyph[] = [C, C, W, C, H, W, C, C, W, C, C, C];
+  const glyphCount = (row: (HourGlyph | null)[]): number => row.filter((g) => g !== null).length;
+
+  it('has one row per day with the glyphs the share strip prints, ghosts after the melt', () => {
+    const hours = [DAY, DAY, [C, W, H, M]];
+    const strip = sunStrip(hours, null, 4);
+    const lines = dayStripLines(hours, false);
+    expect(strip.hidden).toBe(0);
+    expect(strip.rows.map((r) => r.day)).toEqual([1, 2, 3]);
+    strip.rows.forEach((r, i) => {
+      expect(r.tiles).toHaveLength(12);
+      const printed = (lines[i] as string).replace(MOON, '');
+      expect(r.tiles.filter((g) => g !== null).map((g) => GLYPHS[g as HourGlyph]).join('')).toBe(printed);
+      expect(r.night).toBe(i < 2);
+      expect(r.forecast).toBeNull();
+    });
+    expect(glyphCount((strip.rows[2] as { tiles: (HourGlyph | null)[] }).tiles)).toBe(4);
+    // A run started on Day 3 (a debug start) records its glyphs from there.
+    expect(sunStrip([[C, M]], null, 4, 3).rows.map((r) => r.day)).toEqual([3]);
+  });
+
+  it('folds earlier days into a chip and labels plan days with their forecast', () => {
+    const plan = [
+      { biome: 'meadow', forecast: 'clear' },
+      { biome: 'oldtown', forecast: 'market' },
+      { biome: 'meadow', forecast: 'heat' },
+      { biome: 'oldtown', forecast: 'breezy' },
+      { biome: 'meadow', forecast: 'long' },
+    ] as const;
+    const strip = sunStrip([DAY, DAY, DAY, DAY, [C, M]], plan, 2);
+    expect(strip.hidden).toBe(3);
+    expect(strip.rows.map((r) => [r.day, r.forecast?.emoji])).toEqual([
+      [4, '🌬️'],
+      [5, '🍂'],
+    ]);
+  });
+
+  it('tints each tile with its hour', () => {
+    expect(tileFill(0, 'cool')).toBe('#bdd8e6');
+    expect(tileFill(6, 'cool')).not.toBe(tileFill(0, 'cool'));
+    expect(tileFill(5, 'melt')).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe('Title, Daily and cue copy (UM9)', () => {
+  it('names a day by its weather and place', () => {
+    expect(planText({ biome: 'oldtown', forecast: 'breezy' })).toBe('🌬️ Breezy · Old Town');
+    expect(planText({ biome: 'meadow', forecast: 'clear' })).toBe('☀️ Clear · Meadow');
+  });
+
+  it("previews a Daily's Day 1: the Day Plan from its start date, the classic Meadow before", () => {
+    expect(dailyPlan('2026-10-13')).toEqual({ biome: 'meadow', forecast: 'clear' });
+    const later = dailyPlan('2026-10-20');
+    expect(['meadow', 'oldtown']).toContain(later.biome);
+    expect(dailyPlan('2026-10-20')).toEqual(later);
+  });
+
+  it("reads Snowbot's par, or waits for it", () => {
+    expect(parLine(null)).toBe('Snowbot is warming up…');
+    expect(parLine(455)).toBe('Snowbot made it to 1:35 PM');
+    expect(parLine(1500)).toBe('Snowbot made it to Day 3 · 7:00 AM');
+  });
+
+  it('words the cues for touch and keyboard players', () => {
+    expect(cueText('keep-shade', undefined, false)).toBe('Keep Nubs in the shade');
+    expect(cueText('drag', -1, false)).toBe('Drag ← to swing the sun');
+    expect(cueText('drag', 1, true)).toBe('Hold → to swing the sun');
+    expect(cueText('shade-found', undefined, false)).toBe('Shade! Thick teal = safe');
+    expect(cueText('melting', undefined, false)).toBe('Melting! Find thick teal');
+    // In the lesson the warning keeps the drag instruction.
+    expect(cueText('melting', 1, false)).toBe('Melting! Drag → to the thick teal');
+    expect([cueDuration('keep-shade', undefined), cueDuration('shade-found', undefined), cueDuration('melting', undefined)]).toEqual([2000, 1400, 1600]);
+    expect([cueDuration('drag', -1), cueDuration('melting', -1)]).toEqual([null, null]);
+  });
+});
+
+describe('Journal (UM10)', () => {
+  const runs = (ms: number[], r = 4): Save['history'] => ms.map((m) => ({ m, s: 0, r, d: '2026-10-11' }));
+
+  it('scales bars to the best run, marks it gold and hatches eased runs', () => {
+    const c = journalChart([...runs([100], 0), ...runs([400, 800]), ...runs([200], 2)]);
+    expect(c.bars.map((b) => b.height)).toEqual([0.125, 0.5, 1, 0.25]);
+    expect(c.bars.map((b) => b.best)).toEqual([false, false, true, false]);
+    expect(c.bars.map((b) => b.eased)).toEqual([true, false, false, true]);
+    expect(c.bars.map((b) => b.day)).toEqual([1, 1, 2, 1]);
+  });
+
+  it('averages the last 10 and compares them with the 10 before', () => {
+    const c = journalChart(runs([...Array<number>(10).fill(300), ...Array<number>(10).fill(342)]));
+    expect([c.average, c.delta, c.previous]).toEqual([342, 42, 10]);
+    expect(journalChart(runs([100, 200, 300])).delta).toBeNull();
+    expect(journalChart([]).average).toBeNull();
+    expect(journalSummary(c)).toBe('Last 20 runs. Best: 11:42 AM. Last 10 average: 11:42 AM. +42 min against the 10 runs before.');
+    expect(journalSummary(journalChart([]))).toBe('No runs yet.');
+  });
+
+  it('formats deltas and play time', () => {
+    expect([minutesDelta(42), minutesDelta(-65), minutesDelta(120), minutesDelta(0)]).toEqual(['+42 min', '−1 h 5 min', '+2 h', '+0 min']);
+    expect([playTime(59), playTime(720), playTime(3 * 3600 + 754)]).toEqual(['0 m', '12 m', '3 h 12 m']);
   });
 });
 

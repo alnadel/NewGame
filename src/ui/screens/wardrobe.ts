@@ -1,5 +1,6 @@
-// Wardrobe (GDD §6): slot tabs, item grid with cost/lock/owned/equipped states, buy + equip, and a
-// try-on preview whose drawing is injected by the integrator (callbacks.renderWardrobePreview).
+// Wardrobe (GDD §6, V1_1_PLAN UM6): slot tabs (Nubs' scarf, hat and nose, and the sun's Shades),
+// item grid with cost/lock/owned/equipped states, buy + equip, and a try-on preview whose drawing
+// is injected by the integrator (callbacks.renderWardrobePreview: Nubs, or the sun on Shades).
 // Tapping an owned item equips it; tapping anything else previews it and the action button shows
 // what it takes (buy / not enough Snow / achievement).
 //
@@ -23,7 +24,7 @@ import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
 import { button, menuHeader, setButtonLabel, setDisabled, snowChip } from '../widgets.ts';
 
-const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose' };
+const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
 const PREVIEW_CSS = 168;
 const STATES: readonly ItemState[] = ['equipped', 'owned', 'buyable', 'expensive', 'locked'];
 
@@ -122,7 +123,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       canvas.width = px;
       canvas.height = px;
     }
-    ctx.cb.renderWardrobePreview(canvas, { ...selected });
+    ctx.cb.renderWardrobePreview(canvas, { ...selected }, slot === 'shades' ? 'sun' : 'nubs');
   }
 
   function act(): void {
@@ -139,7 +140,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       if (ctx.cb.buy(id)) {
         ctx.sound('buy');
         refresh();
-        ctx.toast(`${c.name}: yours! Looking sharp, Nubs.`, { icon: 'gift', tone: 'accent' });
+        ctx.toast(`${c.name}: yours! ${c.slot === 'shades' ? 'Looking cool, sun.' : 'Looking sharp, Nubs.'}`, { icon: 'gift', tone: 'accent' });
         tiles.get(id)?.btn.classList.add('is-bought');
       } else {
         ctx.sound('deny');
@@ -235,7 +236,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
         setButtonLabel(action, 'Wearing');
         action.classList.add('btn--plain');
         setDisabled(action, true);
-        itemNote.textContent = 'Nubs has it on.';
+        itemNote.textContent = slot === 'shades' ? 'The sun has them on.' : 'Nubs has it on.';
         break;
       case 'owned':
         setButtonLabel(action, 'Wear it');

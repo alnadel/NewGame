@@ -1,9 +1,10 @@
 // Public types of the UI controller. See src/ui/README.md for how the game session drives it.
 
 import type { RunResult } from '../core/sim/events.ts';
-import type { SaveV1, Settings } from '../meta/saveTypes.ts';
+import type { Save, Settings } from '../meta/saveTypes.ts';
 import type { CosmeticId, Equipped } from '../meta/content.ts';
 import type { RunOutcome, ToastIcon, ToastTone } from '../meta/progression.ts';
+import type { DayPlan } from '../meta/shims.ts';
 import type { ShareOutcome } from '../platform/share.ts';
 
 export type ScreenId =
@@ -16,7 +17,16 @@ export type ScreenId =
   | 'settings'
   | 'daily'
   | 'missions'
-  | 'wardrobe';
+  | 'wardrobe'
+  | 'journal';
+
+/**
+ * The plain-language cue line above Nubs (ui.showCue):
+ * - `keep-shade`: "Keep Nubs in the shade" (2 s).
+ * - `drag`: "Drag ← to swing the sun" (or "Hold ←" for keyboard players) until replaced or cleared.
+ * - `shade-found`: "Shade! Thick teal = safe" (1.4 s). `melting`: "Melting! Find thick teal" (1.6 s).
+ */
+export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting';
 
 export type RunKind = 'endless' | 'daily' | 'challenge';
 
@@ -49,8 +59,17 @@ export interface ResultsView {
   dailyScored?: boolean;
   /** Challenge runs: the target score in in-game minutes. */
   challengeTarget?: number;
+  /** Challenge runs: the sender's name ('' or absent = "a friend"). */
+  challengeName?: string;
   /** A run started with sim-altering debug URL params: not scored, saved or shareable. */
   debug?: boolean;
+  /** The death recap line under the death line (core deathTip). */
+  tip?: string;
+  /**
+   * This run was the warm-up before a challenge: Results show "Now beat {name}: {score}" and Retry
+   * reads "Take the challenge" (the session's retry() then starts the challenge).
+   */
+  warmupFor?: { minutes: number; name: string };
 }
 
 /** Title banner shown when the page was opened from a challenge link. */
@@ -59,6 +78,10 @@ export interface ChallengeBanner {
   minutes: number;
   /** Optional second line, e.g. "Daily #280 · practice run". */
   note?: string;
+  /** The sender's name ('' or absent = "A friend"). */
+  name?: string;
+  /** A fresh save plays the tutorial run first: the note reads "Warm-up run first". */
+  warmup?: boolean;
 }
 
 /** Ghost-thumb hint: a looping left-right swipe (Title) or a one-way swipe (in-play hint). */
@@ -96,8 +119,18 @@ export interface UiCallbacks {
   restart(): void;
   /** A tap during the death animation: jump to Results (call ui.show('results', view)). */
   skipDying(): void;
-  /** Results > Share: build the text (meta/share buildShare) and hand it to platform/share. */
+  /**
+   * Results > Share: build the text (meta/share buildShare) and hand it to platform/share shareText
+   * ('shared', 'copied', 'cancelled' or 'failed').
+   */
   share(): Promise<ShareOutcome>;
+  /**
+   * Results > Postcard: the postcard PNG plus the share text through platform/share shareFiles
+   * ('saved' = downloaded and the text copied). Call shareFiles synchronously (iOS user activation).
+   */
+  sharePostcard?(): Promise<ShareOutcome>; // V11-SHIM: A11 — required once gameRender's GR14 is merged.
+  /** Missions or Results > Swap on a stale mission: apply meta swapMission, then ui.setSave. */
+  swapMission?(slotId: string): void; // V11-SHIM: CC-11 — required once gameRender's session implements it.
   /** Any Settings change, with the full new settings. Persist and apply (volumes, sensitivity…). */
   settingsChanged(settings: Settings): void;
   /** Wardrobe purchase; return true on success (then push the new save with ui.setSave). */
@@ -124,15 +157,16 @@ export interface UiCallbacks {
   /** Play a short UI sound (and the 4 ms "UI button" haptic if enabled). */
   uiSound(name: UiSoundName): void;
   /**
-   * Draw Nubs wearing `equipped` into the Wardrobe preview canvas. The backing store is already
-   * sized to its CSS box × devicePixelRatio (max 2). Called whenever the try-on selection changes.
+   * Draw the Wardrobe preview: Nubs wearing `equipped` ('nubs'), or the sun in its shades on the
+   * Shades tab ('sun'). The backing store is already sized to its CSS box × devicePixelRatio (max 2).
+   * Called whenever the try-on selection or the tab changes.
    */
-  renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equipped): void;
+  renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equipped, subject: 'nubs' | 'sun'): void;
 }
 
 export interface UiDeps {
   callbacks: UiCallbacks;
-  save: SaveV1;
+  save: Save;
   /** Local date 'YYYY-MM-DD' (meta/daily localDate()). */
   today: string;
   /** Shown at the bottom of Settings, e.g. "0.1.0 (a1b2c3d)". */
@@ -154,13 +188,22 @@ export interface Ui {
   /** True while a modal (confirm dialog, install or restore sheet) is open. */
   isModalOpen(): boolean;
   /** Pushes a new save; every screen re-renders from it. */
-  setSave(save: SaveV1): void;
+  setSave(save: Save): void;
   /**
    * Updates the local date (call when the date rolls over while the app is open). Re-renders the
    * Daily screen, the Title's Daily dot and the 14-day history.
    */
   setToday(date: string): void;
   setChallenge(banner: ChallengeBanner | null): void;
+  /** The Title run's Day-1 plan for the forecast chip; null for runs without a Day Plan (chip hidden). */
+  setRunPreview(p: DayPlan | null): void;
+  /**
+   * Shows a cue above Nubs (`dir` = the finger direction for 'drag': −1 ←, +1 →); null clears it.
+   * Timed cues clear themselves; 'drag' stays until replaced or cleared.
+   */
+  showCue(id: CueId | null, dir?: -1 | 1): void;
+  /** The Results postcard's thumbnail (an object URL of the ready PNG), or null while it is built. */
+  setPostcard(thumbUrl: string | null): void;
   setGhostThumb(mode: GhostMode): void;
   /**
    * Progress (0..1) through the current loop of the ghost hand's swipe animation, so the canvas can
