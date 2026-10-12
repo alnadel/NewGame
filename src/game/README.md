@@ -52,8 +52,10 @@ audio; only the draw is skipped:
 - The governor samples only drawn frames of play, dying and the Title, with the interval since the
   previous drawn frame, so capped and menu screens never trip it.
 - **Settled Results** (v1.1 GR4): once the Melt Map has settled (`renderer.settled`: the pull is
-  done and no particle, pop, ring or vignette is alive) the Results draw every 50 ms (≤ 20 fps);
-  only the puddle ring still pulses. Puddles steam only during play, so they never keep the
+  done and no particle, pop, ring or vignette is alive) the Results draw every 50 ms (≤ 20 fps),
+  and each of those frames repaints only the world column above the sheet (the puddle ring still
+  pulses there); the bars and the world under the sheet keep the pixels of the frame that settled.
+  A resize or a failed draw repaints everything once. Puddles steam only during play, so they never keep the
   Results from settling.
 
 ### World rect (K9)

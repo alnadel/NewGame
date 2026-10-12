@@ -334,6 +334,7 @@ export class Renderer {
    * session turns into its crash overlay.
    */
   private recover(): void {
+    this.settled = false;
     const g = this.g as CanvasRenderingContext2D & { reset?: () => void };
     if (typeof g.reset === 'function') g.reset();
     else for (let i = 0; i < 8; i++) g.restore();
@@ -354,6 +355,8 @@ export class Renderer {
     if (this.canvas.width !== w) this.canvas.width = w;
     if (this.canvas.height !== h) this.canvas.height = h;
     resizeScene(this.scene, cssW, cssH, dpr, safe);
+    // The next frame repaints everything (a settled Results frame repaints only the map band).
+    this.settled = false;
   }
 
   draw(inp: RenderInput): void {
@@ -362,7 +365,20 @@ export class Renderer {
     this.draws++;
     const t0 = performance.now();
     const sc = this.scene;
+    // Settled Results: only the map above the sheet still moves (the puddle ring), so a frame
+    // repaints just that band of the world column and every other pixel keeps the frame that
+    // settled (the letterbox bars and the world under the sheet are most of the canvas).
+    const band = this.settled && inp.screen === 'results' && inp.sheetTop !== null;
+    if (band) {
+      const v = sc.view;
+      this.g.save();
+      this.g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+      this.g.beginPath();
+      this.g.rect(v.vx, v.vy, v.vw, Math.max(0, (inp.sheetTop as number) - v.vy));
+      this.g.clip();
+    }
     this.drawScene(inp);
+    if (band) this.g.restore();
     this.settled =
       inp.screen === 'results' &&
       inp.sheetTop !== null &&
