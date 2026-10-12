@@ -47,6 +47,9 @@ export interface Banners {
   stampFont: string;
   stampSize: number;
   stampW: number;
+  /** The Day card rays' fill (a radial fade, in card-centred px) and the ray length it was built for. */
+  rayFill: CanvasGradient | null;
+  rayLen: number;
   /** Fonts for the HUD scale they were built at. */
   fontK: number;
   dayFont: string;
@@ -89,6 +92,8 @@ export function createBanners(): Banners {
     stampFont: '',
     stampSize: 0,
     stampW: 0,
+    rayFill: null,
+    rayLen: 0,
     fontK: 0,
     dayFont: '',
     lineFont: '',
@@ -290,19 +295,30 @@ function dayCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: number,
   const gap = 5 * scale;
   const w = Math.max(titleW, glyph + gap + lineW) + 40 * scale;
   const h = 54 * s + 6 * scale;
-  // Five warm rays behind the card, turning at 6°/s.
+  // Five warm rays behind the card, turning at 6°/s and fading out toward their tips.
+  const len = Math.round(w * 0.62);
+  if (b.rayLen !== len || !b.rayFill) {
+    const f = g.createRadialGradient(0, 0, 0, 0, 0, len);
+    f.addColorStop(0, '#FFD36B');
+    f.addColorStop(0.55, 'rgba(255,211,107,0.8)');
+    f.addColorStop(1, 'rgba(255,211,107,0)');
+    b.rayFill = f;
+    b.rayLen = len;
+  }
+  g.save();
+  g.translate(cx, y);
   g.globalAlpha = a * 0.5;
-  g.fillStyle = '#FFD36B';
+  g.fillStyle = b.rayFill;
   g.beginPath();
-  const len = w * 0.62;
   for (let i = 0; i < 5; i++) {
     const ang = (i * TAU) / 5 + t * 6 * DEG - Math.PI / 2;
-    g.moveTo(cx, y);
-    g.lineTo(cx + Math.cos(ang - 0.17) * len, y + Math.sin(ang - 0.17) * len);
-    g.lineTo(cx + Math.cos(ang + 0.17) * len, y + Math.sin(ang + 0.17) * len);
+    g.moveTo(0, 0);
+    g.lineTo(Math.cos(ang - 0.17) * len, Math.sin(ang - 0.17) * len);
+    g.lineTo(Math.cos(ang + 0.17) * len, Math.sin(ang + 0.17) * len);
     g.closePath();
   }
   g.fill();
+  g.restore();
   g.globalAlpha = a;
   g.fillStyle = 'rgba(43,33,64,0.16)';
   roundRect(g, cx - w / 2, y - h / 2 + 4, w, h, 14 * s);

@@ -353,6 +353,9 @@ test.describe('death beat (GR12)', () => {
 
   test('the camera pushes in on the puddle and the world greys outside a ring of colour', async ({ page }, info) => {
     await openGame(page, 'test=1&seed=42&day=1&t=13:00&perf=0&plan=0&profile=3');
+    // Slow sim time: at 1 PM Nubs would melt on his own before the forced death (the beat runs on
+    // real time).
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0.05));
     await startPlay(page);
     await page.waitForTimeout(500);
     const r = await page.evaluate(async () => {
@@ -386,7 +389,11 @@ test.describe('death beat (GR12)', () => {
         return { near: near / nn, far: far / nf };
       };
       const before = sat();
+      hook.setTimeScale(1);
       hook.forceDeath();
+      // The melt lands on the next daylight tick (after the start beat): time the beat from there.
+      const w0 = performance.now();
+      while (hook.state().phase !== 'dead' && performance.now() - w0 < 4000) await new Promise((res) => requestAnimationFrame(res));
       let zoom = 1;
       let passes = 0;
       const t0 = performance.now();
