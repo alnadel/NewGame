@@ -485,3 +485,54 @@ function drawHint(g: CanvasRenderingContext2D, inp: HaloInput, A: number): void 
     sunPointer(g, cx, cy, R, c, ha * (0.45 + 0.35 * pulse), 0, true);
   }
 }
+
+const frozen = createShadeSplit();
+
+/**
+ * The dial frozen at the melt (the Melt Map's 'frozen' mode): a faint ring, the thick teal shade that
+ * lasted (or the shade there was), a dotted short way from the sun pointer to its nearest bin, and
+ * the sun pointer at θ.
+ */
+export function drawFrozenDial(g: CanvasRenderingContext2D, cx: number, cy: number, R: number, theta: number, now: Uint8Array, next: Uint8Array, a: number): void {
+  const mode = splitShade(now, next, frozen);
+  const mask = mode === 'lasting' ? frozen.lasting : now;
+  g.globalAlpha = a;
+  g.strokeStyle = 'rgba(255,255,255,0.55)';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(cx, cy, R, 0, TAU);
+  g.stroke();
+  if (mode === 'none') {
+    sunPointer(g, cx, cy, R, theta, a, 0, false);
+    return;
+  }
+  g.lineCap = 'round';
+  g.strokeStyle = cssa(0x2ec4b6, 0.95 * a);
+  g.lineWidth = 6;
+  g.beginPath();
+  arcRuns(g, mask, cx, cy, R, 1);
+  g.stroke();
+  g.strokeStyle = cssa(0xffffff, 0.9 * a);
+  g.lineWidth = 1;
+  g.beginPath();
+  arcRuns(g, mask, cx, cy, R - 3, 1);
+  g.stroke();
+  // The short way from θ to the nearest set bin, in dots.
+  let best = 999;
+  for (let b = 0; b < 360; b++) {
+    if (mask[b] === 0) continue;
+    const d = ((b - theta + 540) % 360) - 180;
+    if (Math.abs(d) < Math.abs(best)) best = d;
+  }
+  if (Math.abs(best) >= 6) {
+    g.fillStyle = cssa(0xffffff, 0.95 * a);
+    const steps = Math.floor(Math.abs(best) / 8);
+    for (let k = 1; k <= steps; k++) {
+      const ang = -(theta + Math.sign(best) * k * 8) * DEG;
+      g.beginPath();
+      g.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 1.8, 0, TAU);
+      g.fill();
+    }
+  }
+  sunPointer(g, cx, cy, R, theta, a, 0, false);
+}
