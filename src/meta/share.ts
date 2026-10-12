@@ -1,18 +1,21 @@
-// Spoiler-free share text with hour glyphs (GDD §9 with the V1_PLAN §5.5 glyph set).
+// Spoiler-free share text with hour glyphs (GDD §9 with the V1_PLAN §5.5 glyph set, V1_1_PLAN UM7).
 //
-// Endless:                                   Daily:
-//   SHADY: Nubs made it to Day 3 · 2:40 PM     SHADY Daily #284: Day 2 · 2:40 PM (try 2/3)
-//   <final day's strip>                        <day 1 strip>🌙
-//   Snow 112 · 4 PHEWs                         <day 2 strip ending in 💧>
-//   Beat my run: <link>                        <link>
-// 🧭 is appended to the last strip when the guide was forced on ("Always"). Without a canonical
-// base URL (a file: or native build with no VITE_SHARE_URL) the link line is left out.
+// Endless:                                         Daily:
+//   SHADY: Nubs made it to Day 3 · 2:40 PM ☀️🌬️🌡️     SHADY Daily #284: Day 2 · 2:40 PM (try 2/3) ☀️🍂
+//   <final day's strip>                              <day 1 strip>🌙
+//   Snow 112 · 4 PHEWs                               <day 2 strip ending in 💧>
+//   Beat Sam’s run: <link>                           Beat Snowbot’s 11:20 AM ✓
+//                                                    <link>
+// Day Plan runs add one forecast emoji per day reached to the header. 🧭 is appended to the last
+// strip when the guide was forced on ("Always"). Without a canonical base URL (a file: or native
+// build with no VITE_SHARE_URL) the link line is left out.
 
 import type { HourGlyph, RunResult } from '../core/sim/events.ts';
-import { formatScore } from '../core/format.ts';
+import { formatScore, formatTimeOfDay, MINUTES_PER_DAY } from '../core/format.ts';
 import { isNative } from '../platform/native.ts';
 import { challengeUrl, type Challenge } from './challenge.ts';
 import { dailyNumber, DAILY_TRIES } from './daily.ts';
+import { FORECASTS, PLAN_START_DATE, v11Result, type DayPlan, type RunResultV11 } from './shims.ts';
 
 export const GLYPHS: Readonly<Record<HourGlyph, string>> = {
   cool: '❄️', // ❄️ snowflake (shape differs from the squares: colorblind-safe)
@@ -45,12 +48,26 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
+/** One forecast emoji per day of a Day Plan run (e.g. "☀️🌬️🌡️"). */
+export function forecastEmojis(plan: readonly DayPlan[]): string {
+  return plan.map((p) => FORECASTS[p.forecast].emoji).join('');
+}
+
+/** A score as its clock below Day 2 ("11:20 AM"), else with its day ("Day 2 · 9:10 AM"). */
+export function scoreText(minutes: number): string {
+  return minutes < MINUTES_PER_DAY ? formatTimeOfDay(minutes) : formatScore(minutes);
+}
+
 export interface EndlessShareInput {
   minutes: number;
   hourGlyphs: readonly (readonly HourGlyph[])[];
   snow: number;
   phews: number;
   assisted: boolean;
+  /** Forecast emojis for the header ('' for runs without a Day Plan). */
+  forecasts: string;
+  /** The sender's name ('' for none). */
+  name: string;
   /** The challenge link, or null to leave the link line out. */
   link: string | null;
 }
@@ -58,11 +75,11 @@ export interface EndlessShareInput {
 export function endlessShareText(p: EndlessShareInput): string {
   const lines = dayStripLines(p.hourGlyphs, p.assisted);
   const out = [
-    `SHADY: Nubs made it to ${formatScore(p.minutes)}`,
+    `SHADY: Nubs made it to ${formatScore(p.minutes)}${p.forecasts ? ` ${p.forecasts}` : ''}`,
     lines[lines.length - 1] as string,
     `Snow ${p.snow} · ${plural(p.phews, 'PHEW')}`,
   ];
-  if (p.link !== null) out.push(`Beat my run: ${p.link}`);
+  if (p.link !== null) out.push(`Beat ${p.name ? `${p.name}’s` : 'my'} run: ${p.link}`);
   return out.join('\n');
 }
 
@@ -73,15 +90,37 @@ export interface DailyShareInput {
   tryNumber: number | null;
   hourGlyphs: readonly (readonly HourGlyph[])[];
   assisted: boolean;
+  /** Forecast emojis for the header ('' for Dailies without a Day Plan). */
+  forecasts: string;
+  /** Snowbot's par minutes, or null while unknown (no par line). */
+  par: number | null;
   /** The challenge link, or null to leave the link line out. */
   link: string | null;
 }
 
 export function dailyShareText(p: DailyShareInput): string {
   const attempt = p.tryNumber === null ? 'practice' : `try ${p.tryNumber}/${DAILY_TRIES}`;
-  const out = [`SHADY Daily #${p.dailyNumber}: ${formatScore(p.minutes)} (${attempt})`, ...dayStripLines(p.hourGlyphs, p.assisted)];
+  const out = [
+    `SHADY Daily #${p.dailyNumber}: ${formatScore(p.minutes)} (${attempt})${p.forecasts ? ` ${p.forecasts}` : ''}`,
+    ...dayStripLines(p.hourGlyphs, p.assisted),
+  ];
+  if (p.par !== null) out.push(p.minutes > p.par ? `Beat Snowbot’s ${scoreText(p.par)} ✓` : `Snowbot made ${scoreText(p.par)}`);
   if (p.link !== null) out.push(p.link);
   return out.join('\n');
+}
+
+const legacyBiome = (day: number): DayPlan['biome'] => (day % 2 === 0 ? 'oldtown' : 'meadow');
+
+/**
+ * Whether a run's world had the Day Plan (A1): Daily worlds (a Daily or a replayed one) from
+ * PLAN_START_DATE on, endless runs at profile 3; a challenge run unless every day it reached
+ * matches the classic alternating clear days. The session knows for sure (World.planOn) and can
+ * pass it to buildShare as `plan`.
+ */
+export function runPlanOn(r: RunResultV11): boolean {
+  if (r.dailyDate !== undefined && r.mode !== 'endless') return r.dailyDate >= PLAN_START_DATE;
+  if (r.profile !== 3) return false;
+  return r.mode === 'endless' || r.plan.some((p, i) => p.forecast !== 'clear' || p.biome !== legacyBiome(i + 1));
 }
 
 export interface SharePayload {
@@ -91,39 +130,58 @@ export interface SharePayload {
   challenge: Challenge;
 }
 
+export interface ShareExtra {
+  /** The player's name for challenge links ('' or absent = none). */
+  name?: string;
+  /** Daily runs: Snowbot's par minutes, or null while unknown. */
+  par?: number | null;
+  /** The run's world had the Day Plan (World.planOn); derived from the result when absent. */
+  plan?: boolean;
+}
+
 /**
- * Builds the share text and challenge link for a finished run.
+ * Builds the share text and challenge link for a finished run. The link carries the run's rules
+ * (profile, drain, noon cloud, Day Plan), so the friend plays exactly this world.
  * @param baseUrl where links point (see shareBase()), or null to share the text without a link.
  * @param tryNumber for daily runs: the counted try, or null for practice.
  */
-export function buildShare(result: RunResult, baseUrl: string | null, tryNumber: number | null = null): SharePayload {
-  const snow = Math.max(0, Math.floor(result.stats.snow));
+export function buildShare(result: RunResult, baseUrl: string | null, tryNumber: number | null = null, extra: ShareExtra = {}): SharePayload {
+  const r = v11Result(result); // V11-SHIM: CC-7 (use `result` directly)
+  const snow = Math.max(0, Math.floor(r.stats.snow));
+  const n = extra.name ? { n: extra.name } : {};
+  const planOn = extra.plan ?? runPlanOn(r);
+  const forecasts = planOn ? forecastEmojis(r.plan) : '';
   // Daily runs (and challenges replaying a date's daily) share that date; everything else its seed.
   const challenge: Challenge =
-    result.dailyDate !== undefined && result.mode !== 'endless'
-      ? { v: 1, k: 'd', d: result.dailyDate, m: result.minutes, s: snow }
-      : { v: 1, k: 'e', seed: result.seed >>> 0, m: result.minutes, s: snow };
+    r.dailyDate !== undefined && r.mode !== 'endless'
+      ? { v: 1, k: 'd', d: r.dailyDate, m: r.minutes, s: snow, ...n }
+      : { v: 1, k: 'e', seed: r.seed >>> 0, m: r.minutes, s: snow, p: r.profile, dr: r.drain, nc: r.noonCloud, pl: planOn ? 1 : 0, ...n };
   const url = baseUrl === null ? null : challengeUrl(baseUrl, challenge);
   const text =
     challenge.k === 'd'
       ? dailyShareText({
           dailyNumber: dailyNumber(challenge.d),
-          minutes: result.minutes,
-          tryNumber: result.mode === 'daily' ? tryNumber : null,
-          hourGlyphs: result.hourGlyphs,
-          assisted: result.assisted,
+          minutes: r.minutes,
+          tryNumber: r.mode === 'daily' ? tryNumber : null,
+          hourGlyphs: r.hourGlyphs,
+          assisted: r.assisted,
+          forecasts,
+          par: extra.par ?? null,
           link: url,
         })
       : endlessShareText({
-          minutes: result.minutes,
-          hourGlyphs: result.hourGlyphs,
+          minutes: r.minutes,
+          hourGlyphs: r.hourGlyphs,
           snow,
-          phews: result.stats.phews,
-          assisted: result.assisted,
+          phews: r.stats.phews,
+          assisted: r.assisted,
+          forecasts,
+          name: extra.name ?? '',
           link: url,
         });
   return { text, url, challenge };
 }
+
 
 // ---------------------------------------------------------------------------------------------
 // Canonical share URL (V1_PLAN §11.4)

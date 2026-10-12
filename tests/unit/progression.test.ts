@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { HourGlyph, RunResult, RunStats } from '../../src/core/sim/events.ts';
-import type { SaveV1 } from '../../src/meta/saveTypes.ts';
+import type { HourGlyph, RunStats } from '../../src/core/sim/events.ts';
+import type { Save } from '../../src/meta/saveTypes.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { MISSIONS } from '../../src/meta/content.ts';
 import { addDays } from '../../src/meta/daily.ts';
@@ -8,6 +8,7 @@ import {
   activeMissionViews,
   applyRunResult,
   beginRun,
+  BEST_FROM_RUNS,
   buyCosmetic,
   dailyProgress,
   dailyStatus,
@@ -16,16 +17,26 @@ import {
   equipCosmetic,
   isDailyUnlocked,
   itemState,
+  MILESTONES,
+  nextGoal,
+  nextMilestone,
+  recentBest,
   resetProgress,
+  setDailyPar,
   shouldOfferRestoreSheet,
   shouldShowInstallSheet,
+  welcomeBackDue,
+  type ApplyRunOptions,
 } from '../../src/meta/progression.ts';
 import { dayStripLines } from '../../src/meta/share.ts';
+// V11-SHIM: CC-4/CC-7 — RunResultV11 and DayPlan become core's RunResult and DayPlan at integration.
+import type { DayPlan, RunResultV11 } from '../../src/meta/shims.ts';
 import { isInAppBrowser } from '../../src/platform/lifecycle.ts';
 
 const TODAY = '2026-10-11';
+type Stats = RunResultV11['stats'];
 
-function stats(over: Partial<RunStats> = {}): RunStats {
+function stats(over: Partial<Stats> = {}): Stats {
   return {
     flakes: 0,
     flakesMelted: 0,
@@ -44,19 +55,28 @@ function stats(over: Partial<RunStats> = {}): RunStats {
     nightsReached: 0,
     minutes: 0,
     litTotal: 0,
+    swings: 0,
+    swingChainBest: 0,
+    phewMinChill: 100,
     ...over,
-  };
+  } satisfies RunStats & Stats;
 }
 
-function run(minutes: number, over: Partial<RunStats> = {}, extra: Partial<RunResult> = {}): RunResult {
+/** Completed days are 6 cool and 6 warm hours (never "Ice Cold"); the last day ends in a melt. */
+function run(minutes: number, over: Partial<Stats> = {}, extra: Partial<RunResultV11> = {}): RunResultV11 {
   const day = Math.floor(minutes / 720) + 1;
   const glyphs: HourGlyph[][] = [];
-  for (let d = 1; d < day; d++) glyphs.push(Array<HourGlyph>(12).fill('cool'));
+  const plan: DayPlan[] = [];
+  for (let d = 1; d <= day; d++) plan.push({ biome: d % 2 ? 'meadow' : 'oldtown', forecast: 'clear' });
+  for (let d = 1; d < day; d++) glyphs.push([...Array<HourGlyph>(6).fill('cool'), ...Array<HourGlyph>(6).fill('warm')]);
   glyphs.push([...Array<HourGlyph>(Math.floor((minutes % 720) / 60)).fill('warm'), 'melt']);
   return {
     mode: 'endless',
     seed: 42,
     profile: 3,
+    drain: 55,
+    noonCloud: 0,
+    plan,
     minutes,
     day,
     clock: '',
@@ -69,60 +89,241 @@ function run(minutes: number, over: Partial<RunStats> = {}, extra: Partial<RunRe
   };
 }
 
+/**
+ * A save that already played today (no Morning Snow) with today's errand done, so a test sees
+ * only the rule it is about. `runs` past onboarding by default, so bests count.
+ */
+function quiet(runs = BEST_FROM_RUNS): Save {
+  const s = defaults(1);
+  s.stats.runs = runs;
+  s.lastPlay = TODAY;
+  s.unlocks.achievements = ['first-light'];
+  s.missions.errand = { date: TODAY, id: 'e-runs-5', progress: 5, done: true };
+  return s;
+}
+
+const opts = (o: Partial<ApplyRunOptions> = {}): ApplyRunOptions => ({ today: TODAY, ...o });
+
 /** Plays a run and immediately starts the next one (mission replacement). */
-function play(save: SaveV1, result: RunResult, dailyTry?: number | null): SaveV1 {
-  const after = applyRunResult(save, result, { today: TODAY, dailyTry }).save;
-  return beginRun(after).save;
+function play(save: Save, result: RunResultV11, o: Partial<ApplyRunOptions> = {}): Save {
+  return beginRun(applyRunResult(save, result, opts(o)).save).save;
+}
+
+/** A history of `n` endless runs of `m` minutes at the standard rung. */
+function history(n: number, m: number): Save['history'] {
+  return Array.from({ length: n }, () => ({ m, s: 0, r: 4, d: TODAY }));
 }
 
 describe('applyRunResult: stats, bests and wallet', () => {
-  it('pays run Snow plus mission rewards into the wallet', () => {
-    const s0 = defaults(1);
-    const { save, outcome } = applyRunResult(s0, run(200, { snow: 23, flakes: 12 }), { today: TODAY });
-    // reach-9am (10) + flakes-10 (10) complete.
+  it('pays run Snow, mission rewards and the day\'s first-run bonus into the wallet', () => {
+    const { save, outcome } = applyRunResult(defaults(1), run(200, { snow: 23, flakes: 12 }), opts());
+    // reach-9am (10) + flakes-10 (10) complete; Morning Snow +15.
     expect(outcome.runSnow).toBe(23);
     expect(outcome.missionSnow).toBe(20);
-    expect(outcome.snowEarned).toBe(43);
-    expect(outcome.walletBefore).toBe(0);
-    expect(outcome.walletAfter).toBe(43);
-    expect(save.stats.wallet).toBe(43);
-    expect(save.stats.lifetimeSnow).toBe(43);
+    expect(outcome.bonusSnow).toBe(15);
+    expect(outcome.snowEarned).toBe(58);
+    expect([outcome.walletBefore, outcome.walletAfter, save.stats.wallet, save.stats.lifetimeSnow]).toEqual([0, 58, 58, 58]);
     expect(save.stats.runs).toBe(1);
     expect(save.stats.flakes).toBe(12);
     expect(save.stats.bestSnowRun).toBe(23);
+    expect(outcome.toasts.map((t) => t.text)).toContain('Morning Snow +15');
   });
 
   it('never mutates its input', () => {
     const s0 = defaults(1);
     const before = JSON.stringify(s0);
-    applyRunResult(s0, run(900, { snow: 50, phews: 3 }), { today: TODAY });
+    applyRunResult(s0, run(900, { snow: 50, phews: 3 }), opts());
     expect(JSON.stringify(s0)).toBe(before);
   });
 
-  it('reports NEW BEST only when a previous best is beaten', () => {
+  it('counts bests from lifetime run 3 on and never calls the first one new', () => {
     let s = defaults(1);
-    const first = applyRunResult(s, run(300), { today: TODAY });
+    for (const m of [300, 900, 1500]) {
+      const r = applyRunResult(s, run(m), opts());
+      expect(r.outcome.newBest).toBe(false);
+      expect(r.save.stats.bestMinutes).toBe(0);
+      s = r.save;
+    }
+    const first = applyRunResult(s, run(300), opts());
     expect(first.outcome.newBest).toBe(false);
     s = first.save;
     expect(s.stats.bestMinutes).toBe(300);
-    expect(applyRunResult(s, run(250), { today: TODAY }).outcome.newBest).toBe(false);
-    const third = applyRunResult(s, run(301), { today: TODAY });
-    expect(third.outcome.newBest).toBe(true);
-    expect(third.outcome.prevBestMinutes).toBe(300);
-    expect(third.save.stats.bestMinutes).toBe(301);
+    expect(applyRunResult(s, run(250), opts()).outcome.newBest).toBe(false);
+    const better = applyRunResult(s, run(301), opts());
+    expect(better.outcome.newBest).toBe(true);
+    expect(better.outcome.prevBestMinutes).toBe(300);
+    expect(better.save.stats.bestMinutes).toBe(301);
+    // Challenge runs count too.
+    expect(applyRunResult(s, run(400, {}, { mode: 'challenge' }), opts()).save.stats.bestMinutes).toBe(400);
   });
 
   it('keeps daily scores out of the endless best', () => {
-    const s = applyRunResult(defaults(1), run(400, {}, { mode: 'daily', dailyDate: TODAY }), { today: TODAY }).save;
+    const s = applyRunResult(quiet(), run(400, {}, { mode: 'daily', dailyDate: TODAY }), opts()).save;
     expect(s.stats.bestMinutes).toBe(0);
-    expect(s.stats.runs).toBe(1);
+    expect(s.stats.runs).toBe(BEST_FROM_RUNS + 1);
   });
 
-  it('tracks reached night, days survived and max day', () => {
-    const s = applyRunResult(defaults(1), run(1240), { today: TODAY }).save;
+  it('tracks reached night, days survived, max day, play time and SWINGs', () => {
+    const s = applyRunResult(defaults(1), run(1240, { swings: 4 }), opts({ playSeconds: 61.5 })).save;
     expect(s.stats.reachedNight).toBe(true);
     expect(s.stats.daysSurvived).toBe(1);
     expect(s.stats.maxDay).toBe(2);
+    expect(s.stats.playSeconds).toBe(61.5);
+    expect(s.stats.swings).toBe(4);
+  });
+
+  it('marks the forecasts whose noon a run survived', () => {
+    const plan: DayPlan[] = [
+      { biome: 'oldtown', forecast: 'breezy' },
+      { biome: 'meadow', forecast: 'clear' },
+      { biome: 'oldtown', forecast: 'heat' },
+    ];
+    // Day 3 noon is 1440 + 390 = 1830: Breezy (Day 1) counts, Heat (Day 3) not yet.
+    const s = applyRunResult(quiet(), run(1829, {}, { plan }), opts()).save;
+    expect(s.stats.forecastNoons).toBe(0b0000010);
+    expect(applyRunResult(s, run(1830, {}, { plan }), opts()).save.stats.forecastNoons).toBe(0b0001010);
+  });
+});
+
+describe('comfort, history and pace', () => {
+  it('logs finished endless runs with the rung played, capped at 30', () => {
+    let s = quiet();
+    s.history = history(30, 100);
+    s = applyRunResult(s, run(500, { snow: 7 }), opts({ rung: 2 })).save;
+    expect(s.history).toHaveLength(30);
+    expect(s.history.at(-1)).toEqual({ m: 500, s: 7, r: 2, d: TODAY });
+    // Without a rung the run was standard; Daily and challenge runs are never logged.
+    expect(applyRunResult(s, run(10), opts()).save.history.at(-1)?.r).toBe(4);
+    expect(applyRunResult(s, run(10, {}, { mode: 'daily', dailyDate: TODAY }), opts()).save.history).toEqual(s.history);
+    expect(applyRunResult(s, run(10, {}, { mode: 'challenge' }), opts()).save.history).toEqual(s.history);
+  });
+
+  it('moves the comfort rung through comfortAfterRun after endless runs only', () => {
+    const at = (rung: number, minutes: number, mode: 'endless' | 'daily' = 'endless'): number => {
+      const s = quiet();
+      s.stats.comfort = rung;
+      return applyRunResult(s, run(minutes, {}, { mode, dailyDate: mode === 'daily' ? TODAY : undefined }), opts({ rung })).outcome.comfortAfter;
+    };
+    // From the tutorial: Day 3 → standard, the first night → 2, else 1.
+    expect([at(0, 100), at(0, 720), at(0, 1440)]).toEqual([1, 2, 4]);
+    // From rung ≥ 1: up past 12:30 PM, down before 10:00 AM, never below 1 or above 4.
+    expect([at(2, 390), at(2, 389), at(2, 239), at(1, 10), at(4, 400), at(3, 1440)]).toEqual([3, 2, 1, 1, 4, 4]);
+    expect(at(2, 1440, 'daily')).toBe(2);
+    // Adaptive comfort switched off: the rung stays.
+    const off = quiet();
+    off.stats.comfort = 2;
+    off.settings.comfort = false;
+    expect(applyRunResult(off, run(900), opts({ rung: 4 })).save.stats.comfort).toBe(2);
+  });
+
+  it('says how a run compares with the recent ones', () => {
+    const pace = (prev: number[], m: number): string | null => {
+      const s = quiet();
+      s.history = prev.map((x) => ({ m: x, s: 0, r: 4, d: TODAY }));
+      return applyRunResult(s, run(m), opts()).outcome.pace;
+    };
+    expect(pace([100, 200, 300], 900)).toBeNull();
+    expect(pace([100, 200, 300, 400], 900)).toBe('Your best in 5 runs!');
+    expect(pace([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100], 1200)).toBe('Your best in 10 runs!');
+    expect(pace([100, 200, 300, 400, 500, 600, 700, 800, 900], 650)).toBe('Better than 6 of your last 10 runs');
+    expect(pace([100, 200, 300, 400, 500, 600, 700, 800, 900], 450)).toBe('Below your usual (2:20 PM)');
+    expect(pace([1000, 1100, 1200, 1300, 1400], 1000)).toBe('Below your usual (Day 2 · 2:00 PM)');
+    expect(pace([100, 200, 300, 400, 500, 600, 700, 800, 900], 500)).toBeNull();
+    // Tutorial runs are left out of the window.
+    const s = quiet();
+    s.history = [{ m: 5000, s: 0, r: 0, d: TODAY }, ...history(4, 100)];
+    expect(applyRunResult(s, run(200), opts()).outcome.pace).toBe('Your best in 5 runs!');
+    expect(applyRunResult(s, run(200, {}, { mode: 'challenge' }), opts()).outcome.pace).toBeNull();
+  });
+
+  it('reads the recent best from the last 10 runs, tutorial runs ignored', () => {
+    const s = quiet();
+    s.stats.bestMinutes = 2000;
+    s.history = history(2, 300);
+    expect(recentBest(s)).toBe(2000);
+    s.history = [{ m: 900, s: 0, r: 0, d: TODAY }, ...history(2, 300)];
+    expect(recentBest(s)).toBe(300);
+    s.history = [{ m: 1500, s: 0, r: 4, d: TODAY }, ...history(10, 300)];
+    expect(recentBest(s)).toBe(300);
+    s.history.push({ m: 640, s: 0, r: 1, d: TODAY });
+    expect(recentBest(s)).toBe(640);
+    expect(applyRunResult(s, run(10), opts()).outcome.recentBestBefore).toBe(640);
+  });
+
+  it('points at the next milestone above the recent best', () => {
+    const s = quiet();
+    expect(MILESTONES).toEqual([180, 390, 720, 1110, 1440, 1830, 2880, 4320, 6480]);
+    for (const [best, next] of [[0, 180], [180, 390], [389, 390], [1500, 1830], [6479, 6480], [6480, null]] as const) {
+      s.history = history(3, best);
+      expect(nextMilestone(s), String(best)).toBe(next);
+    }
+  });
+
+  it('picks the next goal: a nearly done mission, a fresh Daily, then the next milestone', () => {
+    const s = quiet();
+    s.history = history(3, 400);
+    s.missions.active = [
+      { id: 'flakes-10', progress: 5, done: false, stale: 0 },
+      { id: 'two-phews', progress: 0, done: false, stale: 0 },
+      { id: 'reach-day-2', progress: 0, done: false, stale: 0 },
+    ];
+    s.daily[TODAY] = { tries: 1, bestMinutes: 10, bestSnow: 0, glyphs: '' };
+    expect(nextGoal(s, TODAY)).toEqual({ text: 'Next: reach Day 2', minutes: 720 });
+    s.missions.active[0] = { id: 'flakes-10', progress: 6, done: false, stale: 0 };
+    s.missions.active[2] = { id: 'reach-day-2', progress: 500, done: false, stale: 0 };
+    expect(nextGoal(s, TODAY)).toEqual({ text: 'So close: Reach Day 2 (Day 1 · 2:20 PM)', minutes: 720 });
+    s.missions.active[2] = { id: 'reach-day-2', progress: 0, done: false, stale: 0 };
+    expect(nextGoal(s, TODAY)).toEqual({ text: 'So close: Collect 10 flakes in one run (6/10)', minutes: null });
+    s.missions.active[0] = { id: 'flakes-10', progress: 10, done: true, stale: 0 };
+    expect(nextGoal(s, addDays(TODAY, 1))).toEqual({ text: 'Daily #285 is fresh', minutes: null });
+    // Not before lifetime run 3.
+    s.stats.runs = 2;
+    s.daily = {};
+    expect(nextGoal(s, TODAY)).toBeNull();
+  });
+});
+
+describe('bonuses: Morning Snow, Welcome back, Sunny Week', () => {
+  it('pays Morning Snow once per date', () => {
+    const s = defaults(1);
+    const a = applyRunResult(s, run(10), opts());
+    const b = applyRunResult(a.save, run(10), opts());
+    expect([a.outcome.bonusSnow, b.outcome.bonusSnow]).toEqual([15, 0]);
+    expect(applyRunResult(b.save, run(10), opts({ today: addDays(TODAY, 1) })).outcome.bonusSnow).toBe(15);
+    expect(b.save.lastPlay).toBe(TODAY);
+  });
+
+  it('doubles run Snow after 3 days away, the extra capped at +100', () => {
+    const s = quiet();
+    s.lastPlay = addDays(TODAY, -3);
+    expect(welcomeBackDue(s, TODAY)).toBe(true);
+    expect(welcomeBackDue(s, addDays(TODAY, -1))).toBe(false);
+    const small = applyRunResult(s, run(10, { snow: 40 }), opts()).outcome;
+    expect([small.runSnow, small.bonusSnow]).toEqual([80, 15]);
+    expect(small.toasts.map((t) => t.text).slice(0, 2)).toEqual(['Welcome back ×2', 'Morning Snow +15']);
+    const big = applyRunResult(s, run(10, { snow: 250 }), opts()).outcome;
+    expect(big.runSnow).toBe(350);
+    expect(big.snowEarned).toBe(365);
+    s.lastPlay = addDays(TODAY, -2);
+    expect(applyRunResult(s, run(10, { snow: 40 }), opts()).outcome.runSnow).toBe(40);
+    expect(welcomeBackDue(defaults(1), TODAY)).toBe(false);
+  });
+
+  it('pays the Sunny Week thresholds once and counts sunny weeks', () => {
+    // 2026-10-12 is a Monday.
+    let s = quiet();
+    const chips: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const r = applyRunResult(s, run(10), opts({ today: addDays('2026-10-12', i) }));
+      chips.push(...r.outcome.toasts.map((t) => t.text).filter((t) => t.startsWith('Sunny Week')));
+      s = r.save;
+    }
+    expect(chips).toEqual(['Sunny Week: 3 days +30', 'Sunny Week: 5 days +50', 'Sunny Week: 7 days +80']);
+    expect(s.week.days).toBe(127);
+    expect(s.stats.sunnyWeeks).toBe(0);
+    s = applyRunResult(s, run(10), opts({ today: '2026-10-19' })).save;
+    expect(s.stats.sunnyWeeks).toBe(1);
+    expect(s.week).toEqual({ start: '2026-10-19', days: 1, paid: 0, best: [1, 0, 0, 0, 0, 0, 0] });
   });
 });
 
@@ -133,20 +334,20 @@ describe('debug runs (sim-altering URL params)', () => {
     const o = debugRunOutcome(save, run(720 * 6 + 360, { snow: 40, phews: 30, cloudRideBest: 12 }));
     expect(JSON.stringify(save)).toBe(before);
     expect(o.newBest).toBe(false);
-    expect([o.snowEarned, o.missionSnow, o.walletBefore, o.walletAfter]).toEqual([0, 0, save.stats.wallet, save.stats.wallet]);
+    expect([o.snowEarned, o.missionSnow, o.bonusSnow, o.walletBefore, o.walletAfter]).toEqual([0, 0, 0, save.stats.wallet, save.stats.wallet]);
     expect(o.runSnow).toBe(40);
     expect([o.achievementsUnlocked, o.cosmeticsUnlocked, o.toasts, o.missionsCompleted]).toEqual([[], [], [], []]);
     expect(o.missions).toEqual(activeMissionViews(save));
-    expect(o.dailyUnlocked).toBe(false);
+    expect([o.dailyUnlocked, o.pace, o.errand, o.comfortAfter]).toEqual([false, null, null, save.stats.comfort]);
   });
 });
 
 describe('missions', () => {
   it('tracks best single-run progress without completing early', () => {
-    let s = applyRunResult(defaults(1), run(60, { flakes: 4 }), { today: TODAY }).save;
-    s = applyRunResult(s, run(30, { flakes: 7 }), { today: TODAY }).save;
+    let s = applyRunResult(defaults(1), run(60, { flakes: 4 }), opts()).save;
+    s = applyRunResult(s, run(30, { flakes: 7 }), opts()).save;
     const flakes = s.missions.active.find((m) => m.id === 'flakes-10');
-    expect(flakes).toEqual({ id: 'flakes-10', progress: 7, done: false });
+    expect(flakes).toEqual({ id: 'flakes-10', progress: 7, done: false, stale: 0 });
     expect(activeMissionViews(s)[1]?.progressText).toBe('7/10');
     expect(activeMissionViews(s)[0]?.progressText).toBe('7:00 AM');
   });
@@ -161,7 +362,7 @@ describe('missions', () => {
   });
 
   it('stamps completions and replaces them only at the next run start', () => {
-    const { save, outcome } = applyRunResult(defaults(1), run(400, { maxMult: 3 }), { today: TODAY });
+    const { save, outcome } = applyRunResult(defaults(1), run(400, { maxMult: 3 }), opts());
     expect(outcome.missionsCompleted.map((m) => m.id)).toEqual(['reach-9am', 'survive-noon']);
     expect(outcome.missions.map((m) => [m.id, m.done, m.justCompleted])).toEqual([
       ['reach-9am', true, true],
@@ -172,10 +373,7 @@ describe('missions', () => {
     expect(save.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'survive-noon']);
     const started = beginRun(save);
     expect(started.save.missions.active.map((m) => m.id)).toEqual(['mult-3', 'flakes-10', 'cloud-ride']);
-    expect(started.dealt.map((m) => m.label)).toEqual([
-      'Reach a ×3 multiplier',
-      "Ride a cloud's shadow for 3\u00A0s straight",
-    ]);
+    expect(started.dealt.map((m) => m.label)).toEqual(['Reach a ×3 multiplier', "Ride a cloud's shadow for 3 s straight"]);
     expect(started.save.missions.cursor).toBe(5);
     // Nothing to replace: the same object comes back.
     expect(beginRun(started.save).save).toBe(started.save);
@@ -183,87 +381,60 @@ describe('missions', () => {
 
   it('pays each mission once', () => {
     let s = defaults(1);
-    const a = applyRunResult(s, run(200), { today: TODAY });
+    const a = applyRunResult(s, run(200), opts());
     s = a.save;
-    const b = applyRunResult(s, run(200), { today: TODAY });
+    const b = applyRunResult(s, run(200), opts());
     expect(a.outcome.missionSnow).toBe(10);
     expect(b.outcome.missionSnow).toBe(0);
   });
 
   it('voids the gazing-ball mission on any glare contact', () => {
     let s = defaults(1);
-    s.missions.active[0] = { id: 'clean-balls', progress: 0, done: false };
-    s = applyRunResult(s, run(10, { ballsPassedClean: 6, ballGlared: true }), { today: TODAY }).save;
-    expect(s.missions.active[0]).toEqual({ id: 'clean-balls', progress: 0, done: false });
-    s = applyRunResult(s, run(10, { ballsPassedClean: 4 }), { today: TODAY }).save;
+    s.missions.active[0] = { id: 'clean-balls', progress: 0, done: false, stale: 0 };
+    s = applyRunResult(s, run(10, { ballsPassedClean: 6, ballGlared: true }), opts()).save;
+    expect(s.missions.active[0]).toEqual({ id: 'clean-balls', progress: 0, done: false, stale: 1 });
+    s = applyRunResult(s, run(10, { ballsPassedClean: 4 }), opts()).save;
     expect(s.missions.active[0]?.done).toBe(true);
   });
 
-  it("completes \"Play today's Daily\" with a counted try, not with practice", () => {
+  it('counts SWINGs for "Land 3 SWINGs in one run"', () => {
     const s = defaults(1);
-    s.missions.active[0] = { id: 'play-daily', progress: 0, done: false };
-    const daily = run(400, {}, { mode: 'daily', dailyDate: TODAY });
-    // Practice (all tries used, a past date) and runs that melted before 6:30 AM aren't counted.
-    expect(applyRunResult(s, daily, { today: TODAY, dailyTry: null }).save.missions.active[0]?.done).toBe(false);
-    expect(applyRunResult(s, daily, { today: TODAY }).save.missions.active[0]?.done).toBe(false);
-    expect(applyRunResult(s, run(400), { today: TODAY, dailyTry: 1 }).save.missions.active[0]?.done).toBe(false);
-    expect(applyRunResult(s, daily, { today: TODAY, dailyTry: 2 }).save.missions.active[0]?.done).toBe(true);
-  });
-
-  it("credits a Daily try that starts at 23:59 and ends at 00:02", () => {
-    const s = defaults(1);
-    s.missions.active[2] = { id: 'play-daily', progress: 0, done: false };
-    // The try was counted for the 10th; the run ends (and is applied) on the 11th.
-    const counted = dailyTryStarted(s, '2026-10-10');
-    expect(counted.tryNumber).toBe(1);
-    const late = run(500, {}, { mode: 'daily', dailyDate: '2026-10-10' });
-    const r = applyRunResult(counted.save, late, { today: '2026-10-11', dailyTry: counted.tryNumber });
-    expect(r.save.missions.active[2]).toEqual({ id: 'play-daily', progress: 1, done: true });
-    expect(r.outcome.missionsCompleted.map((m) => m.id)).toContain('play-daily');
-    expect(r.save.daily['2026-10-10']?.bestMinutes).toBe(500);
+    s.missions.active[0] = { id: 'swings-3', progress: 0, done: false, stale: 0 };
+    expect(applyRunResult(s, run(10, { swings: 2 }), opts()).save.missions.active[0]).toMatchObject({ progress: 2, done: false });
+    expect(applyRunResult(s, run(10, { swings: 3 }), opts()).save.missions.active[0]?.done).toBe(true);
   });
 
   it("measures 'Reach a ×4 multiplier' (hold-x5) by the best multiplier", () => {
     const s = defaults(1);
-    s.missions.active[0] = { id: 'hold-x5', progress: 0, done: false };
-    s.missions.active[1] = { id: 'hold-x5@2', progress: 0, done: false };
-    const three = applyRunResult(s, run(10, { maxMult: 3, x5HoldBest: 0 }), { today: TODAY }).save;
+    s.missions.active[0] = { id: 'hold-x5', progress: 0, done: false, stale: 0 };
+    s.missions.active[1] = { id: 'hold-x5@2', progress: 0, done: false, stale: 0 };
+    const three = applyRunResult(s, run(10, { maxMult: 3, x5HoldBest: 0 }), opts()).save;
     expect(three.missions.active.slice(0, 2)).toEqual([
-      { id: 'hold-x5', progress: 3, done: false },
-      { id: 'hold-x5@2', progress: 3, done: false },
+      { id: 'hold-x5', progress: 3, done: false, stale: 0 },
+      { id: 'hold-x5@2', progress: 3, done: false, stale: 0 },
     ]);
     expect(activeMissionViews(three).slice(0, 2).map((v) => [v.label, v.progressText])).toEqual([
       ['Reach a ×4 multiplier', '×3/×4'],
       ['Reach a ×5 multiplier', '×3/×5'],
     ]);
-    const four = applyRunResult(three, run(10, { maxMult: 4 }), { today: TODAY }).save;
+    const four = applyRunResult(three, run(10, { maxMult: 4 }), opts()).save;
     expect(four.missions.active.slice(0, 2).map((m) => m.done)).toEqual([true, false]);
   });
 
   it('repeats the pool as tier II with scaled goals and rewards', () => {
-    // A run that completes every tier-I mission at once.
-    const all = run(1500, {
-      flakes: 40,
-      maxMult: 5,
-      cloudRideBest: 30,
-      phews: 4,
-      crystals: 2,
-      x5HoldBest: 20,
-      gateNoon: true,
-      ballsPassedClean: 9,
-    });
-    const daily = { ...all, mode: 'daily' as const, dailyDate: TODAY };
+    // A strong player (recent best Day 3) completing every tier-I mission at once.
+    const all = run(1500, { flakes: 40, maxMult: 5, cloudRideBest: 30, phews: 4, crystals: 2, x5HoldBest: 20, gateNoon: true, ballsPassedClean: 9, swings: 6 });
     let s = defaults(1);
-    for (let i = 0; i < 5; i++) s = i === 4 ? play(s, daily, 1) : play(s, all);
+    s.history = history(3, 1500);
+    for (let i = 0; i < 5; i++) s = play(s, all);
     // 13 missions in the pool, 3 per lap: the cursor has wrapped once.
     expect(s.missions.tier).toBe(2);
-    const ids = s.missions.active.map((m) => m.id);
-    expect(ids).toEqual(['survive-noon@2', 'mult-3@2', 'cloud-ride@2']);
+    expect(s.missions.active.map((m) => m.id)).toEqual(['survive-noon@2', 'mult-3@2', 'cloud-ride@2']);
     const views = activeMissionViews(s);
     expect(views.map((v) => v.label)).toEqual([
       "Survive Day 2's noon (reach 12:30 PM)",
       'Reach a ×5 multiplier',
-      "Ride a cloud's shadow for 6\u00A0s straight",
+      "Ride a cloud's shadow for 6 s straight",
     ]);
     expect(views.map((v) => v.reward)).toEqual([40, 30, 40]);
     expect(views.map((v) => v.tierLabel)).toEqual(['II', 'II', 'II']);
@@ -272,22 +443,19 @@ describe('missions', () => {
   it('labels tier II day goals one day later', () => {
     const s = defaults(1);
     s.missions.active = [
-      { id: 'reach-9am@2', progress: 0, done: false },
-      { id: 'reach-day-3@2', progress: 0, done: false },
-      { id: 'mult-3@3', progress: 0, done: false },
+      { id: 'reach-9am@2', progress: 0, done: false, stale: 0 },
+      { id: 'reach-day-3@2', progress: 0, done: false, stale: 0 },
+      { id: 'mult-3@3', progress: 0, done: false, stale: 0 },
     ];
-    expect(activeMissionViews(s).map((v) => v.label)).toEqual([
-      'Reach Day 2 · 9:00 AM',
-      'Reach Day 4',
-      'Reach a ×5 multiplier',
-    ]);
-    const after = applyRunResult(s, run(900), { today: TODAY }).save;
+    expect(activeMissionViews(s).map((v) => v.label)).toEqual(['Reach Day 2 · 9:00 AM', 'Reach Day 4', 'Reach a ×5 multiplier']);
+    const after = applyRunResult(s, run(900), opts()).save;
     expect(after.missions.active[0]?.done).toBe(true);
     expect(after.missions.active[1]?.done).toBe(false);
   });
 
-  it('cycles through every pool entry exactly once per tier', () => {
+  it('cycles through every pool entry exactly once per tier past the skill gates', () => {
     const s = defaults(1);
+    s.history = history(3, 1440);
     const seen: string[] = s.missions.active.map((m) => m.id);
     const state = structuredClone(s);
     for (let i = 0; i < MISSIONS.length - 3; i++) {
@@ -298,19 +466,20 @@ describe('missions', () => {
     }
     expect(new Set(seen).size).toBe(MISSIONS.length);
     expect(state.missions.tier).toBe(2);
+    expect(state.missions.deferred).toEqual([]);
   });
 });
 
 describe('achievements and cosmetic unlocks', () => {
   it('unlocks First Light on the first run', () => {
-    const { save, outcome } = applyRunResult(defaults(1), run(5), { today: TODAY });
+    const { save, outcome } = applyRunResult(defaults(1), run(5), opts());
     expect(outcome.achievementsUnlocked).toEqual(['first-light']);
     expect(save.unlocks.achievements).toEqual(['first-light']);
     expect(outcome.toasts[0]).toEqual({ text: 'Achievement: First Light', icon: 'trophy', tone: 'gold' });
   });
 
   it('grants the Sun Visor, Crown and Gold scarf with their achievements', () => {
-    const { save, outcome } = applyRunResult(defaults(1), run(6 * 720 + 10), { today: TODAY });
+    const { save, outcome } = applyRunResult(defaults(1), run(6 * 720 + 10), opts());
     expect(outcome.achievementsUnlocked).toEqual(['first-light', 'night-owl', 'high-noon', 'solstice', 'seventh-sun']);
     expect(outcome.cosmeticsUnlocked).toEqual(['hat-visor', 'hat-crown', 'scarf-gold']);
     expect(save.unlocks.cosmetics).toContain('scarf-gold');
@@ -320,16 +489,16 @@ describe('achievements and cosmetic unlocks', () => {
 
   it('High Noon needs 12:30 PM on Day 3', () => {
     const s = defaults(1);
-    expect(applyRunResult(s, run(1829), { today: TODAY }).outcome.achievementsUnlocked).not.toContain('high-noon');
-    expect(applyRunResult(s, run(1830), { today: TODAY }).outcome.achievementsUnlocked).toContain('high-noon');
+    expect(applyRunResult(s, run(1829), opts()).outcome.achievementsUnlocked).not.toContain('high-noon');
+    expect(applyRunResult(s, run(1830), opts()).outcome.achievementsUnlocked).toContain('high-noon');
   });
 
   it('counts lifetime PHEWs and long cloud rides', () => {
-    let s = applyRunResult(defaults(1), run(5, { phews: 20 }), { today: TODAY }).save;
-    const r = applyRunResult(s, run(5, { phews: 5, cloudRideBest: 10.2 }), { today: TODAY });
+    let s = applyRunResult(defaults(1), run(5, { phews: 20 }), opts()).save;
+    const r = applyRunResult(s, run(5, { phews: 5, cloudRideBest: 10.2 }), opts());
     expect(r.outcome.achievementsUnlocked).toEqual(['phew-nomenal', 'cloud-rider']);
     s = r.save;
-    expect(applyRunResult(s, run(5, { phews: 5 }), { today: TODAY }).outcome.achievementsUnlocked).toEqual([]);
+    expect(applyRunResult(s, run(5, { phews: 5 }), opts()).outcome.achievementsUnlocked).toEqual([]);
   });
 
   it('Daily Habit needs 7 different dailies', () => {
@@ -340,22 +509,54 @@ describe('achievements and cosmetic unlocks', () => {
       s = dailyTryStarted(s, date).save; // a second try on the same date doesn't count twice
     }
     expect(s.stats.dailyDaysPlayed).toBe(7);
-    const r = applyRunResult(s, run(10, {}, { mode: 'daily', dailyDate: TODAY }), { today: TODAY, dailyTry: 2 });
+    const r = applyRunResult(s, run(10, {}, { mode: 'daily', dailyDate: TODAY }), opts({ dailyTry: 2 }));
     expect(r.outcome.achievementsUnlocked).toContain('daily-habit');
   });
 
+  it('checks the eight v1.1 feats and grants their items', () => {
+    const got = (r: RunResultV11, o: Partial<ApplyRunOptions> = {}, s: Save = quiet()): string[] => {
+      s.unlocks.achievements = ['first-light'];
+      return applyRunResult(s, r, opts(o)).outcome.achievementsUnlocked;
+    };
+    expect(got(run(10, { swingChainBest: 2 }))).toEqual([]);
+    expect(got(run(10, { swingChainBest: 3 }))).toEqual(['sundancer']);
+    expect(got(run(1240, {}, { mode: 'challenge' }), { challengeTarget: 1240 })).toContain('rematch');
+    expect(got(run(1239, {}, { mode: 'challenge' }), { challengeTarget: 1240 })).not.toContain('rematch');
+    expect(got(run(1300), { challengeTarget: 1240 })).not.toContain('rematch');
+    expect(got(run(10, { phews: 1, phewMinChill: 4.9 }))).toEqual(['close-shave']);
+    expect(got(run(10, { phews: 1, phewMinChill: 5 }))).toEqual([]);
+    expect(got(run(10, { ballsPassedClean: 10 }))).toEqual(['glare-proof']);
+    expect(got(run(10, { ballsPassedClean: 12, ballGlared: true }))).toEqual([]);
+    expect(got(run(10, { flowers: 30 }))).toEqual(['night-gardener']);
+    const cold = run(800);
+    cold.hourGlyphs[0] = [...Array<HourGlyph>(9).fill('cool'), 'warm', 'hot', 'warm'];
+    const r = applyRunResult(quiet(), cold, opts());
+    expect(r.outcome.achievementsUnlocked).toContain('ice-cold');
+    expect(r.outcome.cosmeticsUnlocked).toEqual(['nose-icicle']);
+    const forecaster = quiet();
+    forecaster.stats.forecastNoons = 0b0001110;
+    const plan: DayPlan[] = [{ biome: 'meadow', forecast: 'long' }];
+    expect(got(run(400, {}, { plan }), {}, forecaster)).toContain('forecaster');
+    // Sunny Week: a finished run on every day of one week.
+    const week = quiet();
+    week.week = { start: '2026-10-12', days: 0b0111111, paid: 0b011, best: [1, 1, 1, 1, 1, 1, 0] };
+    const sunny = applyRunResult(week, run(10), opts({ today: '2026-10-18' }));
+    expect(sunny.outcome.achievementsUnlocked).toContain('sunny-week');
+    expect(sunny.outcome.cosmeticsUnlocked).toContain('scarf-aurora');
+  });
+
   it('announces the Daily unlock on run 3 and nudges when an item becomes affordable', () => {
-    let s = defaults(1);
-    s = applyRunResult(s, run(5, { snow: 20 }), { today: TODAY }).save;
-    s = applyRunResult(s, run(5, { snow: 20 }), { today: TODAY }).save;
+    let s = quiet(0);
+    s = applyRunResult(s, run(5, { snow: 20 }), opts()).save;
+    s = applyRunResult(s, run(5, { snow: 20 }), opts()).save;
     expect(isDailyUnlocked(s)).toBe(false);
-    const r = applyRunResult(s, run(5, { snow: 30 }), { today: TODAY });
+    const r = applyRunResult(s, run(5, { snow: 30 }), opts());
     expect(r.outcome.dailyUnlocked).toBe(true);
     expect(r.outcome.toasts.map((t) => t.text)).toEqual(['Daily Solstice unlocked!', 'You can afford the Mint Scarf!']);
   });
 
   it('no longer unlocks the Daily early after the first night', () => {
-    const r = applyRunResult(defaults(1), run(800), { today: TODAY });
+    const r = applyRunResult(defaults(1), run(800), opts());
     expect(r.save.stats.reachedNight).toBe(true);
     expect(r.save.stats.runs).toBe(1);
     expect(r.outcome.dailyUnlocked).toBe(false);
@@ -365,17 +566,17 @@ describe('achievements and cosmetic unlocks', () => {
 
   it('unlocks the Daily on the 3rd completed run, whatever the runs reached', () => {
     let s = defaults(1);
-    s = applyRunResult(s, run(900), { today: TODAY }).save;
-    s = applyRunResult(s, run(1500), { today: TODAY }).save;
+    s = applyRunResult(s, run(900), opts()).save;
+    s = applyRunResult(s, run(1500), opts()).save;
     expect(s.stats.runs).toBe(2);
     expect(isDailyUnlocked(s)).toBe(false);
-    const third = applyRunResult(s, run(5), { today: TODAY });
+    const third = applyRunResult(s, run(5), opts());
     expect(third.save.stats.runs).toBe(3);
     expect(isDailyUnlocked(third.save)).toBe(true);
     expect(third.outcome.dailyUnlocked).toBe(true);
     expect(third.outcome.toasts.map((t) => t.text)).toContain('Daily Solstice unlocked!');
     // Never announced twice.
-    expect(applyRunResult(third.save, run(5), { today: TODAY }).outcome.dailyUnlocked).toBe(false);
+    expect(applyRunResult(third.save, run(5), opts()).outcome.dailyUnlocked).toBe(false);
   });
 
   it('keeps the Daily unlocked for saves that already played one', () => {
@@ -401,7 +602,16 @@ describe('daily tries', () => {
     expect(s.daily[TODAY]?.tries).toBe(3);
     expect(s.stats.dailyDaysPlayed).toBe(1);
     const status = dailyStatus(s, TODAY);
-    expect(status).toMatchObject({ number: 284, tries: 3, scored: false, played: true });
+    expect(status).toMatchObject({ number: 284, tries: 3, scored: false, played: true, par: null });
+  });
+
+  it('stores Snowbot\'s par for the latest 14 dates', () => {
+    let s = defaults(1);
+    for (let i = 0; i < 16; i++) s = setDailyPar(s, addDays(TODAY, i - 15), 300 + i);
+    expect(Object.keys(s.pars)).toHaveLength(14);
+    expect(dailyStatus(s, TODAY).par).toBe(315);
+    expect(dailyStatus(s, addDays(TODAY, -15)).par).toBeNull();
+    expect(setDailyPar(s, TODAY, 315)).toBe(s);
   });
 
   it('stores the checkpoint strip with a new best, in applyRunResult\'s format', () => {
@@ -436,7 +646,7 @@ describe('daily tries', () => {
   it('records the best try with its glyph strip at run end', () => {
     let s = dailyTryStarted(defaults(1), TODAY).save;
     const daily = run(1240, { snow: 40 }, { mode: 'daily', dailyDate: TODAY });
-    s = applyRunResult(s, daily, { today: TODAY, dailyTry: 1 }).save;
+    s = applyRunResult(s, daily, opts({ dailyTry: 1 })).save;
     const e = s.daily[TODAY]!;
     expect(e.bestMinutes).toBe(1240);
     expect(e.bestSnow).toBe(40);
@@ -444,21 +654,18 @@ describe('daily tries', () => {
     expect(e.glyphs.endsWith('\u{1F4A7}')).toBe(true);
     // A worse later try keeps the best.
     s = dailyTryStarted(s, TODAY).save;
-    s = applyRunResult(s, run(100, {}, { mode: 'daily', dailyDate: TODAY }), { today: TODAY, dailyTry: 2 }).save;
+    s = applyRunResult(s, run(100, {}, { mode: 'daily', dailyDate: TODAY }), opts({ dailyTry: 2 })).save;
     expect(s.daily[TODAY]?.bestMinutes).toBe(1240);
   });
 
   it('ignores practice runs for the daily best', () => {
-    const s = applyRunResult(defaults(1), run(900, {}, { mode: 'daily', dailyDate: TODAY }), {
-      today: TODAY,
-      dailyTry: null,
-    }).save;
+    const s = applyRunResult(defaults(1), run(900, {}, { mode: 'daily', dailyDate: TODAY }), opts({ dailyTry: null })).save;
     expect(s.daily[TODAY]).toBeUndefined();
   });
 });
 
 describe('wardrobe', () => {
-  function rich(wallet: number): SaveV1 {
+  function rich(wallet: number): Save {
     const s = defaults(1);
     s.stats.wallet = wallet;
     return s;
@@ -472,6 +679,18 @@ describe('wardrobe', () => {
     expect(r.save.equipped.scarf).toBe('scarf-mint');
     expect(itemState(r.save, 'scarf-mint')).toBe('equipped');
     expect(itemState(r.save, 'scarf-red')).toBe('owned');
+  });
+
+  it('buys and equips Sun Shades in their own slot', () => {
+    expect(itemState(rich(0), 'shades-classic')).toBe('equipped');
+    expect(itemState(rich(119), 'shades-round')).toBe('expensive');
+    expect(itemState(rich(0), 'shades-star')).toBe('locked');
+    const r = buyCosmetic(rich(300), 'shades-aviator');
+    if (!r.ok) throw new Error('expected purchase');
+    expect(r.save.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-aviator' });
+    expect(itemState(r.save, 'shades-classic')).toBe('owned');
+    const back = equipCosmetic(r.save, 'shades-classic');
+    expect(back.ok && back.save.equipped.shades).toBe('shades-classic');
   });
 
   it('refuses unaffordable, owned and achievement items', () => {
@@ -494,13 +713,16 @@ describe('wardrobe', () => {
 
 describe('misc', () => {
   it('reset keeps settings and device flags', () => {
-    const s = applyRunResult(defaults(1), run(900, { snow: 99 }), { today: TODAY }).save;
+    const s = applyRunResult(defaults(1), run(900, { snow: 99 }), opts()).save;
     s.settings.music = 0.1;
+    s.settings.name = 'Sam';
     s.flags.installSheetShown = true;
     const r = resetProgress(s, 5);
     expect(r.stats.runs).toBe(0);
     expect(r.stats.wallet).toBe(0);
+    expect(r.history).toEqual([]);
     expect(r.settings.music).toBe(0.1);
+    expect(r.settings.name).toBe('Sam');
     expect(r.flags.installSheetShown).toBe(true);
     expect(r.createdAt).toBe(5);
   });
@@ -512,7 +734,7 @@ describe('misc', () => {
     expect([SAFARI, CRIOS, FBAN].map((ua) => isInAppBrowser(ua))).toEqual([false, false, true]);
     expect(isInAppBrowser('Mozilla/5.0 (Linux; Android 14) Instagram 300.0')).toBe(true);
     expect(isInAppBrowser('Mozilla/5.0 (iPhone) GSA/300.0.0 Mobile/15E148 Safari/604.1')).toBe(true);
-    const save = (runs: number): SaveV1 => {
+    const save = (runs: number): Save => {
       const s = defaults(1);
       s.stats.runs = runs;
       return s;

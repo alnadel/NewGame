@@ -14,12 +14,15 @@ import { missionLabel, missionProgressText, missionTarget, parseMissionId, missi
 const HEX = /^#[0-9A-F]{6}$/i;
 
 describe('cosmetics catalog', () => {
-  it('has the 15 GDD items in 3 slots', () => {
-    expect(COSMETICS).toHaveLength(15);
-    expect(cosmeticsForSlot('scarf').map((c) => c.name)).toEqual(['Red Scarf', 'Mint Scarf', 'Plaid Scarf', 'Rainbow Scarf', 'Gold Scarf']);
-    expect(cosmeticsForSlot('hat').map((c) => c.name)).toEqual(['No Hat', 'Beanie', 'Top Hat', 'Party Cone', 'Sun Visor', 'Crown']);
-    expect(cosmeticsForSlot('nose').map((c) => c.name)).toEqual(['Carrot', 'Parsnip', 'Candy Cane', 'Pinecone']);
-    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(15);
+  it('has the 24 items in 4 slots', () => {
+    expect(COSMETICS).toHaveLength(24);
+    expect(cosmeticsForSlot('scarf').map((c) => c.name)).toEqual([
+      'Red Scarf', 'Mint Scarf', 'Plaid Scarf', 'Rainbow Scarf', 'Midnight Scarf', 'Gold Scarf', 'Aurora Scarf',
+    ]);
+    expect(cosmeticsForSlot('hat').map((c) => c.name)).toEqual(['No Hat', 'Beanie', 'Top Hat', 'Party Cone', 'Gilded Top Hat', 'Sun Visor', 'Crown']);
+    expect(cosmeticsForSlot('nose').map((c) => c.name)).toEqual(['Carrot', 'Parsnip', 'Candy Cane', 'Pinecone', 'Icicle']);
+    expect(cosmeticsForSlot('shades').map((c) => c.name)).toEqual(['Classic Shades', 'Round Shades', 'Aviators', 'Star Shades', 'Heart Shades']);
+    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(24);
   });
 
   it('prices items per GDD §6', () => {
@@ -29,7 +32,10 @@ describe('cosmetics catalog', () => {
     };
     expect(['scarf-mint', 'scarf-plaid', 'scarf-rainbow', 'hat-beanie', 'hat-tophat', 'hat-cone', 'nose-parsnip', 'nose-cane', 'nose-pinecone'].map(cost))
       .toEqual([60, 150, 400, 80, 200, 300, 100, 250, 350]);
-    expect(['scarf-red', 'hat-none', 'nose-carrot'].map(cost)).toEqual(['default', 'default', 'default']);
+    expect(['shades-round', 'shades-aviator', 'scarf-midnight', 'hat-gilded'].map(cost)).toEqual([120, 250, 700, 1500]);
+    expect(['scarf-red', 'hat-none', 'nose-carrot', 'shades-classic'].map(cost)).toEqual(['default', 'default', 'default', 'default']);
+    // The Snow-priced catalog: 1,890 from v1.0 plus 2,570 new.
+    expect(COSMETICS.reduce((n, c) => n + (c.unlock.kind === 'snow' ? c.unlock.cost : 0), 0)).toBe(4460);
   });
 
   it('ties every achievement item to the achievement that grants it', () => {
@@ -40,6 +46,11 @@ describe('cosmetics catalog', () => {
     expect(getAchievement('seventh-sun')?.reward).toBe('scarf-gold');
     expect(getAchievement('high-noon')?.reward).toBe('hat-visor');
     expect(getAchievement('solstice')?.reward).toBe('hat-crown');
+    expect(['sundancer', 'rematch', 'sunny-week', 'ice-cold'].map((id) => getAchievement(id)?.reward)).toEqual([
+      'shades-star', 'shades-heart', 'scarf-aurora', 'nose-icicle',
+    ]);
+    // A15: glare-proof and the other new feats grant no item.
+    for (const id of ['close-shave', 'glare-proof', 'night-gardener', 'forecaster']) expect(getAchievement(id)?.reward, id).toBeUndefined();
   });
 
   it('gives the renderer a valid look for every item', () => {
@@ -52,18 +63,22 @@ describe('cosmetics catalog', () => {
     const looks = equippedLooks(DEFAULT_EQUIPPED);
     expect(looks.scarf.main).toBe('#E8475A');
     expect(looks.nose.main).toBe('#FF8A2B');
+    expect(looks.shades).toMatchObject({ slot: 'shades', shape: 'classic', frame: '#2B2140' });
+    expect(equippedLooks({ ...DEFAULT_EQUIPPED, shades: 'shades-aviator' }).shades.shape).toBe('aviator');
     // Unknown or wrong-slot ids fall back to the defaults.
-    expect(equippedLooks({ scarf: 'hat-crown', hat: 'nope', nose: 'nose-cane' }).scarf.main).toBe('#E8475A');
+    expect(equippedLooks({ scarf: 'hat-crown', hat: 'nope', nose: 'nose-cane', shades: 'scarf-red' }).scarf.main).toBe('#E8475A');
+    expect(equippedLooks({ scarf: 'hat-crown', hat: 'nope', nose: 'nose-cane', shades: 'scarf-red' }).shades.shape).toBe('classic');
   });
 });
 
 describe('missions and achievements', () => {
-  it('has the 13-mission pool in the polish-wave order with V1 rewards', () => {
+  it('has the 13-mission pool in the polish-wave order, swings-3 at play-daily\'s index', () => {
     expect(MISSIONS.map((m) => m.id)).toEqual([
       'reach-9am', 'flakes-10', 'survive-noon', 'mult-3', 'cloud-ride', 'reach-day-2', 'ice-crystal',
-      'two-phews', 'gate-arch', 'clean-balls', 'reach-day-3', 'hold-x5', 'play-daily',
+      'two-phews', 'gate-arch', 'clean-balls', 'reach-day-3', 'hold-x5', 'swings-3',
     ]);
     expect(MISSIONS.map((m) => m.reward)).toEqual([10, 10, 20, 15, 20, 30, 20, 25, 30, 30, 50, 30, 15]);
+    expect(MISSIONS.map((m) => m.gate)).toEqual([0, 0, 0, 0, 0, 390, 0, 0, 720, 720, 1080, 390, 0]);
     expect(MISSIONS.map((m) => missionLabel(m, 1))).toEqual([
       'Reach 9:00 AM',
       'Collect 10 flakes in one run',
@@ -77,7 +92,7 @@ describe('missions and achievements', () => {
       'Pass 2 gazing balls in one run with no glare contact',
       'Reach Day 3',
       'Reach a ×4 multiplier',
-      "Play today's Daily",
+      'Land 3 SWINGs in one run',
     ]);
   });
 
@@ -96,7 +111,7 @@ describe('missions and achievements', () => {
       'Reach Day 4',
       // ×4 at tier II clamps to the ×5 cap.
       'Reach a ×5 multiplier',
-      "Play today's Daily",
+      'Land 6 SWINGs in one run',
     ]);
   });
 
@@ -131,9 +146,10 @@ describe('missions and achievements', () => {
     expect(parseMissionId('bogus')).toBeNull();
   });
 
-  it('has 8 achievements with riddles', () => {
+  it('has 16 achievements with riddles', () => {
     expect(ACHIEVEMENTS.map((a) => a.name)).toEqual([
       'First Light', 'Night Owl', 'High Noon', 'Solstice', 'Seventh Sun', 'Phew-nomenal', 'Cloud Rider', 'Daily Habit',
+      'Sundancer', 'Rematch', 'Sunny Week', 'Close Shave', 'Glare-Proof', 'Ice Cold', 'Night Gardener', 'Forecaster',
     ]);
     for (const a of ACHIEVEMENTS) expect(a.hint.length).toBeGreaterThan(10);
   });

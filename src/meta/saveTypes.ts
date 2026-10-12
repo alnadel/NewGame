@@ -1,4 +1,5 @@
-// Persistent save schema (v1). Owned by src/meta/save.ts; read by game/session and ui.
+// Persistent save schema (v2, docs/V1_1_PLAN.md §5 CC-9 as amended). Owned by src/meta/save.ts;
+// read by game/session and ui. A v1.0 build reading a v2 save sees 'future' and stays read-only.
 
 export interface Settings {
   /** 0..1, default 0.8 */
@@ -12,6 +13,10 @@ export interface Settings {
   reducedMotion: 'auto' | 'on' | 'off';
   highContrast: boolean;
   guide: 'auto' | 'always' | 'off';
+  /** Name on challenge links (challenge.ts sanitizeName); '' = none. */
+  name: string;
+  /** Adaptive comfort: endless runs climb or ease the comfort ladder (default on). */
+  comfort: boolean;
 }
 
 export interface SaveStats {
@@ -28,12 +33,49 @@ export interface SaveStats {
   cloudSeconds: number;
   /** True once any run has reached its first night. */
   reachedNight: boolean;
+  /** Comfort rung of the next endless run, 0 (tutorial) .. 4 (standard). */
+  comfort: number;
+  playSeconds: number;
+  swings: number;
+  /** Weeks that closed with 5+ sunny days. */
+  sunnyWeeks: number;
+  /** Bit i: survived a noon under FORECAST_IDS[i]. */
+  forecastNoons: number;
 }
 
 export interface MissionSlot {
   id: string;
   progress: number;
   done: boolean;
+  /** Finished runs in a row without progress (the Swap button shows at 5). */
+  stale: number;
+}
+
+/** Today's errand: the same for everyone on a local date. */
+export interface ErrandState {
+  date: string;
+  id: string;
+  progress: number;
+  done: boolean;
+}
+
+/** A finished non-debug endless run: minutes, run Snow, comfort rung played (0..4), local date. */
+export interface RunRecord {
+  m: number;
+  s: number;
+  r: number;
+  d: string;
+}
+
+export interface WeekState {
+  /** Monday of the current week ('YYYY-MM-DD'), or '' before the first run. */
+  start: string;
+  /** Bit i: a run finished on start + i days. */
+  days: number;
+  /** Paid rewards: bit 0 three days, bit 1 five, bit 2 seven. */
+  paid: number;
+  /** Best Day reached per weekday (Monday first). */
+  best: number[];
 }
 
 export interface DailyEntry {
@@ -44,19 +86,26 @@ export interface DailyEntry {
   glyphs: string;
 }
 
-export interface SaveV1 {
-  v: 1;
+export interface Save {
+  v: 2;
   createdAt: number;
   settings: Settings;
   stats: SaveStats;
   unlocks: { cosmetics: string[]; achievements: string[] };
-  equipped: { scarf: string; hat: string; nose: string };
-  missions: { cursor: number; tier: number; active: MissionSlot[] };
+  equipped: { scarf: string; hat: string; nose: string; shades: string };
+  missions: { cursor: number; tier: number; active: MissionSlot[]; deferred: string[]; errand: ErrandState };
   /** Keyed by local date YYYY-MM-DD; pruned to the latest 60. */
   daily: Record<string, DailyEntry>;
+  /** Snowbot's par minutes per Daily date, the latest 14. */
+  pars: Record<string, number>;
+  /** The last 30 finished non-debug endless runs, oldest first. */
+  history: RunRecord[];
+  week: WeekState;
+  /** Local date of the last finished run, or ''. */
+  lastPlay: string;
   flags: {
     hintsShown: number;
-    /** TECH_SPEC §12: the first lesson (the ghost hint that slows time until a successful swing) was passed. */
+    /** The first-run lesson was passed (the sim's lessonDone). */
     tutorialDone: boolean;
     installSheetShown: boolean;
     persistRequested: boolean;
@@ -68,3 +117,6 @@ export interface SaveV1 {
     missionsV2: boolean;
   };
 }
+
+// V11-SHIM: CC-9 — the v1.0 name, kept until integration renames the other batches' uses to Save.
+export type SaveV1 = Save;

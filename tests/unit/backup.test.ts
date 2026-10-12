@@ -58,6 +58,6 @@ describe('backup codes', () => {
 /** Ownership lists are stored in catalog order after validation. */
 function migrateShape(save: ReturnType<typeof defaults>): ReturnType<typeof defaults> {
   const copy = structuredClone(save);
-  copy.unlocks.cosmetics = ['scarf-red', 'scarf-mint', 'hat-none', 'nose-carrot'];
+  copy.unlocks.cosmetics = ['scarf-red', 'scarf-mint', 'hat-none', 'nose-carrot', 'shades-classic'];
   return copy;
 }

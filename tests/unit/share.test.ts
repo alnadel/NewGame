@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import type { HourGlyph, RunResult } from '../../src/core/sim/events.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { HourGlyph } from '../../src/core/sim/events.ts';
 import {
   COMPASS,
   GLYPHS,
@@ -12,6 +12,9 @@ import {
   resolveShareBase,
 } from '../../src/meta/share.ts';
 import { decodeChallenge } from '../../src/meta/challenge.ts';
+import { shareFiles } from '../../src/platform/share.ts';
+// V11-SHIM: CC-7 — RunResultV11 becomes core's RunResult at integration.
+import type { RunResultV11 } from '../../src/meta/shims.ts';
 
 const C: HourGlyph = 'cool';
 const W: HourGlyph = 'warm';
@@ -50,14 +53,16 @@ describe('share text', () => {
       snow: 112,
       phews: 4,
       assisted: false,
+      forecasts: '☀️🌬️🌡️',
+      name: 'Sam',
       link: 'https://shady.example/#c=CODE',
     });
     expect(text).toBe(
       [
-        'SHADY: Nubs made it to Day 3 · 2:40 PM',
+        'SHADY: Nubs made it to Day 3 · 2:40 PM ☀️🌬️🌡️',
         '❄️❄️🟨🟨🔥🔥🟨🟨💧',
         'Snow 112 · 4 PHEWs',
-        'Beat my run: https://shady.example/#c=CODE',
+        'Beat Sam’s run: https://shady.example/#c=CODE',
       ].join('\n'),
     );
   });
@@ -69,48 +74,57 @@ describe('share text', () => {
       snow: 9,
       phews: 1,
       assisted: true,
+      forecasts: '',
+      name: '',
       link: 'L',
     });
     expect(text).toBe('SHADY: Nubs made it to Day 1 · 11:00 AM\n❄️🟨🟨🔥🔥💧🧭\nSnow 9 · 1 PHEW\nBeat my run: L');
   });
 
-  it('formats the daily share exactly', () => {
-    const text = dailyShareText({
+  const daily = (par: number | null): string =>
+    dailyShareText({
       dailyNumber: 284,
       minutes: 1240,
       tryNumber: 2,
       hourGlyphs: [DAY1, DAY2],
       assisted: false,
+      forecasts: '☀️🍂',
+      par,
       link: 'https://shady.example/#c=CODE',
     });
-    expect(text).toBe(
-      [
-        'SHADY Daily #284: Day 2 · 2:40 PM (try 2/3)',
-        '❄️❄️❄️🟨🟨🔥🔥🟨❄️❄️❄️❄️🌙',
-        '❄️❄️🟨🟨🔥🔥🟨🟨💧',
-        'https://shady.example/#c=CODE',
-      ].join('\n'),
-    );
+
+  it('formats the daily share exactly, with Snowbot’s par once it is known', () => {
+    const head = ['SHADY Daily #284: Day 2 · 2:40 PM (try 2/3) ☀️🍂', '❄️❄️❄️🟨🟨🔥🔥🟨❄️❄️❄️❄️🌙', '❄️❄️🟨🟨🔥🔥🟨🟨💧'];
+    expect(daily(null)).toBe([...head, 'https://shady.example/#c=CODE'].join('\n'));
+    expect(daily(500).split('\n').at(-2)).toBe('Beat Snowbot’s 2:20 PM ✓');
+    expect(daily(1240).split('\n').at(-2)).toBe('Snowbot made Day 2 · 2:40 PM');
+    expect(daily(1500).split('\n').at(-2)).toBe('Snowbot made Day 3 · 7:00 AM');
   });
 
   it('labels unscored daily runs as practice', () => {
-    const text = dailyShareText({ dailyNumber: 9, minutes: 30, tryNumber: null, hourGlyphs: [[M]], assisted: false, link: 'L' });
+    const text = dailyShareText({ dailyNumber: 9, minutes: 30, tryNumber: null, hourGlyphs: [[M]], assisted: false, forecasts: '', par: null, link: 'L' });
     expect(text.split('\n')[0]).toBe('SHADY Daily #9: Day 1 · 6:30 AM (practice)');
   });
 });
 
-function result(over: Partial<RunResult>): RunResult {
+function result(over: Partial<RunResultV11>): RunResultV11 {
   return {
     mode: 'endless',
     seed: 123456789,
     profile: 3,
+    drain: 55,
+    noonCloud: 0,
+    plan: [
+      { biome: 'oldtown', forecast: 'breezy' },
+      { biome: 'meadow', forecast: 'heat' },
+    ],
     minutes: 1240,
     day: 2,
     clock: 'Day 2 · 2:40 PM',
     stats: {
       flakes: 30, flakesMelted: 2, crystals: 1, flowers: 8, phews: 2, snow: 61.6, maxMult: 4, x5HoldBest: 0,
       cloudRideBest: 2, cloudSeconds: 3, ballsPassedClean: 2, ballGlared: false, gateNoon: false, dayReached: 2,
-      nightsReached: 1, minutes: 1240, litTotal: 3,
+      nightsReached: 1, minutes: 1240, litTotal: 3, swings: 2, swingChainBest: 2, phewMinChill: 30,
     },
     death: { day: 2, tDay: 30, minutes: 1240, time: '2:40 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 2:40 PM.' },
     hourGlyphs: [DAY1, DAY2],
@@ -121,24 +135,43 @@ function result(over: Partial<RunResult>): RunResult {
 }
 
 describe('buildShare', () => {
-  it('links an endless run to its seed', () => {
+  it('links an endless run to its seed and rules', () => {
     const p = buildShare(result({}), 'https://shady.example/play/');
-    expect(p.challenge).toEqual({ v: 1, k: 'e', seed: 123456789, m: 1240, s: 61 });
+    expect(p.challenge).toEqual({ v: 1, k: 'e', seed: 123456789, m: 1240, s: 61, p: 3, dr: 55, nc: 0, pl: 1 });
     expect(p.url?.startsWith('https://shady.example/play/#c=')).toBe(true);
     expect(decodeChallenge(p.url!.split('#c=')[1]!)).toEqual(p.challenge);
     expect(p.text.split('\n')).toEqual([
-      'SHADY: Nubs made it to Day 2 · 2:40 PM',
+      'SHADY: Nubs made it to Day 2 · 2:40 PM 🌬️🌡️',
       '❄️❄️🟨🟨🔥🔥🟨🟨💧',
       'Snow 61 · 2 PHEWs',
       `Beat my run: ${p.url}`,
     ]);
   });
 
+  it('carries the name and leaves the forecasts out of runs without a Day Plan', () => {
+    const legacy = [
+      { biome: 'meadow', forecast: 'clear' },
+      { biome: 'oldtown', forecast: 'clear' },
+    ] as const;
+    const p = buildShare(result({ profile: 2, drain: 40, noonCloud: 1, plan: [...legacy] }), 'https://x/', null, { name: 'Zoë' });
+    expect(p.challenge).toEqual({ v: 1, k: 'e', seed: 123456789, m: 1240, s: 61, p: 2, dr: 40, nc: 1, pl: 0, n: 'Zoë' });
+    expect(p.text.split('\n')[0]).toBe('SHADY: Nubs made it to Day 2 · 2:40 PM');
+    expect(p.text.split('\n').at(-1)).toBe(`Beat Zoë’s run: ${p.url}`);
+    // The session knows the world (World.planOn) and can say so.
+    expect(buildShare(result({ plan: [...legacy] }), null, null, { plan: true }).text.split('\n')[0]).toBe(
+      'SHADY: Nubs made it to Day 2 · 2:40 PM ☀️☀️',
+    );
+  });
+
   it('links a daily run to its date', () => {
-    const p = buildShare(result({ mode: 'daily', dailyDate: '2026-10-11' }), 'https://shady.example/', 3);
+    const p = buildShare(result({ mode: 'daily', dailyDate: '2026-10-11' }), 'https://shady.example/', 3, { par: 300 });
     expect(p.challenge).toEqual({ v: 1, k: 'd', d: '2026-10-11', m: 1240, s: 61 });
+    // Dailies before PLAN_START_DATE keep the v1.0 world: no forecasts.
     expect(p.text.split('\n')[0]).toBe('SHADY Daily #284: Day 2 · 2:40 PM (try 3/3)');
+    expect(p.text.split('\n').at(-2)).toBe('Beat Snowbot’s 11:00 AM ✓');
     expect(p.text.split('\n').at(-1)).toBe(p.url);
+    const later = buildShare(result({ mode: 'daily', dailyDate: '2026-10-20' }), null, 1);
+    expect(later.text.split('\n')[0]).toBe('SHADY Daily #293: Day 2 · 2:40 PM (try 1/3) 🌬️🌡️');
   });
 
   it('shares a replayed daily challenge as practice', () => {
@@ -149,7 +182,7 @@ describe('buildShare', () => {
   it('leaves the link line out without a base URL', () => {
     const e = buildShare(result({}), null);
     expect(e.url).toBeNull();
-    expect(e.text.split('\n')).toEqual(['SHADY: Nubs made it to Day 2 · 2:40 PM', '❄️❄️🟨🟨🔥🔥🟨🟨💧', 'Snow 61 · 2 PHEWs']);
+    expect(e.text.split('\n')).toEqual(['SHADY: Nubs made it to Day 2 · 2:40 PM 🌬️🌡️', '❄️❄️🟨🟨🔥🔥🟨🟨💧', 'Snow 61 · 2 PHEWs']);
     const d = buildShare(result({ mode: 'daily', dailyDate: '2026-10-11' }), null, 1);
     expect(d.text.split('\n')).toHaveLength(3);
     expect(d.text).not.toMatch(/#c=|https?:|file:/);
@@ -182,5 +215,65 @@ describe('canonical share base URL', () => {
     expect(p.text).not.toContain('file:');
     expect(p.text).not.toContain('Beat my run');
     expect(p.url).toBeNull();
+  });
+});
+
+describe('shareFiles', () => {
+  const file = new File([new Uint8Array([137, 80, 78, 71])], 'shady-day2-240pm.png', { type: 'image/png' });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** A document whose <a download> clicks are recorded. */
+  function stubDocument(): { downloads: string[] } {
+    const downloads: string[] = [];
+    const noop = (): void => undefined;
+    vi.stubGlobal('document', {
+      body: { appendChild: noop },
+      activeElement: null,
+      // The clipboard fallback (a hidden textarea) finds no way to copy.
+      execCommand: () => false,
+      createElement: () => {
+        const el = { href: '', download: '', value: '', style: {}, setAttribute: noop, select: noop, setSelectionRange: noop, remove: noop,
+          click: () => downloads.push(el.download) };
+        return el;
+      },
+    });
+    return { downloads };
+  }
+
+  it('hands the file and text to the share sheet before any await', () => {
+    const share = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { share, canShare: () => true });
+    void shareFiles({ file, text: 'T' });
+    // Synchronously, inside the click task (iOS user activation).
+    expect(share).toHaveBeenCalledWith({ files: [file], text: 'T' });
+  });
+
+  it('reports a dismissed sheet as cancelled', async () => {
+    vi.stubGlobal('navigator', { share: () => Promise.reject(new DOMException('no', 'AbortError')), canShare: () => true });
+    expect(await shareFiles({ file, text: 'T' })).toBe('cancelled');
+  });
+
+  it('downloads the file and copies the text where files cannot be shared', async () => {
+    vi.useFakeTimers();
+    const { downloads } = stubDocument();
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { share: vi.fn(), canShare: () => false, clipboard: { writeText } });
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    expect(await shareFiles({ file, text: 'T' })).toBe('saved');
+    expect(downloads).toEqual(['shady-day2-240pm.png']);
+    expect(writeText).toHaveBeenCalledWith('T');
+    vi.advanceTimersByTime(10_000);
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('still saves when the copy fails', async () => {
+    stubDocument();
+    vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } });
+    vi.stubGlobal('HTMLElement', class {});
+    expect(await shareFiles({ file, text: 'T' })).toBe('saved');
   });
 });

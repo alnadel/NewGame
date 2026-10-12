@@ -62,6 +62,12 @@ export function addDays(date: string, n: number): string {
   return fromUtc(ms + n * MS_PER_DAY);
 }
 
+/** Day of the week of a date, 0 = Sunday … 6 = Saturday (0 for an invalid date). */
+export function weekday(date: string): number {
+  const ms = utcMidnight(date);
+  return ms === null ? 0 : new Date(ms).getUTCDay();
+}
+
 /** Daily number: days since 2026-01-01 + 1, so 2026-10-11 is #284. */
 export function dailyNumber(date: string): number {
   return daysBetween(DAILY_EPOCH, date) + 1;

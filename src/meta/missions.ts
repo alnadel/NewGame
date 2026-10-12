@@ -1,18 +1,24 @@
-// Pure mission logic: tiered goals, labels, run measurement, dealing and view models.
+// Pure mission logic: tiered goals, skill gates, labels, run measurement, dealing with a deferred
+// queue, stale swaps, Today's errand and view models (V1_PLAN §11.1, V1_1_PLAN UM4).
 //
 // Slot ids encode the tier so a mixed set (e.g. two tier-I and one tier-II mission after the pool
 // wraps) needs no extra save fields: 'flakes-10' is tier I, 'flakes-10@2' is tier II.
 
-import type { RunResult } from '../core/sim/events.ts';
 import { formatScore, formatTimeOfDay, MINUTES_PER_DAY } from '../core/format.ts';
-import type { MissionSlot } from './saveTypes.ts';
-import { ACTIVE_MISSIONS, MISSIONS, type MissionDef, type MissionId } from './content.ts';
+import { hashString } from '../core/rng.ts';
+import type { ErrandState, MissionSlot } from './saveTypes.ts';
+import type { RunResultV11 } from './shims.ts';
+import { ACTIVE_MISSIONS, ERRAND_REWARD, ERRANDS, MISSIONS, type ErrandDef, type ErrandId, type MissionDef, type MissionId } from './content.ts';
 
 /** Keeps "3 s" together when a label wraps. */
-const NBSP = ' ';
+const NBSP = '\u00a0';
 const MAX_MULT = 5;
 const MAX_TIER = 99;
 const TIER_NUMERALS = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+/** A tier ≥ 2 Day goal is dealt once the recent best is within this many minutes of it. */
+const REACH_GATE_LEAD = 330;
+/** Finished runs without progress before a slot offers Swap. */
+export const STALE_SWAP = 5;
 
 const DEF_BY_ID = new Map<string, MissionDef>(MISSIONS.map((m) => [m.id, m]));
 
@@ -54,6 +60,11 @@ export function missionTarget(def: MissionDef, tier: number): number {
   }
 }
 
+/** The recent best a player needs before this mission is dealt. */
+export function missionGate(def: MissionDef, tier: number): number {
+  return def.scale === 'reach' && tier >= 2 ? missionTarget(def, tier) - REACH_GATE_LEAD : def.gate;
+}
+
 export function missionReward(def: MissionDef, tier: number): number {
   return def.reward * tier;
 }
@@ -91,19 +102,13 @@ export function missionLabel(def: MissionDef, tier: number): string {
       return 'Walk under a gate arch between 11 AM and 1 PM';
     case 'clean-balls':
       return `Pass ${t} gazing balls in one run with no glare contact`;
-    case 'play-daily':
-      return "Play today's Daily";
+    case 'swings-3':
+      return `Land ${t} SWINGs in one run`;
   }
 }
 
-/** What a run's measurement needs besides the result itself. */
-export interface MissionRunContext {
-  /** Daily runs: the try counted at 6:30 AM, or null/undefined when the run was not counted. */
-  dailyTry?: number | null;
-}
-
 /** Measures one finished run against a mission's metric. */
-export function missionValue(def: MissionDef, result: RunResult, run: MissionRunContext = {}): number {
+export function missionValue(def: MissionDef, result: RunResultV11): number {
   const s = result.stats;
   switch (def.metric) {
     case 'minutes':
@@ -123,9 +128,8 @@ export function missionValue(def: MissionDef, result: RunResult, run: MissionRun
     case 'cleanBalls':
       // "with no glare contact": a single glare in the run voids it.
       return s.ballGlared ? 0 : s.ballsPassedClean;
-    case 'dailyTry':
-      // A counted try is always today's Daily when it starts; a try that crosses midnight still counts.
-      return result.mode === 'daily' && run.dailyTry != null ? 1 : 0;
+    case 'swings':
+      return s.swings;
   }
 }
 
@@ -163,6 +167,8 @@ export interface MissionView {
   done: boolean;
   /** Completed by the run whose outcome this view belongs to. */
   justCompleted: boolean;
+  /** Unfinished and stale for STALE_SWAP runs: offer Swap. */
+  swappable: boolean;
 }
 
 export function missionView(slot: MissionSlot, justCompleted = false): MissionView | null {
@@ -181,52 +187,184 @@ export function missionView(slot: MissionSlot, justCompleted = false): MissionVi
     progressText: missionProgressText(def, tier, slot.progress, slot.done),
     done: slot.done,
     justCompleted,
+    swappable: !slot.done && slot.stale >= STALE_SWAP,
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Dealing
+// ---------------------------------------------------------------------------------------------
 
 export interface MissionState {
   cursor: number;
   tier: number;
   active: MissionSlot[];
+  /** Gated or swapped slot ids waiting for their turn (one per mission, the lowest tier kept). */
+  deferred: string[];
 }
 
-/** Deals the next mission from the pool, advancing the cursor (and the tier when the pool wraps). */
-function dealNext(state: MissionState): MissionSlot {
+/** Queues a slot id, keeping one entry per mission (the lower tier wins). */
+function defer(state: MissionState, id: string): void {
+  const p = parseMissionId(id);
+  if (!p) return;
+  const i = state.deferred.findIndex((d) => parseMissionId(d)?.def.id === p.def.id);
+  if (i < 0) state.deferred.push(id);
+  else if ((parseMissionId(state.deferred[i] as string)?.tier ?? 1) > p.tier) state.deferred[i] = id;
+}
+
+/** The pool mission at the cursor; advances the cursor (and the tier when the pool wraps). */
+function nextFromPool(state: MissionState): string {
   const def = MISSIONS[state.cursor] as MissionDef;
-  const slot: MissionSlot = { id: missionSlotId(def.id, state.tier), progress: 0, done: false };
+  const id = missionSlotId(def.id, state.tier);
   state.cursor += 1;
   if (state.cursor >= MISSIONS.length) {
     state.cursor = 0;
     state.tier = Math.min(MAX_TIER, state.tier + 1);
   }
-  return slot;
+  return id;
 }
 
 /**
- * Replaces completed slots in place (unless `replaceDone` is false) and tops the list up to 3.
- * Mutates `state`; returns the newly dealt slots. Never deals an id that is already active.
+ * Deals one mission for a player whose recent best is `best`: the first eligible deferred one,
+ * else the next eligible one from the pool (gated ones it passes join the deferred queue). Never a
+ * mission that holds an active slot at any tier, the slot being replaced included.
  */
-export function refillMissions(state: MissionState, replaceDone = true): MissionSlot[] {
-  const dealt: MissionSlot[] = [];
-  const nextFresh = (): MissionSlot => {
-    // The pool is far larger than the active set, so this terminates within one lap.
-    for (let guard = 0; guard <= MISSIONS.length; guard++) {
-      const slot = dealNext(state);
-      if (!state.active.some((s) => s.id === slot.id)) return slot;
-    }
-    return dealNext(state);
+function dealOne(state: MissionState, best: number): MissionSlot {
+  const free = (id: string): boolean => {
+    const def = parseMissionId(id)?.def.id;
+    return !state.active.some((s) => parseMissionId(s.id)?.def.id === def);
   };
+  const eligible = (id: string): boolean => {
+    const p = parseMissionId(id);
+    return p !== null && missionGate(p.def, p.tier) <= best;
+  };
+  const queued = state.deferred.findIndex((id) => free(id) && eligible(id));
+  let id = queued >= 0 ? (state.deferred.splice(queued, 1)[0] as string) : null;
+  // Gate-0 missions exist at every tier, so one lap always finds one; the bound is a safety net.
+  for (let guard = 0; id === null && guard < 2 * MISSIONS.length; guard++) {
+    const next = nextFromPool(state);
+    if (!free(next) || state.deferred.includes(next)) continue;
+    if (eligible(next)) id = next;
+    else defer(state, next);
+  }
+  return { id: id ?? nextFromPool(state), progress: 0, done: false, stale: 0 };
+}
+
+/**
+ * Replaces completed slots in place (unless `replaceDone` is false) and tops the list up to 3, for
+ * a player whose recent best is `best`. Mutates `state`; returns the newly dealt slots.
+ */
+export function refillMissions(state: MissionState, best: number, replaceDone = true): MissionSlot[] {
+  const dealt: MissionSlot[] = [];
   for (let i = 0; replaceDone && i < state.active.length; i++) {
     if ((state.active[i] as MissionSlot).done) {
-      const slot = nextFresh();
+      const slot = dealOne(state, best);
       state.active[i] = slot;
       dealt.push(slot);
     }
   }
   while (state.active.length < ACTIVE_MISSIONS) {
-    const slot = nextFresh();
+    const slot = dealOne(state, best);
     state.active.push(slot);
     dealt.push(slot);
   }
   return dealt;
+}
+
+/** Swap: the slot's mission joins the deferred queue and the next eligible one takes its place. */
+export function swapSlot(state: MissionState, slotId: string, best: number): MissionSlot | null {
+  const i = state.active.findIndex((s) => s.id === slotId && !s.done);
+  if (i < 0) return null;
+  const slot = dealOne(state, best);
+  state.active[i] = slot;
+  defer(state, slotId);
+  return slot;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Today's errand
+// ---------------------------------------------------------------------------------------------
+
+const ERRAND_BY_ID = new Map<string, ErrandDef>(ERRANDS.map((e) => [e.id, e]));
+
+export function getErrand(id: string): ErrandDef | undefined {
+  return ERRAND_BY_ID.get(id);
+}
+
+/**
+ * The errand of a local date, the same for everyone. While the Daily is locked, "Play today's
+ * Daily" gives way to the next errand in the list.
+ */
+export function errandFor(date: string, dailyUnlocked: boolean): ErrandDef {
+  const i = hashString(`shady-errand-${date}`) % ERRANDS.length;
+  const e = ERRANDS[i] as ErrandDef;
+  return e.id === 'e-daily' && !dailyUnlocked ? (ERRANDS[(i + 1) % ERRANDS.length] as ErrandDef) : e;
+}
+
+/** A date's errand: the stored one when it belongs to that date, else a fresh one. */
+export function errandState(stored: ErrandState, date: string, dailyUnlocked: boolean): ErrandState {
+  return stored.date === date && getErrand(stored.id) ? stored : { date, id: errandFor(date, dailyUnlocked).id, progress: 0, done: false };
+}
+
+/** What one finished run adds to an errand's day total. */
+export function errandValue(id: ErrandId, result: RunResultV11, dailyTry: number | null | undefined): number {
+  const s = result.stats;
+  switch (id) {
+    case 'e-flakes-25':
+      return s.flakes;
+    case 'e-phews-2':
+      return s.phews;
+    case 'e-cloud-8':
+      return s.cloudSeconds;
+    case 'e-mult3-2':
+      return s.maxMult >= 3 ? 1 : 0;
+    case 'e-noon-1':
+      return result.minutes >= 390 ? 1 : 0;
+    case 'e-9am-3':
+      return result.minutes >= 180 ? 1 : 0;
+    case 'e-crystals-2':
+      return s.crystals;
+    case 'e-flowers-12':
+      return s.flowers;
+    case 'e-cool-4':
+      return result.hourGlyphs.reduce((n, day) => n + day.filter((g) => g === 'cool').length, 0);
+    case 'e-swings-3':
+      return s.swings;
+    case 'e-daily':
+      return result.mode === 'daily' && dailyTry != null ? 1 : 0;
+    case 'e-runs-5':
+      return 1;
+  }
+}
+
+export interface ErrandView {
+  id: string;
+  label: string;
+  reward: number;
+  progress: number;
+  target: number;
+  /** Progress toward the goal in [0, 1]. */
+  fraction: number;
+  progressText: string;
+  done: boolean;
+  /** Completed by the run whose outcome this view belongs to. */
+  justCompleted: boolean;
+}
+
+export function errandViewOf(state: ErrandState, justCompleted = false): ErrandView | null {
+  const def = getErrand(state.id);
+  if (!def) return null;
+  const shown = Math.min(state.progress, def.target);
+  return {
+    id: def.id,
+    label: def.label,
+    reward: ERRAND_REWARD,
+    progress: state.progress,
+    target: def.target,
+    fraction: state.done ? 1 : Math.max(0, Math.min(1, state.progress / def.target)),
+    progressText:
+      def.id === 'e-cloud-8' ? `${(Math.floor(shown * 10) / 10).toFixed(1)}/${def.target}${NBSP}s` : `${Math.floor(shown)}/${def.target}`,
+    done: state.done,
+    justCompleted,
+  };
 }
