@@ -60,6 +60,7 @@ describe('patterns', () => {
       day: [20, 80, 20],
       best: [15, 40, 15, 40, 40],
       ui: 4,
+      tick: 6,
     });
   });
 });
@@ -200,6 +201,17 @@ describe('WebVibrateHaptics gating', () => {
     for (let i = 1; i < times.length; i++) expect((times[i] as number) - (times[i - 1] as number)).toBeGreaterThanOrEqual(50);
     for (const at of times) expect(times.filter((u) => u > at - 1000 && u <= at).length).toBeLessThanOrEqual(8);
     expect(fired).toBe(16);
+  });
+
+  it('a SWING ticks at most once per 300 ms (CC-4)', () => {
+    const t = setup();
+    const swing = { e: 'swing' as const, deg: 60, chain: 1, snow: 1, x: 0, y: 0 };
+    expect(hapticForEvent(swing)).toBe('tick');
+    for (const at of [0, 100, 250, 320, 500, 700]) {
+      t.at(at);
+      t.h.onEvents([swing], 0);
+    }
+    expect(t.calls.map((c) => c.at)).toEqual([0, 320, 700]);
   });
 
   it('onEvents forwards a frame of SimEvents with the sun speed', () => {

@@ -1,7 +1,8 @@
 // Pooled particle system (structure of arrays, capacity 400), expanding rings (16) and text pops
 // (12) — TECH_SPEC §9.5. Particles are render-only and use Math.random; they never touch the sim.
 // World-space kinds live at (x, y, z) in world units; screen-space kinds (confetti, petals) at CSS
-// px. Nothing here allocates after construction.
+// px. Pops ride with Nubs (an x offset and a height above him) so none drifts across his head.
+// Nothing here allocates after construction.
 
 import type { View } from '../game/camera.ts';
 import { OBLIQUE } from '../game/camera.ts';
@@ -18,6 +19,7 @@ export const P_FIREFLY = 7;
 export const P_CONFETTI = 8; // screen space
 export const P_PETAL = 9; // screen space
 export const P_PUFF = 10; // melt puff (steam, short)
+export const P_BREATH = 11; // cold breath in the shade
 
 const CAP = 400;
 
@@ -260,8 +262,9 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
     const size = (p.size0[i]! + (p.size1[i]! - p.size0[i]!) * t) * S;
     switch (k) {
       case P_STEAM:
-      case P_PUFF: {
-        g.globalAlpha = (k === P_PUFF ? 0.8 : 0.55) * (1 - t) * Math.min(1, t * 6);
+      case P_PUFF:
+      case P_BREATH: {
+        g.globalAlpha = (k === P_PUFF ? 0.8 : k === P_BREATH ? 0.5 : 0.55) * (1 - t) * Math.min(1, t * 6);
         g.drawImage(steamSprite, sx - size, sy - size, size * 2, size * 2);
         break;
       }
@@ -423,15 +426,29 @@ export const POP_PLUS = 0;
 export const POP_PHEW = 1;
 export const POP_MULT = 2;
 export const POP_BANG = 3;
+export const POP_SWING = 4;
+
+/** A +N pop absorbs a new +N within this long of its last change (s); a SWING pop, within 1 s of its first. */
+const PLUS_MERGE_S = 0.45;
+const SWING_MERGE_S = 1;
+/** The bump of a merged pop: scale 1 → 1.25 → 1 over this long (s). */
+const BUMP_S = 0.16;
+/** PHEW! and SWING! ride a row of their own, clear of the +N / ×N row at z 200 even fully risen. */
+const HEADLINE_Z = 340;
+const PLUS_TEXT: readonly string[] = Array.from({ length: 31 }, (_, i) => `+${i}`);
+const SWING_TEXT: readonly string[] = ['SWING!', 'SWING!', 'SWING! ×2', 'SWING! ×3', 'SWING! ×4', 'SWING! ×5'];
 
 export interface Pops {
   readonly text: string[];
   readonly style: Uint8Array;
-  readonly x: Float32Array;
-  readonly y: Float32Array;
+  /** Offset from Nubs (u) and height (u, drawn with the oblique lift). */
+  readonly dx: Float32Array;
   readonly z: Float32Array;
+  /** Age (s), the age at which it ends, and seconds since it was spawned or last absorbed a value. */
   readonly t: Float32Array;
   readonly dur: Float32Array;
+  readonly fresh: Float32Array;
+  readonly value: Float32Array;
   cursor: number;
 }
 
@@ -439,25 +456,82 @@ export function createPops(): Pops {
   return {
     text: new Array<string>(POP_CAP).fill(''),
     style: new Uint8Array(POP_CAP),
-    x: new Float32Array(POP_CAP),
-    y: new Float32Array(POP_CAP),
+    dx: new Float32Array(POP_CAP),
     z: new Float32Array(POP_CAP),
     t: new Float32Array(POP_CAP),
     dur: new Float32Array(POP_CAP),
+    fresh: new Float32Array(POP_CAP),
+    value: new Float32Array(POP_CAP),
     cursor: 0,
   };
 }
 
-export function addPop(p: Pops, text: string, style: number, x: number, y: number, z: number, dur: number): void {
+/** A new pop `dx` u beside Nubs and `z` u above him, living `dur` s. */
+export function addPop(p: Pops, text: string, style: number, dx: number, z: number, dur: number, value = 0): void {
   const i = p.cursor;
   p.cursor = (i + 1) % POP_CAP;
   p.text[i] = text;
   p.style[i] = style;
-  p.x[i] = x;
-  p.y[i] = y;
+  p.dx[i] = dx;
   p.z[i] = z;
   p.t[i] = 0;
   p.dur[i] = dur;
+  p.fresh[i] = 0;
+  p.value[i] = value;
+}
+
+/** The live pop of `style` that may still absorb a value (or −1). */
+function mergeable(p: Pops, style: number, window: number): number {
+  for (let i = 0; i < POP_CAP; i++) {
+    if (p.dur[i]! <= 0 || p.style[i] !== style) continue;
+    if ((style === POP_SWING ? p.t[i]! : p.fresh[i]!) < window) return i;
+  }
+  return -1;
+}
+
+/** Restarts a merged pop's bump and gives it `life` more seconds. */
+function bump(p: Pops, i: number, life: number): void {
+  p.fresh[i] = 0;
+  p.dur[i] = p.t[i]! + life;
+}
+
+/** '+n' Snow beside Nubs (16 u right, 200 u up); quick successive ones add up in one pop ('+1' → '+3'). */
+export function addPlus(p: Pops, n: number): void {
+  const i = mergeable(p, POP_PLUS, PLUS_MERGE_S);
+  if (i < 0) {
+    addPop(p, PLUS_TEXT[Math.min(n, 30)] as string, POP_PLUS, 16, 200, 0.75, n);
+    return;
+  }
+  const v = p.value[i]! + n;
+  p.value[i] = v;
+  p.text[i] = v <= 30 ? (PLUS_TEXT[v] as string) : `+${v}`;
+  bump(p, i, 0.75);
+}
+
+/**
+ * A headline pop (PHEW!, SWING!) on its own row; small pops that have already risen toward it fade
+ * out quickly (and take no more values), so the two rows never stack.
+ */
+export function addHeadline(p: Pops, text: string, style: number, dur: number): void {
+  for (let i = 0; i < POP_CAP; i++) {
+    const s = p.style[i];
+    if (p.dur[i]! <= 0 || s === POP_PHEW || s === POP_SWING || p.t[i]! < 0.2) continue;
+    p.dur[i] = Math.min(p.dur[i]!, p.t[i]! + 0.12);
+    p.fresh[i] = 1;
+  }
+  addPop(p, text, style, 0, HEADLINE_Z, dur);
+}
+
+/** 'SWING!' (with '×N' from a chain of 2) above Nubs; at most one per second, later ones update it. */
+export function addSwing(p: Pops, chain: number): void {
+  const text = SWING_TEXT[Math.max(1, Math.min(5, chain))] as string;
+  const i = mergeable(p, POP_SWING, SWING_MERGE_S);
+  if (i < 0) {
+    addHeadline(p, text, POP_SWING, 0.9);
+    return;
+  }
+  p.text[i] = text;
+  bump(p, i, 0.9);
 }
 
 export function clearPops(p: Pops): void {
@@ -468,6 +542,7 @@ export function updatePops(p: Pops, dt: number): void {
   for (let i = 0; i < POP_CAP; i++) {
     if (p.dur[i]! <= 0) continue;
     p.t[i] = p.t[i]! + dt;
+    p.fresh[i] = p.fresh[i]! + dt;
     if (p.t[i]! >= p.dur[i]!) p.dur[i] = 0;
   }
 }
@@ -482,8 +557,8 @@ function popScale(t: number, inDur: number, peak: number): number {
 
 const POP_FONT = "800 20px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
-/** Text pops in screen space, anchored to world points (they rise as they fade). */
-export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale: number): void {
+/** Text pops in screen space, riding with Nubs at (nx, ny) — his hop included — rising as they fade. */
+export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale: number, nx: number, ny: number): void {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
@@ -491,18 +566,18 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     const dur = p.dur[i]!;
     if (dur <= 0) continue;
     const t = p.t[i]!;
-    const u = t / dur;
     const style = p.style[i]!;
-    const rise = style === POP_PHEW ? 10 : 20;
-    const sx = v.ox + p.x[i]! * v.S;
-    const sy = v.oy - (p.y[i]! + OBLIQUE * p.z[i]!) * v.S - rise * Math.min(1, u * 1.4) * v.S * 0.9;
+    const rise = style === POP_PHEW || style === POP_SWING ? 10 : 20;
+    const sx = v.ox + (nx + p.dx[i]!) * v.S;
+    const sy = v.oy - (ny + OBLIQUE * p.z[i]!) * v.S - rise * Math.min(1, t / 0.55) * v.S * 0.9;
     let scale: number;
     let size: number;
     let fill: string;
     let stroke: string;
     switch (style) {
       case POP_PHEW:
-        scale = popScale(t, 0.25, 1.3);
+      case POP_SWING:
+        scale = popScale(t, 0.25, 1.3) * (style === POP_SWING ? 0.8 : 1);
         size = 30;
         fill = '#FFFFFF';
         stroke = '#1B9A8E';
@@ -526,7 +601,11 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
         stroke = '#2B5A8A';
         break;
     }
-    const a = u > 0.7 ? (1 - u) / 0.3 : 1;
+    // A merged pop bumps: 1 → 1.25 → 1 over 160 ms.
+    const f = p.fresh[i]!;
+    if (f < BUMP_S && f < t) scale *= 1 + 0.25 * Math.sin((Math.PI * f) / BUMP_S);
+    const left = dur - t;
+    const a = left < 0.22 ? left / 0.22 : 1;
     g.globalAlpha = a;
     const s = scale * uiScale;
     g.setTransform(v.dpr * s, 0, 0, v.dpr * s, sx * v.dpr, sy * v.dpr);

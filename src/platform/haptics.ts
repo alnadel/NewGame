@@ -9,6 +9,9 @@
 
 import type { SimEvent } from '../core/sim/events.ts';
 
+// V11-SHIM: CC-4 — SimEvent includes { e: 'swing' } (use SimEvent directly).
+type HapticEvent = SimEvent | { e: 'swing' };
+
 export type HapticName =
   | 'detent'
   | 'catch'
@@ -23,7 +26,8 @@ export type HapticName =
   | 'death'
   | 'day'
   | 'best'
-  | 'ui';
+  | 'ui'
+  | 'tick';
 
 /** A single pulse (ms) or an on/off/on... sequence (ms). */
 export type HapticPattern = number | readonly number[];
@@ -44,6 +48,7 @@ export const HAPTIC_PATTERNS: Readonly<Record<HapticName, HapticPattern>> = {
   day: [20, 80, 20],
   best: [15, 40, 15, 40, 40],
   ui: 4,
+  tick: 6,
 };
 
 export const HAPTIC_RULES = {
@@ -57,6 +62,8 @@ export const HAPTIC_RULES = {
   detentEveryDeg: 45,
   /** Shade re-entry only buzzes after at least this long lit (s), matching the "ahh". */
   shadeMinLit: 0.25,
+  /** A SWING ticks at most this often (ms). */
+  tickMinGapMs: 300,
 } as const;
 
 /**
@@ -87,7 +94,7 @@ export function isDetentHapticStep(index: number, dir: 1 | -1): boolean {
 }
 
 /** The haptic a SimEvent asks for, or null. Detents still need detent() gating (see onEvents). */
-export function hapticForEvent(ev: SimEvent): HapticName | null {
+export function hapticForEvent(ev: HapticEvent): HapticName | null {
   switch (ev.e) {
     case 'detent':
       return 'detent';
@@ -109,6 +116,8 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
       return 'death';
     case 'dawn':
       return 'day';
+    case 'swing':
+      return 'tick';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
       // the rest have no haptic. 'best' and 'ui' are played by the UI directly.
@@ -127,7 +136,7 @@ export interface Haptics {
   /** A sun detent crossing: index = floor(θ/15) after it, dir = ±1, omega = sun speed (°/s). */
   detent(index: number, dir: 1 | -1, omega: number): void;
   /** Forwards a frame's SimEvents; `omega` is the sun's current angular velocity (°/s). */
-  onEvents(events: readonly SimEvent[], omega: number): void;
+  onEvents(events: readonly HapticEvent[], omega: number): void;
 }
 
 /** What the gated player needs from the platform; injectable for tests. */
@@ -180,6 +189,8 @@ export class WebVibrateHaptics implements Haptics {
   /** Start times of the most recent detent pulses (ring of detentPerSecond). */
   private readonly detentTimes = new Float64Array(HAPTIC_RULES.detentPerSecond).fill(Number.NEGATIVE_INFINITY);
   private detentHead = 0;
+  /** Start time of the last SWING tick (ms). */
+  private lastTick = Number.NEGATIVE_INFINITY;
 
   constructor(opts: WebVibrateOptions = {}) {
     this.backend = opts.backend === undefined ? webVibrateBackend() : opts.backend;
@@ -235,7 +246,7 @@ export class WebVibrateHaptics implements Haptics {
     this.fire('detent', now);
   }
 
-  onEvents(events: readonly SimEvent[], omega: number): void {
+  onEvents(events: readonly HapticEvent[], omega: number): void {
     if (!this.on) return;
     for (const ev of events) {
       if (ev.e === 'detent') {
@@ -243,6 +254,11 @@ export class WebVibrateHaptics implements Haptics {
         continue;
       }
       const name = hapticForEvent(ev);
+      if (name === 'tick') {
+        const now = this.now();
+        if (now - this.lastTick < HAPTIC_RULES.tickMinGapMs) continue;
+        this.lastTick = now;
+      }
       if (name) this.play(name);
     }
   }

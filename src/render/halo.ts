@@ -30,10 +30,15 @@ export interface HaloState {
   /** Smoothed rotation direction for the arrow (+1 CCW, −1 CW) and its strength. */
   arrow: number;
   arrowA: number;
+  /** A SWING: seconds left of its swept arc (0.3 s) and the signed sweep that ended at θ (°). */
+  swingT: number;
+  swingDeg: number;
 }
 
+export const SWING_ARC_S = 0.3;
+
 export function createHalo(): HaloState {
-  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0 };
+  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0, swingT: 0, swingDeg: 0 };
 }
 
 export interface HaloInput {
@@ -73,6 +78,7 @@ export function updateHalo(h: HaloState, dt: number, dragging: boolean, chill: n
   const target = dragging || chill < 99 ? 1 : 0.35;
   h.alpha += (target - h.alpha) * Math.min(1, dt * (target > h.alpha ? 12 : 3));
   for (let i = 0; i < 24; i++) if ((h.flash[i] as number) > 0) h.flash[i] = Math.max(0, (h.flash[i] as number) - dt);
+  h.swingT = Math.max(0, h.swingT - dt);
   if (dragging && Math.abs(dTheta) > 0.05) {
     const dir = dTheta > 0 ? 1 : -1;
     h.arrow = dir;
@@ -263,6 +269,19 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 
   if (inp.sunUp) drawHint(g, inp, A);
+
+  // A SWING: the arc the sun swept to hand the shade over, flashing teal and fading out.
+  if (h.swingT > 0 && h.swingDeg !== 0) {
+    const a1 = inp.theta;
+    const a0 = a1 - h.swingDeg;
+    g.lineWidth = 7;
+    g.lineCap = 'round';
+    g.strokeStyle = cssa(TEAL, 0.6 * (h.swingT / SWING_ARC_S) * inp.fade);
+    g.beginPath();
+    arcPath(g, cx, cy, R + 3, Math.min(a0, a1), Math.max(a0, a1));
+    g.stroke();
+    g.lineCap = 'butt';
+  }
 
   // Chill gauge inside the ring, clockwise from the top: frost-white, amber below 50, dashed and
   // pulsing below 25; hidden while Chill is full (the teal arcs lead then).

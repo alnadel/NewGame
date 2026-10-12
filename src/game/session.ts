@@ -1934,7 +1934,7 @@ export class Session {
 
   /**
    * Test hook: replays a moment through fx and audio only (the sim is untouched): phew, mult, mult5,
-   * noon, dawn, night, cloud, glare, flake, best, passed.
+   * noon, dawn, night, cloud, glare, flake, best, passed, swing.
    */
   demo(name: string): void {
     const s = this.s;
@@ -1975,6 +1975,10 @@ export class Session {
         this.fx.celebrate('teal', name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!');
         return;
       }
+      case 'swing':
+        // The audio layer ignores SWING: fx only.
+        this.fx.onEvents([{ e: 'swing', deg: 75, chain: 2, snow: 2, x: s.nubs.x, y: s.nubs.y }], s);
+        return;
       default:
         return;
     }

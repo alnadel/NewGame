@@ -3,23 +3,41 @@
 // effects (steam while lit, sweat below 60 Chill, frost sparkles in shade, fireflies at night).
 // Particles are render-only and may use Math.random.
 
-import type { SimEvent, SimState } from '../core/index.ts';
-import { addPop, addRing, P_BURST, P_CONFETTI, P_DRIP, P_FIREFLY, P_FLAKE_FLY, P_FROST, P_PETAL, P_PUFF, P_SPARKLE, P_STEAM, POP_BANG, POP_MULT, POP_PHEW, POP_PLUS, spawn } from '../render/particles.ts';
-import { flashDetent } from '../render/halo.ts';
+import type { SimState } from '../core/index.ts';
+import {
+  addHeadline,
+  addPlus,
+  addPop,
+  addRing,
+  addSwing,
+  P_BREATH,
+  P_BURST,
+  P_CONFETTI,
+  P_DRIP,
+  P_FIREFLY,
+  P_FLAKE_FLY,
+  P_FROST,
+  P_PETAL,
+  P_PUFF,
+  P_SPARKLE,
+  P_STEAM,
+  POP_BANG,
+  POP_MULT,
+  POP_PHEW,
+  spawn,
+} from '../render/particles.ts';
+import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
+import { hop } from '../render/nubs.ts';
+import type { SimEventV11 } from '../render/shims.ts';
 import { showDayCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
 import { addShake, addZoomPulse } from './camera.ts';
 import type { FixedClock } from './loop.ts';
 
-const PLUS = ['+0', '+1', '+2', '+3', '+4', '+5', '+6', '+7', '+8', '+9', '+10'];
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
 const FROST: number = 0xe6f6ff;
 const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
 const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
-
-function plus(n: number): string {
-  return n >= 0 && n < PLUS.length ? (PLUS[n] as string) : `+${n}`;
-}
 
 function rnd(a: number, b: number): number {
   return a + Math.random() * (b - a);
@@ -33,8 +51,11 @@ export class Fx {
   private sweatAcc = 0;
   private frostAcc = 0;
   private fireflyAcc = 0;
+  private breathAcc = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
   private stampImpact = -1;
+  /** The way the sun last turned (+1 counter-clockwise, −1 clockwise): a SWING's arc sweeps that way. */
+  private turn: 1 | -1 = 1;
 
   constructor(scene: RenderScene, clock: FixedClock) {
     this.sc = scene;
@@ -42,7 +63,7 @@ export class Fx {
   }
 
   /** Routes one frame's events. */
-  onEvents(events: readonly SimEvent[], s: SimState): void {
+  onEvents(events: readonly SimEventV11[], s: SimState): void {
     const sc = this.sc;
     const nx = s.nubs.x;
     const ny = s.nubs.y;
@@ -69,7 +90,7 @@ export class Fx {
             const sp = rnd(60, 120);
             spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp + s.params.v, rnd(10, 60), 0.4, 4, 1.5, 0xffffff);
           }
-          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.75);
+          addPlus(sc.pops, ev.snow);
           break;
         }
         case 'crystal': {
@@ -81,7 +102,7 @@ export class Fx {
             spawn(p, P_SPARKLE, nx, ny, 14, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 80), 0.55, 5, 1.5, 0xbdf3ff);
           }
           addRing(sc.rings, nx, ny, 4, 34, 0.35, 2.5, 0.9, 0xbdf3ff);
-          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.9);
+          addPlus(sc.pops, ev.snow);
           break;
         }
         case 'flower': {
@@ -89,7 +110,7 @@ export class Fx {
             const a = rnd(0, Math.PI * 2);
             spawn(sc.particles, P_SPARKLE, ev.x, ev.y, 6, Math.cos(a) * 40, Math.sin(a) * 40, 30, 0.45, 3.5, 1, 0xe6f7ff);
           }
-          addPop(sc.pops, plus(ev.snow), POP_PLUS, nx, ny, 130, 0.7);
+          addPlus(sc.pops, ev.snow);
           break;
         }
         case 'flakeMelt':
@@ -106,7 +127,9 @@ export class Fx {
         case 'multUp':
           sc.hud.multPop = 0.3;
           sc.banners.coolPulse = 0.25;
-          addPop(sc.pops, MULT[Math.min(5, ev.level)] as string, POP_MULT, nx + 18, ny, 150, 0.8);
+          addPop(sc.pops, MULT[Math.min(5, ev.level)] as string, POP_MULT, -18, 200, 0.8);
+          sc.nubs.happy = Math.max(sc.nubs.happy, 0.6);
+          hop(sc.nubs, ev.level >= 5 ? 9 : 5);
           if (ev.level >= 5) {
             this.clock.addHitStop(0.04);
             sc.banners.goldPulse = 0.45;
@@ -117,8 +140,9 @@ export class Fx {
           break;
         case 'phew': {
           this.clock.slowMo(0.4, 0.35);
-          addPop(sc.pops, 'PHEW!', POP_PHEW, nx, ny, 190, 1.1);
-          addPop(sc.pops, '+3', POP_PLUS, nx + 34, ny, 30, 0.9);
+          addHeadline(sc.pops, 'PHEW!', POP_PHEW, 1.1);
+          addPlus(sc.pops, 3);
+          hop(sc.nubs, 7);
           for (let i = 0; i < 24; i++) {
             const a = (i / 24) * Math.PI * 2 + rnd(-0.1, 0.1);
             const sp = rnd(80, 150);
@@ -141,6 +165,8 @@ export class Fx {
         case 'dawn': {
           showDayCard(sc.banners, ev.day);
           this.petals(30);
+          // Two little hops 0.4 s apart: a new day.
+          hop(sc.nubs, 4, 0.06, 4);
           break;
         }
         case 'cloudCapture':
@@ -150,7 +176,16 @@ export class Fx {
         case 'glareTouch':
           sc.nubs.glare = 0.25;
           addShake(sc.cam, 2, 0.1);
-          addPop(sc.pops, '!', POP_BANG, nx + 14, ny, 150, 0.5);
+          addPop(sc.pops, '!', POP_BANG, 22, 160, 0.5);
+          break;
+        case 'swing':
+          // The hand-off: the sun's sweep flashes on the dial, a SWING! pop (one a second at most;
+          // a chain updates it) and a little hop.
+          sc.halo.swingT = SWING_ARC_S;
+          sc.halo.swingDeg = ev.deg * this.turn;
+          addSwing(sc.pops, ev.chain);
+          sc.nubs.happy = Math.max(sc.nubs.happy, 0.5);
+          hop(sc.nubs, 4);
           break;
         case 'gateArch':
           if (ev.noon) {
@@ -194,6 +229,7 @@ export class Fx {
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
     if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);
+    if (s.sun.dTheta !== 0) this.turn = s.sun.dTheta > 0 ? 1 : -1;
     if (dt <= 0 || !playing) return;
     const sc = this.sc;
     const nb = s.nubs;
@@ -218,6 +254,19 @@ export class Fx {
         const side = Math.random() < 0.5 ? -1 : 1;
         spawn(p, P_DRIP, nb.x + side * rnd(5, 8), nb.y + 2, rnd(34, 44), side * rnd(10, 22), walk * 0.9, rnd(30, 60), 1.2, 1.4, 1.2, 0x7fc8ff);
       }
+    }
+    if (daylight && nb.f === 0) {
+      // Cold breath: a small puff from the mouth every 1.6 s, drifting the way he looks.
+      this.breathAcc += dt;
+      if (this.breathAcc >= 1.6) {
+        this.breathAcc = 0;
+        const lx = sc.nubs.lookX;
+        const ly = sc.nubs.lookY;
+        const size = 0.6 + 0.4 * Math.max(0, nb.chill / nb.maxChill);
+        spawn(p, P_BREATH, nb.x + lx * 4 * size, nb.y - ly * 2 * size, 68 * size, lx * 4, -ly * 4 + walk, 0, 0.7, 2, 5, 0xffffff);
+      }
+    } else {
+      this.breathAcc = 1;
     }
     if (daylight && nb.f === 0) {
       // Frost sparkles: 2 per second on the ground within 16 u, living 1.2 s.

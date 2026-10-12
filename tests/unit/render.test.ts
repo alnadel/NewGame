@@ -7,6 +7,7 @@ import { createBot, createRun, dayTicks, headlessConfig, step, type SimState } f
 import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src/game/camera.ts';
 import { cssa, hex } from '../../src/render/color.ts';
 import { createShadeSplit, splitShade } from '../../src/render/halo.ts';
+import { addHeadline, addPlus, addSwing, createPops, POP_PHEW, updatePops, type Pops } from '../../src/render/particles.ts';
 import { MAP_FADE_S, MAP_LABEL_FADE_S, MAP_PULL_S, mapAlphas, mapSettleT, type MapOverlay } from '../../src/render/meltMap.ts';
 import { createPalette, nubsShadeAt, updatePalette } from '../../src/render/palette.ts';
 import { matchShadow, traceShadows } from '../../src/render/shadowLayer.ts';
@@ -231,5 +232,59 @@ describe('matched shadow composite (GR2)', () => {
     }
     // Nothing to draw at (almost) zero alpha.
     expect(matchShadow(layer, p.shadow, p.ground, 0.001)).toBe(0);
+  });
+});
+
+describe('pops (GR9)', () => {
+  const live = (p: Pops): string[] => {
+    const out: string[] = [];
+    for (let i = 0; i < p.dur.length; i++) if ((p.dur[i] as number) > 0) out.push(p.text[i] as string);
+    return out;
+  };
+
+  it('three flakes 0.3 s apart leave one +3 pop', () => {
+    const p = createPops();
+    addPlus(p, 1);
+    updatePops(p, 0.3);
+    addPlus(p, 1);
+    updatePops(p, 0.3);
+    addPlus(p, 1);
+    expect(live(p)).toEqual(['+3']);
+    // It lives 0.75 s from the last flake; after that a new +1 starts a new pop.
+    updatePops(p, 0.7);
+    expect(live(p)).toEqual(['+3']);
+    updatePops(p, 0.1);
+    addPlus(p, 1);
+    expect(live(p)).toEqual(['+1']);
+  });
+
+  it('shows at most one SWING pop a second; a chain updates it', () => {
+    const p = createPops();
+    addSwing(p, 1);
+    updatePops(p, 0.5);
+    addSwing(p, 2);
+    expect(live(p)).toEqual(['SWING! ×2']);
+    updatePops(p, 0.6);
+    addSwing(p, 3);
+    expect(live(p).sort()).toEqual(['SWING! ×2', 'SWING! ×3']);
+  });
+
+  it('a headline clears small pops that have risen toward its row, but not fresh ones', () => {
+    const p = createPops();
+    addPlus(p, 1);
+    updatePops(p, 0.3);
+    addHeadline(p, 'PHEW!', POP_PHEW, 1.1);
+    addPlus(p, 3);
+    // The risen +1 takes no more values and is gone 0.12 s later; PHEW's +3 is a pop of its own.
+    expect(live(p).sort()).toEqual(['+1', '+3', 'PHEW!']);
+    updatePops(p, 0.13);
+    expect(live(p).sort()).toEqual(['+3', 'PHEW!']);
+    // A +1 only 0.1 s old stays and absorbs the +3.
+    const q = createPops();
+    addPlus(q, 1);
+    updatePops(q, 0.1);
+    addHeadline(q, 'PHEW!', POP_PHEW, 1.1);
+    addPlus(q, 3);
+    expect(live(q).sort()).toEqual(['+4', 'PHEW!']);
   });
 });

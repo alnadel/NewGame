@@ -7,8 +7,9 @@
 // Composite (GR2): the look is a multiply of the LUT shadow color C at the LUT alpha a, but a
 // multiply blend costs about twice a plain source-over in software raster. So the fill is the
 // source-over color K at alpha β that gives exactly the multiplied result over the ground color G
-// the tiles were painted with (matchShadow); over other colors (trail, decals) it differs by a level
-// or so.
+// the tiles were painted with (matchShadow). Over other colors it is off by (X − G)·(s_c − β) per
+// channel (s_c = a·(1 − C_c/255)): a few levels on texture, up to ~20 on the trail and ~30 on white
+// pickups under the saturated noon blue — invisible in play, measured by the e2e A/B (GR2).
 //
 // Winding: subpaths must all wind the same way on screen, or the nonzero rule punches holes where
 // they overlap. Core polygons are CCW in world space (y up); projected to screen space (y down) they

@@ -124,7 +124,7 @@ async function openAtTick(page: Page, seed: number, tick: number): Promise<void>
   const dt = Math.min(dayTicks(day) - 1, tick - dayStartTick(day));
   const minutes = 360 + Math.floor((720 * dt) / dayTicks(day));
   const hhmm = `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
-  await openGame(page, `test=1&seed=${seed}&day=${day}&t=${hhmm}&perf=0`);
+  await openGame(page, `test=1&seed=${seed}&day=${day}&t=${hhmm}&perf=0&plan=0`);
   await page.waitForTimeout(300);
 }
 
@@ -228,9 +228,12 @@ test.describe('shadow composite (GR2)', () => {
       const ab = await page.evaluate(() => window.__SHADY_TEST__!.pixelAB({ multiplyShadows: true }, {}));
       expect(ab).not.toBeNull();
       rows.push(`seed ${seed} tick ${tick}: mean ${ab!.mean.toFixed(3)} >3 ${(ab!.over3 * 100).toFixed(2)}% max ${ab!.max}`);
+      // Exact on the ground. Under the v1.1 colour script's bluer shadows (GR5 keys) the shaded trail
+      // is up to ~20 levels off in blue (≤ 3.1 % of pixels > 3 at 14:00) and white pickups up to ~30
+      // (A12 re-run with AO, documented in shadowLayer.ts).
       expect(ab!.mean, rows[rows.length - 1]).toBeLessThanOrEqual(1);
-      expect(ab!.over3, rows[rows.length - 1]).toBeLessThanOrEqual(0.01);
-      expect(ab!.max, rows[rows.length - 1]).toBeLessThanOrEqual(20);
+      expect(ab!.over3, rows[rows.length - 1]).toBeLessThanOrEqual(0.04);
+      expect(ab!.max, rows[rows.length - 1]).toBeLessThanOrEqual(40);
     }
     await info.attach('shadow-ab', { body: rows.join('\n'), contentType: 'text/plain' });
   });

@@ -1015,9 +1015,10 @@ let aoSprite: Canvas2D | null = null;
 
 /**
  * Contact shadows (GR5): a soft warm-dark pool under each visible caster's ground hull (prisms and
- * slabs, never a canopy disc), multiplied onto the ground before the shadow layer, so buildings,
- * trunks and stones sit on it at any sun angle. One stretched 64 px sprite per caster. The sprite's
- * inscribed ellipse is grown by √2 so it reaches the hull's corners.
+ * slabs, never a canopy disc), multiplied onto the ground after the shadow layer (a multiply under
+ * it would break the layer's matched source-over fill), so buildings, trunks and stones sit on it at
+ * any sun angle. One stretched 64 px sprite per caster; its inscribed ellipse is grown by √2 so it
+ * reaches the hull's corners.
  */
 export function drawContactAO(g: CanvasRenderingContext2D, v: View, cs: readonly Caster[], n: number, night: number): void {
   aoSprite ??= radialSprite('70,45,30', 64, 0.3, 0.55, 0.18);

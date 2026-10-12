@@ -5,11 +5,14 @@
 import {
   dayTicks,
   nightTicks,
+  PICKUP_ALIVE,
   queryCasters,
+  queryPickups,
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
   type Caster,
+  type Pickup,
   type RenderSnap,
   type SimState,
   type World,
@@ -57,6 +60,7 @@ import {
   drawOwnShadow,
   drawSizzle,
   looksFor,
+  hopLift,
   nubsBox,
   renderNubsSprite,
   updateNubsAnim,
@@ -450,9 +454,6 @@ export class Renderer {
       }
       drawFriendPuddle(g, v, sc.friend[0] as number, sc.friend[1] as number);
     }
-    // Visible casters, far (north) first: contact shadows now, the depth sort below.
-    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
-    if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
     drawPickups(g, v, s.world, time, snap.nubsY, night);
     if (sunUp) {
       const multiply = this.options.multiplyShadows;
@@ -460,6 +461,10 @@ export class Renderer {
         sc.passes++;
       }
     }
+    // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
+    // source-over fill stays exact), the depth sort below.
+    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
+    if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
 
     // Nubs' pose (needed for the footprint disc and the depth sort).
     const pose = sc.pose;
@@ -473,8 +478,11 @@ export class Renderer {
     pose.w3 = s.nubs.w[3] as number;
     pose.w4 = s.nubs.w[4] as number;
     pose.f = s.nubs.f;
-    pose.lookX = ux;
-    pose.lookY = -uy;
+    pose.sunX = ux;
+    pose.sunY = -uy;
+    lookAt(sc.nubs, s, snap.nubsX, snap.nubsY, ux, -uy, sunUp && walking && s.nubs.f === 0, gdt);
+    pose.lookX = sc.nubs.lookX;
+    pose.lookY = sc.nubs.lookY;
     pose.sunUp = sunUp;
     pose.walking = walking;
     pose.night = night;
@@ -593,7 +601,7 @@ export class Renderer {
     }
     g.restore();
 
-    drawPops(g, sc.pops, v, hudScale(v));
+    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion));
 
     // Edge sun mascot (decoration), kept below the HUD band.
     if (inp.mapT < 0 && inp.screen !== 'title' && inp.screen !== 'menu') {
@@ -622,6 +630,48 @@ export class Renderer {
 }
 
 const mapOverlay: MapOverlay = { a: 0, labelA: 0, sheetTop: null, time: 0 };
+const pickBuf: Pickup[] = [];
+
+/**
+ * Eases Nubs' face toward what he looks at (8/s; the sprite quantizes it to 5° steps): the sun,
+ * or, while he walks in full shade, the nearest flake or crystal within 70 u ahead.
+ */
+function lookAt(a: NubsAnim, s: SimState, nx: number, ny: number, sunX: number, sunY: number, shaded: boolean, dt: number): void {
+  let tx = sunX;
+  let ty = sunY;
+  if (shaded) {
+    const n = queryPickups(s.world, ny, ny + 70, pickBuf);
+    let best = Infinity;
+    for (let i = 0; i < n; i++) {
+      const pk = pickBuf[i] as Pickup;
+      if (pk.state !== PICKUP_ALIVE || pk.kind === 'flower') continue;
+      const dx = pk.x - nx;
+      const dy = pk.y - ny;
+      const d = dx * dx + dy * dy;
+      if (d < best && d > 1 && d <= 70 * 70) {
+        best = d;
+        tx = dx;
+        ty = -dy;
+      }
+    }
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len;
+    ty /= len;
+  }
+  const k = dt > 0 ? Math.min(1, 8 * dt) : 0;
+  let lx = a.lookX + (tx - a.lookX) * k;
+  let ly = a.lookY + (ty - a.lookY) * k;
+  const len = Math.hypot(lx, ly);
+  if (len < 1e-3) {
+    lx = tx;
+    ly = ty;
+  } else {
+    lx /= len;
+    ly /= len;
+  }
+  a.lookX = lx;
+  a.lookY = ly;
+}
 
 function particlesAlive(p: Particles): boolean {
   const life = p.life;
