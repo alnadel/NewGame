@@ -46,6 +46,7 @@ export interface HudState {
   builtNight: number;
   builtPb: number;
   builtChallenge: number;
+  builtGoal: number;
   builtVx: number;
   builtVw: number;
   builtTop: number;
@@ -116,6 +117,7 @@ export function createHud(): HudState {
     builtNight: NaN,
     builtPb: NaN,
     builtChallenge: NaN,
+    builtGoal: -2,
     builtVx: NaN,
     builtVw: NaN,
     builtTop: NaN,
@@ -243,9 +245,10 @@ function sized(c: Canvas2D | null, w: number, h: number): Canvas2D {
 
 export interface HudInput {
   s: SimState;
-  /** Absolute target minutes (or −1): personal best and challenge. */
+  /** Absolute target minutes (or −1): the recent best (gold flag), the challenge (teal flag) and the next milestone (a white tick). */
   pbMinutes: number;
   challengeMinutes: number;
+  goalMinutes: number;
   alpha: number;
   time: number;
 }
@@ -286,6 +289,7 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
     h.builtNight !== night ||
     h.builtPb !== inp.pbMinutes ||
     h.builtChallenge !== inp.challengeMinutes ||
+    h.builtGoal !== inp.goalMinutes ||
     h.builtVx !== v.vx ||
     h.builtVw !== v.vw ||
     h.builtTop !== v.safe.top ||
@@ -405,6 +409,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   h.builtNight = night;
   h.builtPb = inp.pbMinutes;
   h.builtChallenge = inp.challengeMinutes;
+  h.builtGoal = inp.goalMinutes;
   h.builtVx = v.vx;
   h.builtVw = v.vw;
   h.builtTop = v.safe.top;
@@ -612,6 +617,15 @@ function drawRulerStatic(
   };
   flag(inp.pbMinutes, '#FFC23D');
   flag(inp.challengeMinutes, '#2EC4B6');
+  // The next milestone: a small white tick across the ruler.
+  const gm = inp.goalMinutes - dayStart;
+  if (inp.goalMinutes >= 0 && gm >= 0 && gm <= 720) {
+    const gx = x0 + ((x1 - x0) * gm) / 720;
+    g.fillStyle = '#2B2140';
+    g.fillRect(gx - 2, y - 3, 4, hgt + 6);
+    g.fillStyle = '#FFFFFF';
+    g.fillRect(gx - 1, y - 2, 2, hgt + 4);
+  }
 
   // At night the head is a moon at the end of the (full) ruler: part of the layer.
   if (night) {

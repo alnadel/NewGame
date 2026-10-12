@@ -12,6 +12,7 @@ import {
   type Caster,
   type RenderSnap,
   type SimState,
+  type World,
 } from '../core/index.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
 import type { Equipped } from '../meta/content.ts';
@@ -20,6 +21,7 @@ import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, 
 import { drawBanners, createBanners, updateBanners, type Banners } from './banners.ts';
 import { createLight, drawCaster, drawContactAO, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
+import { drawFriendPennant, drawFriendPuddle, friendSpot } from './friend.ts';
 import { cssa } from './color.ts';
 import {
   createFootprints,
@@ -116,8 +118,12 @@ export interface RenderInput {
   dragging: boolean;
   guideAlpha: number;
   hint: HintView;
+  /** HUD ruler: the recent best (gold flag), the challenge target (teal flag), the next milestone (white tick); −1 = none. */
   pbMinutes: number;
   challengeMinutes: number;
+  goalMinutes: number;
+  /** Challenge runs: the sender's name ('' = none) on the friend's pennant. */
+  challengeName: string;
   /** Game seconds since the death (after hit-stop), or −1. */
   dying: number;
   /** Real seconds since Results appeared, or −1. */
@@ -179,6 +185,10 @@ export interface RenderScene {
   ms: number;
   atm: Atmosphere;
   atmIn: AtmosphereIn;
+  /** The friend's puddle on a challenge run: [x, y] for the score `friendFor` of world `friendWorld`. */
+  friend: Float64Array;
+  friendFor: number;
+  friendWorld: World | null;
   /**
    * Full-viewport layers composited over the ground in the last frame (soft shadow blit, the
    * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
@@ -219,6 +229,9 @@ export function createScene(): RenderScene {
     ms: 0,
     atm: createAtmosphere(),
     atmIn: createAtmosphereIn(),
+    friend: new Float64Array(2),
+    friendFor: -1,
+    friendWorld: null,
     passes: 0,
   };
 }
@@ -266,7 +279,7 @@ export class Renderer {
    * frames, so the first play frame of a run doesn't pay for it).
    */
   prebuildHud(inp: RenderInput): void {
-    syncHud(this.scene.hud, this.scene.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, alpha: 1, time: inp.time });
+    syncHud(this.scene.hud, this.scene.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: 1, time: inp.time });
   }
 
   /**
@@ -427,6 +440,16 @@ export class Renderer {
     drawGround(g, v, sc.groundPal, sc.ground);
     drawTrail(g, v, s.world, sc.groundPal);
     drawFootprints(g, sc.footprints, v, sc.pal);
+    // A challenge run: the friend's puddle where the sender melted.
+    const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;
+    if (friend) {
+      if (sc.friendFor !== inp.challengeMinutes || sc.friendWorld !== s.world) {
+        friendSpot(s.world, inp.challengeMinutes, sc.friend);
+        sc.friendFor = inp.challengeMinutes;
+        sc.friendWorld = s.world;
+      }
+      drawFriendPuddle(g, v, sc.friend[0] as number, sc.friend[1] as number);
+    }
     // Visible casters, far (north) first: contact shadows now, the depth sort below.
     const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
     if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
@@ -506,6 +529,7 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
+    if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
@@ -589,7 +613,7 @@ export class Renderer {
     const hudVisible = inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'dying';
     if (hudVisible) {
       const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : 1;
-      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, alpha: a, time: time });
+      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: a, time: time });
     }
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
     drawScreenParticles(g, sc.particles, v.dpr);

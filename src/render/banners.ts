@@ -1,8 +1,10 @@
 // Screen-space moments (GDD §11): the NOON banner (drops from the top over 600 ms, holds 1.2 s),
 // the NIGHT card, the "DAY N" serif card (slides in from the right in 500 ms, holds 1 s; fades
-// under reduced motion), and the timers of the edge vignettes the atmosphere layer draws
-// (atmosphere.ts): low-Chill heat haze, the cool multiplier pulse and the gold ×5 pulse.
-// Photosensitivity: no full-screen flash.
+// under reduced motion), the stamps (a plate that slams in at 2.4× over 220 ms with an overshoot,
+// tilted −4°, holds, then fades and rises 12 px over 300 ms; under reduced motion it only fades:
+// 'PASSED SAM!' in teal, 'PAST YOUR RECENT BEST' in gold), and the timers of the edge vignettes
+// the atmosphere layer draws (atmosphere.ts): low-Chill heat haze, the cool multiplier pulse and
+// the gold ×5 pulse. Photosensitivity: no full-screen flash.
 
 import type { View } from '../game/camera.ts';
 import { roundRect } from './sprites.ts';
@@ -22,10 +24,52 @@ export interface Banners {
   /** Heat haze strength 0..1 (eased toward 1 while Chill < 25). */
   heat: number;
   heatPhase: number;
+  /** The stamp: seconds since it appeared (−1 none), its look, text, hold time and text width. */
+  stamp: number;
+  stampKind: StampKind;
+  stampText: string;
+  stampHold: number;
+  stampW: number;
 }
 
+export type StampKind = 'noon' | 'teal' | 'gold';
+
+/** Stamp timing (s): slam in, then fade out (the hold is per stamp). */
+export const STAMP_IN = 0.22;
+const STAMP_OUT = 0.3;
+/** Plate, outline and ink of each stamp look. */
+const STAMP_LOOK: Readonly<Record<StampKind, readonly [string, string, string]>> = {
+  noon: ['#FFC23D', '#FF6A3D', '#2B2140'],
+  teal: ['#2EC4B6', '#13857C', '#10302D'],
+  gold: ['#FFE08A', '#D99A12', '#2B2140'],
+};
+
 export function createBanners(): Banners {
-  return { noon: -1, night: -1, day: -1, dayN: 1, dayText: 'DAY 1', coolPulse: 0, goldPulse: 0, heat: 0, heatPhase: 0 };
+  return {
+    noon: -1,
+    night: -1,
+    day: -1,
+    dayN: 1,
+    dayText: 'DAY 1',
+    coolPulse: 0,
+    goldPulse: 0,
+    heat: 0,
+    heatPhase: 0,
+    stamp: -1,
+    stampKind: 'noon',
+    stampText: '',
+    stampHold: 0,
+    stampW: 0,
+  };
+}
+
+/** Shows a stamp (it replaces any stamp still on screen). */
+export function showStamp(b: Banners, kind: StampKind, text: string, hold: number): void {
+  b.stamp = 0;
+  b.stampKind = kind;
+  b.stampText = text;
+  b.stampHold = hold;
+  b.stampW = 0;
 }
 
 export function resetBanners(b: Banners): void {
@@ -35,6 +79,7 @@ export function resetBanners(b: Banners): void {
   b.coolPulse = 0;
   b.goldPulse = 0;
   b.heat = 0;
+  b.stamp = -1;
 }
 
 export function showDayCard(b: Banners, day: number): void {
@@ -49,6 +94,7 @@ export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
   if (b.noon >= 0) b.noon = b.noon + dt > 2.4 ? -1 : b.noon + dt;
   if (b.night >= 0) b.night = b.night + dt > 2.4 ? -1 : b.night + dt;
   if (b.day >= 0) b.day = b.day + dt > 2.0 ? -1 : b.day + dt;
+  if (b.stamp >= 0) b.stamp = b.stamp + dt > STAMP_IN + b.stampHold + STAMP_OUT ? -1 : b.stamp + dt;
   b.coolPulse = Math.max(0, b.coolPulse - dt);
   b.goldPulse = Math.max(0, b.goldPulse - dt);
   b.heat += ((lowChill ? 1 : 0) - b.heat) * Math.min(1, dt * 3);
@@ -93,7 +139,63 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
     }
     serifCard(g, x, top + 70 * scale, b.dayText, scale * 1.25, a, '#2B2140', 'rgba(255,248,238,0.94)');
   }
+  if (b.stamp >= 0) drawStamp(g, b, cx, top + 40 * scale, scale, v.vw - 40, reducedMotion);
   g.globalAlpha = 1;
+}
+
+/** The stamp plate and text, fitted to `maxW` CSS px. */
+function drawStamp(g: CanvasRenderingContext2D, b: Banners, cx: number, y: number, scale: number, maxW: number, reducedMotion: boolean): void {
+  const t = b.stamp;
+  const outT = t - STAMP_IN - b.stampHold;
+  let a = 1;
+  let s = 1;
+  let rise = 0;
+  if (reducedMotion) a = Math.min(1, t / 0.15);
+  else if (t < STAMP_IN) {
+    s = 2.4 - 1.4 * easeOutBack(t / STAMP_IN);
+    a = Math.min(1, t / 0.08);
+  }
+  if (outT > 0) {
+    const u = Math.min(1, outT / STAMP_OUT);
+    a *= 1 - u;
+    rise = -12 * u;
+  }
+  if (a <= 0.01) return;
+  let size = 44 * scale;
+  g.font = `italic 900 ${Math.round(size)}px ${SANS}`;
+  if (b.stampW === 0) b.stampW = g.measureText(b.stampText).width;
+  let tw = b.stampW;
+  const pad = 18 * scale;
+  if (tw + 2 * pad > maxW) {
+    // Too wide: shrink the type to fit (the plate keeps its padding).
+    const k = (maxW - 2 * pad) / tw;
+    size *= k;
+    tw *= k;
+    g.font = `italic 900 ${Math.round(size)}px ${SANS}`;
+  }
+  const w = tw + 2 * pad;
+  const h = size * 1.3;
+  const [plate, line, ink] = STAMP_LOOK[b.stampKind];
+  g.save();
+  g.globalAlpha = a;
+  g.translate(cx, y + rise);
+  g.rotate((-4 * Math.PI) / 180);
+  g.scale(s, s);
+  g.fillStyle = 'rgba(43,33,64,0.22)';
+  roundRect(g, -w / 2, -h / 2 + 5, w, h, 12 * scale);
+  g.fill();
+  g.fillStyle = plate;
+  roundRect(g, -w / 2, -h / 2, w, h, 12 * scale);
+  g.fill();
+  g.strokeStyle = line;
+  g.lineWidth = 4;
+  roundRect(g, -w / 2 + 2, -h / 2 + 2, w - 4, h - 4, 10 * scale);
+  g.stroke();
+  g.fillStyle = ink;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(b.stampText, 0, size * 0.04);
+  g.restore();
 }
 
 function noonBanner(g: CanvasRenderingContext2D, cx: number, y: number, s: number, a: number, t: number): void {

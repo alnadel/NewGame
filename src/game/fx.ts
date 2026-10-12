@@ -6,7 +6,7 @@
 import type { SimEvent, SimState } from '../core/index.ts';
 import { addPop, addRing, P_BURST, P_CONFETTI, P_DRIP, P_FIREFLY, P_FLAKE_FLY, P_FROST, P_PETAL, P_PUFF, P_SPARKLE, P_STEAM, POP_BANG, POP_MULT, POP_PHEW, POP_PLUS, spawn } from '../render/particles.ts';
 import { flashDetent } from '../render/halo.ts';
-import { showDayCard } from '../render/banners.ts';
+import { showDayCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
 import { addShake, addZoomPulse } from './camera.ts';
 import type { FixedClock } from './loop.ts';
@@ -33,6 +33,8 @@ export class Fx {
   private sweatAcc = 0;
   private frostAcc = 0;
   private fireflyAcc = 0;
+  /** Seconds until the current stamp lands (its camera shake), or −1. */
+  private stampImpact = -1;
 
   constructor(scene: RenderScene, clock: FixedClock) {
     this.sc = scene;
@@ -174,8 +176,24 @@ export class Fx {
     }
   }
 
+  /**
+   * A stamp in the banner slot (HIGH NOON, PASSED SAM!, PAST YOUR RECENT BEST): it slams in and
+   * lands with a 3 u camera shake (none under reduced motion).
+   */
+  stamp(kind: StampKind, text: string, hold: number): void {
+    showStamp(this.sc.banners, kind, text, hold);
+    this.stampImpact = STAMP_IN;
+  }
+
+  /** A stamp that celebrates (a target passed): the stamp plus confetti. */
+  celebrate(kind: StampKind, text: string): void {
+    this.stamp(kind, text, 0.7);
+    this.confetti(24);
+  }
+
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
+    if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);
     if (dt <= 0 || !playing) return;
     const sc = this.sc;
     const nb = s.nubs;

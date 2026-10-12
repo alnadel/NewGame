@@ -65,7 +65,7 @@ import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
-import type { ChallengeBanner, ImportOutcome, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
+import type { ImportOutcome, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
@@ -89,7 +89,20 @@ import {
   type RunConfigV11,
   type SimEventV11,
 } from '../render/shims.ts';
-import { comfortOn, comfortStat, uiV11, type ApplyRunOptionsV11, type CueId } from './shims.ts';
+import {
+  challengeRules,
+  comfortOn,
+  comfortStat,
+  historyLength,
+  nextMilestone,
+  recentBest,
+  uiV11,
+  type ApplyRunOptionsV11,
+  type ChallengeBannerV11,
+  type CueId,
+  type ResultsViewV11,
+} from './shims.ts';
+import type { StampKind } from '../render/banners.ts';
 
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
@@ -242,6 +255,14 @@ export class Session {
   private runAssisted = false;
   /** The best the HUD flags during this run, read when it began (checkpoints must not move it). */
   private runPb = -1;
+  /** The next milestone the HUD ticks during this run (−1 none), read when it began. */
+  private runGoal = -1;
+  /** This run is the warm-up a first-time player plays before a friend's challenge (its Retry takes the challenge). */
+  private warmup: Challenge | null = null;
+  /** The in-run stamp still to come: the score that triggers it (−1 none), its look and text. */
+  private stampAt = -1;
+  private stampKind: StampKind = 'teal';
+  private stampText = '';
   /**
    * Sim-altering debug URL params are present (?day, ?t, ?chill, ?profile, ?bot, ?fast, ?guide):
    * such runs are not scored, saved, shared or counted as Daily tries.
@@ -440,6 +461,8 @@ export class Session {
       hint: { target: Number.NaN, width: 0, turn: 0, phase: -1, alpha: 0 },
       pbMinutes: -1,
       challengeMinutes: -1,
+      goalMinutes: -1,
+      challengeName: '',
       dying: -1,
       mapT: -1,
       sheetTop: null,
@@ -672,6 +695,7 @@ export class Session {
       this.fx.onEvents(events, s);
     }
     this.checkDailyTry();
+    if (stepping) this.checkStamp();
 
     // Idle-time world generation (keeps step() from ever validating a chunk inside a tick).
     const tGen = performance.now();
@@ -711,8 +735,10 @@ export class Session {
     r.guideAlpha = this.currentGuideAlpha();
     this.fillHintView(real, screenNow);
     const save = this.d.store.get();
-    r.pbMinutes = this.pbMinutes();
+    r.pbMinutes = this.runActive ? this.runPb : this.livePb();
+    r.goalMinutes = this.runActive ? this.runGoal : this.liveGoal();
     r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
+    r.challengeName = this.runChallenge ? challengeRules(this.runChallenge).n : '';
     r.dying = this.deathAt >= 0 ? Math.max(0, this.dyingGame) : -1;
     r.mapT = this.resultsAt >= 0 && screenNow === 'results' ? this.time - this.resultsAt : -1;
     r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
@@ -881,7 +907,9 @@ export class Session {
       if (c.k === 'd') {
         cfg = this.dailyConfig(c.d, rm);
       } else {
-        cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: 3, tutorial: false, reducedMotion: rm };
+        // The sender's exact rules (CC-8, A1); never a lesson, hint or cue.
+        const r = challengeRules(c);
+        cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: r.p, tutorial: r.p === 0, reducedMotion: rm, drain: r.dr, noonCloud: r.nc, plan: r.pl === 1 };
       }
       this.kind = 'challenge';
     } else {
@@ -930,13 +958,19 @@ export class Session {
     return !this.debugRuns && date === localDate() && dailyStatus(this.d.store.get(), date).tries < DAILY_TRIES;
   }
 
+  /** A challenge is open on a save that has never finished a run: the tutorial run comes first. */
+  private inWarmup(): boolean {
+    return this.challenge !== null && this.d.store.get().stats.runs === 0;
+  }
+
   /**
    * The Title's live scene, held at dawn: the challenge run while a challenge link is open (so a
-   * press on the canvas or a tray drag starts it), otherwise the next endless run.
+   * press on the canvas or a tray drag starts it) unless the tutorial warm-up comes first,
+   * otherwise the next endless run.
    */
   private createTitleRun(): SimState {
     this.finishPrebuild();
-    if (this.challenge) return this.makeRun('challenge');
+    if (this.challenge && !this.inWarmup()) return this.makeRun('challenge');
     if (this.nextRun && this.nextRun.cfg.mode === 'endless' && this.nextRun.phase === 'hold') {
       const r = this.nextRun;
       this.nextRun = null;
@@ -957,6 +991,7 @@ export class Session {
     this.nextRun = null;
     this.nextBuild = null;
     if (this.runActive) return;
+    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
     this.lifetimeRuns = this.d.store.get().stats.runs;
     this.runRm = this.reducedMotion();
     this.s = this.createTitleRun();
@@ -1032,7 +1067,10 @@ export class Session {
     this.runActive = true;
     this.runAssisted = (this.params.guide ?? save.settings.guide) === 'always';
     this.runPb = this.livePb();
+    this.runGoal = this.liveGoal();
     this.lifetimeRuns = save.stats.runs;
+    this.warmup = run.cfg.mode === 'endless' && this.inWarmup() ? this.challenge : null;
+    this.armStamp(run);
     if (!this.debugRuns) {
       const begun = beginRun(save);
       if (begun.save !== save) {
@@ -1147,9 +1185,11 @@ export class Session {
     }
   }
 
-  private startRun(kind: RunKind, date?: string): void {
+  private startRun(want: RunKind, date?: string): void {
     this.d.audio.ensure();
     const held = !this.runActive && this.s.phase === 'hold';
+    // A first-time player plays the tutorial run before a friend's challenge (CC-8 warm-up).
+    const kind = want === 'challenge' && this.inWarmup() ? 'endless' : want;
     if (kind === 'endless') {
       if (!held || this.s.cfg.mode !== 'endless' || this.kind !== 'endless') this.s = this.makeRun('endless');
       this.beginRun(this.s);
@@ -1169,6 +1209,8 @@ export class Session {
   private retry(): void {
     this.d.audio.ensure();
     this.finishPrebuild();
+    // After the warm-up, Retry ("Take the challenge") plays the friend's run.
+    if (this.warmup && this.challenge) this.kind = 'challenge';
     let run: SimState;
     if (this.kind === 'endless' && this.nextRun && this.nextRun.cfg.mode === 'endless') {
       run = this.nextRun;
@@ -1195,11 +1237,11 @@ export class Session {
     this.paused = false;
     this.input.releaseAll();
     if (this.queuedChallenge) {
-      const c = this.queuedChallenge;
+      this.challenge = this.queuedChallenge;
       this.queuedChallenge = null;
-      this.challenge = c;
-      this.ui.setChallenge(this.challengeBanner(c));
     }
+    // The banner drops its warm-up note once the first run is done.
+    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
     this.lifetimeRuns = this.d.store.get().stats.runs;
     this.s = this.createTitleRun();
     this.renderIn.s = this.s;
@@ -1237,10 +1279,16 @@ export class Session {
   // Challenges, the date, other tabs
   // -------------------------------------------------------------------------------------------
 
-  private challengeBanner(c: Challenge): ChallengeBanner {
-    if (c.k !== 'd') return { minutes: c.m };
-    const n = dailyNumber(c.d);
-    return { minutes: c.m, note: c.d === localDate() ? `Daily #${n}` : `Daily #${n} · practice run` };
+  private challengeBanner(c: Challenge): ChallengeBannerV11 {
+    const b: ChallengeBannerV11 = { minutes: c.m };
+    const name = challengeRules(c).n;
+    if (name) b.name = name;
+    if (this.inWarmup()) b.warmup = true;
+    if (c.k === 'd') {
+      const n = dailyNumber(c.d);
+      b.note = c.d === localDate() ? `Daily #${n}` : `Daily #${n} · practice run`;
+    }
+    return b;
   }
 
   /** A challenge link opened in this document (same-document navigation to #c=…). */
@@ -1387,13 +1435,14 @@ export class Session {
     if (this.resultsShown || !this.result || !this.outcome) return;
     this.resultsShown = true;
     const daily = this.result.mode === 'daily';
-    const view = {
+    const view: ResultsViewV11 = {
       result: this.result,
       outcome: this.outcome,
       dailyTry: daily ? this.dailyTry : undefined,
       // K5: every Daily (k:'d' challenges too) says which date it was and whether it could count.
       ...(daily && this.dailyDate !== null ? { dailyDate: this.dailyDate, dailyScored: this.dailyScored } : {}),
-      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m } : {}),
+      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m, challengeName: challengeRules(this.runChallenge).n } : {}),
+      ...(this.warmup ? { warmupFor: { minutes: this.warmup.m, name: challengeRules(this.warmup).n } } : {}),
       ...(this.debugRuns ? { debug: true } : {}),
     };
     this.ui.show('results', view);
@@ -1483,18 +1532,53 @@ export class Session {
     return guideAlpha(setting, s.cfg.profile, this.lifetimeRuns, s.day, frac);
   }
 
-  /** The HUD's best flag: frozen for the run in progress, live on the Title and menus. */
-  private pbMinutes(): number {
-    return this.runActive ? this.runPb : this.livePb();
-  }
-
+  /**
+   * The HUD's gold flag (frozen for the run in progress, live on the Title and menus): the Daily's
+   * best on a Daily, else the recent best (the best of the last 10 runs) from lifetime run 3 on.
+   */
   private livePb(): number {
     const save = this.d.store.get();
     if (this.dailyDate) {
       const st = dailyStatus(save, this.dailyDate);
       return st.bestMinutes > 0 ? st.bestMinutes : -1;
     }
-    return save.stats.bestMinutes > 0 && save.stats.runs >= 3 ? save.stats.bestMinutes : -1;
+    const recent = recentBest(save);
+    return recent > 0 && save.stats.runs >= 3 ? recent : -1;
+  }
+
+  /** The HUD's white tick: the next milestone of endless runs. */
+  private liveGoal(): number {
+    if (this.kind !== 'endless') return -1;
+    return nextMilestone(this.d.store.get()) ?? -1;
+  }
+
+  /**
+   * The run's stamp (GR8): a challenge stamps 'PASSED SAM!' when its target is reached; an endless
+   * run with three runs of history stamps 'PAST YOUR RECENT BEST' when it beats that, once.
+   */
+  private armStamp(run: SimState): void {
+    this.stampAt = -1;
+    const save = this.d.store.get();
+    const c = this.runChallenge;
+    if (run.cfg.mode === 'challenge' && c) {
+      const name = challengeRules(c).n;
+      this.stampAt = c.m;
+      this.stampKind = 'teal';
+      this.stampText = name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!';
+    } else if (run.cfg.mode === 'endless' && historyLength(save) >= 3) {
+      this.stampAt = recentBest(save) + 1;
+      this.stampKind = 'gold';
+      this.stampText = 'PAST YOUR RECENT BEST';
+    }
+  }
+
+  /** Fires the run's stamp on the first tick its score is reached. */
+  private checkStamp(): void {
+    const s = this.s;
+    if (this.stampAt < 0 || s.phase === 'hold' || s.minutes < this.stampAt) return;
+    this.stampAt = -1;
+    this.fx.celebrate(this.stampKind, this.stampText);
+    this.d.haptics.play('best');
   }
 
   private updateHints(dt: number, screen: ScreenId): void {
@@ -1507,6 +1591,9 @@ export class Session {
       const s = this.s;
       if (s.phase === 'hold') {
         this.setGhost('both');
+      } else if (this.kind === 'challenge') {
+        // The sender's rules: no ghost hint.
+        this.setGhost('off');
       } else {
         const dragging = this.input.pointerDown || this.input.keyDown;
         const h = this.hintIn;
@@ -1845,7 +1932,10 @@ export class Session {
     return { mode: this.ghost, target: h.target, width: h.targetW, turn: h.turn, lesson: h.lesson, shown: h.shown };
   }
 
-  /** Test hook: replays a moment through fx and audio only (the sim is untouched). */
+  /**
+   * Test hook: replays a moment through fx and audio only (the sim is untouched): phew, mult, mult5,
+   * noon, dawn, night, cloud, glare, flake, best, passed.
+   */
   demo(name: string): void {
     const s = this.s;
     let ev: SimEvent | null = null;
@@ -1880,6 +1970,11 @@ export class Session {
       case 'best':
         this.fx.confetti(40);
         return;
+      case 'passed': {
+        const name = this.runChallenge ? challengeRules(this.runChallenge).n : '';
+        this.fx.celebrate('teal', name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!');
+        return;
+      }
       default:
         return;
     }
