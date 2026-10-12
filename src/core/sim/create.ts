@@ -56,7 +56,7 @@ export function prepareRun(cfg: RunConfig): RunBuild {
   const { day, dayTick } = startOf(cfg);
   return {
     cfg: { ...cfg },
-    world: createWorld(cfg.seed, cfg.profile, cfg.tutorial),
+    world: createWorld(cfg),
     targetY: yAtDayTick(day, dayTick) + TUNING.world.hardAhead,
   };
 }
@@ -67,13 +67,16 @@ export function prepareSome(b: RunBuild, budget: number): boolean {
 }
 
 /**
- * Creates a run: builds the world (validated through Nubs + 1600 u), puts Nubs at the start (or at
- * cfg.startDay/startT for debugging) with the sun at θ0, and computes coverage and the guide so the
- * Title can render the live scene. The clock stays frozen until the first touch. With `build` (from
- * prepareRun() with the same config) its world is used and only the rest of it is generated now.
+ * Creates a run: builds the world (validated through Nubs + `ahead` u), puts Nubs at the start (or
+ * at cfg.startDay/startT for debugging) with the sun at θ0, and computes coverage and the guide so
+ * the Title can render the live scene. The clock stays frozen until the first touch, and step()
+ * completes the hard guarantee (Nubs + TUNING.world.hardAhead) on it, so a smaller `ahead` (≥ the
+ * view and the shadow reach, e.g. 1100 for the Title) only moves generation work later: the world is
+ * the same either way. With `build` (from prepareRun() with the same config) its world is used and
+ * only the rest of it is generated now.
  */
-export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
-  const world = build ? build.world : createWorld(cfg.seed, cfg.profile, cfg.tutorial);
+export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNING.world.hardAhead): SimState {
+  const world = build ? build.world : createWorld(cfg);
   const { day, dayTick } = startOf(cfg);
   const maxChill = TUNING.nubs.maxChill;
   const theta0 = world.theta0;
@@ -148,7 +151,7 @@ export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
   };
   syncTime(s);
   s.nextHistoryY = s.nubs.y;
-  ensureGenerated(world, s.nubs.y + TUNING.world.hardAhead);
+  ensureGenerated(world, s.nubs.y + ahead);
   computeCoverage(s);
   updateGuide(s);
   return s;

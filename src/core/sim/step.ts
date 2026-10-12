@@ -167,6 +167,8 @@ export function step(s: SimState, input: InputFrame): void {
     if (!input.downEdge && input.key === 0) return;
     s.phase = 'day';
     s.ready = TUNING.start.readyTicks;
+    // A run created with less than the hard guarantee generated (createRun's `ahead`) pays the rest now.
+    ensureGenerated(s.world, s.nubs.y + W.hardAhead);
     s.events.push({ e: 'start' });
     startFrame.down = input.down;
     startFrame.downEdge = input.downEdge;

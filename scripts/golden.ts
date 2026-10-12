@@ -95,7 +95,7 @@ function fnv(values: number[]): string {
 
 /** Digest of each of chunks 0-9 of a profile-3 world: its casters (incl. rescues) and pickups. */
 export function chunkDigests(seed: number): string[] {
-  const w = createWorld(seed, 3, false);
+  const w = createWorld({ seed, profile: 3, tutorial: false });
   ensureGenerated(w, 11 * CH);
   const out: string[] = [];
   for (let k = 0; k < 10; k++) {

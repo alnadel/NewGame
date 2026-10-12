@@ -1,4 +1,4 @@
-// Day table, post-Day-6 ramp and onboarding profiles (V1_PLAN §4.2, §6).
+// Day table, post-Day-6 ramp, onboarding profiles and the comfort ladder (V1_PLAN §4.2, §6).
 // Pure data + arithmetic: this module imports nothing. All per-day difficulty knobs live here.
 
 export type BiomeId = 'meadow' | 'oldtown';
@@ -38,7 +38,7 @@ export interface DayParams {
   readonly floor: number;
   /**
    * Profile drain (Chill/s at f = 1). Persists for the whole run. The sim reads the drain through
-   * effectiveDrain(s), which prefers RunConfig.drain (the endless onboarding ramp) when it is set;
+   * effectiveDrain(s), which prefers RunConfig.drain (an endless run's comfort rung) when it is set;
    * the validator always uses this profile value.
    */
   readonly drain: number;
@@ -51,55 +51,88 @@ export interface DayParams {
 export interface ProfileParams {
   readonly drain: number;
   readonly day1EpsNoon: number;
-  /**
-   * Validator floor override for Day 1 (0 = use the day table). Currently non-binding: profile 0's
-   * Day 1 (εnoon 40°, drain 30, the authored tutorial chunk and the parked noon cloud) never needs a
-   * rescue at its floor, so 70 and the table's 50 give byte-identical worlds and sim output
-   * (verified with `node scripts/sim.ts` and the golden hashes). Kept as the knob for a harder p0.
-   */
-  readonly day1Floor: number;
-  /** A cloud rides with Nubs over 11 AM-1 PM on Day 1, reachable with the sun roughly north. */
-  readonly parkedNoonCloud: boolean;
-  /** The first Day-1 cloud is always an overtaker (tutorial beat). */
-  readonly firstCloudOvertakes: boolean;
   readonly phewT: number;
-  readonly guideAlways: boolean;
 }
 
 /**
- * Onboarding profiles (V1_PLAN §6). Daily and challenge runs always use profile 3. Drains step
- * 30 / 40 / 47 / 55 (K2) so the run-3 jump to the full drain is no longer a cliff; endless runs also
- * cap it per lifetime run with endlessDrain() below.
- *
- * Runs 1 and 2 keep the parked noon cloud. The seeded human model showed that without it they die
- * just before Day 1 noon (median 24 s, 18% see night, vs 67% on run 0). With it, run 1 reaches a
- * median of 40 s and 43% see night. The training wheel still asks the player to find the cloud's
- * angle, and it ends at run 3.
+ * Onboarding profiles (V1_PLAN §6): drain, Day-1 noon elevation and PHEW threshold. Daily and
+ * challenge runs always use profile 3. Endless runs pick a profile through the comfort ladder below.
  */
 export const PROFILES: readonly ProfileParams[] = Object.freeze([
-  Object.freeze({ drain: 30, day1EpsNoon: 40, day1Floor: 70, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: true }),
-  Object.freeze({ drain: 40, day1EpsNoon: 44, day1Floor: 0, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: false }),
-  Object.freeze({ drain: 47, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: true, firstCloudOvertakes: true, phewT: 20, guideAlways: false }),
-  Object.freeze({ drain: 55, day1EpsNoon: 48, day1Floor: 0, parkedNoonCloud: false, firstCloudOvertakes: false, phewT: 15, guideAlways: false }),
+  Object.freeze({ drain: 30, day1EpsNoon: 40, phewT: 20 }),
+  Object.freeze({ drain: 40, day1EpsNoon: 44, phewT: 20 }),
+  Object.freeze({ drain: 47, day1EpsNoon: 48, phewT: 20 }),
+  Object.freeze({ drain: 55, day1EpsNoon: 48, phewT: 15 }),
 ]);
 
 /**
- * Endless onboarding drain ramp (K2 addendum): run n (0-based lifetime runs) drains at most
- * start + perRun·n Chill/s, never above max or its profile's drain.
+ * Day-1 parked training cloud (part of a world's identity): 1 rides with Nubs 300-420 min after
+ * 6 AM (11:00 AM-1:00 PM), 2 only 330-390 min (11:30 AM-12:30 PM), 0 none. With it, the first Day-1
+ * cloud is always an overtaker. Windows: TUNING.cloud.parkedWindows.
  */
-export const ONBOARD_DRAIN = Object.freeze({ start: 30, perRun: 3, max: 55 });
+export type NoonCloud = 0 | 1 | 2;
+
+/** The noon cloud a run's world uses: RunConfig.noonCloud, else 1 for profiles 0-2 and 0 for 3. */
+export function effectiveNoonCloud(cfg: { readonly profile: ProfileId; readonly noonCloud?: NoonCloud }): NoonCloud {
+  return cfg.noonCloud ?? (cfg.profile <= 2 ? 1 : 0);
+}
+
+/** One rung of the comfort ladder: the rules an endless run is played at. */
+export interface ComfortRung {
+  readonly profile: ProfileId;
+  readonly drain: number;
+  readonly noonCloud: NoonCloud;
+}
 
 /**
- * Drain (Chill/s at f = 1) for an endless run started after `lifetimeRuns` finished runs:
- * min(PROFILES[min(3, n)].drain, start + perRun·n, max) with n = max(0, floor(runs)).
- * Runs 0..9 give 30, 33, 36, 39, 42, 45, 48, 51, 54, 55; 9 and later give 55. The session passes it
- * as RunConfig.drain for endless runs only; daily, challenge and bots keep the profile drain.
+ * The comfort ladder. Rung 0 is the tutorial (lifetime run 0 only); rung 4 is standard (the Daily's
+ * rules). Endless runs climb after a good run and step down after a rough one (comfortAfterRun).
  */
+export const COMFORT_RUNGS: readonly ComfortRung[] = Object.freeze([
+  Object.freeze({ profile: 0, drain: 30, noonCloud: 1 }),
+  Object.freeze({ profile: 2, drain: 40, noonCloud: 1 }),
+  Object.freeze({ profile: 3, drain: 44, noonCloud: 1 }),
+  Object.freeze({ profile: 3, drain: 50, noonCloud: 2 }),
+  Object.freeze({ profile: 3, drain: 55, noonCloud: 0 }),
+] satisfies ComfortRung[]);
+
+export const COMFORT_MAX = 4;
+
+/** comfortAfterRun thresholds (score minutes): a jump to standard, one rung up, one rung down. */
+export const COMFORT_STEPS = Object.freeze({ standard: 1440, up: 390, down: 240, tutorialUp: 720 });
+
+const clampRung = (r: number, lo: number): number => (r >= lo ? (r <= COMFORT_MAX ? Math.floor(r) : COMFORT_MAX) : lo);
+
+/**
+ * The rung of the next endless run after a run at `rung` that scored `minutes`. From the tutorial
+ * (rung 0): Day 3 → standard, the first night → 2, else 1. From rung ≥ 1: Day 3 → standard, past
+ * 12:30 PM → one up, before 10:00 AM → one down, else the same. Never back to the tutorial.
+ */
+export function comfortAfterRun(rung: number, minutes: number): number {
+  const S = COMFORT_STEPS;
+  const r = clampRung(rung, 0);
+  if (minutes >= S.standard) return COMFORT_MAX;
+  if (r === 0) return minutes >= S.tutorialUp ? 2 : 1;
+  return clampRung(minutes >= S.up ? r + 1 : minutes < S.down ? r - 1 : r, 1);
+}
+
+/** The RunConfig fields of an endless run at `rung` (the session and the career sim both use it). */
+export interface RungConfig extends ComfortRung {
+  readonly tutorial: boolean;
+  readonly lesson: boolean;
+}
+
+export function rungConfig(rung: number, opts: { readonly tutorialDone: boolean }): RungConfig {
+  const r = clampRung(rung, 0);
+  const c = COMFORT_RUNGS[r] as ComfortRung;
+  return { profile: c.profile, drain: c.drain, noonCloud: c.noonCloud, tutorial: r === 0, lesson: !opts.tutorialDone && r <= 1 };
+}
+
+// V11-SHIM: CC-1 endlessDrain(lifetimeRuns) — src/game/session.ts still imports it until GR7 moves
+// endless runs to rungConfig(); delete at integration (CC-1 removes it).
 export function endlessDrain(lifetimeRuns: number): number {
   const n = lifetimeRuns > 0 ? Math.floor(lifetimeRuns) : 0;
-  const prof = (PROFILES[n < 3 ? n : 3] as ProfileParams).drain;
-  const ramp = ONBOARD_DRAIN.start + ONBOARD_DRAIN.perRun * n;
-  return Math.min(prof, ramp, ONBOARD_DRAIN.max);
+  return Math.min((PROFILES[n < 3 ? n : 3] as ProfileParams).drain, 30 + 3 * n, 55);
 }
 
 interface Row {
@@ -193,7 +226,7 @@ export function dayParams(day: number, profile: ProfileId): DayParams {
     ballStart: oldTown ? row.ballStart : 0,
     ballEvery: oldTown ? row.ballEvery : 0,
     flakesPerCluster: row.flakes,
-    floor: d === 1 && prof.day1Floor > 0 ? prof.day1Floor : row.floor,
+    floor: row.floor,
     drain: prof.drain,
     phewT: prof.phewT,
     gateAtNoon: d === 2,

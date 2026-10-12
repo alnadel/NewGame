@@ -3,12 +3,13 @@
 // Generation is a fixed sequence of jobs: place(−1), place(0), place(1), validate(0), place(2),
 // validate(1), ... Chunk k is validated only after chunk k+1 is placed, so long dawn shadows from
 // just ahead count. Every job draws only from streams keyed by (seed, purpose, index) and job order
-// never changes, so chunk content is a pure function of (seed, profile, tutorial, k, prior chunks):
+// never changes, so chunk content is a pure function of the WorldConfig, k and the prior chunks:
 // generating in idle frames, inside step(), in one go or in many slices yields the same world.
 
-import type { ProfileId } from '../../config/days.ts';
+import { effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { binOf } from '../intervals.ts';
+import type { RunConfig } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
 import { placeChunk, placeStart } from './placer.ts';
 import type { World } from './store.ts';
@@ -21,13 +22,19 @@ const CH = TUNING.world.chunkLen;
 /** Work units charged for placing one chunk (a validator step costs 1). */
 const PLACE_COST = 8;
 
+/** The RunConfig fields that make a world: the same values always build the same world. */
+export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan'>;
+
 /** Creates a world with its start hut (and tutorial layout); nothing else is generated yet. */
-export function createWorld(seed: number, profile: ProfileId, tutorial: boolean): World {
+export function createWorld(cfg: WorldConfig): World {
+  const seed = cfg.seed >>> 0;
   const w: World = {
-    seed: seed >>> 0,
-    profile,
-    tutorial,
-    trail: createTrail(seed >>> 0, tutorial),
+    seed,
+    profile: cfg.profile,
+    tutorial: cfg.tutorial,
+    noonCloud: effectiveNoonCloud(cfg),
+    planOn: false,
+    trail: createTrail(seed, cfg.tutorial),
     casters: [],
     byId: new Map(),
     clouds: [],

@@ -3,8 +3,18 @@
 
 // Configuration and constants
 export { TUNING } from '../config/tuning.ts';
-export { dayParams, endlessDrain, ONBOARD_DRAIN, PROFILES } from '../config/days.ts';
-export type { BiomeId, DayParams, ProfileId, ProfileParams } from '../config/days.ts';
+export {
+  COMFORT_MAX,
+  COMFORT_RUNGS,
+  COMFORT_STEPS,
+  comfortAfterRun,
+  dayParams,
+  effectiveNoonCloud,
+  endlessDrain,
+  PROFILES,
+  rungConfig,
+} from '../config/days.ts';
+export type { BiomeId, ComfortRung, DayParams, NoonCloud, ProfileId, ProfileParams, RungConfig } from '../config/days.ts';
 export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';
 export type { CasterKind } from '../config/casters.ts';
 

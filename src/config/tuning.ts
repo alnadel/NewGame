@@ -207,9 +207,15 @@ const tuning = {
     lumpsMax: 7,
     /** Render-only: suggested fade-in/out at the ends of a cloud's life (s). */
     fade: 1.5,
-    /** Profile-0 parked noon cloud: rides with Nubs over this clock window (minutes since 6 AM). */
-    parkedFromMin: 300,
-    parkedToMin: 420,
+    /**
+     * Day-1 parked noon cloud, indexed by NoonCloud (days.ts): it rides with Nubs over this clock
+     * window (minutes since 6 AM).
+     */
+    parkedWindows: [
+      [0, 0],
+      [300, 420],
+      [330, 390],
+    ],
     /** Extra life before/after the window so it can fade in/out (s). */
     parkedLead: 3,
   },

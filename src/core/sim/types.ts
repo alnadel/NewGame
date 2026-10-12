@@ -1,7 +1,7 @@
 // Simulation state and its inputs (V1_PLAN §3.1). Everything here is advanced only by step(); the
 // renderer and session read it and never write it.
 
-import type { DayParams, ProfileId } from '../../config/days.ts';
+import type { DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { World } from '../gen/store.ts';
 import type { DeathInfo, HourGlyph, RunMode, RunStats, SimEvent } from './events.ts';
 
@@ -50,12 +50,24 @@ export interface RunConfig {
   /** Daily runs: the local date, YYYY-MM-DD. */
   dailyDate?: string;
   /**
-   * Endless onboarding override of the drain (Chill/s at f = 1), normally endlessDrain(lifetime
-   * runs). Unset means the profile drain (dayParams(day, profile).drain). Daily, challenge and bot
-   * runs leave it unset. It changes Chill only: the world and its validator always use the profile
-   * drain, so the same seed builds the same world with or without it. Read it via effectiveDrain(s).
+   * Drain override (Chill/s at f = 1): an endless run's comfort rung (rungConfig) or a challenge's
+   * rules. Unset means the profile drain (dayParams(day, profile).drain). It changes Chill only: the
+   * world and its validator always use the profile drain, so the same seed builds the same world
+   * with or without it. Read it via effectiveDrain(s).
    */
   drain?: number;
+  /**
+   * Day-1 parked training cloud (days.ts NoonCloud); part of the world's identity. Unset means
+   * effectiveNoonCloud(): 1 for profiles 0-2, 0 for profile 3 (v1.0 worlds).
+   */
+  noonCloud?: NoonCloud;
+  /** First-run lesson: the Chill floor and lessonDone (no effect on the world). */
+  lesson?: boolean;
+  /**
+   * Day Plan on or off; part of the world's identity. Unset means on for profile 3 without the
+   * tutorial (World.planOn).
+   */
+  plan?: boolean;
 }
 
 /**

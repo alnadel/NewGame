@@ -1,8 +1,8 @@
 // Chunk placement (V1_PLAN §6.1, §7.1-§7.3, GDD §2.7-§2.10).
 //
 // Every function here draws only from streams keyed by (seed, purpose, chunk/day/id), and the job
-// order is fixed (see world.ts), so the world is a pure function of (seed, profile, tutorial) no
-// matter when, or in how many slices, it is generated.
+// order is fixed (see world.ts), so the world is a pure function of its WorldConfig no matter when,
+// or in how many slices, it is generated.
 
 import {
   BIOME_KINDS,
@@ -15,7 +15,7 @@ import {
   TUTORIAL,
   type CasterKind,
 } from '../../config/casters.ts';
-import { dayParams, PROFILES, type BiomeId, type DayParams, type ProfileParams } from '../../config/days.ts';
+import { dayParams, type BiomeId, type DayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { cloudOffset } from '../shadows.ts';
 import {
@@ -316,13 +316,12 @@ export function placeStart(w: World): void {
 
 /**
  * Day-level objects for day N, generated when the chunk holding its dawn is placed (before any
- * chunk of that day): clouds, the profile-0 parked noon cloud, the Day-2 gate arch, gazing balls,
+ * chunk of that day): clouds, the Day-1 parked noon cloud, the Day-2 gate arch, gazing balls,
  * the ice crystal and the night's frost flowers.
  */
 export function generateDay(w: World, day: number): void {
   const p = dayParams(day, w.profile);
-  const pp = PROFILES[w.profile] as ProfileParams;
-  const prof = { overtakeFirst: pp.firstCloudOvertakes && day === 1, parked: pp.parkedNoonCloud && day === 1 };
+  const parked = day === 1 && w.noonCloud > 0;
   const tDay0 = dayStartTick(day) / TICK_HZ;
   const C = TUNING.cloud;
   const chunk = Math.floor(dayStartY(day) / CH);
@@ -330,7 +329,7 @@ export function generateDay(w: World, day: number): void {
   const sky = rngFor(w.seed, 'sky', day);
   p.clouds.forEach((t, i) => {
     const roll = sky.next();
-    const overtake = (prof.overtakeFirst && i === 0) || roll < C.overtakerChance;
+    const overtake = (parked && i === 0) || roll < C.overtakerChance;
     const rx = sky.range(C.rxMin, C.rxMax);
     const speed = overtake ? sky.range(C.overtakeSpeedMin, C.overtakeSpeedMax) : sky.range(C.waitSpeedMin, C.waitSpeedMax);
     const vx = sky.range(-C.driftMax, C.driftMax);
@@ -340,7 +339,7 @@ export function generateDay(w: World, day: number): void {
     addCloud(w, overtake ? 'overtaker' : 'waiter', tDay0 + t, C.life, x0, y0, vx, speed * p.v, rx);
   });
 
-  if (prof.parked) addParkedNoonCloud(w, day);
+  if (parked) addParkedNoonCloud(w, day);
 
   if (p.gateAtNoon) placeGate(w, yAtTime(day, p.dayLen / 2), chunk);
 
@@ -369,15 +368,16 @@ export function generateDay(w: World, day: number): void {
 }
 
 /**
- * Profile 0: a cloud rides with Nubs from 11:00 AM to 1:00 PM on Day 1 so that its shadow covers
- * him with the sun roughly north (V1_PLAN §6). Its center stays R(ε) ahead of Nubs and tracks the
- * trail linearly across the window.
+ * The Day-1 training cloud (World.noonCloud > 0): it rides with Nubs over its parkedWindows clock
+ * window (11:00 AM-1:00 PM, or 11:30 AM-12:30 PM) so that its shadow covers him with the sun roughly
+ * north. Its center stays R(ε) ahead of Nubs and tracks the trail linearly across the window.
  */
 function addParkedNoonCloud(w: World, day: number): void {
   const p = dayParams(day, w.profile);
   const C = TUNING.cloud;
-  const t1 = (C.parkedFromMin / 720) * p.dayLen;
-  const t2 = (C.parkedToMin / 720) * p.dayLen;
+  const win = C.parkedWindows[w.noonCloud] as readonly number[];
+  const t1 = ((win[0] as number) / 720) * p.dayLen;
+  const t2 = ((win[1] as number) / 720) * p.dayLen;
   const y1 = yAtTime(day, t1);
   const y2 = yAtTime(day, t2);
   const r = cloudOffset(TUNING.shadow.cloudZ, 1 / tanD(elevation(p, t1)));

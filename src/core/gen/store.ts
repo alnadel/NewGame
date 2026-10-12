@@ -1,7 +1,7 @@
 // World storage: y-sorted object lists, id lookup, range queries and pruning.
 // Generation (placer/validator) inserts; the sim and renderer only read (pickups excepted).
 
-import type { ProfileId } from '../../config/days.ts';
+import type { NoonCloud, ProfileId } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { type MaskScene, sceneAddBall, sceneAddCaster, sceneAddCloud, sceneBegin } from '../intervals.ts';
 import type { Caster, Cloud, GazingBall, Pickup } from '../objects.ts';
@@ -42,6 +42,10 @@ export interface World {
   readonly seed: number;
   readonly profile: ProfileId;
   readonly tutorial: boolean;
+  /** Effective Day-1 parked noon cloud (effectiveNoonCloud of the run's config). */
+  readonly noonCloud: NoonCloud;
+  /** Day Plan on: each day draws its biome and forecast (planDay); off: alternating clear days. */
+  readonly planOn: boolean;
   readonly trail: Trail;
   /** Casters sorted by center y (ties by id). */
   readonly casters: Caster[];
