@@ -11,10 +11,10 @@ import type { SimState } from './types.ts';
 
 export interface DeathRecap {
   readonly cause: DeathCause;
-  /** Share of the Melt Map samples over the last `window` seconds of walking that were lit (f > 0). */
+  /** Share of the Melt Map samples over the last `walked` seconds of the walk that were lit (f > 0). */
   readonly litShare10: number;
   /** Seconds of walking those samples cover: 10, or fewer on a run that melted sooner (≥ 1). */
-  readonly window: number;
+  readonly walked: number;
   /** θ at death (°). */
   readonly theta: number;
   /** Signed turn (°, + counter-clockwise) from θ to the nearest bin of shade that lasts (guide now ∧ next), else null. */
@@ -61,7 +61,7 @@ export function deathRecap(s: SimState): DeathRecap {
   return {
     cause: s.death?.cause ?? 'plain',
     litShare10: n > 0 ? lit / n : 0,
-    window: Math.min(10, Math.max(1, Math.round((nb.y - oldest) / v))),
+    walked: Math.min(10, Math.max(1, Math.round((nb.y - oldest) / v))),
     theta,
     away: nearest(theta, g.now, g.next),
     nowAway: nearest(theta, g.now, null),
@@ -94,7 +94,7 @@ export function deathTip(r: DeathRecap, invert: boolean, variant = 0): string | 
       : `Shade was ${deg}° away. Drag ${arrow}.`;
   }
   if (r.litShare10 >= R.litShare) {
-    const w = r.window;
+    const w = r.walked;
     const lit = Math.max(1, Math.round(w * r.litShare10));
     return pick(
       [

@@ -9,7 +9,7 @@ import { deathRecap, deathTip, type DeathRecap } from '../../src/core/sim/recap.
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT } from '../../src/core/sim/types.ts';
 
-const base: DeathRecap = { cause: 'gap', litShare10: 0.2, window: 10, theta: 90, away: null, nowAway: null, exposure: 0.2, minuteOfDay: 200 };
+const base: DeathRecap = { cause: 'gap', litShare10: 0.2, walked: 10, theta: 90, away: null, nowAway: null, exposure: 0.2, minuteOfDay: 200 };
 const tip = (over: Partial<DeathRecap>, invert = false, variant = 0): string | null => deathTip({ ...base, ...over }, invert, variant);
 
 describe('deathTip', () => {
@@ -48,7 +48,7 @@ describe('deathTip', () => {
     expect(tip({ litShare10: 0.35 })).toBe('In the sun 4 of the last 10 s. Short dips add up.');
     expect(tip({ litShare10: 1, away: 130, nowAway: 130, exposure: 9 })).toBe('In the sun 10 of the last 10 s. Short dips add up.');
     // A run that melted 2 s after it started can't have spent 10 s in the sun.
-    expect(tip({ litShare10: 1, window: 2, exposure: 2 })).toBe('In the sun 2 of the last 2 s. Short dips add up.');
+    expect(tip({ litShare10: 1, walked: 2, exposure: 2 })).toBe('In the sun 2 of the last 2 s. Short dips add up.');
     expect(tip({ litShare10: 0.34 })).toBeNull();
     expect(tip({ minuteOfDay: 300 })).toBe('Noon shadows are stubs. Ride a cloud or hug tall walls.');
     expect(tip({ minuteOfDay: 420 })).toBe('Noon shadows are stubs. Ride a cloud or hug tall walls.');
@@ -83,14 +83,14 @@ describe('deathRecap', () => {
     expect(r.cause).toBe('plain');
     expect(r.litShare10).toBe(1);
     // It melted within seconds: the window covers only the seconds actually walked.
-    expect(r.window).toBe(Math.min(10, Math.max(1, Math.round((s.nubs.y - y0) / s.params.v))));
-    expect(r.window).toBeLessThan(10);
+    expect(r.walked).toBe(Math.min(10, Math.max(1, Math.round((s.nubs.y - y0) / s.params.v))));
+    expect(r.walked).toBeLessThan(10);
     expect(r.away).toBeNull();
     expect(r.nowAway).toBeNull();
     expect(r.exposure).toBeCloseTo((100 / 55) * 1, 1);
     expect(r.minuteOfDay).toBe(26);
     expect(r.theta).toBe(s.sun.theta);
-    expect(deathTip(r, false)).toBe(`In the sun ${r.window} of the last ${r.window} s. Short dips add up.`);
+    expect(deathTip(r, false)).toBe(`In the sun ${r.walked} of the last ${r.walked} s. Short dips add up.`);
   });
 
   it('prefers shade that lasts (now ∧ next) over shade that is ending', () => {
