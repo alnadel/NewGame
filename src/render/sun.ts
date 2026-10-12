@@ -2,15 +2,25 @@
 // rectangle inset from the viewport edges, on the ray from Nubs toward θ. Its face follows Chill
 // (smug ≥ 60, worried 30-60, horrified < 30), sighs on a PHEW, squashes on a catch, turns away
 // guiltily when Nubs melts, sinks at sunset, and becomes the moon at night. Its top run stays
-// below the HUD band.
+// below the HUD band. Around noon it turns boss (GR10): it swells, its rays flare and flicker over
+// a second, counter-turning orange corona, and it pushes its shades up to glare and grin.
 
+import { smoothstep } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { radialSprite } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 
-export type SunMood = 'smug' | 'worried' | 'horrified' | 'relief' | 'guilty';
+export type SunMood = 'smug' | 'worried' | 'horrified' | 'relief' | 'guilty' | 'boss';
+
+/**
+ * How much of a boss the sun is (0..1): up from 11:00 to 11:30, down from 12:36 to 1:00 PM (a
+ * Heat Wave widens it to 10:30-1:30).
+ */
+export function bossWeight(dayFrac: number, heat: boolean): number {
+  return smoothstep(heat ? 0.375 : 0.417, 0.458, dayFrac) * (1 - smoothstep(0.55, heat ? 0.625 : 0.583, dayFrac));
+}
 
 export interface SunGlyph {
   x: number;
@@ -82,32 +92,54 @@ export function placeSun(s: SunGlyph, v: View, nx: number, ny: number, dx: numbe
   s.init = true;
 }
 
-/** Draws the sun (or moon) at the glyph position. `scale` multiplies the 20 px core radius. */
-export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood, time: number, scale: number, alpha: number, guiltDx: number): void {
+/**
+ * Draws the sun (or moon) at the glyph position. `scale` multiplies the 20 px core radius; `boss`
+ * (bossWeight) swells it.
+ */
+export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood, time: number, scale: number, alpha: number, guiltDx: number, boss: number): void {
   if (alpha <= 0.01) return;
   const night = s.night;
-  const r = 20 * scale;
+  const r = 20 * scale * (1 + 0.35 * boss);
   const gx = s.x + guiltDx * 8 * s.guilty;
   const gy = s.y;
   if (night > 0.01) drawMoon(g, s.mx, s.my, r * 0.8, alpha * night, time);
   const a = alpha * (1 - 0.8 * night);
   if (a <= 0.01) return;
-  // Bloom.
-  const bloom = radialSprite('255,181,71', 256, 0.42, 0.4, 0.16);
-  g.globalAlpha = a;
+  // Bloom: α 0.42, up to 0.62 as a boss.
+  const bloom = radialSprite('255,181,71', 256, 0.62, 0.4, 0.236);
+  g.globalAlpha = a * ((0.42 + 0.2 * boss) / 0.62);
   g.drawImage(bloom, gx - r * 3, gy - r * 3, r * 6, r * 6);
+  g.globalAlpha = a;
   g.save();
   g.translate(gx, gy);
   const sq = 1 - 0.1 * Math.min(1, s.squash / 0.08);
   g.scale(1 / sq, sq);
-  // Rays rotating at 10°/s.
+  if (boss > 0.01) {
+    // The boss corona: 12 orange rays between the main ones, turning the other way at 20°/s.
+    g.rotate(-time * 20 * DEG);
+    g.globalAlpha = a * 0.6 * boss;
+    g.fillStyle = '#FF8A3D';
+    g.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const ang = ((i + 0.5) * TAU) / 12;
+      const tip = (1.4 + 0.6 * boss) * r;
+      g.moveTo(Math.cos(ang - 0.16) * r * 1.05, Math.sin(ang - 0.16) * r * 1.05);
+      g.lineTo(Math.cos(ang) * tip, Math.sin(ang) * tip);
+      g.lineTo(Math.cos(ang + 0.16) * r * 1.05, Math.sin(ang + 0.16) * r * 1.05);
+    }
+    g.fill();
+    g.rotate(time * 20 * DEG);
+    g.globalAlpha = a;
+  }
+  // Rays rotating at 10°/s; a boss's reach further and flicker.
   g.rotate(time * 10 * DEG);
   g.fillStyle = '#FFD36B';
   g.beginPath();
   for (let i = 0; i < 12; i++) {
     const ang = (i * TAU) / 12;
+    const tip = (1.62 + 0.5 * boss) * r * (1 + 0.08 * boss * Math.sin(time * 14 + 1.7 * i));
     g.moveTo(Math.cos(ang - 0.19) * r * 1.1, Math.sin(ang - 0.19) * r * 1.1);
-    g.lineTo(Math.cos(ang) * r * 1.62, Math.sin(ang) * r * 1.62);
+    g.lineTo(Math.cos(ang) * tip, Math.sin(ang) * tip);
     g.lineTo(Math.cos(ang + 0.19) * r * 1.1, Math.sin(ang + 0.19) * r * 1.1);
   }
   g.fill();
@@ -128,19 +160,39 @@ export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood,
 
 function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: number, guilty: number): void {
   const u = r;
-  // Glasses slip down when horrified; look aside when guilty.
-  const slip = mood === 'horrified' ? 0.14 + 0.03 * Math.sin(time * 14) : 0;
+  // Glasses slip down when horrified, go up on the forehead for the boss; look aside when guilty.
+  const boss = mood === 'boss';
+  const slip = mood === 'horrified' ? 0.14 + 0.03 * Math.sin(time * 14) : boss ? -0.5 : 0;
   const look = guilty * 0.32;
   // Cheeks.
   g.fillStyle = 'rgba(255,158,107,0.5)';
-  for (const sd of [-1, 1]) {
+  for (let sd = -1; sd <= 1; sd += 2) {
     g.beginPath();
     g.ellipse(sd * 0.52 * u + look * u, 0.3 * u, 0.17 * u, 0.1 * u, 0, 0, TAU);
     g.fill();
   }
+  if (boss) {
+    // Glaring eyes under two angry brows slanting inward (0.5 r, 3 px).
+    g.fillStyle = '#2B2140';
+    g.beginPath();
+    g.ellipse(-0.36 * u, 0.02 * u, 0.1 * u, 0.13 * u, 0, 0, TAU);
+    g.moveTo(0.46 * u, 0.02 * u);
+    g.ellipse(0.36 * u, 0.02 * u, 0.1 * u, 0.13 * u, 0, 0, TAU);
+    g.fill();
+    g.strokeStyle = '#7A3B00';
+    g.lineWidth = 3;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-0.6 * u, -0.27 * u);
+    g.lineTo(-0.13 * u, -0.12 * u);
+    g.moveTo(0.6 * u, -0.27 * u);
+    g.lineTo(0.13 * u, -0.12 * u);
+    g.stroke();
+  }
   // Bridge and lenses.
   g.save();
   g.translate(look * u, slip * u);
+  if (boss) g.scale(0.9, 0.9);
   g.strokeStyle = '#1E1E28';
   g.lineWidth = 0.09 * u;
   g.lineCap = 'round';
@@ -149,7 +201,7 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
   g.quadraticCurveTo(0, -0.33 * u, 0.88 * u, -0.25 * u);
   g.stroke();
   g.fillStyle = '#1E1E28';
-  for (const sd of [-1, 1]) {
+  for (let sd = -1; sd <= 1; sd += 2) {
     g.save();
     g.translate(sd * 0.41 * u, -0.1 * u);
     g.scale(sd, 1);
@@ -175,7 +227,7 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
   if (slip > 0) {
     // Wide eyes peeking over the slipped glasses.
     g.fillStyle = '#FFFFFF';
-    for (const sd of [-1, 1]) {
+    for (let sd = -1; sd <= 1; sd += 2) {
       g.beginPath();
       g.arc(sd * 0.4 * u, -0.32 * u - slip * u, 0.13 * u, 0, TAU);
       g.fill();
@@ -233,6 +285,15 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
       g.quadraticCurveTo(mx, 0.38 * u, mx + 0.22 * u, 0.5 * u);
       g.stroke();
       break;
+    case 'boss':
+      // A wide grin with a row of white teeth.
+      g.moveTo(mx - 0.38 * u, 0.3 * u);
+      g.quadraticCurveTo(mx, 0.8 * u, mx + 0.38 * u, 0.3 * u);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#FFFFFF';
+      g.fillRect(mx - 0.27 * u, 0.32 * u, 0.54 * u, 0.1 * u);
+      break;
   }
 }
 
@@ -254,7 +315,7 @@ function drawMoon(g: CanvasRenderingContext2D, x: number, y: number, r: number, 
   g.lineWidth = Math.max(1, r * 0.08);
   g.lineCap = 'round';
   g.beginPath();
-  for (const sd of [-1, 1]) {
+  for (let sd = -1; sd <= 1; sd += 2) {
     g.moveTo(x + sd * r * 0.32 - r * 0.12, y - r * 0.02);
     g.quadraticCurveTo(x + sd * r * 0.32, y + r * 0.08, x + sd * r * 0.32 + r * 0.12, y - r * 0.02);
   }

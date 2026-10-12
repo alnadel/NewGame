@@ -1934,7 +1934,7 @@ export class Session {
 
   /**
    * Test hook: replays a moment through fx and audio only (the sim is untouched): phew, mult, mult5,
-   * noon, dawn, night, cloud, glare, flake, best, passed, swing.
+   * noon (= highnoon), dawn, night, cloud, glare, flake, best, passed, swing.
    */
   demo(name: string): void {
     const s = this.s;
@@ -1950,6 +1950,7 @@ export class Session {
         ev = { e: 'multUp', level: 5 };
         break;
       case 'noon':
+      case 'highnoon':
         ev = { e: 'noonBanner' };
         break;
       case 'dawn':

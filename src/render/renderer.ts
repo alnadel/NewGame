@@ -87,8 +87,8 @@ import {
 } from './particles.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
-import { forecastOf } from './shims.ts';
-import { createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
+import { forecastOf, worldPlan } from './shims.ts';
+import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
 
@@ -170,6 +170,15 @@ export interface RenderScene {
   sun: SunGlyph;
   sunMood: SunMood;
   relief: number;
+  /** Seconds left of the sun's worried look after noon has passed. */
+  sunWorried: number;
+  /** The biome the ground shows (1 Old Town) for day `townDay` of world `townWorld`. */
+  town: number;
+  townDay: number;
+  townWorld: World | null;
+  /** The last 16 heat-wisp spawn tries (x, y, 1 lit / 0 shaded), for the debug overlay. */
+  wispTries: Float32Array;
+  wispTry: number;
   hud: HudState;
   banners: Banners;
   map: MapFrame;
@@ -221,6 +230,12 @@ export function createScene(): RenderScene {
     sun: createSunGlyph(),
     sunMood: 'smug',
     relief: 0,
+    sunWorried: 0,
+    town: 0,
+    townDay: -1,
+    townWorld: null,
+    wispTries: new Float32Array(48),
+    wispTry: 0,
     hud: createHud(),
     banners: createBanners(),
     map: createMapFrame(),
@@ -350,16 +365,23 @@ export class Renderer {
     const nt = nightTicks(snap.day);
     let dayFrac = Math.min(1, snap.dayTick / dl);
     let night = 0;
-    let town = snap.day % 2 === 0 ? 1 : 0;
+    // The ground's biome is the day's plan; past midnight it is already tomorrow's (A9).
+    let planDay = snap.day;
     if (snap.dayTick > dl) {
       const tn = (snap.dayTick - dl) / 60;
       const nl = nt / 60;
       night = smooth(Math.min(1, tn / 1.5)) * (1 - smooth(Math.max(0, (tn - (nl - 1.5)) / 1.5)));
       if (tn > nl / 2) {
         dayFrac = 0;
-        town = (snap.day + 1) % 2 === 0 ? 1 : 0;
+        planDay = snap.day + 1;
       }
     }
+    if (planDay !== sc.townDay || s.world !== sc.townWorld) {
+      sc.town = worldPlan(s.world, planDay).biome === 'oldtown' ? 1 : 0;
+      sc.townDay = planDay;
+      sc.townWorld = s.world;
+    }
+    const town = sc.town;
     updatePalette(sc.pal, dayFrac, night, town, inp.highContrast);
     // The ground steps through the day in 1/64ths (≈ 0.8 s): a 1-3 level change at most.
     updatePalette(sc.groundPal, Math.round(dayFrac * 64) / 64, Math.round(night * 16) / 16, town, inp.highContrast);
@@ -424,6 +446,7 @@ export class Renderer {
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
     updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta);
     sc.relief = Math.max(0, sc.relief - adt);
+    sc.sunWorried = Math.max(0, sc.sunWorried - adt);
     if (inp.screen === 'play' && walking) {
       stepFootprints(sc.footprints, snap.nubsX, snap.nubsY, trailSlope(s.world.trail, snap.nubsY), s.nubs.f === 0, gdt);
     } else {
@@ -570,7 +593,7 @@ export class Renderer {
     }
 
     // Debug geometry.
-    if (inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose);
+    if (inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 
     // Halo dial (play/title; fades out on death and under the map).
     const showHalo = inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'title' || inp.screen === 'dying');
@@ -611,10 +634,17 @@ export class Renderer {
       if (dying >= 0) sc.sun.guilty = Math.min(1, sc.sun.guilty + adt * 3);
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);
-      const mood: SunMood =
-        dying >= 0 ? 'guilty' : sc.relief > 0 ? 'relief' : snap.chill >= 60 ? 'smug' : snap.chill >= 30 ? 'worried' : 'horrified';
+      // Around noon the sun is the boss (unless Nubs is nearly gone: then it is horrified).
+      const boss = sunUp && night === 0 ? bossWeight(dayFrac, forecastOf(s.params) === 'heat') : 0;
+      let mood: SunMood;
+      if (dying >= 0) mood = 'guilty';
+      else if (sc.relief > 0) mood = 'relief';
+      else if (snap.chill < 30) mood = 'horrified';
+      else if (sc.sunWorried > 0) mood = 'worried';
+      else if (boss > 0.6) mood = 'boss';
+      else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
-      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1);
+      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss);
     }
 
     // HUD.
@@ -708,6 +738,7 @@ function drawDebug(
   cot: number,
   tAbs: number,
   pose: NubsPose,
+  wisps: Float32Array,
 ): void {
   if (d.outlines && cot > 0) {
     g.strokeStyle = 'rgba(255,0,180,0.8)';
@@ -728,6 +759,16 @@ function drawDebug(
       g.arc(x, y, 2.5, 0, Math.PI * 2);
       g.fill();
       g.stroke();
+    }
+    // Heat-wisp spawn tries: amber where the ground was lit (a wisp rose), teal where it was shaded.
+    for (let i = 0; i < wisps.length; i += 3) {
+      const x = wisps[i] as number;
+      const y = wisps[i + 1] as number;
+      if (x === 0 && y === 0) continue;
+      g.fillStyle = wisps[i + 2] === 1 ? '#FF8A3D' : '#2EC4B6';
+      g.beginPath();
+      g.arc(v.ox + x * v.S, v.oy - y * v.S, 4, 0, Math.PI * 2);
+      g.fill();
     }
   }
   if (d.masks) {

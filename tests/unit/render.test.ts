@@ -5,12 +5,14 @@
 import { describe, expect, it } from 'vitest';
 import { createBot, createRun, dayTicks, headlessConfig, step, type SimState } from '../../src/core/index.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src/game/camera.ts';
+import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
 import { createShadeSplit, splitShade } from '../../src/render/halo.ts';
 import { addHeadline, addPlus, addSwing, createPops, POP_PHEW, updatePops, type Pops } from '../../src/render/particles.ts';
 import { MAP_FADE_S, MAP_LABEL_FADE_S, MAP_PULL_S, mapAlphas, mapSettleT, type MapOverlay } from '../../src/render/meltMap.ts';
 import { createPalette, nubsShadeAt, updatePalette } from '../../src/render/palette.ts';
 import { matchShadow, traceShadows } from '../../src/render/shadowLayer.ts';
+import { bossWeight } from '../../src/render/sun.ts';
 
 const overlay = (): MapOverlay => ({ a: 0, labelA: 0, sheetTop: null, time: 0 });
 
@@ -286,5 +288,30 @@ describe('pops (GR9)', () => {
     addHeadline(q, 'PHEW!', POP_PHEW, 1.1);
     addPlus(q, 3);
     expect(live(q).sort()).toEqual(['+4', 'PHEW!']);
+  });
+});
+
+describe('noon boss and Day card (GR10)', () => {
+  const at = (h: number, m: number): number => (h * 60 + m - 360) / 720;
+
+  it('ramps the boss up from 11:00 to 11:30 and down from 12:36 to 1:00 PM; a Heat Wave widens it', () => {
+    expect(bossWeight(at(10, 59), false)).toBe(0);
+    expect(bossWeight(at(11, 15), false)).toBeGreaterThan(0.3);
+    expect(bossWeight(at(11, 31), false)).toBe(1);
+    expect(bossWeight(at(12, 30), false)).toBe(1);
+    expect(bossWeight(at(12, 50), false)).toBeGreaterThan(0);
+    expect(bossWeight(at(13, 1), false)).toBe(0);
+    expect(bossWeight(at(10, 45), true)).toBeGreaterThan(0.1);
+    expect(bossWeight(at(13, 15), true)).toBeGreaterThan(0.1);
+    expect(bossWeight(at(13, 31), true)).toBe(0);
+  });
+
+  it("writes the Day card's second line from the plan, leaving out a clear forecast", () => {
+    const b = createBanners();
+    showDayCard(b, 4, 'oldtown', 'heat', 71.6);
+    expect(b.dayText).toBe('DAY 4');
+    expect(b.dayLine).toBe('OLD TOWN · Heat Wave · NOON 72°');
+    showDayCard(b, 5, 'meadow', 'clear', 58);
+    expect(b.dayLine).toBe('MEADOW · NOON 58°');
   });
 });

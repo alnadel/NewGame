@@ -20,6 +20,7 @@ export const P_CONFETTI = 8; // screen space
 export const P_PETAL = 9; // screen space
 export const P_PUFF = 10; // melt puff (steam, short)
 export const P_BREATH = 11; // cold breath in the shade
+export const P_WISP = 12; // heat shimmer rising off lit ground around noon
 
 const CAP = 400;
 
@@ -231,6 +232,31 @@ function steamPuff(): Canvas2D {
   return c;
 }
 let fireflySprite: Canvas2D | null = null;
+let wispSprite: Canvas2D | null = null;
+
+/** A heat wisp: one soft wavy white stroke, 24 × 64 px (drawn at 2×), fading at both ends. */
+function wavyStroke(): Canvas2D {
+  const c = makeCanvas(48, 128);
+  const g = ctx2d(c);
+  const grad = g.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, 'rgba(255,255,255,0)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,1)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.strokeStyle = grad;
+  g.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++) {
+    g.globalAlpha = pass === 0 ? 0.35 : 1;
+    g.lineWidth = pass === 0 ? 10 : 4;
+    g.beginPath();
+    for (let y = 6; y <= 122; y += 4) {
+      const x = 24 + 9 * Math.sin((y / 128) * 3 * Math.PI);
+      if (y === 6) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  return c;
+}
 
 /**
  * Air particles (steam, drips, sparkles, flying flakes, fireflies), drawn above the objects: first
@@ -248,6 +274,7 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
   const S = v.S;
   steamSprite ??= steamPuff();
   fireflySprite ??= radialSprite('255,236,150', 64, 1, 0.18, 0.4);
+  wispSprite ??= wavyStroke();
   const fl = flake();
   const sp = sparkle();
   for (let i = 0; i < p.cap; i++) {
@@ -296,6 +323,14 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
         g.rotate(p.rot[i]!);
         g.drawImage(fl, -s2, -s2, s2 * 2, s2 * 2);
         g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+        break;
+      }
+      case P_WISP: {
+        // White α 0.18 at its peak, swaying ±3 u at 2 Hz as it rises.
+        const age = p.maxLife[i]! - life;
+        g.globalAlpha = 0.18 * Math.sin(Math.PI * t);
+        const sway = 3 * Math.sin(age * 4 * Math.PI + i * 1.7) * S;
+        g.drawImage(wispSprite, sx + sway - 11 * S, sy - 59 * S, 22 * S, 59 * S);
         break;
       }
       case P_FIREFLY: {

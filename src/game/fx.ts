@@ -3,7 +3,8 @@
 // effects (steam while lit, sweat below 60 Chill, frost sparkles in shade, fireflies at night).
 // Particles are render-only and may use Math.random.
 
-import type { SimState } from '../core/index.ts';
+import { dayParams, dayTicks, type SimState } from '../core/index.ts';
+import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
   addPlus,
@@ -21,6 +22,7 @@ import {
   P_PUFF,
   P_SPARKLE,
   P_STEAM,
+  P_WISP,
   POP_BANG,
   POP_MULT,
   POP_PHEW,
@@ -28,10 +30,11 @@ import {
 } from '../render/particles.ts';
 import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
 import { hop } from '../render/nubs.ts';
-import type { SimEventV11 } from '../render/shims.ts';
+import { forecastOf, worldPlan, type SimEventV11 } from '../render/shims.ts';
 import { showDayCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
-import { addShake, addZoomPulse } from './camera.ts';
+import { bossWeight } from '../render/sun.ts';
+import { addShake, addZoomPulse, OBLIQUE } from './camera.ts';
 import type { FixedClock } from './loop.ts';
 
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
@@ -52,6 +55,7 @@ export class Fx {
   private frostAcc = 0;
   private fireflyAcc = 0;
   private breathAcc = 0;
+  private wispAcc = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
   private stampImpact = -1;
   /** The way the sun last turned (+1 counter-clockwise, −1 clockwise): a SWING's arc sweeps that way. */
@@ -154,16 +158,21 @@ export class Fx {
           break;
         }
         case 'noonBanner':
-          sc.banners.noon = 0;
+          this.stamp('noon', 'HIGH NOON', 1.1);
           break;
         case 'noonPassed':
+          // The boss blinks first: a worried sun for 1.5 s, the ruler's sparkle and one cool pulse.
           sc.hud.noonSparkle = 1.2;
+          sc.sunWorried = 1.5;
+          sc.banners.coolPulse = 0.25;
           break;
         case 'nightStart':
           sc.banners.night = 0;
           break;
         case 'dawn': {
-          showDayCard(sc.banners, ev.day);
+          const plan = worldPlan(s.world, ev.day);
+          const eps = (s.params.day === ev.day ? s.params : dayParams(ev.day, s.cfg.profile)).epsNoon;
+          showDayCard(sc.banners, ev.day, plan.biome, plan.forecast, eps);
           this.petals(30);
           // Two little hops 0.4 s apart: a new day.
           hop(sc.nubs, 4, 0.06, 4);
@@ -277,6 +286,28 @@ export class Fx {
         const r = rnd(4, 16);
         spawn(p, P_FROST, nb.x + Math.cos(a) * r, nb.y + Math.sin(a) * r, 0, 0, 0, 0, 1.2, 3.2, 3.2, FROST);
       }
+    }
+    // Heat wisps while the sun is a boss: 7 tries a second 44-160 u from Nubs, rising (18 u/s on
+    // screen, 1.4 s) only from lit ground — about 10 in the air at once.
+    const boss = daylight ? bossWeight(s.dayTick / dayTicks(s.day), forecastOf(s.params) === 'heat') : 0;
+    if (boss > 0.3) {
+      this.wispAcc += dt * 7;
+      while (this.wispAcc >= 1) {
+        this.wispAcc -= 1;
+        const a = rnd(0, Math.PI * 2);
+        const r = rnd(44, 160);
+        const x = nb.x + Math.cos(a) * r;
+        const y = nb.y + Math.sin(a) * r;
+        const lit = pointLitWeight(s, x, y) > 0;
+        const k = sc.wispTry;
+        sc.wispTries[k] = x;
+        sc.wispTries[k + 1] = y;
+        sc.wispTries[k + 2] = lit ? 1 : 0;
+        sc.wispTry = (k + 3) % sc.wispTries.length;
+        if (lit) spawn(p, P_WISP, x, y, 0, 0, 0, 18 / OBLIQUE, 1.4, 1, 1, 0xffffff);
+      }
+    } else {
+      this.wispAcc = 0;
     }
     if (s.phase === 'night') {
       this.fireflyAcc += dt * 3;
