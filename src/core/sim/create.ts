@@ -1,8 +1,8 @@
 // createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
 
-import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayTicks, yAtDayTick } from '../clock.ts';
+import { paramsAt } from '../gen/plan.ts';
 import { ensureGenerated, createWorld, generateSome, type World } from '../gen/world.ts';
 import { syncTime } from './step.ts';
 import { computeCoverage } from './nubs.ts';
@@ -82,7 +82,7 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
   const theta0 = world.theta0;
   const s: SimState = {
     cfg: { ...cfg },
-    params: dayParams(day, cfg.profile),
+    params: paramsAt(world, day),
     phase: 'hold',
     tick: 0,
     ready: 0,

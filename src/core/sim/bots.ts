@@ -11,10 +11,10 @@
 //   Nubs lit or the sun's current angle unsafe; it aims with Gaussian error and over/undershoot,
 //   drags with minimum-jerk motion (120 ms + 0.9 ms/°), lifts at ω = 0 and pauses 120 ms.
 
-import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, DT, elevation, TICK_HZ } from '../clock.ts';
 import { angleDiff, wrapDeg } from '../dmath.ts';
+import { paramsAt } from '../gen/plan.ts';
 import { chillDeltaTable, slidingMaxCircular, stepLit } from '../gen/validator.ts';
 import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
@@ -184,7 +184,7 @@ function oracleBot(): Bot {
       lits.set(row, h * BINS);
       const tick = j * STEP;
       const d = dayAtTick(tick);
-      night[h] = elevation(dayParams(d, s.cfg.profile), (tick - dayStartTick(d)) / TICK_HZ) > 0 ? 0 : 1;
+      night[h] = elevation(paramsAt(s.world, d), (tick - dayStartTick(d)) / TICK_HZ) > 0 ? 0 : 1;
     }
     const delta = chillDeltaTable(effectiveDrain(s));
     // need[i][b]: least Chill after step j0 + i at bin b that still survives to the horizon.

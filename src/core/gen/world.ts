@@ -23,7 +23,7 @@ const CH = TUNING.world.chunkLen;
 const PLACE_COST = 8;
 
 /** The RunConfig fields that make a world: the same values always build the same world. */
-export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan'>;
+export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast'>;
 
 /** Creates a world with its start hut (and tutorial layout); nothing else is generated yet. */
 export function createWorld(cfg: WorldConfig): World {
@@ -33,7 +33,9 @@ export function createWorld(cfg: WorldConfig): World {
     profile: cfg.profile,
     tutorial: cfg.tutorial,
     noonCloud: effectiveNoonCloud(cfg),
-    planOn: false,
+    planOn: cfg.forecast !== undefined || (cfg.plan ?? (cfg.profile === 3 && !cfg.tutorial)),
+    forcedForecast: cfg.forecast ?? null,
+    plan: [],
     trail: createTrail(seed, cfg.tutorial),
     casters: [],
     byId: new Map(),

@@ -2,6 +2,7 @@
 // renderer and session read it and never write it.
 
 import type { DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
+import type { ForecastId } from '../../config/forecasts.ts';
 import type { World } from '../gen/store.ts';
 import type { DeathInfo, HourGlyph, RunMode, RunStats, SimEvent } from './events.ts';
 
@@ -68,6 +69,11 @@ export interface RunConfig {
    * tutorial (World.planOn).
    */
   plan?: boolean;
+  /**
+   * Debug and tooling: force this forecast on every day it fits (others are clear) and turn the Day
+   * Plan on whatever the profile; part of the world's identity. The session treats such runs as debug.
+   */
+  forecast?: ForecastId;
 }
 
 /**

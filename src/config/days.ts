@@ -1,12 +1,36 @@
-// Day table, post-Day-6 ramp, onboarding profiles and the comfort ladder (V1_PLAN §4.2, §6).
-// Pure data + arithmetic: this module imports nothing. All per-day difficulty knobs live here.
+// Day table, post-Day-6 ramp, onboarding profiles and the comfort ladder (V1_PLAN §4.2, §6), and
+// dayParams(): one day's knobs under a profile and its Day Plan entry (biome and forecast).
+// Pure data + arithmetic over the other config tables. All per-day difficulty knobs live here.
+
+import { FORECAST_IDS, FORECAST_TUNING, type ForecastId } from './forecasts.ts';
+import { TUNING } from './tuning.ts';
 
 export type BiomeId = 'meadow' | 'oldtown';
 export type ProfileId = 0 | 1 | 2 | 3;
 
+/** One day of the Day Plan (core planDay / worldPlan). */
+export interface DayPlan {
+  readonly biome: BiomeId;
+  readonly forecast: ForecastId;
+}
+
+/** Cloud spawn ranges of a day (U(min, max); speeds are multiples of v). */
+export interface SkyParams {
+  readonly rxMin: number;
+  readonly rxMax: number;
+  /** Drift across the trail, U(−drift, drift) u/s. */
+  readonly drift: number;
+  readonly overtakeMin: number;
+  readonly overtakeMax: number;
+  readonly waitMin: number;
+  readonly waitMax: number;
+}
+
 export interface DayParams {
   readonly day: number;
+  /** The day's biome and forecast (from the Day Plan; plan-off worlds alternate clear days). */
   readonly biome: BiomeId;
+  readonly forecast: ForecastId;
   /** Sun elevation at noon (°). */
   readonly epsNoon: number;
   /** Walk speed in daylight (u/s). At night Nubs covers 8·v in total. */
@@ -28,12 +52,15 @@ export interface DayParams {
   /** Lateral distance from the centerline to the nearest footprint point, U(latMin, latMax) (u). */
   readonly latMin: number;
   readonly latMax: number;
-  /** Cloud spawn times (s into the day). */
+  /** Cloud spawn times (s into the day) and spawn ranges. */
   readonly clouds: readonly number[];
+  readonly sky: SkyParams;
   /** Gazing balls: first at ballStart s, then every ballEvery s while t < dayLen. ballEvery 0 = none. */
   readonly ballStart: number;
   readonly ballEvery: number;
   readonly flakesPerCluster: number;
+  /** Flake and crystal Snow multiplier (Snow = round(base · snowMult)). */
+  readonly snowMult: number;
   /** Validator floor: the best achievable Chill must stay at or above this. */
   readonly floor: number;
   /**
@@ -44,8 +71,6 @@ export interface DayParams {
   readonly drain: number;
   /** PHEW fires below this Chill. */
   readonly phewT: number;
-  /** Day 2 gets a guaranteed gate arch at noon (V1_PLAN §7.2). */
-  readonly gateAtNoon: boolean;
 }
 
 export interface ProfileParams {
@@ -194,42 +219,112 @@ export function nightLength(day: number): number {
   return day <= 6 ? 8 : Math.max(5, 8 - 0.5 * (day - 6));
 }
 
+const C = TUNING.cloud;
+const CLEAR_SKY: SkyParams = Object.freeze({
+  rxMin: C.rxMin,
+  rxMax: C.rxMax,
+  drift: C.driftMax,
+  overtakeMin: C.overtakeSpeedMin,
+  overtakeMax: C.overtakeSpeedMax,
+  waitMin: C.waitSpeedMin,
+  waitMax: C.waitSpeedMax,
+});
+
+/** Index of each forecast in FORECAST_IDS (cache keys). */
+const FIDX = Object.freeze(Object.fromEntries(FORECAST_IDS.map((id, i) => [id, i])) as Record<ForecastId, number>);
+const plans = new Map<number, DayPlan>();
+
+/** The interned DayPlan of (biome, forecast): equal plans are the same object. */
+export function dayPlan(biome: BiomeId, forecast: ForecastId): DayPlan {
+  const key = (biome === 'oldtown' ? 8 : 0) + FIDX[forecast];
+  let p = plans.get(key);
+  if (!p) {
+    p = Object.freeze({ biome, forecast });
+    plans.set(key, p);
+  }
+  return p;
+}
+
+const LEGACY_MEADOW = dayPlan('meadow', 'clear');
+const LEGACY_TOWN = dayPlan('oldtown', 'clear');
+
+/** The plan of a plan-off (v1.0) world's day: odd days Meadow, even days Old Town, always clear. */
+export function legacyPlan(day: number): DayPlan {
+  return Math.floor(day) % 2 === 0 ? LEGACY_TOWN : LEGACY_MEADOW;
+}
+
+function tableRow(d: number): Row {
+  return d <= TABLE.length ? (TABLE[d - 1] as Row) : rampRow(d);
+}
+
+const NO_BALLS: readonly [number, number] = Object.freeze([0, 0]);
+
+/** Gazing balls of a day: the forecast's, else Old Town days ≥ 2 take row 2k's on their k-th such day. */
+function ballsOf(d: number, plan: DayPlan): readonly [number, number] {
+  const set = FORECAST_TUNING[plan.forecast].balls;
+  if (set) return set;
+  if (plan.biome !== 'oldtown' || d < 2) return NO_BALLS;
+  const row = tableRow(2 * Math.floor(d / 2));
+  return [row.ballStart, row.ballEvery];
+}
+
+function skyOf(plan: DayPlan): SkyParams {
+  const ft = FORECAST_TUNING[plan.forecast];
+  if (!ft.cloudRx && ft.cloudDrift === undefined && !ft.overtake && !ft.wait) return CLEAR_SKY;
+  return Object.freeze({
+    rxMin: ft.cloudRx ? ft.cloudRx[0] : CLEAR_SKY.rxMin,
+    rxMax: ft.cloudRx ? ft.cloudRx[1] : CLEAR_SKY.rxMax,
+    drift: ft.cloudDrift ?? CLEAR_SKY.drift,
+    overtakeMin: ft.overtake ? ft.overtake[0] : CLEAR_SKY.overtakeMin,
+    overtakeMax: ft.overtake ? ft.overtake[1] : CLEAR_SKY.overtakeMax,
+    waitMin: ft.wait ? ft.wait[0] : CLEAR_SKY.waitMin,
+    waitMax: ft.wait ? ft.wait[1] : CLEAR_SKY.waitMax,
+  });
+}
+
 const cache = new Map<number, DayParams>();
 
 /**
- * Parameters for day `day` (1-based) under onboarding profile `profile`.
- * Only Day 1's εnoon/floor and the drain/PHEW threshold depend on the profile, so day and night
- * lengths (and therefore the time ↔ y mapping) are identical in every profile.
+ * Parameters for day `day` (1-based) under onboarding profile `profile` and Day Plan entry `plan`
+ * (default: the plan-off alternation of clear days). Only Day 1's εnoon and the drain/PHEW threshold
+ * depend on the profile, and forecasts never touch dayLen, nightLen or v, so the time ↔ y mapping is
+ * the same in every world. Gazing balls stand on Old Town days ≥ 2, the k-th such day using the
+ * table row of day 2k (Old Town keeps its rhythm whichever biome Day 1 drew), unless the forecast
+ * sets them (dazzle brings them to the Meadow, market clears them).
  */
-export function dayParams(day: number, profile: ProfileId): DayParams {
+export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legacyPlan(day)): DayParams {
   const d = Math.max(1, Math.floor(day));
-  const key = d * 4 + profile;
+  const key = ((d * 4 + profile) * 2 + (plan.biome === 'oldtown' ? 1 : 0)) * 8 + FIDX[plan.forecast];
   const hit = cache.get(key);
   if (hit) return hit;
-  const row = d <= TABLE.length ? (TABLE[d - 1] as Row) : rampRow(d);
+  const row = tableRow(d);
   const prof = PROFILES[profile] as ProfileParams;
-  const oldTown = d % 2 === 0;
+  const ft = FORECAST_TUNING[plan.forecast];
+  const n = row.clouds.length;
+  const k = ft.clouds ?? 1;
+  const balls = ballsOf(d, plan);
   const params: DayParams = Object.freeze({
     day: d,
-    biome: oldTown ? 'oldtown' : 'meadow',
-    epsNoon: d === 1 ? prof.day1EpsNoon : row.epsNoon,
+    biome: plan.biome,
+    forecast: plan.forecast,
+    epsNoon: (d === 1 ? prof.day1EpsNoon : row.epsNoon) + (ft.epsNoon ?? 0),
     v: row.v,
     dayLen: row.dayLen,
     nightLen: nightLength(d),
-    spacing: row.spacing,
+    spacing: row.spacing * (ft.spacing ?? 1),
     waveA: row.waveA,
     waveB: row.waveB,
     latMin: row.latMin,
-    latMax: row.latMax,
-    clouds: Object.freeze(row.clouds.slice()),
-    // Gazing balls are Old Town objects only.
-    ballStart: oldTown ? row.ballStart : 0,
-    ballEvery: oldTown ? row.ballEvery : 0,
-    flakesPerCluster: row.flakes,
+    latMax: row.latMax + (ft.latMax ?? 0),
+    clouds: Object.freeze(k === 1 ? row.clouds.slice() : evenly(Math.round(n * k), row.clouds[0] as number, row.clouds[n - 1] as number)),
+    sky: skyOf(plan),
+    ballStart: balls[0],
+    ballEvery: balls[1],
+    flakesPerCluster: row.flakes + (ft.flakes ?? 0),
+    snowMult: ft.snow ?? 1,
     floor: row.floor,
     drain: prof.drain,
     phewT: prof.phewT,
-    gateAtNoon: d === 2,
   });
   cache.set(key, params);
   return params;

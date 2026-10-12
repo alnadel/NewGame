@@ -6,7 +6,7 @@
 // patterns are matched against what is left.
 //
 // Layering (imports are read from the AST, so comments and strings never count):
-//   config   → nothing
+//   config   → config (pure data tables that may share types and constants)
 //   core     → core, config
 //   platform → platform
 //   meta     → meta, core, config, platform
@@ -205,7 +205,7 @@ type Layer = 'config' | 'core' | 'platform' | 'meta' | 'ui' | 'audio' | 'render'
 
 /** Layers each layer may import from (V1_PLAN §2.3). src/game and src/main.ts may import anything. */
 const ALLOWED: Record<Layer, readonly Layer[]> = {
-  config: [],
+  config: ['config'],
   core: ['core', 'config'],
   platform: ['platform'],
   meta: ['meta', 'core', 'config', 'platform'],
@@ -249,10 +249,6 @@ function layeringErrors(file: string, source: string): string[] {
     }
     if ((from === 'core' || from === 'config') && !spec.endsWith('.ts')) {
       errors.push(`${rel} import '${spec}' needs an explicit .ts extension`);
-    }
-    if (from === 'config') {
-      errors.push(`${rel}: src/config must import nothing (imports '${spec}')`);
-      continue;
     }
     const target = resolve(dirname(file), spec);
     const targetRel = relative(root, target).split('\\').join('/');
@@ -355,7 +351,9 @@ describe('architecture: the scanner and the rules themselves', () => {
     expect(layeringErrors(at('src/render/x.ts'), "import { a } from '../ui/ui.ts';")).toHaveLength(1);
     expect(layeringErrors(at('src/core/x.ts'), "import { a } from '../meta/save.ts';")).toHaveLength(1);
     expect(layeringErrors(at('src/core/x.ts'), "import { a } from 'some-package';")).toHaveLength(1);
-    expect(layeringErrors(at('src/config/x.ts'), "import { a } from './days.ts';")).toHaveLength(1);
+    expect(layeringErrors(at('src/config/x.ts'), "import { a } from './days.ts';")).toEqual([]);
+    expect(layeringErrors(at('src/config/x.ts'), "import { a } from '../core/clock.ts';")).toHaveLength(1);
+    expect(layeringErrors(at('src/config/x.ts'), "import { a } from './days';")).toHaveLength(1);
     expect(layeringErrors(at('src/game/x.ts'), "import { a } from '../ui/ui.ts';")).toEqual([]);
     // Comments and strings never count as imports.
     expect(layeringErrors(at('src/ui/x.ts'), "// import { a } from '../game/session.ts';\nconst s = \"import x from '../game/y.ts'\";")).toEqual([]);

@@ -9,6 +9,7 @@ import { dayParams } from '../../src/config/days.ts';
 import { dayStartY, yAtTime } from '../../src/core/clock.ts';
 import { angleDiff, sinD } from '../../src/core/dmath.ts';
 import { casterClearance } from '../../src/core/gen/placer.ts';
+import { worldPlan } from '../../src/core/gen/plan.ts';
 import { createWorld, ensureGenerated, generateSome, type World } from '../../src/core/gen/world.ts';
 import { convexDistance } from '../../src/core/geom.ts';
 import { createRun } from '../../src/core/sim/create.ts';
@@ -75,9 +76,9 @@ describe('world generation', () => {
     }
   });
 
-  it('gives Day 2 a gate arch between 11:00 AM and 1:00 PM, and Old Town days gazing balls', () => {
+  it('plan-off worlds give Day 2 a gate arch between 11:00 AM and 1:00 PM, and Old Town days gazing balls', () => {
     for (let seed = 1; seed <= 10; seed++) {
-      const w = createWorld({ seed, profile: 3, tutorial: false });
+      const w = createWorld({ seed, profile: 3, tutorial: false, plan: false });
       ensureGenerated(w, dayStartY(3));
       const p = dayParams(2, 3);
       const y11 = yAtTime(2, (300 / 720) * p.dayLen);
@@ -187,8 +188,9 @@ describe('start of a generated world', () => {
         ensureGenerated(w, 1200);
         const hut = w.byId.get(w.startHutId)!;
         expect(Math.sign(hut.x - trailX(w.trail, hut.y))).toBe(w.startSide);
+        const clearAhead = START_HUT.clearAhead[worldPlan(w, 1).biome];
         for (const c of w.casters) {
-          if (c.id === hut.id || c.y <= 0 || c.y >= START_HUT.clearAhead) continue;
+          if (c.id === hut.id || c.y <= 0 || c.y >= clearAhead) continue;
           expect(Math.sign(c.x - trailX(w.trail, c.y))).toBe(-w.startSide);
         }
       }

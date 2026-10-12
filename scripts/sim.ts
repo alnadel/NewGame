@@ -23,6 +23,7 @@
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import { endlessDrain, type ProfileId } from '../src/config/days.ts';
+import type { ForecastId } from '../src/config/forecasts.ts';
 import { dayStartTick, dayStartY } from '../src/core/clock.ts';
 import { formatScore } from '../src/core/format.ts';
 import { ensureGenerated } from '../src/core/gen/world.ts';
@@ -44,6 +45,7 @@ const sameJob = (a: Job, b: Job): boolean => a.bot === b.bot && a.profile === b.
 const jobName = (j: Job): string => `${j.bot} p${j.profile}${j.drain !== undefined ? `@${j.drain}` : ''}`;
 
 interface Task extends Job {
+  forecast?: ForecastId;
   seed: number;
   days: number;
   /** Pre-generate the whole world first to time generation separately from the sim. */
@@ -74,6 +76,7 @@ interface RunOut extends Task {
 
 function runTask(t: Task): RunOut {
   const cfg = headlessConfig(t.seed, t.profile, t.drain);
+  if (t.forecast) cfg.forecast = t.forecast;
   let genMs = 0;
   const s = createRun(cfg);
   if (t.timeGen) {
@@ -187,8 +190,9 @@ async function main(): Promise<void> {
   }
 
   const tasks: Task[] = [];
+  const fc = arg('forecast', '') as ForecastId | '';
   for (const j of jobs) {
-    for (let seed = 1; seed <= seeds; seed++) tasks.push({ ...j, seed, days, timeGen: j.bot === 'oracle' });
+    for (let seed = 1; seed <= seeds; seed++) tasks.push({ ...j, seed, days, timeGen: j.bot === 'oracle', ...(fc ? { forecast: fc } : {}) });
   }
   // Interleave so every worker gets a similar mix of long and short runs.
   const buckets: Task[][] = Array.from({ length: workers }, () => []);

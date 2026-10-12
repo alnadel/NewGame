@@ -171,12 +171,12 @@ function cloudFullCover(cl: Cloud, x: number, y: number, eps: number, tAbs: numb
 }
 
 describe('death cause over real runs', () => {
-  it('novice p3, seeds 1-20: a cloud is blamed exactly when one fully covered Nubs within 60° of θ 60 ticks before death', () => {
+  it('novice p3 (plan off), seeds 1-20: a cloud is blamed exactly when one fully covered Nubs within 60° of θ 60 ticks before death', () => {
     const back = TUNING.death.cloudLookbackTicks;
     const causes: Record<string, number> = {};
     let cloudDeaths = 0;
     for (let seed = 1; seed <= 20; seed++) {
-      const s = createRun(headlessConfig(seed, 3));
+      const s = createRun({ ...headlessConfig(seed, 3), plan: false });
       const bot = createBot('novice');
       // θ after every tick of the clock (start-beat ticks don't advance it, like the sim's ring).
       const theta: number[] = [];

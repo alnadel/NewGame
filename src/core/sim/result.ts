@@ -1,8 +1,10 @@
 // RunResult for the meta layer (src/core/sim/events.ts contract).
 
 import { formatScore } from '../format.ts';
+import { worldPlan } from '../gen/plan.ts';
 import { deathCause } from './deathcause.ts';
 import type { RunResult } from './events.ts';
+import { effectiveDrain } from './nubs.ts';
 import type { SimState } from './types.ts';
 
 /**
@@ -16,6 +18,9 @@ export function buildRunResult(s: SimState): RunResult {
     mode: s.cfg.mode,
     seed: s.cfg.seed,
     profile: s.cfg.profile,
+    drain: effectiveDrain(s),
+    noonCloud: s.world.noonCloud,
+    plan: Array.from({ length: s.day }, (_, i) => worldPlan(s.world, i + 1)),
     minutes: s.minutes,
     day: s.day,
     clock: formatScore(s.minutes),

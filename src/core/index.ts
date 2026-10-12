@@ -14,7 +14,9 @@ export {
   PROFILES,
   rungConfig,
 } from '../config/days.ts';
-export type { BiomeId, ComfortRung, DayParams, NoonCloud, ProfileId, ProfileParams, RungConfig } from '../config/days.ts';
+export type { BiomeId, ComfortRung, DayParams, DayPlan, NoonCloud, ProfileId, ProfileParams, RungConfig, SkyParams } from '../config/days.ts';
+export { FORECAST_IDS, FORECAST_TUNING, FORECASTS, forecastFits, PLAN_START_DATE } from '../config/forecasts.ts';
+export type { ForecastId, ForecastInfo, ForecastTuning } from '../config/forecasts.ts';
 export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';
 export type { CasterKind } from '../config/casters.ts';
 
@@ -28,7 +30,6 @@ export {
   dayStartY,
   dayTicks,
   elevation,
-  elevationAt,
   exactClock,
   hourTicks,
   hudClock,
@@ -92,7 +93,7 @@ export {
   validatedY,
 } from './gen/world.ts';
 export type { ChunkLit, World, WorldStats } from './gen/world.ts';
-export { biomeAtY, dayAtY } from './gen/placer.ts';
+export { biomeAtY, dayAtY, firstTownDay, paramsAt, planDay, worldPlan } from './gen/plan.ts';
 
 // Simulation
 export { createRun, prepareRun, prepareSome } from './sim/create.ts';

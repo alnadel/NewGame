@@ -5,7 +5,6 @@
 // balls passed → history → death → guide. Everything is pure arithmetic on the state.
 // The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
-import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import {
   dayStartTick,
@@ -21,6 +20,7 @@ import {
   yAtDayTick,
 } from '../clock.ts';
 import { cosD, sinD, tanD } from '../dmath.ts';
+import { paramsAt } from '../gen/plan.ts';
 import { lowerBound, pruneWorld } from '../gen/store.ts';
 import { ensureGenerated } from '../gen/world.ts';
 import type { Caster, GazingBall } from '../objects.ts';
@@ -74,7 +74,7 @@ function advanceClock(s: SimState): void {
   if (s.dayTick === dl + nightTicks(s.day)) {
     s.day++;
     s.dayTick = 0;
-    s.params = dayParams(s.day, s.cfg.profile);
+    s.params = paramsAt(s.world, s.day);
     s.phase = 'day';
     s.nubs.chill = s.nubs.maxChill;
     s.flakesToday = 0;
