@@ -10,9 +10,9 @@
 // from a per-biome atlas built lazily at the device scale. Drawn after the trail and before the
 // shadow layer, so shade darkens them like the ground.
 
-import { biomeAtY, queryCasters, smoothstep, trailSlope, trailX, validatedY, type Caster, type SimState, type World } from '../core/index.ts';
+import { biomeAtY, dayAtY, queryCasters, smoothstep, trailSlope, trailX, validatedY, worldPlan, type Caster, type SimState, type World } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
-import type { View } from '../game/camera.ts';
+import { OBLIQUE, type View } from '../game/camera.ts';
 import { P_STEAM, spawn, type Particles } from './particles.ts';
 import { ctx2d, makeCanvas, roundRect, sparkle, type Canvas2D } from './sprites.ts';
 
@@ -840,4 +840,81 @@ function signpost(g: CanvasRenderingContext2D, text: string): void {
   g.beginPath();
   dot(g, -22, 9, 2);
   g.fill();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Market days: bunting strung across the street every BUNTING_GAP u (render-only, no shadow).
+// ---------------------------------------------------------------------------------------------
+
+const BUNTING_GAP = 150;
+/** Half the span across the street (u), the string's height (u) and its sag at the middle (u). */
+const BUNTING_HALF = 66;
+const BUNTING_Z = 30;
+const BUNTING_SAG = 7;
+const PENNANTS = 9;
+const BUNTING_COLORS = ['#E8504A', '#FFC23D', '#2EC4B6', '#5A8FE0', '#F28DB2'] as const;
+
+/**
+ * Bunting over the street on Market days (the forecast's signature): strings of pennants every
+ * 150 u, one path per colour for the whole view. `fade` scales it (night, the far zoom).
+ */
+export function drawBunting(g: CanvasRenderingContext2D, v: View, w: World, fade: number): void {
+  if (fade <= 0.02 || !w.planOn) return;
+  const S = v.S;
+  const k0 = Math.floor((v.y0 - 40) / BUNTING_GAP);
+  const k1 = Math.ceil((v.y1 + 80) / BUNTING_GAP);
+  let any = false;
+  for (let k = k0; k <= k1 && !any; k++) any = worldPlan(w, dayAtY(k * BUNTING_GAP)).forecast === 'market';
+  if (!any) return;
+  g.globalAlpha = fade;
+  // Strings first (thin ink), then the pennants batched by colour.
+  g.strokeStyle = 'rgba(43,33,64,0.55)';
+  g.lineWidth = Math.max(0.8, 0.7 * S);
+  g.beginPath();
+  for (let k = k0; k <= k1; k++) {
+    const y = k * BUNTING_GAP;
+    if (worldPlan(w, dayAtY(y)).forecast !== 'market') continue;
+    const cx = trailX(w.trail, y);
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12;
+      const [sx, sy] = buntingPoint(v, cx, y, t);
+      if (i === 0) g.moveTo(sx, sy);
+      else g.lineTo(sx, sy);
+    }
+  }
+  g.stroke();
+  for (let c = 0; c < BUNTING_COLORS.length; c++) {
+    g.fillStyle = BUNTING_COLORS[c] as string;
+    g.beginPath();
+    for (let k = k0; k <= k1; k++) {
+      const y = k * BUNTING_GAP;
+      if (worldPlan(w, dayAtY(y)).forecast !== 'market') continue;
+      const cx = trailX(w.trail, y);
+      for (let i = 0; i < PENNANTS; i++) {
+        if ((i + k) % BUNTING_COLORS.length !== c) continue;
+        const ta = (i + 0.15) / PENNANTS;
+        const tb = (i + 0.85) / PENNANTS;
+        const [ax, ay] = buntingPoint(v, cx, y, ta);
+        const [bx, by] = buntingPoint(v, cx, y, tb);
+        g.moveTo(ax, ay);
+        g.lineTo(bx, by);
+        g.lineTo((ax + bx) / 2, (ay + by) / 2 + 9 * S);
+        g.closePath();
+      }
+    }
+    g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+const bp: [number, number] = [0, 0];
+
+/** Screen point at t ∈ [0, 1] along a string across the street at y (sagging, slightly skewed). */
+function buntingPoint(v: View, cx: number, y: number, t: number): [number, number] {
+  const x = cx - BUNTING_HALF + 2 * BUNTING_HALF * t;
+  const wy = y + 8 * (t - 0.5);
+  const z = BUNTING_Z - BUNTING_SAG * 4 * t * (1 - t);
+  bp[0] = v.ox + x * v.S;
+  bp[1] = v.oy - (wy + OBLIQUE * z) * v.S;
+  return bp;
 }

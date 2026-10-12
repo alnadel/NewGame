@@ -18,6 +18,8 @@ import {
   P_FIREFLY,
   P_FLAKE_FLY,
   P_FROST,
+  P_GLINT,
+  P_LEAF,
   P_PETAL,
   P_PUFF,
   P_SPARKLE,
@@ -41,6 +43,14 @@ const FIREFLIES = 14;
 const FROST: number = 0xe6f6ff;
 const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
 const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
+const LEAVES: readonly number[] = [0x7cb342, 0x9ccc65, 0xc0ca33, 0xf9a825, 0x8bc34a];
+
+/** Live particles of one kind. */
+function countKind(p: { cap: number; kind: Uint8Array; life: Float32Array }, kind: number): number {
+  let n = 0;
+  for (let i = 0; i < p.cap; i++) if (p.kind[i] === kind && (p.life[i] as number) > 0) n++;
+  return n;
+}
 
 function rnd(a: number, b: number): number {
   return a + Math.random() * (b - a);
@@ -55,6 +65,10 @@ export class Fx {
   private frostAcc = 0;
   private breathAcc = 0;
   private wispAcc = 0;
+  private leafAcc = 0;
+  private glintAcc = 0;
+  /** Game seconds until HIGH NOON lands (the sim's noonBanner comes 2 s early), or 0. */
+  private noonIn = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
   private stampImpact = -1;
   /** The way the sun last turned (+1 counter-clockwise, −1 clockwise): a SWING's arc sweeps that way. */
@@ -63,6 +77,13 @@ export class Fx {
   constructor(scene: RenderScene, clock: FixedClock) {
     this.sc = scene;
     this.clock = clock;
+  }
+
+  /** A new run begins: drop pending timers from the last one (a HIGH NOON due after its melt). */
+  resetRun(): void {
+    this.noonIn = 0;
+    this.leafAcc = 0;
+    this.glintAcc = 0;
   }
 
   /** Routes one frame's events. */
@@ -78,13 +99,17 @@ export class Fx {
         case 'catch':
           sc.sun.squash = 0.08;
           break;
-        case 'go':
-          // End of the start beat: a little cheer and a kick of snow dust as Nubs sets off.
+        case 'go': {
+          // End of the start beat: a little cheer and a kick of snow dust as Nubs sets off; on a
+          // forecast day the Day card names the weather (later days get theirs at dawn).
+          const plan = worldPlan(s.world, s.day);
+          if (plan.forecast !== 'clear') showDayCard(sc.banners, s.day, plan.biome, plan.forecast, s.params.epsNoon);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.45);
           for (let i = 0; i < 5; i++) {
             spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-14, 14), rnd(-30, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
           }
           break;
+        }
         case 'flake': {
           const p = sc.particles;
           spawn(p, P_FLAKE_FLY, ev.x, ev.y, 8, 0, 0, 0, 0.15, 7, 5, 0xffffff);
@@ -157,7 +182,8 @@ export class Fx {
           break;
         }
         case 'noonBanner':
-          this.stamp('noon', 'HIGH NOON', 1.1);
+          // The sim warns 2 s early (the audio's cue); the stamp lands at noon, with the clock.
+          this.noonIn = 2;
           break;
         case 'noonPassed':
           // The boss blinks first: a worried sun for 1.5 s, the ruler's sparkle and one cool pulse.
@@ -239,6 +265,10 @@ export class Fx {
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
     if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);
+    if (this.noonIn > 0 && (this.noonIn -= dt) <= 0) {
+      this.noonIn = 0;
+      if (playing && s.phase === 'day') this.stamp('noon', 'HIGH NOON', 1.1);
+    }
     if (s.sun.dTheta !== 0) this.turn = s.sun.dTheta > 0 ? 1 : -1;
     if (dt <= 0 || !playing) return;
     const sc = this.sc;
@@ -289,10 +319,14 @@ export class Fx {
       }
     }
     // Heat wisps while the sun is a boss: 7 tries a second 44-160 u from Nubs, rising (18 u/s on
-    // screen, 1.4 s) only from lit ground — about 10 in the air at once.
-    const boss = daylight ? bossWeight(s.dayTick / dayTicks(s.day), s.params.forecast === 'heat') : 0;
-    if (boss > 0.3) {
-      this.wispAcc += dt * 7;
+    // screen, 1.4 s) only from lit ground — about 10 in the air at once. A Heat Wave shimmers from
+    // 8 AM to 4 PM and twice as thick.
+    const fc = s.params.forecast;
+    const dayFrac = s.dayTick / dayTicks(s.day);
+    const heatDay = fc === 'heat' && daylight && dayFrac > 0.17 && dayFrac < 0.83;
+    const boss = daylight ? bossWeight(dayFrac, fc === 'heat') : 0;
+    if (boss > 0.3 || heatDay) {
+      this.wispAcc += dt * (heatDay ? 14 : 7);
       while (this.wispAcc >= 1) {
         this.wispAcc -= 1;
         const a = rnd(0, Math.PI * 2);
@@ -309,6 +343,38 @@ export class Fx {
       }
     } else {
       this.wispAcc = 0;
+    }
+    // Breezy: a few leaves blown across the screen (at most 6 at once), the wind's way.
+    if (fc === 'breezy' && daylight) {
+      this.leafAcc += dt * 1.8;
+      if (this.leafAcc >= 1) {
+        this.leafAcc -= 1;
+        if (countKind(p, P_LEAF) < 6) {
+          const v = sc.view;
+          const dir = s.day % 2 === 0 ? -1 : 1;
+          const li = spawn(p, P_LEAF, dir > 0 ? v.vx - 20 : v.vx + v.vw + 20, v.vy + rnd(0.1, 0.8) * v.vh, 0, dir * rnd(110, 170), 0, 0, rnd(3.5, 5.5), rnd(11, 15), 0, LEAVES[Math.floor(rnd(0, LEAVES.length))] as number);
+          p.vrot[li] = rnd(-4, 4);
+        }
+      }
+    } else {
+      this.leafAcc = 0;
+    }
+    // Dazzle: glints flash on lit ground around Nubs (at most 6 at once).
+    if (fc === 'dazzle' && daylight) {
+      this.glintAcc += dt * 5;
+      while (this.glintAcc >= 1) {
+        this.glintAcc -= 1;
+        if (countKind(p, P_GLINT) >= 6) continue;
+        const a = rnd(0, Math.PI * 2);
+        const r = rnd(30, 200);
+        const x = nb.x + Math.cos(a) * r;
+        const y = nb.y + Math.sin(a) * r;
+        if (pointLitWeight(s, x, y) <= 0) continue;
+        const gi = spawn(p, P_GLINT, x, y, rnd(0, 6), 0, 0, 0, rnd(0.45, 0.7), rnd(9, 13), 0, 0xffffff);
+        p.rot[gi] = rnd(0, Math.PI);
+      }
+    } else {
+      this.glintAcc = 0;
     }
     if (s.phase === 'night') {
       // A steady pool of 14 fireflies within 140 u of Nubs, each wandering for 5-8 s.

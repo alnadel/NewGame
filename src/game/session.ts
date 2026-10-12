@@ -1105,6 +1105,7 @@ export class Session {
     this.dropPostcard();
     this.resetSnaps();
     this.resetRender();
+    this.fx.resetRun();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     const botKind = this.params.bot ?? this.testBot;

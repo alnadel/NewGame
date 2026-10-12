@@ -13,13 +13,18 @@ interface Key {
 }
 
 // Shadows are cool (GR5 colour script): violet-blue at dawn, a clean sky blue at noon (it reads as
-// "cold, safe" on the cream ground), indigo by dusk; the light around them stays warm.
+// "cold, safe" on the cream ground), indigo by dusk; the light around them stays warm. The shadow is
+// a multiply, which cannot turn a saturated ochre blue: the dawn, 9 AM and 3 PM grounds are pale
+// peach and cream (a warm light, not a warm paint) and their shadow colours lean hard to blue, so
+// the shade stays blue-grey to violet at every hour instead of olive or brown (fix round 1). How
+// blue they can go is bounded by the matched composite's error on white pickups (shadowLayer.ts,
+// ≤ 40 levels in the GR2 A/B): (255 − ground blue)·a·(C_b − C_r)/255 stays under ~39 on both biomes.
 const KEYS: readonly Key[] = [
-  { ground: hex('#F6B07C'), trail: hex('#E39468'), shadow: hex('#4536A0'), shadowAlpha: 0.46, tint: hex('#FF9E6B') },
-  { ground: hex('#F4D49A'), trail: hex('#DDB07A'), shadow: hex('#3550B0'), shadowAlpha: 0.54, tint: hex('#FFE8C2') },
+  { ground: hex('#F4CCB2'), trail: hex('#E3A07E'), shadow: hex('#3030CC'), shadowAlpha: 0.52, tint: hex('#FF9E6B') },
+  { ground: hex('#F4E0BA'), trail: hex('#DDB88A'), shadow: hex('#2848C8'), shadowAlpha: 0.56, tint: hex('#FFE8C2') },
   { ground: hex('#FFF4DC'), trail: hex('#EAD3A6'), shadow: hex('#2F62C4'), shadowAlpha: 0.62, tint: hex('#FFFFFF') },
-  { ground: hex('#F5CF8A'), trail: hex('#D9A564'), shadow: hex('#3A42A8'), shadowAlpha: 0.54, tint: hex('#FFD59A') },
-  { ground: hex('#E3829E'), trail: hex('#C76784'), shadow: hex('#30247A'), shadowAlpha: 0.5, tint: hex('#D96A8E') },
+  { ground: hex('#F4DEB8'), trail: hex('#D9AD74'), shadow: hex('#2C44C2'), shadowAlpha: 0.56, tint: hex('#FFD59A') },
+  { ground: hex('#E8A0B4'), trail: hex('#C76784'), shadow: hex('#2A20A0'), shadowAlpha: 0.52, tint: hex('#D96A8E') },
 ];
 
 const NIGHT: Key = { ground: hex('#1D2247'), trail: hex('#2A2F5E'), shadow: hex('#1D2247'), shadowAlpha: 0, tint: hex('#3A4380') };

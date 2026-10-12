@@ -89,7 +89,7 @@ import {
   type Rings,
 } from './particles.ts';
 import { createDeathBeat, drawGrey, drawHatPop, greyOf, startDeathBeat, type DeathBeat } from './deathbeat.ts';
-import { createDecor, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
+import { createDecor, drawBunting, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
 import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
@@ -635,6 +635,8 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
+    // Market days string bunting over the street (the forecast's signature; no shadow).
+    if (this.options.decor) drawBunting(g, v, s.world, 1 - 0.6 * night);
     if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
     drawHatPop(g, v, beat, inp.reducedMotion);

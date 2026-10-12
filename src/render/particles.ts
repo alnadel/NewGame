@@ -21,6 +21,8 @@ export const P_PETAL = 9; // screen space
 export const P_PUFF = 10; // melt puff (steam, short)
 export const P_BREATH = 11; // cold breath in the shade
 export const P_WISP = 12; // heat shimmer rising off lit ground around noon
+export const P_LEAF = 13; // screen space: a leaf blown across a Breezy day
+export const P_GLINT = 14; // a four-point glint on lit ground (Dazzle)
 
 const CAP = 400;
 
@@ -175,6 +177,11 @@ export function updateParticles(p: Particles, dt: number, nx: number, ny: number
         p.vy[i] = vx * sn + p.vy[i]! * c;
         break;
       }
+      case P_LEAF:
+        // Carried by the wind (vx holds), fluttering up and down and tumbling.
+        p.vy[i] = 22 * Math.sin(life * 3.1 + i) + 10;
+        if (p.x[i]! < -60 || p.x[i]! > 4000) p.life[i] = 0;
+        break;
       case P_CONFETTI:
       case P_PETAL:
         p.vy[i] = p.vy[i]! + (k === P_CONFETTI ? 260 : 60) * dt;
@@ -287,8 +294,8 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
     const life = p.life[i]!;
     if (life <= 0) continue;
     const k = p.kind[i]!;
-    if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL) continue;
-    if ((k === P_SPARKLE || k === P_FIREFLY) !== glows) continue;
+    if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL || k === P_LEAF) continue;
+    if ((k === P_SPARKLE || k === P_FIREFLY || k === P_GLINT) !== glows) continue;
     const t = 1 - life / p.maxLife[i]!;
     const sx = v.ox + p.x[i]! * S;
     const sy = v.oy - (p.y[i]! + OBLIQUE * p.z[i]!) * S;
@@ -320,6 +327,17 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
       case P_SPARKLE: {
         g.globalAlpha = (1 - t) * 0.95;
         g.drawImage(sp, sx - size, sy - size, size * 2, size * 2);
+        break;
+      }
+      case P_GLINT: {
+        // Swells and fades once, turning a little: sunlight flashing off something polished.
+        const pulse = Math.sin(Math.PI * t);
+        g.globalAlpha = pulse;
+        const r = size * (0.5 + 0.5 * pulse);
+        g.setTransform(v.dpr, 0, 0, v.dpr, sx * v.dpr, sy * v.dpr);
+        g.rotate(p.rot[i]!);
+        g.drawImage(sp, -r, -r, r * 2, r * 2);
+        g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
         break;
       }
       case P_FLAKE_FLY: {
@@ -361,7 +379,7 @@ export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles, d
     const life = p.life[i]!;
     if (life <= 0) continue;
     const k = p.kind[i]!;
-    if (k !== P_CONFETTI && k !== P_PETAL) continue;
+    if (k !== P_CONFETTI && k !== P_PETAL && k !== P_LEAF) continue;
     const t = 1 - life / p.maxLife[i]!;
     const x = p.x[i]!;
     const y = p.y[i]!;
@@ -378,6 +396,32 @@ export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles, d
       const w = s * Math.abs(Math.cos(rot * 1.7));
       g.setTransform(cd, sd, -sd, cd, x * dpr, y * dpr);
       g.fillRect(-w / 2, -s * 0.35, w, s * 0.7);
+    } else if (k === P_LEAF) {
+      // A pointed leaf whose width flips as it tumbles, with a darker midrib; fades in and out.
+      const fadeL = Math.min(1, life * 1.5, t * 8);
+      const w = s * (0.25 + 0.75 * Math.abs(Math.cos(rot * 1.3)));
+      // Its shadow on the ground below first: the leaf flies.
+      g.globalAlpha = fadeL * 0.18;
+      const fill = g.fillStyle;
+      g.fillStyle = '#2B2140';
+      g.setTransform(cd, sd, -sd, cd, (x + 6) * dpr, (y + 14) * dpr);
+      g.beginPath();
+      g.ellipse(0, 0, s, w * 0.6, 0, 0, TAU);
+      g.fill();
+      g.fillStyle = fill;
+      g.globalAlpha = fadeL * 0.95;
+      g.setTransform(cd, sd, -sd, cd, x * dpr, y * dpr);
+      g.beginPath();
+      g.moveTo(-s, 0);
+      g.quadraticCurveTo(0, -w * 0.9, s, 0);
+      g.quadraticCurveTo(0, w * 0.9, -s, 0);
+      g.fill();
+      g.strokeStyle = 'rgba(60,90,30,0.55)';
+      g.lineWidth = 0.8;
+      g.beginPath();
+      g.moveTo(-s * 0.9, 0);
+      g.lineTo(s * 0.9, 0);
+      g.stroke();
     } else {
       g.setTransform(cd, sd, -sd, cd, x * dpr, y * dpr);
       g.beginPath();

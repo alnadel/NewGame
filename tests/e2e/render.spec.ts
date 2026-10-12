@@ -242,6 +242,43 @@ test.describe('shadow composite (GR2)', () => {
   });
 });
 
+test.describe('forecast signatures', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+
+  test('each forecast grades the whole frame unmistakably, within three full-screen passes', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one run is enough');
+    /** Mean colour of the world below the HUD at Day 1 11:20 AM under a forced forecast (time frozen). */
+    const frame = async (forecast: string): Promise<{ rgb: number[]; passes: number }> => {
+      await openGame(page, `test=1&perf=0&seed=11&day=1&t=11:20&forecast=${forecast}`);
+      await keepAlive(page);
+      await page.mouse.click(195, 380);
+      await waitForScreen(page, 'play');
+      await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
+      await page.waitForTimeout(600);
+      return page.evaluate(() => {
+        const c = document.getElementById('game') as HTMLCanvasElement;
+        const g = c.getContext('2d')!;
+        const y0 = Math.round(c.height * 0.15);
+        const d = g.getImageData(0, y0, c.width, Math.round(c.height * 0.7)).data;
+        const sum = [0, 0, 0];
+        for (let i = 0; i < d.length; i += 4 * 7) for (let k = 0; k < 3; k++) sum[k]! += d[i + k]!;
+        const n = d.length / (4 * 7);
+        return { rgb: sum.map((v) => v / n), passes: window.__SHADY_TEST__!.perf().fullScreenPasses };
+      });
+    };
+    const clear = await frame('clear');
+    const rows: string[] = [`clear ${clear.rgb.map((v) => v.toFixed(0)).join(',')}`];
+    for (const f of ['heat', 'overcast', 'long']) {
+      const r = await frame(f);
+      const dist = Math.hypot(...r.rgb.map((v, k) => v - clear.rgb[k]!));
+      rows.push(`${f} ${r.rgb.map((v) => v.toFixed(0)).join(',')} Δ ${dist.toFixed(1)} passes ${r.passes}`);
+      expect(dist, rows.join(' | ')).toBeGreaterThanOrEqual(10);
+      expect(r.passes).toBeLessThanOrEqual(3);
+    }
+    await info.attach('forecast-means', { body: rows.join('\n'), contentType: 'text/plain' });
+  });
+});
+
 test.describe('world rect (K9)', () => {
   test('--world-* follow the letterboxed view', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });

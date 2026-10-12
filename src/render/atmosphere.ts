@@ -8,9 +8,14 @@
 //   - the night pool: moonlight around Nubs, dark edges;
 //   - the edge vignettes: low-Chill heat (pulsing at 1.1 Hz), the cool multiplier pulse, the gold ×5
 //     pulse, and the cool wash of the death beat.
-// Forecasts tint it (Heat Wave: warmer sun side; Overcast: everything ×0.7). At governor level 3 only
-// the vignettes stay. The layer is redrawn only when a quantized input changes (a drag, the clock's
-// 1/96-day steps, a pulse), and drawn only when something in it is visible.
+// Each forecast grades the whole frame from this same layer (no pass of its own): Heat Wave a hot
+// orange wash that peaks at noon and a hotter sun side; Overcast a cool, desaturated sky tone with
+// the sun's warmth and the noon bleach muted; Long Shadows an amber low-sun grade all day; Dazzle a
+// bright glare; Breezy a fresh, airy tone. Breezy (leaves), Dazzle (glints) and Market (bunting)
+// add small sprites elsewhere.
+// The morning's warm sun side is capped so the shade stays cool on the saturated dawn ground. At
+// governor level 3 only the vignettes stay. The layer is redrawn only when a quantized input
+// changes (a drag, the clock's 1/96-day steps, a pulse), and drawn only when something is visible.
 
 import type { ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
@@ -25,6 +30,28 @@ const BLEACH = hex('#FFFAE1');
 const MOON = hex('#AABEFF');
 const DARK = hex('#06081E');
 const ICE = hex('#5AB8FF');
+
+/** A forecast's full-frame grade: its colour and alpha at dawn/dusk (lo) and at noon (hi). */
+interface Grade {
+  readonly color: Rgb;
+  readonly lo: number;
+  readonly hi: number;
+  /** Multipliers on the sun-side warmth, the far-side cool and the noon bleach; a floor on "low sun". */
+  readonly warm: number;
+  readonly cool: number;
+  readonly bleach: number;
+  readonly lowMin: number;
+}
+
+const PLAIN: Grade = { color: 0, lo: 0, hi: 0, warm: 1, cool: 1, bleach: 1, lowMin: 0 };
+const GRADES: Readonly<Partial<Record<ForecastId, Grade>>> = {
+  breezy: { color: hex('#E2FBF0'), lo: 0.06, hi: 0.07, warm: 0.85, cool: 1.2, bleach: 1, lowMin: 0 },
+  heat: { color: hex('#FF5A2E'), lo: 0.07, hi: 0.16, warm: 1.35, cool: 0.6, bleach: 1.2, lowMin: 0 },
+  overcast: { color: hex('#7F8DAE'), lo: 0.2, hi: 0.24, warm: 0.3, cool: 1.3, bleach: 0.3, lowMin: 0 },
+  long: { color: hex('#FFC24A'), lo: 0.12, hi: 0.12, warm: 1.2, cool: 1.1, bleach: 0.2, lowMin: 0.75 },
+  dazzle: { color: hex('#FFFDF0'), lo: 0.05, hi: 0.1, warm: 0.9, cool: 1, bleach: 1.4, lowMin: 0 },
+};
+const FORECAST_KEY: Readonly<Record<ForecastId, number>> = { clear: 0, breezy: 1, overcast: 2, heat: 3, long: 4, dazzle: 5, market: 6 };
 const MAX_W = 128;
 const MAX_H = 256;
 const TAU = Math.PI * 2;
@@ -104,18 +131,22 @@ export function warmAt(dayFrac: number): Rgb {
  * full-screen pass).
  */
 export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: View, a: AtmosphereIn): boolean {
-  const oc = a.forecast === 'overcast' ? 0.7 : 1;
+  const gr = GRADES[a.forecast] ?? PLAIN;
   const day = a.full ? 1 - a.night : 0;
-  const low = 1 - a.elev;
-  const warmA = (0.16 + 0.14 * low + (a.forecast === 'heat' ? 0.05 : 0)) * day * oc;
-  const coolA = (0.06 + 0.1 * low) * day * oc;
-  const bleachA = a.elev > 0.75 ? 0.22 * ((a.elev - 0.75) / 0.25) * day * oc : 0;
-  const nightA = a.full ? a.night * oc : 0;
-  const heatA = a.heat > 0.01 ? 0.25 * (0.25 + 0.75 * (0.5 - 0.5 * Math.cos(a.heatPhase * TAU * 1.1))) * a.heat * oc : 0;
-  const coolP = a.cool > 0 ? 0.18 * Math.sin((Math.PI * a.cool) / 0.25) * oc : 0;
-  const goldP = a.gold > 0 ? 0.2 * Math.sin((Math.PI * a.gold) / 0.45) * oc : 0;
+  const low = Math.max(gr.lowMin, 1 - a.elev);
+  // The sun side warms less before 9 AM (the colour script's dawn ground is already warm: more would
+  // turn the shade brown); the far side's cool is what keeps the shade reading cold.
+  const morning = 1 - 0.35 * (1 - smoothstep(0.15, 0.3, a.dayFrac));
+  const warmA = (0.13 + 0.1 * low) * morning * gr.warm * day;
+  const coolA = (0.07 + 0.1 * low) * gr.cool * day;
+  const bleachA = a.elev > 0.75 ? 0.22 * ((a.elev - 0.75) / 0.25) * gr.bleach * day : 0;
+  const gradeA = (gr.lo + (gr.hi - gr.lo) * a.elev) * day;
+  const nightA = a.full ? a.night : 0;
+  const heatA = a.heat > 0.01 ? 0.25 * (0.25 + 0.75 * (0.5 - 0.5 * Math.cos(a.heatPhase * TAU * 1.1))) * a.heat : 0;
+  const coolP = a.cool > 0 ? 0.18 * Math.sin((Math.PI * a.cool) / 0.25) : 0;
+  const goldP = a.gold > 0 ? 0.2 * Math.sin((Math.PI * a.gold) / 0.45) : 0;
   const washA = a.wash;
-  if (warmA < 0.005 && nightA < 0.005 && heatA < 0.005 && coolP < 0.005 && goldP < 0.005 && washA < 0.005) {
+  if (warmA < 0.005 && gradeA < 0.005 && nightA < 0.005 && heatA < 0.005 && coolP < 0.005 && goldP < 0.005 && washA < 0.005) {
     at.visible = false;
     return false;
   }
@@ -138,8 +169,10 @@ export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: V
   n[11] = Math.round(coolP * 200);
   n[12] = Math.round(goldP * 200);
   n[13] = Math.round(washA * 200);
+  n[14] = FORECAST_KEY[a.forecast];
+  n[15] = Math.round(gradeA * 200);
   let same = true;
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 16; i++) {
     if (n[i] !== at.key[i]) {
       same = false;
       break;
@@ -147,7 +180,7 @@ export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: V
   }
   if (!same || !at.canvas) {
     at.key.set(n);
-    paint(at, W, H, a, warmA, coolA, bleachA, nightA, heatA, coolP, goldP, washA);
+    paint(at, W, H, a, gr, gradeA, warmA, coolA, bleachA, nightA, heatA, coolP, goldP, washA);
   }
   at.visible = true;
   g.imageSmoothingEnabled = true;
@@ -160,6 +193,8 @@ function paint(
   W: number,
   H: number,
   a: AtmosphereIn,
+  gr: Grade,
+  gradeA: number,
   warmA: number,
   coolA: number,
   bleachA: number,
@@ -181,6 +216,11 @@ function paint(
   const cx = W / 2;
   const cy = H / 2;
   const R = Math.sqrt(W * W + H * H) / 2;
+  if (gradeA > 0.005) {
+    // The forecast's grade under everything else in the layer.
+    g.fillStyle = cssa(gr.color, gradeA);
+    g.fillRect(0, 0, W, H);
+  }
   if (warmA > 0.005) {
     // Screen sun direction d = (ux, −uy): warm on the sun's side, cool on the far side.
     const len = Math.hypot(a.ux, a.uy) || 1;
