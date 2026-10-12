@@ -1,6 +1,6 @@
 // Time-of-day palette LUT (GDD §10): keyframes at 6, 9, 12, 15 and 18 o'clock interpolated linearly
-// in RGB, a separate night keyframe, and the Old Town ground tint. One Palette object is updated in
-// place every frame; materials are tinted through tint().
+// in RGB, a separate night keyframe, and the two biome tints (a green Meadow, a warm terracotta Old
+// Town). One Palette object is updated in place every frame; materials are tinted through tint().
 
 import { hex, mix, multiply, darken, lighten, type Rgb } from './color.ts';
 
@@ -23,9 +23,9 @@ const KEYS: readonly Key[] = [
 ];
 
 const NIGHT: Key = { ground: hex('#1D2247'), trail: hex('#2A2F5E'), shadow: hex('#1D2247'), shadowAlpha: 0, tint: hex('#3A4380') };
-const OLD_TOWN = hex('#F0E6DA');
-/** Meadow ground gets a faint green cast so the two biomes read apart at a glance. */
-const MEADOW = hex('#F2F7E6');
+/** Biome tints multiplied into the ground: the two biomes read apart at a glance (GR11). */
+const OLD_TOWN = hex('#F2D9C4');
+const MEADOW = hex('#E6F2CF');
 const DAY_TINT_MIX = 0.25;
 const NIGHT_TINT_MIX = 0.55;
 
@@ -36,7 +36,10 @@ export interface Palette {
   night: number;
   /** 0 = meadow, 1 = old town. */
   town: number;
+  /** The ground of the current biome blend, and of each biome on its own (its tiles and decor). */
   ground: Rgb;
+  groundMeadow: Rgb;
+  groundTown: Rgb;
   groundDeep: Rgb;
   trail: Rgb;
   trailEdge: Rgb;
@@ -56,6 +59,8 @@ export function createPalette(): Palette {
     night: 0,
     town: 0,
     ground: 0,
+    groundMeadow: 0,
+    groundTown: 0,
     groundDeep: 0,
     trail: 0,
     trailEdge: 0,
@@ -95,8 +100,9 @@ export function updatePalette(p: Palette, dayFrac: number, night: number, town: 
   p.dayFrac = dayFrac;
   p.night = n;
   p.town = town;
-  let ground = mix(multiply(k.ground, MEADOW), multiply(k.ground, OLD_TOWN), town);
-  ground = mix(ground, NIGHT.ground, n);
+  p.groundMeadow = mix(multiply(k.ground, MEADOW), NIGHT.ground, n);
+  p.groundTown = mix(multiply(k.ground, OLD_TOWN), NIGHT.ground, n);
+  const ground = mix(p.groundMeadow, p.groundTown, town);
   p.ground = ground;
   p.groundDeep = darken(ground, 0.08);
   const trail = mix(mix(k.trail, multiply(k.trail, OLD_TOWN), town), NIGHT.trail, n);

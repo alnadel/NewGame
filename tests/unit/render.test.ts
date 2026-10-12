@@ -1,12 +1,13 @@
 // Pure render helpers: the Melt Map's fade timing (callouts only after the camera pull, K10), when
 // the map counts as settled (the 20 fps Results cadence), the cached rgba() strings, Nubs' shade tint
 // shared by the palette and the cached sprite (quantized night, G15), the shadow path's winding
-// (GR1) and the matched shadow composite (GR2).
+// (GR1), the matched shadow composite (GR2), the noon boss (GR10) and the ground decals (GR11).
 import { describe, expect, it } from 'vitest';
-import { createBot, createRun, dayTicks, headlessConfig, step, type SimState } from '../../src/core/index.ts';
+import { createBot, createRun, dayTicks, headlessConfig, queryCasters, step, validatedY, type Caster, type SimState } from '../../src/core/index.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src/game/camera.ts';
 import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
+import { createDecals, decorIn, FOOTPRINT_CLEAR, PUDDLE, TRAIL_CLEAR, trailDistance } from '../../src/render/decor.ts';
 import { createShadeSplit, splitShade } from '../../src/render/halo.ts';
 import { addHeadline, addPlus, addSwing, createPops, POP_PHEW, updatePops, type Pops } from '../../src/render/particles.ts';
 import { MAP_FADE_S, MAP_LABEL_FADE_S, MAP_PULL_S, mapAlphas, mapSettleT, type MapOverlay } from '../../src/render/meltMap.ts';
@@ -171,13 +172,13 @@ describe('cool-shade colour script (GR5)', () => {
     }
   });
 
-  it('turns noon shade blue on the cream ground', () => {
+  it('turns noon shade blue on the Meadow ground', () => {
     const p = createPalette();
     updatePalette(p, 0.5, 0, 0, false);
     const G = p.ground;
     const shaded = [16, 8, 0].map((ch) => Math.round(((G >> ch) & 255) * (1 - p.shadowAlpha * (1 - ((p.shadow >> ch) & 255) / 255))));
-    // About #829ABD: blue clearly above red.
-    expect((shaded[2] as number) - (shaded[0] as number)).toBeGreaterThan(40);
+    // About #72909A on the green-cream Meadow (GR11's tint): blue clearly above red.
+    expect((shaded[2] as number) - (shaded[0] as number)).toBeGreaterThan(35);
   });
 });
 
@@ -313,5 +314,62 @@ describe('noon boss and Day card (GR10)', () => {
     expect(b.dayLine).toBe('OLD TOWN · Heat Wave · NOON 72°');
     showDayCard(b, 5, 'meadow', 'clear', 58);
     expect(b.dayLine).toBe('MEADOW · NOON 58°');
+  });
+});
+
+describe('living ground (GR11)', () => {
+  const world = createRun(headlessConfig(42, 3)).world;
+  const top = validatedY(world) - 100;
+
+  it('lays out the same decals for the same seed and range, and others for another seed', () => {
+    const a = createDecals(4000);
+    const b = createDecals(4000);
+    decorIn(world.seed, 0, top, world, a);
+    decorIn(world.seed, 0, top, world, b);
+    expect(a.n).toBeGreaterThan(100);
+    expect(Array.from(b.x.subarray(0, b.n))).toEqual(Array.from(a.x.subarray(0, a.n)));
+    expect(Array.from(b.k.subarray(0, b.n))).toEqual(Array.from(a.k.subarray(0, a.n)));
+    // Row by row gives the same list as one sweep.
+    let i = 0;
+    for (let y = 0; y < top; y += 48) {
+      decorIn(world.seed, y, Math.min(top, y + 48), world, b);
+      for (let j = 0; j < b.n; j++, i++) expect(b.y[j]).toBe(a.y[i]);
+    }
+    expect(i).toBe(a.n);
+    decorIn(world.seed + 1, 0, top, world, b);
+    expect(Array.from(b.x.subarray(0, 20))).not.toEqual(Array.from(a.x.subarray(0, 20)));
+    // Puddles appear, at roughly their 8 % per cell.
+    let puddles = 0;
+    for (let j = 0; j < a.n; j++) if ((a.k[j]! & 15) === PUDDLE) puddles++;
+    expect(puddles).toBeGreaterThan(5);
+  });
+
+  it('keeps every decal off the trail and out of every caster footprint', () => {
+    const d = createDecals(4000);
+    decorIn(world.seed, 0, top, world, d);
+    const cs: Caster[] = [];
+    for (let i = 0; i < d.n; i++) {
+      const x = d.x[i]!;
+      const y = d.y[i]!;
+      expect(trailDistance(world, x, y)).toBeGreaterThanOrEqual(TRAIL_CLEAR);
+      const n = queryCasters(world, y - 70, y + 70, cs);
+      for (let c = 0; c < n; c++) {
+        const h = cs[c]!.hull;
+        const m = cs[c]!.hullN;
+        let inside = m >= 3;
+        let near = Infinity;
+        for (let e = 0; e < m; e++) {
+          const ax = h[2 * e]!;
+          const ay = h[2 * e + 1]!;
+          const ex = h[(2 * e + 2) % (2 * m)]! - ax;
+          const ey = h[(2 * e + 3) % (2 * m)]! - ay;
+          if (ex * (y - ay) - ey * (x - ax) < 0) inside = false;
+          const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey)));
+          near = Math.min(near, Math.hypot(ax + t * ex - x, ay + t * ey - y));
+        }
+        expect(inside).toBe(false);
+        expect(near).toBeGreaterThanOrEqual(FOOTPRINT_CLEAR);
+      }
+    }
   });
 });

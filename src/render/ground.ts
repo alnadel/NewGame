@@ -1,17 +1,20 @@
 // Ground fill, biome detail tiles, the trail ribbon and footprint decals (GDD §10, TECH_SPEC §9.2
-// steps 3-6). The ground scrolls with the world: tiles are anchored to multiples of 256 u.
+// steps 3-6). The ground scrolls with the world: tiles are anchored to multiples of 256 u. Each
+// biome's tile carries its own ground colour; where the biome changes (at a dawn) the boundary row
+// fades the new biome in over 64 u (GR11).
 
-import { biomeAtY, trailX, type World } from '../core/index.ts';
+import { dayAtY, dayStartY, trailX, type BiomeId, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
-import { exactGroundTile, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
+import { biomeAtWorld, worldPlan } from './shims.ts';
+import { ctx2d, exactGroundTile, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
 
 /**
  * Letterbox bars (TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
  * faintly, so the world reads as extending beyond the playfield instead of ending in flat paint.
  */
-export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette): void {
+export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, w: World): void {
   // No bars when the world viewport fills the canvas (the ground covers every pixel anyway).
   if (v.vx <= 0.5 && v.vy <= 0.5 && v.vw >= v.cssW - 0.5 && v.vh >= v.cssH - 0.5) return;
   g.fillStyle = css(pal.bar);
@@ -24,7 +27,7 @@ export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette): vo
   const y0 = (v.oy - v.cssH) / v.S;
   g.globalAlpha = 0.5 * (1 - pal.night * 0.6);
   for (let ty = Math.floor(y0 / TILE_U) * TILE_U; ty < y1; ty += TILE_U) {
-    const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
+    const tile = biomeAtWorld(w, ty + TILE_U / 2) === 'oldtown' ? tiles.town : tiles.meadow;
     const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
     const h = Math.ceil(v.oy - ty * v.S) - sy;
     for (let tx = Math.floor(x0 / TILE_U) * TILE_U; tx < x1; tx += TILE_U) {
@@ -67,9 +70,24 @@ interface BiomeTile {
   marksAlpha: number;
 }
 
+/**
+ * The boundary row's upper biome faded in over 64 u (destination-in through a vertical alpha
+ * ramp on a scratch canvas), drawn over the lower biome's tile; rebuilt only when its key changes.
+ */
+interface Seam {
+  canvas: Canvas2D | null;
+  /** Ramp centre in the tile (u above the row's bottom edge), tile size, and the faded-in tile's paint. */
+  at: number;
+  T: number;
+  src: BiomeTile | null;
+  ground: number;
+  marksAlpha: number;
+}
+
 export interface GroundPaint {
   meadow: BiomeTile;
   town: BiomeTile;
+  seam: Seam;
   /** Tile size in device px of the current zoom (0 before the first stable frame). */
   T: number;
   /** The view's S on the previous frame (whole-pixel blits only while the zoom holds still). */
@@ -80,7 +98,60 @@ export interface GroundPaint {
 
 export function createGroundPaint(): GroundPaint {
   const tile = (): BiomeTile => ({ canvas: null, T: 0, ground: -1, marksAlpha: -1 });
-  return { meadow: tile(), town: tile(), T: 0, lastS: 0, paints: 0 };
+  return { meadow: tile(), town: tile(), seam: { canvas: null, at: 0, T: 0, src: null, ground: -1, marksAlpha: -1 }, T: 0, lastS: 0, paints: 0 };
+}
+
+/** Half the seam's fade (u). */
+const SEAM_HALF = 32;
+
+/**
+ * The biome boundary in [y0, y1] (the dawn y of a day whose biome differs from the day before), or
+ * NaN. The view never spans two of them.
+ */
+export function biomeSeamIn(w: World, y0: number, y1: number): number {
+  const d0 = dayAtY(Math.max(0, y0));
+  const d1 = dayAtY(Math.max(0, y1));
+  for (let d = d0 + 1; d <= d1; d++) {
+    if (worldPlan(w, d).biome !== worldPlan(w, d - 1).biome) return dayStartY(d);
+  }
+  return Number.NaN;
+}
+
+/** The seam tile for a boundary `yb` crossing row [ty, ty + 256): `upper` faded in above it. */
+function seamTile(gp: GroundPaint, upper: BiomeTile, ty: number, yb: number): Canvas2D | null {
+  const sm = gp.seam;
+  const src = upper.canvas;
+  if (!src) return null;
+  const T = upper.T;
+  // Keep the whole ramp inside the row so the rows around it join without a step.
+  const at = Math.min(TILE_U - SEAM_HALF, Math.max(SEAM_HALF, yb - ty));
+  if (sm.canvas && sm.at === at && sm.T === T && sm.src === upper && sm.ground === upper.ground && sm.marksAlpha === upper.marksAlpha) {
+    return sm.canvas;
+  }
+  const cv = sm.canvas ?? makeCanvas(T, T);
+  if (cv.width !== T) cv.width = T;
+  if (cv.height !== T) cv.height = T;
+  const g = ctx2d(cv);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'copy';
+  g.drawImage(src, 0, 0);
+  // Canvas rows run north to south: the upper biome stays opaque above the ramp.
+  const k = T / TILE_U;
+  const mid = (TILE_U - at) * k;
+  const ramp = g.createLinearGradient(0, mid - SEAM_HALF * k, 0, mid + SEAM_HALF * k);
+  ramp.addColorStop(0, '#000');
+  ramp.addColorStop(1, 'rgba(0,0,0,0)');
+  g.globalCompositeOperation = 'destination-in';
+  g.fillStyle = ramp;
+  g.fillRect(0, 0, T, T);
+  g.globalCompositeOperation = 'source-over';
+  sm.canvas = cv;
+  sm.at = at;
+  sm.T = T;
+  sm.src = upper;
+  sm.ground = upper.ground;
+  sm.marksAlpha = upper.marksAlpha;
+  return cv;
 }
 
 /** Paints `bt` for the current tile size, ground color and marks alpha if it is stale. */
@@ -110,7 +181,7 @@ function paintTile(c: Canvas2D | null, T: number, ground: Rgb, marks: Canvas2D, 
   return cv;
 }
 
-export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, gp: GroundPaint): void {
+export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, gp: GroundPaint, w: World): void {
   // Night hides the detail a little (it stays as texture, not noise).
   const alpha = 1 - pal.night * 0.72;
   const tx0 = Math.floor(v.x0 / TILE_U) * TILE_U;
@@ -118,6 +189,7 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, g
   // Repaint only while the zoom holds still (or for the very first tiles).
   const stable = v.S === gp.lastS || gp.T === 0;
   gp.lastS = v.S;
+  const seamY = biomeSeamIn(w, v.y0 - TILE_U, v.y1 + TILE_U);
   // A biome's tile is built and kept fresh only while one of its rows is on screen or within one
   // screen ahead (Day 1 never paints the Old Town tile); a stale one is repainted when it is next
   // needed. (The scaled path below fills a never-painted tile's rows with the plain ground color.)
@@ -128,14 +200,13 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, g
     let needTown = false;
     const ahead = v.y1 + (v.y1 - v.y0);
     for (let ty = ty0 - TILE_U; ty < ahead && !(needMeadow && needTown); ty += TILE_U) {
-      if (biomeAtY(ty + TILE_U / 2) === 'oldtown') needTown = true;
+      if (biomeAtWorld(w, ty + TILE_U / 2) === 'oldtown') needTown = true;
       else needMeadow = true;
     }
-    if (needMeadow) freshen(gp, gp.meadow, false, T, pal.ground, alpha);
-    if (needTown) freshen(gp, gp.town, true, T, pal.ground, alpha);
+    if (!Number.isNaN(seamY)) needMeadow = needTown = true;
+    if (needMeadow) freshen(gp, gp.meadow, false, T, pal.groundMeadow, alpha);
+    if (needTown) freshen(gp, gp.town, true, T, pal.groundTown, alpha);
   }
-  const meadow = gp.meadow.canvas;
-  const town = gp.town.canvas;
   const dpr = v.dpr;
   if (stable) {
     // Whole-pixel grid anchored at the world tile (tx0, ty0): one copy per tile.
@@ -148,27 +219,48 @@ export function drawGround(g: CanvasRenderingContext2D, v: View, pal: Palette, g
     g.setTransform(1, 0, 0, 1, 0, 0);
     // One row and column of slack on the near edges: rounding must never leave a seam.
     for (let k = -1, ty = ty0 - TILE_U; ay - k * T + T > top; k++, ty += TILE_U) {
-      const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? town : meadow;
       const sy = ay - k * T;
+      const tile = rowTile(gp, w, ty, seamY);
+      const over = seamY >= ty && seamY < ty + TILE_U ? seamTile(gp, tileOf(gp, upperBiome(w, seamY)), ty, seamY) : null;
       if (!tile) continue;
-      for (let x = ax > left ? ax - T : ax; x < right; x += T) g.drawImage(tile, x, sy);
+      for (let x = ax > left ? ax - T : ax; x < right; x += T) {
+        g.drawImage(tile, x, sy);
+        if (over) g.drawImage(over, x, sy);
+      }
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     return;
   }
   // Zoom in motion: the painted tiles, scaled.
   for (let ty = ty0; ty < v.y1; ty += TILE_U) {
-    const tile = biomeAtY(ty + TILE_U / 2) === 'oldtown' ? town : meadow;
+    const tile = rowTile(gp, w, ty, seamY);
+    const over = seamY >= ty && seamY < ty + TILE_U ? gp.seam.canvas : null;
     const sy = Math.floor(v.oy - (ty + TILE_U) * v.S);
     const h = Math.ceil(v.oy - ty * v.S) - sy;
     if (!tile) g.fillStyle = css(pal.ground);
     for (let tx = tx0; tx < v.x1; tx += TILE_U) {
       const sx = Math.floor(v.ox + tx * v.S);
-      const w = Math.ceil(v.ox + (tx + TILE_U) * v.S) - sx;
-      if (tile) g.drawImage(tile, sx, sy, w + 0.5, h + 0.5);
-      else g.fillRect(sx, sy, w + 0.5, h + 0.5);
+      const tw = Math.ceil(v.ox + (tx + TILE_U) * v.S) - sx;
+      if (tile) g.drawImage(tile, sx, sy, tw + 0.5, h + 0.5);
+      else g.fillRect(sx, sy, tw + 0.5, h + 0.5);
+      if (over) g.drawImage(over, sx, sy, tw + 0.5, h + 0.5);
     }
   }
+}
+
+function tileOf(gp: GroundPaint, b: BiomeId): BiomeTile {
+  return b === 'oldtown' ? gp.town : gp.meadow;
+}
+
+/** The biome just above a boundary. */
+function upperBiome(w: World, yb: number): BiomeId {
+  return biomeAtWorld(w, yb + 1);
+}
+
+/** A row's base tile: its centre's biome, or the lower biome on the boundary row. */
+function rowTile(gp: GroundPaint, w: World, ty: number, seamY: number): Canvas2D | null {
+  const y = seamY >= ty && seamY < ty + TILE_U ? seamY - 1 : ty + TILE_U / 2;
+  return tileOf(gp, biomeAtWorld(w, y)).canvas;
 }
 
 const STEP = 8;

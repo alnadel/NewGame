@@ -253,24 +253,25 @@ function townTile(scale: number): Canvas2D {
   const g = ctx2d(c);
   g.scale(scale, scale);
   const rnd = lcg(11);
-  // Irregular cobbles in loose rows: a light face and a soft darker lower lip, no hard joints.
-  const rowH = 12.8;
-  const rows = TILE_U / rowH;
+  // Irregular cobbles in loose rows (14 per tile, ≈ 18 u): a light face and a soft darker lower
+  // lip, no hard joints.
+  const rows = 14;
+  const rowH = TILE_U / rows;
   for (let r = 0; r < rows; r++) {
     const y = r * rowH;
     let x = -rnd() * 10;
     while (x < TILE_U) {
-      const w = 9 + rnd() * 9;
+      const w = 12 + rnd() * 12;
       const jy = (rnd() - 0.5) * 1.6;
       const bx = x + 1.4;
       const by = y + 1.4 + jy;
       const bw = w - 2.8;
       const bh = rowH - 2.8;
-      const light = 0.05 + rnd() * 0.06;
+      const light = 0.04 + rnd() * 0.04;
       for (const dx of [0, TILE_U]) {
         if (dx > 0 && x + w <= TILE_U) continue;
         g.fillStyle = `rgba(255,255,255,${light.toFixed(3)})`;
-        roundRect(g, bx - dx, by, bw, bh, 4.2);
+        roundRect(g, bx - dx, by, bw, bh, 5.6);
         g.fill();
         g.fillStyle = 'rgba(60,30,10,0.045)';
         roundRect(g, bx - dx + 1, by + bh * 0.6, bw - 2, bh * 0.4, 3);

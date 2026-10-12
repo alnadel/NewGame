@@ -114,6 +114,7 @@ export interface ShadyPerf {
   govLevel: number;
   draws: number;
   fullScreenPasses: number;
+  decals: number;
 }
 
 export interface PixelAB {
@@ -126,6 +127,7 @@ export interface PixelAB {
 export interface RenderOptions {
   mapOverlay: boolean;
   multiplyShadows: boolean;
+  decor: boolean;
 }
 
 export interface MapProbe {

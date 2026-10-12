@@ -43,6 +43,8 @@ export interface ShadyTestHook {
     draws: number;
     /** Full-viewport layers composited over the ground in the last drawn frame (≤ 3, A12). */
     fullScreenPasses: number;
+    /** Ground decals drawn in the last frame (render/decor.ts). */
+    decals: number;
   };
   /** The current run's config (the Title's held run between runs); drain = cfg.drain ?? the profile's. */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number };
@@ -91,6 +93,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       govLevel: session.gov.level,
       draws: session.renderer.draws,
       fullScreenPasses: session.renderer.scene.passes,
+      decals: session.renderer.scene.decor.drawn,
     }),
     runCfg: () => session.runCfg(),
     cameraFx: () => {

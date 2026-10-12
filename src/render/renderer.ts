@@ -28,6 +28,7 @@ import { drawFriendPennant, drawFriendPuddle, friendSpot } from './friend.ts';
 import { cssa } from './color.ts';
 import {
   createFootprints,
+  biomeSeamIn,
   createGroundPaint,
   drawBars,
   drawFootprints,
@@ -85,6 +86,7 @@ import {
   type Pops,
   type Rings,
 } from './particles.ts';
+import { createDecor, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
 import { forecastOf, worldPlan } from './shims.ts';
@@ -157,6 +159,9 @@ export interface RenderScene {
    * (ground.ts GroundPaint) are repainted about once a second, not every frame. */
   groundPal: Palette;
   ground: GroundPaint;
+  /** Seeded ground decals (decor.ts) and the frame inputs handed to them. */
+  decor: Decor;
+  decorIn: DecorFrame;
   light: Light;
   shadow: ShadowLayer;
   particles: Particles;
@@ -217,6 +222,8 @@ export function createScene(): RenderScene {
     pal,
     groundPal: createPalette(),
     ground: createGroundPaint(),
+    decor: createDecor(),
+    decorIn: { time: 0, dt: 0, night: 0, effects: true },
     light: createLight(pal),
     shadow: createShadowLayer(),
     particles: createParticles(),
@@ -268,6 +275,8 @@ export interface RenderOptions {
   mapOverlay: boolean;
   /** Composite the shadow layer with a multiply of the LUT color (the GR2 A/B reference). */
   multiplyShadows: boolean;
+  /** Draw the ground decals (GR11; off for A/B timing). */
+  decor: boolean;
 }
 
 export class Renderer {
@@ -279,7 +288,7 @@ export class Renderer {
    * ring or vignette is alive (only the puddle ring pulses), so the cadence may draw it at 20 fps.
    */
   settled = false;
-  readonly options: RenderOptions = { mapOverlay: true, multiplyShadows: false };
+  readonly options: RenderOptions = { mapOverlay: true, multiplyShadows: false, decor: true };
   private readonly g: CanvasRenderingContext2D;
   private readonly canvas: HTMLCanvasElement;
   /** A draw is in progress (left set when one threw: the next draw resets the context first). */
@@ -317,6 +326,8 @@ export class Renderer {
     sc.hud.badgeKey = -1;
     sc.ground.meadow.T = 0;
     sc.ground.town.T = 0;
+    sc.ground.seam.T = 0;
+    invalidateDecor(sc.decor);
   }
 
   /** Resizes the backing store (CSS size × dpr) and re-fits the view. */
@@ -458,14 +469,20 @@ export class Renderer {
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    drawBars(g, v, sc.pal);
+    drawBars(g, v, sc.pal, s.world);
     g.save();
     g.beginPath();
     g.rect(v.vx, v.vy, v.vw, v.vh);
     g.clip();
 
-    drawGround(g, v, sc.groundPal, sc.ground);
+    drawGround(g, v, sc.groundPal, sc.ground, s.world);
     drawTrail(g, v, s.world, sc.groundPal);
+    const di = sc.decorIn;
+    di.time = time;
+    di.dt = udt;
+    di.night = night;
+    di.effects = inp.govLevel < 2;
+    if (this.options.decor) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);
     drawFootprints(g, sc.footprints, v, sc.pal);
     // A challenge run: the friend's puddle where the sender melted.
     const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;

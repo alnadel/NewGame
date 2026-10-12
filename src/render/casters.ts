@@ -20,7 +20,7 @@ const TAU = Math.PI * 2;
 const MAT = {
   trunk: hex('#8A5A3C'),
   trunkSide: hex('#6E4630'),
-  canopy: hex('#6DBE7B'),
+  canopy: hex('#66B675'),
   canopyShade: hex('#4E9A63'),
   oak: hex('#5AA86E'),
   oakShade: hex('#3F8A57'),
@@ -28,18 +28,16 @@ const MAT = {
   cottageSide: hex('#D9C7AA'),
   cottageRoof: hex('#D9644A'),
   cottageRoofSide: hex('#B44E3A'),
-  stone: hex('#C9C3B5'),
-  stoneSide: hex('#A39C8E'),
+  stone: hex('#B5AE9F'),
+  stoneSide: hex('#948D80'),
   hedge: hex('#5E9E5A'),
   hedgeSide: hex('#467C45'),
   hut: hex('#C08A5B'),
   hutSide: hex('#9C6B41'),
   hutRoof: hex('#8E6B4E'),
-  house: hex('#EBD8C3'),
-  houseSide: hex('#CDB59C'),
-  houseRoof: hex('#6E8FB8'),
-  houseRoofSide: hex('#557299'),
-  arch: hex('#D8C7B0'),
+  house: hex('#F7EDE0'),
+  houseSide: hex('#D9C6B0'),
+  arch: hex('#F2E8DA'),
   archSide: hex('#B7A48C'),
   stallRed: hex('#E8475A'),
   stallCream: hex('#FFF4DC'),
@@ -48,15 +46,23 @@ const MAT = {
   columnSide: hex('#BDB5A6'),
   wall: hex('#CFB79A'),
   wallSide: hex('#AE987D'),
+  wallTop: hex('#EFE4D4'),
   ball: hex('#BFE6FF'),
-  pedestal: hex('#C9C3B5'),
+  pedestal: hex('#F4F1EA'),
   pedestalSide: hex('#A39C8E'),
-  rock: hex('#A7B2C6'),
-  rockSide: hex('#7D88A3'),
+  rock: hex('#96A2B8'),
+  rockSide: hex('#6F7A95'),
   window: hex('#5D6F94'),
   windowLit: hex('#FFD27A'),
   door: hex('#7A4E36'),
 };
+
+/**
+ * Old Town roof decks, picked by caster id: blue, terracotta, ochre, sage (and each one's side). Like
+ * every caster top they differ from the noon ground of their biome by at least 15 % in luminance.
+ */
+const HOUSE_ROOFS: readonly Rgb[] = [hex('#6E8FB8'), hex('#D9644A'), hex('#D4952F'), hex('#7FA88A')];
+const HOUSE_ROOF_SIDES: readonly Rgb[] = HOUSE_ROOFS.map((c) => darken(c, 0.2));
 
 /** Per-frame lighting context shared by every caster draw. */
 export interface Light {
@@ -482,12 +488,13 @@ function drawHouse(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): v
     sideFaces(g, v, L, p.pts, p.pts, p.n, p.h - 7, p.h - 4, 0x2b2140, 0x2b2140);
     g.globalAlpha = 1;
   }
-  // Flat roof: parapet ring (wall color) around a darker blue roof deck.
+  // Flat roof: parapet ring (wall color) around a darker roof deck in one of four colours.
+  const roof = c.id % HOUSE_ROOFS.length;
   fillTop(g, v, p.pts, p.n, p.h, topColor(L, MAT.house));
   scaled(p.pts, p.n, 0.86, tmp);
-  fillTop(g, v, tmp, p.n, p.h, tint(L.pal, MAT.houseRoofSide));
+  fillTop(g, v, tmp, p.n, p.h, tint(L.pal, HOUSE_ROOF_SIDES[roof] as Rgb));
   scaled(p.pts, p.n, 0.8, tmp2);
-  fillTop(g, v, tmp2, p.n, p.h - 1, topColor(L, MAT.houseRoof));
+  fillTop(g, v, tmp2, p.n, p.h - 1, topColor(L, HOUSE_ROOFS[roof] as Rgb));
   // A little chimney/vent block for silhouette.
   rim(g, v, L, p.pts, p.n, p.h);
 }
@@ -646,7 +653,7 @@ function drawWall(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): vo
   // Coping stones: a slightly wider, lighter cap.
   grown(p.pts, p.n, 1.5, tmp);
   if (L.sides) sideFaces(g, v, L, tmp, tmp, p.n, p.h - 4, p.h, MAT.wall, lighten(MAT.wall, 0.2));
-  fillTop(g, v, tmp, p.n, p.h, topColor(L, lighten(MAT.wall, 0.12)));
+  fillTop(g, v, tmp, p.n, p.h, topColor(L, MAT.wallTop));
   rim(g, v, L, tmp, p.n, p.h);
 }
 
