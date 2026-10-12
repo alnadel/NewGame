@@ -1,4 +1,4 @@
-// Safe-arc guide masks (V1_PLAN §6.3, TECH_SPEC §4 step 11): every 6 ticks, on the absolute 0.1 s
+// Safe-arc guide masks (V1_PLAN §6.3, archive/TECH_SPEC §4 step 11): every 6 ticks, on the absolute 0.1 s
 // grid shared with the validator, compute which sun azimuths fully shade Nubs now (strict: all 5
 // samples shaded, no glare), 0.6 s ahead, and where glare would touch him.
 

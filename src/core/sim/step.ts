@@ -1,4 +1,4 @@
-// step(): advances a run by exactly one 1/60 s tick (TECH_SPEC §4, with V1_PLAN fixes).
+// step(): advances a run by exactly one 1/60 s tick (archive/TECH_SPEC §4, with V1_PLAN fixes).
 //
 // Order: sun → clock (+ night/dawn/noon/hour events) → sun vector and Nubs' position → world hard
 // guarantee and pruning → coverage → Chill/multiplier/PHEW (or night regen) → pickups → gates and

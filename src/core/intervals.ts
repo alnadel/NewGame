@@ -1,4 +1,4 @@
-// Per-point angular shade masks over 360 one-degree sun-azimuth bins (TECH_SPEC §6).
+// Per-point angular shade masks over 360 one-degree sun-azimuth bins (archive/TECH_SPEC §6).
 //
 // Bin b stands for θ = b° exactly (its center), so masks agree with the per-tick logic tests at
 // whole-degree azimuths. Each occluder contributes one analytic angular interval:

@@ -1,4 +1,4 @@
-// The shadow layer (TECH_SPEC §9.3, V1_PLAN §9): every visible part shadow, canopy disc and cloud
+// The shadow layer (archive/TECH_SPEC §9.3, V1_PLAN §9): every visible part shadow, canopy disc and cloud
 // ellipse is appended to ONE path and filled once with an opaque color, so overlapping shadows union
 // without darkening. Soft mode fills a half-resolution offscreen layer and blits it (bilinear
 // upscaling gives a soft penumbra for free); crisp mode (perf governor level ≥ 1 and low-end

@@ -1,4 +1,4 @@
-// The halo dial around Nubs (V1_PLAN §9, CRITIQUE #5/#6, GR6 dial v2): the main control readout.
+// The halo dial around Nubs (V1_PLAN §9, archive/CRITIQUE #5/#6, GR6 dial v2): the main control readout.
 // A 40 u ring around his ground point carries the sun pointer (never fades), the teal shade arcs in
 // three weights, red hatched glare arcs (always shown), 24 detent ticks and a curved rotation arrow
 // while dragging, and an inner Chill gauge. Teal means only shade and red only glare:

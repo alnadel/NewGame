@@ -1,4 +1,4 @@
-// Smoke test of the real build (TECH_SPEC §16.3, CRITIQUE #2/#19): boot, Title, a drag starts
+// Smoke test of the real build (archive/TECH_SPEC §16.3, archive/CRITIQUE #2/#19): boot, Title, a drag starts
 // play, death → Results → Retry, pause and visibility, the Daily screen, engine determinism, the
 // edge-ignore zone, the Back trap, and audio unlocking on the first gesture.
 import { readFileSync } from 'node:fs';

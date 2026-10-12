@@ -1,4 +1,4 @@
-// Fixed-step clock (TECH_SPEC §9.10): a 60 Hz accumulator fed by real frame time scaled by slow-mo,
+// Fixed-step clock (archive/TECH_SPEC §9.10): a 60 Hz accumulator fed by real frame time scaled by slow-mo,
 // paused by hit-stop, capped at 5 ticks per frame (×fast for soak runs). Slow-mo and hit-stop
 // timers run in real time. The interpolation alpha is acc / DT. `assist` is a sustained time scale
 // the session eases in and out (the first lesson's slow time, game/assist.ts); it multiplies the rest.

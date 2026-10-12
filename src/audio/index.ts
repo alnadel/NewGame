@@ -21,7 +21,7 @@ export { SFX_NAMES } from './recipes.ts';
 export type { AudioView, ScreenMode, SimPhase } from './scene.ts';
 export { createAudioView } from './scene.ts';
 
-/** Scheduler cadence and lookahead (TECH_SPEC §10). */
+/** Scheduler cadence and lookahead (archive/TECH_SPEC §10). */
 const PUMP_MS = 25;
 const LOOKAHEAD_S = 0.12;
 /**

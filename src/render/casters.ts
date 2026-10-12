@@ -1,4 +1,4 @@
-// Casters (GDD §10 materials, TECH_SPEC §9.4): prisms with sun-lit south side faces, lit tops and
+// Casters (GDD §10 materials, archive/TECH_SPEC §9.4): prisms with sun-lit south side faces, lit tops and
 // sun-facing rim highlights; gable roofs (cottage, hut), parapets (house), striped stall awnings,
 // arches, columns with capitals, brick walls, bushy hedges, tapered standing stones and Shade
 // Rocks, lumpy tree canopies with a sun-side highlight, and the gazing ball on its pedestal.

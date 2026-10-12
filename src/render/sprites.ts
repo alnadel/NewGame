@@ -1,4 +1,4 @@
-// Pre-rendered sprites (TECH_SPEC §9.9): glows, the sun bloom, flakes, sparkles, edge vignettes and
+// Pre-rendered sprites (archive/TECH_SPEC §9.9): glows, the sun bloom, flakes, sparkles, edge vignettes and
 // the two ground detail tiles. Built lazily and cached; tiles are rebuilt when the pixel scale
 // changes. All procedural: no image files.
 

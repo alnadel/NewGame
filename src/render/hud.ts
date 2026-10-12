@@ -1,4 +1,4 @@
-// Canvas HUD (V1_PLAN §9, GDD §5, CRITIQUE #25): one compact row under the safe inset, to the right
+// Canvas HUD (V1_PLAN §9, GDD §5, archive/CRITIQUE #25): one compact row under the safe inset, to the right
 // of the DOM pause button: a "D2" badge (and the day's forecast glyph unless it is clear), the clock
 // in 10-minute steps, and the day ruler (dawn → noon → dusk gradient, progress, the noon "boss"
 // icon, a gold PB flag and a teal challenge flag); Snow and the multiplier badge (pop on ×up, shake

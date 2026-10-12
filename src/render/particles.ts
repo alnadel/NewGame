@@ -1,5 +1,5 @@
 // Pooled particle system (structure of arrays, capacity 400), expanding rings (16) and text pops
-// (12) — TECH_SPEC §9.5. Particles are render-only and use Math.random; they never touch the sim.
+// (12) — archive/TECH_SPEC §9.5. Particles are render-only and use Math.random; they never touch the sim.
 // World-space kinds live at (x, y, z) in world units; screen-space kinds (confetti, petals) at CSS
 // px. Pops ride with Nubs (an x offset and a height above him) so none drifts across his head.
 // Nothing here allocates after construction.
@@ -265,7 +265,7 @@ function wavyStroke(): Canvas2D {
 
 /**
  * Air particles (steam, drips, sparkles, flying flakes, fireflies), drawn above the objects: first
- * the plain ones, then every additive glow under one 'lighter' switch (TECH_SPEC §9.2 step 13).
+ * the plain ones, then every additive glow under one 'lighter' switch (archive/TECH_SPEC §9.2 step 13).
  */
 export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: View): void {
   drawAirPass(g, p, v, false);

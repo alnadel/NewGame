@@ -1,4 +1,4 @@
-// Determinism (TECH_SPEC §16.1, critique #17): identical runs hash identically, replays reproduce
+// Determinism (archive/TECH_SPEC §16.1, archive/CRITIQUE #17): identical runs hash identically, replays reproduce
 // live runs, idle-time generation never changes play, and the golden values hold.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

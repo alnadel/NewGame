@@ -1,4 +1,4 @@
-// Frame orchestration and draw order (TECH_SPEC §9.2 with the V1_PLAN changes). The renderer only
+// Frame orchestration and draw order (archive/TECH_SPEC §9.2 with the V1_PLAN changes). The renderer only
 // reads the sim; render-side state (particles, rings, pops, footprints, the halo, the sun glyph,
 // banners, HUD timers, Nubs' springs) lives in RenderScene and is driven by game/fx.ts.
 

@@ -187,7 +187,7 @@ function evenly(n: number, a: number, b: number): number[] {
   return out;
 }
 
-/** Day ≥ 7: keep daylight at 45 s and ramp danger instead (critique #7). */
+/** Day ≥ 7: keep daylight at 45 s and ramp danger instead (archive/CRITIQUE #7). */
 function rampRow(day: number): Row {
   const n = day - 6;
   return {

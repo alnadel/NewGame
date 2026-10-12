@@ -1,4 +1,4 @@
-// Debug and test URL parameters (V1_PLAN §14, TECH_SPEC §17).
+// Debug and test URL parameters (V1_PLAN §14, archive/TECH_SPEC §17).
 
 import { BOT_KINDS, COMFORT_MAX, dayLength, FORECAST_IDS, type BotKind, type ForecastId, type ProfileId } from '../core/index.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';

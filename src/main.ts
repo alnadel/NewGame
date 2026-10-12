@@ -1,4 +1,4 @@
-// Boot (TECH_SPEC §9-§14, src/ui/README.md §6): load the save, create audio, haptics, the UI, the
+// Boot (archive/TECH_SPEC §9-§14, src/ui/README.md §6): load the save, create audio, haptics, the UI, the
 // renderer and the session, start the loop, register the service worker, then drop the boot splash
 // once the first frame (the live dawn scene) is on screen. Any uncaught error or rejection flushes
 // the save first; a boot that throws leaves a "couldn't start" splash with a Reload button.

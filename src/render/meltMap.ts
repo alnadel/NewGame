@@ -1,4 +1,4 @@
-// The Melt Map (V1_PLAN §9, CRITIQUE #10): after death the camera pulls up (1.4 s, easeInOutCubic;
+// The Melt Map (V1_PLAN §9, archive/CRITIQUE #10): after death the camera pulls up (1.4 s, easeInOutCubic;
 // a cut under reduced motion) to frame the last ~600 u of trail above the Results sheet. Footprint
 // trail is a ribbon coloured by Chill with ticks at the hours it crossed, the lit gap gets a red
 // bracket, the named casters from the death line are pinned with callout labels, the dial is frozen

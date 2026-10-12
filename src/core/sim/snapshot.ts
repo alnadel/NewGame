@@ -1,4 +1,4 @@
-// Cheap snapshots for render interpolation (TECH_SPEC §9.1): the loop snapshots the state before
+// Cheap snapshots for render interpolation (archive/TECH_SPEC §9.1): the loop snapshots the state before
 // each step; the renderer blends (prev, curr) by the accumulator fraction so 90/120 Hz screens stay
 // smooth while the sim runs at 60 Hz.
 

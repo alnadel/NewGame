@@ -1,4 +1,4 @@
-// Camera and view metrics (TECH_SPEC §9.1, V1_PLAN §9): the 360 u world viewport fitted to the
+// Camera and view metrics (archive/TECH_SPEC §9.1, V1_PLAN §9): the 360 u world viewport fitted to the
 // screen (letterboxed outside 600-860 u of height), Nubs at 68 % (70 % on tall screens) of the
 // view height, trauma shake and zoom pulses. Everything is drawn in CSS-pixel screen space:
 //   sx = ox + x·S        sy = oy − (y + 0.25·z)·S
@@ -67,7 +67,7 @@ export function createView(): View {
   };
 }
 
-/** Fits the world viewport to a CSS size (letterbox rules of TECH_SPEC §9.1). */
+/** Fits the world viewport to a CSS size (letterbox rules of archive/TECH_SPEC §9.1). */
 export function layoutView(v: View, cssW: number, cssH: number, dpr: number, safe: Insets): void {
   v.cssW = Math.max(1, cssW);
   v.cssH = Math.max(1, cssH);

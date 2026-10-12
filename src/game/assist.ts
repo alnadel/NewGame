@@ -95,7 +95,7 @@ const LESSON_LOST = 0.5;
 /** Gaps of up to this many degrees inside a safe region don't split it into two targets. */
 const MERGE_GAP = 6;
 
-/** Game time scale while the first lesson plays (V1_PLAN §6.2 forgiveness, CRITIQUE first minute). */
+/** Game time scale while the first lesson plays (V1_PLAN §6.2 forgiveness, archive/CRITIQUE first minute). */
 export const LESSON_TIME_SCALE = 0.5;
 
 export interface HintInput {

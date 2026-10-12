@@ -1,4 +1,4 @@
-// Haptics (GDD §13, V1_PLAN §12.2, TECH_SPEC §11): named vibration patterns behind a small
+// Haptics (GDD §13, V1_PLAN §12.2, archive/TECH_SPEC §11): named vibration patterns behind a small
 // interface, with the gating rules that keep phones from buzzing continuously:
 // - no new pattern within 40 ms of the last one (the heartbeat is exempt); important patterns
 //   landing inside the gap are deferred to its end instead of being lost;

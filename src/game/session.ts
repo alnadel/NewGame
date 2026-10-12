@@ -1,4 +1,4 @@
-// The game session (TECH_SPEC §9.10, §13; V1_PLAN §6, §8, §11): owns the SimState and the run
+// The game session (archive/TECH_SPEC §9.10, §13; V1_PLAN §6, §8, §11): owns the SimState and the run
 // lifecycle (Title hold → play → dying → Results → retry/home), the fixed-step loop, and routes
 // every frame's events to fx, audio, haptics, meta and the UI.
 
@@ -104,6 +104,11 @@ import type { StampKind } from '../render/banners.ts';
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
+/**
+ * World built before the Title's first frame: the view above Nubs plus the 540 u shadow reach, with
+ * margin (GR19). Idle frames generate the rest; a tap at once pays the remainder on the first tick.
+ */
+const TITLE_AHEAD = 1100;
 /** The par job's share of an idle frame (A13: ≤ 3 ms) and its sim chunk. */
 const PAR_MS = 3;
 const PAR_TICKS = 6;
@@ -922,9 +927,12 @@ export class Session {
     return cfg;
   }
 
-  /** A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`). */
-  private makeRun(kind: RunKind, date?: string): SimState {
-    const run = createRun(this.runConfig(kind, date));
+  /**
+   * A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`).
+   * `ahead` = how far the world is built now; the first tick completes the rest (same world).
+   */
+  private makeRun(kind: RunKind, date?: string, ahead?: number): SimState {
+    const run = createRun(this.runConfig(kind, date), undefined, ahead);
     this.rungOf.set(run, this.cfgRung);
     return run;
   }
@@ -1024,7 +1032,7 @@ export class Session {
    */
   private createTitleRun(): SimState {
     this.finishPrebuild();
-    if (this.challenge && !this.inWarmup()) return this.makeRun('challenge');
+    if (this.challenge && !this.inWarmup()) return this.makeRun('challenge', undefined, TITLE_AHEAD);
     if (this.nextRun && this.nextRun.cfg.mode === 'endless' && this.nextRun.phase === 'hold') {
       const r = this.nextRun;
       this.nextRun = null;
@@ -1034,7 +1042,7 @@ export class Session {
       this.dailyScored = false;
       return r;
     }
-    return this.makeRun('endless');
+    return this.makeRun('endless', undefined, TITLE_AHEAD);
   }
 
   /**

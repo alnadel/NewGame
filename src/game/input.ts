@@ -1,4 +1,4 @@
-// Pointer and keyboard input → per-tick InputFrames (V1_PLAN §3, §8; TECH_SPEC §8).
+// Pointer and keyboard input → per-tick InputFrames (V1_PLAN §3, §8; archive/TECH_SPEC §8).
 //
 // - Pointer Events with getCoalescedEvents(); a horizontal drag of one world-viewport width is one
 //   full turn (Δθ = −dx / viewportWidth × 360° × sensitivity, inverted on request).

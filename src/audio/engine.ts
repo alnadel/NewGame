@@ -1,4 +1,4 @@
-// WebAudio plumbing (TECH_SPEC §10): the lazily created AudioContext and its unlock dance, the
+// WebAudio plumbing (archive/TECH_SPEC §10): the lazily created AudioContext and its unlock dance, the
 // bus/master/compressor graph, shared noise buffers, and one-shot "voices" with a per-bus
 // voice limiter. Recipes, music and ambience build on the AudioGraph defined here.
 //
@@ -451,7 +451,7 @@ function clamp01(v: number): number {
 
 export type AudioStatus = 'locked' | 'running' | 'suspended' | 'interrupted' | 'closed' | 'unavailable';
 
-/** Gestures that may unlock audio. Touch only counts on pointerup/touchend (CRITIQUE #19). */
+/** Gestures that may unlock audio. Touch only counts on pointerup/touchend (archive/CRITIQUE #19). */
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const;
 const LISTEN: AddEventListenerOptions = { capture: true, passive: true };
 

@@ -1,4 +1,4 @@
-// Shadow logic tests and render polygons (V1_PLAN §2.7, TECH_SPEC §6).
+// Shadow logic tests and render polygons (V1_PLAN §2.7, archive/TECH_SPEC §6).
 //
 // Conventions: u = (ux, uy) = (cos θ, sin θ) points toward the sun; cot = 1/tan ε. A point at
 // height h casts its shadow at p − u·L with L = min(h·cot, 520). The logic tests below and the

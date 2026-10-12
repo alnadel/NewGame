@@ -1,4 +1,4 @@
-// Layout checks (TECH_SPEC §16.3): at 320×568, 360×640, 390×844 and 430×932 with a simulated 47 px
+// Layout checks (archive/TECH_SPEC §16.3): at 320×568, 360×640, 390×844 and 430×932 with a simulated 47 px
 // notch, the pause button and the Results buttons sit inside the viewport and below the inset, and
 // the Title's ghost hint and the Pause card stay clear of Nubs and his halo dial; a phone held
 // landscape shows the rotate overlay. Wave 3: on wide screens every control lies inside the world

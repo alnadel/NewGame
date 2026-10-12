@@ -1,4 +1,4 @@
-// State hash for determinism tests and golden files (TECH_SPEC §2.5, critique #17).
+// State hash for determinism tests and golden files (archive/TECH_SPEC §2.5, archive/CRITIQUE #17).
 //
 // Only tick-determined state is hashed: the clock, Nubs, the sun, Snow and pickup counters, plus
 // the casters and pickups less than HASH_AHEAD in front of Nubs (sorted by id). Generation progress

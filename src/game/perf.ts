@@ -1,4 +1,4 @@
-// Frame-time governor (TECH_SPEC §15). Quality steps down one notch at a time when frames are late,
+// Frame-time governor (archive/TECH_SPEC §15). Quality steps down one notch at a time when frames are late,
 // over a 4-level ladder, and may step back up once:
 //   0 full: soft shadows (the half-res layer's full-screen blit);
 //   1 crisp shadows (the shadow path filled straight onto the world, no blit);
@@ -192,7 +192,7 @@ export interface DeviceHints {
 }
 
 /**
- * 'low' for devices that are likely to rasterize a DPR-2 canvas too slowly (TECH_SPEC §15 targets a
+ * 'low' for devices that are likely to rasterize a DPR-2 canvas too slowly (archive/TECH_SPEC §15 targets a
  * Pixel 4a / Moto G class device): ≤ 4 GB of memory or ≤ 4 cores.
  * iOS is left out (Safari reports a fixed core count, and every supported iPhone has the GPU for it).
  */
@@ -203,7 +203,7 @@ export function deviceClass(h: DeviceHints): 'low' | 'normal' {
   return lowMemory || fewCores ? 'low' : 'normal';
 }
 
-/** DPR cap for a device class (TECH_SPEC §15: DPR ≤ 2). */
+/** DPR cap for a device class (archive/TECH_SPEC §15: DPR ≤ 2). */
 export function dprCap(cls: 'low' | 'normal'): number {
   return cls === 'low' ? 1.5 : 2;
 }

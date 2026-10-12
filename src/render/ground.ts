@@ -1,4 +1,4 @@
-// Ground fill, biome detail tiles, the trail ribbon and footprint decals (GDD §10, TECH_SPEC §9.2
+// Ground fill, biome detail tiles, the trail ribbon and footprint decals (GDD §10, archive/TECH_SPEC §9.2
 // steps 3-6). The ground scrolls with the world: tiles are anchored to multiples of 256 u. Each
 // biome's tile carries its own ground colour; where the biome changes (at a dawn) the boundary row
 // fades the new biome in over 64 u (GR11).
@@ -10,7 +10,7 @@ import type { Palette } from './palette.ts';
 import { ctx2d, exactGroundTile, groundTiles, makeCanvas, TILE_U, type Canvas2D } from './sprites.ts';
 
 /**
- * Letterbox bars (TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
+ * Letterbox bars (archive/TECH_SPEC §9.1): the ground color darkened 35 % with the detail tiles continuing
  * faintly, so the world reads as extending beyond the playfield instead of ending in flat paint.
  */
 export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, w: World): void {
@@ -52,7 +52,7 @@ export function drawBars(g: CanvasRenderingContext2D, v: View, pal: Palette, w: 
   }
 }
 
-// Ground paint (TECH_SPEC §15 raster budget). The detail tiles are transparent marks over the ground
+// Ground paint (archive/TECH_SPEC §15 raster budget). The detail tiles are transparent marks over the ground
 // color; drawing them that way costs a full-screen fill plus ~8 scaled, blended images every frame.
 // Instead each biome's tile is pre-composited once (ground color + marks at the night alpha) into an
 // opaque canvas of a whole number of device pixels, and the tiles are blitted 1:1 at whole-pixel

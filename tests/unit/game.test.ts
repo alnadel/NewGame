@@ -1,6 +1,6 @@
 // Pure game-layer logic: guide Auto rules and ghost hints (V1_PLAN §6.2-§6.3), the fixed-step clock
-// (TECH_SPEC §9.10), URL params (V1_PLAN §14), view letterboxing (TECH_SPEC §9.1), the input
-// frame splitting/quantization (V1_PLAN §3.1) and the perf governor (TECH_SPEC §15).
+// (archive/TECH_SPEC §9.10), URL params (V1_PLAN §14), view letterboxing (archive/TECH_SPEC §9.1), the input
+// frame splitting/quantization (V1_PLAN §3.1) and the perf governor (archive/TECH_SPEC §15).
 import { describe, expect, it } from 'vitest';
 import { cssEaseInOut, ghostSwingX, ghostSwipe, guideAlpha, HintTracker, nearestSafe, widestArc, type HintInput } from '../../src/game/assist.ts';
 import { createView, layoutView } from '../../src/game/camera.ts';
@@ -233,7 +233,7 @@ describe('URL params', () => {
   });
 });
 
-describe('view letterboxing (TECH_SPEC §9.1)', () => {
+describe('view letterboxing (archive/TECH_SPEC §9.1)', () => {
   it('fits 360 u across a phone and puts Nubs at 68-70 %', () => {
     const v = createView();
     layoutView(v, 390, 844, 2, NO_INSETS);
@@ -363,7 +363,7 @@ describe('input frames (V1_PLAN §3.1)', () => {
   });
 });
 
-describe('perf governor (TECH_SPEC §15)', () => {
+describe('perf governor (archive/TECH_SPEC §15)', () => {
   /** Feeds `seconds` of frames: intervals from `interval(i)` (ms), JS work `work` (ms). */
   function feed(g: Governor, seconds: number, interval: (i: number) => number, work: number): void {
     let t = 0;

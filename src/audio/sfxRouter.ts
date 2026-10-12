@@ -16,7 +16,7 @@ export interface RouterOutput {
   applyScene(scene: Readonly<Scene>): void;
 }
 
-/** Throttles (TECH_SPEC §10, CRITIQUE #27): [min gap ms, max per second]. */
+/** Throttles (archive/TECH_SPEC §10, archive/CRITIQUE #27): [min gap ms, max per second]. */
 export const THROTTLES = {
   detent: [50, 20],
   melt: [0, 3],

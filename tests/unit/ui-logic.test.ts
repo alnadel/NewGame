@@ -70,7 +70,7 @@ describe('screen transitions', () => {
     ['daily', 'settings'],
   ];
 
-  it('allows the flows of TECH_SPEC §13', () => {
+  it('allows the flows of archive/TECH_SPEC §13', () => {
     for (const [a, b] of legal) expect(isLegalTransition(a, b), `${a} -> ${b}`).toBe(true);
   });
 
