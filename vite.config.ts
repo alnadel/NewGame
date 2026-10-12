@@ -6,9 +6,10 @@ import { defineConfig } from 'vitest/config';
 
 /**
  * Public files left out of the precache: install-time icons the browser fetches itself (the page
- * never needs them offline) and the 1024 px store asset.
+ * never needs them offline), the 1024 px store asset and the link-preview card (og.png, fetched by
+ * link unfurlers only), so none of them changes sw.js or its VERSION.
  */
-const SW_SKIP: readonly RegExp[] = [/^icons\/icon-(512|maskable-512|1024)\.png$/];
+const SW_SKIP: readonly RegExp[] = [/^icons\/icon-(512|maskable-512|1024)\.png$/, /^og\.png$/];
 
 /** Files under `dir`, as '/'-separated paths relative to it. */
 function listFiles(dir: string, prefix = ''): string[] {
