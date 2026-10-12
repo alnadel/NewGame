@@ -13,9 +13,10 @@
 // the sun's warmth and the noon bleach muted; Long Shadows an amber low-sun grade all day; Dazzle a
 // bright glare; Breezy a fresh, airy tone. Breezy (leaves), Dazzle (glints) and Market (bunting)
 // add small sprites elsewhere.
-// The morning's warm sun side is capped so the shade stays cool on the saturated dawn ground. At
-// governor level 3 only the vignettes stay. The layer is redrawn only when a quantized input
-// changes (a drag, the clock's 1/96-day steps, a pulse), and drawn only when something is visible.
+// The morning's warm sun side is capped so the shade stays cool on the saturated dawn ground. From
+// governor level 2 only the forecast grade and the vignettes stay, at level 3 only the vignettes.
+// The layer is redrawn only when a quantized input changes (a drag, the clock's 1/96-day steps, a
+// pulse), and drawn only when something is visible.
 
 import type { ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
@@ -79,8 +80,10 @@ export interface AtmosphereIn {
   /** The death beat's cool wash alpha. */
   wash: number;
   forecast: ForecastId;
-  /** Governor below level 3: the sun-side gradient, the noon bleach and the night pool. */
+  /** Governor below level 2: the sun-side gradient, the noon bleach and the night pool. */
   full: boolean;
+  /** Governor below level 3: the forecast's grade. */
+  grade: boolean;
 }
 
 export interface Atmosphere {
@@ -113,6 +116,7 @@ export function createAtmosphereIn(): AtmosphereIn {
     wash: 0,
     forecast: 'clear',
     full: true,
+    grade: true,
   };
 }
 
@@ -140,7 +144,7 @@ export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: V
   const warmA = (0.13 + 0.1 * low) * morning * gr.warm * day;
   const coolA = (0.07 + 0.1 * low) * gr.cool * day;
   const bleachA = a.elev > 0.75 ? 0.22 * ((a.elev - 0.75) / 0.25) * gr.bleach * day : 0;
-  const gradeA = (gr.lo + (gr.hi - gr.lo) * a.elev) * day;
+  const gradeA = a.grade ? (gr.lo + (gr.hi - gr.lo) * a.elev) * (1 - a.night) : 0;
   const nightA = a.full ? a.night : 0;
   const heatA = a.heat > 0.01 ? 0.25 * (0.25 + 0.75 * (0.5 - 0.5 * Math.cos(a.heatPhase * TAU * 1.1))) * a.heat : 0;
   const coolP = a.cool > 0 ? 0.18 * Math.sin((Math.PI * a.cool) / 0.25) : 0;

@@ -242,6 +242,51 @@ test.describe('shadow composite (GR2)', () => {
   });
 });
 
+test.describe('draw-call budget', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+
+  // A load-independent perf guard (fix round 1): the canvas calls one full-quality play frame issues
+  // (time frozen, seed 42 at 9:00 AM). v1.0 issued ~40 drawImage, ~150 fill and ~60 stroke calls
+  // there; v1.1 adds about 85 decal blits, a contact-AO sprite per caster and the atmosphere layer.
+  test('a full-quality play frame stays within its canvas-call budget', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one run is enough');
+    await page.addInitScript(() => {
+      const c: Record<string, number> = { drawImage: 0, fill: 0, stroke: 0 };
+      (window as unknown as { __calls: Record<string, number> }).__calls = c;
+      const P = CanvasRenderingContext2D.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+      for (const k of Object.keys(c)) {
+        const orig = P[k] as (...a: unknown[]) => unknown;
+        P[k] = function (this: CanvasRenderingContext2D, ...a: unknown[]) {
+          if (this.canvas instanceof HTMLCanvasElement && this.canvas.id === 'game') c[k] = (c[k] as number) + 1;
+          return orig.apply(this, a);
+        };
+      }
+    });
+    await openGame(page, 'test=1&perf=0&seed=42&day=1&t=9:00&plan=0');
+    await keepAlive(page);
+    await page.mouse.click(195, 380);
+    await waitForScreen(page, 'play');
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
+    await page.waitForTimeout(300);
+    const per = await page.evaluate(async () => {
+      const w = window as unknown as { __calls: Record<string, number> };
+      const d0 = window.__SHADY_TEST__!.perf().draws;
+      const c0 = { ...w.__calls };
+      await new Promise((r) => setTimeout(r, 1000));
+      const n = window.__SHADY_TEST__!.perf().draws - d0;
+      const out: Record<string, number> = { frames: n };
+      for (const k of Object.keys(c0)) out[k] = ((w.__calls[k] as number) - (c0[k] as number)) / Math.max(1, n);
+      return out;
+    });
+    await info.attach('calls-per-frame', { body: JSON.stringify(per), contentType: 'application/json' });
+    expect(per.frames).toBeGreaterThan(10);
+    expect(per.drawImage, JSON.stringify(per)).toBeLessThanOrEqual(190);
+    expect(per.fill, JSON.stringify(per)).toBeLessThanOrEqual(185);
+    expect(per.stroke, JSON.stringify(per)).toBeLessThanOrEqual(75);
+  });
+});
+
 test.describe('forecast signatures', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
 

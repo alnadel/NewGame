@@ -148,7 +148,11 @@ export interface RenderInput {
   equipped: Equipped;
   /** Perf governor: soft (half-res layer) or crisp (direct fill) shadows. */
   softShadows: boolean;
-  /** Perf governor level 0..3 (game/perf.ts): level 3 drops the atmosphere's gradients and the contact AO. */
+  /**
+   * Perf governor level 0..3 (game/perf.ts): level 2 drops the contact AO, the decor's effects and
+   * the atmosphere's gradients (sun side, noon bleach, night pool); level 3 also the ground decals
+   * and the forecast grade.
+   */
   govLevel: number;
   /** Paused: UI timers (banners, HUD pops, halo) hold still. */
   paused: boolean;
@@ -519,7 +523,9 @@ export class Renderer {
     di.dt = inp.screen === 'play' ? agdt : 0;
     di.night = night;
     di.effects = inp.govLevel < 2;
-    if (this.options.decor) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);
+    // Governor level 3 (the slowest devices) drops the ground decals altogether.
+    if (this.options.decor && inp.govLevel < 3) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);
+    else sc.decor.drawn = 0;
     drawFootprints(g, sc.footprints, v, sc.pal);
     // A challenge run: the friend's puddle where the sender melted.
     const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;
@@ -547,7 +553,7 @@ export class Renderer {
     // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
     // source-over fill stays exact), the depth sort below.
     const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
-    if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
+    if (inp.govLevel < 2) drawContactAO(g, v, casterBuf, n, night);
     const glows = night > 0.05 && inp.govLevel < 2;
     if (glows) drawWindowGlow(g, v, casterBuf, n, night);
 
@@ -667,7 +673,8 @@ export class Renderer {
       at.gold = b.goldPulse;
       at.wash = 0.08 * grey;
       at.forecast = s.params.forecast;
-      at.full = inp.govLevel < 3;
+      at.full = inp.govLevel < 2;
+      at.grade = inp.govLevel < 3;
       if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;
     } else if (sc.mapReady && this.options.mapOverlay) {
       const o = mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay);
