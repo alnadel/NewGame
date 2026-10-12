@@ -213,12 +213,26 @@ function updateLesson(s: SimState, lit: boolean, wasLit: boolean): void {
     if (!s.lessonSwung && Math.abs(angleDiff(theta, s.lessonFrom)) >= L.swingDeg) s.lessonSwung = true;
     if (s.lessonSwung) s.lessonShade = lit ? 0 : s.lessonShade + 1;
     if (s.lessonShade >= L.shadeTicks) {
-      s.lessonOn = false;
+      endLesson(s);
       s.events.push({ e: 'lessonDone' });
       return;
     }
   }
-  if (++s.lessonTicks >= L.maxDaylightTicks) s.lessonOn = false;
+  if (++s.lessonTicks >= L.maxDaylightTicks) endLesson(s);
+}
+
+/** The lesson ends in daylight: its floor holds until holdTicks of daylight, then fades over fadeTicks. */
+function endLesson(s: SimState): void {
+  s.lessonOn = false;
+  s.lessonGrace = Math.max(0, L.holdTicks - s.lessonTicks) + L.fadeTicks;
+}
+
+/** The lesson's Chill floor this daylight tick: full while it is on, then the fading grace. */
+function lessonFloor(s: SimState): number {
+  if (s.lessonOn) return L.floor;
+  if (s.lessonGrace <= 0) return 0;
+  const g = s.lessonGrace--;
+  return g >= L.fadeTicks ? L.floor : (L.floor * g) / L.fadeTicks;
 }
 
 /** Daylight tick: Chill, multiplier, PHEW, SWING, lesson, shade/glare/cloud events and timers, hour log. */
@@ -233,7 +247,10 @@ export function applyDaylight(s: SimState): void {
   let c = nb.chill + (-effectiveDrain(s) * f + N.regen * Math.max(0, 1 - f)) * DT;
   if (c > nb.maxChill) c = nb.maxChill;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
-  if (s.lessonOn && c < L.floor) c = L.floor;
+  if (s.lessonOn || s.lessonGrace > 0) {
+    const floor = lessonFloor(s);
+    if (c < floor) c = floor;
+  }
   nb.chill = c;
 
   // Shade transitions.
@@ -331,6 +348,7 @@ export function applyNight(s: SimState): void {
   nb.swSrc = -1;
   nb.swPend = -1;
   s.lessonOn = false;
+  s.lessonGrace = 0;
 }
 
 /** Glyph of a finished in-game hour from its lit seconds and the low-Chill flag. */

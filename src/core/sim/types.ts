@@ -239,4 +239,10 @@ export interface SimState {
   lessonFrom: number;
   lessonSwung: boolean;
   lessonShade: number;
+  /**
+   * Daylight ticks of Chill floor left after the lesson ends in daylight (pass or timeout): the
+   * floor holds until TUNING.lesson.holdTicks of daylight, then fades to 0 over fadeTicks, so Nubs
+   * is never dropped from 12 Chill to the full drain at once. Nightfall clears it.
+   */
+  lessonGrace: number;
 }

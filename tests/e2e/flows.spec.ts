@@ -69,12 +69,12 @@ const ENDLESS_CHALLENGE = challengeCode({ v: 1, k: 'e', seed: 42, m: 1240, s: 0 
 const PLAYED_SAVE = { v: 1, createdAt: 1, stats: { runs: 1 } };
 
 test.describe('drain (comfort ladder, A2)', () => {
-  test('the first run is the tutorial rung at 30 Chill/s; a short run leads to rung 1 at 40', async ({ page }) => {
+  test('the first run is the tutorial rung at 30 Chill/s; a short run leads to rung 1 at 35', async ({ page }) => {
     await openGame(page, 'test=1');
     expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 0, tutorial: true, drain: 30 });
     await forceDeath(page);
     await homeFromResults(page);
-    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 2, tutorial: false, drain: 40 });
+    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 1, tutorial: false, drain: 35 });
   });
 
   test('?profile= keeps the profile drain', async ({ page }) => {

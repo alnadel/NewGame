@@ -125,9 +125,11 @@ const tuning = {
   /**
    * First-run lesson: from `go` until the lesson is passed (a ≥ swingDeg turn after Nubs was lit,
    * then shadeTicks of full shade), for at most maxDaylightTicks of daylight, Chill never drops
-   * below floor.
+   * below floor. When it ends in daylight the floor stays at full height until holdTicks of daylight
+   * (9:00 AM on Day 1), then fades to 0 over fadeTicks (10 s): passing the lesson at 5 s no longer
+   * leaves a sweating Nubs at 12 Chill under the full drain.
    */
-  lesson: { floor: 12, swingDeg: 15, shadeTicks: 15, maxDaylightTicks: 1500 },
+  lesson: { floor: 12, swingDeg: 15, shadeTicks: 15, maxDaylightTicks: 1500, holdTicks: 750, fadeTicks: 600 },
 
   /** PHEW (V1_PLAN §5.3). The threshold T comes from the profile (days.ts). */
   phew: {

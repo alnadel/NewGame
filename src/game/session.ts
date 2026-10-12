@@ -1930,6 +1930,7 @@ export class Session {
     }
     s.cfg.lesson = false;
     s.lessonOn = false;
+    s.lessonGrace = 0;
     s.nubs.chill = -1e6;
   }
 

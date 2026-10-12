@@ -19,9 +19,9 @@ async function recordCues(page: Page): Promise<void> {
 const cues = (page: Page): Promise<string[]> => page.evaluate(() => (window as unknown as { __cues: string[] }).__cues);
 
 test.describe('comfort ladder (A2)', () => {
-  test('a save at rung 2 plays profile 3 at drain 44 with the noon cloud; comfort off plays the standard rules', async ({ browser }) => {
+  test('a save at rung 2 plays profile 2 at drain 38 with the noon cloud; comfort off plays the standard rules', async ({ browser }) => {
     for (const [comfort, want] of [
-      [true, { profile: 3, drain: 44, noonCloud: 1, rung: 2 }],
+      [true, { profile: 2, drain: 38, noonCloud: 1, rung: 2 }],
       [false, { profile: 3, drain: 55, noonCloud: 0, rung: 4 }],
     ] as const) {
       const ctx = await browser.newContext();
@@ -37,7 +37,7 @@ test.describe('comfort ladder (A2)', () => {
   test('?rung= forces a rung for endless runs', async ({ page }) => {
     await openGame(page, 'test=1&seed=42&rung=3');
     const s = await state(page);
-    expect({ profile: s.profile, drain: s.drain, noonCloud: s.noonCloud, rung: s.rung }).toEqual({ profile: 3, drain: 50, noonCloud: 2, rung: 3 });
+    expect({ profile: s.profile, drain: s.drain, noonCloud: s.noonCloud, rung: s.rung }).toEqual({ profile: 3, drain: 42, noonCloud: 1, rung: 3 });
     await openGame(page, 'test=1&seed=42&rung=0');
     expect((await state(page)).profile).toBe(0);
   });

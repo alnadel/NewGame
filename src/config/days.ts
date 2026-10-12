@@ -112,12 +112,19 @@ export interface ComfortRung {
 /**
  * The comfort ladder. Rung 0 is the tutorial (lifetime run 0 only); rung 4 is standard (the Daily's
  * rules). Endless runs climb after a good run and step down after a rough one (comfortAfterRun).
+ *
+ * Each assisted rung eases the morning, where a struggling player melts (about 10 AM), not only the
+ * noon such a player never reaches: R1 is a gentle floor (profile 1's lower Day-1 sun, drain 35),
+ * R2 keeps the classic clear days (profile 2, drain 38), R3 has the Day Plan at drain 42, and all
+ * three park the noon cloud. On the humanDial model the share reaching 11:00 AM falls rung by rung
+ * (about 84% → 70% → 58% → 27% over 200 seeds). A run that reaches 11 AM on an assisted rung usually
+ * rides the cloud into the afternoon, so per-rung medians jump between ~18 s and ~65 s.
  */
 export const COMFORT_RUNGS: readonly ComfortRung[] = Object.freeze([
   Object.freeze({ profile: 0, drain: 30, noonCloud: 1 }),
-  Object.freeze({ profile: 2, drain: 40, noonCloud: 1 }),
-  Object.freeze({ profile: 3, drain: 44, noonCloud: 1 }),
-  Object.freeze({ profile: 3, drain: 50, noonCloud: 2 }),
+  Object.freeze({ profile: 1, drain: 35, noonCloud: 1 }),
+  Object.freeze({ profile: 2, drain: 38, noonCloud: 1 }),
+  Object.freeze({ profile: 3, drain: 42, noonCloud: 1 }),
   Object.freeze({ profile: 3, drain: 55, noonCloud: 0 }),
 ] satisfies ComfortRung[]);
 
@@ -136,6 +143,7 @@ const clampRung = (r: number, lo: number): number => (r >= lo ? (r <= COMFORT_MA
  * Calibrated with the career sim on the humanDial model. Sending a tutorial run that reached night
  * straight to rung 2 cut runs 1-3 from a 71 s to a 43 s median. Stepping down below 10:00 AM kept
  * struggling players stuck at rung 2-3; 11:00 AM lets them ease off, and they climb back past 12:30 PM.
+ * With the gentler R1 (fix round 1) runs 4-9 went from a 21 s to a 31 s median.
  */
 export function comfortAfterRun(rung: number, minutes: number): number {
   const S = COMFORT_STEPS;

@@ -165,6 +165,7 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
     lessonFrom: -1,
     lessonSwung: false,
     lessonShade: 0,
+    lessonGrace: 0,
   };
   syncTime(s);
   s.nextHistoryY = s.nubs.y;

@@ -327,6 +327,8 @@ function quantile(sorted: number[], p: number): number {
 const median = (xs: number[]): number => quantile([...xs].sort((a, b) => a - b), 0.5);
 const sum = (rs: RunOut[], f: (r: RunOut) => number): number => rs.reduce((a, r) => a + f(r), 0);
 const firstNight = (rs: RunOut[]): number => rs.filter((r) => !r.died || r.minutes >= 720).length / Math.max(1, rs.length);
+/** Share of runs that reach 11:00 AM on Day 1: the comfort ladder steps down below it (COMFORT_STEPS.down). */
+const past11 = (rs: RunOut[]): number => rs.filter((r) => !r.died || r.minutes >= 300).length / Math.max(1, rs.length);
 /** Median run length in real seconds (sim ticks / 60, the start beat included). */
 const medianSec = (rs: RunOut[]): number => median(rs.map((r) => r.ticks / 60));
 /** Death minutes, survivors as Infinity. */
@@ -496,14 +498,14 @@ async function main(): Promise<void> {
   };
 
   console.log(`SHADY sim: ${seeds} seeds, up to Day ${days}, ${workers} workers, ${wall.toFixed(1)} s${fc ? `, forecast ${fc} forced` : ''}\n`);
-  console.log(`${'row'.padEnd(30)} ${'median'.padEnd(17)} ${'p10'.padEnd(17)} ${'p90'.padEnd(17)} night  run s  melted%  Snow   sw/min  lit%   µs/tick`);
+  console.log(`${'row'.padEnd(30)} ${'median'.padEnd(17)} ${'p10'.padEnd(17)} ${'p90'.padEnd(17)} 11AM+  night  run s  melted%  Snow   sw/min  lit%   µs/tick`);
   const rowLine = (ji: number): void => {
     const rs = of(ji);
     const dm = deathMinutes(rs);
     const q = (p: number): string => clockOf(quantile(dm, p), days);
     const ticks = sum(rs, (r) => r.ticks);
     console.log(
-      `${jobName(jobs[ji] as Job).padEnd(30)} ${q(0.5).padEnd(17)} ${q(0.1).padEnd(17)} ${q(0.9).padEnd(17)} ${`${(100 * firstNight(rs)).toFixed(0)}%`.padStart(5)}  ${medianSec(rs).toFixed(1).padStart(5)}  ${meltedPct(rs).toFixed(1).padStart(7)}  ${(sum(rs, (r) => r.snow) / rs.length).toFixed(1).padStart(5)}  ${swingsPerMin(rs).toFixed(2).padStart(6)}  ${(100 * litShare(rs)).toFixed(0).padStart(4)}%  ${((1000 * sum(rs, (r) => r.stepMs)) / Math.max(1, ticks)).toFixed(1).padStart(6)}`,
+      `${jobName(jobs[ji] as Job).padEnd(30)} ${q(0.5).padEnd(17)} ${q(0.1).padEnd(17)} ${q(0.9).padEnd(17)} ${`${(100 * past11(rs)).toFixed(0)}%`.padStart(5)}  ${`${(100 * firstNight(rs)).toFixed(0)}%`.padStart(5)}  ${medianSec(rs).toFixed(1).padStart(5)}  ${meltedPct(rs).toFixed(1).padStart(7)}  ${(sum(rs, (r) => r.snow) / rs.length).toFixed(1).padStart(5)}  ${swingsPerMin(rs).toFixed(2).padStart(6)}  ${(100 * litShare(rs)).toFixed(0).padStart(4)}%  ${((1000 * sum(rs, (r) => r.stepMs)) / Math.max(1, ticks)).toFixed(1).padStart(6)}`,
     );
   };
   base.forEach((_, ji) => rowLine(ji));
@@ -564,6 +566,7 @@ async function main(): Promise<void> {
     { rung: 0, what: 'first night ≥ 75%', ok: (rs) => firstNight(rs) >= 0.75, got: (rs) => `${(100 * firstNight(rs)).toFixed(0)}%` },
     { rung: 1, what: 'median run ≥ 60 s', ok: (rs) => medianSec(rs) >= 60, got: (rs) => `${medianSec(rs).toFixed(1)} s` },
     { rung: 2, what: 'median run ≥ 60 s', ok: (rs) => medianSec(rs) >= 60, got: (rs) => `${medianSec(rs).toFixed(1)} s` },
+    { rung: 3, what: 'median run ≥ 60 s', ok: (rs) => medianSec(rs) >= 60, got: (rs) => `${medianSec(rs).toFixed(1)} s` },
     { rung: 4, what: 'median run ≥ 20 s', ok: (rs) => medianSec(rs) >= 20, got: (rs) => `${medianSec(rs).toFixed(1)} s` },
     { rung: 4, what: 'lit share ≤ 45%', ok: (rs) => litShare(rs) <= 0.45, got: (rs) => `${(100 * litShare(rs)).toFixed(0)}%` },
     { rung: 4, what: 'SWINGs ≤ 4 per minute', ok: (rs) => swingsPerMin(rs) <= 4, got: (rs) => swingsPerMin(rs).toFixed(2) },
@@ -577,6 +580,13 @@ async function main(): Promise<void> {
       advLines.push(`  ${a.ok(rs) ? 'PASS' : 'MISS'}  ${j.bot} R${j.rung} ${a.what}: ${a.got(rs)}`);
     }
   });
+  // Each assisted rung must ease the morning, not only the noon a player who melts at 10 AM never
+  // sees: the share reaching 11:00 AM falls rung by rung from R1 to R4.
+  const ladder = advisory.filter((j) => (j.rung ?? 0) >= 1).map((j) => past11(of(base.length + advisory.indexOf(j))));
+  if (ladder.length >= 2) {
+    const ok = ladder.every((v, i) => i === 0 || v < (ladder[i - 1] as number));
+    advLines.push(`  ${ok ? 'PASS' : 'MISS'}  ${advisory[0]?.bot} 11:00 AM reached falls rung by rung R1 → R4: ${ladder.map((v) => `${(100 * v).toFixed(0)}%`).join(' → ')}`);
+  }
   const reaJi = base.findIndex((j) => j.bot === 'reactive' && j.profile === 3);
   if (reaJi >= 0) {
     const rs = of(reaJi);

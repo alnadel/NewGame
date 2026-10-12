@@ -38,15 +38,18 @@ describe('comfort ladder', () => {
     expect(COMFORT_MAX).toBe(4);
     expect(COMFORT_RUNGS.map((r) => [r.profile, r.drain, r.noonCloud])).toEqual([
       [0, 30, 1],
-      [2, 40, 1],
-      [3, 44, 1],
-      [3, 50, 2],
+      [1, 35, 1],
+      [2, 38, 1],
+      [3, 42, 1],
       [3, 55, 0],
     ]);
     const std = COMFORT_RUNGS[COMFORT_MAX]!;
     expect(std.drain).toBe(PROFILES[3]!.drain);
     expect(effectiveNoonCloud({ profile: 3 })).toBe(std.noonCloud);
     for (let r = 1; r <= COMFORT_MAX; r++) expect(COMFORT_RUNGS[r]!.drain).toBeGreaterThan(COMFORT_RUNGS[r - 1]!.drain);
+    // Every assisted rung differs from the next in its world as well as its drain: R1-R2 keep the
+    // classic clear days with a lower Day-1 sun (profiles 1-2), R3 has the Day Plan, R4 drops the cloud.
+    expect(COMFORT_RUNGS.slice(1).map((r) => r.profile)).toEqual([1, 2, 3, 3]);
   });
 
   it('comfortAfterRun from the tutorial: Day 3 → standard, else rung 1', () => {
@@ -77,11 +80,11 @@ describe('comfort ladder', () => {
 
   it('rungConfig gives the rung rules, the tutorial on rung 0 and the lesson on rungs 0-1 until passed', () => {
     expect(rungConfig(0, { tutorialDone: false })).toEqual({ profile: 0, drain: 30, noonCloud: 1, tutorial: true, lesson: true });
-    expect(rungConfig(1, { tutorialDone: false })).toEqual({ profile: 2, drain: 40, noonCloud: 1, tutorial: false, lesson: true });
+    expect(rungConfig(1, { tutorialDone: false })).toEqual({ profile: 1, drain: 35, noonCloud: 1, tutorial: false, lesson: true });
     expect(rungConfig(1, { tutorialDone: true }).lesson).toBe(false);
     expect(rungConfig(0, { tutorialDone: true }).lesson).toBe(false);
-    expect(rungConfig(2, { tutorialDone: false })).toEqual({ profile: 3, drain: 44, noonCloud: 1, tutorial: false, lesson: false });
-    expect(rungConfig(3, { tutorialDone: true })).toEqual({ profile: 3, drain: 50, noonCloud: 2, tutorial: false, lesson: false });
+    expect(rungConfig(2, { tutorialDone: false })).toEqual({ profile: 2, drain: 38, noonCloud: 1, tutorial: false, lesson: false });
+    expect(rungConfig(3, { tutorialDone: true })).toEqual({ profile: 3, drain: 42, noonCloud: 1, tutorial: false, lesson: false });
     expect(rungConfig(4, { tutorialDone: true })).toEqual({ profile: 3, drain: 55, noonCloud: 0, tutorial: false, lesson: false });
     expect(rungConfig(17, { tutorialDone: true })).toEqual(rungConfig(4, { tutorialDone: true }));
   });

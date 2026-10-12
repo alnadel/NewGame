@@ -331,27 +331,32 @@ describe('first-run lesson (CO4, A5)', () => {
     return ev;
   };
 
-  it('turns on at go and floors Chill at 12 for 1500 daylight ticks, after which Chill can reach 0', () => {
+  it('turns on at go and floors Chill at 12 for 1500 daylight ticks, then the floor fades out over 10 s', () => {
+    const L = TUNING.lesson;
     const s = lab({ lesson: true });
     step(s, TAP);
     expect(s.lessonOn).toBe(false);
     while (s.ready > 0) step(s, NO_INPUT);
     expect(s.lessonOn).toBe(true);
     let min = 100;
-    for (let i = 0; i < TUNING.lesson.maxDaylightTicks - 1; i++) {
+    for (let i = 0; i < L.maxDaylightTicks - 1; i++) {
       step(s, NO_INPUT);
       min = Math.min(min, s.nubs.chill);
     }
-    expect(min).toBe(TUNING.lesson.floor);
+    expect(min).toBe(L.floor);
     expect(s.lessonOn).toBe(true);
     step(s, NO_INPUT);
     expect(s.lessonOn).toBe(false);
-    run(s, 60);
+    // No drop at once: halfway through the fade the floor still holds Nubs at half its height.
+    run(s, L.fadeTicks / 2);
+    expect(s.phase).toBe('day');
+    expect(s.nubs.chill).toBeCloseTo(L.floor / 2, 0);
+    run(s, L.fadeTicks / 2 + 20);
     expect(s.phase).toBe('dead');
-    expect(s.dayTick).toBeLessThan(TUNING.lesson.maxDaylightTicks + 20);
+    expect(s.dayTick).toBeLessThan(L.maxDaylightTicks + L.fadeTicks + 20);
   });
 
-  it('a 20° drag into shade passes it after 15 fully shaded ticks; then the floor is gone', () => {
+  it('a 20° drag into shade passes it after 15 fully shaded ticks; the floor then holds to 9 AM and fades', () => {
     const s = lab({ lesson: true });
     const ev = run(s, 10); // lit in the empty world
     ev.push(...drag(s, 10, 2));
@@ -365,7 +370,18 @@ describe('first-run lesson (CO4, A5)', () => {
     expect(ticks + 1).toBe(TUNING.lesson.shadeTicks);
     expect(s.lessonOn).toBe(false);
     unshade(s);
-    run(s, 200);
+    const L = TUNING.lesson;
+    // Passed early: the full floor holds until holdTicks of daylight (9:00 AM on Day 1)…
+    let min = 100;
+    while (s.dayTick < L.holdTicks - 5) {
+      step(s, NO_INPUT);
+      min = Math.min(min, s.nubs.chill);
+    }
+    expect(min).toBe(L.floor);
+    // …then fades: Nubs melts only once the fade has run out.
+    run(s, L.fadeTicks - 60);
+    expect(s.phase).toBe('day');
+    run(s, 120);
     expect(s.phase).toBe('dead');
   });
 

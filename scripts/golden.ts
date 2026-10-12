@@ -128,7 +128,7 @@ export function forecastHashes(): Record<string, string> {
   return out;
 }
 
-/** Final hash of a 30 s humanDial run on seed 6 at each comfort rung (rung 2 is p3 @ 44 with noon cloud 1). */
+/** Final hash of a 30 s humanDial run on seed 6 at each comfort rung (rung 3 is p3 @ 42 with noon cloud 1). */
 export function rungHashes(): string[] {
   return [0, 1, 2, 3, 4].map((rung) => {
     const rc = rungConfig(rung, { tutorialDone: rung > 0 });
