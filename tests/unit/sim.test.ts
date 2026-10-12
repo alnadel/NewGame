@@ -1,4 +1,5 @@
-// Sim rules (V1_PLAN §5): Chill rates, profiles, glare, multiplier, PHEW, melting, night, death, hold.
+// Sim rules (V1_PLAN §5): Chill rates, profiles, glare, multiplier, PHEW, melting, night, death, hold,
+// and the first-run lesson (V1_1_PLAN CO4 with amendment A5).
 import { describe, expect, it } from 'vitest';
 import type { ProfileId } from '../../src/config/days.ts';
 import { dayParams } from '../../src/config/days.ts';
@@ -10,7 +11,8 @@ import { rectPoly } from '../../src/core/geom.ts';
 import { glareOffset } from '../../src/core/shadows.ts';
 import { createRun } from '../../src/core/sim/create.ts';
 import type { SimEvent } from '../../src/core/sim/events.ts';
-import { headlessConfig } from '../../src/core/sim/headless.ts';
+import { hashState } from '../../src/core/sim/hash.ts';
+import { headlessConfig, runBot } from '../../src/core/sim/headless.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT, type RunConfig, type SimState } from '../../src/core/sim/types.ts';
 import { TUNING } from '../../src/config/tuning.ts';
@@ -20,7 +22,7 @@ const TAP = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, 
 
 /** A run whose world is emptied (and frozen: no further generation), so Nubs is in full sun. */
 function lab(cfg: Partial<RunConfig> = {}): SimState {
-  const s = createRun({ ...headlessConfig(1), ...cfg });
+  const s = createRun({ ...headlessConfig(1), plan: false, ...cfg });
   const w = s.world;
   w.casters.length = 0;
   w.byId.clear();
@@ -144,7 +146,7 @@ describe('sim rules', () => {
     }
   });
 
-  it('RunConfig.drain overrides the profile drain (endless onboarding ramp)', () => {
+  it('RunConfig.drain overrides the profile drain (comfort rungs)', () => {
     for (const drain of [30, 39, 55]) {
       const s = lab({ drain });
       run(s, 30);
@@ -305,7 +307,7 @@ describe('sim rules', () => {
     expect(ev.some((e) => e.e === 'nightStart')).toBe(true);
   });
 
-  it('records the Melt Map history every 20 u', () => {
+  it('records the Melt Map history every 20 u (history)', () => {
     const s = lab();
     shade(s);
     run(s, 600); // 10 s at 70 u/s = 700 u
@@ -314,5 +316,130 @@ describe('sim rules', () => {
     expect(s.history[4 * 10 + 1]! - 200).toBeGreaterThanOrEqual(0);
     expect(s.history[4 * 10 + 1]! - 200).toBeLessThan(70 / 60);
     expect(s.history[4 * 10 + 2]).toBe(100);
+  });
+});
+
+describe('first-run lesson (CO4, A5)', () => {
+  const lessonDone = (ev: SimEvent[]): number => ev.filter((e) => e.e === 'lessonDone').length;
+  /** n ticks of a finger dragging dθ per tick (the first touches down). */
+  const drag = (s: SimState, n: number, d: number): SimEvent[] => {
+    const ev: SimEvent[] = [];
+    for (let i = 0; i < n; i++) {
+      step(s, { dTheta: d, down: true, downEdge: i === 0, upEdge: i === n - 1, release: 0, key: 0 });
+      ev.push(...s.events);
+    }
+    return ev;
+  };
+
+  it('turns on at go and floors Chill at 12 for 1500 daylight ticks, after which Chill can reach 0', () => {
+    const s = lab({ lesson: true });
+    step(s, TAP);
+    expect(s.lessonOn).toBe(false);
+    while (s.ready > 0) step(s, NO_INPUT);
+    expect(s.lessonOn).toBe(true);
+    let min = 100;
+    for (let i = 0; i < TUNING.lesson.maxDaylightTicks - 1; i++) {
+      step(s, NO_INPUT);
+      min = Math.min(min, s.nubs.chill);
+    }
+    expect(min).toBe(TUNING.lesson.floor);
+    expect(s.lessonOn).toBe(true);
+    step(s, NO_INPUT);
+    expect(s.lessonOn).toBe(false);
+    run(s, 60);
+    expect(s.phase).toBe('dead');
+    expect(s.dayTick).toBeLessThan(TUNING.lesson.maxDaylightTicks + 20);
+  });
+
+  it('a 20° drag into shade passes it after 15 fully shaded ticks; then the floor is gone', () => {
+    const s = lab({ lesson: true });
+    const ev = run(s, 10); // lit in the empty world
+    ev.push(...drag(s, 10, 2));
+    expect(lessonDone(ev)).toBe(0);
+    shade(s);
+    let ticks = 0;
+    for (; ticks < 100 && s.lessonOn; ticks++) {
+      step(s, NO_INPUT);
+      if (lessonDone(s.events) > 0) break;
+    }
+    expect(ticks + 1).toBe(TUNING.lesson.shadeTicks);
+    expect(s.lessonOn).toBe(false);
+    unshade(s);
+    run(s, 200);
+    expect(s.phase).toBe('dead');
+  });
+
+  it('a shadow passing over a still sun never passes it, and neither does a turn of less than 15°', () => {
+    const s = lab({ lesson: true });
+    const ev = run(s, 30);
+    for (let k = 0; k < 4; k++) {
+      shade(s);
+      ev.push(...run(s, 60));
+      unshade(s);
+      ev.push(...run(s, 30));
+    }
+    ev.push(...drag(s, 7, 2));
+    shade(s);
+    ev.push(...run(s, 60));
+    expect(lessonDone(ev)).toBe(0);
+    expect(s.lessonOn).toBe(true);
+  });
+
+  it('any input counts and there is no per-drag reset: two 10° drags, or a held key, then shade', () => {
+    const a = lab({ lesson: true });
+    const ev = run(a, 10);
+    ev.push(...drag(a, 5, 2));
+    ev.push(...run(a, 5));
+    ev.push(...drag(a, 5, 2));
+    shade(a);
+    ev.push(...run(a, 20));
+    expect(lessonDone(ev)).toBe(1);
+
+    const b = lab({ lesson: true });
+    const evb = run(b, 10);
+    for (let i = 0; i < 8; i++) {
+      step(b, { ...NO_INPUT, key: 1 });
+      evb.push(...b.events);
+    }
+    shade(b);
+    evb.push(...run(b, 20));
+    expect(lessonDone(evb)).toBe(1);
+  });
+
+  it('becoming lit again restarts the rule, and nightfall ends the lesson without a pass', () => {
+    const s = lab({ lesson: true });
+    const ev = run(s, 10);
+    ev.push(...drag(s, 10, 2));
+    shade(s);
+    ev.push(...run(s, 10));
+    unshade(s);
+    ev.push(...run(s, 5)); // lit again: θ is recorded afresh
+    shade(s);
+    ev.push(...run(s, 40));
+    expect(lessonDone(ev)).toBe(0);
+
+    const n = lab({ lesson: true, startT: 49 });
+    shade(n);
+    run(n, 120);
+    expect(n.phase).toBe('night');
+    expect(n.lessonOn).toBe(false);
+  });
+
+  it('runs without the lesson are untouched by it (false and unset hash the same)', () => {
+    for (const bot of ['novice', 'reactive'] as const) {
+      const a = runBot({ ...headlessConfig(13, 3), lesson: false }, 3000, bot);
+      const b = runBot(headlessConfig(13, 3), 3000, bot);
+      expect(hashState(a)).toBe(hashState(b));
+      expect(a.lessonOn).toBe(false);
+    }
+    expect(headlessConfig(1, 0).lesson).toBe(true);
+    expect(headlessConfig(1, 3).lesson).toBe(false);
+  });
+
+  it('the idle player at profile 0 (lesson on) never melts in its first 25 s of daylight', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = runBot(headlessConfig(seed, 0), 60 * 40, 'idle');
+      if (s.phase === 'dead') expect(s.tick - READY).toBeGreaterThanOrEqual(TUNING.lesson.maxDaylightTicks);
+    }
   });
 });

@@ -16,7 +16,7 @@ function sunState(theta: number, eps = 30, reducedMotion = false): SimState {
     cfg: { ...base.cfg, reducedMotion },
     eps,
     events: [],
-    sun: { theta, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta / 15), dTheta: 0 },
+    sun: { theta, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta / 15), dTheta: 0, keyTicks: 0, keySign: 0 },
   };
   return s;
 }
@@ -78,7 +78,7 @@ describe('sun control', () => {
       const d = s.sun.dTheta;
       if (sign === 0) sign = Math.sign(d);
       expect(Math.sign(d)).toBe(sign);
-      expect(Math.abs(d)).toBeLessThanOrEqual(1 + 1e-9); // +2 finger, −3 key
+      expect(Math.abs(d)).toBeLessThanOrEqual(3.5 + 1e-9); // +2 finger, −2.5 … −5.5 key
     }
     // Finger alone afterwards just follows the finger; no stored lag fights it.
     updateSun(s, f({ down: true, dTheta: 2 }));
@@ -129,9 +129,10 @@ describe('sun control', () => {
   it('8. a detent event at each 15° crossing', () => {
     const s = sunState(1);
     const events: SimEvent[] = [];
-    for (let i = 0; i < 120; i++) {
+    // A fine key turns a steady 90°/s: 240 ticks are one full turn.
+    for (let i = 0; i < 240; i++) {
       s.events.length = 0;
-      updateSun(s, f({ key: 1 }));
+      updateSun(s, f({ key: 2 }));
       events.push(...s.events);
     }
     const detents = events.filter((e) => e.e === 'detent');
@@ -140,9 +141,9 @@ describe('sun control', () => {
     expect(new Set(detents.map((e) => (e.e === 'detent' ? e.index : -1))).size).toBe(24);
     // And clockwise.
     const back: SimEvent[] = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 20; i++) {
       s.events.length = 0;
-      updateSun(s, f({ key: -1 }));
+      updateSun(s, f({ key: -2 }));
       back.push(...s.events);
     }
     expect(back.filter((e) => e.e === 'detent' && e.dir === -1).length).toBe(2);
@@ -187,6 +188,52 @@ function flick(release: number, reducedMotion = false): { omegaRel: number; omeg
   }
   return out;
 }
+
+describe('keyboard parity (CO5)', () => {
+  /** Holds `key` for n ticks; returns the per-tick turns. */
+  const holdKey = (s: SimState, key: InputFrame['key'], n: number): number[] => {
+    const turns: number[] = [];
+    for (let i = 0; i < n; i++) {
+      updateSun(s, f({ key }));
+      turns.push(s.sun.dTheta);
+    }
+    return turns;
+  };
+
+  it('a 1-tick tap turns 2.5°, and the rate ramps to 330°/s over 15 held ticks', () => {
+    const tap = sunState(100);
+    expect(holdKey(tap, 1, 1)[0]).toBeCloseTo(2.5, 9);
+    updateSun(tap, f());
+    expect(tap.sun.keyTicks).toBe(0);
+    const s = sunState(100);
+    const turns = holdKey(s, -1, 40);
+    expect(turns[0]).toBeCloseTo(-2.5, 9);
+    for (let i = 1; i < turns.length; i++) expect(Math.abs(turns[i]!)).toBeGreaterThanOrEqual(Math.abs(turns[i - 1]!) - 1e-9);
+    expect(turns[15]).toBeCloseTo(-330 / 60, 9);
+    expect(turns[39]).toBeCloseTo(-330 / 60, 9);
+    expect(Math.abs(turns[14]!)).toBeLessThan(330 / 60);
+  });
+
+  it('60 held ticks turn at least 250°; Shift (±2) turns at a steady 90°/s', () => {
+    const s = sunState(0);
+    const total = holdKey(s, 1, 60).reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThanOrEqual(250);
+    const fine = sunState(0);
+    for (const t of holdKey(fine, -2, 30)) expect(t).toBeCloseTo(-90 / 60, 9);
+    for (const t of holdKey(fine, 2, 5)) expect(t).toBeCloseTo(90 / 60, 9);
+  });
+
+  it('a reversal or a release restarts the ramp; fine keys keep counting the same sign', () => {
+    const s = sunState(0);
+    holdKey(s, 1, 20);
+    expect(holdKey(s, -1, 1)[0]).toBeCloseTo(-2.5, 9);
+    holdKey(s, -2, 20);
+    expect(s.sun.keyTicks).toBe(21);
+    expect(holdKey(s, -1, 1)[0]).toBeCloseTo(-5.5, 9);
+    updateSun(s, f());
+    expect(holdKey(s, -1, 1)[0]).toBeCloseTo(-2.5, 9);
+  });
+});
 
 describe('only genuine flicks coast (K1)', () => {
   it('a 150°/s lift does not coast: the sun is idle once the chase ends', () => {

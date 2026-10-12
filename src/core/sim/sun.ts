@@ -10,8 +10,10 @@
 //   at ω_rel. Only genuine flicks coast (K1): a lift below 200°/s stops dead, 400°/s coasts at
 //   200°/s, 600°/s and up at full speed.
 // - coasting: θ += ω·DT, ω *= e^(−3.5/60); idle below 5°/s.
-// - key ≠ 0: θ += key·180·DT and the target snaps to θ, overriding chasing/coasting, so a held key
-//   and a held finger add up instead of fighting.
+// - key ≠ 0: θ turns by sign(key)·rate·DT and the target snaps to θ, overriding chasing/coasting, so
+//   a held key and a held finger add up instead of fighting. The rate ramps linearly from 150 to
+//   330°/s over the first 15 held ticks of the same sign (a tap turns 2.5°, a held second ≈ 306°);
+//   fine keys (|key| 2, Shift) turn at 90°/s.
 // - Detents (every 15°) emit `detent` events; they are feedback only.
 
 import { TUNING } from '../../config/tuning.ts';
@@ -73,10 +75,21 @@ export function updateSun(s: SimState, inp: InputFrame): void {
   }
 
   if (inp.key !== 0) {
-    sun.theta = wrapDeg(sun.theta + inp.key * S.keyRate * DT);
+    const sign = inp.key > 0 ? 1 : -1;
+    if (sign !== sun.keySign) {
+      sun.keySign = sign;
+      sun.keyTicks = 0;
+    }
+    const ramp = sun.keyTicks < S.keyRampTicks ? sun.keyTicks / S.keyRampTicks : 1;
+    const rate = inp.key === 2 || inp.key === -2 ? S.keyFine : S.keyRateMin + (S.keyRateMax - S.keyRateMin) * ramp;
+    sun.keyTicks++;
+    sun.theta = wrapDeg(sun.theta + sign * rate * DT);
     sun.lag = 0;
     sun.omega = 0;
     if (sun.mode === 'chasing' || sun.mode === 'coasting') sun.mode = 'idle';
+  } else {
+    sun.keySign = 0;
+    sun.keyTicks = 0;
   }
 
   sun.dTheta = angleDiff(sun.theta, before);

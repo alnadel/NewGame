@@ -18,8 +18,8 @@ export interface InputFrame {
   upEdge: boolean;
   /** Release angular velocity °/s on the upEdge tick, quantized to 1/64 °/s; 0 otherwise. */
   release: number;
-  /** Keyboard: +1 = counter-clockwise (Left/A), −1 = clockwise (Right/D). */
-  key: -1 | 0 | 1;
+  /** Keyboard: +1 = counter-clockwise (Left/A), −1 = clockwise (Right/D); ±2 the same, fine (Shift). */
+  key: -2 | -1 | 0 | 1 | 2;
 }
 
 /** A frame with no input. */
@@ -99,6 +99,10 @@ export interface SunState {
   detent: number;
   /** Signed θ change applied this tick (°). */
   dTheta: number;
+  /** Consecutive ticks a rotation key has been held with the same sign (0 on release or reversal). */
+  keyTicks: number;
+  /** Sign of the key counted by keyTicks (0 none). */
+  keySign: number;
 }
 
 export interface NubsState {
@@ -134,6 +138,21 @@ export interface NubsState {
   /** Ball whose glare touches Nubs this tick, and last tick (−1 none). */
   glareBallId: number;
   prevGlareBallId: number;
+  /** θ on the first tick of the current lit streak (Frost grace). */
+  litTheta: number;
+  /**
+   * SWING tracking: the source (caster or cloud id) of the last full-shade tick, θ and tick then;
+   * a hand-off waiting for confirmation (swPend source, −1 none; its turn and confirmed ticks so far);
+   * the chain length and tick of the last SWING.
+   */
+  swSrc: number;
+  swTheta: number;
+  swTick: number;
+  swPend: number;
+  swPendDeg: number;
+  swPendTicks: number;
+  swChain: number;
+  swLastTick: number;
 }
 
 export interface GuideState {
@@ -209,4 +228,15 @@ export interface SimState {
   /** Clouds that already fired cloudCapture, balls that glared Nubs. */
   readonly captured: Set<number>;
   readonly glaredBalls: Set<number>;
+  /**
+   * First-run lesson (RunConfig.lesson): true from `go` while the Chill floor holds; it ends on
+   * lessonDone, after TUNING.lesson.maxDaylightTicks daylight ticks, or at nightfall.
+   */
+  lessonOn: boolean;
+  /** Daylight ticks played with the lesson on. */
+  lessonTicks: number;
+  /** θ when Nubs last became lit (−1 before the first lit tick), whether θ has since turned ≥ 15°, and the full-shade ticks since. */
+  lessonFrom: number;
+  lessonSwung: boolean;
+  lessonShade: number;
 }

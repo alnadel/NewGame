@@ -51,6 +51,8 @@ export type SimEvent =
   | { e: 'hourEnd'; day: number; hour: number; glyph: HourGlyph }
   | { e: 'gateArch'; noon: boolean }
   | { e: 'ballPassed'; clean: boolean }
+  | { e: 'swing'; deg: number; chain: number; snow: number; x: number; y: number }
+  | { e: 'lessonDone' }
   | { e: 'death'; info: DeathInfo };
 
 export type SimEventName = SimEvent['e'];
@@ -80,6 +82,10 @@ export interface RunStats {
   minutes: number;
   /** Total integral of f over daylight (s). */
   litTotal: number;
+  /** SWINGs landed, the longest chain (0 when none), and the lowest Chill a PHEW fired from (100 when none). */
+  swings: number;
+  swingChainBest: number;
+  phewMinChill: number;
 }
 
 export type RunMode = 'endless' | 'daily' | 'challenge';

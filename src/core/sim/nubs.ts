@@ -1,8 +1,10 @@
-// Nubs: shade coverage, Chill, Frost multiplier, PHEW, shade/glare/cloud events and the hour log
-// (V1_PLAN §5). Per-tick work is allocation-free (scratch arrays are module-level).
+// Nubs: shade coverage, Chill, Frost multiplier, PHEW, SWING, the first-run lesson, shade/glare/cloud
+// events and the hour log (V1_PLAN §5, V1_1_PLAN CO3-CO4). Per-tick work is allocation-free (scratch
+// arrays are module-level; event objects are allocated only when an event fires).
 
 import { TUNING } from '../../config/tuning.ts';
 import { DT } from '../clock.ts';
+import { angleDiff } from '../dmath.ts';
 import { lowerBound } from '../gen/store.ts';
 import { SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
 import type { Caster, Cloud, GazingBall } from '../objects.ts';
@@ -24,6 +26,8 @@ import type { SimState } from './types.ts';
 const N = TUNING.nubs;
 const M = TUNING.mult;
 const P = TUNING.phew;
+const SW = TUNING.swing;
+const L = TUNING.lesson;
 const MAX_R = TUNING.world.maxCasterRadius;
 /** Max distance of a coverage sample from Nubs' center. */
 const SAMPLE_R = N.sampleOffset * 1.5;
@@ -150,7 +154,74 @@ export function effectiveDrain(s: SimState): number {
   return s.cfg.drain ?? s.params.drain;
 }
 
-/** Daylight tick: Chill, multiplier, PHEW, shade/glare/cloud events and timers, hour log. */
+/**
+ * SWING (A3): full shade handed from one source to another (caster or cloud; one id space) by a
+ * ≥ 45° turn of the sun with at most 20 lit ticks between the two, confirmed once the new source has
+ * kept Nubs fully shaded for 15 ticks (the event fires on that tick). `deg` is the turn between the
+ * last shaded tick under the old source and the first under the new one. SWINGs within 180 ticks
+ * chain (×2 … ×5) and pay the chain in Snow, never multiplied. Every full-shade tick re-anchors the
+ * source, so continuous shade passing between sources can never fire.
+ */
+function updateSwing(s: SimState): void {
+  const nb = s.nubs;
+  const src = nb.f === 0 ? (nb.cloudId >= 0 ? nb.cloudId : nb.shaderId) : -1;
+  if (src < 0) {
+    nb.swPend = -1;
+    return;
+  }
+  const theta = s.sun.theta;
+  if (nb.swPend >= 0) {
+    if (src === nb.swPend) nb.swPendTicks++;
+    else nb.swPend = -1;
+  }
+  if (nb.swPend < 0 && nb.swSrc >= 0 && src !== nb.swSrc && s.tick - nb.swTick - 1 <= SW.maxGapTicks) {
+    const turn = Math.abs(angleDiff(theta, nb.swTheta));
+    if (turn >= SW.minDeg) {
+      nb.swPend = src;
+      nb.swPendDeg = Math.round(turn);
+      nb.swPendTicks = 1;
+    }
+  }
+  nb.swSrc = src;
+  nb.swTheta = theta;
+  nb.swTick = s.tick;
+  if (nb.swPend < 0 || nb.swPendTicks < SW.confirmTicks) return;
+  nb.swPend = -1;
+  const st = s.stats;
+  const chain = s.tick - nb.swLastTick <= SW.chainTicks ? Math.min(SW.chainMax, nb.swChain + 1) : 1;
+  nb.swChain = chain;
+  nb.swLastTick = s.tick;
+  st.swings++;
+  st.snow += chain;
+  if (chain > st.swingChainBest) st.swingChainBest = chain;
+  s.events.push({ e: 'swing', deg: nb.swPendDeg, chain, snow: chain, x: nb.x, y: nb.y });
+}
+
+/**
+ * First-run lesson pass rule (A5): from the first lit tick after `go`, θ is recorded each time Nubs
+ * becomes lit; once θ has turned ≥ 15° from it (any input), 15 consecutive full-shade ticks pass the
+ * lesson. A shadow passing over a still sun never passes it.
+ */
+function updateLesson(s: SimState, lit: boolean, wasLit: boolean): void {
+  const theta = s.sun.theta;
+  if (lit && (!wasLit || s.lessonFrom < 0)) {
+    s.lessonFrom = theta;
+    s.lessonSwung = false;
+    s.lessonShade = 0;
+  }
+  if (s.lessonFrom >= 0) {
+    if (!s.lessonSwung && Math.abs(angleDiff(theta, s.lessonFrom)) >= L.swingDeg) s.lessonSwung = true;
+    if (s.lessonSwung) s.lessonShade = lit ? 0 : s.lessonShade + 1;
+    if (s.lessonShade >= L.shadeTicks) {
+      s.lessonOn = false;
+      s.events.push({ e: 'lessonDone' });
+      return;
+    }
+  }
+  if (++s.lessonTicks >= L.maxDaylightTicks) s.lessonOn = false;
+}
+
+/** Daylight tick: Chill, multiplier, PHEW, SWING, lesson, shade/glare/cloud events and timers, hour log. */
 export function applyDaylight(s: SimState): void {
   const nb = s.nubs;
   const st = s.stats;
@@ -161,6 +232,8 @@ export function applyDaylight(s: SimState): void {
 
   let c = nb.chill + (-effectiveDrain(s) * f + N.regen * Math.max(0, 1 - f)) * DT;
   if (c > nb.maxChill) c = nb.maxChill;
+  // The first-run lesson's floor: Nubs is small and sweating, but alive.
+  if (s.lessonOn && c < L.floor) c = L.floor;
   nb.chill = c;
 
   // Shade transitions.
@@ -177,6 +250,7 @@ export function applyDaylight(s: SimState): void {
       nb.phewOpen = false;
       st.phews++;
       st.snow += P.snow;
+      if (prevChill < st.phewMinChill) st.phewMinChill = prevChill;
       s.events.push({ e: 'phew' });
     }
   }
@@ -198,8 +272,12 @@ export function applyDaylight(s: SimState): void {
       }
     }
   } else {
+    // Frost grace: a lit stretch in which θ turned ≥ 30° (a swing on its way to new shade) resets
+    // only after 21 lit ticks instead of 9.
+    if (nb.litTicks === 0) nb.litTheta = s.sun.theta;
     nb.litTicks++;
-    if (nb.litTicks >= M.resetLitTicks && (nb.mult > 1 || nb.shadeTicks > 0)) {
+    const reset = Math.abs(angleDiff(s.sun.theta, nb.litTheta)) < M.graceDeg ? M.resetLitTicks : M.graceLitTicks;
+    if (nb.litTicks >= reset && (nb.mult > 1 || nb.shadeTicks > 0)) {
       if (nb.mult > 1) s.events.push({ e: 'multReset', from: nb.mult });
       nb.mult = 1;
       nb.shadeTicks = 0;
@@ -237,6 +315,8 @@ export function applyDaylight(s: SimState): void {
 
   s.hourLit += f * DT;
   st.litTotal += f * DT;
+  updateSwing(s);
+  if (s.lessonOn) updateLesson(s, lit, wasLit);
 }
 
 /** Night tick: Chill refills at +30/s; the multiplier is frozen. */
@@ -247,6 +327,10 @@ export function applyNight(s: SimState): void {
   nb.rideTicks = 0;
   nb.rideId = -1;
   nb.prevGlareBallId = -1;
+  // Nightfall ends the lesson and any shade hand-off.
+  nb.swSrc = -1;
+  nb.swPend = -1;
+  s.lessonOn = false;
 }
 
 /** Glyph of a finished in-game hour from its lit seconds and the low-Chill flag. */

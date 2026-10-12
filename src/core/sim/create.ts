@@ -29,6 +29,9 @@ function freshStats(day: number): RunStats {
     nightsReached: 0,
     minutes: 0,
     litTotal: 0,
+    swings: 0,
+    swingChainBest: 0,
+    phewMinChill: 100,
   };
 }
 
@@ -99,7 +102,7 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
     ux: 1,
     uy: 0,
     theta0,
-    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0 },
+    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0, keyTicks: 0, keySign: 0 },
     nubs: {
       x: 0,
       y: 0,
@@ -124,6 +127,15 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
       rideTicks: 0,
       glareBallId: -1,
       prevGlareBallId: -1,
+      litTheta: theta0,
+      swSrc: -1,
+      swTheta: theta0,
+      swTick: -1e9,
+      swPend: -1,
+      swPendDeg: 0,
+      swPendTicks: 0,
+      swChain: 0,
+      swLastTick: -1e9,
     },
     guide: {
       now: new Uint8Array(360),
@@ -148,6 +160,11 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
     flakesToday: 0,
     captured: new Set(),
     glaredBalls: new Set(),
+    lessonOn: false,
+    lessonTicks: 0,
+    lessonFrom: -1,
+    lessonSwung: false,
+    lessonShade: 0,
   };
   syncTime(s);
   s.nextHistoryY = s.nubs.y;

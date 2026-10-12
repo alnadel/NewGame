@@ -154,7 +154,10 @@ function readyTick(s: SimState): void {
   s.ux = cosD(s.sun.theta);
   s.uy = sinD(s.sun.theta);
   computeCoverage(s);
-  if (s.ready === 0) s.events.push({ e: 'go' });
+  if (s.ready === 0) {
+    s.lessonOn = s.cfg.lesson === true;
+    s.events.push({ e: 'go' });
+  }
 }
 
 /** Advances the run by one tick. s.events holds this tick's events afterwards. */

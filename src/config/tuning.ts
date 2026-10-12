@@ -50,8 +50,14 @@ const tuning = {
     stopOmega: 5,
     /** A touch-down while |ω| exceeds this emits `catch`. */
     catchOmega: 90,
-    /** Keyboard rotation rate (°/s). */
-    keyRate: 180,
+    /**
+     * Keyboard rotation (°/s): a held key ramps linearly from keyRateMin to keyRateMax over
+     * keyRampTicks held ticks (a 1-tick tap turns 2.5°); fine keys (Shift, |key| 2) turn at keyFine.
+     */
+    keyRateMin: 150,
+    keyRateMax: 330,
+    keyRampTicks: 15,
+    keyFine: 90,
     /** Detent spacing (°). Feedback only, never a snap. */
     detentDeg: 15,
     /** Chasing hands off to coasting when the remaining lag is below this (°). */
@@ -98,9 +104,30 @@ const tuning = {
     max: 5,
     /** Continuous full-shade ticks per level (4.0 s). */
     stepTicks: 240,
-    /** Continuous lit ticks that reset the multiplier (0.15 s). */
+    /** Continuous lit ticks that reset the multiplier (0.15 s)… */
     resetLitTicks: 9,
+    /**
+     * …unless θ has turned ≥ graceDeg since the lit stretch began: then the reset waits for
+     * graceLitTicks (0.35 s), so a lit stretch that ends in a SWING keeps the multiplier.
+     */
+    graceDeg: 30,
+    graceLitTicks: 21,
   },
+
+  /**
+   * SWING: shade handed from one source (caster or cloud) to another by turning the sun ≥ minDeg,
+   * with at most maxGapTicks lit ticks between them, confirmed once the new source has kept Nubs
+   * fully shaded for confirmTicks. SWINGs within chainTicks of the last one chain (×2 … ×chainMax)
+   * and pay the chain in Snow.
+   */
+  swing: { minDeg: 45, maxGapTicks: 20, confirmTicks: 15, chainTicks: 180, chainMax: 5 },
+
+  /**
+   * First-run lesson: from `go` until the lesson is passed (a ≥ swingDeg turn after Nubs was lit,
+   * then shadeTicks of full shade), for at most maxDaylightTicks of daylight, Chill never drops
+   * below floor.
+   */
+  lesson: { floor: 12, swingDeg: 15, shadeTicks: 15, maxDaylightTicks: 1500 },
 
   /** PHEW (V1_PLAN §5.3). The threshold T comes from the profile (days.ts). */
   phew: {
