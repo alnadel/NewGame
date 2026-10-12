@@ -16,8 +16,9 @@ import {
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
 import type { Equipped } from '../meta/content.ts';
 import type { Insets } from '../platform/safeArea.ts';
-import { drawBanners, drawVignettes, createBanners, updateBanners, type Banners } from './banners.ts';
-import { createLight, drawCaster, type Light } from './casters.ts';
+import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, type AtmosphereIn } from './atmosphere.ts';
+import { drawBanners, createBanners, updateBanners, type Banners } from './banners.ts';
+import { createLight, drawCaster, drawContactAO, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
 import { cssa } from './color.ts';
 import {
@@ -80,6 +81,7 @@ import {
 } from './particles.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
+import { forecastOf } from './shims.ts';
 import { createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
@@ -127,8 +129,10 @@ export interface RenderInput {
   highContrast: boolean;
   reducedMotion: boolean;
   equipped: Equipped;
-  /** Perf governor: soft (half-res layer) or crisp (direct multiply fill) shadows. */
+  /** Perf governor: soft (half-res layer) or crisp (direct fill) shadows. */
   softShadows: boolean;
+  /** Perf governor level 0..3 (game/perf.ts): level 3 drops the atmosphere's gradients and the contact AO. */
+  govLevel: number;
   /** Paused: UI timers (banners, HUD pops, halo) hold still. */
   paused: boolean;
   debug: DebugDraw | null;
@@ -173,6 +177,13 @@ export interface RenderScene {
   worldTime: number;
   /** CPU ms of the last draw (debug). */
   ms: number;
+  atm: Atmosphere;
+  atmIn: AtmosphereIn;
+  /**
+   * Full-viewport layers composited over the ground in the last frame (soft shadow blit, the
+   * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
+   */
+  passes: number;
 }
 
 export function createScene(): RenderScene {
@@ -206,6 +217,9 @@ export function createScene(): RenderScene {
     thetaSpeed: 0,
     worldTime: 0,
     ms: 0,
+    atm: createAtmosphere(),
+    atmIn: createAtmosphereIn(),
+    passes: 0,
   };
 }
 
@@ -400,6 +414,7 @@ export class Renderer {
     }
 
     // ---- Draw ------------------------------------------------------------------------------
+    sc.passes = 0;
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
@@ -412,9 +427,15 @@ export class Renderer {
     drawGround(g, v, sc.groundPal, sc.ground);
     drawTrail(g, v, s.world, sc.groundPal);
     drawFootprints(g, sc.footprints, v, sc.pal);
+    // Visible casters, far (north) first: contact shadows now, the depth sort below.
+    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
+    if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
     drawPickups(g, v, s.world, time, snap.nubsY, night);
     if (sunUp) {
-      drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows, this.options.multiplyShadows);
+      const multiply = this.options.multiplyShadows;
+      if (drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows, multiply)) {
+        sc.passes++;
+      }
     }
 
     // Nubs' pose (needed for the footprint disc and the depth sort).
@@ -458,7 +479,6 @@ export class Renderer {
     const looks = looksFor(inp.equipped);
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr);
     nubsBox(pose.x, pose.y, v.S, box);
-    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
     let nubsDrawn = false;
     let occluded = false;
     for (let i = n - 1; i >= 0; i--) {
@@ -490,11 +510,31 @@ export class Renderer {
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
 
-    if (inp.mapT >= 0 && sc.mapReady && this.options.mapOverlay) {
+    // The atmosphere: sun-side light, noon bleach, night pool and the edge vignettes in one layer.
+    // On the Results the Melt Map's wash takes its place.
+    if (inp.mapT < 0) {
+      const at = sc.atmIn;
+      const b = sc.banners;
+      at.ux = ux;
+      at.uy = uy;
+      at.elev = L.elev;
+      at.dayFrac = dayFrac;
+      at.night = night;
+      at.nubsX = pose.x;
+      at.nubsY = pose.y;
+      at.heat = b.heat;
+      at.heatPhase = b.heatPhase;
+      at.cool = b.coolPulse;
+      at.gold = b.goldPulse;
+      at.wash = 0;
+      at.forecast = forecastOf(s.params);
+      at.full = inp.govLevel < 3;
+      if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;
+    } else if (sc.mapReady && this.options.mapOverlay) {
       const o = mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay);
       o.sheetTop = inp.sheetTop;
       o.time = inp.time;
-      drawMeltMap(g, v, s, sc.map, o);
+      if (drawMeltMap(g, v, s, sc.map, o)) sc.passes++;
     }
 
     // Debug geometry.
@@ -529,7 +569,6 @@ export class Renderer {
     }
     g.restore();
 
-    drawVignettes(g, sc.banners, v);
     drawPops(g, sc.pops, v, hudScale(v));
 
     // Edge sun mascot (decoration), kept below the HUD band.

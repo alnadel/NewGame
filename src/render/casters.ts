@@ -9,6 +9,7 @@ import type { View } from '../game/camera.ts';
 import { OBLIQUE } from '../game/camera.ts';
 import { css, cssa, darken, hex, lighten, mix, type Rgb } from './color.ts';
 import { faceShade, tint, type Palette } from './palette.ts';
+import { radialSprite, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 
@@ -1002,4 +1003,49 @@ export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Ca
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Contact shadows
+// ---------------------------------------------------------------------------------------------
+
+/** Ground padding of the contact shadow around a hull (u). */
+const AO_PAD = 5;
+let aoSprite: Canvas2D | null = null;
+
+/**
+ * Contact shadows (GR5): a soft warm-dark pool under each visible caster's ground hull (prisms and
+ * slabs, never a canopy disc), multiplied onto the ground before the shadow layer, so buildings,
+ * trunks and stones sit on it at any sun angle. One stretched 64 px sprite per caster. The sprite's
+ * inscribed ellipse is grown by √2 so it reaches the hull's corners.
+ */
+export function drawContactAO(g: CanvasRenderingContext2D, v: View, cs: readonly Caster[], n: number, night: number): void {
+  aoSprite ??= radialSprite('70,45,30', 64, 0.3, 0.55, 0.18);
+  const spr = aoSprite;
+  g.globalCompositeOperation = 'multiply';
+  g.globalAlpha = 1 - 0.5 * night;
+  for (let i = 0; i < n; i++) {
+    const c = cs[i] as Caster;
+    if (c.hullN < 3 || c.maxX < v.x0 - 20 || c.minX > v.x1 + 20) continue;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    const h = c.hull;
+    for (let k = 0; k < c.hullN; k++) {
+      const x = h[2 * k] as number;
+      const y = h[2 * k + 1] as number;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    const rx = ((x1 - x0) / 2 + AO_PAD) * Math.SQRT2 * v.S;
+    const ry = ((y1 - y0) / 2 + AO_PAD) * Math.SQRT2 * v.S;
+    const cx = v.ox + ((x0 + x1) / 2) * v.S;
+    const cy = v.oy - ((y0 + y1) / 2) * v.S;
+    g.drawImage(spr, cx - rx, cy - ry, 2 * rx, 2 * ry);
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
 }

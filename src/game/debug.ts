@@ -40,6 +40,8 @@ export interface ShadyTestHook {
     govLevel: number;
     /** renderer.draw calls so far (the render cadence skips the rest of the rAFs). */
     draws: number;
+    /** Full-viewport layers composited over the ground in the last drawn frame (≤ 3, A12). */
+    fullScreenPasses: number;
   };
   /** The current run's config (the Title's held run between runs); drain = cfg.drain ?? the profile's. */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number };
@@ -98,6 +100,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       dpr: session.renderer.scene.view.dpr,
       govLevel: session.gov.level,
       draws: session.renderer.draws,
+      fullScreenPasses: session.renderer.scene.passes,
     }),
     runCfg: () => session.runCfg(),
     cameraFx: () => {

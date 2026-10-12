@@ -150,10 +150,13 @@ function chillColor(c: number): Rgb {
   return c >= 50 ? mix(GOLD, BLUE, (c - 50) / 50) : mix(RED, GOLD, c / 50);
 }
 
-/** Overlays on the world once the map is up (`o.a` fades them in), clipped above the sheet. */
-export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame, o: MapOverlay): void {
+/**
+ * Overlays on the world once the map is up (`o.a` fades them in), clipped above the sheet. Returns
+ * true when it drew (its paper wash is a full-screen pass).
+ */
+export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame, o: MapOverlay): boolean {
   const a = o.a;
-  if (a <= 0.01) return;
+  if (a <= 0.01) return false;
   g.save();
   clipAboveSheet(g, v, o.sheetTop);
   const S = v.S;
@@ -243,6 +246,7 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
   }
   g.globalAlpha = 1;
   g.restore();
+  return true;
 }
 
 /** The puddle marker: a pulsing ring and a carrot (the only part of a settled map that moves). */

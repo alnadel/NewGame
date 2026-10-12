@@ -125,7 +125,7 @@ export function matchShadow(out: { fill: Rgb }, shadow: Rgb, ground: Rgb, a: num
 /**
  * Renders and composites the shadow layer onto the world (call with the world clip active): the
  * matched source-over fill (GR2), or a multiply of the shadow color when `multiply` is set (the
- * test hook's A/B reference).
+ * test hook's A/B reference). Returns true when it blitted the soft layer (a full-screen pass).
  */
 export function drawShadowLayer(
   g: CanvasRenderingContext2D,
@@ -141,10 +141,10 @@ export function drawShadowLayer(
   alpha: number,
   soft: boolean,
   multiply: boolean,
-): void {
-  if (cot <= 0) return;
+): boolean {
+  if (cot <= 0) return false;
   const a = multiply ? alpha : matchShadow(layer, pal.shadow, ground, alpha);
-  if (a <= 0.002) return;
+  if (a <= 0.002) return false;
   const color = css(multiply ? pal.shadow : layer.fill);
   const op = multiply ? 'multiply' : 'source-over';
   if (!soft) {
@@ -156,7 +156,7 @@ export function drawShadowLayer(
     g.fill('nonzero');
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    return;
+    return false;
   }
   const w = Math.max(2, Math.ceil(v.vw / 2));
   const h = Math.max(2, Math.ceil(v.vh / 2));
@@ -181,4 +181,5 @@ export function drawShadowLayer(
   g.drawImage(layer.canvas, 0, 0, w, h, v.vx, v.vy, w * 2, h * 2);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
+  return true;
 }

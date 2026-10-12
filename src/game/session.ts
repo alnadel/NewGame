@@ -433,6 +433,7 @@ export class Session {
       reducedMotion: false,
       equipped: save.equipped,
       softShadows: true,
+      govLevel: 0,
       paused: false,
       debug: null,
     };
@@ -701,6 +702,7 @@ export class Session {
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
     r.softShadows = this.gov.softShadows;
+    r.govLevel = this.gov.level;
     r.paused = this.paused || screenNow === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
 

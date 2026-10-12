@@ -126,6 +126,57 @@ describe('shadow path winding', () => {
   });
 });
 
+describe('cool-shade colour script (GR5)', () => {
+  /** WCAG relative luminance of a packed color. */
+  function lum(c: number): number {
+    const ch = (v: number): number => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch((c >> 16) & 255) + 0.7152 * ch((c >> 8) & 255) + 0.0722 * ch(c & 255);
+  }
+  /** Contrast of the ground against itself under the shadow color at alpha a (multiply). */
+  function contrast(ground: number, shadow: number, a: number): number {
+    let shaded = 0;
+    for (const ch of [16, 8, 0]) {
+      const G = (ground >> ch) & 255;
+      const C = (shadow >> ch) & 255;
+      shaded |= Math.round(G * (1 - a * (1 - C / 255))) << ch;
+    }
+    return (lum(ground) + 0.05) / (lum(shaded) + 0.05);
+  }
+  // v1.0 shadow keys (6, 9, 12, 15, 18 o'clock).
+  const V10: [number, number][] = [
+    [hex('#5B4A8A'), 0.42],
+    [hex('#4F5C8E'), 0.5],
+    [hex('#4B5A73'), 0.58],
+    [hex('#4A4F8C'), 0.5],
+    [hex('#34306B'), 0.45],
+  ];
+
+  it('keeps every key at least as legible as v1.0, in both biomes and in high contrast', () => {
+    const p = createPalette();
+    for (const hc of [false, true]) {
+      for (const town of [0, 1]) {
+        for (let k = 0; k < 5; k++) {
+          updatePalette(p, k / 4, 0, town, hc);
+          const [old, oldA] = V10[k] as [number, number];
+          expect(contrast(p.ground, p.shadow, p.shadowAlpha)).toBeGreaterThanOrEqual(contrast(p.ground, old, oldA + (hc ? 0.17 : 0)));
+        }
+      }
+    }
+  });
+
+  it('turns noon shade blue on the cream ground', () => {
+    const p = createPalette();
+    updatePalette(p, 0.5, 0, 0, false);
+    const G = p.ground;
+    const shaded = [16, 8, 0].map((ch) => Math.round(((G >> ch) & 255) * (1 - p.shadowAlpha * (1 - ((p.shadow >> ch) & 255) / 255))));
+    // About #829ABD: blue clearly above red.
+    expect((shaded[2] as number) - (shaded[0] as number)).toBeGreaterThan(40);
+  });
+});
+
 describe('matched shadow composite (GR2)', () => {
   it('gives the multiplied ground color with a plain source-over fill, at every hour and in high contrast', () => {
     const p = createPalette();

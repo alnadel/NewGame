@@ -1,10 +1,11 @@
 // Screen-space moments (GDD §11): the NOON banner (drops from the top over 600 ms, holds 1.2 s),
 // the NIGHT card, the "DAY N" serif card (slides in from the right in 500 ms, holds 1 s; fades
-// under reduced motion), and edge vignettes: low-Chill heat haze (≤ 0.25 α pulsing at 1.1 Hz),
-// the cool multiplier pulse and the gold ×5 pulse. Photosensitivity: no full-screen flash.
+// under reduced motion), and the timers of the edge vignettes the atmosphere layer draws
+// (atmosphere.ts): low-Chill heat haze, the cool multiplier pulse and the gold ×5 pulse.
+// Photosensitivity: no full-screen flash.
 
 import type { View } from '../game/camera.ts';
-import { roundRect, vignette } from './sprites.ts';
+import { roundRect } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 const SERIF = "italic 700 {S}px Georgia, 'Times New Roman', serif";
@@ -58,24 +59,6 @@ function easeOutBack(t: number): number {
   const c1 = 1.70158;
   const c3 = c1 + 1;
   return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2;
-}
-
-/** Vignettes over the world viewport (call after the world, before the HUD). */
-export function drawVignettes(g: CanvasRenderingContext2D, b: Banners, v: View): void {
-  if (b.heat > 0.01) {
-    const pulse = 0.5 - 0.5 * Math.cos(b.heatPhase * TAU * 1.1);
-    g.globalAlpha = 0.25 * (0.25 + 0.75 * pulse) * b.heat;
-    g.drawImage(vignette('255,106,61'), v.vx, v.vy, v.vw, v.vh);
-  }
-  if (b.coolPulse > 0) {
-    g.globalAlpha = 0.18 * Math.sin((Math.PI * b.coolPulse) / 0.25);
-    g.drawImage(vignette('90,184,255'), v.vx, v.vy, v.vw, v.vh);
-  }
-  if (b.goldPulse > 0) {
-    g.globalAlpha = 0.2 * Math.sin((Math.PI * b.goldPulse) / 0.45);
-    g.drawImage(vignette('255,194,61'), v.vx, v.vy, v.vw, v.vh);
-  }
-  g.globalAlpha = 1;
 }
 
 /** Banners and cards, below the HUD band (`top` CSS px). */

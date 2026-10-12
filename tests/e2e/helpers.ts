@@ -105,6 +105,7 @@ export interface ShadyPerf {
   dpr: number;
   govLevel: number;
   draws: number;
+  fullScreenPasses: number;
 }
 
 export interface PixelAB {
