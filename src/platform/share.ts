@@ -71,9 +71,31 @@ function download(file: File): boolean {
   return true;
 }
 
-/** Copies text to the clipboard (async Clipboard API, then the legacy execCommand path). */
+interface PolicyHolder {
+  permissionsPolicy?: { allowsFeature?: (feature: string) => boolean };
+  featurePolicy?: { allowsFeature?: (feature: string) => boolean };
+}
+
+/**
+ * Whether the page's permissions policy lets it write the clipboard. A frame sandboxed without
+ * same-origin access (or one whose host withholds clipboard-write) doesn't: asking anyway logs a
+ * "Permissions policy violation" on every Share before the legacy copy works.
+ */
+function clipboardAllowed(): boolean {
+  if (typeof document === 'undefined') return true;
+  const d = document as unknown as PolicyHolder;
+  const policy = d.permissionsPolicy ?? d.featurePolicy;
+  if (!policy || typeof policy.allowsFeature !== 'function') return true;
+  try {
+    return policy.allowsFeature('clipboard-write');
+  } catch {
+    return true;
+  }
+}
+
+/** Copies text to the clipboard (async Clipboard API where allowed, then the legacy execCommand path). */
 export async function copyText(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function' && clipboardAllowed()) {
     try {
       await navigator.clipboard.writeText(text);
       return true;

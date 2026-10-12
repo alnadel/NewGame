@@ -268,6 +268,19 @@ describe('shareFiles', () => {
     expect(revoke).toHaveBeenCalledTimes(1);
   });
 
+  it('skips the Clipboard API where the permissions policy blocks it (a sandboxed frame)', async () => {
+    const { downloads } = stubDocument();
+    const doc = globalThis.document as unknown as { featurePolicy: { allowsFeature: (f: string) => boolean }; execCommand: () => boolean };
+    doc.featurePolicy = { allowsFeature: (f) => f !== 'clipboard-write' };
+    doc.execCommand = () => true;
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { share: vi.fn(), canShare: () => false, clipboard: { writeText } });
+    vi.stubGlobal('HTMLElement', class {});
+    expect(await shareFiles({ file, text: 'T' })).toBe('saved');
+    expect(downloads).toEqual(['shady-day2-240pm.png']);
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
   it('still saves when the copy fails', async () => {
     stubDocument();
     vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } });
