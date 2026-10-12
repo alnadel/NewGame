@@ -1,3 +1,5 @@
+> Historical; superseded by V1_1_PLAN.md, V1_PLAN.md and the module READMEs.
+
 # SHADY: Technical Architecture and Spec v1.0
 
 This spec matches the existing scaffold in `/home/user/NewGame`:

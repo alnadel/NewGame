@@ -1,4 +1,4 @@
-// Backup codes (V1_PLAN §11.5, CRITIQUE #20): the whole save as base64url JSON, so progress can be
+// Backup codes (V1_PLAN §11.5, archive/CRITIQUE #20): the whole save as base64url JSON, so progress can be
 // carried across Safari's 7-day eviction, browser profiles or from a tab into the installed app.
 
 import { formatScore } from '../core/format.ts';

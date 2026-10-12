@@ -1,3 +1,5 @@
+> Historical; superseded by V1_1_PLAN.md, V1_PLAN.md and the module READMEs.
+
 # SHADY v1.1 build manifest
 
 This is the binding input for the three v1.1 build batches. **Precedence:** §0 Director's amendments override everything below them, then the batch items (§2-§4), then the contracts (§1), then docs/V1_1_PLAN.md. At the end, uiMeta folds the final state into docs/V1_1_PLAN.md and moves this file to docs/archive/.

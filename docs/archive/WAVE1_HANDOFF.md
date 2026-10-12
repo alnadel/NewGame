@@ -1,3 +1,5 @@
+> Historical; superseded by V1_1_PLAN.md, V1_PLAN.md and the module READMEs.
+
 # Wave 1 handoff notes (integration requests and known issues)
 
 Written by the three wave-1 tracks (core, audio, ui). The integration engineer must honour the **requests**. The **known issues** are context. The full APIs are in `src/core/README.md`, `src/audio/README.md` and `src/ui/README.md`.

@@ -1,10 +1,34 @@
 # SHADY v1.1: "Every run a different day"
 
-> **Status:** the binding build input is `docs/V1_1_BUILD.md`. Its §0 Director's amendments override this plan wherever they differ, for example the 5-rung comfort ladder, a single og.png with no link stubs, the cut records and nemesis, and 5 sun-shade shapes.
+> **Status:** built. The director's amendments below (§0) are folded in and win over the rest of this plan wherever they differ; the per-item build specs and contracts live in `archive/V1_1_BUILD.md`.
 
 **Precedence.** For v1.1 work this file wins, then `V1_PLAN.md`, then the module READMEs. Older docs live in `docs/archive/` and are history only.
 
 **Owner's brief:** "Compactly overhaul and enhance in every possible aspect, focusing on everything except audio." No audio work: new SimEvents exist and the audio layer ignores them.
+
+---
+
+## 0. Director's amendments (binding) and final numbers
+
+- **A1 World identity.** `RunConfig.plan` is world identity: `World.planOn = cfg.forecast !== undefined || (cfg.plan ?? (profile === 3 && !tutorial))`; core `PLAN_START_DATE = '2026-10-14'`. Dailies set `plan: date >= PLAN_START_DATE`. Endless challenge codes add `pl` after `nc`; encoders always write `p, dr, nc, pl`; a code without `p` is v1.0 and decodes to `{ p 3, dr 55, nc 0, pl 0 }`; without `pl`, `pl = p === 3 ? 1 : 0`. `?plan=0|1` forces it (a debug run); screenshot and perf baselines pin `?plan=0`.
+- **A2 Comfort ladder: 5 rungs.** R0 tutorial (profile 0, drain 30, noon cloud 1, lifetime run 0 only), R1 (2, 40, 1), R2 (3, 44, 1), R3 (3, 50, 2), R4 standard (3, 55, 0; the Daily's rules); `COMFORT_MAX = 4`. `comfortAfterRun`: from R0, Day 3 → 4, the first night → 2, else 1; from R ≥ 1, Day 3 → 4, ≥ 390 min → +1, < 240 min → −1; clamp [1, 4] (core kept 390/240). One helper, `rungConfig(rung, { tutorialDone })`, for the session and the career sim. The session plays rung 0 for lifetime run 0, else `max(1, stats.comfort)` with Adaptive comfort on, else 4. v1 saves migrate runs 0 → 0, r ≥ 1 → [1, 1, 2, 3, 4][min(r, 5) − 1]. `history.r` is the rung played; the Journal hatches runs below R4.
+- **A3 SWING needs confirmed shade:** awarded after 15 ticks of continuous full shade under the new source; `deg` as before; advisory rows: human R4 ≤ 4 swings/min, SWING Snow ≤ 15 % of run Snow; at most one SWING pop per second; silent.
+- **A4** `hashState` never hashes config scalars (`noonCloud`, `planOn`).
+- **A5 Lesson pass:** after the first lit tick with `ready === 0`, θ must move ≥ 15° from where it was when Nubs became lit (any input), then Nubs stays fully shaded for 15 ticks → `lessonDone`. The 0.5× time scale runs from the first lesson hint while `lessonOn`.
+- **A6** A perception-limited `human` bot (the lasting mask on half its decisions, arcs ≥ 20° only) drives the advisory and career rows.
+- **A7** The k-th Old Town day ≥ 2 uses the ball row of even row 2k; Day 1 has balls only under Dazzle. **A8** A forced forecast applies only to days it fits; the rest are clear. **A9** Plan readers take the World; nothing derives the biome from day parity.
+- **A10 Link previews: compact.** One `public/og.png` (1200×630, ≤ 300 KB, `scripts/gen-og.ts`); Open Graph and Twitter tags with an absolute `%VITE_SHARE_URL%og.png`. Links stay `${base}#c=${code}`; no `/c/N/` stubs; the service worker is unchanged.
+- **A11 Postcard:** no second Renderer; a cover-crop of the settled main canvas built in idle stages (≤ 16 ms each at 4× throttle), the full challenge URL in its footer. Share stays text and link (desktop copies); a separate Postcard pill shares the file and text through `shareFiles`.
+- **A12 Performance:** the atmosphere is one small offscreen canvas stretched once; `perf().fullScreenPasses` ≤ 3; the death-beat desaturation only at governor level 0 and DPR ≤ 2; the caster sprite cache is a stretch goal with a θ-independent key.
+- **A13** `deathTip` and `createParJob` live in core; the Daily par is a stretch goal, its storage and UI stay.
+- **A14 Career meta API:** meta exports `defaults`, `beginRun`, `applyRunResult`, `swapMission`, `buyCosmetic`, `dailyTryStarted`, `COSMETICS`, `ACHIEVEMENTS` and `isDailyUnlocked`; the harness swaps slots stale ≥ 5 runs, buys the cheapest affordable item after each run, plays one Daily a sim-day, and advances `today` every 5 runs.
+- **A15 Scope cuts:** Sun Shades has five shapes (classic default, round 120, aviator 250, star for Sundancer, heart for Rematch); Glare-Proof grants no item. The Journal keeps bests, the 30-run chart and totals: no records, no nemesis (nor their save fields). No wind streaks or clock-pill glow.
+- **A16 Minor:** `recentBest` ignores rung-0 runs; `sanitizeName` allows combining marks, counts ≤ 12 code points, and names render in `<bdi>`; the e-daily errand gives way to the next while the Daily is locked; in the lesson the low-Chill cue reads "Melting! Drag … to the thick teal"; the warm-up Title keeps the banner; a name change keeps the prebuilt run; `sim --check` loops every forecast at the same seed count (CI: `--check --seeds 40`); the docs diet target is ≥ 900 lines; uiMeta's layout checks live in `tests/e2e/meta.spec.ts`; no audio work (new SimEvents get silent cases).
+
+**Final numbers (uiMeta, measured on core + meta before integration).**
+- Career meta, 20 careers × 40 runs (`node scripts/sim.ts --career 20 --runs 40 --bot B --meta`): recent best beaten in runs 11+ 8.7 % (human), 8.8 % (novice), 7.8 % (reactive) (target 5-15 %). Careers with a mission completed in runs 31-40: human 50 %, novice 50 %, reactive 95 % (advisory ≥ 80 %); median last completion: run 31, 33, 38 (advisory ≥ 36). Catalog owned at run 40: human 53 %, novice 57 %, reactive 89 % (advisory ≤ 70 %: A15 took 2.5k Snow of items out of the planned ~7k catalog, which now totals 4,460 Snow).
+- Comfort: novice careers 90 % at R3+ by run 6; reactive at R4 from run 2 in 100 %.
+- `og.png`: 97 KB. Docs: docs/*.md (archive excluded), README.md and src/*/README.md went from 4,475 to about 2,470 lines, not counting this plan.
 
 ---
 
@@ -915,20 +939,17 @@ All animations work on every shape.
 #### UM12 [MUST] Docs diet and v1.1 docs
 **New:** docs/V1_1_PLAN.md.
 
-**Archive** these 4 into docs/archive/:
-- TECH_SPEC
-- CRITIQUE
-- WAVE1_HANDOFF
-- CONCEPTS
+**Archive** these 4 into docs/archive/ (done: `archive/TECH_SPEC.md`, `archive/CRITIQUE.md`,
+`archive/WAVE1_HANDOFF.md`, `archive/CONCEPTS.md`, and the build manifest `archive/V1_1_BUILD.md`).
 
 **Consolidate:**
-- Fold the "Deliberate deviations" sections into V1_PLAN.
+- Fold the READMEs' deviation sections into V1_PLAN (done: V1_PLAN §15).
 - Keep one URL-parameter table.
 - README.md ≤ 90 lines.
 - Add GDD status lines.
 - Update the module READMEs per the contracts.
 
-**Acceptance.** −1,500 lines or more.
+**Acceptance.** −1,500 lines or more (A16: ≥ 900).
 
 ---
 

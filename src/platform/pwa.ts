@@ -1,4 +1,4 @@
-// Service worker registration (TECH_SPEC §14) and the Android install prompt. The worker itself
+// Service worker registration (archive/TECH_SPEC §14) and the Android install prompt. The worker itself
 // (sw.js) is emitted at build time by the shadySW plugin in vite.config.ts. No skipWaiting: a new
 // version takes over on the next cold start, so a running game never reloads under the player.
 

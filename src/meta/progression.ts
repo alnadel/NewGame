@@ -447,7 +447,7 @@ export function welcomeBackDue(save: Save, today: string): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Daily bookkeeping (V1_PLAN §11.3, CRITIQUE #30)
+// Daily bookkeeping (V1_PLAN §11.3, archive/CRITIQUE #30)
 // ---------------------------------------------------------------------------------------------
 
 export interface DailyStatus {

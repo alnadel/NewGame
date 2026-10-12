@@ -1,5 +1,5 @@
 // Death animation (canvas): a full-screen invisible catcher so a tap skips straight to Results
-// (V1_PLAN §8.4, CRITIQUE #32: retry in well under 1.5 s).
+// (V1_PLAN §8.4, archive/CRITIQUE #32: retry in well under 1.5 s).
 
 import { h } from '../dom.ts';
 import type { Screen, UiContext } from '../screen.ts';

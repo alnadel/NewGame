@@ -1,4 +1,4 @@
-// Native shell detection (TECH_SPEC §18). Platform adapters switch on this; the web build has no
+// Native shell detection (archive/TECH_SPEC §18). Platform adapters switch on this; the web build has no
 // Capacitor global, so everything takes the web path until native projects exist.
 
 interface CapacitorGlobal {

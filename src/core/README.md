@@ -68,20 +68,33 @@ for (const e of s.events) route(e);   // valid until the next step()
 
 ### `RunConfig`
 `{ seed, mode: 'endless'|'daily'|'challenge', profile: 0|1|2|3, tutorial, reducedMotion,
-startDay?, startT?, startChill?, dailyDate?, drain? }`. `tutorial` should be `true` exactly for
-profile 0 (first run). Daily/challenge runs use profile 3. `startDay`/`startT` (seconds after that
-dawn) and `startChill` are debug hooks; a start on Day 8 generates the world from Day 1 (≈100 ms).
+startDay?, startT?, startChill?, dailyDate?, drain?, noonCloud?, lesson?, forecast?, plan? }`.
+`startDay`/`startT` (seconds after that dawn) and `startChill` are debug hooks. v1.1 (CC-1, A1):
+- `noonCloud?: 0 | 1 | 2` — the Day-1 parked training cloud (1 = 11:00 AM-1:00 PM, 2 = 11:30 AM-
+  12:30 PM, 0 = none); unset = 1 for profiles 0-2, 0 for 3 (`effectiveNoonCloud`). World identity.
+- `lesson?` — the first-run lesson floor (Chill ≥ 12) until `lessonDone` (CC-5, A5); no world effect.
+- `forecast?` — debug: that forecast on every day it fits (A8), Day Plan on.
+- `plan?` — the Day Plan on or off; `World.planOn = forecast !== undefined || (plan ?? (profile
+  === 3 && !tutorial))`. Dailies set `plan: date >= PLAN_START_DATE` ('2026-10-14'); challenge
+  codes carry it (`pl`).
+- `drain?` overrides the profile drain (30 / 40 / 47 / 55 for profiles 0-3) through
+  `effectiveDrain(s)`; the world and its validator always use the profile drain.
 
-**Drain (K2).** Profile drains (Chill/s at f = 1) are **30 / 40 / 47 / 55** for profiles 0-3.
-`drain?` is the endless onboarding override: the session sets `cfg.drain =
-endlessDrain(save.stats.runs)` for `mode: 'endless'` runs with no `?profile=`/`?bot=` override;
-daily, challenge and bot runs leave it unset (= the profile drain). `endlessDrain(runs)` =
-`min(PROFILES[min(3, n)].drain, ONBOARD_DRAIN.start + ONBOARD_DRAIN.perRun·n, ONBOARD_DRAIN.max)`
-with `ONBOARD_DRAIN = { start: 30, perRun: 3, max: 55 }` and n = max(0, floor(runs)): runs 0..9
-give 30, 33, 36, 39, 42, 45, 48, 51, 54, 55, and 55 from then on. The sim reads the drain only
-through `effectiveDrain(s)` (`s.cfg.drain ?? s.params.drain`); the world and its validator always
-use the profile drain, so the same seed builds the same world with or without the override.
-Replays copy the config, so they carry it. All three are exported from `index.ts`.
+**Comfort ladder (CC-2 with A2).** Endless runs take their rules from `rungConfig(rung, {
+tutorialDone })` → `{ profile, drain, noonCloud, tutorial: rung === 0, lesson }` over
+`COMFORT_RUNGS` (`COMFORT_MAX = 4`):
+
+| Rung | Profile | Drain | Noon cloud | |
+|---|---|---|---|---|
+| 0 | 0 | 30 | 1 | tutorial, lifetime run 0 only |
+| 1 | 2 | 40 | 1 | |
+| 2 | 3 | 44 | 1 | |
+| 3 | 3 | 50 | 2 | |
+| 4 | 3 | 55 | 0 | standard: the Daily's rules |
+
+`comfortAfterRun(rung, minutes)` (`COMFORT_STEPS = { standard: 1440, up: 390, down: 240,
+tutorialUp: 720 }`): Day 3 → 4; from rung 0 the first night → 2, else 1; from rung ≥ 1 past 12:30 PM
+one up, before 10:00 AM one down; clamped to [1, 4]. Meta stores the rung (`stats.comfort`).
 
 ### Building a run in slices
 `createRun(cfg)` generates the world through Nubs + 1600 u at once (≈ 20-60 ms in Node for Day 1).
@@ -307,17 +320,20 @@ that fully shades the DP's best reachable angles for 3 consecutive steps wins.
   N(0, 10°) noise and a ±N(0, 0.2) over/undershoot, drags with a minimum-jerk profile lasting
   120 ms + 0.9 ms/°, lifts at ω = 0 and pauses 120 ms (`TUNING.bots.human`). Deterministic per seed.
 - `runBot(cfg, ticks, kind)` → final state; `runHeadless(seed, ticks, kind, profile = 3)` → hash
-  (the `__SHADY_TEST__.runHeadless` hook); `headlessConfig(seed, profile, drain?)`.
+  (the `__SHADY_TEST__.runHeadless` hook); `headlessConfig(seed, profile, drain?, noonCloud?)`
+  (lesson on for profile 0).
 - `hashState(s)` — 16-hex digest of tick-determined state only (clock, Nubs, sun, Snow/pickup
   counters, casters and pickups < 1000 u ahead); generation progress is deliberately excluded.
 - `createReplay(cfg)`, `recordFrame(replay, frame)`, `playReplay(replay, onStep?)` — in-memory.
-- `node scripts/sim.ts [--seeds N] [--days D] [--bot idle|novice|reactive|oracle|human|all]
-  [--profile P] [--check] [--workers W]` — balance report and V1_PLAN §13 acceptance check (exit 1
-  on failure). Each row prints death-time quantiles, `melted%` (flakes melted ÷ (melted +
-  collected)), first-night share and median run length in real seconds (ticks/60). Three
-  **ADVISORY** rows run the human model at p0 (profile drain), p1 @ `endlessDrain(1)` = 33 and
-  p3 @ `endlessDrain(4)` = 42 and print PASS/MISS against onboarding goals (≥ 50% first night;
-  median run ≥ 30 s; ≥ 25 s). They never fail `--check`.
+- `node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check]
+  [--margin PTS] [--workers W]` — balance report and the V1_PLAN §13 check on the plan mix (exit 1
+  on failure); `--check` also runs every forecast forced at the same seed count (A16). Rows print
+  death-time quantiles, `melted%`, first-night share, median run seconds, Snow, SWINGs per minute and
+  lit share. **ADVISORY** rows run the perception-limited human model (A6) at rungs R0-R4 against
+  the V1_1_PLAN §6 targets and never fail `--check`.
+- `node scripts/sim.ts --career N [--runs R] [--bot B] [--meta]` — comfort-ladder careers; `--meta`
+  folds every run through the meta API (A14: `defaults`, `beginRun`, `applyRunResult`,
+  `swapMission`, `buyCosmetic`, `dailyTryStarted`, `COSMETICS`, `ACHIEVEMENTS`, `isDailyUnlocked`).
 - `node scripts/golden.ts` — rewrites `tests/golden/hashes.json` (do it only deliberately).
 
 ## 11. Tuning
@@ -341,14 +357,14 @@ Polish wave (all in the golden hashes regenerated with it):
 - **Flakes** melt after `TUNING.pickups.meltBudget` = 1.2 lit seconds (GDD §5.4; never above 1.3).
 - **Death line**: a cloud is blamed only within ±`cloudTurnRate`·`cloudTurnSec` = ±60° of θ one
   second before death (GDD §10 row 3).
-- `PROFILES[p].firstCloudOvertakes` / `parkedNoonCloud` are honoured as flags (p0-p2 set them: runs 1-2 keep the noon cloud as a training wheel).
-  `day1Floor` (70 for p0) is currently non-binding: the table's 50 gives byte-identical output.
+- The Day-1 noon cloud and the overtaking first cloud follow `World.noonCloud` (v1.1 CO1), which
+  replaced the profile flags.
 
 `sim --check` after the wave (40 / 50 / 100 seeds): idle p3 dies before 8 AM on 97.5 / 98 / 98%;
 novice p3 median Day 1 10:57 / 11:07 / 11:02 AM; novice p0 first night 100%; reactive p3 median
 Day 3 11:12 AM; oracle 100% to Day 8; rescues/chunk p3 0.514 / 0.524 / 0.545, unresolved 0. melted%:
-novice p3 25.2-26.5%, reactive p3 27.7-28.6%. Advisory human rows (40 seeds): p0 first night 68%
-(PASS); p1@33 median 24.0 s (MISS, goal 30); p3@42 median 16.7 s (MISS, goal 25).
+novice p3 25.2-26.5%, reactive p3 27.7-28.6%. (v1.0 numbers; v1.1 runs the rows on the plan mix
+and every forecast, and its advisory rows by comfort rung.)
 
 ## 12. Decisions beyond the docs
 
@@ -360,3 +376,18 @@ novice p3 25.2-26.5%, reactive p3 27.7-28.6%. Advisory human rows (40 seeds): p0
   (95%), then the shade moves to the left; flakes sit in the post-swing shade at y 300/324/348.
   With 300-500 u dawn shadows the right-hand casters behind Nubs still offer a ≥ 30° clockwise
   alternative for about a second; the big (≥ 90°) swing to the west arc is the one that lasts.
+
+## 13. v1.1 additions (V1_1_PLAN CC-1..CC-7, CC-18)
+
+- **Day Plan (CC-3).** `FORECASTS`/`FORECAST_IDS` (clear, breezy, overcast, heat, long, dazzle
+  (Meadow only), market (Old Town only)); `planDay(seed, day)` (pure; Day 1 biome by coin flip, then
+  alternating; weighted forecasts, never the same non-clear forecast twice in a row);
+  `worldPlan(w, day)`, `paramsAt(w, day)`, `firstTownDay(w)`, `biomeAtY(w, y)`. Nothing derives the
+  biome from day parity. Forecasts never change day length, night length, v or drain.
+- **SWING (CC-4, A3).** `{ e: 'swing', deg, chain, snow, x, y }` after the new source has kept Nubs
+  fully shaded for 15 ticks; `RunStats.swings`, `swingChainBest`, `phewMinChill`.
+- **Lesson (CC-5, A5).** `{ e: 'lessonDone' }`, `SimState.lessonOn`.
+- **Keys (CC-6).** `InputFrame.key` −2..2 (|2| = fine), ramping 150 → 330 °/s over 15 ticks.
+- **Results (CC-7, A13).** `RunResult.drain`, `noonCloud`, `plan` (one entry per day reached);
+  `deathTip(…)`/`deathRecap(…)` in `sim/recap.ts`; `createParJob(dateSeed)` → `{ step(maxTicks),
+  minutes }` for Snowbot's Daily par.
