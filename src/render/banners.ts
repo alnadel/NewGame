@@ -1,7 +1,7 @@
-// Screen-space moments (GDD §11): the NIGHT card, the Day card (a serif 'DAY N' over a small-caps
-// line 'MEADOW · Heat Wave · NOON 72°' with the biome's glyph, on biome paper with five slow rays
-// behind it; slides in from the right in 500 ms, holds, leaves to the left; fades only under
-// reduced motion), the stamps (a plate that slams in at 2.4× over 220 ms with an overshoot, tilted
+// Screen-space moments (GDD §11): the Night card ('Night · Day N survived' by a crescent), the Day
+// card (a serif 'DAY N' over a small-caps line 'MEADOW · Heat Wave · NOON 72°' with the biome's
+// glyph, on biome paper with five slow rays behind it; slides in from the right in 500 ms, holds,
+// leaves to the left; fades only under reduced motion), the stamps (a plate that slams in at 2.4× over 220 ms with an overshoot, tilted
 // −4°, holds, then fades and rises 12 px over 300 ms; under reduced motion it only fades: 'HIGH
 // NOON', 'PASSED SAM!' in teal, 'PAST YOUR RECENT BEST' in gold), and the timers of the edge
 // vignettes the atmosphere layer draws (atmosphere.ts): low-Chill heat haze, the cool multiplier
@@ -22,13 +22,15 @@ const DAY_S = 2;
 
 export interface Banners {
   night: number;
+  /** 'Night · Day 2 survived'. */
+  nightText: string;
   day: number;
   dayN: number;
   dayText: string;
   /** The Day card's second line and its biome (glyph and paper). */
   dayLine: string;
   dayBiome: BiomeId;
-  /** Measured widths of the Day card's title and line and of 'Night' (0 = not yet). */
+  /** Measured widths of the Day card's title and line and of the night line (0 = not yet). */
   dayTitleW: number;
   dayLineW: number;
   nightW: number;
@@ -67,6 +69,7 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [string, string, string]>>
 export function createBanners(): Banners {
   return {
     night: -1,
+    nightText: 'Night',
     day: -1,
     dayN: 1,
     dayText: 'DAY 1',
@@ -111,6 +114,13 @@ export function resetBanners(b: Banners): void {
   b.stamp = -1;
 }
 
+/** The night card after surviving day `day`. */
+export function showNightCard(b: Banners, day: number): void {
+  b.night = 0;
+  b.nightText = `Night · Day ${day} survived`;
+  b.nightW = 0;
+}
+
 /** The Day card for `day`: its biome, forecast (left out when clear) and noon elevation. */
 export function showDayCard(b: Banners, day: number, biome: BiomeId, forecast: ForecastId, epsNoon: number): void {
   b.day = 0;
@@ -144,7 +154,7 @@ function fonts(b: Banners, scale: number): void {
   b.fontK = scale;
   b.dayFont = `italic 700 ${Math.round(34 * 1.25 * scale)}px ${SERIF}`;
   b.lineFont = `small-caps 700 ${Math.round(12 * scale)}px ${SANS}`;
-  b.nightFont = `italic 700 ${Math.round(34 * 0.85 * scale)}px ${SERIF}`;
+  b.nightFont = `italic 700 ${Math.round(26 * scale)}px ${SERIF}`;
   b.stampW = 0;
   b.dayTitleW = 0;
   b.nightW = 0;
@@ -242,8 +252,9 @@ function nightCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: numbe
   const s = scale * 0.85;
   g.globalAlpha = a;
   g.font = b.nightFont;
-  if (b.nightW === 0) b.nightW = g.measureText('Night').width;
-  const w = b.nightW + 44 * s;
+  if (b.nightW === 0) b.nightW = g.measureText(b.nightText).width;
+  const moon = 13 * s;
+  const w = b.nightW + moon * 2 + 52 * s;
   const h = 54 * s;
   g.fillStyle = 'rgba(43,33,64,0.16)';
   roundRect(g, cx - w / 2, y - h / 2 + 4, w, h, 14 * s);
@@ -251,10 +262,16 @@ function nightCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: numbe
   g.fillStyle = 'rgba(29,34,71,0.72)';
   roundRect(g, cx - w / 2, y - h / 2, w, h, 14 * s);
   g.fill();
+  // A crescent, then the words.
+  const mx = cx - w / 2 + 22 * s + moon;
   g.fillStyle = '#E8ECFF';
-  g.textAlign = 'center';
+  g.beginPath();
+  g.arc(mx, y, moon, 0, TAU);
+  g.arc(mx + moon * 0.55, y - moon * 0.35, moon * 0.85, 0, TAU, true);
+  g.fill('evenodd');
+  g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.fillText('Night', cx, y + 2 * s);
+  g.fillText(b.nightText, mx + moon + 10 * s, y + 2 * s);
 }
 
 /** The Day card at (cx, y); `t` turns the rays (0 holds them still). */

@@ -22,10 +22,11 @@ import type { Equipped } from '../meta/content.ts';
 import type { Insets } from '../platform/safeArea.ts';
 import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, type AtmosphereIn } from './atmosphere.ts';
 import { drawBanners, createBanners, updateBanners, type Banners } from './banners.ts';
-import { createLight, drawCaster, drawContactAO, type Light } from './casters.ts';
+import { createLight, drawCaster, drawContactAO, drawWindowGlow, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
 import { drawFriendPennant, drawFriendPuddle, friendSpot } from './friend.ts';
-import { cssa } from './color.ts';
+import { cssa, hex } from './color.ts';
+import { radialSprite, type Canvas2D } from './sprites.ts';
 import {
   createFootprints,
   biomeSeamIn,
@@ -94,6 +95,9 @@ import { forecastOf, shadesLook, worldPlan } from './shims.ts';
 import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
+/** The moon's shadow length factor (a low moon). */
+const MOON_COT = 1.2;
+let moonRim: Canvas2D | null = null;
 
 export type RenderScreen = 'boot' | 'title' | 'play' | 'pause' | 'dying' | 'results' | 'menu';
 
@@ -165,6 +169,8 @@ export interface RenderScene {
   decorIn: DecorFrame;
   /** The death beat: grey-out, cool wash and the popped hat (deathbeat.ts). */
   death: DeathBeat;
+  /** The moonlight shadow colour (#0A0D2A) as a palette for drawShadowLayer. */
+  moonPal: Palette;
   light: Light;
   shadow: ShadowLayer;
   particles: Particles;
@@ -217,6 +223,12 @@ export interface RenderScene {
   passes: number;
 }
 
+function moonPalette(): Palette {
+  const p = createPalette();
+  p.shadow = hex('#0A0D2A');
+  return p;
+}
+
 export function createScene(): RenderScene {
   const pal = createPalette();
   return {
@@ -228,6 +240,7 @@ export function createScene(): RenderScene {
     decor: createDecor(),
     decorIn: { time: 0, dt: 0, night: 0, effects: true },
     death: createDeathBeat(),
+    moonPal: moonPalette(),
     light: createLight(pal),
     shadow: createShadowLayer(),
     particles: createParticles(),
@@ -504,11 +517,19 @@ export class Renderer {
       if (drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows, multiply)) {
         sc.passes++;
       }
+    } else if (night > 0.05) {
+      // Moonlight (GR16): soft indigo shadows thrown the other way (θ + 180°), long and low. Chill
+      // ignores them; the dial stays hidden at night.
+      if (drawShadowLayer(g, sc.shadow, v, s.world, sc.moonPal, sc.groundPal.ground, -ux, -uy, MOON_COT, snap.tAbs, 0.32 * night, inp.softShadows, false)) {
+        sc.passes++;
+      }
     }
     // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
     // source-over fill stays exact), the depth sort below.
     const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
     if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
+    const glows = night > 0.05 && inp.govLevel < 2;
+    if (glows) drawWindowGlow(g, v, casterBuf, n, night);
 
     // Nubs' pose (needed for the footprint disc and the depth sort).
     const pose = sc.pose;
@@ -546,6 +567,16 @@ export class Renderer {
 
     drawOwnShadow(g, pose, sc.pal.shadow, sc.pal.shadowAlpha);
     drawFootprintDisc(g, pose, sc.pal.trail);
+    if (glows) {
+      // Moonlight rim under Nubs.
+      const rr = 26 * v.S;
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = night;
+      moonRim ??= radialSprite('191,211,255', 64, 0.18, 0.5, 0.08);
+      g.drawImage(moonRim, pose.x - rr, pose.y - rr, 2 * rr, 2 * rr);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+    }
     if (sunUp) drawGlare(g, v, s.world, ux, uy, snap.cot, snap.eps, time);
     drawGroundParticles(g, sc.particles, v);
     drawRings(g, sc.rings, v);

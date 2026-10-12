@@ -1057,3 +1057,39 @@ export function drawContactAO(g: CanvasRenderingContext2D, v: View, cs: readonly
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
 }
+
+/**
+ * Night window light (GR16): a warm pool on the ground just south of each lit window face of the
+ * visible cottages and houses ('lighter', at most 12 a frame).
+ */
+let windowGlowSprite: Canvas2D | null = null;
+
+export function drawWindowGlow(g: CanvasRenderingContext2D, v: View, cs: readonly Caster[], n: number, night: number): void {
+  windowGlowSprite ??= radialSprite('255,200,107', 64, 0.35, 0.5, 0.14);
+  const spr = windowGlowSprite;
+  const r = 10 * v.S;
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = night;
+  let drawn = 0;
+  for (let i = 0; i < n && drawn < 12; i++) {
+    const c = cs[i] as Caster;
+    if ((c.kind !== 'cottage' && c.kind !== 'house') || c.maxX < v.x0 - 20 || c.minX > v.x1 + 20) continue;
+    const p = c.parts[0] as PrismPart;
+    for (let k = 0; k < p.n && drawn < 12; k++) {
+      const len = windowFace(p.pts, p.n, k);
+      if (len <= 0) continue;
+      const j = k + 1 === p.n ? 0 : k + 1;
+      const ax = p.pts[2 * k] as number;
+      const ay = p.pts[2 * k + 1] as number;
+      const ex = (p.pts[2 * j] as number) - ax;
+      const ey = (p.pts[2 * j + 1] as number) - ay;
+      // The face's middle, 5 u out along its outward normal (ey, −ex).
+      const x = ax + ex / 2 + (5 * ey) / len;
+      const y = ay + ey / 2 - (5 * ex) / len;
+      g.drawImage(spr, v.ox + x * v.S - r, v.oy - y * v.S - r, 2 * r, 2 * r);
+      drawn++;
+    }
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+}

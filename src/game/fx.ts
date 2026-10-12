@@ -31,13 +31,14 @@ import {
 import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
 import { hop } from '../render/nubs.ts';
 import { forecastOf, worldPlan, type SimEventV11 } from '../render/shims.ts';
-import { showDayCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
+import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
 import { bossWeight } from '../render/sun.ts';
 import { addShake, addZoomPulse, holdZoom, OBLIQUE } from './camera.ts';
 import type { FixedClock } from './loop.ts';
 
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
+const FIREFLIES = 14;
 const FROST: number = 0xe6f6ff;
 const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
 const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
@@ -53,7 +54,6 @@ export class Fx {
   private steamAcc = 0;
   private sweatAcc = 0;
   private frostAcc = 0;
-  private fireflyAcc = 0;
   private breathAcc = 0;
   private wispAcc = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
@@ -167,7 +167,7 @@ export class Fx {
           sc.banners.coolPulse = 0.25;
           break;
         case 'nightStart':
-          sc.banners.night = 0;
+          showNightCard(sc.banners, ev.day);
           break;
         case 'dawn': {
           const plan = worldPlan(s.world, ev.day);
@@ -312,10 +312,14 @@ export class Fx {
       this.wispAcc = 0;
     }
     if (s.phase === 'night') {
-      this.fireflyAcc += dt * 3;
-      while (this.fireflyAcc >= 1) {
-        this.fireflyAcc -= 1;
-        spawn(p, P_FIREFLY, nb.x + rnd(-170, 170), nb.y + rnd(-120, 420), rnd(8, 30), rnd(-8, 8), rnd(-8, 8), rnd(-3, 3), rnd(2.5, 4.5), 4.5, 4.5, 0xffec96);
+      // A steady pool of 14 fireflies within 140 u of Nubs, each wandering for 5-8 s.
+      let alive = 0;
+      for (let i = 0; i < p.limit; i++) if (p.kind[i] === P_FIREFLY && p.life[i]! > 0) alive++;
+      for (; alive < FIREFLIES; alive++) {
+        const a = rnd(0, Math.PI * 2);
+        const r = 140 * Math.sqrt(Math.random());
+        const h = rnd(0, Math.PI * 2);
+        spawn(p, P_FIREFLY, nb.x + Math.cos(a) * r, nb.y + Math.sin(a) * r, rnd(8, 30), Math.cos(h) * 12, Math.sin(h) * 12, 0, rnd(5, 8), 2.5, 2.5, 0xfff2a0);
       }
     }
   }

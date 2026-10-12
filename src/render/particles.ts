@@ -165,12 +165,16 @@ export function updateParticles(p: Particles, dt: number, nx: number, ny: number
         p.vz[i] = p.vz[i]! * drag;
         break;
       }
-      case P_FIREFLY:
-        p.vx[i] = p.vx[i]! + (Math.random() - 0.5) * 40 * dt;
-        p.vy[i] = p.vy[i]! + (Math.random() - 0.5) * 40 * dt;
-        p.vz[i] = p.vz[i]! + (Math.random() - 0.5) * 20 * dt;
-        if (p.z[i]! < 4) p.vz[i] = Math.abs(p.vz[i]!);
+      case P_FIREFLY: {
+        // Wander at 12 u/s, turning up to ±2 rad/s.
+        const turn = (Math.random() - 0.5) * 4 * dt;
+        const c = Math.cos(turn);
+        const sn = Math.sin(turn);
+        const vx = p.vx[i]!;
+        p.vx[i] = vx * c - p.vy[i]! * sn;
+        p.vy[i] = vx * sn + p.vy[i]! * c;
         break;
+      }
       case P_CONFETTI:
       case P_PETAL:
         p.vy[i] = p.vy[i]! + (k === P_CONFETTI ? 260 : 60) * dt;
@@ -232,6 +236,7 @@ function steamPuff(): Canvas2D {
   return c;
 }
 let fireflySprite: Canvas2D | null = null;
+let fireflyGlow: Canvas2D | null = null;
 let wispSprite: Canvas2D | null = null;
 
 /** A heat wisp: one soft wavy white stroke, 24 × 64 px (drawn at 2×), fading at both ends. */
@@ -273,7 +278,8 @@ export function drawAirParticles(g: CanvasRenderingContext2D, p: Particles, v: V
 function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: boolean): void {
   const S = v.S;
   steamSprite ??= steamPuff();
-  fireflySprite ??= radialSprite('255,236,150', 64, 1, 0.18, 0.4);
+  fireflySprite ??= radialSprite('255,242,160', 32, 1, 0.6, 0.9);
+  fireflyGlow ??= radialSprite('200,255,138', 64, 0.45, 0.25, 0.14);
   wispSprite ??= wavyStroke();
   const fl = flake();
   const sp = sparkle();
@@ -334,8 +340,11 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
         break;
       }
       case P_FIREFLY: {
-        const blink = 0.5 + 0.5 * Math.sin(life * 4.5 + i * 1.7);
-        g.globalAlpha = Math.min(1, life * 0.8, (p.maxLife[i]! - life) * 0.8) * blink * 0.9;
+        // A 2.5 u core in a 14 u green glow, blinking: 0.25 + 0.75·max(0, sin(2.3 t + seed))³.
+        const b = Math.max(0, Math.sin(2.3 * (p.maxLife[i]! - life) + i * 1.7));
+        g.globalAlpha = Math.min(1, life * 0.8, (p.maxLife[i]! - life) * 0.8) * (0.25 + 0.75 * b * b * b);
+        const gr = 14 * S;
+        g.drawImage(fireflyGlow!, sx - gr, sy - gr, gr * 2, gr * 2);
         g.drawImage(fireflySprite!, sx - size, sy - size, size * 2, size * 2);
         break;
       }
