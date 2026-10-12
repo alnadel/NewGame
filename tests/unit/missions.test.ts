@@ -71,10 +71,10 @@ describe('skill gates and the deferred queue', () => {
     s.active = [{ id: 'flakes-10', progress: 0, done: false, stale: 0 }];
     s.deferred = ['reach-day-3'];
     refillMissions(s, 0);
-    // reach-day-3 is passed again but already queued; hold-x5, reach-9am@2 and survive-noon@2 join
-    // the queue; flakes-10@2 is skipped while flakes-10 is active.
-    expect(s.active.map((m) => m.id)).toEqual(['flakes-10', 'swings-3', 'mult-3@2']);
-    expect(s.deferred).toEqual(['reach-day-3', 'hold-x5', 'reach-9am@2', 'survive-noon@2']);
+    // reach-day-3 is passed again but already queued; hold-x5, swings-3, reach-9am@2 and
+    // survive-noon@2 join the queue; flakes-10@2 is skipped while flakes-10 is active.
+    expect(s.active.map((m) => m.id)).toEqual(['flakes-10', 'mult-3@2', 'cloud-ride@2']);
+    expect(s.deferred).toEqual(['reach-day-3', 'hold-x5', 'swings-3', 'reach-9am@2', 'survive-noon@2']);
   });
 
   it('never leaves a final slot gated above the recent best over a long career', () => {

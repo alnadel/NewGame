@@ -74,6 +74,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
         h('span', { class: 'mcard-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
         h('span', { class: 'reward reward--chip' }, ...reward(m.reward)),
       ),
+      m.hint && !m.done ? h('p', { class: 'mcard-hint' }, m.hint) : null,
       h(
         'div',
         { class: 'mcard-bottom' },

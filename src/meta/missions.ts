@@ -169,6 +169,20 @@ export interface MissionView {
   justCompleted: boolean;
   /** Unfinished and stale for STALE_SWAP runs: offer Swap. */
   swappable: boolean;
+  /** How to do it, for goals the game never explains elsewhere (null for the self-evident ones). */
+  hint: string | null;
+}
+
+/** One line of how-to for missions whose goal is a mechanic, not a time or a count of pickups. */
+export function missionHint(def: MissionDef): string | null {
+  switch (def.id) {
+    case 'swings-3':
+      return 'A SWING: turn the sun so Nubs steps from one shadow straight into another.';
+    case 'cloud-ride':
+      return "Keep the sun behind a cloud so its shadow rides along with Nubs.";
+    default:
+      return null;
+  }
 }
 
 export function missionView(slot: MissionSlot, justCompleted = false): MissionView | null {
@@ -188,6 +202,7 @@ export function missionView(slot: MissionSlot, justCompleted = false): MissionVi
     done: slot.done,
     justCompleted,
     swappable: !slot.done && slot.stale >= STALE_SWAP,
+    hint: missionHint(def),
   };
 }
 

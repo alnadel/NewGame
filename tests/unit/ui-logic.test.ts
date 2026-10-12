@@ -338,6 +338,9 @@ describe('Title, Daily and cue copy (UM9)', () => {
     expect(cueText('melting', 1, false)).toBe('Melting! Drag → to the thick teal');
     expect([cueDuration('keep-shade', undefined), cueDuration('shade-found', undefined), cueDuration('melting', undefined)]).toEqual([2000, 1400, 1600]);
     expect([cueDuration('drag', -1), cueDuration('melting', -1)]).toEqual([null, null]);
+    // The first SWING of a lifetime says what just happened.
+    expect(cueText('swing', undefined, false)).toBe('SWING! Straight into the next shade: +Snow');
+    expect(cueDuration('swing', undefined)).toBe(2400);
   });
 });
 

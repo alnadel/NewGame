@@ -316,7 +316,8 @@ export const MISSIONS: readonly MissionDef[] = [
   { id: 'clean-balls', metric: 'cleanBalls', scale: 'count', base: 2, reward: 30, gate: 720 },
   { id: 'reach-day-3', metric: 'minutes', scale: 'reach', base: 1440, reward: 50, gate: 1080 },
   { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 4, reward: 30, gate: 390 },
-  { id: 'swings-3', metric: 'swings', scale: 'count', base: 3, reward: 15, gate: 0 },
+  // Dealt once the recent best reaches 12:30 PM: a SWING needs a player who already chains shade.
+  { id: 'swings-3', metric: 'swings', scale: 'count', base: 3, reward: 15, gate: 390 },
 ];
 
 export const ACTIVE_MISSIONS = 3;

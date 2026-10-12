@@ -78,7 +78,8 @@ describe('missions and achievements', () => {
       'two-phews', 'gate-arch', 'clean-balls', 'reach-day-3', 'hold-x5', 'swings-3',
     ]);
     expect(MISSIONS.map((m) => m.reward)).toEqual([10, 10, 20, 15, 20, 30, 20, 25, 30, 30, 50, 30, 15]);
-    expect(MISSIONS.map((m) => m.gate)).toEqual([0, 0, 0, 0, 0, 390, 0, 0, 720, 720, 1080, 390, 0]);
+    // swings-3 waits for a recent best of 12:30 PM (fix round 1: nothing taught SWINGs before then).
+    expect(MISSIONS.map((m) => m.gate)).toEqual([0, 0, 0, 0, 0, 390, 0, 0, 720, 720, 1080, 390, 390]);
     expect(MISSIONS.map((m) => missionLabel(m, 1))).toEqual([
       'Reach 9:00 AM',
       'Collect 10 flakes in one run',

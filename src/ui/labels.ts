@@ -204,6 +204,9 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
     case 'melting':
       // In the lesson the warning keeps the drag instruction (it never hides it).
       return dir === undefined ? 'Melting! Find thick teal' : `Melting! ${verb} ${arrow} to the thick teal`;
+    case 'swing':
+      // The first SWING ever: what just happened, so it can happen on purpose.
+      return 'SWING! Straight into the next shade: +Snow';
   }
 }
 
@@ -216,6 +219,8 @@ export function cueDuration(id: CueId, dir: -1 | 1 | undefined): number | null {
       return 1400;
     case 'melting':
       return dir === undefined ? 1600 : null;
+    case 'swing':
+      return 2400;
     case 'drag':
       return null;
   }

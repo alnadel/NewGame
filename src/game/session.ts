@@ -1410,6 +1410,10 @@ export class Session {
         }
         this.cue('shade-found');
         break;
+      case 'swing':
+        // The first SWING of a lifetime explains itself once (nothing else in the game names it).
+        if (this.d.store.get().stats.swings === 0 && this.s.stats.swings === 1) this.cue('swing');
+        break;
       case 'lowChill':
         // The first scare of a new player; inside the lesson it keeps the drag instruction (A16).
         if (this.lifetimeRuns <= 2) this.cue('melting', this.hints.lesson ? this.dragDir() : undefined);
@@ -1829,7 +1833,7 @@ export class Session {
       this.ui.showCue(null);
       return;
     }
-    const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : 8;
+    const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : id === 'melting' ? 8 : 16;
     if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
     this.cues |= bit;
     this.ui.showCue(id, dir);
