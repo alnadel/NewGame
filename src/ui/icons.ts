@@ -47,6 +47,11 @@ const ICONS = {
   bolt: `<path d="M13 3.2 5.6 13.4H12l-1 7.4 7.4-10.2H12Z"/>`,
   phew: `<path d="M3.5 9h10.6a3 3 0 1 0-3-3M3.5 13h14.6a3 3 0 1 1-3 3M3.5 17h6"/>`,
   keyboard: `<rect x="2.6" y="6" width="18.8" height="12" rx="2.6"/><path d="M6.4 10h.1M9.2 10h.1M12 10h.1M14.8 10h.1M17.6 10h.1M6.4 13.8h.1M17.6 13.8h.1M9.4 13.8h5.2"/>`,
+  chevron: `<path d="M9.4 5.4 16 12l-6.6 6.6"/>`,
+  swap: `<path d="M4.6 10a7.6 7.6 0 0 1 13.5-3.6"/><path d="M18.6 3.2v3.9h-3.9"/><path d="M19.4 14a7.6 7.6 0 0 1-13.5 3.6"/><path d="M5.4 20.8v-3.9h3.9"/>`,
+  swing: `<path d="M4.4 15.6a8 8 0 0 1 14.8-4.2"/><path d="m20.2 7.6-.9 4.2-4.1-1.2"/><circle cx="12" cy="17.6" r="2.2" ${FILL}/>`,
+  clock: `<circle cx="12" cy="12" r="8.6"/><path d="M12 7.4V12l3.2 2.1"/>`,
+  journal: `<path d="M4 20.2h16"/><path d="M7 16.6v-3.8M11 16.6V7.4M15 16.6v-6M19 16.6V4.6" stroke-width="2.8"/>`,
 } as const;
 
 export type IconName = keyof typeof ICONS;

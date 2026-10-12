@@ -1,8 +1,10 @@
-// Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code). Opened from the Title or from Pause;
+// Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code, V1_1_PLAN UM2/UM9: the name on challenge
+// links and adaptive comfort). Opened from the Title or from Pause;
 // Back returns to wherever it was opened from. Mid-run (from Pause) the backup, restore and reset
 // controls are hidden: replacing the save under a running run would desync it.
 
 import { backupErrorMessage, backupSummary, importBackup } from '../../meta/backup.ts';
+import { sanitizeName } from '../../meta/challenge.ts';
 import type { Settings } from '../../meta/saveTypes.ts';
 import { isStandalone } from '../../platform/lifecycle.ts';
 import { canPromptInstall, onInstallPromptChange, promptInstall } from '../../platform/pwa.ts';
@@ -61,6 +63,30 @@ export function createSettingsScreen(ctx: UiContext): Screen {
         ...(i > 0 ? [h('span', { class: 'sr-only' }, ' · ')] : []),
         h('span', { class: 'set-key' }, part),
       ]))));
+
+  // Play: the name friends see on challenge links (sanitized; '' = "A friend"), adaptive comfort.
+  const nameInput = h('input', {
+    class: 'text-field',
+    type: 'text',
+    maxlength: 12,
+    placeholder: 'A friend',
+    autocomplete: 'nickname',
+    autocapitalize: 'words',
+    spellcheck: 'false',
+    enterkeyhint: 'done',
+    'aria-label': 'Name on challenges',
+  });
+  nameInput.addEventListener('change', () => {
+    const raw = nameInput.value;
+    const name = sanitizeName(raw);
+    nameInput.value = name;
+    if (raw.trim() !== '' && name === '') ctx.toast('Names use letters, numbers, spaces and . _ \' -', { icon: 'info', tone: 'ink' });
+    if (name !== current.name) change('name', name);
+  });
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') nameInput.blur();
+  });
+  const comfort = toggleSwitch(ctx, 'Adaptive comfort', (on) => change('comfort', on));
 
   // Display & assist
   const motion = segmented(ctx, 'Reduced motion', [
@@ -199,10 +225,15 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       keys,
     ),
     section(
+      'Play',
+      stackRow('flag', 'Name on challenges', 'Friends see it on the links you share.', nameInput),
+      row('sun', 'Adaptive comfort', 'Eases the heat after a rough run. Daily and challenges always use standard rules.', comfort.el),
+    ),
+    section(
       'Display & assist',
       stackRow('motion', 'Reduced motion', 'No shake, zoom or sliding cards', motion.el),
       row('contrast', 'High-contrast shadows', null, contrast.el),
-      stackRow('compass', 'Shade guide', 'Teal arcs on the dial show safe angles. "Always" marks your shares.', guide.el),
+      stackRow('compass', 'Shade guide', 'Thick teal: shade that lasts. Thin: shade ending. "Always" marks your shares.', guide.el),
     ),
     appSection,
     backupSection,
@@ -230,6 +261,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     motion.set(current.reducedMotion);
     contrast.set(current.highContrast);
     guide.set(current.guide);
+    if (document.activeElement !== nameInput) nameInput.value = current.name;
+    comfort.set(current.comfort);
     syncInstall();
   }
 

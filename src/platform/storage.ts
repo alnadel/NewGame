@@ -1,4 +1,4 @@
-// Key-value persistence with a graceful in-memory fallback (TECH_SPEC §12, CRITIQUE #20).
+// Key-value persistence with a graceful in-memory fallback (archive/TECH_SPEC §12, archive/CRITIQUE #20).
 // Every call is guarded: Safari private mode, blocked site data, sandboxed iframes and full quotas
 // all degrade to memory instead of throwing, and `degraded` tells the UI to warn once.
 
@@ -104,7 +104,7 @@ export function createStorage(backing: Storage | null | undefined = defaultBacki
 }
 
 /**
- * Asks the browser to exempt our storage from eviction (CRITIQUE #20: call after the first
+ * Asks the browser to exempt our storage from eviction (archive/CRITIQUE #20: call after the first
  * completed run). Resolves false when unsupported or refused; never rejects.
  */
 export async function requestPersistence(): Promise<boolean> {

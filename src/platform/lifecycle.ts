@@ -1,4 +1,4 @@
-// Page lifecycle and device-shape probes (V1_PLAN §8.5, TECH_SPEC §13).
+// Page lifecycle and device-shape probes (V1_PLAN §8.5, archive/TECH_SPEC §13).
 // Every `on*` helper returns an unsubscribe function.
 
 export type Unsubscribe = () => void;

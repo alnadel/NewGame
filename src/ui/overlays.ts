@@ -10,7 +10,7 @@ import { button } from './widgets.ts';
 
 // ---------------------------------------------------------------------------------------------
 // Toasts: a stack at the top of the world column (below the header on menus, below the HUD row in
-// play), each visible for 2.5 s (TECH_SPEC §13). A screen switch fades the stack out in 120 ms.
+// play), each visible for 2.5 s (archive/TECH_SPEC §13). A screen switch fades the stack out in 120 ms.
 // ---------------------------------------------------------------------------------------------
 
 const TOAST_MS = 2500;

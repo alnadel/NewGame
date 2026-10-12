@@ -1,6 +1,6 @@
 # SHADY v1: Authoritative build plan
 
-**Precedence:** where docs disagree, this file wins. Order: `V1_PLAN.md`, then `CRITIQUE.md` fixes, then `TECH_SPEC.md`, then `GDD.md`.
+**Precedence:** `V1_1_PLAN.md`, then `V1_PLAN.md`, then the module READMEs; `GDD.md` is the design background. The older docs are history in `archive/`.
 
 > **One-liner:** You are the sun. Don't melt Nubs.
 
@@ -45,7 +45,7 @@ This plan is the **vertical slice**. Its quality gate: *the first 60 seconds mus
 - Mission tiers beyond the simple repeat rule (§11).
 - RLE replay encoding (keep in-memory record/replay for tests).
 - Handedness mirroring, night music box, debug tuning sliders.
-- Online leaderboards, native Capacitor projects. The path is documented in the README only.
+- Online leaderboards, native Capacitor projects. The path is `archive/TECH_SPEC.md` §18, with these decisions: seed the storage adapter from the asynchronous Preferences read **before** `new SaveStore()` (it reads once, at construction) and keep mirroring writes to localStorage; Android's back button calls `Session.handleBack()` and exits from a Title with no dialog; on Android 15 edge-to-edge, inset the web view or feed the real insets into `--safe-*` (as `simulateSafeArea()` does); no service worker in native (`canRegisterServiceWorker()`); challenge links use `VITE_SHARE_URL`; portrait only, icons from `public/icons/icon-1024.png`.
 
 ---
 
@@ -53,13 +53,14 @@ This plan is the **vertical slice**. Its quality gate: *the first 60 seconds mus
 
 ### 2.1 Layering
 `src/config` → `src/core` (pure, deterministic) → `src/meta` → `src/render`, `src/audio`, `src/ui` (side effects) → `src/game` (orchestration); `src/platform` holds the browser and native seams. `tests/unit/architecture.test.ts` enforces this table on every layer (type-only imports count too):
-- `config` imports nothing; `core` imports only `core` and `config`.
+- `config` imports only `config` (pure data tables that share types and constants); `core` imports only `core` and `config`.
 - `platform` imports only `platform`.
 - `meta` imports `meta`, `core`, `config` and `platform`.
 - `ui` imports `ui`, `meta`, `core`, `config` and `platform`.
 - `audio` imports `audio`, `core`, `config` and `platform`.
 - `render` imports `render`, `core`, `config`, `meta` and `platform`, plus `../game/camera.ts` and `../game/assist.ts`.
 - `game` and `main.ts` may import anything.
+- One type-only exception remains: `platform/haptics.ts` reads the sim's event names from `core/sim/events.ts`.
 
 ### 2.2 TypeScript
 - Use explicit `.ts` extensions in relative imports.
@@ -315,7 +316,7 @@ Days 2 and later use the standard table in every profile; only the drain persist
   - Generation must be resumable/time-sliced: ensureGenerated runs with a budget and the session calls it in idle time, 3 chunks ahead.
   - The sim's hard guarantee is generated through nubs.y + 1600.
   - Chunk content is a pure function of (seed, profile, k, prior chunks), so frame timing can never change the world.
-- **Cost target:** ≤ 4 ms per chunk on mid-range phones. Use analytic angular extents (TECH_SPEC §6) so only bins near each part are tested.
+- **Cost target:** ≤ 4 ms per chunk on mid-range phones. Use analytic angular extents (`archive/TECH_SPEC.md` §6) so only bins near each part are tested.
 
 ---
 
@@ -460,7 +461,7 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 - **Share mechanism:** Web Share API, then clipboard, then a toast.
 
 ### 11.5 Save
-- localStorage key `shady.save`, schema v1 (TECH_SPEC §12 minus charms, postcards and handedness), using `src/meta/saveTypes.ts`.
+- localStorage key `shady.save`, schema v1 (`archive/TECH_SPEC.md` §12 minus charms, postcards and handedness; v2 in V1_1_PLAN UM1), using `src/meta/saveTypes.ts`.
 - Memory fallback with a one-time toast.
 - `navigator.storage.persist()` after the first completed run.
 - **Backup code** (Settings): export copies base64url of JSON; import validates via migrate().
@@ -513,23 +514,28 @@ Tune `src/config/days.ts`/`tuning.ts` until these pass. **Never weaken a target 
 
 ## 14. Debug and test hooks
 
-**URL params:**
+**URL params** (the one table; the README points here):
 
 | Param | Effect |
 |---|---|
-| `?seed=N` | Endless seed |
-| `?mode=daily&date=YYYY-MM-DD` | Daily run for that date |
-| `?day=N&t=dawn\|noon\|dusk\|HH:MM` | Start at that day/time |
+| `?test=1` | Exposes `window.__SHADY_TEST__` (below) for e2e and tooling |
+| `?seed=N` | Endless world seed |
+| `?mode=daily&date=YYYY-MM-DD` | The Daily of that date (Daily #1 to tomorrow; practice unless it is today) |
+| `?day=N&t=dawn\|noon\|dusk\|HH:MM` | Start on Day N at that time |
 | `?chill=N` | Starting Chill |
-| `?profile=0..3` | Force a profile |
-| `?bot=idle\|novice\|reactive\|oracle\|human` | Autoplay with a bot |
-| `?fast=N` | N× ticks per frame |
-| `?perf=0` | Full quality: no frame-time governor and no low-end device caps |
-| `?guide=always\|off` | Override the guide |
-| `?debug=1` | Overlay: FPS, ms/frame, sim/gen/render ms, counts, ε, θ, f, chunk/rescues; toggles to draw test points, masks and shadow outlines |
-| `?mute=1` | Mute audio |
-| `?reset=1` | Clear the save |
-| `?test=1` | Exposes `window.__SHADY_TEST__` |
+| `?profile=0..3` | Force a difficulty profile |
+| `?rung=0..4` | Force a comfort rung for endless runs (v1.1) |
+| `?forecast=clear\|breezy\|overcast\|heat\|long\|dazzle\|market` | Force that forecast on every day it fits (v1.1; other days are clear) |
+| `?plan=0\|1` | Force the Day Plan off or on (v1.1; screenshots and baselines pin `?plan=0`) |
+| `?bot=idle\|novice\|reactive\|oracle\|human` | A bot plays |
+| `?fast=N` | N× ticks per frame (1-16) |
+| `?guide=always\|off` | Override the shade guide |
+| `?perf=0` | Full quality: no frame-time governor, no low-end caps (captures, A/B timing) |
+| `?debug=1` | Overlay: frame, sim, generation and render ms, counts, ε, θ, f, chunk and rescues; toggles for test points, masks and shadow outlines |
+| `?mute=1` | No audio |
+| `?reset=1` | Clear the save (dev builds only: a shared link must not wipe a save) |
+
+Runs started with `?day`, `?t`, `?chill`, `?profile`, `?rung`, `?forecast`, `?plan`, `?bot`, `?fast` or `?guide` are debug runs: not saved, scored, shared or counted as Daily tries.
 
 **`window.__SHADY_TEST__`:**
 ```ts
@@ -542,3 +548,21 @@ Tune `src/config/days.ts`/`tuning.ts` until these pass. **Never weaken a target 
   audioState(): string;
 }
 ```
+
+## 15. Decisions taken while building (formerly the READMEs' "deviations")
+
+Gameplay and presentation:
+- **First lesson.** v1.0 looped the first hint at 0.5× game time until a swing of ≥ 15° ended in full shade; v1.1 moves the pass rule into the sim (V1_1_PLAN CO4 with A5: `lessonDone`, the Chill floor of 12) and keeps the 0.5× time scale while `lessonOn`.
+- **Hint target and direction.** The hint aims at the widest arc safe now *and* 0.6 s ahead (gaps ≤ 6° merged), keeps its first way round while that arc exists, honours Settings → invert, and shows the target on the halo (a glow, a bracket, dots along the way and a ghost sun gliding in step with the ghost thumb, read from `ui.ghostProgress()`).
+- **Title sway** follows the ghost hand's swing (hand right → sun clockwise, or the other way with invert), and Nubs' footprint follows the swaying sun, so the Title shows drag → sun → shade → cool Nubs.
+- **Start beat** (`TUNING.start.readyTicks`): 0.8 s in which the sun answers the finger but the clock, Nubs and Chill wait, so Retry's tap never walks Nubs out of the start hut's shade.
+- **Nubs is drawn larger than the GDD body** (1.15× in v1.0; V1_1_PLAN GR9 raises it); the footprint disc still marks the true test area, with its rim at r 13.5 u so its quadrants stay visible.
+- **X-ray**: a caster drawn in front of Nubs re-stamps him at 62 % alpha; canopies near him fade to ~0.62.
+- **Heat squiggles** above a lit Nubs as well as steam (white steam is invisible on noon ground); glare spots draw **above** the shadow layer; the canvas sun mascot hides on the Title (the DOM logo carries it).
+- **Crisp shadow mode** exists beside the soft half-resolution layer (cost notes in `src/game/README.md`).
+- The in-play ghost hint sits below Nubs and his dial (`top: min(84%, 100% − inset − 72px)`); on the Title the hand sits below the dial when it fits above the chips, otherwise above Nubs (`ui/screens/title.ts` fit()).
+
+Audio levels (found with the audio lab's level check and spectrogram; GDD §12 values were inaudible, masking or clipping):
+- Pad 0.028 (GDD 0.035) at ±4 cents, 1 : 0.6 (equal ±7 cent saws cancelled into a tremolo); arpeggio 0.09 with a 0.4 s ring (GDD 0.03, 180 ms); sizzle 0.12 (GDD 0.22).
+- Cicadas 0.4 and crickets 0.05 (GDD 0.07 and 0.03 measured −51 dBFS RMS); flake bell 0.18, multiplier chime 0.12, glare 0.16, cloud 0.2, melt 0.09, catch +2 dB.
+- The heartbeat adds an octave partial and a soft knock (55 Hz alone is inaudible on phone speakers); keys fold around C4 (−5…+6).

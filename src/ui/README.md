@@ -6,12 +6,14 @@ renderer; the only DOM element during play is the pause button (plus a small mut
 
 ```
 src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab
-src/meta/      save v1, content catalog, progression, missions, daily, share text, challenge links, backup
+src/meta/      save v2, content catalog, progression, missions and errands, Sunny Week, daily, share text,
+               challenge links, backup (shims.ts: V11-SHIM fallbacks for core contracts until integration)
 src/platform/  storage, share, pwa, lifecycle, safeArea, native
 ```
 
 Dev lab: `npx vite` then open `/ui-lab.html` (every screen with fake data and a working fake integrator).
-URL parameters reach any state: `?screen=results&variant=best&inset=47&rm=1&bare=1` (see `src/ui/lab.ts`).
+URL parameters reach any state: `?screen=results&variant=warmup&inset=47&rm=1&bare=1&today=2026-10-18`
+(see `src/ui/lab.ts`).
 
 ---
 
@@ -22,7 +24,7 @@ import { createUi } from './ui/ui.ts';
 
 const ui = createUi(document.getElementById('ui')!, {
   callbacks,              // UiCallbacks, section 4
-  save: store.get(),      // SaveV1
+  save: store.get(),      // Save (v2)
   today: localDate(),     // meta/daily.ts
   version: '0.1.0 (a1b2c3d)',
 });
@@ -49,8 +51,9 @@ into a screen only in keyboard mode, and a menu returns focus to the control tha
 
 ```
 boot -> title | play
-title -> play | daily | wardrobe | missions | settings
-daily -> play | title          wardrobe | missions -> title
+title -> play | daily | wardrobe | missions | settings | journal
+daily -> play | title          wardrobe -> title          missions -> title | journal
+journal -> title | missions    (Back returns to wherever the Journal was opened from)
 settings -> title | pause      (Back returns to wherever Settings was opened from)
 play -> pause | dying | results | title
 pause -> play | title | settings
@@ -91,8 +94,11 @@ Input ownership:
 | `isModalOpen()` | True while a confirm dialog or the install/restore sheet is open (the session keeps its history sentinel armed then). |
 | `setSave(save)` | Push the latest save; visible screens re-render. Call after every store change the UI should see (wallet, unlocks, missions, settings…). Call it synchronously inside `buy`/`equip`/`importBackup`/`resetProgress`. |
 | `setToday(date)` | Local date changed while open (midnight rollover; the session checks at most once a second and when the page shows). Re-renders the Daily screen (number, tries, Play label, 14-day history), the Title's Daily dot and Results' Retry label. |
-| `setChallenge(banner \| null)` | Title banner "Beat Day 2 · 2:40 PM" + Play, from a `#c=` link (section 6). |
-| `setGhostThumb(mode)` | `'both'`: looping swipe above the word "drag" (Title). `'left'` / `'right'`: one-way swipe hint in play (V1_PLAN §6.2). `'off'`. Shown only on `title`/`play`. |
+| `setChallenge(banner \| null)` | Title banner "Sam challenges you: Beat Day 2 · 2:40 PM" + Play, from a `#c=` link (section 6). `banner.name` ('' = "A friend", shown in `<bdi>`), `banner.warmup` (note "Warm-up run first"), `banner.note`. |
+| `setRunPreview(plan \| null)` | The Title run's Day-1 `DayPlan` for the chip "Forecast: 🌬️ Breezy · Old Town"; null (plan-off runs) hides it. |
+| `showCue(id \| null, dir?)` | The cue line above Nubs (`aria-live` polite, 18 px on an ink pill): `keep-shade` "Keep Nubs in the shade" (2 s), `drag` "Drag ← to swing the sun" ("Hold ←" for keyboard players, Invert honoured; until replaced), `shade-found` "Shade! Thick teal = safe" (1.4 s), `melting` "Melting! Find thick teal" (1.6 s; with `dir`, "Melting! Drag → to the thick teal" until replaced). Null clears it. Shown only in play. |
+| `setPostcard(url \| null)` | The Results postcard thumbnail (an object URL of the ready PNG; a paper placeholder while null). |
+| `setGhostThumb(mode)` | `'both'`: the Title's looping swipe (below the dial when it fits above the chips, else above Nubs with the word "drag"). `'left'` / `'right'`: the one-way hint in play, or a "Hold ←" key chip for keyboard players. `'off'`. Shown only on `title`/`play`. |
 | `ghostProgress()` | Progress 0..1 through the ghost hand's current animation loop (read from its CSS animation clock), or −1 while it is hidden or only pulsing (reduced motion). The game moves the Title sway and the halo's ghost sun in step with it. |
 | `setAudioMuted(muted)` | Small muted icon under the pause button while the AudioContext isn't running. |
 | `toast(text, { icon?, tone?, duration? })` | Stack at the top of the world column (below the header on menus, below the HUD row in play), 2.5 s each. Every screen switch fades the old toasts out in ~120 ms; toasts raised by the entering screen (in `enter()` or later) stay. Icons/tones as in `meta/progression` `ToastSpec`. |
@@ -102,21 +108,27 @@ Input ownership:
 | `isRotateBlocking()` | True while the rotate overlay covers a landscape phone. |
 | `destroy()` | Removes listeners and DOM. |
 
-`ResultsView`: `{ result: RunResult, outcome: RunOutcome, dailyTry?: number | null, dailyDate?: string,
-dailyScored?: boolean, challengeTarget?: number, debug?: boolean }`. For every run with
-`result.mode === 'daily'` (k:'d' challenges included) the session sets `dailyDate` and `dailyScored`
-(the run was eligible to count: the date was today and tries were left when it began); `dailyTry`
-is the counted try number or null. The kicker reads `Daily #N · Try n/3`, `· Not counted` (with
-"Melted before 6:30 AM, so no try was used") or `· Practice`, and Retry reads exactly
-`Retry · practice` when the next run of that date can't count (another date, or 3 tries used);
-the label logic is in `labels.ts`.
-The sheet shows the big time, a NEW BEST ribbon (`outcome.newBest`), `result.death.line` typed at 30
-chars/s, Snow +N → wallet, flakes/melted, PHEWs, the best multiplier (or seconds held at ×5), the 3
-missions with "complete" stamps, then `outcome.toasts`. Retry is described by the time and the
-death line (`aria-describedby`). Retry arms 0.3 s after the sheet appears; a tap anywhere above the
-sheet also retries (the UI catches it, the game does nothing). The sheet is at least 58% tall and
-grows with its content up to 96 px below the top; on short or large-text screens the top part
-scrolls with the list and Retry stays pinned.
+`ResultsView`: `{ result, outcome, dailyTry?, dailyDate?, dailyScored?, challengeTarget?,
+challengeName?, debug?, tip?, warmupFor? }`. For Daily runs (k:'d' challenges included) the session
+sets `dailyDate` and `dailyScored`; the kicker reads `Daily #N · Try n/3`, `· Not counted` or
+`· Practice`, and Retry reads `Retry · practice` when the next run of that date can't count. `tip` is
+core's death recap line; `warmupFor { minutes, name }` marks the warm-up before a challenge (a card
+"Now beat Sam: Day 2 · 2:40 PM" and Retry labelled "Take the challenge").
+The sheet (v1.1): the big time with the Postcard pill (its thumbnail), the **Sun Strip** (one row of
+12 hour tiles per day, the last 4 or 2 on screens under 700 px, a "+N days" chip, the day's forecast
+emoji on Day Plan runs, a night pill after each completed day, ghost outlines after the melt; tiles
+pop in 35 ms apart), the typed death line, the tip and `outcome.pace`, the challenge verdict, the
+warm-up card, `outcome.toasts` as award chips (achievements, items, Morning Snow, Sunny Week, Welcome
+back, the errand), stat tiles with nothing to show left out (Snow always; SWINGs with the best chain),
+the missions with stamps and Swap on stale ones, and Today's errand. Share is a labeled pill (accent
+after a new best, a challenge or a counted Daily try; "Send it back" after a won challenge). Retry
+arms 0.3 s after the sheet appears; a tap above the sheet also retries. The sheet grows with its
+content up to 96 px below the top; on short or large-text screens the body scrolls with Retry pinned.
+
+**Journal** (v1.1): bests (endless and Daily), the last 30 endless runs as bars (height ∝ score,
+colour by the day reached, the best in gold, runs on eased rules hatched, an sr-only summary), the
+last-10 average and its change against the 10 before, and lifetime totals. Opened from the Title's
+Best chip ("Journal, best …") and the Missions header.
 
 ## 4. `UiCallbacks` reference
 
@@ -128,7 +140,9 @@ scrolls with the list and Retry stays pinned.
 | `pause()` / `resume()` | Freeze/unfreeze the loop. In `resume`, call `ensureAudio()` synchronously (iOS). |
 | `restart()` | Abandon this run, start a new one. |
 | `skipDying()` | Jump to Results now: `ui.show('results', view)`. |
-| `share()` | `buildShare(result, shareBase(), dailyTry)` then `shareText({ text })`; return the `ShareOutcome`. `shareBase()` is the page's address on the web, else `VITE_SHARE_URL`, else null (no link line). The UI toasts "Copied!" / failure. |
+| `share()` | `buildShare(result, shareBase(), dailyTry, { name: settings.name, par })` then `shareText({ text })` (text and link; desktop copies). The UI toasts "Copied!" / failure. |
+| `sharePostcard()` | The Postcard pill: `shareFiles({ file, text })` called synchronously in the click task; `'saved'` toasts "Postcard saved · link copied". Optional until gameRender's postcard lands (the pill hides without it). |
+| `swapMission(slotId)` | Swap on a stale mission (Missions card or Results row): `swapMission(save, slotId)`, `store.set`, `ui.setSave`. |
 | `settingsChanged(settings)` | Full new `Settings` (already clamped by the controls). Persist (`store.update`), apply volumes, sensitivity, invert, guide, high contrast. Reduced motion is applied to the DOM by the UI. |
 | `buy(id)` | `buyCosmetic(save, id)`; on success `store.set(save)`, `ui.setSave(save)`, return true. |
 | `equip(id)` | `equipCosmetic(save, id)`; `store.set`, `ui.setSave`. |
@@ -138,7 +152,7 @@ scrolls with the list and Retry stays pinned.
 | `dismissChallenge()` | Forget the challenge and clear `#c=` (`history.replaceState`). |
 | `dragHandoff(e)` | A press that began on a Title tray button slid sideways > 10 px: start the run with catch semantics at `e.clientX/Y` and follow `e.pointerId` (listen on `window`; the button released capture). |
 | `uiSound(name)` | `'tap' 'back' 'toggle' 'slide' 'buy' 'equip' 'deny' 'stamp' 'unlock' 'count'`. Map to the GDD "UI tap" recipe (or richer ones) plus the 4 ms UI haptic. |
-| `renderWardrobePreview(canvas, equipped)` | Draw Nubs wearing `equipped` (use `equippedLooks(equipped)` from `meta/content`). The canvas backing store is CSS size × DPR (≤ 2). Called on every try-on change; you may keep animating it until the next call. |
+| `renderWardrobePreview(canvas, equipped, subject)` | Draw Nubs wearing `equipped` (`subject` 'nubs'), or the sun in `equipped.shades` on the Shades tab ('sun'); use `equippedLooks(equipped)`. The backing store is CSS size × DPR (≤ 2). Called on every try-on or tab change. |
 
 ## 5. Meta API (pure unless noted)
 
@@ -161,8 +175,12 @@ scrolls with the list and Retry stays pinned.
     on every write; `degraded` reports whether the latest write failed.
 - `meta/progression.ts`:
   - `beginRun(save) -> { save, dealt }` at every run start (completed missions are replaced here).
-  - `applyRunResult(save, result, { today?, dailyTry }) -> { save, outcome }` at run end. "Play
-    today's Daily" counts a run with a `dailyTry`, even one that ends after midnight.
+  - `applyRunResult(save, result, { today, dailyTry?, challengeTarget?, playSeconds?, rung? }) ->
+    { save, outcome }` at run end: bests from lifetime run 3, the history and comfort rung (endless),
+    Morning Snow, Welcome back, Sunny Week, Today's errand, missions with staleness, achievements.
+    `outcome` adds `bonusSnow`, `pace`, `errand`, `recentBestBefore`, `comfortAfter`.
+  - `swapMission`, `recentBest` (tutorial runs ignored), `MILESTONES`, `nextMilestone`, `nextGoal`
+    (the Title tagline from run 3), `welcomeBackDue` (the launch toast), `errandView`, `setDailyPar`.
   - `dailyTryStarted(save, date) -> { save, tryNumber | null }` when a daily run passes 6:30 AM;
     then `store.set(save); store.flush()` immediately. `null` = practice (unscored).
   - `dailyProgress(save, date, minutes, snow, strip?)` every in-game hour of a scored daily run
@@ -171,18 +189,22 @@ scrolls with the list and Retry stays pinned.
   - `dailyStatus`, `isDailyUnlocked` (after 3 completed runs, or once any Daily was played),
     `activeMissionViews`, `itemState`, `buyCosmetic`, `equipCosmetic`, `resetProgress`,
     `shouldShowInstallSheet` (not in in-app browsers), `shouldOfferRestoreSheet`.
-- `meta/content.ts`: `COSMETICS` (with `look` render params per slot), `equippedLooks`, `MISSIONS`,
-  `ACHIEVEMENTS`, lookups.
+- `meta/content.ts`: `COSMETICS` (24 in 4 slots, Sun Shades included, with `look` render params),
+  `equippedLooks`, `MISSIONS` (with skill gates), `ERRANDS`, `ACHIEVEMENTS` (16), lookups.
+- `meta/week.ts`: `markSunnyDay`, `mondayOf`, `weekFor` (local date strings; DST never matters).
 - `meta/daily.ts`: `localDate()`, `dailyNumber(date)` (#284 = 2026-10-11), `dailySeed(date)`,
   `recentDates`, `formatDateLabel`, `addDays`, `isDateString`.
-- `meta/share.ts`: `buildShare(result, baseUrl | null, tryNumber) -> { text, url | null, challenge }`
-  (no link line when the base is null), `shareBase()`, the pure `resolveShareBase()`, glyph helpers.
-- `meta/challenge.ts`: `encodeChallenge`, `decodeChallenge(code, today?)` (null when malformed, or
-  for a Daily date outside `DAILY_EPOCH`..tomorrow), `challengeFromHash(location.hash)`,
-  `challengeUrl`.
+- `meta/share.ts`: `buildShare(result, baseUrl | null, tryNumber, { name?, par?, plan? }) -> { text,
+  url | null, challenge }` (forecast emojis on Day Plan runs, "Beat Sam's run", Snowbot's par on
+  Dailies), `shareBase()`, the pure `resolveShareBase()`, glyph helpers. `platform/share.ts`:
+  `shareText`, `shareFiles({ file, text })` ('saved' = downloaded and copied), `copyText`.
+- `meta/challenge.ts`: `encodeChallenge` (keys v, k, seed|d, m, s, p, dr, nc, pl, n), `decodeChallenge`
+  (a v1.0 code decodes to the v1.0 world; invalid optional fields are dropped), `sanitizeName`,
+  `challengeFromHash(location.hash)`, `challengeUrl(base, c)` = `${base}#c=${code}`.
 - `meta/backup.ts`: `exportBackup`, `importBackup`, `backupErrorMessage`.
 
-Run profile from lifetime runs: `save.stats.runs` (0, 1, 2, then 3). Daily and challenge runs use 3.
+Endless rules come from the comfort rung (`stats.comfort`, core `rungConfig`); Daily and challenge
+runs use their own rules.
 
 ## 6. Integration recipes
 
@@ -195,13 +217,13 @@ store.onDegraded(() => ui.notifyStorageDegraded());
 store.onExternalChange((save) => { ui.setSave(save); applySettings(save.settings); });
 onPageHidden(() => { store.flush(); if (ui.current() === 'play') ui.show('pause'); /* + game pause */ });
 const challenge = challengeFromHash(location.hash);
-if (challenge) ui.setChallenge({ minutes: challenge.m, note: challenge.k === 'd' && challenge.d !== localDate() ? `Daily #${dailyNumber(challenge.d)} · practice run` : undefined });
+if (challenge) ui.setChallenge({ minutes: challenge.m, name: challenge.n ?? '', warmup: store.get().stats.runs === 0 });
 void registerServiceWorker();   // never in the single-file build or native shells
 ```
 
 **Run end**
 ```ts
-const { save, outcome } = applyRunResult(store.get(), result, { today: localDate(), dailyTry });
+const { save, outcome } = applyRunResult(store.get(), result, { today: localDate(), dailyTry, challengeTarget, playSeconds, rung });
 store.set(save); store.flush(); ui.setSave(save);
 if (!save.flags.persistRequested) { void requestPersistence(); store.update((s) => { s.flags.persistRequested = true; }); }
 ui.show('dying');
@@ -232,10 +254,10 @@ keep `none`.
 
 ## 8. PWA
 
-- `public/manifest.webmanifest` (TECH_SPEC §14) and `public/icons/*` (committed). The icon art lives
+- `public/manifest.webmanifest` and `public/icons/*` (committed). The icon art lives
   in `src/ui/art.ts`; regenerate with `node scripts/gen-icons.ts` (Playwright Chromium).
 - `shadySW()` in `vite.config.ts` emits `sw.js` for client builds (skipped for `--mode single` and
-  `dist-single`): precache = bundle + public files (minus install/store-only icons), fetched with
+  `dist-single`): precache = bundle + public files (minus install/store-only icons and `og.png`), fetched with
   `cache: 'reload'` so a CDN's stale copy is never precached, `VERSION` = content hash,
   navigations network-first with a 3 s timeout falling back to the cached `index.html`, assets
   cache-first, only `ok` + `basic` responses cached, old `shady-*` caches deleted on activate, no
@@ -245,3 +267,9 @@ keep `none`.
 - `captureInstallPrompt()` (called by `createUi`) stashes `beforeinstallprompt`; Settings shows
   "Install SHADY" while `canPromptInstall()` and not standalone; `promptInstall()` →
   `'accepted' | 'dismissed' | 'unavailable'`.
+
+## 9. Link previews
+
+`index.html` carries Open Graph and Twitter tags with absolute URLs from `%VITE_SHARE_URL%` (one card
+for every link, A10). `node scripts/gen-og.ts` (after `npx vite build`) renders `public/og.png`:
+1200×630, 256 colours, under 300 KB; re-run it after visual changes and commit the PNG.

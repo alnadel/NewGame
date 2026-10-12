@@ -1,4 +1,4 @@
-// Safe-area insets (notch, home indicator, rounded corners) in CSS px (TECH_SPEC §9.1).
+// Safe-area insets (notch, home indicator, rounded corners) in CSS px (archive/TECH_SPEC §9.1).
 //
 // The real values come from the #safe-probe element in index.html, whose padding is
 // env(safe-area-inset-*). For layout testing, `simulateSafeArea` sets the --safe-* custom properties

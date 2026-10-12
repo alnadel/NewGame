@@ -1,3 +1,5 @@
+> Historical; superseded by V1_1_PLAN.md, V1_PLAN.md and the module READMEs.
+
 # SHADY: Design critique (pre-implementation review)
 
 > Produced by an adversarial design review before any code was written. `docs/V1_PLAN.md` records how each item was resolved.

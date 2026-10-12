@@ -1,9 +1,10 @@
-// UI controller: screen state machine, keyboard, overlays (TECH_SPEC §13). The game session drives
-// it through the `Ui` interface and receives player intents through `UiCallbacks` (see README.md).
+// UI controller: screen state machine, keyboard, overlays, the cue line (V1_PLAN §8, V1_1_PLAN
+// UM9). The game session drives it through the `Ui` interface and receives player intents through
+// `UiCallbacks` (see README.md).
 
 import './ui.css';
-import { shouldOfferRestoreSheet } from '../meta/progression.ts';
-import type { SaveV1, Settings } from '../meta/saveTypes.ts';
+import { shouldOfferRestoreSheet, welcomeBackDue } from '../meta/progression.ts';
+import type { Save, Settings } from '../meta/saveTypes.ts';
 import {
   isInAppBrowser,
   isIOS,
@@ -20,6 +21,7 @@ import { createModalHost, createRotateOverlay, createToastStack } from './overla
 import type { Screen, UiContext } from './screen.ts';
 import { createDailyScreen } from './screens/daily.ts';
 import { createDyingScreen } from './screens/dying.ts';
+import { createJournalScreen } from './screens/journal.ts';
 import { createMissionsScreen } from './screens/missions.ts';
 import { createPauseScreen } from './screens/pause.ts';
 import { createPlayScreen } from './screens/play.ts';
@@ -28,9 +30,11 @@ import { createSettingsScreen } from './screens/settings.ts';
 import { createTitleScreen } from './screens/title.ts';
 import { createWardrobeScreen } from './screens/wardrobe.ts';
 import { isLegalTransition } from './transitions.ts';
-import type { ChallengeBanner, GhostMode, ScreenArgs, ScreenId, Ui, UiDeps } from './types.ts';
+import { cueDuration, cueText } from './labels.ts';
+import type { ChallengeBanner, CueId, GhostMode, ScreenArgs, ScreenId, Ui, UiDeps } from './types.ts';
 
 const STORAGE_WARNING = "Progress can't be saved in this browser mode.";
+const WELCOME_BACK = 'Welcome back! Double Snow this run.';
 /** Shown under the Title's drag hint for mouse and keyboard players. */
 export const KEY_HINT = '← → turn the sun · Space to start · Esc pauses';
 
@@ -38,7 +42,7 @@ const WORLD_VARS = ['--world-left', '--world-top', '--world-width', '--world-hei
 
 export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const cb = deps.callbacks;
-  let save: SaveV1 = deps.save;
+  let save: Save = deps.save;
   let today = deps.today;
   let challenge: ChallengeBanner | null = null;
   let current: ScreenId = 'boot';
@@ -63,6 +67,9 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     root.classList.toggle('is-kbd', on);
     // The Title's key line may just have appeared: let it make room.
     if (current !== 'boot') screens[current].relayout?.();
+    // Keyboard players hold a key: the cue and the in-play hint say which.
+    if (shownCue) renderCue(shownCue.id, shownCue.dir);
+    updateGhostKey();
   };
 
   // Polite live region for screen-reader-only announcements (Results, Pause).
@@ -110,6 +117,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const results = createResultsScreen(ctx);
   const daily = createDailyScreen(ctx);
   const screens: Record<Exclude<ScreenId, 'boot'>, Screen> = {
+    journal: createJournalScreen(ctx),
     title,
     play,
     pause: createPauseScreen(ctx),
@@ -137,12 +145,38 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     h('p', { class: 'ghost-keys' }, KEY_HINT),
     h('p', { class: 'ghost-word' }, h('span', { class: 'ghost-arrow' }, '‹'), 'drag', h('span', { class: 'ghost-arrow' }, '›')),
   );
+  // Keyboard players in play see the key to hold instead of the swiping hand.
+  const ghostKey = h('span', { class: 'ghost-key' });
+  ghostEl.querySelector('.ghost-track')?.append(ghostKey);
+
+  // The cue line above Nubs (ui.showCue): plain words for the first runs.
+  const cueEl = h('p', { class: 'cue', 'aria-live': 'polite' });
+  let shownCue: { id: CueId; dir: -1 | 1 | undefined } | null = null;
+  let cueTimer = 0;
+  /** A finger direction as the arrow key that turns the sun the same way (Invert flips drags only). */
+  const keyDir = (dir: -1 | 1 | undefined): -1 | 1 | undefined => (dir !== undefined && save.settings.invert ? (-dir as -1 | 1) : dir);
+  const renderCue = (id: CueId, dir: -1 | 1 | undefined): void => {
+    cueEl.textContent = cueText(id, keyboardMode ? keyDir(dir) : dir, keyboardMode);
+  };
+  const showCue = (id: CueId | null, dir?: -1 | 1): void => {
+    clearTimeout(cueTimer);
+    shownCue = id === null ? null : { id, dir };
+    cueEl.classList.toggle('is-on', id !== null);
+    if (id === null) return;
+    renderCue(id, dir);
+    const ms = cueDuration(id, dir);
+    if (ms !== null) cueTimer = window.setTimeout(() => showCue(null), ms);
+  };
+  function updateGhostKey(): void {
+    const dir = ghost === 'left' ? -1 : ghost === 'right' ? 1 : undefined;
+    ghostKey.textContent = dir === undefined ? '' : `Hold ${keyDir(dir) === -1 ? '←' : '→'}`;
+  }
   const toasts = createToastStack();
   const modals = createModalHost(() => ctx, (open) => setFlag(screenLayer, 'inert', open || rotateBlocking));
   const rotateEl = createRotateOverlay();
   // Screens, the ghost hint and toasts live in the world column; modals and the rotate overlay
   // span the viewport (modals place their dialog inside the column themselves).
-  const world = h('div', { class: 'world' }, screenLayer, ghostEl, toasts.el);
+  const world = h('div', { class: 'world' }, screenLayer, ghostEl, cueEl, toasts.el);
   root.append(world, modals.el, rotateEl, live);
 
   // The column's distance to the right and bottom viewport edges, for the inset math in ui.css.
@@ -253,6 +287,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     if (from === 'boot' && id === 'title' && !restoreOffered) {
       restoreOffered = true;
       if (shouldOfferRestoreSheet(save, { ios: isIOS(), standalone: isStandalone() })) modals.restoreSheet();
+      else if (welcomeBackDue(save, today)) toasts.show(WELCOME_BACK, { icon: 'snow', tone: 'gold', duration: 4000 });
     }
   }
 
@@ -342,9 +377,17 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       challenge = banner;
       screens.title.refresh?.();
     },
+    setRunPreview(p) {
+      title.setRunPreview(p);
+    },
+    showCue,
+    setPostcard(url) {
+      results.setPostcard(url);
+    },
     setGhostThumb(mode) {
       ghost = mode;
       updateGhost();
+      updateGhostKey();
     },
     ghostProgress,
     setAudioMuted(muted) {
@@ -364,6 +407,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     resultsSheetTop: () => (current === 'results' ? results.sheetTop() : null),
     isRotateBlocking: () => rotateBlocking,
     destroy() {
+      clearTimeout(cueTimer);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('gesturestart', onGesture);

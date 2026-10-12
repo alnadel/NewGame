@@ -10,7 +10,7 @@ import {
   sanitizeSettings,
   type SaveChangeSource,
 } from '../../src/meta/save.ts';
-import type { SaveV1 } from '../../src/meta/saveTypes.ts';
+import type { Save } from '../../src/meta/saveTypes.ts';
 import { createStorage, type StorageAdapter } from '../../src/platform/storage.ts';
 import { addDays } from '../../src/meta/daily.ts';
 
@@ -46,7 +46,7 @@ class FakeStorage implements Storage {
 describe('defaults', () => {
   it('builds a complete fresh save', () => {
     const s = defaults(NOW);
-    expect(s.v).toBe(1);
+    expect(s.v).toBe(2);
     expect(s.createdAt).toBe(NOW);
     expect(s.settings).toEqual({
       sfx: 0.8,
@@ -57,12 +57,21 @@ describe('defaults', () => {
       reducedMotion: 'auto',
       highContrast: false,
       guide: 'auto',
+      name: '',
+      comfort: true,
     });
     expect(s.stats.runs).toBe(0);
     expect(s.stats.wallet).toBe(0);
-    expect(s.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot' });
-    expect(s.unlocks.cosmetics).toEqual(['scarf-red', 'hat-none', 'nose-carrot']);
+    expect(s.stats).toMatchObject({ comfort: 0, playSeconds: 0, swings: 0, sunnyWeeks: 0, forecastNoons: 0 });
+    expect(s.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-classic' });
+    expect(s.unlocks.cosmetics).toEqual(['scarf-red', 'hat-none', 'nose-carrot', 'shades-classic']);
     expect(s.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'survive-noon']);
+    expect(s.missions.deferred).toEqual([]);
+    expect(s.missions.errand).toEqual({ date: '', id: '', progress: 0, done: false });
+    expect(s.history).toEqual([]);
+    expect(s.pars).toEqual({});
+    expect(s.week).toEqual({ start: '', days: 0, paid: 0, best: [0, 0, 0, 0, 0, 0, 0] });
+    expect(s.lastPlay).toBe('');
     expect(s.flags.missionsV2).toBe(true);
     expect(s.missions.cursor).toBe(3);
     expect(s.missions.tier).toBe(1);
@@ -92,7 +101,7 @@ describe('migrate', () => {
   });
 
   it('flags saves from a newer version', () => {
-    const r = migrate('{"v":2,"stats":{"wallet":999}}', NOW);
+    const r = migrate('{"v":3,"stats":{"wallet":999}}', NOW);
     expect(r.status).toBe('future');
     expect(r.save.stats.wallet).toBe(0);
   });
@@ -151,10 +160,15 @@ describe('migrate', () => {
     );
     const s = r.save;
     // Defaults are always owned; the Solstice reward (Crown) is granted by repair.
-    expect(s.unlocks.cosmetics).toEqual(['scarf-red', 'scarf-mint', 'hat-none', 'hat-crown', 'nose-carrot']);
+    expect(s.unlocks.cosmetics).toEqual(['scarf-red', 'scarf-mint', 'hat-none', 'hat-crown', 'nose-carrot', 'shades-classic']);
     expect(s.unlocks.achievements).toEqual(['solstice']);
-    // Plaid is not owned and a scarf can't be a nose.
-    expect(s.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-crown', nose: 'nose-carrot' });
+    // Plaid is not owned and a scarf can't be a nose; a v1 save gets the default shades.
+    expect(s.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-crown', nose: 'nose-carrot', shades: 'shades-classic' });
+    // Shades must be owned shades.
+    for (const shades of ['shades-heart', 'scarf-mint', 7]) {
+      expect(migrate({ v: 2, unlocks: { cosmetics: ['scarf-mint'] }, equipped: { shades } }, NOW).save.equipped.shades).toBe('shades-classic');
+    }
+    expect(migrate({ v: 2, unlocks: { cosmetics: ['shades-round'] }, equipped: { shades: 'shades-round' } }, NOW).save.equipped.shades).toBe('shades-round');
   });
 
   it('drops invalid missions and deals replacements', () => {
@@ -175,12 +189,14 @@ describe('migrate', () => {
       NOW,
     );
     const m = r.save.missions;
+    // The gap is filled past the skill gates: Reach Day 2 (gate 390) waits in the deferred queue.
     expect(m.active).toEqual([
-      { id: 'two-phews', progress: 1, done: false },
-      { id: 'flakes-10@2', progress: 0, done: true },
-      { id: 'reach-day-2', progress: 0, done: false },
+      { id: 'two-phews', progress: 1, done: false, stale: 0 },
+      { id: 'flakes-10@2', progress: 0, done: true, stale: 0 },
+      { id: 'ice-crystal', progress: 0, done: false, stale: 0 },
     ]);
-    expect(m.cursor).toBe(6);
+    expect(m.deferred).toEqual(['reach-day-2']);
+    expect(m.cursor).toBe(7);
   });
 
   it('validates daily entries and keeps only the newest 60 dates', () => {
@@ -213,26 +229,130 @@ describe('migrate', () => {
     };
     const m = migrate(old, NOW).save;
     expect(m.missions.active).toEqual([
-      { id: 'hold-x5', progress: 5, done: false },
-      { id: 'hold-x5@2', progress: 5, done: false },
-      { id: 'flakes-10', progress: 7, done: false },
+      { id: 'hold-x5', progress: 5, done: false, stale: 0 },
+      { id: 'hold-x5@2', progress: 5, done: false, stale: 0 },
+      { id: 'flakes-10', progress: 7, done: false, stale: 0 },
     ]);
     expect(m.flags.missionsV2).toBe(true);
     // Zero stays zero, done slots are left alone.
     const zero = migrate({ v: 1, missions: { active: [{ id: 'hold-x5', progress: 0 }, { id: 'hold-x5@3', progress: 12, done: true }] } }, NOW).save;
     expect(zero.missions.active.slice(0, 2)).toEqual([
-      { id: 'hold-x5', progress: 0, done: false },
-      { id: 'hold-x5@3', progress: 12, done: true },
+      { id: 'hold-x5', progress: 0, done: false, stale: 0 },
+      { id: 'hold-x5@3', progress: 12, done: true, stale: 0 },
     ]);
     // A save already in the new unit (best multiplier ×3) is never bumped, however often it loads.
     const fresh = defaults(NOW);
-    fresh.missions.active[0] = { id: 'hold-x5', progress: 3, done: false };
+    fresh.missions.active[0] = { id: 'hold-x5', progress: 3, done: false, stale: 2 };
     let raw = JSON.stringify(fresh);
     for (let i = 0; i < 3; i++) {
       const again = migrate(raw, NOW);
-      expect(again.save.missions.active[0]).toEqual({ id: 'hold-x5', progress: 3, done: false });
+      expect(again.save.missions.active[0]).toEqual({ id: 'hold-x5', progress: 3, done: false, stale: 2 });
       raw = JSON.stringify(again.save);
     }
+  });
+
+  it('migrates a v1 save with 10 runs and a Daily mission to v2', () => {
+    const v1 = {
+      v: 1,
+      createdAt: 5,
+      settings: { music: 0.3 },
+      stats: { runs: 10, bestMinutes: 1300, bestSnowRun: 140, wallet: 77 },
+      unlocks: { cosmetics: ['scarf-mint'], achievements: ['night-owl'] },
+      equipped: { scarf: 'scarf-mint', hat: 'hat-none', nose: 'nose-carrot' },
+      missions: {
+        cursor: 2,
+        tier: 2,
+        active: [
+          { id: 'play-daily', progress: 0, done: false },
+          { id: 'mult-3@2', progress: 4, done: false },
+          { id: 'flakes-10@2', progress: 12, done: false },
+        ],
+      },
+      flags: { tutorialDone: true, missionsV2: true },
+    };
+    const r = migrate(JSON.stringify(v1), NOW);
+    expect(r.status).toBe('ok');
+    const s = r.save;
+    expect(s.v).toBe(2);
+    // A2: lifetime runs 10 → the standard rung.
+    expect(s.stats.comfort).toBe(4);
+    expect(s.settings).toMatchObject({ music: 0.3, name: '', comfort: true });
+    expect(s.equipped).toEqual({ scarf: 'scarf-mint', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-classic' });
+    // play-daily (now an errand) is replaced; the other slots keep their progress.
+    expect(s.missions.active.map((m) => m.id)).toEqual(['mult-3@2', 'flakes-10@2', 'survive-noon@2']);
+    expect(s.missions.active.every((m) => m.stale === 0)).toBe(true);
+    expect(s.history).toEqual([]);
+    expect(s.lastPlay).toBe('');
+    expect(s.stats).toMatchObject({ bestMinutes: 1300, bestSnowRun: 140, wallet: 77, playSeconds: 0, swings: 0 });
+    // The comfort map over lifetime runs.
+    expect([0, 1, 2, 3, 4, 5, 9].map((runs) => migrate({ v: 1, stats: { runs } }, NOW).save.stats.comfort)).toEqual([0, 1, 1, 2, 3, 4, 4]);
+  });
+
+  it('round-trips a rich v2 save unchanged', () => {
+    const s = defaults(NOW);
+    s.settings.name = 'Zoë';
+    s.settings.comfort = false;
+    s.stats = { ...s.stats, runs: 12, comfort: 3, playSeconds: 812.5, swings: 40, sunnyWeeks: 2, forecastNoons: 0b0011110 };
+    s.equipped.shades = 'shades-round';
+    s.unlocks.cosmetics.push('shades-round');
+    s.missions.deferred = ['reach-day-3', 'gate-arch@2'];
+    s.missions.active[1] = { ...(s.missions.active[1] as Save['missions']['active'][number]), stale: 6, progress: 3 };
+    s.missions.errand = { date: '2026-10-12', id: 'e-phews-2', progress: 1, done: false };
+    s.history = [
+      { m: 400, s: 20, r: 2, d: '2026-10-11' },
+      { m: 900, s: 61, r: 4, d: '2026-10-12' },
+    ];
+    s.pars = { '2026-10-12': 410 };
+    s.week = { start: '2026-10-12', days: 0b11, paid: 0, best: [2, 1, 0, 0, 0, 0, 0] };
+    s.lastPlay = '2026-10-12';
+    const r = migrate(JSON.stringify(s), NOW);
+    expect(r.status).toBe('ok');
+    expect(r.save).toEqual(s);
+  });
+
+  it('repairs garbage in every v2 field', () => {
+    const history = [
+      { m: 400, s: 20, r: 2, d: '2026-10-11' },
+      { m: -5, s: 1e12, r: 9, d: '2026-10-12' },
+      { m: 1, s: 1, r: 1, d: 'Tuesday' },
+      'junk',
+      ...Array.from({ length: 40 }, (_, i) => ({ m: i, s: 0, r: 4, d: '2026-10-12' })),
+    ];
+    const pars: Record<string, unknown> = { nope: 3, '2026-02-30': 4, '2026-10-12': 'x', '2026-10-11': 333.7 };
+    for (let i = 0; i < 20; i++) pars[addDays('2026-01-01', i)] = 100 + i;
+    const s = migrate(
+      {
+        v: 2,
+        settings: { name: '<b>Eve</b>', comfort: 'yes' },
+        stats: { runs: 4, comfort: 99, playSeconds: -3, swings: 'x', sunnyWeeks: 1.5, forecastNoons: 999 },
+        missions: {
+          active: [{ id: 'flakes-10', progress: 3, done: false, stale: -2 }],
+          deferred: ['nope', 'flakes-10', 'reach-day-3', 'reach-day-3@2', 7],
+          errand: { date: '2026-10-12', id: 'e-moon', progress: 3, done: false },
+        },
+        history,
+        pars,
+        week: { start: '2026-10-12', days: 500, paid: -1, best: [1, 'x', 300] },
+        lastPlay: 'yesterday',
+      },
+      NOW,
+    ).save;
+    expect(s.settings.name).toBe('');
+    expect(s.settings.comfort).toBe(true);
+    expect(s.stats).toMatchObject({ comfort: 4, playSeconds: 0, swings: 0, sunnyWeeks: 1, forecastNoons: 127 });
+    expect(s.missions.active[0]).toEqual({ id: 'flakes-10', progress: 3, done: false, stale: 0 });
+    // Unknown ids, the active mission and a second tier of a queued mission are dropped.
+    expect(s.missions.deferred).toEqual(['reach-day-3']);
+    expect(s.missions.errand).toEqual({ date: '', id: '', progress: 0, done: false });
+    expect(s.history).toHaveLength(30);
+    expect(s.history.every((e) => e.d === '2026-10-12' && e.r >= 0 && e.r <= 4)).toBe(true);
+    expect(Object.keys(s.pars)).toHaveLength(14);
+    expect(s.pars['2026-10-11']).toBe(333);
+    expect(s.pars['2026-10-12']).toBeUndefined();
+    expect(s.week).toEqual({ start: '2026-10-12', days: 127, paid: 0, best: [1, 0, 99, 0, 0, 0, 0] });
+    expect(s.lastPlay).toBe('');
+    expect(migrate({ v: 2, week: { start: 'soon' } }, NOW).save.week.start).toBe('');
+    expect(migrate({ v: 2, settings: { name: '  Sam  ' } }, NOW).save.settings.name).toBe('Sam');
   });
 
   it('derives the side keys from the main key', () => {
@@ -406,7 +526,7 @@ describe('SaveStore', () => {
   });
 
   it('cannot persist over a newer version\'s save', () => {
-    storage.set(SAVE_KEY, JSON.stringify({ v: 2, stats: { runs: 40 } }));
+    storage.set(SAVE_KEY, JSON.stringify({ v: 3, stats: { runs: 40 } }));
     const store = new SaveStore(storage, { now: () => NOW, changes: null });
     expect(store.canPersist).toBe(false);
     expect(new SaveStore(createStorage(new FakeStorage()), { now: () => NOW, changes: null }).canPersist).toBe(true);
@@ -489,7 +609,7 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
   afterEach(() => vi.useRealTimers());
 
   /** What another instance would write: this one's save after a run, a purchase and a Daily try. */
-  function otherInstanceSave(base: SaveV1): SaveV1 {
+  function otherInstanceSave(base: Save): Save {
     const o = structuredClone(base);
     o.stats.runs = 9;
     o.stats.wallet = 321;
@@ -501,7 +621,7 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
 
   it('adopts a save written by another instance (storage event) without writing it back', () => {
     const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
-    const seen: SaveV1[] = [];
+    const seen: Save[] = [];
     store.onExternalChange((sv) => seen.push(sv));
     const writesBefore = backing.writes;
     const remote = JSON.stringify(otherInstanceSave(store.get()));
@@ -545,8 +665,8 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
     expect(got.stats.runs).toBe(9);
     expect(got.stats.wallet).toBe(321);
     // The outfit worn here is kept where the remote owns it (hat-none); the Candy Cane isn't theirs.
-    expect(got.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot' });
-    const written = JSON.parse(backing.getItem(SAVE_KEY) as string) as SaveV1;
+    expect(got.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-classic' });
+    const written = JSON.parse(backing.getItem(SAVE_KEY) as string) as Save;
     expect(written.settings.music).toBe(0.1);
     expect(written.stats.runs).toBe(9);
   });
@@ -569,7 +689,7 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
     const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
     let fired = 0;
     store.onExternalChange(() => fired++);
-    changes.storage(SAVE_KEY, JSON.stringify({ v: 2, stats: { runs: 99 } }));
+    changes.storage(SAVE_KEY, JSON.stringify({ v: 3, stats: { runs: 99 } }));
     changes.storage(SAVE_KEY, '{nope');
     expect(fired).toBe(0);
     expect(store.get().stats.runs).toBe(0);

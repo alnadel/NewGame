@@ -1,9 +1,10 @@
-// Daily Solstice (V1_PLAN §11.3): today's number and date, tries n/3 (then Practice), best today,
-// Play, and the last 14 days.
+// Daily Solstice (V1_PLAN §11.3, V1_1_PLAN UM9): today's number, weather and place, tries n/3
+// (then Practice), best today, Snowbot's par, Play, and the last 14 days.
 
 import { formatScore } from '../../core/format.ts';
 import { beforeSaveStart, DAILY_TRIES, formatDateLabel, localDate, recentDates } from '../../meta/daily.ts';
 import { dailyStatus, type DailyStatus } from '../../meta/progression.ts';
+import { dailyPlan, parLine, planText } from '../labels.ts';
 import { h, setChildren } from '../dom.ts';
 import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
@@ -23,7 +24,9 @@ export function createDailyScreen(ctx: UiContext): Screen {
   let shown = ctx.today();
 
   const number = h('span', { class: 'daily-num' });
+  const plan = h('span', { class: 'daily-plan' });
   const date = h('span', { class: 'daily-date' });
+  const par = h('p', { class: 'daily-par' });
   const tryPips = h('span', { class: 'try-pips', 'aria-hidden': 'true' });
   const tryText = h('span', { class: 'daily-tries-text' });
   const best = h('span', { class: 'daily-best-val' });
@@ -54,7 +57,8 @@ export function createDailyScreen(ctx: UiContext): Screen {
     { class: 'card daily-hero' },
     h('div', { class: 'daily-sun', 'aria-hidden': 'true' }, icon('sun')),
     h('p', { class: 'kicker' }, 'Daily Solstice'),
-    h('p', { class: 'daily-id' }, number, date),
+    h('h3', { class: 'daily-id' }, h('span', { class: 'daily-title' }, 'Daily ', number), h('span', { class: 'sr-only' }, ' · '), plan),
+    date,
     h('p', { class: 'daily-blurb' }, 'Same world for everyone today. You get 3 tries and your best one counts.'),
     h(
       'div',
@@ -62,6 +66,7 @@ export function createDailyScreen(ctx: UiContext): Screen {
       h('div', { class: 'daily-meta-cell' }, h('span', { class: 'kicker' }, 'Tries'), h('span', { class: 'daily-tries' }, tryPips, tryText)),
       h('div', { class: 'daily-meta-cell' }, h('span', { class: 'kicker' }, 'Best today'), best),
     ),
+    par,
     play,
   );
 
@@ -102,7 +107,10 @@ export function createDailyScreen(ctx: UiContext): Screen {
     shown = today;
     const s = dailyStatus(save, today);
     number.textContent = `#${s.number}`;
+    plan.textContent = planText(dailyPlan(today));
     date.textContent = formatDateLabel(today);
+    par.replaceChildren(icon('bolt'), parLine(s.par));
+    par.classList.toggle('is-waiting', s.par === null);
     setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => h('i', { class: i < s.tries ? 'is-used' : '' })));
     tryText.textContent = s.scored ? `${s.tries}/${DAILY_TRIES} used` : 'All used';
     best.textContent = s.bestMinutes > 0 ? formatScore(s.bestMinutes) : '–';

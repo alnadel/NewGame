@@ -1,16 +1,24 @@
-// Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, CRITIQUE #9).
+// Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, V1_1_PLAN UM9).
 // Only the actual controls take pointer events; a pointerdown anywhere else reaches the canvas and
 // starts the run (the challenge run while a challenge banner is up). Tray buttons activate on click
 // with < 8 px of travel, and a sideways drag that starts on one is handed to the canvas.
 
 import { formatScore, formatTimeOfDay, splitMinutes } from '../../core/format.ts';
-import { activeMissionViews, dailyStatus, isDailyUnlocked, DAILY_UNLOCK_RUNS } from '../../meta/progression.ts';
+import {
+  activeMissionViews,
+  dailyStatus,
+  errandView,
+  isDailyUnlocked,
+  nextGoal,
+  DAILY_UNLOCK_RUNS,
+} from '../../meta/progression.ts';
+import type { DayPlan } from '../../meta/shims.ts';
 import { logoLayers } from '../art.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
-import { challengeGoalText } from '../labels.ts';
+import { challengeGoalText, planText } from '../labels.ts';
 import { button, hide } from '../widgets.ts';
 
 /** Travel (px) after which a press is no longer a tap. */
@@ -24,6 +32,7 @@ const BEST_CHIP_RUNS = 3;
 /** Gap (px) kept between the challenge banner and the ghost hint. */
 const BANNER_GAP = 6;
 
+const TAGLINE = "Don't melt Nubs.";
 const REGION_LABEL = 'Drag, or press Space, to start.';
 const REGION_LABEL_CHALLENGE = 'Drag, or press Space, to start the challenge.';
 
@@ -65,6 +74,8 @@ function overlaps(a: DOMRect, b: DOMRect, gap = 0): boolean {
 export interface TitleScreen extends Screen {
   /** Chips + tray at the bottom of the Title. */
   readonly bottomCluster: HTMLElement;
+  /** The Title run's Day-1 plan for the forecast chip (null hides it). */
+  setRunPreview(p: DayPlan | null): void;
 }
 
 export function createTitleScreen(ctx: UiContext): TitleScreen {
@@ -78,6 +89,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   };
 
   // --- Challenge banner ------------------------------------------------------------------------
+  // "Sam challenges you:" — the name is isolated (<bdi>) so a right-to-left name can't reorder the line.
+  const challengeName = h('bdi', null);
+  const challengeFrom = h('span', { class: 'challenge-from' }, challengeName, ' challenges you:');
   const challengeGoal = h('strong', { class: 'challenge-goal' });
   const challengeNote = h('span', { class: 'challenge-note' });
   const challengePlay = button(ctx, {
@@ -105,17 +119,21 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     'div',
     { class: 'challenge pe', role: 'group', 'aria-label': 'Challenge' },
     h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, icon('flag')),
-    h('div', { class: 'challenge-text' }, h('span', { class: 'kicker' }, 'Challenge'), challengeGoal, challengeNote),
+    h('div', { class: 'challenge-text' }, challengeFrom, challengeGoal, challengeNote),
     challengePlay,
     challengeClose,
   );
 
   // --- Chips -------------------------------------------------------------------------------------
-  // Best as "D3 2:40 PM", matching the HUD's compact day badge.
+  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Journal.
   const bestDay = h('span', { class: 'day-badge' });
   const bestValue = h('span', { class: 'num' });
-  // Chips are read as one labeled image each (their aria-label carries the full sentence).
-  const chipBest = h('span', { class: 'chip', role: 'img' }, icon('trophy'), bestDay, bestValue);
+  const chipBest = h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev'));
+  chipBest.addEventListener('click', () => {
+    ctx.sound('tap');
+    ctx.go('journal');
+  });
+  // The other chips are read as one labeled image each (their aria-label carries the full sentence).
   const pips = h('span', { class: 'pips' });
   const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
   const walletValue = h('span', { class: 'num' });
@@ -186,6 +204,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const wardrobeBtn = trayButton('Wardrobe', 'wardrobe', () => openMenu('wardrobe'));
   const settingsBtn = trayButton('Settings', 'settings', () => openMenu('settings'));
   const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
+    journal: chipBest,
     daily: dailyBtn,
     missions: missionsBtn,
     wardrobe: wardrobeBtn,
@@ -193,14 +212,19 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   };
   const tray = h('nav', { class: 'tray', 'aria-label': 'Menu' }, dailyBtn, missionsBtn, wardrobeBtn, settingsBtn);
 
-  const tagline = h('p', { class: 'tagline' }, "Don't melt Nubs.");
+  // After onboarding the tagline names the next goal; the forecast chip previews the run's Day 1.
+  const tagline = h('p', { class: 'tagline' }, TAGLINE);
+  const forecast = h('p', { class: 'forecast-chip', hidden: true });
   const bottomCluster = h('div', { class: 'title-bottom' }, chips, h('i', { class: 'title-gap', 'aria-hidden': 'true' }), tray);
   const el = h(
     'section',
     { class: 'scr scr-title', 'aria-label': REGION_LABEL },
-    h('div', { class: 'title-top' }, logo(), tagline, challenge),
+    h('div', { class: 'title-top' }, logo(), tagline, forecast, challenge),
     bottomCluster,
   );
+  let preview: DayPlan | null = null;
+  /** The tagline shows the next goal (it gives way first when the Title is crowded). */
+  let goalTagline = false;
 
   /**
    * Measures and resolves crowding (called on enter, refresh, resize and the first key press; reads
@@ -208,16 +232,18 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    * - the chips stay on one line: the Snow chip is dropped when the row would overflow;
    * - the bottom cluster stays below Nubs' halo (--nubs-y + --halo-r): gaps shrink first (CSS),
    *   then the tray labels go (the buttons keep their aria-labels);
-   * - a tall challenge banner shrinks the logo, then drops the tagline, to stay clear of the chips;
-   * - the ghost hint never overlaps the tagline or the challenge banner: its key line goes first,
-   *   then the word "drag", then (with a banner) the logo shrinks, and as a last resort the hint
-   *   hides on the Title (the banner's Play and the region label carry the message).
+   * - a tall challenge banner drops the goal tagline, shrinks the logo, drops the forecast chip,
+   *   then the tagline, to stay clear of the chips;
+   * - the swiping hand sits below the dial when it fits between the dial and the chips (the thumb
+   *   it teaches then never covers Nubs or what comes at him); otherwise the whole hint sits above
+   *   Nubs and never overlaps the tagline, the forecast chip or the banner: its key line goes first,
+   *   then the goal tagline, the word "drag", and (after a smaller logo) the hint itself.
    */
   function fit(): void {
     if (!el.classList.contains('is-on')) return;
     chips.classList.remove('no-wallet');
     bottomCluster.classList.remove('no-labels');
-    el.classList.remove('is-compact', 'no-tagline', 'no-ghost-keys', 'no-ghost-word', 'no-ghost');
+    el.classList.remove('is-compact', 'no-tagline', 'no-forecast', 'no-ghost-keys', 'no-ghost-word', 'no-ghost', 'ghost-below');
     if (chips.scrollWidth > chips.clientWidth + 1) chips.classList.add('no-wallet');
 
     // --nubs-y is in viewport px, like the rects.
@@ -231,12 +257,13 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       if (chips.getBoundingClientRect().top < limit) bottomCluster.classList.add('no-labels');
     }
 
-    // A tall banner (large text, small phone) must not reach the chips: shrink the logo, then drop
-    // the tagline.
+    const shed = (fits: () => boolean, steps: readonly string[]): void => {
+      for (const step of steps) if (!fits()) el.classList.add(step);
+    };
+    const first = goalTagline ? ['no-tagline'] : [];
+    // A tall banner (large text, small phone) must not reach the chips.
     if (ctx.challenge() !== null) {
-      const clear = (): boolean => layoutRect(challenge).bottom + BANNER_GAP <= chips.getBoundingClientRect().top;
-      if (!clear()) el.classList.add('is-compact');
-      if (!clear()) el.classList.add('no-tagline');
+      shed(() => layoutRect(challenge).bottom + BANNER_GAP <= chips.getBoundingClientRect().top, [...first, 'is-compact', 'no-forecast', 'no-tagline']);
     }
 
     const ghost = el.closest('.world')?.querySelector('.ghost');
@@ -244,24 +271,29 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const word = ghost.querySelector('.ghost-word');
     const keys = ghost.querySelector('.ghost-keys');
     const track = ghost.querySelector('.ghost-track');
-    const obstacles = (): DOMRect[] => [tagline, ...(ctx.challenge() ? [challenge] : [])].map(layoutRect);
-    const hitsAny = (r: DOMRect | null | undefined): boolean => !!r && obstacles().some((o) => overlaps(r, o, BANNER_GAP));
     const handBox = (): DOMRect | null => {
-      // The hand hangs from the track's center line: 5 px above to 50 px below it (any swing phase,
-      // its tip glow included).
+      // The hand hangs from the track's center line: 18 px above (its tip glow) to 50 px below it.
       const t = track?.getBoundingClientRect();
       if (!t || t.height === 0) return null;
       const c = t.top + t.height / 2;
       return new DOMRect(t.left, c - 18, t.width, 68);
     };
+    // Below the dial: only the hand and its trail, for touch players (mouse and keyboard players
+    // need the key line, which only fits above).
+    if (!ctx.keyboardMode() && !matchMedia('(pointer: fine)').matches) {
+      el.classList.add('ghost-below');
+      if (overlaps(handBox() ?? new DOMRect(), chips.getBoundingClientRect(), 2)) el.classList.remove('ghost-below');
+      else return;
+    }
+    const obstacles = (): DOMRect[] => [tagline, forecast, ...(ctx.challenge() ? [challenge] : [])].map(layoutRect);
+    const hitsAny = (r: DOMRect | null | undefined): boolean => !!r && obstacles().some((o) => overlaps(r, o, BANNER_GAP));
     const wordHits = (): boolean => hitsAny(word?.getBoundingClientRect());
     const handHits = (): boolean => hitsAny(handBox());
     // The key line sits between the word and the hand: dropping it lowers the word, so try that first.
     if (hitsAny(keys?.getBoundingClientRect()) || wordHits()) el.classList.add('no-ghost-keys');
-    // "drag" and the hand teach the game, so make room before dropping them: a smaller logo, then
-    // no tagline (small phones with a notch, large text, a tall banner).
-    if (wordHits() || handHits()) el.classList.add('is-compact');
-    if (wordHits() || handHits()) el.classList.add('no-tagline');
+    // "drag" and the hand teach the game, so make room before dropping them: the goal tagline, a
+    // smaller logo, the forecast chip, then no tagline (small phones, large text, a tall banner).
+    shed(() => !wordHits() && !handHits(), [...first, 'is-compact', 'no-forecast', 'no-tagline']);
     if (wordHits()) el.classList.add('no-ghost-word');
     if (handHits()) el.classList.add('no-ghost-word', 'no-ghost');
   }
@@ -274,19 +306,28 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const best = splitMinutes(s.bestMinutes);
     bestDay.textContent = `D${best.day}`;
     bestValue.textContent = formatTimeOfDay(best.minute);
-    chipBest.setAttribute('aria-label', `Best: ${formatScore(s.bestMinutes)}`);
+    chipBest.setAttribute('aria-label', `Journal, best ${formatScore(s.bestMinutes)}`);
 
+    // Three mission pips and a fourth, set apart, for Today's errand.
     const missions = activeMissionViews(save);
-    setChildren(
-      pips,
-      ...missions.map((m) => {
-        const pip = h('i', { class: m.done ? 'pip is-done' : 'pip' });
-        pip.style.setProperty('--p', String(m.fraction));
-        return pip;
-      }),
-    );
+    const errand = errandView(save, ctx.today());
+    const pip = (fraction: number, done: boolean, cls = ''): HTMLElement => {
+      const p = h('i', { class: `pip${done ? ' is-done' : ''}${cls}` });
+      p.style.setProperty('--p', String(fraction));
+      return p;
+    };
+    setChildren(pips, ...missions.map((m) => pip(m.fraction, m.done)), pip(errand.fraction, errand.done, ' pip--errand'));
     const done = missions.filter((m) => m.done).length;
-    chipMissions.setAttribute('aria-label', `Missions: ${done} of ${missions.length} complete`);
+    chipMissions.setAttribute(
+      'aria-label',
+      `Missions: ${done} of ${missions.length} complete. Today's errand ${errand.done ? 'done' : errand.progressText}`,
+    );
+
+    const goal = nextGoal(save, ctx.today());
+    goalTagline = goal !== null;
+    tagline.textContent = goal?.text ?? TAGLINE;
+    tagline.classList.toggle('is-goal', goalTagline);
+    renderPreview();
 
     hide(chipSnow, s.runs === 0);
     walletValue.textContent = String(s.wallet);
@@ -304,16 +345,29 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     el.classList.toggle('has-challenge', banner !== null);
     el.setAttribute('aria-label', banner ? REGION_LABEL_CHALLENGE : REGION_LABEL);
     if (banner) {
+      challengeName.textContent = banner.name || 'A friend';
       challengeGoal.textContent = challengeGoalText(banner.minutes);
-      challengeNote.textContent = banner.note ?? '';
-      hide(challengeNote, !banner.note);
+      const note = banner.warmup ? 'Warm-up run first' : (banner.note ?? '');
+      challengeNote.textContent = note;
+      hide(challengeNote, note === '');
     }
     fit();
+  }
+
+  function renderPreview(): void {
+    hide(forecast, preview === null);
+    forecast.textContent = preview ? `Forecast: ${planText(preview)}` : '';
   }
 
   return {
     el,
     bottomCluster,
+    setRunPreview(p) {
+      if (p?.biome === preview?.biome && p?.forecast === preview?.forecast) return;
+      preview = p;
+      renderPreview();
+      fit();
+    },
     enter(from) {
       returnFrom = from;
       refresh();

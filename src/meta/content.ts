@@ -1,13 +1,13 @@
-// Meta content catalog (pure data): Wardrobe cosmetics, the mission pool and achievements.
-// GDD §6 + §8 as trimmed by V1_PLAN §11. Ids are persisted in saves: never rename one.
+// Meta content catalog (pure data): Wardrobe cosmetics, the mission pool, Today's errands and
+// achievements (GDD §6 + §8, V1_PLAN §11, V1_1_PLAN UM4/UM6). Ids are persisted in saves: never rename one.
 
 // ---------------------------------------------------------------------------------------------
 // Cosmetics
 // ---------------------------------------------------------------------------------------------
 
-export type CosmeticSlot = 'scarf' | 'hat' | 'nose';
+export type CosmeticSlot = 'scarf' | 'hat' | 'nose' | 'shades';
 
-export const COSMETIC_SLOTS: readonly CosmeticSlot[] = ['scarf', 'hat', 'nose'];
+export const COSMETIC_SLOTS: readonly CosmeticSlot[] = ['scarf', 'hat', 'nose', 'shades'];
 
 export type AchievementId =
   | 'first-light'
@@ -17,7 +17,15 @@ export type AchievementId =
   | 'seventh-sun'
   | 'phew-nomenal'
   | 'cloud-rider'
-  | 'daily-habit';
+  | 'daily-habit'
+  | 'sundancer'
+  | 'rematch'
+  | 'sunny-week'
+  | 'close-shave'
+  | 'glare-proof'
+  | 'ice-cold'
+  | 'night-gardener'
+  | 'forecaster';
 
 export type CosmeticId =
   | 'scarf-red'
@@ -25,16 +33,25 @@ export type CosmeticId =
   | 'scarf-plaid'
   | 'scarf-rainbow'
   | 'scarf-gold'
+  | 'scarf-midnight'
+  | 'scarf-aurora'
   | 'hat-none'
   | 'hat-beanie'
   | 'hat-tophat'
   | 'hat-cone'
   | 'hat-visor'
+  | 'hat-gilded'
   | 'hat-crown'
   | 'nose-carrot'
   | 'nose-parsnip'
   | 'nose-cane'
-  | 'nose-pinecone';
+  | 'nose-pinecone'
+  | 'nose-icicle'
+  | 'shades-classic'
+  | 'shades-round'
+  | 'shades-aviator'
+  | 'shades-star'
+  | 'shades-heart';
 
 export type CosmeticUnlock =
   | { kind: 'default' }
@@ -92,7 +109,22 @@ export interface NoseLook {
   length: number;
 }
 
-export type CosmeticLook = ScarfLook | HatLook | NoseLook;
+/**
+ * The sun's Sun Shades, drawn over its face. `frame` outlines both lenses and the bridge, `lens` fills
+ * them with a vertical gradient to `lens2`, and `shine` is the glint toward the upper left.
+ * - `classic`: wide rounded rectangles. `round`: circles. `aviator`: teardrops with a double bridge.
+ * - `star`: five-point stars. `heart`: hearts.
+ */
+export interface ShadesLook {
+  slot: 'shades';
+  shape: 'classic' | 'round' | 'aviator' | 'star' | 'heart';
+  frame: string;
+  lens: string;
+  lens2: string;
+  shine: string;
+}
+
+export type CosmeticLook = ScarfLook | HatLook | NoseLook | ShadesLook;
 
 export interface Cosmetic {
   id: CosmeticId;
@@ -106,7 +138,7 @@ const snow = (cost: number): CosmeticUnlock => ({ kind: 'snow', cost });
 const DEFAULT: CosmeticUnlock = { kind: 'default' };
 const byAchievement = (achievement: AchievementId): CosmeticUnlock => ({ kind: 'achievement', achievement });
 
-/** All 15 cosmetics, grouped by slot in Wardrobe display order. */
+/** All 24 cosmetics, grouped by slot in Wardrobe display order. */
 export const COSMETICS: readonly Cosmetic[] = [
   // Scarves
   { id: 'scarf-red', slot: 'scarf', name: 'Red Scarf', unlock: DEFAULT,
@@ -118,8 +150,12 @@ export const COSMETICS: readonly Cosmetic[] = [
   { id: 'scarf-rainbow', slot: 'scarf', name: 'Rainbow Scarf', unlock: snow(400),
     look: { slot: 'scarf', pattern: 'rainbow', main: '#FF5D5D', shade: '#8C5BD8',
       stripes: ['#FF5D5D', '#FF9F43', '#FFD93D', '#6BCB77', '#4D96FF', '#9B5DE5'] } },
+  { id: 'scarf-midnight', slot: 'scarf', name: 'Midnight Scarf', unlock: snow(700),
+    look: { slot: 'scarf', pattern: 'stripes', main: '#2B2F6B', shade: '#1D2050', stripes: ['#E8ECFF'] } },
   { id: 'scarf-gold', slot: 'scarf', name: 'Gold Scarf', unlock: byAchievement('seventh-sun'),
     look: { slot: 'scarf', pattern: 'metallic', main: '#FFC23D', shade: '#C98A12', stripes: [], shine: '#FFF3C4' } },
+  { id: 'scarf-aurora', slot: 'scarf', name: 'Aurora Scarf', unlock: byAchievement('sunny-week'),
+    look: { slot: 'scarf', pattern: 'rainbow', main: '#2EC4B6', shade: '#1B9A8E', stripes: ['#2EC4B6', '#5AB8FF', '#9B5DE5', '#6BCB77'] } },
 
   // Hats
   { id: 'hat-none', slot: 'hat', name: 'No Hat', unlock: DEFAULT,
@@ -130,6 +166,8 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'hat', shape: 'topHat', main: '#2B2140', shade: '#1B1429', accent: '#E8475A', detail: '#E8475A' } },
   { id: 'hat-cone', slot: 'hat', name: 'Party Cone', unlock: snow(300),
     look: { slot: 'hat', shape: 'partyCone', main: '#9B5DE5', shade: '#7440B8', accent: '#2EC4B6', detail: '#FFC23D' } },
+  { id: 'hat-gilded', slot: 'hat', name: 'Gilded Top Hat', unlock: snow(1500),
+    look: { slot: 'hat', shape: 'topHat', main: '#FFC23D', shade: '#C98A12', accent: '#2B2140', detail: '#2B2140' } },
   { id: 'hat-visor', slot: 'hat', name: 'Sun Visor', unlock: byAchievement('high-noon'),
     look: { slot: 'hat', shape: 'sunVisor', main: '#FFE27A', shade: '#E8B93A', accent: '#FF8A2B', detail: '#FF8A2B' } },
   { id: 'hat-crown', slot: 'hat', name: 'Crown', unlock: byAchievement('solstice'),
@@ -144,6 +182,20 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'nose', shape: 'candyCane', main: '#FFFFFF', shade: '#E4E9F2', accent: '#E8475A', length: 0.9 } },
   { id: 'nose-pinecone', slot: 'nose', name: 'Pinecone', unlock: snow(350),
     look: { slot: 'nose', shape: 'pinecone', main: '#8A5A3C', shade: '#5E3B25', accent: '#B07A52', length: 0.75 } },
+  { id: 'nose-icicle', slot: 'nose', name: 'Icicle', unlock: byAchievement('ice-cold'),
+    look: { slot: 'nose', shape: 'carrot', main: '#CFEFFF', shade: '#9AD8FF', accent: '#FFFFFF', length: 1.1 } },
+
+  // Sun Shades (worn by the sun)
+  { id: 'shades-classic', slot: 'shades', name: 'Classic Shades', unlock: DEFAULT,
+    look: { slot: 'shades', shape: 'classic', frame: '#2B2140', lens: '#2B2140', lens2: '#4A3D6B', shine: '#FFFFFF' } },
+  { id: 'shades-round', slot: 'shades', name: 'Round Shades', unlock: snow(120),
+    look: { slot: 'shades', shape: 'round', frame: '#8A5A3C', lens: '#3A2F5A', lens2: '#5B4A86', shine: '#FFFFFF' } },
+  { id: 'shades-aviator', slot: 'shades', name: 'Aviators', unlock: snow(250),
+    look: { slot: 'shades', shape: 'aviator', frame: '#FFC23D', lens: '#FF9F43', lens2: '#8C3B12', shine: '#FFF3C4' } },
+  { id: 'shades-star', slot: 'shades', name: 'Star Shades', unlock: byAchievement('sundancer'),
+    look: { slot: 'shades', shape: 'star', frame: '#9B5DE5', lens: '#FFD93D', lens2: '#FF9F43', shine: '#FFFFFF' } },
+  { id: 'shades-heart', slot: 'shades', name: 'Heart Shades', unlock: byAchievement('rematch'),
+    look: { slot: 'shades', shape: 'heart', frame: '#E8475A', lens: '#FF8FA3', lens2: '#E8475A', shine: '#FFFFFF' } },
 ];
 
 const COSMETIC_BY_ID = new Map<string, Cosmetic>(COSMETICS.map((c) => [c.id, c]));
@@ -160,22 +212,23 @@ export function cosmeticsForSlot(slot: CosmeticSlot): Cosmetic[] {
   return COSMETICS.filter((c) => c.slot === slot);
 }
 
-/** What Nubs is wearing; one cosmetic id per slot. Mirrors SaveV1.equipped. */
+/** What Nubs (and the sun, for shades) is wearing; one cosmetic id per slot. Mirrors Save.equipped. */
 export interface Equipped {
   scarf: string;
   hat: string;
   nose: string;
+  shades: string;
 }
 
 /** Items every save owns from the start. */
-export const DEFAULT_EQUIPPED: Readonly<Equipped> = { scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot' };
+export const DEFAULT_EQUIPPED: Readonly<Equipped> = { scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-classic' };
 
 export const DEFAULT_COSMETICS: readonly CosmeticId[] = COSMETICS.filter((c) => c.unlock.kind === 'default').map(
   (c) => c.id,
 );
 
 /** Resolves an equipped set to concrete looks for the renderer (unknown ids fall back to defaults). */
-export function equippedLooks(equipped: Equipped): { scarf: ScarfLook; hat: HatLook; nose: NoseLook } {
+export function equippedLooks(equipped: Equipped): { scarf: ScarfLook; hat: HatLook; nose: NoseLook; shades: ShadesLook } {
   const look = <L extends CosmeticLook>(slot: CosmeticSlot, id: string): L => {
     const c = getCosmetic(id);
     const item = c && c.slot === slot ? c : (getCosmetic(DEFAULT_EQUIPPED[slot]) as Cosmetic);
@@ -185,6 +238,7 @@ export function equippedLooks(equipped: Equipped): { scarf: ScarfLook; hat: HatL
     scarf: look<ScarfLook>('scarf', equipped.scarf),
     hat: look<HatLook>('hat', equipped.hat),
     nose: look<NoseLook>('nose', equipped.nose),
+    shades: look<ShadesLook>('shades', equipped.shades),
   };
 }
 
@@ -205,7 +259,7 @@ export type MissionId =
   | 'gate-arch'
   | 'clean-balls'
   | 'reach-day-3'
-  | 'play-daily';
+  | 'swings-3';
 
 /**
  * How a mission measures a run and how its goal scales with the tier (V1_PLAN §11.1):
@@ -226,7 +280,7 @@ export type MissionMetric =
   | 'crystals'
   | 'gateNoon'
   | 'cleanBalls'
-  | 'dailyTry';
+  | 'swings';
 
 export interface MissionDef {
   id: MissionId;
@@ -236,31 +290,79 @@ export interface MissionDef {
   base: number;
   /** Tier-1 Snow reward (×tier). */
   reward: number;
+  /**
+   * Skill gate: the recent best (progression recentBest) a player needs before this mission is
+   * dealt. Tier ≥ 2 `reach` goals use their target − 330 instead (missions.ts missionGate).
+   */
+  gate: number;
 }
 
 /**
- * The ordered pool (V1_PLAN §11.1). Three are active; completed ones are replaced from here. The
- * order deals one easy, one medium and one stretch goal together and keeps the rare feats (gate
- * arch, gazing balls, a ×4 multiplier) for once the player can reach Day 2. hold-x5 keeps its id
- * (saves persist it) but is now "Reach a ×4 multiplier"; save.ts converts its old seconds progress.
+ * The ordered pool (V1_PLAN §11.1). Three are active; completed ones are replaced from here, and a
+ * mission above the player's recent best waits in the deferred queue (missions.ts). hold-x5 keeps
+ * its id (saves persist it) but is "Reach a ×4 multiplier"; swings-3 took play-daily's index (now
+ * an errand), so saved cursors stay valid.
  */
 export const MISSIONS: readonly MissionDef[] = [
-  { id: 'reach-9am', metric: 'minutes', scale: 'reach', base: 180, reward: 10 },
-  { id: 'flakes-10', metric: 'flakes', scale: 'count', base: 10, reward: 10 },
-  { id: 'survive-noon', metric: 'minutes', scale: 'reach', base: 390, reward: 20 },
-  { id: 'mult-3', metric: 'maxMult', scale: 'mult', base: 3, reward: 15 },
-  { id: 'cloud-ride', metric: 'cloudRide', scale: 'seconds', base: 3, reward: 20 },
-  { id: 'reach-day-2', metric: 'minutes', scale: 'reach', base: 720, reward: 30 },
-  { id: 'ice-crystal', metric: 'crystals', scale: 'count', base: 1, reward: 20 },
-  { id: 'two-phews', metric: 'phews', scale: 'count', base: 2, reward: 25 },
-  { id: 'gate-arch', metric: 'gateNoon', scale: 'flag', base: 1, reward: 30 },
-  { id: 'clean-balls', metric: 'cleanBalls', scale: 'count', base: 2, reward: 30 },
-  { id: 'reach-day-3', metric: 'minutes', scale: 'reach', base: 1440, reward: 50 },
-  { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 4, reward: 30 },
-  { id: 'play-daily', metric: 'dailyTry', scale: 'flag', base: 1, reward: 15 },
+  { id: 'reach-9am', metric: 'minutes', scale: 'reach', base: 180, reward: 10, gate: 0 },
+  { id: 'flakes-10', metric: 'flakes', scale: 'count', base: 10, reward: 10, gate: 0 },
+  { id: 'survive-noon', metric: 'minutes', scale: 'reach', base: 390, reward: 20, gate: 0 },
+  { id: 'mult-3', metric: 'maxMult', scale: 'mult', base: 3, reward: 15, gate: 0 },
+  { id: 'cloud-ride', metric: 'cloudRide', scale: 'seconds', base: 3, reward: 20, gate: 0 },
+  { id: 'reach-day-2', metric: 'minutes', scale: 'reach', base: 720, reward: 30, gate: 390 },
+  { id: 'ice-crystal', metric: 'crystals', scale: 'count', base: 1, reward: 20, gate: 0 },
+  { id: 'two-phews', metric: 'phews', scale: 'count', base: 2, reward: 25, gate: 0 },
+  { id: 'gate-arch', metric: 'gateNoon', scale: 'flag', base: 1, reward: 30, gate: 720 },
+  { id: 'clean-balls', metric: 'cleanBalls', scale: 'count', base: 2, reward: 30, gate: 720 },
+  { id: 'reach-day-3', metric: 'minutes', scale: 'reach', base: 1440, reward: 50, gate: 1080 },
+  { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 4, reward: 30, gate: 390 },
+  { id: 'swings-3', metric: 'swings', scale: 'count', base: 3, reward: 15, gate: 0 },
 ];
 
 export const ACTIVE_MISSIONS = 3;
+
+// ---------------------------------------------------------------------------------------------
+// Today's errand: one per local date, the same for everyone (missions.ts errandFor)
+// ---------------------------------------------------------------------------------------------
+
+export type ErrandId =
+  | 'e-flakes-25'
+  | 'e-phews-2'
+  | 'e-cloud-8'
+  | 'e-mult3-2'
+  | 'e-noon-1'
+  | 'e-9am-3'
+  | 'e-crystals-2'
+  | 'e-flowers-12'
+  | 'e-cool-4'
+  | 'e-swings-3'
+  | 'e-daily'
+  | 'e-runs-5';
+
+export interface ErrandDef {
+  id: ErrandId;
+  label: string;
+  /** Summed over every finished run of the date (missions.ts errandValue). */
+  target: number;
+}
+
+/** Fixed index order: the date's hash picks the index. */
+export const ERRANDS: readonly ErrandDef[] = [
+  { id: 'e-flakes-25', label: 'Collect 25 flakes today', target: 25 },
+  { id: 'e-phews-2', label: '2 PHEWs today', target: 2 },
+  { id: 'e-cloud-8', label: '8 s of cloud shade today', target: 8 },
+  { id: 'e-mult3-2', label: 'Reach ×3 in 2 runs today', target: 2 },
+  { id: 'e-noon-1', label: 'Survive a noon today', target: 1 },
+  { id: 'e-9am-3', label: 'Reach 9:00 AM in 3 runs today', target: 3 },
+  { id: 'e-crystals-2', label: '2 Ice Crystals today', target: 2 },
+  { id: 'e-flowers-12', label: '12 frost flowers today', target: 12 },
+  { id: 'e-cool-4', label: '4 cool hours today', target: 4 },
+  { id: 'e-swings-3', label: '3 SWINGs today', target: 3 },
+  { id: 'e-daily', label: "Play today's Daily", target: 1 },
+  { id: 'e-runs-5', label: 'Finish 5 runs today', target: 5 },
+];
+
+export const ERRAND_REWARD = 30;
 
 // ---------------------------------------------------------------------------------------------
 // Achievements
@@ -288,6 +390,18 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'phew-nomenal', name: 'Phew-nomenal', description: '25 lifetime PHEWs.', hint: 'Cut it close. Two dozen times, and then once more.' },
   { id: 'cloud-rider', name: 'Cloud Rider', description: '10 s straight under one cloud.', hint: 'Hitch a long ride on something fluffy.' },
   { id: 'daily-habit', name: 'Daily Habit', description: 'Play 7 different Dailies.', hint: 'A week of shared mornings.' },
+  { id: 'sundancer', name: 'Sundancer', description: 'Land a ×3 SWING chain.', hint: 'Hand the shade off, again and again.',
+    reward: 'shades-star' },
+  { id: 'rematch', name: 'Rematch', description: 'Win a friend’s challenge.', hint: 'Some debts are paid in daylight.',
+    reward: 'shades-heart' },
+  { id: 'sunny-week', name: 'Sunny Week', description: 'Play on all 7 days of one week.', hint: 'Every day of the week, a little sun.',
+    reward: 'scarf-aurora' },
+  { id: 'close-shave', name: 'Close Shave', description: 'PHEW from below 5 Chill.', hint: 'Closer. Closer…' },
+  { id: 'glare-proof', name: 'Glare-Proof', description: 'Pass 10 gazing balls in one run with no glare.', hint: 'Mirrors can’t touch you.' },
+  { id: 'ice-cold', name: 'Ice Cold', description: 'Nine cool hours in one day.', hint: 'A whole day in the blue.', reward: 'nose-icicle' },
+  { id: 'night-gardener', name: 'Night Gardener', description: '30 frost flowers in one run.', hint: 'The night garden is big.' },
+  { id: 'forecaster', name: 'Forecaster', description: 'Survive a noon in Breezy, Overcast, Heat Wave and Long Shadows weather.',
+    hint: 'Any weather, same snowman.' },
 ];
 
 const ACHIEVEMENT_BY_ID = new Map<string, AchievementDef>(ACHIEVEMENTS.map((a) => [a.id, a]));

@@ -1,20 +1,24 @@
 // UI lab (dev only, ui-lab.html): mounts every screen with fake data over a stand-in scene, with a
 // working fake integrator, so screens can be reviewed in isolation. URL parameters make every state
 // reachable for screenshots:
-//   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|rotate
+//   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|journal|rotate
 //   &variant=…   (see VARIANTS)   &inset=47 (simulated top inset)   &rm=1 (reduced motion)
 //   &bare=1 (hide the lab toolbar)   &toast=1 (demo toasts)   &sheet=install|confirm
 
-import type { HourGlyph, RunResult, RunStats } from '../core/sim/events.ts';
+import type { HourGlyph, RunResult } from '../core/sim/events.ts';
 import { formatScore } from '../core/format.ts';
-import type { SaveV1 } from '../meta/saveTypes.ts';
+import type { Save } from '../meta/saveTypes.ts';
 import { defaults, sanitizeSettings } from '../meta/save.ts';
-import { equippedLooks, type CosmeticId, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
+import { equippedLooks, getCosmetic, type CosmeticId, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
 import { addDays, localDate } from '../meta/daily.ts';
-import { applyRunResult, buyCosmetic, equipCosmetic, resetProgress } from '../meta/progression.ts';
+import { applyRunResult, buyCosmetic, equipCosmetic, resetProgress, swapMission } from '../meta/progression.ts';
 import { backupErrorMessage, exportBackup, importBackup } from '../meta/backup.ts';
 import { buildShare, shareBase } from '../meta/share.ts';
+import { mondayOf } from '../meta/week.ts';
+// V11-SHIM: CC-4/CC-7 — RunResultV11 becomes core's RunResult at integration.
+import type { DayPlan, RunResultV11 } from '../meta/shims.ts';
 import { shareText } from '../platform/share.ts';
+import { cosmeticSwatch } from './swatches.ts';
 import { simulateSafeArea } from '../platform/safeArea.ts';
 import { createUi } from './ui.ts';
 import type { ResultsView, ScreenId, Ui, UiCallbacks } from './types.ts';
@@ -22,20 +26,24 @@ import type { ResultsView, ScreenId, Ui, UiCallbacks } from './types.ts';
 type LabScreen = Exclude<ScreenId, 'boot'> | 'rotate';
 
 const VARIANTS: Record<LabScreen, readonly string[]> = {
-  title: ['regular', 'fresh', 'challenge', 'locked'],
-  play: ['regular', 'muted', 'hint'],
+  title: ['regular', 'fresh', 'challenge', 'warmup', 'locked'],
+  play: ['regular', 'muted', 'hint', 'cue', 'kbd'],
   pause: ['regular'],
   dying: ['regular'],
-  results: ['best', 'first', 'daily', 'challenge', 'quiet'],
+  results: ['best', 'first', 'daily', 'challenge', 'warmup', 'long', 'quiet'],
   settings: ['regular', 'from-pause'],
   daily: ['regular', 'used'],
   missions: ['regular', 'fresh'],
-  wardrobe: ['regular', 'hats', 'poor'],
+  wardrobe: ['regular', 'hats', 'shades', 'poor'],
+  journal: ['regular', 'empty'],
   rotate: ['regular'],
 };
+/** A Title run's Day 1 in the lab. */
+const PREVIEW: DayPlan = { biome: 'oldtown', forecast: 'breezy' };
 
 const params = new URLSearchParams(location.search);
-const today = localDate();
+// ?today=YYYY-MM-DD pins the lab's date (e.g. a Sunday, to show a full Sunny Week).
+const today = params.get('today') ?? localDate();
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const root = document.getElementById('ui') as HTMLElement;
 const bar = document.getElementById('lab-bar') as HTMLElement;
@@ -44,22 +52,41 @@ const bar = document.getElementById('lab-bar') as HTMLElement;
 // Fake data
 // ---------------------------------------------------------------------------------------------
 
-function richSave(): SaveV1 {
-  const s = defaults(Date.now() - 20 * 86_400_000);
-  s.stats = { ...s.stats, runs: 14, bestMinutes: 1960, bestSnowRun: 96, lifetimeSnow: 910, wallet: 230, phews: 19,
-    flakes: 402, daysSurvived: 9, maxDay: 3, dailyDaysPlayed: 5, cloudSeconds: 64, reachedNight: true };
-  s.unlocks.cosmetics = ['scarf-red', 'scarf-mint', 'hat-none', 'hat-beanie', 'hat-visor', 'nose-carrot', 'nose-parsnip'];
-  s.unlocks.achievements = ['first-light', 'night-owl', 'high-noon'];
-  s.equipped = { scarf: 'scarf-mint', hat: 'hat-beanie', nose: 'nose-carrot' };
+function richSave(): Save {
+  const s = defaults(Date.now() - 40 * 86_400_000);
+  s.stats = { ...s.stats, runs: 34, bestMinutes: 1960, bestSnowRun: 96, lifetimeSnow: 1910, wallet: 230, phews: 39,
+    flakes: 802, daysSurvived: 19, maxDay: 3, dailyDaysPlayed: 5, cloudSeconds: 164, reachedNight: true, comfort: 4,
+    playSeconds: 3 * 3600 + 720, swings: 61, sunnyWeeks: 1, forecastNoons: 0b11010 };
+  s.unlocks.cosmetics = ['scarf-red', 'scarf-mint', 'hat-none', 'hat-beanie', 'hat-visor', 'nose-carrot', 'nose-parsnip', 'shades-classic', 'shades-round'];
+  s.unlocks.achievements = ['first-light', 'night-owl', 'high-noon', 'sundancer'];
+  s.unlocks.cosmetics.push('shades-star');
+  s.equipped = { scarf: 'scarf-mint', hat: 'hat-beanie', nose: 'nose-carrot', shades: 'shades-round' };
   s.missions = {
     cursor: 7,
     tier: 1,
     active: [
-      { id: 'reach-day-2', progress: 1240, done: true },
-      { id: 'two-phews', progress: 1, done: false },
-      { id: 'cloud-ride', progress: 1.8, done: false },
+      { id: 'reach-day-2', progress: 1240, done: true, stale: 0 },
+      { id: 'two-phews', progress: 1, done: false, stale: 6 },
+      { id: 'cloud-ride', progress: 1.8, done: false, stale: 1 },
     ],
+    deferred: ['gate-arch'],
+    errand: { date: today, id: 'e-flakes-25', progress: 14, done: false },
   };
+  // 30 endless runs: a climb through the comfort ladder, then standard rules.
+  s.history = Array.from({ length: 30 }, (_, i) => ({
+    m: Math.round(160 + i * 28 + ((i * 7919) % 11) * 70 - (i % 4 === 3 ? 260 : 0)),
+    s: 20 + i,
+    r: i < 4 ? i : 4,
+    d: addDays(today, i - 30),
+  }));
+  s.week = { start: mondayOf(today), days: 0, paid: 0, best: [0, 0, 0, 0, 0, 0, 0] };
+  for (let i = 0; i < 7 && addDays(s.week.start, i) < today; i++) {
+    if (i === 2) continue;
+    s.week.days |= 1 << i;
+    s.week.best[i] = [2, 5, 0, 1, 3, 2, 1][i] as number;
+  }
+  s.lastPlay = addDays(today, -1);
+  s.pars[today] = 455;
   const strip = '❄️❄️❄️🟨❄️❄️🔥🟨❄️❄️❄️❄️🌙\n❄️❄️🟨🟨🔥🔥🟨💧';
   s.daily[addDays(today, -1)] = { tries: 3, bestMinutes: 1240, bestSnow: 61, glyphs: strip };
   s.daily[addDays(today, -2)] = { tries: 2, bestMinutes: 455, bestSnow: 22, glyphs: '❄️❄️🟨🟨🔥🔥🟨💧' };
@@ -69,36 +96,63 @@ function richSave(): SaveV1 {
   return s;
 }
 
-function stats(over: Partial<RunStats>): RunStats {
+type Stats = RunResultV11['stats'];
+
+function stats(over: Partial<Stats>): Stats {
   return {
     flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0,
     cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 1, nightsReached: 0, minutes: 0,
-    litTotal: 0, ...over,
+    litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, ...over,
   };
 }
 
-function fakeRun(minutes: number, over: Partial<RunStats>, extra: Partial<RunResult>, line: string): RunResult {
+const LAB_PLAN: readonly DayPlan[] = [
+  { biome: 'oldtown', forecast: 'breezy' },
+  { biome: 'meadow', forecast: 'clear' },
+  { biome: 'oldtown', forecast: 'heat' },
+  { biome: 'meadow', forecast: 'long' },
+  { biome: 'oldtown', forecast: 'clear' },
+  { biome: 'meadow', forecast: 'dazzle' },
+];
+
+function fakeRun(minutes: number, over: Partial<Stats>, extra: Partial<RunResultV11>, line: string): RunResultV11 {
   const day = Math.floor(minutes / 720) + 1;
   const pattern: HourGlyph[] = ['cool', 'cool', 'warm', 'cool', 'hot', 'warm', 'cool', 'cool', 'warm', 'cool', 'cool', 'cool'];
   const glyphs: HourGlyph[][] = [];
   for (let d = 1; d < day; d++) glyphs.push([...pattern]);
   glyphs.push([...pattern.slice(0, Math.floor((minutes % 720) / 60)), 'melt']);
   return {
-    mode: 'endless', seed: 20261011, profile: 3, minutes, day, clock: formatScore(minutes),
+    mode: 'endless', seed: 20261011, profile: 3, drain: 55, noonCloud: 0, plan: LAB_PLAN.slice(0, day), minutes, day,
+    clock: formatScore(minutes),
     stats: stats({ minutes, dayReached: day, nightsReached: day - 1, ...over }),
     death: { day, tDay: 0, minutes, time: '', x: 0, y: 0, cause: 'gap', line },
     hourGlyphs: glyphs, melody: [], assisted: false, ...extra,
   };
 }
 
-function resultsView(variant: string, save: SaveV1): { view: ResultsView; save: SaveV1 } {
+function resultsView(variant: string, save: Save): { view: ResultsView; save: Save } {
   const base = variant === 'first' ? defaults() : save;
   let run: RunResult;
   let dailyTry: number | null | undefined;
   let challengeTarget: number | undefined;
+  let tip: string | undefined;
+  let warmupFor: ResultsView['warmupFor'];
+  let rung: number | undefined;
   switch (variant) {
     case 'first':
-      run = fakeRun(204, { flakes: 9, flakesMelted: 2, snow: 11, maxMult: 2 }, {}, 'Melted by You at 9:24 AM, just past the Sleepy Hut.');
+      run = fakeRun(204, { flakes: 9, flakesMelted: 2, snow: 11, maxMult: 2 }, { profile: 0 }, 'Melted by You at 9:24 AM, just past the Sleepy Hut.');
+      tip = 'Tip: drag before the shade runs out. Thick teal lasts.';
+      rung = 0;
+      break;
+    case 'warmup':
+      run = fakeRun(204, { flakes: 9, snow: 11, maxMult: 2 }, { profile: 0 }, 'Melted by You at 9:24 AM, just past the Sleepy Hut.');
+      warmupFor = { minutes: 1240, name: 'Sam' };
+      rung = 0;
+      break;
+    case 'long':
+      run = fakeRun(4100, { flakes: 88, snow: 190, phews: 6, maxMult: 5, x5HoldBest: 12.4, swings: 9, swingChainBest: 4 }, {},
+        'Melted by You at 1:20 PM. The noon sun found a gap.');
+      tip = 'Tip: at noon the shadows shrink. Stay close to tall things.';
       break;
     case 'daily':
       run = fakeRun(1335, { flakes: 31, flakesMelted: 4, snow: 58, phews: 1, maxMult: 4, x5HoldBest: 0 }, { mode: 'daily', dailyDate: today },
@@ -106,7 +160,7 @@ function resultsView(variant: string, save: SaveV1): { view: ResultsView; save: 
       dailyTry = 2;
       break;
     case 'challenge':
-      run = fakeRun(1312, { flakes: 26, snow: 47, phews: 2, maxMult: 5, x5HoldBest: 6.4 }, { mode: 'challenge' },
+      run = fakeRun(1312, { flakes: 26, snow: 47, phews: 2, maxMult: 5, x5HoldBest: 6.4, swings: 3, swingChainBest: 2 }, { mode: 'challenge' },
         'Melted by You at 3:52 PM. That cloud was right there.');
       challengeTarget = 1240;
       break;
@@ -114,11 +168,14 @@ function resultsView(variant: string, save: SaveV1): { view: ResultsView; save: 
       run = fakeRun(95, { flakes: 3, flakesMelted: 3, snow: 3 }, {}, 'Melted by You at 7:35 AM.');
       break;
     default:
-      run = fakeRun(3175, { flakes: 48, flakesMelted: 6, snow: 112, phews: 3, maxMult: 5, x5HoldBest: 9.2, cloudRideBest: 4.1 }, {},
+      run = fakeRun(2095, { flakes: 48, flakesMelted: 6, snow: 112, phews: 3, maxMult: 5, x5HoldBest: 9.2, cloudRideBest: 4.1, swings: 5, swingChainBest: 3 }, {},
         'Melted by You at 10:55 AM, between the Mossy Oak and the Little Hut.');
+      tip = 'Tip: a SWING hands Nubs to the next shadow before the old one ends.';
   }
-  const r = applyRunResult(base, run, { today, dailyTry });
-  return { view: { result: run, outcome: r.outcome, dailyTry, challengeTarget }, save: r.save };
+  const r = applyRunResult(base, run, { today, dailyTry, challengeTarget, rung, playSeconds: 140 });
+  const view: ResultsView = { result: run, outcome: r.outcome, dailyTry, challengeTarget, tip, warmupFor };
+  if (challengeTarget !== undefined) view.challengeName = 'Sam';
+  return { view, save: r.save };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -356,12 +413,21 @@ function drawNose(g: CanvasRenderingContext2D, l: NoseLook, cx: number, cy: numb
   g.fill();
 }
 
-function placeholderPreview(target: HTMLCanvasElement, equipped: Equipped): void {
+function placeholderPreview(target: HTMLCanvasElement, equipped: Equipped, subject: 'nubs' | 'sun'): void {
   const g = target.getContext('2d');
   if (!g) return;
   const s = target.width / 168;
   g.setTransform(s, 0, 0, s, 0, 0);
   g.clearRect(0, 0, 168, 168);
+  if (subject === 'sun') {
+    // The sun in its shades: the tile art, scaled up.
+    const c = getCosmetic(equipped.shades);
+    if (!c) return;
+    const img = new Image();
+    img.onload = () => g.drawImage(img, 4, 4, 160, 160);
+    img.src = `data:image/svg+xml,${encodeURIComponent(new XMLSerializer().serializeToString(cosmeticSwatch(c)))}`;
+    return;
+  }
   const looks = equippedLooks(equipped);
   const cx = 84;
   g.fillStyle = '#fff';
@@ -384,6 +450,30 @@ function placeholderPreview(target: HTMLCanvasElement, equipped: Equipped): void
   drawHat(g, looks.hat, cx, 40);
 }
 
+/** A stand-in postcard: paper, a map panel and a score line (the game draws the real one). */
+function postcardThumb(): string {
+  const c = document.createElement('canvas');
+  c.width = 216;
+  c.height = 270;
+  const g = c.getContext('2d');
+  if (!g) return '';
+  g.fillStyle = '#FFF8EE';
+  g.fillRect(0, 0, 216, 270);
+  g.fillStyle = '#F2B47C';
+  g.fillRect(8, 8, 200, 164);
+  g.fillStyle = '#5B4A8A';
+  g.globalAlpha = 0.4;
+  g.fillRect(20, 40, 120, 18);
+  g.fillRect(70, 110, 130, 16);
+  g.globalAlpha = 1;
+  g.fillStyle = '#2B2140';
+  g.font = '900 30px system-ui';
+  g.fillText('2:40 PM', 16, 220);
+  g.fillStyle = '#2EC4B6';
+  for (let i = 0; i < 8; i++) g.fillRect(16 + i * 24, 236, 20, 20);
+  return c.toDataURL();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Lab wiring
 // ---------------------------------------------------------------------------------------------
@@ -394,8 +484,9 @@ function mount(screen: LabScreen, variant: string): void {
   ui?.destroy();
   simulateSafeArea(params.has('inset') ? { top: Number(params.get('inset')) } : null);
 
-  let save = variant === 'fresh' ? defaults() : richSave();
+  let save = variant === 'fresh' || variant === 'empty' ? defaults() : richSave();
   if (screen === 'title' && variant === 'locked') save.stats = { ...save.stats, runs: 2, reachedNight: false, bestMinutes: 410 };
+  if (screen === 'title' && variant === 'warmup') save = defaults();
   if (screen === 'daily' && variant === 'used') save.daily[today] = { tries: 3, bestMinutes: 1290, bestSnow: 52, glyphs: '❄️❄️🟨💧' };
   if (screen === 'wardrobe' && variant === 'poor') save.stats.wallet = 40;
   if (params.get('rm') === '1') save.settings.reducedMotion = 'on';
@@ -417,7 +508,15 @@ function mount(screen: LabScreen, variant: string): void {
     },
     share: async () => {
       const run = lastResults?.result;
-      return run ? shareText({ text: buildShare(run, shareBase()).text }) : 'failed';
+      return run ? shareText({ text: buildShare(run, shareBase(), null, { name: save.settings.name }).text }) : 'failed';
+    },
+    sharePostcard: async () => {
+      log('sharePostcard');
+      return 'saved';
+    },
+    swapMission: (slotId) => {
+      save = swapMission(save, slotId);
+      ui?.setSave(save);
     },
     settingsChanged: (settings) => {
       save = { ...save, settings: sanitizeSettings(settings) };
@@ -461,7 +560,9 @@ function mount(screen: LabScreen, variant: string): void {
   };
 
   ui = createUi(root, { callbacks, save, today, version: '0.1.0 (lab)' });
-  if (screen === 'title' && variant === 'challenge') ui.setChallenge({ minutes: 1240, note: 'From a friend · seed 20261011' });
+  if (screen === 'title' && variant === 'challenge') ui.setChallenge({ minutes: 1240, name: 'Sam' });
+  if (screen === 'title' && variant === 'warmup') ui.setChallenge({ minutes: 1240, name: '', warmup: true });
+  if (screen === 'title' && variant !== 'fresh' && variant !== 'warmup') ui.setRunPreview(PREVIEW);
 
   const path: ScreenId[] = {
     title: ['title'],
@@ -473,6 +574,7 @@ function mount(screen: LabScreen, variant: string): void {
     daily: ['title', 'daily'],
     missions: ['title', 'missions'],
     wardrobe: ['title', 'wardrobe'],
+    journal: ['title', 'journal'],
     rotate: ['title', 'play'],
   }[screen] as ScreenId[];
   for (const id of path) ui.show(id);
@@ -482,8 +584,18 @@ function mount(screen: LabScreen, variant: string): void {
     save = r.save;
     ui.setSave(save);
     ui.show('results', r.view);
+    // The postcard arrives a moment after the sheet (built in idle time by the game).
+    const shown = ui;
+    if (variant !== 'quiet') setTimeout(() => shown.setPostcard(postcardThumb()), 900);
   }
   if (screen === 'wardrobe' && variant === 'hats') (document.getElementById('tab-hat') as HTMLButtonElement | null)?.click();
+  if (screen === 'wardrobe' && variant === 'shades') (document.getElementById('tab-shades') as HTMLButtonElement | null)?.click();
+  if (screen === 'play' && variant === 'cue') ui.showCue('drag', -1);
+  if (screen === 'play' && variant === 'kbd') {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }));
+    ui.setGhostThumb('left');
+    ui.showCue('drag', -1);
+  }
   if (screen === 'title') ui.setGhostThumb('both');
   if (screen === 'play' && variant === 'hint') ui.setGhostThumb('right');
   if (screen === 'play' && variant === 'muted') ui.setAudioMuted(true);

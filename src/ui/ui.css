@@ -393,6 +393,28 @@
   color: var(--ink-2);
 }
 
+/* A chip that opens something (the Title's Best chip opens the Journal). */
+.chip--btn {
+  border: 0;
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  padding-right: 6px;
+  min-height: 40px;
+  transition: transform 90ms var(--ease-out);
+}
+
+.chip--btn:active {
+  transform: translateY(2px);
+}
+
+.chip .chip-chev {
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+  color: var(--ink-3);
+}
+
 .chip--snow .ic {
   color: var(--accent-deep);
 }
@@ -419,6 +441,11 @@
   border-radius: 50%;
   background: conic-gradient(var(--accent) calc(var(--p) * 1turn), rgba(43, 33, 64, 0.14) 0);
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+.pip--errand {
+  margin-left: 4px;
+  border-radius: 4px;
 }
 
 .pip.is-done {
@@ -545,8 +572,8 @@
 /* The logo is stacked full-size layers (title.ts logo(), art.ts logoLayers()); only these
    wrappers animate, and only their transform, so the compositor runs the motions. Percentages are
    of the logo box (viewBox 360 × 172): the sun bobs 2.16 units up and 4° around its center
-   (83.3333% 37.2093%, set inline), the rays spin around the same point, the shadow sways (3, −1)
-   units. The keyframes hold constants: var() in keyframes is re-resolved on every frame. */
+   (83.3333% 37.2093%, set inline), the rays spin around the same point; the shadow follows the
+   sun (.logo-drop). The keyframes hold constants: var() in keyframes is re-resolved on every frame. */
 .logo-layer {
   position: absolute;
   inset: 0;
@@ -568,7 +595,9 @@
 }
 
 .logo-drop {
-  animation: shadow-sway 3.2s ease-in-out infinite;
+  /* The session moves the logo's shadow with the Title sun each frame (--lsx/--lsy, CSS px):
+     a compositor-only transform, with a static offset when the game never sets them. */
+  transform: translate(var(--lsx, 3px), var(--lsy, 4px));
 }
 
 @keyframes spin {
@@ -579,9 +608,6 @@
   50% { transform: translateY(-1.2558%) rotate(-4deg); }
 }
 
-@keyframes shadow-sway {
-  50% { transform: translate(0.8333%, -0.5814%); }
-}
 
 /* With a challenge banner on a short screen (title.ts fit()), the logo gives the hint room. */
 .scr-title.is-compact .logo {
@@ -601,6 +627,35 @@
   font-weight: 800;
   font-size: 1rem;
   letter-spacing: 0.01em;
+}
+
+/* After onboarding the tagline names the next goal (nextGoal): smaller, it may wrap. */
+.tagline.is-goal {
+  max-width: min(100%, 360px);
+  padding: 5px 14px;
+  font-size: 0.9375rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* The Title run's Day 1: weather and place (ui.setRunPreview). */
+.forecast-chip {
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(43, 33, 64, 0.72);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scr-title.no-forecast .forecast-chip {
+  display: none;
 }
 
 .challenge {
@@ -638,9 +693,12 @@
   min-width: 0;
 }
 
-.challenge-text .kicker {
-  font-size: 0.6875rem;
+.challenge-from {
+  font-weight: 800;
+  font-size: 0.875rem;
+  line-height: 1.25;
   color: var(--accent-ink);
+  overflow-wrap: anywhere;
 }
 
 /* May wrap after "Beat" and after "·" (title.ts challengeGoalText keeps "Day 2" and "2:40 PM"). */
@@ -795,19 +853,18 @@
     var(--shadow-sm);
 }
 
-/* 14 px at any root size; may wrap within its button slot, never overlapping a neighbor. Below
-   340 px (or when fit() needs the room) the icons and the buttons' aria-labels carry the menu. */
+/* 14 px (13 px in narrow columns) at any root size, on one line: words never break. Below 340 px
+   (or when fit() needs the room) the icons and the buttons' aria-labels carry the menu. */
 .tray-label {
-  max-width: 100%;
+  max-width: calc(100% + 12px);
   padding: 2px 7px;
   border-radius: 999px;
   background: rgba(255, 248, 238, 0.82);
   font-weight: 800;
-  font-size: 14px;
+  font-size: clamp(12px, calc(var(--cw) * 0.036), 14px);
   line-height: 1.25;
   text-align: center;
-  white-space: normal;
-  overflow-wrap: break-word;
+  white-space: nowrap;
 }
 
 .title-bottom.no-labels .tray-label {
@@ -894,6 +951,18 @@
   margin: 0 0 2px;
 }
 
+/* Below the dial (title.ts fit(), when the hand fits above the chips): only the hand and its
+   trail, its fingertip path 10 px under the dial, so the thumb it teaches never covers Nubs. */
+.sui:has(.scr-title.is-on.ghost-below) .ghost {
+  top: calc(var(--nubs-y, 68%) - var(--wt) + var(--halo-r, 44px) + 10px - 32px);
+  bottom: auto;
+  flex-direction: column;
+}
+
+.sui:has(.scr-title.is-on.ghost-below) :is(.ghost-word, .ghost-keys) {
+  display: none !important;
+}
+
 /* title.ts fit() measures the hint against the tagline and the challenge banner: the key line goes
    first, then the word, then (after a smaller logo) the whole hint, so it never overlaps them. */
 .sui:has(.scr-title.is-on.no-ghost-word) .ghost-word,
@@ -950,6 +1019,36 @@
 
 .ghost[data-mode='left'] .ghost-track {
   transform: scaleX(-1);
+}
+
+.ghost-key {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 4px 0 rgba(43, 33, 64, 0.25), var(--shadow-sm);
+  font-weight: 900;
+  font-size: 1.125rem;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+/* Keyboard players in play: the key to hold replaces the swiping hand (the track is mirrored for
+   'left', so the chip un-mirrors itself). */
+.sui.is-kbd[data-screen='play'] .ghost :is(.ghost-hand, .ghost-trail) {
+  display: none;
+}
+
+.sui.is-kbd[data-screen='play'] .ghost-key {
+  display: block;
+}
+
+.ghost[data-mode='left'] .ghost-key {
+  transform: translate(-50%, -50%) scaleX(-1);
 }
 
 .ghost-trail {
@@ -1045,6 +1144,45 @@
   font-size: 1.75rem;
   line-height: 1;
   opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Cue line (ui.showCue): plain words above Nubs for the first runs
+   --------------------------------------------------------------------------------------------- */
+
+.cue {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--nubs-y, 68%) - var(--wt) - var(--halo-r, 44px) - 56px);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(43, 33, 64, 0.8);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 1.25;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.cue.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.sui:not([data-screen='play']) .cue {
+  display: none;
+}
+
+.sui.is-rm .cue {
+  transform: translate(-50%, 0);
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -1341,6 +1479,254 @@
   background: var(--paper);
 }
 
+/* Share: a labeled pill, accent after a new best, a challenge or a counted Daily try. */
+.res-share {
+  min-height: 46px;
+  padding: 4px 14px 4px 10px;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 0.9375rem;
+}
+
+.res-share .ic {
+  width: 20px;
+  height: 20px;
+}
+
+.res-share.btn--primary {
+  background: var(--accent);
+}
+
+/* The score row: the time, and the postcard to its right. */
+.res-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.res-score .res-time {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The Postcard: a 40×50 thumbnail of the shareable image, tilted like a card on a table, with a
+   small label (a paper placeholder until the game has built it). */
+.res-postcard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 48px;
+  padding: 4px 12px 4px 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 0.875rem;
+  transition: opacity var(--t);
+}
+
+.res-postcard[aria-disabled='true'] {
+  cursor: default;
+}
+
+.res-postcard-card {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 50px;
+  border-radius: 4px;
+  background:
+    linear-gradient(#f2b47c, #f2b47c) 3px 3px / 34px 28px no-repeat,
+    #fff8ee;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 4px 10px rgba(43, 33, 64, 0.25);
+  transform: rotate(-6deg);
+  overflow: hidden;
+}
+
+.res-postcard:not(.is-ready) .res-postcard-card {
+  animation: postcard-wait 1.2s ease-in-out infinite;
+}
+
+.res-postcard-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.res-postcard.is-ready .res-postcard-img {
+  opacity: 1;
+}
+
+.res-postcard-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.res-postcard-label .ic {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes postcard-wait {
+  50% { opacity: 0.55; }
+}
+
+/* Narrower sheets: the postcard keeps its thumbnail and drops the word, so the time stays on one
+   line; on phones Share drops its icon so the kicker keeps its line next to Share and Home. */
+@container sheet (max-width: 439.98px) {
+  .res-postcard {
+    padding: 4px;
+    background: none;
+  }
+
+  .res-postcard-label {
+    display: none;
+  }
+}
+
+@container sheet (max-width: 379.98px) {
+  .res-share .ic {
+    display: none;
+  }
+
+  .res-share {
+    padding: 4px 14px;
+  }
+
+  .res-kicker {
+    letter-spacing: 0.04em;
+  }
+}
+
+/* The Sun Strip: one row of hour tiles (6 AM-5 PM) per day, the last 4 (2 on short screens). */
+.strip {
+  --tile: min(22px, calc((100cqw - 56px) / 15.2));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.strip-more {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font-weight: 800;
+  font-size: 0.8125rem;
+}
+
+.strip-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.strip-day {
+  width: calc(var(--tile) + 4px);
+  font-size: calc(var(--tile) * 0.72);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.st {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tile);
+  height: var(--tile);
+  border-radius: calc(var(--tile) * 0.27);
+  animation: tile-in 180ms var(--ease-back) calc(var(--i, 0) * 35ms + 300ms) both;
+}
+
+.st svg {
+  width: calc(var(--tile) * 0.46);
+  height: calc(var(--tile) * 0.46);
+}
+
+.st--ghost {
+  box-shadow: inset 0 0 0 1.5px rgba(43, 33, 64, 0.15);
+  animation: none;
+}
+
+.st--melt svg {
+  animation: melt-pulse 833ms ease-in-out infinite alternate;
+}
+
+.strip-night {
+  position: relative;
+  width: 4px;
+  height: var(--tile);
+  margin-left: 1px;
+  border-radius: 2px;
+  background: #1d2247;
+}
+
+.strip-night::after {
+  content: '';
+  position: absolute;
+  left: 0.5px;
+  top: 4px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #e8ecff;
+}
+
+.strip.is-instant .st {
+  animation: none;
+}
+
+@keyframes tile-in {
+  from { transform: scale(0.6); opacity: 0; }
+}
+
+@keyframes melt-pulse {
+  to { transform: scale(1.08); }
+}
+
+/* The death recap tip and the pace line under the death line. */
+.res-tip {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.res-pace {
+  margin-top: 4px;
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 0.9375rem;
+}
+
+/* After the warm-up run: the challenge it was for. */
+.res-warmup {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  font-size: 1.0625rem;
+}
+
 .res-kicker {
   min-width: 0;
 }
@@ -1555,10 +1941,25 @@
   line-height: 1.15;
 }
 
+.stat--swing .stat-sub {
+  color: var(--accent-ink);
+}
+
+/* Five tiles (with SWINGs): the wide row fits them all. */
+.res-stats[data-n='5'] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 /* A narrow sheet: two tiles per row (16 px captions need the room). */
 @container sheet (max-width: 439.98px) {
-  .res-stats {
+  .res-stats,
+  .res-stats[data-n='5'] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* An odd count: Snow, the first tile, spans the row. */
+  .res-stats:is([data-n='1'], [data-n='3'], [data-n='5']) .stat--snow {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1615,6 +2016,40 @@
   font-weight: 700;
   font-size: 1rem;
   line-height: 1.2;
+}
+
+.mrow-kicker {
+  font-weight: 800;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+/* Swap on a mission stuck for 5 runs (Results rows and Missions cards). */
+.btn.btn--swap {
+  overflow: visible;
+  min-height: 36px;
+  padding: 4px 12px 4px 9px;
+  gap: 5px;
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 0.875rem;
+  box-shadow:
+    0 3px 0 rgba(43, 33, 64, 0.14),
+    var(--shadow-sm);
+}
+
+.btn--swap .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.btn--swap::before {
+  /* 48 px touch target around the small pill. */
+  content: '';
+  position: absolute;
+  inset: -6px 0;
 }
 
 .mrow-side .reward {
@@ -1746,6 +2181,20 @@
   font-size: 1rem;
 }
 
+/* A header link to another menu (Missions → Journal). */
+.menu-head .menu-link {
+  justify-self: end;
+  min-height: 44px;
+  padding: 4px 14px 4px 10px;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+}
+
+.menu-link .ic {
+  width: 20px;
+  height: 20px;
+}
+
 .menu-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1872,6 +2321,29 @@
 }
 
 /* Settings opened from Pause: where backup, restore and reset went. */
+.text-field {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  font-weight: 800;
+  font-size: 1rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.text-field:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.text-field::placeholder {
+  color: var(--ink-3);
+  font-weight: 700;
+}
+
 .set-midrun {
   margin-top: 0;
 }
@@ -2104,7 +2576,7 @@
   gap: 10px;
 }
 
-.daily-num {
+.daily-title {
   font-size: 2.5rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
@@ -2114,6 +2586,42 @@
 .daily-date {
   font-weight: 800;
   color: var(--ink-2);
+}
+
+.daily-id {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Day 1's weather and place (the Day Plan; the classic clear Meadow before it started). */
+.daily-plan {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(43, 33, 64, 0.08);
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+/* Snowbot's par: what the novice bot made of today's world. */
+.daily-par {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.daily-par .ic {
+  width: 18px;
+  height: 18px;
+  color: var(--gold-deep);
+}
+
+.daily-par.is-waiting {
+  font-weight: 700;
+  font-style: italic;
 }
 
 .daily-blurb {
@@ -2310,6 +2818,80 @@
   flex: 1 1 auto;
 }
 
+.mcard--errand {
+  background: var(--gold-soft);
+}
+
+.mcard--errand.is-done {
+  background: var(--accent-soft);
+}
+
+/* The Sunny Week: seven day stamps, Monday to Sunday. */
+.week-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.wk-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 6px;
+  border-radius: 12px;
+}
+
+.wk-day svg {
+  width: min(40px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.wk-sun {
+  fill: none;
+  stroke: rgba(43, 33, 64, 0.18);
+  stroke-width: 1.8;
+  stroke-dasharray: 3 2.6;
+}
+
+.wk-rays {
+  stroke: #ffb42e;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+
+.wk-rays--dim {
+  stroke: rgba(43, 33, 64, 0.1);
+}
+
+.wk-day:not(.is-sunny) .wk-rays--dim {
+  stroke: none;
+}
+
+.wk-day.is-sunny .wk-sun {
+  fill: #ffd36b;
+  stroke: #ffb42e;
+  stroke-dasharray: none;
+}
+
+.wk-day.is-gold .wk-sun {
+  stroke: var(--gold-deep);
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 3px rgba(255, 194, 61, 0.9));
+}
+
+.wk-day.is-today {
+  background: var(--paper);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.wk-name {
+  font-weight: 800;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
 .mcard-prog {
   font-weight: 800;
   font-size: 1rem;
@@ -2480,7 +3062,7 @@
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border-radius: 16px;
@@ -2489,12 +3071,15 @@
 
 .tab {
   min-height: 48px;
+  min-width: 0;
+  padding: 0 2px;
   border: 0;
   border-radius: 12px;
   background: transparent;
   color: var(--ink-2);
   font-weight: 800;
   font-size: 1rem;
+  overflow-wrap: anywhere;
 }
 
 /* Selected: white with a 2 px ink edge, not color alone. */
@@ -2647,6 +3232,7 @@
 .sui[data-screen='settings'] .toasts,
 .sui[data-screen='daily'] .toasts,
 .sui[data-screen='missions'] .toasts,
+.sui[data-screen='journal'] .toasts,
 .sui[data-screen='wardrobe'] .toasts {
   top: calc(var(--in-top) + 28px + max(48px, 1.375rem * 1.35));
 }
@@ -3088,4 +3674,167 @@ body:has(#ui[data-screen='play']) #game:active {
   .sui :focus-visible {
     outline-color: Highlight;
   }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Journal: bests, the last 30 runs, totals
+   --------------------------------------------------------------------------------------------- */
+
+.jbests {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.jbest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: 14px;
+  background: var(--paper);
+  text-align: center;
+}
+
+.jbest .kicker {
+  font-size: 0.8125rem;
+}
+
+.jbest-val {
+  font-weight: 900;
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One bar per run, oldest left: height ∝ score, colour by the day reached, the best in gold, runs
+   on eased rules hatched. */
+.jchart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  padding: 0 2px 2px;
+  border-bottom: 2px solid var(--line);
+}
+
+.jbar {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 16px;
+  border-radius: 3px 3px 1px 1px;
+  background: #9ad8ff;
+}
+
+.jbar--d2 {
+  background: #5ab8ff;
+}
+
+.jbar--d3 {
+  background: var(--accent);
+}
+
+.jbar--d4 {
+  background: #9b5de5;
+}
+
+.jbar.is-eased {
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 5px);
+}
+
+.jbar.is-best {
+  background-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-deep);
+}
+
+.javerage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 10px;
+  font-weight: 700;
+}
+
+.javerage strong {
+  font-weight: 900;
+}
+
+.jdelta {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font-weight: 800;
+  font-size: 0.875rem;
+}
+
+.jdelta.is-up {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.jlegend {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.jkey::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.jkey--best::before {
+  background: var(--gold);
+  box-shadow: 0 0 0 1.5px var(--gold-deep);
+}
+
+.jkey--eased::before {
+  background: #5ab8ff repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 5px);
+}
+
+.jtotals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  margin: 0;
+}
+
+.jtotals dt,
+.jtotals dd {
+  margin: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.jtotals dt:first-of-type,
+.jtotals dt:first-of-type + dd {
+  border-top: 0;
+}
+
+.jtotals dt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.jtotals dt .ic {
+  width: 20px;
+  height: 20px;
+  color: var(--ink-3);
+}
+
+.jtotals dd {
+  font-weight: 900;
+  text-align: right;
 }

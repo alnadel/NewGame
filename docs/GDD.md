@@ -764,7 +764,18 @@ Global rules: no new pattern within 40 ms of the last (except the heartbeat). Ha
 - Hall of Saves (top 10 PHEW micro-replays); auto replay-reel video via MediaRecorder; monthly Seasons (autumn leaves, blossoms).
 - Sun sunglasses cosmetics; footprint styles; more charms.
 - Online leaderboards and accounts; daily bot par; localization.
-- Native store builds through Capacitor (the path is in the tech spec).
+- Native store builds through Capacitor (the path is in `archive/TECH_SPEC.md` §18).
+
+**Status of the deferred ideas (after v1.1):**
+- Forks and Frost Lane: v1.2.
+- Balloons: cut (measured: they added nothing the clouds don't).
+- Charms: cut (the comfort ladder eases new players instead).
+- Atlas and landmark challenges: v1.2.
+- Postcards: shipped in v1.1 (the Results Postcard pill).
+- Dawn Start: v1.2.
+- More biomes (Harbor first): v1.2.
+- Snow Globe and Eclipse: v1.2.
+- Sun sunglasses: shipped in v1.1 (Sun Shades, 5 shapes). Daily bot par: shipped in v1.1 (Snowbot).
 
 ---
 

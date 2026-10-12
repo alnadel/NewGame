@@ -25,8 +25,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - name: Difficulty acceptance (headless bots)
-        run: npm run sim -- --check --seeds 50
+      - name: Difficulty acceptance (headless bots, the plan mix and every forecast)
+        run: npm run sim -- --check --seeds 40
       - name: Single-file build (offline copy; no service worker)
         run: npm run build:single
       - name: Install Playwright Chromium

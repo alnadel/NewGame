@@ -1,14 +1,16 @@
 // Pure label logic for the screens (no DOM), so it can be unit-tested: Results' Daily labels, the
-// Retry label, the stats tile for the multiplier, the screen-reader summary of a run, and which
-// Settings sections show where.
+// Retry label, the stats tile for the multiplier, the screen-reader summary of a run, which
+// Settings sections show where, the Sun Strip, the cue line, forecast lines and the Journal chart.
 
-import type { RunStats } from '../core/sim/events.ts';
-import { formatScore } from '../core/format.ts';
+import type { HourGlyph, RunStats } from '../core/sim/events.ts';
+import { formatScore, MINUTES_PER_DAY } from '../core/format.ts';
 import { challengeVerdict } from '../meta/challenge.ts';
-import { DAILY_TRIES } from '../meta/daily.ts';
+import { DAILY_TRIES, dailySeed } from '../meta/daily.ts';
 import { dailyStatus } from '../meta/progression.ts';
-import type { SaveV1 } from '../meta/saveTypes.ts';
-import type { ResultsView, ScreenId } from './types.ts';
+import type { Save } from '../meta/saveTypes.ts';
+import { scoreText } from '../meta/share.ts';
+import { COMFORT_MAX, FORECASTS, PLAN_START_DATE, planDay, type BiomeId, type DayPlan, type ForecastInfo } from '../meta/shims.ts';
+import type { CueId, ResultsView, ScreenId } from './types.ts';
 
 const NBSP = '\u00a0';
 
@@ -46,7 +48,7 @@ export function viewDailyDate(view: ResultsView): string | undefined {
  * Retry's label: 'Retry · practice' when Retry would replay a Daily that can no longer count (its
  * date isn't today, or all 3 tries are used); otherwise 'Retry'.
  */
-export function retryLabel(view: ResultsView, save: SaveV1, today: string): string {
+export function retryLabel(view: ResultsView, save: Save, today: string): string {
   if (view.debug) return RETRY;
   const date = viewDailyDate(view);
   if (date === undefined) return RETRY;
@@ -90,4 +92,198 @@ export interface SettingsSections {
 export function settingsSections(origin: ScreenId): SettingsSections {
   const midRun = origin === 'pause';
   return { backup: !midRun, danger: !midRun, backupNote: midRun };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Results: the Sun Strip (one row of hour tiles per day, V1_1_PLAN UM8)
+// ---------------------------------------------------------------------------------------------
+
+/** Daylight hours shown per day: 6 AM to 5 PM. */
+export const STRIP_HOURS = 12;
+/** The light of each daylight hour, dawn to dusk, under the glyph colour. */
+export const HOUR_TINTS: readonly string[] = [
+  '#FFD9B8', '#FFE4C2', '#FFEBCF', '#FFF0D9', '#FFF4E0', '#FFF6E6', '#FFF6E6', '#FFF3DF', '#FFEED6', '#FFE6CC', '#FFDCC4', '#FFCFC0',
+];
+const GLYPH_COLORS: Readonly<Record<HourGlyph, string>> = { cool: '#9AD8FF', warm: '#FFD36B', hot: '#FF6A3D', melt: '#2EC4B6' };
+/** Share of the hour's light mixed into a tile's glyph colour. */
+const TINT_MIX = 0.35;
+
+const hexRgb = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+/** A tile's fill: the glyph colour with the hour's light mixed in. */
+export function tileFill(hour: number, glyph: HourGlyph): string {
+  const tint = hexRgb(HOUR_TINTS[Math.max(0, Math.min(STRIP_HOURS - 1, hour))] as string);
+  const base = hexRgb(GLYPH_COLORS[glyph]);
+  return `#${base.map((c, i) => Math.round(c * (1 - TINT_MIX) + (tint[i] as number) * TINT_MIX).toString(16).padStart(2, '0')).join('')}`;
+}
+
+export interface SunStripRow {
+  day: number;
+  /** The day's forecast on Day Plan runs; null otherwise. */
+  forecast: ForecastInfo | null;
+  /** STRIP_HOURS slots: an hour's glyph, or null for the hours after the melt (ghost outlines). */
+  tiles: (HourGlyph | null)[];
+  /** The day was completed: a night pill ends the row. */
+  night: boolean;
+}
+
+export interface SunStrip {
+  rows: SunStripRow[];
+  /** Earlier days folded into the '+N days' chip. */
+  hidden: number;
+}
+
+/**
+ * The Sun Strip of a run: its last `maxRows` days, each with the hour glyphs the share strip
+ * prints (dayStripLines) and ghost slots after the melt. The last row is Day `lastDay` (a run
+ * started past Day 1 records glyphs from its start only). `plan` is the run's Day Plan (null when
+ * the run had none).
+ */
+export function sunStrip(
+  hourGlyphs: readonly (readonly HourGlyph[])[],
+  plan: readonly DayPlan[] | null,
+  maxRows: number,
+  lastDay: number = hourGlyphs.length,
+): SunStrip {
+  const first = Math.max(0, hourGlyphs.length - Math.max(1, maxRows));
+  const dayOf = (i: number): number => lastDay - (hourGlyphs.length - 1) + i;
+  const rows = hourGlyphs.slice(first).map((hours, k): SunStripRow => {
+    const i = first + k;
+    const p = plan?.[dayOf(i) - 1];
+    const tiles: (HourGlyph | null)[] = hours.slice(0, STRIP_HOURS);
+    while (tiles.length < STRIP_HOURS) tiles.push(null);
+    return { day: dayOf(i), forecast: p ? FORECASTS[p.forecast] : null, tiles, night: i < hourGlyphs.length - 1 };
+  });
+  return { rows, hidden: first };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Title, Daily, cues
+// ---------------------------------------------------------------------------------------------
+
+export const BIOME_NAMES: Readonly<Record<BiomeId, string>> = { meadow: 'Meadow', oldtown: 'Old Town' };
+
+/** "🌬️ Breezy · Old Town": a day's weather and place. */
+export function planText(p: DayPlan): string {
+  const f = FORECASTS[p.forecast];
+  return `${f.emoji} ${f.name} · ${BIOME_NAMES[p.biome]}`;
+}
+
+/** Day 1 of a Daily's world: the Day Plan from PLAN_START_DATE on, the classic clear Meadow before. */
+export function dailyPlan(date: string): DayPlan {
+  return date >= PLAN_START_DATE ? planDay(dailySeed(date), 1) : { biome: 'meadow', forecast: 'clear' };
+}
+
+/** "Snowbot made it to 11:20 AM", or the waiting line while the par is being computed. */
+export function parLine(par: number | null): string {
+  return par === null ? 'Snowbot is warming up…' : `Snowbot made it to ${scoreText(par)}`;
+}
+
+const CUE_ARROW = { [-1]: '←', 1: '→' } as const;
+
+/** The cue line's copy (ui.showCue). Keyboard players hold a key instead of dragging. */
+export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): string {
+  const arrow = CUE_ARROW[dir ?? 1];
+  const verb = keyboard ? 'Hold' : 'Drag';
+  switch (id) {
+    case 'keep-shade':
+      return 'Keep Nubs in the shade';
+    case 'drag':
+      return `${verb} ${arrow} to swing the sun`;
+    case 'shade-found':
+      return 'Shade! Thick teal = safe';
+    case 'melting':
+      // In the lesson the warning keeps the drag instruction (it never hides it).
+      return dir === undefined ? 'Melting! Find thick teal' : `Melting! ${verb} ${arrow} to the thick teal`;
+  }
+}
+
+/** How long a cue stays up (ms); null = until replaced or cleared. */
+export function cueDuration(id: CueId, dir: -1 | 1 | undefined): number | null {
+  switch (id) {
+    case 'keep-shade':
+      return 2000;
+    case 'shade-found':
+      return 1400;
+    case 'melting':
+      return dir === undefined ? 1600 : null;
+    case 'drag':
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Journal (V1_1_PLAN UM10)
+// ---------------------------------------------------------------------------------------------
+
+export interface JournalBar {
+  minutes: number;
+  /** Day reached (1-based). */
+  day: number;
+  /** Height in [0, 1] of the tallest bar. */
+  height: number;
+  /** The best run of the window. */
+  best: boolean;
+  /** Played below the standard rung (comfort ladder): hatched. */
+  eased: boolean;
+}
+
+export interface JournalChart {
+  bars: JournalBar[];
+  /** Mean score of the last 10 runs, or null without runs. */
+  average: number | null;
+  /** Last-10 mean minus the mean of the 10 before (minutes), or null with under 5 runs before. */
+  delta: number | null;
+  /** Runs in the window the delta compares with. */
+  previous: number;
+}
+
+const avg = (xs: readonly number[]): number => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
+
+/** The Journal's chart of the last 30 endless runs (save.history, oldest first). */
+export function journalChart(history: Save['history']): JournalChart {
+  const top = history.reduce((m, e) => Math.max(m, e.m), 0);
+  let bestAt = -1;
+  history.forEach((e, i) => {
+    if (top > 0 && e.m === top) bestAt = i;
+  });
+  const bars = history.map((e, i) => ({
+    minutes: e.m,
+    day: Math.floor(e.m / MINUTES_PER_DAY) + 1,
+    height: top > 0 ? e.m / top : 0,
+    best: i === bestAt,
+    eased: e.r < COMFORT_MAX,
+  }));
+  const last = history.slice(-10).map((e) => e.m);
+  const before = history.slice(-20, -10).map((e) => e.m);
+  return {
+    bars,
+    average: last.length > 0 ? avg(last) : null,
+    delta: last.length > 0 && before.length >= 5 ? avg(last) - avg(before) : null,
+    previous: before.length,
+  };
+}
+
+/** "+42 min", "−1 h 5 min": a difference in score minutes. */
+export function minutesDelta(d: number): string {
+  const a = Math.abs(d);
+  const text = a < 60 ? `${a} min` : a % 60 === 0 ? `${a / 60} h` : `${Math.floor(a / 60)} h ${a % 60} min`;
+  return `${d < 0 ? '−' : '+'}${text}`;
+}
+
+/** Time played as "3 h 12 m" (or "12 m"). */
+export function playTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} m` : `${m} m`;
+}
+
+/** The chart's text summary for screen readers. */
+export function journalSummary(c: JournalChart): string {
+  if (c.bars.length === 0) return 'No runs yet.';
+  const best = c.bars.find((b) => b.best);
+  const parts = [`Last ${c.bars.length} runs.`];
+  if (best) parts.push(`Best: ${scoreText(best.minutes)}.`);
+  if (c.average !== null) parts.push(`Last 10 average: ${scoreText(c.average)}.`);
+  if (c.delta !== null) parts.push(`${minutesDelta(c.delta)} against the ${c.previous} runs before.`);
+  return parts.join(' ');
 }

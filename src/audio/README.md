@@ -140,7 +140,7 @@ with the always-on layers, and the lab's level check is unchanged within its run
 | `flake` | Flake bell at `degree` (0..9, octaves 5-6) | **Quantized** to the next free 16th note (a burst rolls up the grid); ≤ 12/s |
 | `crystal` | Ice-crystal triad | |
 | `flower` | Frost-flower music-box note | Climbs the pentatonic scale each night; quantized |
-| `flakeMelt` | "tss" | ≤ 3/s (CRITIQUE #27) |
+| `flakeMelt` | "tss" | ≤ 3/s |
 | `shadeEnter` | Shade "ahh" | Only if `litFor ≥ 0.25` s |
 | `multUp` | Two-note chime climbing with `level`; ×5 rolls a full arpeggio | |
 | `multReset` | Descending blip | Only if `from > 1` |
@@ -154,6 +154,7 @@ with the always-on layers, and the lab's level check is unchanged within its run
 | `death` | Death slide-whistle + plop | Loops stop via `screen`/`phase` |
 | `start`, `shadeExit`, `lowChill` | none | Carried by continuous layers (arpeggio, sizzle, heartbeat) |
 | `hourEnd`, `gateArch`, `ballPassed` | none | Bookkeeping |
+| `swing`, `lessonDone` (v1.1) | none | Ignored: v1.1 has no audio work; fx, haptics and the cue line carry them |
 
 The sim computes the flake `degree` ((pickups this day + mult) mod 10, GDD §12). The session records
 those degrees into `RunResult.melody` for `playMelody`.
@@ -194,18 +195,7 @@ one-shot's last 10 ms measure ≈ −80 dB (no cut-off clicks). Voices disconnec
 limiter caps 24 concurrent one-shots per bus (12 for ambience) and steals the oldest with a
 20 ms fade.
 
-**Deliberate deviations from GDD §12** (all found with the level check or spectrogram):
-- Pad tone gain 0.028 (GDD 0.035) and ±4 cents at 1 : 0.6 (GDD ±7 equal). Equal saws at ±7 cents
-  cancel fully at each fundamental 1-2 times a second (an audible tremolo at the dawn cutoff), and at
-  0.035 the pad masked the arpeggio.
-- Arpeggio gain 0.09 (GDD 0.03) and a 0.4 s ring (GDD 180 ms), so plucks read over the pad.
-- Sizzle 0.12 (GDD 0.22): at 0.22 full-scale noise was the loudest sound in the game.
-- Cicadas 0.4 (GDD 0.07) and crickets 0.05 (GDD 0.03): a Q 6 band keeps ~4 % of white noise's
-  energy, and the GDD values measured −51 dBFS RMS (inaudible).
-- Flake bell 0.18 (GDD 0.12); multiplier chime 0.12, glare 0.16, cloud 0.2, melt 0.09, catch
-  +2 dB: rewards and hazards must cut through the score.
-- Heartbeat adds an octave partial and a soft knock, because 55 Hz alone is inaudible on phone speakers.
-- Keys fold around C4 (−5…+6) rather than upward into [C4, B4].
+Levels that differ from GDD §12 (found with the level check and spectrogram) are listed in V1_PLAN §15.
 
 Decay times are the time to reach the 0.0001 floor (≈ RT60 at these gains).
 

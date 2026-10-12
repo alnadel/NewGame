@@ -1,30 +1,78 @@
-// Pure progression rules (V1_PLAN §11, GDD §6-§8). Every function takes a save and returns a new one;
-// inputs are never mutated, so the session can diff, test and persist freely.
+// Pure progression rules (V1_PLAN §11, V1_1_PLAN UM3-UM6, GDD §6-§8). Every function takes a save
+// and returns a new one; inputs are never mutated, so the session can diff, test and persist freely.
 
 import type { HourGlyph, RunResult } from '../core/sim/events.ts';
-import type { DailyEntry, SaveV1 } from './saveTypes.ts';
+import { MINUTES_PER_DAY } from '../core/format.ts';
+import type { DailyEntry, Save } from './saveTypes.ts';
 import {
   ACHIEVEMENTS,
   COSMETICS,
+  ERRAND_REWARD,
   getAchievement,
   getCosmetic,
   type AchievementId,
   type CosmeticId,
 } from './content.ts';
-import { missionTarget, missionValue, missionView, parseMissionId, refillMissions, type MissionView } from './missions.ts';
-import { cloneSave, defaults, pruneDaily } from './save.ts';
-import { DAILY_TRIES, dailyNumber } from './daily.ts';
-import { dayStripLines } from './share.ts';
+import {
+  errandState,
+  getErrand,
+  errandValue,
+  errandViewOf,
+  missionTarget,
+  missionValue,
+  missionView,
+  parseMissionId,
+  refillMissions,
+  swapSlot,
+  type ErrandView,
+  type MissionView,
+} from './missions.ts';
+import { cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest } from './save.ts';
+import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
+import { dayStripLines, scoreText } from './share.ts';
+import { markSunnyDay } from './week.ts';
+import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, v11Result, type RunResultV11 } from './shims.ts';
+
+export { recentBest } from './save.ts';
 
 /**
  * The Daily unlocks after this many completed lifetime runs (V1_PLAN §11.3), i.e. once onboarding
- * (profiles 0-2) is over. A save that already holds a Daily entry keeps it unlocked.
+ * is over. A save that already holds a Daily entry keeps it unlocked.
  */
 export const DAILY_UNLOCK_RUNS = 3;
 /** The iOS "Add to Home Screen" sheet is offered once after this many runs. */
 export const INSTALL_SHEET_RUNS = 3;
+/** Bests (and the next-goal line) count from this lifetime run on: onboarding runs set none. */
+export const BEST_FROM_RUNS = 3;
 /** High Noon: 12:30 PM on Day 3. */
 const HIGH_NOON_MINUTES = 2 * 720 + 390;
+/** Surviving a day's noon: 12:30 PM, 390 minutes after 6 AM. */
+const NOON_MINUTES = 390;
+const MORNING_SNOW = 15;
+/** Welcome back: run Snow ×2 after this many days away, the extra capped. */
+const WELCOME_BACK_DAYS = 3;
+const WELCOME_BACK_CAP = 100;
+/** Breezy, Overcast, Heat Wave and Long Shadows (forecastNoons bits). */
+const FORECASTER_MASK = (['breezy', 'overcast', 'heat', 'long'] as const).reduce((m, id) => m | (1 << FORECAST_IDS.indexOf(id)), 0);
+/** A mission this far along is the Title's next goal. */
+const SO_CLOSE = 0.6;
+/** Pace lines need this many recent runs (this one included); the window is the last 10. */
+const PACE_MIN_RUNS = 5;
+const PACE_WINDOW = 10;
+
+/** Score milestones for the Title's next-goal line, in score minutes. */
+export const MILESTONES: readonly number[] = [180, 390, 720, 1110, 1440, 1830, 2880, 4320, 6480];
+const MILESTONE_TEXT: Readonly<Record<number, string>> = {
+  180: 'reach 9:00 AM',
+  390: 'survive noon',
+  720: 'reach Day 2',
+  1110: "survive Day 2's noon",
+  1440: 'reach Day 3',
+  1830: 'High Noon on Day 3',
+  2880: 'reach Day 5',
+  4320: 'reach Day 7',
+  6480: 'reach Day 10',
+};
 
 export type ToastIcon = 'trophy' | 'gift' | 'snow' | 'calendar' | 'info' | 'warn' | 'check' | 'share' | 'lock';
 export type ToastTone = 'ink' | 'accent' | 'gold' | 'danger';
@@ -36,14 +84,16 @@ export interface ToastSpec {
 }
 
 export interface RunOutcome {
-  /** Beat a previous endless best (never on the very first run). */
+  /** Beat a previous best (bests count from lifetime run BEST_FROM_RUNS on; never the first). */
   newBest: boolean;
   prevBestMinutes: number;
-  /** Snow collected during the run. */
+  /** Snow collected during the run, with the Welcome back ×2 extra. */
   runSnow: number;
   /** Snow paid by missions completed this run. */
   missionSnow: number;
-  /** runSnow + missionSnow, all added to the wallet. */
+  /** Morning Snow, Sunny Week and errand rewards. */
+  bonusSnow: number;
+  /** runSnow + missionSnow + bonusSnow, all added to the wallet. */
   snowEarned: number;
   walletBefore: number;
   walletAfter: number;
@@ -54,21 +104,32 @@ export interface RunOutcome {
   cosmeticsUnlocked: CosmeticId[];
   /** The Daily became available with this run. */
   dailyUnlocked: boolean;
-  /** Celebration toasts for the results screen, in display order. */
+  /** Award chips for the results screen, in display order. */
   toasts: ToastSpec[];
+  /** Endless runs: how this run compares with the recent ones (null when there's nothing to say). */
+  pace: string | null;
+  /** Today's errand after this run. */
+  errand: ErrandView | null;
+  /** recentBest before this run (the gold ruler flag the run was played against). */
+  recentBestBefore: number;
+  /** The comfort rung of the next endless run. */
+  comfortAfter: number;
 }
 
 export interface ApplyRunOptions {
-  /**
-   * Local date of the device ('YYYY-MM-DD') at run end. Informational: "Play today's Daily" now
-   * credits any counted try (`dailyTry`), so a try that crosses midnight still completes it.
-   */
-  today?: string;
+  /** Local date of the device ('YYYY-MM-DD') at run end: history, errand, Sunny Week, Morning Snow. */
+  today: string;
   /** Daily runs: the try number counted at 6:30 AM by dailyTryStarted, or null/undefined if unscored. */
   dailyTry?: number | null;
+  /** Challenge runs: the target score (Rematch). */
+  challengeTarget?: number;
+  /** Seconds played this run. */
+  playSeconds?: number;
+  /** Endless runs: the comfort rung played (0..4; standard when absent). */
+  rung?: number;
 }
 
-type AchievementCheck = (save: SaveV1, run: RunResult) => boolean;
+type AchievementCheck = (save: Save, run: RunResultV11, options: ApplyRunOptions) => boolean;
 
 /** Evaluated after the run's stats are merged into the save. */
 const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
@@ -80,18 +141,26 @@ const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
   'phew-nomenal': (s) => s.stats.phews >= 25,
   'cloud-rider': (_s, r) => r.stats.cloudRideBest >= 10,
   'daily-habit': (s) => s.stats.dailyDaysPlayed >= 7,
+  sundancer: (_s, r) => r.stats.swingChainBest >= 3,
+  rematch: (_s, r, o) => r.mode === 'challenge' && o.challengeTarget !== undefined && r.minutes >= o.challengeTarget,
+  'sunny-week': (s) => s.week.days === 127,
+  'close-shave': (_s, r) => r.stats.phewMinChill < 5,
+  'glare-proof': (_s, r) => r.stats.ballsPassedClean >= 10 && !r.stats.ballGlared,
+  'ice-cold': (_s, r) => r.hourGlyphs.some((day) => day.filter((g) => g === 'cool').length >= 9),
+  'night-gardener': (_s, r) => r.stats.flowers >= 30,
+  forecaster: (s) => (s.stats.forecastNoons & FORECASTER_MASK) === FORECASTER_MASK,
 };
 
 /**
  * Unlocked after DAILY_UNLOCK_RUNS completed runs. Any stored Daily entry also counts, so players
  * who unlocked it under the old "first night" rule (or restored such a backup) keep it.
  */
-export function isDailyUnlocked(save: SaveV1): boolean {
+export function isDailyUnlocked(save: Save): boolean {
   return save.stats.runs >= DAILY_UNLOCK_RUNS || Object.keys(save.daily).length > 0;
 }
 
 /** Cheapest Snow-priced cosmetic the player doesn't own yet. */
-function cheapestUnowned(save: SaveV1): { name: string; cost: number } | null {
+function cheapestUnowned(save: Save): { name: string; cost: number } | null {
   let best: { name: string; cost: number } | null = null;
   for (const c of COSMETICS) {
     if (c.unlock.kind !== 'snow' || save.unlocks.cosmetics.includes(c.id)) continue;
@@ -106,36 +175,76 @@ function sortedIds<T extends string>(catalog: readonly { id: T }[], owned: Itera
 }
 
 /**
- * Folds a finished run into the save: stats and bests, wallet, mission progress/completion,
- * daily best, achievements and their cosmetic rewards. Pure.
+ * How this endless run compares with the recent ones (tutorial runs left out): its best in the
+ * last 10, better than most of them, or below their median; null otherwise or with under 5 runs.
  */
-export function applyRunResult(
-  save: SaveV1,
-  result: RunResult,
-  options: ApplyRunOptions,
-): { save: SaveV1; outcome: RunOutcome } {
+function paceLine(history: Save['history']): string | null {
+  const recent = history.filter((e) => e.r !== 0).slice(-PACE_WINDOW);
+  if (recent.length < PACE_MIN_RUNS) return null;
+  const m = (recent[recent.length - 1] as Save['history'][number]).m;
+  const others = recent.slice(0, -1).map((e) => e.m).sort((a, b) => a - b);
+  const beaten = others.filter((o) => m > o).length;
+  if (beaten === others.length) return `Your best in ${recent.length} runs!`;
+  if (beaten >= 5) return `Better than ${beaten} of your last ${recent.length} runs`;
+  const mid = others.length >> 1;
+  const median = others.length % 2 ? (others[mid] as number) : Math.round(((others[mid - 1] as number) + (others[mid] as number)) / 2);
+  return m < median ? `Below your usual (${scoreText(median)})` : null;
+}
+
+/** Bits of the forecasts whose noon this run survived (FORECAST_IDS order; Clear never counts). */
+function forecastNoonBits(r: RunResultV11): number {
+  let bits = 0;
+  r.plan.forEach((p, i) => {
+    if (p.forecast !== 'clear' && r.minutes >= i * MINUTES_PER_DAY + NOON_MINUTES) bits |= 1 << FORECAST_IDS.indexOf(p.forecast);
+  });
+  return bits;
+}
+
+/**
+ * Folds a finished, non-debug run into the save: stats and bests, history and comfort, wallet and
+ * bonuses (Morning Snow, Welcome back, Sunny Week, Today's errand), missions (progress, staleness),
+ * the Daily best, achievements and their cosmetic rewards. Pure.
+ */
+export function applyRunResult(save: Save, result: RunResult, options: ApplyRunOptions): { save: Save; outcome: RunOutcome } {
+  const r = v11Result(result); // V11-SHIM: CC-7 (use `result` directly)
+  const today = options.today;
   const next = cloneSave(save);
   const s = next.stats;
+  const runsBefore = s.runs;
   const dailyWasUnlocked = isDailyUnlocked(save);
+  const recentBestBefore = recentBest(save);
+  const rawSnow = Math.max(0, Math.floor(r.stats.snow));
 
-  // Bests: endless and challenge runs count; dailies keep their own per-date best.
+  // Bests: endless and challenge runs from lifetime run 3 on; Dailies keep their own per-date best.
   const prevBestMinutes = s.bestMinutes;
-  const countsForBest = result.mode !== 'daily';
-  const newBest = countsForBest && s.runs > 0 && result.minutes > prevBestMinutes;
-  if (countsForBest && result.minutes > prevBestMinutes) s.bestMinutes = result.minutes;
+  const countsForBest = r.mode !== 'daily' && runsBefore >= BEST_FROM_RUNS;
+  const newBest = countsForBest && prevBestMinutes > 0 && r.minutes > prevBestMinutes;
+  if (countsForBest && r.minutes > prevBestMinutes) s.bestMinutes = r.minutes;
 
-  const runSnow = Math.max(0, Math.floor(result.stats.snow));
+  // Endless runs: the history and the comfort ladder (Daily and challenge runs never touch them).
+  let pace: string | null = null;
+  if (r.mode === 'endless') {
+    next.history.push({ m: r.minutes, s: rawSnow, r: options.rung ?? COMFORT_MAX, d: today });
+    next.history = next.history.slice(-HISTORY_KEEP);
+    if (next.settings.comfort) s.comfort = comfortAfterRun(options.rung ?? s.comfort, r.minutes);
+    pace = paceLine(next.history);
+  }
+
   s.runs += 1;
-  s.bestSnowRun = Math.max(s.bestSnowRun, runSnow);
-  s.phews += result.stats.phews;
-  s.flakes += result.stats.flakes;
-  s.daysSurvived += result.stats.nightsReached;
-  s.maxDay = Math.max(s.maxDay, result.day);
-  s.cloudSeconds += result.stats.cloudSeconds;
+  s.bestSnowRun = Math.max(s.bestSnowRun, rawSnow);
+  s.phews += r.stats.phews;
+  s.flakes += r.stats.flakes;
+  s.daysSurvived += r.stats.nightsReached;
+  s.maxDay = Math.max(s.maxDay, r.day);
+  s.cloudSeconds += r.stats.cloudSeconds;
+  s.playSeconds += Math.max(0, options.playSeconds ?? 0);
+  s.swings += r.stats.swings;
+  s.forecastNoons |= forecastNoonBits(r);
   // Death only happens in daylight, so a score past 6:00 PM of Day 1 means a night was reached.
-  if (result.minutes >= 720 || result.stats.nightsReached > 0) s.reachedNight = true;
+  if (r.minutes >= MINUTES_PER_DAY || r.stats.nightsReached > 0) s.reachedNight = true;
 
-  // Missions: progress is the best single run; completion pays out immediately.
+  // Missions: progress is the best single run; completion pays out immediately. A slot that gains
+  // nothing grows staler (Swap at 5).
   let missionSnow = 0;
   const missions: MissionView[] = [];
   const missionsCompleted: MissionView[] = [];
@@ -144,11 +253,13 @@ export function applyRunResult(
     if (!parsed) continue;
     let justCompleted = false;
     if (!slot.done) {
-      slot.progress = Math.max(slot.progress, missionValue(parsed.def, result, options));
+      const before = slot.progress;
+      slot.progress = Math.max(before, missionValue(parsed.def, r));
       if (slot.progress >= missionTarget(parsed.def, parsed.tier)) {
         slot.done = true;
         justCompleted = true;
       }
+      slot.stale = slot.done || slot.progress > before ? 0 : slot.stale + 1;
     }
     const view = missionView(slot, justCompleted);
     if (!view) continue;
@@ -159,20 +270,54 @@ export function applyRunResult(
     }
   }
 
-  if (result.mode === 'daily' && result.dailyDate !== undefined && options.dailyTry != null) {
-    const glyphs = dayStripLines(result.hourGlyphs, result.assisted).join('\n');
-    recordDailyBest(next, result.dailyDate, result.minutes, runSnow, glyphs);
+  if (r.mode === 'daily' && r.dailyDate !== undefined && options.dailyTry != null) {
+    const glyphs = dayStripLines(r.hourGlyphs, r.assisted).join('\n');
+    recordDailyBest(next, r.dailyDate, r.minutes, rawSnow, glyphs);
   }
 
+  // Bonuses: the day's first run, a return after days away, the Sunny Week and Today's errand.
+  const chips: ToastSpec[] = [];
+  let bonusSnow = 0;
+  let welcomeExtra = 0;
+  if (next.lastPlay !== '' && daysBetween(next.lastPlay, today) >= WELCOME_BACK_DAYS) {
+    welcomeExtra = Math.min(WELCOME_BACK_CAP, rawSnow);
+    chips.push({ text: 'Welcome back ×2', icon: 'snow', tone: 'gold' });
+  }
+  if (next.lastPlay !== today) {
+    bonusSnow += MORNING_SNOW;
+    chips.push({ text: `Morning Snow +${MORNING_SNOW}`, icon: 'snow', tone: 'ink' });
+  }
+  const week = markSunnyDay(next.week, today, r.day);
+  if (week.closedSunny) s.sunnyWeeks += 1;
+  for (const p of week.paid) {
+    bonusSnow += p.snow;
+    chips.push({ text: `Sunny Week: ${p.days} days +${p.snow}`, icon: 'calendar', tone: 'gold' });
+  }
+  const errand = { ...errandState(next.missions.errand, today, dailyWasUnlocked) };
+  const errandDef = getErrand(errand.id);
+  let errandDone = false;
+  if (errandDef && !errand.done) {
+    errand.progress += errandValue(errandDef.id, r, options.dailyTry);
+    errandDone = errand.done = errand.progress >= errandDef.target;
+  }
+  if (errandDone) {
+    bonusSnow += ERRAND_REWARD;
+    chips.push({ text: `Errand done +${ERRAND_REWARD}`, icon: 'check', tone: 'accent' });
+  }
+  next.missions.errand = errand;
+  next.lastPlay = today;
+
+  const runSnow = rawSnow + welcomeExtra;
+  const snowEarned = runSnow + missionSnow + bonusSnow;
   const walletBefore = s.wallet;
-  s.wallet += runSnow + missionSnow;
-  s.lifetimeSnow += runSnow + missionSnow;
+  s.wallet += snowEarned;
+  s.lifetimeSnow += snowEarned;
 
   // Achievements and their cosmetic rewards.
   const achievementsUnlocked: AchievementId[] = [];
   const cosmeticsUnlocked: CosmeticId[] = [];
   for (const a of ACHIEVEMENTS) {
-    if (next.unlocks.achievements.includes(a.id) || !ACHIEVEMENT_CHECKS[a.id](next, result)) continue;
+    if (next.unlocks.achievements.includes(a.id) || !ACHIEVEMENT_CHECKS[a.id](next, r, options)) continue;
     achievementsUnlocked.push(a.id);
     if (a.reward && !next.unlocks.cosmetics.includes(a.reward)) cosmeticsUnlocked.push(a.reward);
   }
@@ -188,6 +333,7 @@ export function applyRunResult(
   for (const id of cosmeticsUnlocked) {
     toasts.push({ text: `Unlocked: ${getCosmetic(id)?.name ?? id}`, icon: 'gift', tone: 'accent' });
   }
+  toasts.push(...chips);
   if (dailyUnlocked) toasts.push({ text: 'Daily Solstice unlocked!', icon: 'calendar', tone: 'accent' });
   const cheapest = cheapestUnowned(next);
   if (cheapest && walletBefore < cheapest.cost && s.wallet >= cheapest.cost) {
@@ -201,7 +347,8 @@ export function applyRunResult(
       prevBestMinutes,
       runSnow,
       missionSnow,
-      snowEarned: runSnow + missionSnow,
+      bonusSnow,
+      snowEarned,
       walletBefore,
       walletAfter: s.wallet,
       missions,
@@ -210,6 +357,10 @@ export function applyRunResult(
       cosmeticsUnlocked,
       dailyUnlocked,
       toasts,
+      pace,
+      errand: errandViewOf(errand, errandDone),
+      recentBestBefore,
+      comfortAfter: s.comfort,
     },
   };
 }
@@ -218,13 +369,14 @@ export function applyRunResult(
  * Results data for a debug run (sim-altering URL params such as ?day=, ?bot=, ?chill=): nothing is
  * earned, unlocked or saved, so the outcome only mirrors the save as it is.
  */
-export function debugRunOutcome(save: SaveV1, result: RunResult): RunOutcome {
+export function debugRunOutcome(save: Save, result: RunResult): RunOutcome {
   const wallet = save.stats.wallet;
   return {
     newBest: false,
     prevBestMinutes: save.stats.bestMinutes,
     runSnow: Math.max(0, Math.floor(result.stats.snow)),
     missionSnow: 0,
+    bonusSnow: 0,
     snowEarned: 0,
     walletBefore: wallet,
     walletAfter: wallet,
@@ -234,24 +386,68 @@ export function debugRunOutcome(save: SaveV1, result: RunResult): RunOutcome {
     cosmeticsUnlocked: [],
     dailyUnlocked: false,
     toasts: [],
+    pace: null,
+    errand: null,
+    recentBestBefore: recentBest(save),
+    comfortAfter: save.stats.comfort,
   };
 }
 
 /** Call when a run starts: completed missions are swapped for fresh ones (V1_PLAN §11.1). Pure. */
-export function beginRun(save: SaveV1): { save: SaveV1; dealt: MissionView[] } {
+export function beginRun(save: Save): { save: Save; dealt: MissionView[] } {
   if (!save.missions.active.some((m) => m.done)) return { save, dealt: [] };
   const next = cloneSave(save);
-  const dealt = refillMissions(next.missions);
+  const dealt = refillMissions(next.missions, recentBest(next));
   return { save: next, dealt: dealt.map((slot) => missionView(slot)).filter((v): v is MissionView => v !== null) };
 }
 
+/** Missions > Swap on a stale slot: its mission waits in the deferred queue, a fresh one is dealt. Pure. */
+export function swapMission(save: Save, slotId: string): Save {
+  const next = cloneSave(save);
+  return swapSlot(next.missions, slotId, recentBest(next)) ? next : save;
+}
+
 /** Views of the 3 active missions (Title pips, Missions screen). */
-export function activeMissionViews(save: SaveV1): MissionView[] {
+export function activeMissionViews(save: Save): MissionView[] {
   return save.missions.active.map((slot) => missionView(slot)).filter((v): v is MissionView => v !== null);
 }
 
+/** Today's errand as it stands (a new date shows a fresh one). */
+export function errandView(save: Save, today: string): ErrandView {
+  return errandViewOf(errandState(save.missions.errand, today, isDailyUnlocked(save))) as ErrandView;
+}
+
+/** The first milestone above the recent best, or null past the last one. */
+export function nextMilestone(save: Save): number | null {
+  const best = recentBest(save);
+  return MILESTONES.find((m) => m > best) ?? null;
+}
+
+/**
+ * The Title's next-goal line, from lifetime run BEST_FROM_RUNS on: a mission that is nearly done,
+ * else a fresh Daily, else the next milestone. `minutes` is the score it points at, when it has one.
+ */
+export function nextGoal(save: Save, today: string): { text: string; minutes: number | null } | null {
+  if (save.stats.runs < BEST_FROM_RUNS) return null;
+  let close: MissionView | null = null;
+  for (const m of activeMissionViews(save)) if (!m.done && m.fraction >= SO_CLOSE && (!close || m.fraction > close.fraction)) close = m;
+  if (close) {
+    const p = parseMissionId(close.id);
+    const minutes = p && p.def.scale === 'reach' ? missionTarget(p.def, p.tier) : null;
+    return { text: `So close: ${close.label} (${close.progressText})`, minutes };
+  }
+  if (isDailyUnlocked(save) && !dailyStatus(save, today).played) return { text: `Daily #${dailyNumber(today)} is fresh`, minutes: null };
+  const m = nextMilestone(save);
+  return m === null ? null : { text: `Next: ${MILESTONE_TEXT[m]}`, minutes: m };
+}
+
+/** True when the next run pays Welcome back ×2 (the last run was 3 or more days ago). */
+export function welcomeBackDue(save: Save, today: string): boolean {
+  return save.lastPlay !== '' && daysBetween(save.lastPlay, today) >= WELCOME_BACK_DAYS;
+}
+
 // ---------------------------------------------------------------------------------------------
-// Daily bookkeeping (V1_PLAN §11.3, CRITIQUE #30)
+// Daily bookkeeping (V1_PLAN §11.3, archive/CRITIQUE #30)
 // ---------------------------------------------------------------------------------------------
 
 export interface DailyStatus {
@@ -266,13 +462,15 @@ export interface DailyStatus {
   /** Glyph strip lines of the best try ('\n'-joined), '' if none finished yet. */
   glyphs: string;
   played: boolean;
+  /** Snowbot's score on this Daily (CC-17), or null until it has been computed. */
+  par: number | null;
 }
 
 function emptyEntry(): DailyEntry {
   return { tries: 0, bestMinutes: 0, bestSnow: 0, glyphs: '' };
 }
 
-export function dailyStatus(save: SaveV1, date: string): DailyStatus {
+export function dailyStatus(save: Save, date: string): DailyStatus {
   const e = save.daily[date] ?? emptyEntry();
   return {
     date,
@@ -283,14 +481,24 @@ export function dailyStatus(save: SaveV1, date: string): DailyStatus {
     bestSnow: e.bestSnow,
     glyphs: e.glyphs,
     played: e.tries > 0,
+    par: save.pars[date] ?? null,
   };
+}
+
+/** Stores Snowbot's par for a Daily (the latest 14 dates are kept). Pure. */
+export function setDailyPar(save: Save, date: string, minutes: number): Save {
+  if (save.pars[date] === minutes) return save;
+  const next = cloneSave(save);
+  next.pars[date] = Math.max(0, Math.floor(minutes));
+  prunePars(next.pars);
+  return next;
 }
 
 /**
  * Call when a daily run passes 6:30 AM, and persist the result immediately (flush), so quitting a
  * bad run can't refund the try. Returns the counted try number, or null when the run is practice.
  */
-export function dailyTryStarted(save: SaveV1, date: string): { save: SaveV1; tryNumber: number | null } {
+export function dailyTryStarted(save: Save, date: string): { save: Save; tryNumber: number | null } {
   const current = save.daily[date] ?? emptyEntry();
   if (current.tries >= DAILY_TRIES) return { save, tryNumber: null };
   const next = cloneSave(save);
@@ -301,7 +509,7 @@ export function dailyTryStarted(save: SaveV1, date: string): { save: SaveV1; try
   return { save: next, tryNumber: entry.tries };
 }
 
-function recordDailyBest(save: SaveV1, date: string, minutes: number, snow: number, glyphs?: string): void {
+function recordDailyBest(save: Save, date: string, minutes: number, snow: number, glyphs?: string): void {
   const entry = save.daily[date] ?? emptyEntry();
   const better = minutes > entry.bestMinutes || (minutes === entry.bestMinutes && snow >= entry.bestSnow);
   if (!better) return;
@@ -323,7 +531,7 @@ export interface DailyStripSource {
  * glyph strip so far (in applyRunResult's format), so the Daily history never shows the best time
  * next to an older try's strip.
  */
-export function dailyProgress(save: SaveV1, date: string, minutes: number, snow: number, strip?: DailyStripSource): SaveV1 {
+export function dailyProgress(save: Save, date: string, minutes: number, snow: number, strip?: DailyStripSource): Save {
   const entry = save.daily[date];
   if (!entry || entry.tries === 0) return save;
   const runSnow = Math.max(0, Math.floor(snow));
@@ -345,11 +553,11 @@ export function dailyProgress(save: SaveV1, date: string, minutes: number, snow:
  */
 export type ItemState = 'equipped' | 'owned' | 'buyable' | 'expensive' | 'locked';
 
-export function isOwned(save: SaveV1, id: string): boolean {
+export function isOwned(save: Save, id: string): boolean {
   return save.unlocks.cosmetics.includes(id);
 }
 
-export function itemState(save: SaveV1, id: CosmeticId): ItemState {
+export function itemState(save: Save, id: CosmeticId): ItemState {
   const c = getCosmetic(id);
   if (!c) return 'locked';
   if (save.equipped[c.slot] === id) return 'equipped';
@@ -359,11 +567,11 @@ export function itemState(save: SaveV1, id: CosmeticId): ItemState {
 }
 
 export type BuyResult =
-  | { ok: true; save: SaveV1 }
+  | { ok: true; save: Save }
   | { ok: false; reason: 'unknown' | 'owned' | 'locked' | 'poor' };
 
 /** Spends Snow on a cosmetic and equips it right away. */
-export function buyCosmetic(save: SaveV1, id: CosmeticId): BuyResult {
+export function buyCosmetic(save: Save, id: CosmeticId): BuyResult {
   const c = getCosmetic(id);
   if (!c) return { ok: false, reason: 'unknown' };
   if (isOwned(save, id)) return { ok: false, reason: 'owned' };
@@ -376,9 +584,9 @@ export function buyCosmetic(save: SaveV1, id: CosmeticId): BuyResult {
   return { ok: true, save: next };
 }
 
-export type EquipResult = { ok: true; save: SaveV1 } | { ok: false; reason: 'unknown' | 'notOwned' };
+export type EquipResult = { ok: true; save: Save } | { ok: false; reason: 'unknown' | 'notOwned' };
 
-export function equipCosmetic(save: SaveV1, id: CosmeticId): EquipResult {
+export function equipCosmetic(save: Save, id: CosmeticId): EquipResult {
   const c = getCosmetic(id);
   if (!c) return { ok: false, reason: 'unknown' };
   if (!isOwned(save, id)) return { ok: false, reason: 'notOwned' };
@@ -389,7 +597,7 @@ export function equipCosmetic(save: SaveV1, id: CosmeticId): EquipResult {
 }
 
 /** Settings > Reset progress: a fresh save that keeps the player's settings and device flags. */
-export function resetProgress(save: SaveV1, now: number = Date.now()): SaveV1 {
+export function resetProgress(save: Save, now: number = Date.now()): Save {
   const fresh = defaults(now);
   fresh.settings = { ...save.settings };
   fresh.flags.installSheetShown = save.flags.installSheetShown;
@@ -408,7 +616,7 @@ export interface InstallEnv {
  * iOS browsers only: offer the "Add to Home Screen" sheet once, after run 3 (V1_PLAN §11.5). Never
  * inside an in-app browser, which has no Add to Home Screen.
  */
-export function shouldShowInstallSheet(save: SaveV1, env: InstallEnv): boolean {
+export function shouldShowInstallSheet(save: Save, env: InstallEnv): boolean {
   return env.ios && !env.standalone && env.inApp !== true && save.stats.runs >= INSTALL_SHEET_RUNS && !save.flags.installSheetShown;
 }
 
@@ -417,6 +625,6 @@ export function shouldShowInstallSheet(save: SaveV1, env: InstallEnv): boolean {
  * no runs yet, offer to restore the progress copied in the browser (the install sheet's step 1).
  * Nothing needs saving: once a run finishes the condition is false for good.
  */
-export function shouldOfferRestoreSheet(save: SaveV1, env: InstallEnv): boolean {
+export function shouldOfferRestoreSheet(save: Save, env: InstallEnv): boolean {
   return env.ios && env.standalone && save.stats.runs === 0;
 }

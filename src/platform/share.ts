@@ -1,7 +1,15 @@
-// Sharing text: Web Share API first, then the clipboard (V1_PLAN §11.4). The caller turns the
-// returned outcome into a toast; nothing here touches the UI.
+// Sharing: Web Share API first, then the clipboard (text) or a download (files) (V1_PLAN §11.4,
+// V1_1_PLAN UM7). The caller turns the returned outcome into a toast; nothing here touches the UI.
 
-export type ShareOutcome = 'shared' | 'copied' | 'cancelled' | 'failed';
+/**
+ * - `shared`: handed to the share sheet. `copied`: the text is on the clipboard.
+ * - `saved`: the file was downloaded and the text copied (the copy may have failed).
+ * - `cancelled`: the player dismissed the share sheet (show nothing). `failed`: nothing worked.
+ */
+export type ShareOutcome = 'shared' | 'copied' | 'saved' | 'cancelled' | 'failed';
+
+/** How long a download's object URL lives (the browser has started the download by then). */
+const DOWNLOAD_URL_MS = 10_000;
 
 export interface SharePayload {
   title?: string;
@@ -9,14 +17,8 @@ export interface SharePayload {
   text: string;
 }
 
-/**
- * Opens the native share sheet when available, otherwise copies the text.
- * - `shared`: handed to the share sheet.
- * - `copied`: on the clipboard (show "Copied!").
- * - `cancelled`: the player dismissed the share sheet (show nothing).
- * - `failed`: neither worked (show a manual-copy hint).
- */
-export async function shareText(payload: SharePayload): Promise<ShareOutcome> {
+/** Opens the native share sheet when available, otherwise copies the text ('copied' or 'failed'). */
+export async function shareText(payload: SharePayload): Promise<Exclude<ShareOutcome, 'saved'>> {
   const data: ShareData = payload.title ? { title: payload.title, text: payload.text } : { text: payload.text };
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     const allowed = typeof navigator.canShare !== 'function' || navigator.canShare(data);
@@ -31,6 +33,42 @@ export async function shareText(payload: SharePayload): Promise<ShareOutcome> {
     }
   }
   return (await copyText(payload.text)) ? 'copied' : 'failed';
+}
+
+/**
+ * Shares a file (the Results postcard) with its text: the native share sheet when it takes files,
+ * otherwise a download of the file plus the text on the clipboard ('saved'). Call it synchronously
+ * inside the click handler: navigator.share runs before any await, so iOS still sees the tap.
+ */
+export async function shareFiles(p: { file: File; text: string }): Promise<ShareOutcome> {
+  const data: ShareData = { files: [p.file], text: p.text };
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && navigator.canShare?.({ files: [p.file] }) === true) {
+    try {
+      await navigator.share(data);
+      return 'shared';
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled';
+      // A share target that refused the file: save it instead.
+    }
+  }
+  if (!download(p.file)) return 'failed';
+  await copyText(p.text);
+  return 'saved';
+}
+
+/** Starts a download of `file` through a temporary <a download>. False without a document. */
+function download(file: File): boolean {
+  if (typeof document === 'undefined' || !document.body || typeof URL.createObjectURL !== 'function') return false;
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_MS);
+  return true;
 }
 
 /** Copies text to the clipboard (async Clipboard API, then the legacy execCommand path). */

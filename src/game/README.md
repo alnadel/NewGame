@@ -1,4 +1,4 @@
-# SHADY game and render layers (wave 3)
+# SHADY game and render layers
 
 `src/game` orchestrates a run on top of the deterministic core; `src/render` draws it with Canvas 2D.
 `src/main.ts` boots everything (save, audio, haptics, UI, renderer, session, service worker) and
@@ -51,17 +51,8 @@ audio; only the draw is skipped:
   time).
 - The governor samples only drawn frames of play, dying and the Title, with the interval since the
   previous drawn frame, so capped and menu screens never trip it.
-- **Settled Results** (Melt Map pulled and faded in, no particle, pop, ring or vignette alive,
-  the sheet top unchanged): the renderer draws the world and the map overlay once into a canvas-
-  sized backdrop, with the world clock frozen; each frame then copies back only the puddle marker's
-  box from it and redraws the pulsing ring and carrot there, under the same clips (pixel-identical
-  to a full redraw, checked by `resultsAB()`). It is rebuilt after a resize, a DPR or governor step,
-  a sheet-top change, a palette change or new confetti. In this container (software compositing,
-  390×844 at DPR 2, 1× CPU) the settled Results went from ~33 % to ~15 % of the main thread and from
-  ~900 KB/s to ~120 KB/s of JS allocation five seconds in (~40 KB/s once the frame code is
-  optimized); at 1280×800 from ~85 % to ~16 %. What is left is the per-rAF session work (~2.5 %),
-  the UI's own per-frame style work, and the compositor's commit of the changed canvas (~5 % here),
-  which a GPU canvas makes cheap.
+- **Settled Results** (v1.1 GR4): the backdrop cache is gone; once the Melt Map has settled the
+  Results draw at a capped cadence instead (V1_1_PLAN GR4).
 
 ### World rect (K9)
 
@@ -94,10 +85,10 @@ out every screen, control, sheet, toast and dialog inside it.
 
 ### Runs
 
-- **Drain (K2)**: endless runs without `?profile=` or `?bot=` set `cfg.drain =
-  endlessDrain(save.stats.runs)` (30, 33, 36 … 55 Chill/s by lifetime run); the prebuilt next run
-  and the Title's held run come through the same `runConfig`. Dailies, challenges, `?profile=` and
-  bots keep the profile's drain.
+- **Comfort rungs** (v1.1, V1_1_PLAN GR7 with A2): endless runs without `?profile`, `?bot`,
+  `?forecast` or `?rung` take their profile, drain and noon cloud from core `rungConfig(rung)`, with
+  rung 0 for lifetime run 0, else `max(1, stats.comfort)` (or 4 with Adaptive comfort off); the
+  rung played goes to `applyRunResult`. Dailies use the Daily's rules, challenges the sender's (A1).
 - **The held Title run** is the challenge run while a challenge link is open (a canvas press or a
   tray drag starts it, `startRun('challenge')` reuses it, Home brings it back). `refreshTitleRun()`
   rebuilds it, and drops the prebuilt next run, after a reset or restore, another tab's save, a
@@ -124,86 +115,36 @@ rings → depth-sorted casters with Nubs (an offscreen sprite) inserted at his y
 when something in front overlaps him → heat squiggles → clouds → air particles → Melt Map overlays
 → halo dial → vignettes → text pops → sun mascot → HUD → banners → confetti.
 
-Per-frame cost notes: the ground detail tiles are pre-composited with the ground color into opaque
-tiles of a whole number of device pixels (repainted when the ground palette, quantized to 1/64 of the
-day, steps: about once a second) and blitted 1:1 at whole-pixel positions, a plain copy instead of a
-full-screen fill plus ~8 scaled, blended images; the letterbox fill is skipped when the world fills
-the canvas; additive particle glows share one `lighter` switch; the gazing ball reuses its gradient.
-The soft shadow layer's full-screen scaled multiply blit is the largest raster item in software
-raster, so the governor's first step (and low-end devices from the start) fill the same shadow path
-straight onto the world with `multiply` instead (identical colors, crisp edges). In this container
-(software raster, 4× CPU throttle, Day 4 noon, 390×844 at DPR 2) that took the rAF interval from
-~170 ms to ~140 ms at full quality (`?perf=0`) and from ~130 ms (governor at DPR 0.625) to ~60 ms by
-default (crisp shadows, DPR ≤ 1.5); the frame's JS is ~13-17 ms there, mostly caster and Nubs path
-work, so a real mid-range phone profile is still the open check. Earlier: the HUD row is an offscreen layer rebuilt only when its text, flags or layout
-change (about every 0.7 s), with the moving bits (flake pop, multiplier badge, ruler progress) drawn
-from small sprites; Nubs is stamped from two cached layers (back, front) plus live scarf tails, the
-layers redrawn only when his size (1/40 Chill steps), look (5° steps), tints or expression change;
-building windows, stall posts and footprints are batched into few fills; tree canopies fill cached
-unit-space `Path2D` lumps. At Day 4 noon with a 4× CPU throttle this took the frame's JS from
-~16.5 ms to ~12.5 ms mean (container without a GPU; raster cost there is still software and dominates
-the rAF interval, so a real mid-range phone profile is still the open check).
+Per-frame cost notes: ground detail tiles are pre-composited into opaque, whole-device-pixel tiles
+(repainted when the quantized ground palette steps, and only for a biome on or near the screen) and
+blitted 1:1; the shadow layer is one path and one fill; the governor's first step fills it straight
+onto the world (crisp shadows); the HUD row and Nubs are cached layers redrawn only when their
+content changes; windows, posts and footprints are batched; audio builds its graph in a task after
+the first pointerdown. v1.1 adds one small offscreen atmosphere canvas stretched with a single
+`drawImage` (A12, `perf().fullScreenPasses` ≤ 3).
 
-Wave 3 cache churn (at 4× CPU in this container): a biome's ground tile is built and painted only
-when one of its rows is on screen or within one screen ahead, and palette-step or DPR repaints touch
-only those tiles, so Day 1 paints the meadow tile alone (first-frame `drawGround` ~100-120 ms → ~33-46
-ms). Nubs' cached layers take their shade tint from the quantized night (1/16 steps) instead of the
-continuous palette value, so dusk and dawn redraw them ≤ 20 times a second (was 38-58). The Title
-keeps the play HUD's row prebuilt for the held run, so the first play frame after a tap doesn't
-build it. The first tap's pointerdown handling went from ~70-100 ms to ~1-10 ms: audio builds its
-context and graph in a task right after the first pointerdown (see `src/audio/README.md`).
+## v1.1 at a glance
+
+See V1_1_PLAN §4.2 for the contracts. The governor has four levels (`perf().govLevel` 0-3); the
+caster sprite cache is optional (A12: a θ-independent key, measured under `?bot=human`); the death
+recap line comes from core `deathTip()` (A13) into `ResultsView.tip`; the Daily par job steps core
+`createParJob()` in idle time (≤ 3 ms or one chunk per callback) and stores it with meta
+`setDailyPar`; the postcard (A11) is a cover-crop of the settled Melt Map built in idle stages and
+shared from its own Results pill through platform `shareFiles`, while Share stays text and link.
+New SimEvents (`swing`, `lessonDone`) drive fx, haptics and the cue line; audio ignores them.
 
 ## Test hook (`?test=1`)
 
-`screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`), `forceDeath()` (Nubs melts on
-the next daylight tick; a paused run resumes first), `runHeadless(seed, ticks, bot)`,
-`setTimeScale(n)`, `audioState()`; extras for tooling: `paused()`, `presses()`, `demo(name)`
-(replays `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`, `cloud`, `glare`, `flake` or `best`
-through fx/audio only — the sim is untouched), `perf()` (frame/sim/gen/render ms, Nubs layer redraw
-and compose counters, ground tile repaints (one per biome tile painted), the canvas DPR, the
-governor level, `draws` (renderer.draw calls so far) and `ringDraws` (settled-Results frames that
-only repainted the puddle ring)), `nubsScreen()`, `timeScale()` (slow-mo × lesson × hit-stop),
-`hint()` (ghost mode, target arc, way round, lesson on, hints shown), `runCfg()` (the current or
-held run's `mode, profile, tutorial, reducedMotion, seed, dailyDate, drain`; drain is `cfg.drain`
-or the profile's), `cameraFx()` (`zoom, shakeX, shakeY`), `hudPb()` (the HUD's best flag),
-`renderOptions({ resultsCache, mapOverlay })` (A/B switches), `mapProbe(mapT)` (on the Results:
-draws the map at `mapT` with and without its overlay and counts the device pixels that differ above
-and below the sheet's top), `resultsAB()` (settled Results: the cached frame vs a full redraw at the
-same instant) and `bot(kind)` (a core bot plays the runs; unlike `?bot=` they stay scored). `?perf=0` is full quality: no governor and no device-class cap (useful for captures and A/B
-timing).
+`screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
+(−1 outside endless), `drain, noonCloud, forecast, biome, lessonOn`), `forceDeath()`,
+`runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; for tooling: `paused()`,
+`presses()`, `demo(name)` (fx and audio only: `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`,
+`cloud`, `glare`, `flake`, `best`, and in v1.1 `passed`, `swing`, `highnoon`, `postcard`), `perf()`
+(frame, sim, generation and render ms, layer counters, the DPR, `govLevel`, `draws`, and in v1.1
+`casterRenders, casterHits, casterDirect, fullScreenPasses`), `nubsScreen()`, `timeScale()`,
+`hint()`, `runCfg()`, `cameraFx()`, `hudPb()`, `renderOptions({ mapOverlay, casterSprites })`,
+`mapProbe(mapT)` and `bot(kind)` (a core bot plays; unlike `?bot=` the runs stay scored). URL
+parameters are in V1_PLAN §14.
 
-## Deliberate deviations from the docs
-
-- **First lesson** (V1_PLAN §6.2, CRITIQUE first minute): in profiles 0-1, until the save's
-  `flags.tutorialDone`, the first hint of a run does not time out: it loops while game time runs at
-  0.5× (`clock.assist`, eased) until a swing of ≥ 15° ends with Nubs fully shaded for 0.25 s (then
-  `tutorialDone` is saved), its target is gone for 0.5 s, or the sun sets. A shadow that passes over
-  an idle Nubs ends it unpassed; it returns the next time he is lit. The sim is untouched (replays and
-  bots are unaffected); an idle first-timer now melts after ~10 s instead of ~7 s and a player who
-  follows the hint 4 s late still makes it.
-- **Hint target and direction**: the hint aims at the widest arc that is safe now *and* 0.6 s ahead
-  (gaps ≤ 6° merged), tracked as it drifts, and keeps its first way round while that arc exists and
-  the two ways differ by less than 20° of a half-turn (it used to aim at the nearest safe bin, which
-  flipped sides on an unchanged sun when the arc sat ~180° away). The direction now honours
-  Settings → invert (it ignored it). While a hint plays, the halo shows the target: a glow and a white bracket on the arc, dots
-  along the way round, and a ghost sun that glides from the sun pointer into the arc in step with the
-  ghost thumb (read from its CSS animation clock, `ui.ghostProgress()`).
-- **Title**: the ±25° sway follows the ghost hand's swing (hand right → sun clockwise, or the other
-  way with invert) instead of a free 0.3 Hz sine, and Nubs' footprint rim and tint follow the swaying
-  sun through the guide's lit counts, so the Title shows drag → sun → shade → cool Nubs.
-- **Crisp shadow mode** (V1_PLAN §9 specifies only the soft half-res layer): see the cost notes above.
-- **Start beat** (core, `TUNING.start.readyTicks`): every run opens with 0.8 s in which the sun
-  answers the finger but the clock, Nubs and Chill wait; Nubs stands until the `go` event, then sets
-  off with a little cheer. Retry/Restart start the run on the tap, so without it Nubs walked out of
-  the start hut's shade ~0.2 s later while the finger was still lifting off the button.
-
-- **Nubs is drawn at 1.15× the GDD body size** (V1_PLAN says 0.9): at 360 u per screen width the
-  compressed sprite was a ~20 px speck. The footprint disc still marks the true test area; its rim is
-  drawn at r 13.5 u (not 9) so its per-sample quadrants stay visible around his base.
-- **X-ray**: when a caster drawn in front of Nubs overlaps his sprite, he is stamped again at 62 %
-  alpha; canopies near him fade to ~0.62 (GDD 0.7).
-- **Heat squiggles** above a lit Nubs, in addition to steam (white steam is invisible on noon ground).
-- Glare spots are drawn **above** the shadow layer (glare ignores shade, so it should look bright).
-- The canvas sun mascot is hidden on the Title (the DOM logo already carries the sun).
-- `?reset=1` only works in dev builds (TECH_SPEC §17); a shared link must not wipe a save.
-- The in-play ghost-thumb hint sits at 84 % height (`ui.css`), below Nubs and his halo.
+Decisions that differ from the GDD or V1_PLAN (the first lesson, the hint's target, the Title sway,
+the start beat, Nubs' size, x-ray, heat squiggles, crisp shadows) are listed in V1_PLAN §15.

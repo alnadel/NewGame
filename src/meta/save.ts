@@ -1,9 +1,10 @@
-// Save v1: defaults, validation/migration and a debounced persistent store (TECH_SPEC §12, V1_PLAN §11.5).
+// Save v2: defaults, validation/migration and a debounced persistent store (V1_PLAN §11.5,
+// V1_1_PLAN UM1).
 //
 // Loading never throws and never trusts its input: every field is type-checked, clamped and filtered
 // against the content catalog. A save written by a newer build is left untouched on disk.
 
-import type { DailyEntry, MissionSlot, SaveV1, Settings } from './saveTypes.ts';
+import type { DailyEntry, ErrandState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
 import type { StorageAdapter } from '../platform/storage.ts';
 import { onPageVisible } from '../platform/lifecycle.ts';
 import {
@@ -19,8 +20,10 @@ import {
   isAchievementId,
   isCosmeticId,
 } from './content.ts';
-import { parseMissionId, refillMissions } from './missions.ts';
+import { getErrand, parseMissionId, refillMissions } from './missions.ts';
+import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
+import { COMFORT_MAX } from './shims.ts';
 
 export const SAVE_KEY = 'shady.save';
 /** Suffixes of the side keys every store keeps next to its main key. */
@@ -30,14 +33,20 @@ const FUTURE_SUFFIX = '.future';
 export const SAVE_BAK_KEY = `${SAVE_KEY}${BAK_SUFFIX}`;
 /** A save written by a newer build, copied aside and never overwritten. */
 export const SAVE_FUTURE_KEY = `${SAVE_KEY}${FUTURE_SUFFIX}`;
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 /** Daily entries kept (newest dates win). */
 export const DAILY_KEEP = 60;
+/** Snowbot pars kept (newest dates win). */
+export const PARS_KEEP = 14;
+/** Endless runs kept in the history (oldest dropped first). */
+export const HISTORY_KEEP = 30;
 /** Default write debounce (ms). */
 export const SAVE_DEBOUNCE_MS = 300;
 
 const BIG = 1_000_000_000;
 const MAX_GLYPHS_LENGTH = 1000;
+const MAX_MINUTES = 1_000_000;
+const MAX_SNOW = 10_000_000;
 
 export function defaultSettings(): Settings {
   return {
@@ -49,15 +58,31 @@ export function defaultSettings(): Settings {
     reducedMotion: 'auto',
     highContrast: false,
     guide: 'auto',
+    name: '',
+    comfort: true,
   };
 }
 
+/** An empty errand (a date's errand is created on its first run or view). */
+export function emptyErrand(): ErrandState {
+  return { date: '', id: '', progress: 0, done: false };
+}
+
+export function emptyWeek(): WeekState {
+  return { start: '', days: 0, paid: 0, best: [0, 0, 0, 0, 0, 0, 0] };
+}
+
+/** The comfort rung a v1 save starts v1.1 on, from its lifetime runs (A2). */
+export function comfortFromRuns(runs: number): number {
+  return runs <= 0 ? 0 : ([1, 1, 2, 3, 4][Math.min(runs, 5) - 1] as number);
+}
+
 /** A brand-new save (3 missions dealt, default cosmetics owned and equipped). */
-export function defaults(now: number = Date.now()): SaveV1 {
-  const missions = { cursor: 0, tier: 1, active: [] as MissionSlot[] };
-  refillMissions(missions);
+export function defaults(now: number = Date.now()): Save {
+  const missions = { cursor: 0, tier: 1, active: [] as MissionSlot[], deferred: [] as string[], errand: emptyErrand() };
+  refillMissions(missions, 0);
   return {
-    v: 1,
+    v: 2,
     createdAt: now,
     settings: defaultSettings(),
     stats: {
@@ -73,11 +98,20 @@ export function defaults(now: number = Date.now()): SaveV1 {
       dailyDaysPlayed: 0,
       cloudSeconds: 0,
       reachedNight: false,
+      comfort: 0,
+      playSeconds: 0,
+      swings: 0,
+      sunnyWeeks: 0,
+      forecastNoons: 0,
     },
     unlocks: { cosmetics: [...DEFAULT_COSMETICS], achievements: [] },
     equipped: { ...DEFAULT_EQUIPPED },
     missions,
     daily: {},
+    pars: {},
+    history: [],
+    week: emptyWeek(),
+    lastPlay: '',
     flags: {
       hintsShown: 0,
       tutorialDone: false,
@@ -90,7 +124,7 @@ export function defaults(now: number = Date.now()): SaveV1 {
 }
 
 /** Deep copy, so pure helpers never alias the caller's save. */
-export function cloneSave(save: SaveV1): SaveV1 {
+export function cloneSave(save: Save): Save {
   return structuredClone(save);
 }
 
@@ -137,6 +171,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     reducedMotion: pick(r.reducedMotion, ['auto', 'on', 'off'] as const, d.reducedMotion),
     highContrast: bool(r.highContrast, d.highContrast),
     guide: pick(r.guide, ['auto', 'always', 'off'] as const, d.guide),
+    name: typeof r.name === 'string' ? sanitizeName(r.name) : d.name,
+    comfort: bool(r.comfort, d.comfort),
   };
 }
 
@@ -169,7 +205,14 @@ function sanitizeDaily(raw: unknown): Record<string, DailyEntry> {
  */
 export const HOLD_X5_MIGRATED_PROGRESS = 5;
 
-function sanitizeMissions(raw: unknown, legacyUnits: boolean): SaveV1['missions'] {
+function sanitizeErrand(raw: unknown): ErrandState {
+  const r = rec(raw);
+  if (typeof r.date !== 'string' || !isDateString(r.date) || typeof r.id !== 'string' || !getErrand(r.id)) return emptyErrand();
+  return { date: r.date, id: r.id, progress: num(r.progress, 0, 0, BIG), done: bool(r.done, false) };
+}
+
+/** `best`: the player's recent best, for dealing replacement slots past the skill gates. */
+function sanitizeMissions(raw: unknown, legacyUnits: boolean, best: number): Save['missions'] {
   const r = rec(raw);
   const active: MissionSlot[] = [];
   if (Array.isArray(r.active)) {
@@ -182,27 +225,91 @@ function sanitizeMissions(raw: unknown, legacyUnits: boolean): SaveV1['missions'
       const done = bool(item.done, false);
       let progress = num(item.progress, 0, 0, BIG);
       if (legacyUnits && !done && parsed.def.id === 'hold-x5' && progress > 0) progress = HOLD_X5_MIGRATED_PROGRESS;
-      active.push({ id: item.id, progress, done });
+      active.push({ id: item.id, progress, done, stale: int(item.stale, 0, 0, BIG) });
     }
+  }
+  // One queued entry per mission, never one that is active.
+  const deferred: string[] = [];
+  for (const id of Array.isArray(r.deferred) ? r.deferred : []) {
+    const def = typeof id === 'string' ? parseMissionId(id)?.def.id : undefined;
+    if (def === undefined || active.some((s) => s.id === id) || deferred.some((d) => parseMissionId(d)?.def.id === def)) continue;
+    deferred.push(id as string);
   }
   const missions = {
     cursor: int(r.cursor, 0, 0, MISSIONS.length - 1),
     tier: int(r.tier, 1, 1, 99),
     active,
+    deferred,
+    errand: sanitizeErrand(r.errand),
   };
-  // A damaged save may have lost slots: deal replacements so there are always three. Completed
-  // slots stay as they are; they are only swapped at the next run start.
-  if (active.length < ACTIVE_MISSIONS) refillMissions(missions, false);
+  // A damaged save (or a v1 'play-daily' slot, now an errand) leaves a gap: deal replacements so
+  // there are always three. Completed slots stay as they are until the next run starts.
+  if (active.length < ACTIVE_MISSIONS) refillMissions(missions, best, false);
   return missions;
 }
 
-/** Validates a v1-shaped object into a well-formed SaveV1. */
-function sanitize(r: Rec, now: number): SaveV1 {
+function sanitizeHistory(raw: unknown): RunRecord[] {
+  const out: RunRecord[] = [];
+  for (const e of Array.isArray(raw) ? raw : []) {
+    if (!isRecord(e) || typeof e.d !== 'string' || !isDateString(e.d)) continue;
+    out.push({ m: int(e.m, 0, 0, MAX_MINUTES), s: int(e.s, 0, 0, MAX_SNOW), r: int(e.r, COMFORT_MAX, 0, COMFORT_MAX), d: e.d });
+  }
+  return out.slice(-HISTORY_KEEP);
+}
+
+function sanitizeWeek(raw: unknown): WeekState {
+  const r = rec(raw);
+  if (typeof r.start !== 'string' || !isDateString(r.start)) return emptyWeek();
+  const best = Array.isArray(r.best) ? r.best : [];
+  return {
+    start: r.start,
+    days: int(r.days, 0, 0, 127),
+    paid: int(r.paid, 0, 0, 7),
+    best: Array.from({ length: 7 }, (_, i) => int(best[i], 0, 0, 99)),
+  };
+}
+
+/** Keeps the newest `keep` pars. Mutates and returns `pars`. */
+export function prunePars(pars: Record<string, number>, keep: number = PARS_KEEP): Record<string, number> {
+  const dates = Object.keys(pars).sort();
+  for (let i = 0; i < dates.length - keep; i++) delete pars[dates[i] as string];
+  return pars;
+}
+
+function sanitizePars(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [date, value] of Object.entries(rec(raw))) {
+    if (isDateString(date) && typeof value === 'number' && Number.isFinite(value)) out[date] = int(value, 0, 0, MAX_MINUTES);
+  }
+  return prunePars(out);
+}
+
+/**
+ * The best score of the recent endless runs: the max over the last 10 history entries (tutorial
+ * runs ignored), or the all-time best while the history holds fewer than 3 runs. Missions are
+ * gated on it, the gold ruler flag shows it and the Journal frames runs against it.
+ */
+export function recentBest(save: Pick<Save, 'history' | 'stats'>): number {
+  const h = save.history;
+  if (h.length < 3) return save.stats.bestMinutes;
+  let best = 0;
+  for (let i = Math.max(0, h.length - 10); i < h.length; i++) {
+    const e = h[i] as RunRecord;
+    if (e.r !== 0 && e.m > best) best = e.m;
+  }
+  return best;
+}
+
+/** Validates a v2-shaped object into a well-formed Save. */
+function sanitize(r: Rec, now: number): Save {
   const base = defaults(now);
   const stats = rec(r.stats);
   const unlocks = rec(r.unlocks);
   const equipped = rec(r.equipped);
   const flags = rec(r.flags);
+  const runs = int(stats.runs, 0, 0, BIG);
+  const bestMinutes = int(stats.bestMinutes, 0, 0, BIG);
+  const history = sanitizeHistory(r.history);
 
   const achievementSet = new Set(Array.isArray(unlocks.achievements) ? unlocks.achievements.filter(isAchievementId) : []);
   const achievements = ACHIEVEMENTS.filter((a) => achievementSet.has(a.id)).map((a) => a.id);
@@ -223,12 +330,12 @@ function sanitize(r: Rec, now: number): SaveV1 {
   }
 
   return {
-    v: 1,
+    v: 2,
     createdAt: typeof r.createdAt === 'number' && r.createdAt > 0 && r.createdAt < 1e15 ? r.createdAt : now,
     settings: sanitizeSettings(r.settings),
     stats: {
-      runs: int(stats.runs, 0, 0, BIG),
-      bestMinutes: int(stats.bestMinutes, 0, 0, BIG),
+      runs,
+      bestMinutes,
       bestSnowRun: int(stats.bestSnowRun, 0, 0, BIG),
       lifetimeSnow: int(stats.lifetimeSnow, 0, 0, BIG),
       wallet: int(stats.wallet, 0, 0, BIG),
@@ -239,12 +346,21 @@ function sanitize(r: Rec, now: number): SaveV1 {
       dailyDaysPlayed: int(stats.dailyDaysPlayed, 0, 0, BIG),
       cloudSeconds: num(stats.cloudSeconds, 0, 0, BIG),
       reachedNight: bool(stats.reachedNight, false),
+      comfort: int(stats.comfort, comfortFromRuns(runs), 0, COMFORT_MAX),
+      playSeconds: num(stats.playSeconds, 0, 0, BIG),
+      swings: int(stats.swings, 0, 0, BIG),
+      sunnyWeeks: int(stats.sunnyWeeks, 0, 0, BIG),
+      forecastNoons: int(stats.forecastNoons, 0, 0, 127),
     },
     unlocks: { cosmetics, achievements },
     equipped: eq,
     // Saves without the flag predate the polish-wave mission units: convert them once.
-    missions: sanitizeMissions(r.missions, !bool(flags.missionsV2, false)),
+    missions: sanitizeMissions(r.missions, !bool(flags.missionsV2, false), recentBest({ history, stats: { ...base.stats, bestMinutes } })),
     daily: sanitizeDaily(r.daily),
+    pars: sanitizePars(r.pars),
+    history,
+    week: sanitizeWeek(r.week),
+    lastPlay: typeof r.lastPlay === 'string' && isDateString(r.lastPlay) ? r.lastPlay : '',
     flags: {
       hintsShown: int(flags.hintsShown, 0, 0, BIG),
       tutorialDone: bool(flags.tutorialDone, false),
@@ -270,15 +386,22 @@ function sanitize(r: Rec, now: number): SaveV1 {
 export type LoadStatus = 'fresh' | 'ok' | 'recovered' | 'corrupt' | 'future';
 
 export interface MigrateResult {
-  save: SaveV1;
+  save: Save;
   status: Exclude<LoadStatus, 'recovered'>;
 }
 
 /**
- * Upgrades from older schemas: MIGRATIONS[i] turns a v(i+1) object into a v(i+2) object.
- * v1 is the first schema, so the list starts empty; append to it when SaveV2 ships.
+ * Upgrades from older schemas: MIGRATIONS[i] turns a v(i+1) object into a v(i+2) object; sanitize
+ * then fills every field the old schema lacked with its default.
+ * - v1 → v2: the comfort rung from lifetime runs (A2). Its 'play-daily' slots no longer parse (the
+ *   Daily is an errand now), so sanitize deals replacements.
  */
-const MIGRATIONS: readonly ((save: Rec) => Rec)[] = [];
+const MIGRATIONS: readonly ((save: Rec) => Rec)[] = [
+  (v1) => {
+    const stats = rec(v1.stats);
+    return { ...v1, v: 2, stats: { ...stats, comfort: comfortFromRuns(int(stats.runs, 0, 0, BIG)) } };
+  },
+];
 
 /** Parses (if a string) and validates raw save data. Never throws. */
 export function migrate(raw: unknown, now: number = Date.now()): MigrateResult {
@@ -352,7 +475,7 @@ export interface SaveStoreOptions {
  */
 export class SaveStore {
   readonly status: LoadStatus;
-  private current: SaveV1;
+  private current: Save;
   private readonly storage: StorageAdapter;
   private readonly key: string;
   private readonly debounceMs: number;
@@ -366,8 +489,8 @@ export class SaveStore {
   /** The raw bytes last read from or written to the main key (to spot writes made elsewhere). */
   private lastRaw: string | null;
   private degradedNotified = false;
-  private readonly listeners = new Set<(save: SaveV1) => void>();
-  private readonly externalListeners = new Set<(save: SaveV1) => void>();
+  private readonly listeners = new Set<(save: Save) => void>();
+  private readonly externalListeners = new Set<(save: Save) => void>();
   private readonly degradedListeners = new Set<() => void>();
   private readonly detach: (() => void)[] = [];
 
@@ -424,18 +547,18 @@ export class SaveStore {
     return this.writable;
   }
 
-  get(): SaveV1 {
+  get(): Save {
     return this.current;
   }
 
   /** Replaces the save (e.g. with the result of a pure progression helper) and schedules a write. */
-  set(next: SaveV1): void {
+  set(next: Save): void {
     this.current = next;
     this.changed();
   }
 
   /** Mutates the save in place and schedules a write. */
-  update(mutate: (draft: SaveV1) => void): void {
+  update(mutate: (draft: Save) => void): void {
     mutate(this.current);
     this.changed();
   }
@@ -462,7 +585,7 @@ export class SaveStore {
   }
 
   /** Called with the new save after every set/update. Returns an unsubscribe function. */
-  subscribe(listener: (save: SaveV1) => void): () => void {
+  subscribe(listener: (save: Save) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -472,7 +595,7 @@ export class SaveStore {
    * or a re-read on becoming visible that found different bytes). Push it to the UI and re-apply
    * its settings. Returns an unsubscribe function.
    */
-  onExternalChange(cb: (save: SaveV1) => void): () => void {
+  onExternalChange(cb: (save: Save) => void): () => void {
     this.externalListeners.add(cb);
     return () => this.externalListeners.delete(cb);
   }

@@ -1,3 +1,5 @@
+> Historical; superseded by V1_1_PLAN.md, V1_PLAN.md and the module READMEs.
+
 # Concept panel results
 
 Ten concepts were generated from five design angles and scored 1-10 by three judges (retention, market/uniqueness, feasibility).

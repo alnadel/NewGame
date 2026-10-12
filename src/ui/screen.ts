@@ -1,6 +1,6 @@
 // Internal contracts between the UI controller (ui.ts) and its screens.
 
-import type { SaveV1, Settings } from '../meta/saveTypes.ts';
+import type { Save, Settings } from '../meta/saveTypes.ts';
 import type { ChallengeBanner, ScreenArgs, ScreenId, ToastOptions, UiCallbacks, UiSoundName } from './types.ts';
 
 export interface ConfirmOptions {
@@ -14,7 +14,7 @@ export interface ConfirmOptions {
 export interface UiContext {
   readonly cb: UiCallbacks;
   readonly version: string;
-  save(): SaveV1;
+  save(): Save;
   today(): string;
   /** Sets the local date and re-renders the date-dependent screens (Daily, the Title's Daily dot). */
   setToday(date: string): void;
