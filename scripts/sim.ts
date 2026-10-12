@@ -10,11 +10,12 @@
 // daylight seconds), plus world stats (rescues per chunk, unresolved validator failures), generation
 // ms/chunk and sim µs/tick.
 //
-// Rows. The V1_PLAN §13 rows run on the plan mix (profile 3 with the Day Plan on). --forecast F sets
-// RunConfig.forecast on every task. --check also runs idle, novice, reactive and oracle with each
-// forecast forced (same seed count, same worker pool) and checks them. ADVISORY rows run the
-// perception-limited human model (humanDial, A6) at comfort rungs R0-R4 and print PASS/MISS against
-// the V1_1_PLAN §6 targets; they never fail --check.
+// Rows. The V1_PLAN §13 rows run on the plan mix (profile 3 with the Day Plan on), plus idle p0 for
+// the first-run lesson's floor (CO4). --forecast F sets RunConfig.forecast on every task. --check
+// also runs idle, novice, reactive and oracle with each forecast forced (same seed count, same
+// worker pool) and checks them. ADVISORY rows run the perception-limited human model (humanDial,
+// A6) at comfort rungs R0-R4 and print PASS/MISS against the V1_1_PLAN §6 targets; they never fail
+// --check.
 //
 // --check exits non-zero if a hard target fails, or passes by less than --margin percentage points
 // of seeds (default 3), so a target that only just passes fails CI before a small tuning change or a
@@ -35,6 +36,7 @@ import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import { comfortAfterRun, rungConfig, type NoonCloud, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
+import { TUNING } from '../src/config/tuning.ts';
 import { dayStartTick, dayStartY } from '../src/core/clock.ts';
 import { formatScore } from '../src/core/format.ts';
 import { ensureGenerated } from '../src/core/gen/world.ts';
@@ -438,6 +440,7 @@ async function main(): Promise<void> {
   const withFc = (j: Job): Job => (fc ? { ...j, forecast: fc } : j);
   let base: Job[] = [
     { bot: 'idle', profile: 3 },
+    { bot: 'idle', profile: 0 },
     { bot: 'novice', profile: 3 },
     { bot: 'novice', profile: 0 },
     { bot: 'reactive', profile: 3 },
@@ -598,6 +601,12 @@ async function main(): Promise<void> {
     }
     const nov0 = at('novice', 0);
     if (nov0.length) share(`${label}novice p0 (lesson) reaches the first night on ≥ 75%`, firstNight(nov0), 0.75);
+    const idle0 = at('idle', 0);
+    if (idle0.length) {
+      // CO4: the lesson floor holds for its whole 25 s, so even a player who never touches the sun lasts that long.
+      const early = idle0.filter((r) => r.died && r.ticks - TUNING.start.readyTicks < TUNING.lesson.maxDaylightTicks).length;
+      report(early === 0, `${label}idle p0 (lesson) never melts in its first 25 s of daylight`, `${early} of ${idle0.length} did`);
+    }
     const rea = at('reactive', 3);
     if (rea.length) window(`${label}reactive p3 median death in [Day 2 noon, Day 4 noon]`, rea, 1080, 2520);
     const ora = at('oracle', 3);
