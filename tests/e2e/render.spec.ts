@@ -2,11 +2,12 @@
 // 20 fps with the puddle ring still pulsing), the world rect published for the DOM (K9), the Melt
 // Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
 // under reduced motion), the lazily painted ground tiles, the matched shadow composite (GR2) and
-// the death beat with its recap tip and callouts that never overlap (GR12), and the postcard (GR14).
+// the death beat with its recap tip and callouts that never overlap (GR12), the postcard (GR14) and
+// the Daily par computed in idle slices (GR15).
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
-import { drag, openGame, seedSave, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, openGame, pageDate, seedSave, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
@@ -473,5 +474,16 @@ test.describe('postcard (GR14)', () => {
     expect(shared!.files).toBe(1);
     expect(shared!.name).toMatch(/\.png$/);
     expect(shared!.text).toContain('SHADY');
+  });
+});
+
+test.describe('Daily par (GR15)', () => {
+  test('Snowbot plays today\'s Daily on the Title and the par lands in the save', async ({ page }) => {
+    await seedSave(page, { v: 1, createdAt: 1, stats: { runs: 5 } });
+    await openGame(page);
+    const today = await pageDate(page);
+    await expect
+      .poll(() => page.evaluate((d) => (JSON.parse(localStorage.getItem('shady.save') ?? '{}') as { pars?: Record<string, number> }).pars?.[d] ?? null, today), { timeout: 15_000 })
+      .toBeGreaterThan(0);
   });
 });

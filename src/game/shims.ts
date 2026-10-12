@@ -143,3 +143,15 @@ function saveFile(p: { file: File; text: string }): Promise<ShareOutcomeV11> {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return copyText(p.text).then((): ShareOutcomeV11 => 'saved');
 }
+
+// V11-SHIM: CC-9/CC-10 — `Save.pars` (Snowbot par minutes by date, the latest 14) and
+// `setDailyPar(save, date, minutes): Save` from src/meta/progression.ts.
+type SaveWithPars = SaveV1 & { pars?: Record<string, number> };
+export function dailyPar(save: SaveV1, date: string): number | undefined {
+  return (save as SaveWithPars).pars?.[date];
+}
+export function setDailyPar(save: SaveV1, date: string, minutes: number): SaveV1 {
+  const pars: Record<string, number> = { ...((save as SaveWithPars).pars ?? {}), [date]: minutes };
+  const keep = Object.keys(pars).sort().slice(-14);
+  return { ...save, pars: Object.fromEntries(keep.map((d) => [d, pars[d] as number])) } as SaveV1;
+}

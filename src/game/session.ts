@@ -41,6 +41,7 @@ import {
   dailyProgress,
   dailyTryStarted,
   equipCosmetic,
+  isDailyUnlocked,
   resetProgress,
   shouldShowInstallSheet,
   type RunOutcome,
@@ -85,6 +86,8 @@ import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import {
   biomeAtWorld,
   COMFORT_MAX,
+  createParJob,
+  type ParJob,
   deathRecap,
   deathTip,
   effectiveNoonCloud,
@@ -111,6 +114,8 @@ import {
   type ChallengeBannerV11,
   type CueId,
   type ResultsViewV11,
+  dailyPar,
+  setDailyPar,
   shareFiles,
   type ShareOutcomeV11,
   swapMission,
@@ -121,6 +126,9 @@ import type { StampKind } from '../render/banners.ts';
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
+/** The par job's share of an idle frame (A13: ≤ 3 ms) and its sim chunk. */
+const PAR_MS = 3;
+const PAR_TICKS = 6;
 
 /** Runs `fn` in idle time (a frame later where requestIdleCallback is missing). */
 function idle(fn: () => void): void {
@@ -298,6 +306,9 @@ export class Session {
   private outcome: RunOutcome | null = null;
   /** The death recap's line of advice for the Results (null: none fits). */
   private tip: string | null = null;
+  /** Today's Daily par job (Snowbot) and the date it is for. */
+  private parJob: ParJob | null = null;
+  private parDate = '';
   /** The postcard of `postcardFor` (built in idle stages once its Melt Map settles) and its file. */
   private postcardFor: RunResult | null = null;
   private postcardJob: PostcardJob | null = null;
@@ -745,6 +756,7 @@ export class Session {
     if (screen !== 'boot') generateSome(s.world, s.nubs.y + TUNING.world.idleAhead, IDLE_BUDGET);
     // The next run's world is built only while no run is being played.
     if (screen !== 'play' && screen !== 'pause') this.stepPrebuild(Math.min(PREBUILD_MAX_MS, Math.max(PREBUILD_MS, realMs * PREBUILD_SHARE)));
+    if (screen !== 'play' && screen !== 'pause' && screen !== 'dying' && screen !== 'boot') this.stepPar();
     this.stats.genMs = performance.now() - tGen;
 
     const gdt = stepping || screen === 'dying' || screen === 'results' ? this.clock.gameDt : screen === 'pause' ? 0 : real;
@@ -1539,6 +1551,35 @@ export class Session {
     if (this.kind !== 'endless' || this.nextRun || this.nextBuild) return;
     this.nextBuild = prepareRun(this.endlessConfigQuiet());
     this.nextBuildRung = this.cfgRung;
+  }
+
+  /**
+   * The Daily par (Snowbot, CC-17): while no run is being played and today's par is missing, the
+   * novice bot plays today's Daily world for at most PAR_MS a frame; the result goes into the save.
+   * A new local date restarts it.
+   */
+  private stepPar(): void {
+    const save = this.d.store.get();
+    const today = this.today;
+    if (!this.d.store.canPersist || !isDailyUnlocked(save) || dailyPar(save, today) !== undefined) {
+      this.parJob = null;
+      return;
+    }
+    if (!this.parJob || this.parDate !== today) {
+      this.parJob = createParJob(dailySeed(today), today >= PLAN_START_DATE);
+      this.parDate = today;
+    }
+    const job = this.parJob;
+    const t0 = performance.now();
+    let done = false;
+    do done = job.step(PAR_TICKS);
+    while (!done && performance.now() - t0 < PAR_MS);
+    if (!done) return;
+    this.parJob = null;
+    const next = setDailyPar(this.d.store.get(), today, job.minutes);
+    this.d.store.set(next);
+    this.d.store.flush();
+    this.ui.setSave(next);
   }
 
   /** Spends up to `ms` of this frame generating the next run's world; creates the run when done. */

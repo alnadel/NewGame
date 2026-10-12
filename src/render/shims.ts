@@ -9,6 +9,16 @@ import {
   BINS,
   biomeAtY,
   cosD,
+  createBot,
+  createRun,
+  dayStartTick,
+  generateSome,
+  headlessConfig,
+  prepareRun,
+  prepareSome,
+  step,
+  TUNING,
+  type RunBuild,
   historyAt,
   historyLength,
   minutesOfDay,
@@ -242,4 +252,37 @@ const SHADES: Readonly<Record<string, ShadesLook>> = {
 export function shadesLook(equipped: Equipped): ShadesLook {
   const id = (equipped as { shades?: string }).shades;
   return (id !== undefined ? SHADES[id] : undefined) ?? (SHADES['shades-classic'] as ShadesLook);
+}
+
+// V11-SHIM: A13 — `createParJob(dateSeed, plan = true): ParJob` from src/core (sim/par.ts): the
+// novice bot plays the Daily's world until it melts or reaches the dawn of Day 8, resumably.
+export interface ParJob {
+  step(maxTicks: number): boolean;
+  readonly minutes: number;
+}
+export function createParJob(dateSeed: number, plan = true): ParJob {
+  const cfg = { ...headlessConfig(dateSeed, 3), mode: 'daily' as const, plan } as RunConfigV11;
+  const bot = createBot('novice');
+  const end = dayStartTick(8);
+  let build: RunBuild | null = prepareRun(cfg);
+  let s: SimState | null = null;
+  const done = (r: SimState): boolean => r.phase === 'dead' || r.tickAbs >= end;
+  return {
+    step(maxTicks: number): boolean {
+      if (build) {
+        if (!prepareSome(build, 12)) return false;
+        s = createRun(cfg, build);
+        build = null;
+        return false;
+      }
+      const r = s as SimState;
+      if (done(r)) return true;
+      generateSome(r.world, r.nubs.y + TUNING.world.idleAhead, 12);
+      for (let i = 0; i < maxTicks && !done(r); i++) step(r, bot.next(r));
+      return done(r);
+    },
+    get minutes(): number {
+      return s ? s.minutes : 0;
+    },
+  };
 }
