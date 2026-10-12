@@ -50,8 +50,14 @@ const tuning = {
     stopOmega: 5,
     /** A touch-down while |ω| exceeds this emits `catch`. */
     catchOmega: 90,
-    /** Keyboard rotation rate (°/s). */
-    keyRate: 180,
+    /**
+     * Keyboard rotation (°/s): a held key ramps linearly from keyRateMin to keyRateMax over
+     * keyRampTicks held ticks (a 1-tick tap turns 2.5°); fine keys (Shift, |key| 2) turn at keyFine.
+     */
+    keyRateMin: 150,
+    keyRateMax: 330,
+    keyRampTicks: 15,
+    keyFine: 90,
     /** Detent spacing (°). Feedback only, never a snap. */
     detentDeg: 15,
     /** Chasing hands off to coasting when the remaining lag is below this (°). */
@@ -98,9 +104,30 @@ const tuning = {
     max: 5,
     /** Continuous full-shade ticks per level (4.0 s). */
     stepTicks: 240,
-    /** Continuous lit ticks that reset the multiplier (0.15 s). */
+    /** Continuous lit ticks that reset the multiplier (0.15 s)… */
     resetLitTicks: 9,
+    /**
+     * …unless θ has turned ≥ graceDeg since the lit stretch began: then the reset waits for
+     * graceLitTicks (0.35 s), so a lit stretch that ends in a SWING keeps the multiplier.
+     */
+    graceDeg: 30,
+    graceLitTicks: 21,
   },
+
+  /**
+   * SWING: shade handed from one source (caster or cloud) to another by turning the sun ≥ minDeg,
+   * with at most maxGapTicks lit ticks between them, confirmed once the new source has kept Nubs
+   * fully shaded for confirmTicks. SWINGs within chainTicks of the last one chain (×2 … ×chainMax)
+   * and pay the chain in Snow.
+   */
+  swing: { minDeg: 45, maxGapTicks: 20, confirmTicks: 15, chainTicks: 180, chainMax: 5 },
+
+  /**
+   * First-run lesson: from `go` until the lesson is passed (a ≥ swingDeg turn after Nubs was lit,
+   * then shadeTicks of full shade), for at most maxDaylightTicks of daylight, Chill never drops
+   * below floor.
+   */
+  lesson: { floor: 12, swingDeg: 15, shadeTicks: 15, maxDaylightTicks: 1500 },
 
   /** PHEW (V1_PLAN §5.3). The threshold T comes from the profile (days.ts). */
   phew: {
@@ -207,9 +234,15 @@ const tuning = {
     lumpsMax: 7,
     /** Render-only: suggested fade-in/out at the ends of a cloud's life (s). */
     fade: 1.5,
-    /** Profile-0 parked noon cloud: rides with Nubs over this clock window (minutes since 6 AM). */
-    parkedFromMin: 300,
-    parkedToMin: 420,
+    /**
+     * Day-1 parked noon cloud, indexed by NoonCloud (days.ts): it rides with Nubs over this clock
+     * window (minutes since 6 AM).
+     */
+    parkedWindows: [
+      [0, 0],
+      [300, 420],
+      [330, 390],
+    ],
     /** Extra life before/after the window so it can fade in/out (s). */
     parkedLead: 3,
   },
@@ -273,6 +306,14 @@ const tuning = {
     recentTicks: 128,
   },
 
+  /**
+   * Death recap tips (sim/recap.ts): "shade was close" needs ≥ exposureSec in the sun at the end and
+   * shade within maxAwayDeg; "short dips add up" needs litShare of the last 10 s lit (0.35, not the
+   * planned 0.5: the human model's deaths at standard rules are mostly flicker deaths at 35-50% lit,
+   * which this line describes best); the noon line covers deaths noonFrom-noonTo minutes after 6 AM.
+   */
+  recap: { exposureSec: 1.5, maxAwayDeg: 90, litShare: 0.35, noonFrom: 300, noonTo: 420 },
+
   /** Headless bots (V1_PLAN §13). Turn rates in °/s. */
   bots: {
     novice: { lagTicks: 12, rate: 180, blur: 6, penalty: 0.2 },
@@ -281,9 +322,20 @@ const tuning = {
     /**
      * Seeded human model (tooling only, never an acceptance gate): reaction lag U(lagMin, lagMax)
      * per decision, aim error N(0, aimSigma)° plus a ±N(0, gainSigma) over/undershoot, min-jerk
-     * drags lasting moveBase + moveMsPerDeg·|Δθ| ms, then a settle pause; lifts at ω = 0.
+     * drags lasting moveBase + moveMsPerDeg·|Δθ| ms, then a settle pause; lifts at ω = 0. The
+     * humanDial variant reads lasting arcs (≥ lastingMinArc°) on lastingShare of its decisions.
      */
-    human: { lagMinMs: 250, lagMaxMs: 350, aimSigmaDeg: 10, gainSigma: 0.2, settleMs: 120, moveBaseMs: 120, moveMsPerDeg: 0.9 },
+    human: {
+      lagMinMs: 250,
+      lagMaxMs: 350,
+      aimSigmaDeg: 10,
+      gainSigma: 0.2,
+      settleMs: 120,
+      moveBaseMs: 120,
+      moveMsPerDeg: 0.9,
+      lastingShare: 0.5,
+      lastingMinArc: 20,
+    },
   },
 };
 

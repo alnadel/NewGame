@@ -1,8 +1,8 @@
 // Chunk placement (V1_PLAN §6.1, §7.1-§7.3, GDD §2.7-§2.10).
 //
 // Every function here draws only from streams keyed by (seed, purpose, chunk/day/id), and the job
-// order is fixed (see world.ts), so the world is a pure function of (seed, profile, tutorial) no
-// matter when, or in how many slices, it is generated.
+// order is fixed (see world.ts), so the world is a pure function of its WorldConfig no matter when,
+// or in how many slices, it is generated.
 
 import {
   BIOME_KINDS,
@@ -15,7 +15,8 @@ import {
   TUTORIAL,
   type CasterKind,
 } from '../../config/casters.ts';
-import { dayParams, PROFILES, type BiomeId, type DayParams, type ProfileParams } from '../../config/days.ts';
+import type { DayParams } from '../../config/days.ts';
+import { FORECAST_TUNING } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { cloudOffset } from '../shadows.ts';
 import {
@@ -35,21 +36,12 @@ import { PICKUP_ALIVE, type Caster, type Cloud, type CloudKind, type Part, type 
 import { rngFor } from '../rng.ts';
 import { distPolyToTrail, trailX } from '../trail.ts';
 import { buildParts, gateArchParts, isRotatable, makeCaster, solidHull } from './catalog.ts';
+import { biomeAtY, dayAtY, firstTownDay, paramsAt, worldPlan } from './plan.ts';
 import { insertBall, insertCaster, insertPickup, lowerBound, takeId, type World } from './store.ts';
 
 const WT = TUNING.world;
 const CH = WT.chunkLen;
 const yt: YTime = { day: 1, dayTick: 0, night: false };
-
-/** Day whose daylight or night contains y (Day 1 for y < 0). */
-export function dayAtY(y: number): number {
-  return timeAtY(y, yt).day;
-}
-
-/** Biome of the ground at y: odd days Meadow, even days Old Town (the night keeps its day's biome). */
-export function biomeAtY(y: number): BiomeId {
-  return dayAtY(y) % 2 === 0 ? 'oldtown' : 'meadow';
-}
 
 /** Casters within this distance (y) avoid sharing a name, so death lines can tell them apart. */
 const NAME_SPAN = 800;
@@ -207,7 +199,7 @@ function commit(
     id,
     kind,
     name: name ?? casterName(w, id, kind, y),
-    biome: biomeAtY(y),
+    biome: biomeAtY(w, y),
     x,
     y,
     rot: rotIdx * WT.rotStep,
@@ -316,13 +308,13 @@ export function placeStart(w: World): void {
 
 /**
  * Day-level objects for day N, generated when the chunk holding its dawn is placed (before any
- * chunk of that day): clouds, the profile-0 parked noon cloud, the Day-2 gate arch, gazing balls,
- * the ice crystal and the night's frost flowers.
+ * chunk of that day): clouds, the Day-1 parked noon cloud, the noon gate arch of the first Old Town
+ * day ≥ 2, gazing balls, the ice crystal and the night's frost flowers.
  */
 export function generateDay(w: World, day: number): void {
-  const p = dayParams(day, w.profile);
-  const pp = PROFILES[w.profile] as ProfileParams;
-  const prof = { overtakeFirst: pp.firstCloudOvertakes && day === 1, parked: pp.parkedNoonCloud && day === 1 };
+  const p = paramsAt(w, day);
+  const sk = p.sky;
+  const parked = day === 1 && w.noonCloud > 0;
   const tDay0 = dayStartTick(day) / TICK_HZ;
   const C = TUNING.cloud;
   const chunk = Math.floor(dayStartY(day) / CH);
@@ -330,19 +322,19 @@ export function generateDay(w: World, day: number): void {
   const sky = rngFor(w.seed, 'sky', day);
   p.clouds.forEach((t, i) => {
     const roll = sky.next();
-    const overtake = (prof.overtakeFirst && i === 0) || roll < C.overtakerChance;
-    const rx = sky.range(C.rxMin, C.rxMax);
-    const speed = overtake ? sky.range(C.overtakeSpeedMin, C.overtakeSpeedMax) : sky.range(C.waitSpeedMin, C.waitSpeedMax);
-    const vx = sky.range(-C.driftMax, C.driftMax);
+    const overtake = (parked && i === 0) || roll < C.overtakerChance;
+    const rx = sky.range(sk.rxMin, sk.rxMax);
+    const speed = overtake ? sky.range(sk.overtakeMin, sk.overtakeMax) : sky.range(sk.waitMin, sk.waitMax);
+    const vx = sky.range(-sk.drift, sk.drift);
     const x0 = sky.range(C.x0Min, C.x0Max);
     const yN = yAtTime(day, t);
     const y0 = overtake ? yN - C.overtakeBehind : yN + C.waitAhead;
     addCloud(w, overtake ? 'overtaker' : 'waiter', tDay0 + t, C.life, x0, y0, vx, speed * p.v, rx);
   });
 
-  if (prof.parked) addParkedNoonCloud(w, day);
+  if (parked) addParkedNoonCloud(w, day);
 
-  if (p.gateAtNoon) placeGate(w, yAtTime(day, p.dayLen / 2), chunk);
+  if (day === firstTownDay(w)) placeGate(w, yAtTime(day, p.dayLen / 2), chunk);
 
   if (p.ballEvery > 0) {
     const br = rngFor(w.seed, 'balls', day);
@@ -369,15 +361,16 @@ export function generateDay(w: World, day: number): void {
 }
 
 /**
- * Profile 0: a cloud rides with Nubs from 11:00 AM to 1:00 PM on Day 1 so that its shadow covers
- * him with the sun roughly north (V1_PLAN §6). Its center stays R(ε) ahead of Nubs and tracks the
- * trail linearly across the window.
+ * The Day-1 training cloud (World.noonCloud > 0): it rides with Nubs over its parkedWindows clock
+ * window (11:00 AM-1:00 PM, or 11:30 AM-12:30 PM) so that its shadow covers him with the sun roughly
+ * north. Its center stays R(ε) ahead of Nubs and tracks the trail linearly across the window.
  */
 function addParkedNoonCloud(w: World, day: number): void {
-  const p = dayParams(day, w.profile);
+  const p = paramsAt(w, day);
   const C = TUNING.cloud;
-  const t1 = (C.parkedFromMin / 720) * p.dayLen;
-  const t2 = (C.parkedToMin / 720) * p.dayLen;
+  const win = C.parkedWindows[w.noonCloud] as readonly number[];
+  const t1 = ((win[0] as number) / 720) * p.dayLen;
+  const t2 = ((win[1] as number) / 720) * p.dayLen;
   const y1 = yAtTime(day, t1);
   const y2 = yAtTime(day, t2);
   const r = cloudOffset(TUNING.shadow.cloudZ, 1 / tanD(elevation(p, t1)));
@@ -419,11 +412,25 @@ function spacingWave(p: DayParams, at: YTime): number {
 
 const waveAt: YTime = { day: 1, dayTick: 0, night: false };
 
+const stallMixes = new Map<number, readonly number[]>();
+
+/** Old Town kind weights with stalls × `stalls` (market days). */
+function townWeights(stalls: number): readonly number[] {
+  let wts = stallMixes.get(stalls);
+  if (!wts) {
+    const m = BIOME_KINDS.oldtown;
+    wts = m.weights.map((wt, i) => (m.kinds[i] === 'stall' ? wt * stalls : wt));
+    stallMixes.set(stalls, wts);
+  }
+  return wts;
+}
+
 function placeCasters(w: World, k: number, y1: number): void {
   const rng = rngFor(w.seed, 'chunk', k);
+  const clearAhead = START_HUT.clearAhead[worldPlan(w, 1).biome];
   for (;;) {
     timeAtY(w.cursorY, waveAt);
-    const p0 = dayParams(waveAt.day, w.profile);
+    const p0 = paramsAt(w, waveAt.day);
     // Draw every value up front so the stream advances identically whatever gets placed. The
     // authored tutorial chunk never reaches here (placeChunk skips it), so it keeps its layout.
     const gap = p0.spacing * spacingWave(p0, waveAt) * rng.range(WT.gapMin, WT.gapMax);
@@ -436,14 +443,17 @@ function placeCasters(w: World, k: number, y1: number): void {
     if (y >= y1) break;
     w.cursorY = y;
     if (flip) w.cursorSide = w.cursorSide > 0 ? -1 : 1;
-    const p = dayParams(dayAtY(y), w.profile);
+    const p = paramsAt(w, dayAtY(y));
+    const ft = FORECAST_TUNING[p.forecast];
     const mix = BIOME_KINDS[p.biome];
-    const kind = pickWeighted(mix.kinds, mix.weights, kindRoll);
+    const kind = pickWeighted(mix.kinds, ft.stalls !== undefined && p.biome === 'oldtown' ? townWeights(ft.stalls) : mix.weights, kindRoll);
     const lat = p.latMin + (p.latMax - p.latMin) * latRoll;
-    if (kind === 'arch' && p.biome === 'oldtown' && gateRoll < GATE_ARCH.chance && placeGate(w, y, k)) continue;
-    // Just past the start hut its side of the trail stays open (non-tutorial runs; the tutorial's
-    // chunk 0 is authored): holding θ0 must stop working soon after the hut's shade ends.
-    const side = y > 0 && y < START_HUT.clearAhead && w.cursorSide === w.startSide ? (w.startSide > 0 ? -1 : 1) : w.cursorSide;
+    // Just past the start hut its side of the trail stays open, and no gate arch spans the trail
+    // there (non-tutorial runs; the tutorial's chunk 0 is authored): holding θ0 must stop working
+    // soon after the hut's shade ends.
+    const gate = kind === 'arch' && p.biome === 'oldtown' && y >= clearAhead && gateRoll < (ft.gateChance ?? GATE_ARCH.chance);
+    if (gate && placeGate(w, y, k)) continue;
+    const side = y > 0 && y < clearAhead && w.cursorSide === w.startSide ? (w.startSide > 0 ? -1 : 1) : w.cursorSide;
     if (!placeBeside(w, { kind, y, side, lat, rotIdx, chunk: k })) w.stats.dropped++;
   }
 }
@@ -470,11 +480,11 @@ function placeFlakes(w: World, k: number, y1: number): void {
   for (let guard = 0; guard < 64; guard++) {
     timeAtY(w.flakeY, yt);
     const day = yt.day;
-    const p = dayParams(day, w.profile);
+    const p = paramsAt(w, day);
     const dl = dayTicks(day);
     if (yt.night || yt.dayTick > P.clusterTMax * dl) {
       // Jump to the next day's window.
-      w.flakeY = yAtDayTick(day + 1, P.clusterTMin * dayTicks(day + 1)) + rng.range(0, 2) * dayParams(day + 1, w.profile).v;
+      w.flakeY = yAtDayTick(day + 1, P.clusterTMin * dayTicks(day + 1)) + rng.range(0, 2) * paramsAt(w, day + 1).v;
       continue;
     }
     if (yt.dayTick < P.clusterTMin * dl) {

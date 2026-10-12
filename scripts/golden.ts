@@ -6,13 +6,16 @@ import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CASTER_KINDS } from '../src/config/casters.ts';
+import { rungConfig } from '../src/config/days.ts';
+import { FORECAST_IDS, forecastFits } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
 import { sinD } from '../src/core/dmath.ts';
+import { planDay } from '../src/core/gen/plan.ts';
 import { createWorld, ensureGenerated } from '../src/core/gen/world.ts';
 import { createBot } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import { hashState } from '../src/core/sim/hash.ts';
-import { headlessConfig, runHeadless } from '../src/core/sim/headless.ts';
+import { headlessConfig, runBot, runHeadless } from '../src/core/sim/headless.ts';
 import { step } from '../src/core/sim/step.ts';
 import type { InputFrame } from '../src/core/sim/types.ts';
 
@@ -26,7 +29,8 @@ const q64 = (v: number): number => Math.round(v * 64) / 64;
 
 /**
  * A fixed 3-minute input script exercising every input path: sine-swept drags, flicks released at
- * speed, catches mid-coast, taps and keyboard bursts. A pure function of the tick index.
+ * speed, catches mid-coast, taps and keyboard bursts (ramping and fine). A pure function of the tick
+ * index.
  */
 export function scriptedInput(i: number): InputFrame {
   const f: InputFrame = { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
@@ -49,7 +53,8 @@ export function scriptedInput(i: number): InputFrame {
     f.downEdge = true;
     f.upEdge = true;
   } else if (c >= 200 && c < 230 && i % 1000 < 500) {
-    f.key = i % 2000 < 1000 ? 1 : -1;
+    const k = i % 2000 < 1000 ? 1 : -1;
+    f.key = c < 218 ? k : k > 0 ? 2 : -2;
   }
   return f;
 }
@@ -93,9 +98,12 @@ function fnv(values: number[]): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-/** Digest of each of chunks 0-9 of a profile-3 world: its casters (incl. rescues) and pickups. */
-export function chunkDigests(seed: number): string[] {
-  const w = createWorld(seed, 3, false);
+/**
+ * Digest of each of chunks 0-9 of a profile-3 world (Day Plan on, or off for the v1.0 world): its
+ * casters (incl. rescues) and pickups.
+ */
+export function chunkDigests(seed: number, plan = true): string[] {
+  const w = createWorld({ seed, profile: 3, tutorial: false, plan });
   ensureGenerated(w, 11 * CH);
   const out: string[] = [];
   for (let k = 0; k < 10; k++) {
@@ -109,12 +117,35 @@ export function chunkDigests(seed: number): string[] {
   return out;
 }
 
+/** Final hash of a 40 s reactive run with each forecast forced, on the first seed ≥ 5 whose Day 1 it fits. */
+export function forecastHashes(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const forecast of FORECAST_IDS) {
+    let seed = 5;
+    while (!forecastFits(forecast, planDay(seed, 1).biome)) seed++;
+    out[forecast] = hashState(runBot({ ...headlessConfig(seed, 3), forecast }, 2400, 'reactive'));
+  }
+  return out;
+}
+
+/** Final hash of a 30 s humanDial run on seed 6 at each comfort rung (rung 2 is p3 @ 44 with noon cloud 1). */
+export function rungHashes(): string[] {
+  return [0, 1, 2, 3, 4].map((rung) => {
+    const rc = rungConfig(rung, { tutorialDone: rung > 0 });
+    return hashState(runBot({ ...headlessConfig(6, rc.profile, rc.drain, rc.noonCloud), tutorial: rc.tutorial, lesson: rc.lesson }, 1800, 'humanDial'));
+  });
+}
+
 export function goldenValues(): Record<string, unknown> {
   return {
     scripted: scriptedHashes(),
     oracle3min: oracleHashes(),
     headless_7_3600_reactive: runHeadless(7, 3600, 'reactive'),
     chunks: { 1: chunkDigests(1), 2: chunkDigests(2), 3: chunkDigests(3) },
+    // Plan-off profile-3 worlds (v1.0 links and Dailies before PLAN_START_DATE) are the v1.0 worlds.
+    chunksPlanOff: { 1: chunkDigests(1, false), 2: chunkDigests(2, false), 3: chunkDigests(3, false) },
+    forecasts: forecastHashes(),
+    rungs: rungHashes(),
   };
 }
 

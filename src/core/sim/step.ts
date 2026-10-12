@@ -5,7 +5,6 @@
 // balls passed → history → death → guide. Everything is pure arithmetic on the state.
 // The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
-import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import {
   dayStartTick,
@@ -21,6 +20,7 @@ import {
   yAtDayTick,
 } from '../clock.ts';
 import { cosD, sinD, tanD } from '../dmath.ts';
+import { paramsAt } from '../gen/plan.ts';
 import { lowerBound, pruneWorld } from '../gen/store.ts';
 import { ensureGenerated } from '../gen/world.ts';
 import type { Caster, GazingBall } from '../objects.ts';
@@ -74,7 +74,7 @@ function advanceClock(s: SimState): void {
   if (s.dayTick === dl + nightTicks(s.day)) {
     s.day++;
     s.dayTick = 0;
-    s.params = dayParams(s.day, s.cfg.profile);
+    s.params = paramsAt(s.world, s.day);
     s.phase = 'day';
     s.nubs.chill = s.nubs.maxChill;
     s.flakesToday = 0;
@@ -154,7 +154,10 @@ function readyTick(s: SimState): void {
   s.ux = cosD(s.sun.theta);
   s.uy = sinD(s.sun.theta);
   computeCoverage(s);
-  if (s.ready === 0) s.events.push({ e: 'go' });
+  if (s.ready === 0) {
+    s.lessonOn = s.cfg.lesson === true;
+    s.events.push({ e: 'go' });
+  }
 }
 
 /** Advances the run by one tick. s.events holds this tick's events afterwards. */
@@ -167,6 +170,8 @@ export function step(s: SimState, input: InputFrame): void {
     if (!input.downEdge && input.key === 0) return;
     s.phase = 'day';
     s.ready = TUNING.start.readyTicks;
+    // A run created with less than the hard guarantee generated (createRun's `ahead`) pays the rest now.
+    ensureGenerated(s.world, s.nubs.y + W.hardAhead);
     s.events.push({ e: 'start' });
     startFrame.down = input.down;
     startFrame.downEdge = input.downEdge;

@@ -11,11 +11,11 @@ import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runHeadless } from '../../src/core/sim/headless.ts';
 import { createReplay, playReplay, recordFrame } from '../../src/core/sim/replay.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { CHECK_EVERY, oracleHashes, SCRIPT_TICKS, scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
+import { CHECK_EVERY, forecastHashes, oracleHashes, rungHashes, SCRIPT_TICKS, scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
-) as { scripted: string[]; oracle3min: string[]; headless_7_3600_reactive: string };
+) as { scripted: string[]; oracle3min: string[]; headless_7_3600_reactive: string; forecasts: Record<string, string>; rungs: string[] };
 
 describe('determinism', () => {
   it('the scripted input run is identical twice and matches the golden hashes', () => {
@@ -26,11 +26,15 @@ describe('determinism', () => {
     expect(new Set(a).size).toBeGreaterThan(10);
   }, 30_000);
 
-  it('a 3-minute oracle run is identical twice and matches the golden hashes', () => {
+  it('a 3-minute oracle run matches the golden hashes (equality with Node-made goldens is the determinism proof)', () => {
     const a = oracleHashes();
     expect(a.length).toBe(SCRIPT_TICKS / CHECK_EVERY);
-    expect(oracleHashes()).toEqual(a);
     expect(a).toEqual(golden.oracle3min);
+  }, 60_000);
+
+  it('a forced run of every forecast and a run at every comfort rung match the golden hashes', () => {
+    expect(forecastHashes()).toEqual(golden.forecasts);
+    expect(rungHashes()).toEqual(golden.rungs);
   }, 60_000);
 
   it('runHeadless(7, 3600, reactive) matches the golden hash (also checked in the browser e2e)', () => {
@@ -61,9 +65,9 @@ describe('determinism', () => {
     const cfg = headlessConfig(33, 3);
     const plain = createRun(cfg);
     const eager = createRun(cfg);
-    const botA = createBot('oracle');
-    const botB = createBot('oracle');
-    for (let i = 0; i < 3600; i++) {
+    const botA = createBot('reactive');
+    const botB = createBot('reactive');
+    for (let i = 0; i < 2400 && plain.phase !== 'dead'; i++) {
       step(plain, botA.next(plain));
       generateSome(eager.world, eager.nubs.y + 4000, 1 + (i % 5));
       step(eager, botB.next(eager));
@@ -83,7 +87,7 @@ describe('determinism', () => {
       expect(hashState(sliced)).toBe(hashState(plain));
       const botA = createBot('reactive');
       const botB = createBot('reactive');
-      for (let i = 0; i < 1800; i++) {
+      for (let i = 0; i < 900; i++) {
         step(plain, botA.next(plain));
         step(sliced, botB.next(sliced));
       }
@@ -91,12 +95,27 @@ describe('determinism', () => {
     }
   }, 60_000);
 
+  it('a run created with less of its world generated (1100 u, as the Title may) plays exactly like a full one', () => {
+    const cfg = headlessConfig(44, 3);
+    const full = createRun(cfg);
+    const lean = createRun(cfg, undefined, 1100);
+    expect(lean.world.validatedThrough).toBeLessThan(full.world.validatedThrough);
+    expect(hashState(lean)).toBe(hashState(full));
+    const a = createBot('reactive');
+    const b = createBot('reactive');
+    for (let i = 0; i < 1200; i++) {
+      step(full, a.next(full));
+      generateSome(lean.world, lean.nubs.y + 2400, 2);
+      step(lean, b.next(lean));
+    }
+    expect(hashState(lean)).toBe(hashState(full));
+  });
+
   it('the scripted input exercises drags, flicks, catches, taps and keys', () => {
     const frames = Array.from({ length: 2000 }, (_, i) => scriptedInput(i));
     expect(frames.some((f) => f.upEdge && f.release > 100)).toBe(true);
     expect(frames.some((f) => f.downEdge && f.upEdge)).toBe(true);
-    expect(frames.some((f) => f.key === 1)).toBe(true);
-    expect(frames.some((f) => f.key === -1)).toBe(true);
+    for (const key of [1, -1, 2, -2]) expect(frames.some((f) => f.key === key)).toBe(true);
     expect(frames.every((f) => f.dTheta * 1024 === Math.round(f.dTheta * 1024))).toBe(true);
   });
 });

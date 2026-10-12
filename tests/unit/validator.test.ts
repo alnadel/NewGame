@@ -75,7 +75,7 @@ describe('validator', () => {
   });
 
   it('an emptied chunk fails, gets Shade Rocks, and then passes', () => {
-    const w = createWorld(8, 3, false);
+    const w = createWorld({ seed: 8, profile: 3, tutorial: false });
     // Place chunks −1, 0 and 1 (8 work units each) without validating anything yet…
     expect(generateSome(w, 480, 24)).toBe(false);
     expect(w.placedThrough).toBe(1);
@@ -97,7 +97,7 @@ describe('validator', () => {
 
   it('validated worlds stay above the floor for a human-model player (seeds 1-3, Days 1-5)', () => {
     for (const seed of [1, 2, 3]) {
-      const w = createWorld(seed, 3, false);
+      const w = createWorld({ seed, profile: 3, tutorial: false });
       ensureGenerated(w, dayStartY(6));
       expect(w.stats.unresolved).toBe(0);
       expect(Math.max(...w.stats.rescuesPerChunk.filter((x) => x !== undefined))).toBeLessThanOrEqual(8);
@@ -109,7 +109,7 @@ describe('validator', () => {
     let rescues = 0;
     let chunks = 0;
     for (let seed = 1; seed <= 12; seed++) {
-      const w = createWorld(seed, 3, false);
+      const w = createWorld({ seed, profile: 3, tutorial: false });
       ensureGenerated(w, dayStartY(2));
       expect(w.stats.unresolved, `seed ${seed}`).toBe(0);
       expect(worstMargin(w), `seed ${seed}`).toBeGreaterThanOrEqual(0);
@@ -122,10 +122,11 @@ describe('validator', () => {
     expect(rescues / chunks).toBeLessThanOrEqual(1.0);
   }, 60_000);
 
-  it('profile 0 holds Day 1 to the higher floor (70)', () => {
-    const w = createWorld(4, 0, true);
+  it('the profile-0 tutorial world (with its noon cloud) stays above the Day-1 floor without rescues', () => {
+    const w = createWorld({ seed: 4, profile: 0, tutorial: true });
     ensureGenerated(w, dayStartY(2));
-    expect(dayParams(1, 0).floor).toBe(70);
+    expect(dayParams(1, 0).floor).toBe(dayParams(1, 3).floor);
     expect(worstMargin(w)).toBeGreaterThanOrEqual(0);
+    expect(w.stats.rescues).toBe(0);
   });
 });

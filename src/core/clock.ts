@@ -7,7 +7,7 @@
 // Nubs' y is a pure function of (day, dayTick): v·t in daylight, then 8·v spread over the night.
 // Day and night lengths never depend on the profile, so this mapping is global.
 
-import { dayParams, type DayParams, type ProfileId } from '../config/days.ts';
+import { dayParams, type DayParams } from '../config/days.ts';
 import { TUNING } from '../config/tuning.ts';
 import { sinD } from './dmath.ts';
 import { formatScore, formatTimeOfDay, formatTimeOfDay10, MINUTES_PER_DAY } from './format.ts';
@@ -135,11 +135,6 @@ export function yAtTime(day: number, t: number): number {
 export function elevation(params: DayParams, tDay: number): number {
   if (tDay < 0 || tDay > params.dayLen) return 0;
   return EPS_DAWN + (params.epsNoon - EPS_DAWN) * sinD((180 * tDay) / params.dayLen);
-}
-
-/** Elevation for (day, dayTick, profile). */
-export function elevationAt(day: number, dayTick: number, profile: ProfileId): number {
-  return elevation(dayParams(day, profile), dayTick / TICK_HZ);
 }
 
 /** In-game minutes since 6:00 AM, 0..720 (720 = 6:00 PM, also used through the night). */

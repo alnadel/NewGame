@@ -1,6 +1,8 @@
 // Shared contract between the simulation (src/core) and its consumers (audio, UI, meta, render).
 // The sim emits these; nothing else constructs SimEvents. Extend only additively.
 
+import type { DayPlan, NoonCloud } from '../../config/days.ts';
+
 export type HourGlyph = 'cool' | 'warm' | 'hot' | 'melt';
 
 export type DeathCause = 'glare' | 'cloud' | 'gap' | 'plain';
@@ -49,6 +51,8 @@ export type SimEvent =
   | { e: 'hourEnd'; day: number; hour: number; glyph: HourGlyph }
   | { e: 'gateArch'; noon: boolean }
   | { e: 'ballPassed'; clean: boolean }
+  | { e: 'swing'; deg: number; chain: number; snow: number; x: number; y: number }
+  | { e: 'lessonDone' }
   | { e: 'death'; info: DeathInfo };
 
 export type SimEventName = SimEvent['e'];
@@ -78,6 +82,10 @@ export interface RunStats {
   minutes: number;
   /** Total integral of f over daylight (s). */
   litTotal: number;
+  /** SWINGs landed, the longest chain (0 when none), and the lowest Chill a PHEW fired from (100 when none). */
+  swings: number;
+  swingChainBest: number;
+  phewMinChill: number;
 }
 
 export type RunMode = 'endless' | 'daily' | 'challenge';
@@ -87,6 +95,11 @@ export interface RunResult {
   seed: number;
   dailyDate?: string;
   profile: 0 | 1 | 2 | 3;
+  /** Drain the run used (RunConfig.drain, else the profile drain) and its Day-1 noon cloud. */
+  drain: number;
+  noonCloud: NoonCloud;
+  /** One Day Plan entry per day reached, index 0 = Day 1 (plan-off runs: alternating clear days). */
+  plan: DayPlan[];
   minutes: number;
   day: number;
   /** "Day 2 · 2:40 PM" (exact minutes). */

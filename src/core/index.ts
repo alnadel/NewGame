@@ -3,8 +3,21 @@
 
 // Configuration and constants
 export { TUNING } from '../config/tuning.ts';
-export { dayParams, endlessDrain, ONBOARD_DRAIN, PROFILES } from '../config/days.ts';
-export type { BiomeId, DayParams, ProfileId, ProfileParams } from '../config/days.ts';
+export {
+  COMFORT_MAX,
+  COMFORT_RUNGS,
+  COMFORT_STEPS,
+  comfortAfterRun,
+  dayParams,
+  effectiveNoonCloud,
+  PROFILES,
+  rungConfig,
+} from '../config/days.ts';
+// V11-SHIM: CC-1 endlessDrain — src/game/session.ts imports it until GR7; delete at integration.
+export { endlessDrain } from '../config/days.ts';
+export type { BiomeId, ComfortRung, DayParams, DayPlan, NoonCloud, ProfileId, ProfileParams, RungConfig, SkyParams } from '../config/days.ts';
+export { FORECAST_IDS, FORECAST_TUNING, FORECASTS, forecastFits, PLAN_START_DATE } from '../config/forecasts.ts';
+export type { ForecastId, ForecastInfo, ForecastTuning } from '../config/forecasts.ts';
 export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';
 export type { CasterKind } from '../config/casters.ts';
 
@@ -18,7 +31,6 @@ export {
   dayStartY,
   dayTicks,
   elevation,
-  elevationAt,
   exactClock,
   hourTicks,
   hudClock,
@@ -82,7 +94,7 @@ export {
   validatedY,
 } from './gen/world.ts';
 export type { ChunkLit, World, WorldStats } from './gen/world.ts';
-export { biomeAtY, dayAtY } from './gen/placer.ts';
+export { biomeAtY, dayAtY, firstTownDay, paramsAt, planDay, worldPlan } from './gen/plan.ts';
 
 // Simulation
 export { createRun, prepareRun, prepareSome } from './sim/create.ts';
@@ -112,3 +124,7 @@ export type { Replay } from './sim/replay.ts';
 export { BOT_KINDS, createBot } from './sim/bots.ts';
 export type { Bot, BotKind } from './sim/bots.ts';
 export { headlessConfig, runBot, runHeadless } from './sim/headless.ts';
+export { deathRecap, deathTip } from './sim/recap.ts';
+export type { DeathRecap } from './sim/recap.ts';
+export { createParJob } from './sim/par.ts';
+export type { ParJob } from './sim/par.ts';

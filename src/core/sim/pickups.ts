@@ -84,14 +84,15 @@ function collect(s: SimState, p: Pickup): void {
   const st = s.stats;
   p.state = PICKUP_TAKEN;
   if (p.kind === 'flake') {
-    const snow = nb.mult;
+    // Heat Wave days pay ×1.5 (DayParams.snowMult; 1 on other days, so Snow stays an integer).
+    const snow = Math.round(nb.mult * s.params.snowMult);
     st.flakes++;
     st.snow += snow;
     nb.chill = Math.min(nb.maxChill, nb.chill + P.flakeChill);
     s.events.push({ e: 'flake', mult: nb.mult, degree: (s.flakesToday + nb.mult) % 10, x: p.x, y: p.y, snow });
     s.flakesToday++;
   } else if (p.kind === 'crystal') {
-    const snow = P.crystalSnowMult * nb.mult;
+    const snow = Math.round(P.crystalSnowMult * nb.mult * s.params.snowMult);
     st.crystals++;
     st.snow += snow;
     nb.chill = Math.min(nb.maxChill, nb.chill + P.crystalChill);

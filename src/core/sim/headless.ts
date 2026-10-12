@@ -1,6 +1,6 @@
 // Headless runs for tests, the sim script and the in-browser test hook.
 
-import type { ProfileId } from '../../config/days.ts';
+import type { NoonCloud, ProfileId } from '../../config/days.ts';
 import { createBot, type BotKind } from './bots.ts';
 import { createRun } from './create.ts';
 import { hashState } from './hash.ts';
@@ -8,12 +8,13 @@ import { step } from './step.ts';
 import type { RunConfig, SimState } from './types.ts';
 
 /**
- * Default endless config for a seed/profile (the tutorial chunk goes with profile 0). `drain`, when
- * given, sets RunConfig.drain (the endless onboarding override); bots normally leave it unset.
+ * Default endless config for a seed/profile: the tutorial chunk and the first-run lesson go with
+ * profile 0. `drain` and `noonCloud`, when given, set the RunConfig overrides (a comfort rung's).
  */
-export function headlessConfig(seed: number, profile: ProfileId = 3, drain?: number): RunConfig {
-  const cfg: RunConfig = { seed: seed >>> 0, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: false };
+export function headlessConfig(seed: number, profile: ProfileId = 3, drain?: number, noonCloud?: NoonCloud): RunConfig {
+  const cfg: RunConfig = { seed: seed >>> 0, mode: 'endless', profile, tutorial: profile === 0, lesson: profile === 0, reducedMotion: false };
   if (drain !== undefined) cfg.drain = drain;
+  if (noonCloud !== undefined) cfg.noonCloud = noonCloud;
   return cfg;
 }
 

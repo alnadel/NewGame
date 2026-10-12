@@ -5,7 +5,6 @@
 // re-runs only the steps the insertion can reach. Validation is a resumable job: each lit-mask
 // computation is one work unit, so it can be time-sliced across frames.
 
-import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, elevation, TICK_HZ, yAtTick } from '../clock.ts';
 import { SUN_COS, SUN_SIN, tanD } from '../dmath.ts';
@@ -14,6 +13,7 @@ import type { Caster, Cloud, PrismPart } from '../objects.ts';
 import { cloudOffset, distToCasterBounds, shadowLength } from '../shadows.ts';
 import { trailX } from '../trail.ts';
 import { rockHeight } from './catalog.ts';
+import { paramsAt } from './plan.ts';
 import { addCloud, commitRescue, findSpot, type Spot } from './placer.ts';
 import { gatherScene, type ChunkLit, type World } from './store.ts';
 
@@ -117,7 +117,7 @@ export function chillDeltaTable(drain: number): Float64Array {
 function stepGeometry(w: World, j: number, job: ValidationJob, s: number): void {
   const tick = j * STEP;
   const day = dayAtTick(tick);
-  const p = dayParams(day, w.profile);
+  const p = paramsAt(w, day);
   const y = yAtTick(tick);
   const tDay = (tick - dayStartTick(day)) / TICK_HZ;
   const eps = j < 0 ? 0 : elevation(p, tDay);
@@ -369,7 +369,7 @@ function onFailure(w: World, job: ValidationJob, i: number, floor: number, maxC:
     const R = cloudOffset(TUNING.shadow.cloudZ, job.sCot[i] as number);
     const cx = (job.sx[i] as number) + (SUN_COS[b] as number) * R;
     const cy = (job.sy[i] as number) + (SUN_SIN[b] as number) * R;
-    const v = dayParams(job.sDay[i] as number, w.profile).v;
+    const v = paramsAt(w, job.sDay[i] as number).v;
     const half = TUNING.rescue.parkedLife / 2;
     const yF = job.sy[i] as number;
     const vx = (trailX(w.trail, yF + v * half) - trailX(w.trail, yF - v * half)) / (2 * half);
@@ -416,7 +416,7 @@ function finish(w: World, job: ValidationJob): void {
  * cheap and runs in the same call). Returns the units used.
  */
 export function stepValidation(w: World, job: ValidationJob, budget: number): number {
-  const delta = chillDeltaTable(dayParams(1, w.profile).drain);
+  const delta = chillDeltaTable(paramsAt(w, 1).drain);
   let used = 0;
   while (!job.done) {
     // 1) (Re)compute pending lit slots in order.
@@ -439,7 +439,7 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
     let resume = -1;
     for (; i <= job.pre + job.n; i++) {
       const maxC = dpSlot(job, i, delta);
-      const floor = dayParams(job.sDay[i] as number, w.profile).floor;
+      const floor = paramsAt(w, job.sDay[i] as number).floor;
       if (job.accepting) {
         if (maxC >= floor) job.accepting = false;
         continue;
@@ -477,7 +477,7 @@ export function stepLit(w: World, j: number, out: Uint8Array): void {
   }
   const tick = j * STEP;
   const day = dayAtTick(tick);
-  const eps = elevation(dayParams(day, w.profile), (tick - dayStartTick(day)) / TICK_HZ);
+  const eps = elevation(paramsAt(w, day), (tick - dayStartTick(day)) / TICK_HZ);
   if (eps <= 0) {
     out.fill(0);
     return;

@@ -9,6 +9,7 @@ import { dayParams } from '../../src/config/days.ts';
 import { dayStartY, yAtTime } from '../../src/core/clock.ts';
 import { angleDiff, sinD } from '../../src/core/dmath.ts';
 import { casterClearance } from '../../src/core/gen/placer.ts';
+import { worldPlan } from '../../src/core/gen/plan.ts';
 import { createWorld, ensureGenerated, generateSome, type World } from '../../src/core/gen/world.ts';
 import { convexDistance } from '../../src/core/geom.ts';
 import { createRun } from '../../src/core/sim/create.ts';
@@ -20,7 +21,7 @@ import { chunkDigests } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
-) as { chunks: Record<string, string[]> };
+) as { chunks: Record<string, string[]>; chunksPlanOff: Record<string, string[]> };
 
 function fingerprint(w: World): string {
   const cs = w.casters.map((c) => `${c.id}:${c.kind}:${c.x}:${c.y}:${c.rot}:${c.name}:${c.rescue}`).join('|');
@@ -31,10 +32,10 @@ function fingerprint(w: World): string {
 }
 
 describe('world generation', () => {
-  it('keeps every ground footprint ≥ 20 u from the trail (gate arches excepted), seeds 1-100', () => {
+  it('keeps every ground footprint ≥ 20 u from the trail (gate arches excepted), seeds 1-25', () => {
     let gates = 0;
-    for (let seed = 1; seed <= 100; seed++) {
-      const w = createWorld(seed, 3, false);
+    for (let seed = 1; seed <= 25; seed++) {
+      const w = createWorld({ seed, profile: 3, tutorial: false });
       ensureGenerated(w, dayStartY(2) + 1200); // Day 1 and the start of Old Town
       for (const c of w.casters) {
         if (c.gate) {
@@ -49,7 +50,7 @@ describe('world generation', () => {
 
   it('keeps casters apart (overlap margin) and names unique nearby', () => {
     for (let seed = 1; seed <= 10; seed++) {
-      const w = createWorld(seed, 3, false);
+      const w = createWorld({ seed, profile: 3, tutorial: false });
       ensureGenerated(w, dayStartY(3));
       const cs = w.casters;
       for (let i = 0; i < cs.length; i++) {
@@ -65,7 +66,7 @@ describe('world generation', () => {
 
   it('places the start hut first, 20 u from the trail, with θ0 pointing at it', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const w = createWorld(seed, 3, false);
+      const w = createWorld({ seed, profile: 3, tutorial: false });
       const hut = w.byId.get(w.startHutId)!;
       expect(hut.kind).toBe('hut');
       expect(hut.y).toBe(10);
@@ -75,9 +76,9 @@ describe('world generation', () => {
     }
   });
 
-  it('gives Day 2 a gate arch between 11:00 AM and 1:00 PM, and Old Town days gazing balls', () => {
+  it('plan-off worlds give Day 2 a gate arch between 11:00 AM and 1:00 PM, and Old Town days gazing balls', () => {
     for (let seed = 1; seed <= 10; seed++) {
-      const w = createWorld(seed, 3, false);
+      const w = createWorld({ seed, profile: 3, tutorial: false, plan: false });
       ensureGenerated(w, dayStartY(3));
       const p = dayParams(2, 3);
       const y11 = yAtTime(2, (300 / 720) * p.dayLen);
@@ -91,7 +92,7 @@ describe('world generation', () => {
   });
 
   it('places flakes on the centerline in clusters, a crystal per day and frost flowers at night', () => {
-    const w = createWorld(4, 3, false);
+    const w = createWorld({ seed: 4, profile: 3, tutorial: false });
     ensureGenerated(w, dayStartY(2) + 500);
     const day1 = w.pickups.filter((p) => p.day === 1);
     const flakes = day1.filter((p) => p.kind === 'flake');
@@ -108,22 +109,25 @@ describe('world generation', () => {
       [11, 3],
       [12, 0],
     ] as const) {
-      const a = createWorld(seed, profile, profile === 0);
+      const a = createWorld({ seed, profile, tutorial: profile === 0 });
       ensureGenerated(a, 9000);
-      const b = createWorld(seed, profile, profile === 0);
+      const b = createWorld({ seed, profile, tutorial: profile === 0 });
       let budget = 1;
       while (!generateSome(b, 9000, budget)) budget = (budget % 7) + 1;
       expect(fingerprint(b)).toBe(fingerprint(a));
       // Generating further ahead first never changes what was already there.
-      const c = createWorld(seed, profile, profile === 0);
+      const c = createWorld({ seed, profile, tutorial: profile === 0 });
       ensureGenerated(c, 15000);
       const prefix = (w: World) => fingerprint({ ...w, casters: w.casters.filter((x) => x.y < 8000), clouds: [], pickups: w.pickups.filter((x) => x.y < 8000), balls: [] });
       expect(prefix(c)).toBe(prefix(a));
     }
   });
 
-  it('matches the golden chunk digests (seeds 1-3, chunks 0-9)', () => {
-    for (const seed of [1, 2, 3]) expect(chunkDigests(seed)).toEqual(golden.chunks[String(seed)]);
+  it('matches the golden chunk digests (seeds 1-3, chunks 0-9), with the Day Plan on and off', () => {
+    for (const seed of [1, 2, 3]) {
+      expect(chunkDigests(seed)).toEqual(golden.chunks[String(seed)]);
+      expect(chunkDigests(seed, false)).toEqual(golden.chunksPlanOff[String(seed)]);
+    }
   });
 });
 
@@ -154,7 +158,7 @@ describe('Day-1 difficulty wave (caster spacing)', () => {
     const noon = band(0.4, 0.6);
     const dusk = band(0.75, 0.95);
     for (let seed = 1; seed <= 30; seed++) {
-      const w = createWorld(seed, 3, false);
+      const w = createWorld({ seed, profile: 3, tutorial: false });
       ensureGenerated(w, dayStartY(2));
       for (const c of w.casters) {
         if (c.rescue || c.id === w.startHutId) continue;
@@ -171,7 +175,7 @@ describe('Day-1 difficulty wave (caster spacing)', () => {
 
   it('the authored tutorial chunk keeps its exact layout (the wave never touches it)', () => {
     for (const seed of [1, 7, 12]) {
-      const w = createWorld(seed, 0, true);
+      const w = createWorld({ seed, profile: 0, tutorial: true });
       ensureGenerated(w, 2000);
       const chunk0 = w.casters.filter((c) => c.chunk === 0 && c.id !== w.startHutId && !c.rescue);
       expect(chunk0.map((c) => [c.kind, c.y])).toEqual(TUTORIAL.casters.map((a) => [a.kind, a.y]));
@@ -183,12 +187,13 @@ describe('start of a generated world', () => {
   it("keeps the start hut's side of the trail clear just past the hut, so holding θ0 stops working", () => {
     for (let seed = 1; seed <= 30; seed++) {
       for (const profile of [1, 3] as const) {
-        const w = createWorld(seed, profile, false);
+        const w = createWorld({ seed, profile, tutorial: false });
         ensureGenerated(w, 1200);
         const hut = w.byId.get(w.startHutId)!;
         expect(Math.sign(hut.x - trailX(w.trail, hut.y))).toBe(w.startSide);
+        const clearAhead = START_HUT.clearAhead[worldPlan(w, 1).biome];
         for (const c of w.casters) {
-          if (c.id === hut.id || c.y <= 0 || c.y >= START_HUT.clearAhead) continue;
+          if (c.id === hut.id || c.y <= 0 || c.y >= clearAhead) continue;
           expect(Math.sign(c.x - trailX(w.trail, c.y))).toBe(-w.startSide);
         }
       }

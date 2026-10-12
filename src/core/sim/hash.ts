@@ -66,6 +66,7 @@ export function hashState(s: SimState): string {
     st.flowers,
     st.phews,
     st.maxMult,
+    st.swings,
   ]) {
     feed(v);
   }

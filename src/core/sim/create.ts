@@ -1,8 +1,8 @@
 // createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
 
-import { dayParams } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayTicks, yAtDayTick } from '../clock.ts';
+import { paramsAt } from '../gen/plan.ts';
 import { ensureGenerated, createWorld, generateSome, type World } from '../gen/world.ts';
 import { syncTime } from './step.ts';
 import { computeCoverage } from './nubs.ts';
@@ -29,6 +29,9 @@ function freshStats(day: number): RunStats {
     nightsReached: 0,
     minutes: 0,
     litTotal: 0,
+    swings: 0,
+    swingChainBest: 0,
+    phewMinChill: 100,
   };
 }
 
@@ -56,7 +59,7 @@ export function prepareRun(cfg: RunConfig): RunBuild {
   const { day, dayTick } = startOf(cfg);
   return {
     cfg: { ...cfg },
-    world: createWorld(cfg.seed, cfg.profile, cfg.tutorial),
+    world: createWorld(cfg),
     targetY: yAtDayTick(day, dayTick) + TUNING.world.hardAhead,
   };
 }
@@ -67,19 +70,22 @@ export function prepareSome(b: RunBuild, budget: number): boolean {
 }
 
 /**
- * Creates a run: builds the world (validated through Nubs + 1600 u), puts Nubs at the start (or at
- * cfg.startDay/startT for debugging) with the sun at θ0, and computes coverage and the guide so the
- * Title can render the live scene. The clock stays frozen until the first touch. With `build` (from
- * prepareRun() with the same config) its world is used and only the rest of it is generated now.
+ * Creates a run: builds the world (validated through Nubs + `ahead` u), puts Nubs at the start (or
+ * at cfg.startDay/startT for debugging) with the sun at θ0, and computes coverage and the guide so
+ * the Title can render the live scene. The clock stays frozen until the first touch, and step()
+ * completes the hard guarantee (Nubs + TUNING.world.hardAhead) on it, so a smaller `ahead` (≥ the
+ * view and the shadow reach, e.g. 1100 for the Title) only moves generation work later: the world is
+ * the same either way. With `build` (from prepareRun() with the same config) its world is used and
+ * only the rest of it is generated now.
  */
-export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
-  const world = build ? build.world : createWorld(cfg.seed, cfg.profile, cfg.tutorial);
+export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNING.world.hardAhead): SimState {
+  const world = build ? build.world : createWorld(cfg);
   const { day, dayTick } = startOf(cfg);
   const maxChill = TUNING.nubs.maxChill;
   const theta0 = world.theta0;
   const s: SimState = {
     cfg: { ...cfg },
-    params: dayParams(day, cfg.profile),
+    params: paramsAt(world, day),
     phase: 'hold',
     tick: 0,
     ready: 0,
@@ -96,7 +102,7 @@ export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
     ux: 1,
     uy: 0,
     theta0,
-    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0 },
+    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0, keyTicks: 0, keySign: 0 },
     nubs: {
       x: 0,
       y: 0,
@@ -121,6 +127,15 @@ export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
       rideTicks: 0,
       glareBallId: -1,
       prevGlareBallId: -1,
+      litTheta: theta0,
+      swSrc: -1,
+      swTheta: theta0,
+      swTick: -1e9,
+      swPend: -1,
+      swPendDeg: 0,
+      swPendTicks: 0,
+      swChain: 0,
+      swLastTick: -1e9,
     },
     guide: {
       now: new Uint8Array(360),
@@ -145,10 +160,15 @@ export function createRun(cfg: RunConfig, build?: RunBuild): SimState {
     flakesToday: 0,
     captured: new Set(),
     glaredBalls: new Set(),
+    lessonOn: false,
+    lessonTicks: 0,
+    lessonFrom: -1,
+    lessonSwung: false,
+    lessonShade: 0,
   };
   syncTime(s);
   s.nextHistoryY = s.nubs.y;
-  ensureGenerated(world, s.nubs.y + TUNING.world.hardAhead);
+  ensureGenerated(world, s.nubs.y + ahead);
   computeCoverage(s);
   updateGuide(s);
   return s;

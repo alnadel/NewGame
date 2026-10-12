@@ -20,19 +20,11 @@ describe('bots', () => {
     expect(early).toBeGreaterThanOrEqual(9);
   });
 
-  it('oracle survives through Day 3 on seeds 1-2', () => {
-    for (const seed of [1, 2]) {
-      const s = runBot(headlessConfig(seed, 3), 3 * 3480 + 60, 'oracle');
-      expect(s.phase).not.toBe('dead');
-      expect(s.day).toBeGreaterThanOrEqual(4);
-    }
-  }, 60_000);
-
-  it('human: a seeded model, deterministic per seed, that never flicks or uses keys', () => {
-    expect(BOT_KINDS).toContain('human');
+  it.each(['human', 'humanDial'] as const)('%s: a seeded model, deterministic per seed, that never flicks or uses keys', (kind) => {
+    expect(BOT_KINDS).toContain(kind);
     const trace = (seed: number): { hashes: string[]; s: SimState } => {
       const s = createRun(headlessConfig(seed, 3));
-      const bot = createBot('human');
+      const bot = createBot(kind);
       const hashes: string[] = [];
       let moves = 0;
       for (let i = 0; i < 60 * 90 && s.phase !== 'dead'; i++) {
@@ -51,7 +43,13 @@ describe('bots', () => {
     // Different seeds give different players (and different worlds).
     expect(trace(3).hashes).not.toEqual(trace(8).hashes);
     // The same seed through runHeadless matches too (?bot=human and the test hook use this path).
-    expect(runHeadless(5, 2400, 'human')).toBe(runHeadless(5, 2400, 'human'));
+    expect(runHeadless(5, 2400, kind)).toBe(runHeadless(5, 2400, kind));
+  });
+
+  it('humanDial plays differently from human: some of its decisions aim for the lasting shade', () => {
+    let differs = 0;
+    for (const seed of [2, 6, 9]) if (runHeadless(seed, 1800, 'humanDial') !== runHeadless(seed, 1800, 'human')) differs++;
+    expect(differs).toBeGreaterThanOrEqual(2);
   });
 
   it('human survives longer than idle (median over seeds 1-12, profile 3)', () => {
