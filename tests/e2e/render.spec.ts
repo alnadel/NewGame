@@ -1,8 +1,9 @@
-// Render-side checks (wave 3, gameRender): the render cadence (menus draw once, the settled
-// Results repaint only the puddle ring and match a full redraw), the world rect published for the
-// DOM (K9), the Melt Map never drawing under the Results sheet (K10), camera shake and zoom that
-// end (and never start under reduced motion), and the lazily painted ground tiles.
+// Render-side checks (gameRender): the render cadence (menus draw once, the settled Results draw at
+// 20 fps with the puddle ring still pulsing), the world rect published for the DOM (K9), the Melt
+// Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
+// under reduced motion), the lazily painted ground tiles, and the matched shadow composite (GR2).
 import { expect, test, type Page } from '@playwright/test';
+import { dayStartTick, dayTicks } from '../../src/core/index.ts';
 import { drag, openGame, seedSave, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
@@ -21,7 +22,7 @@ async function toResults(page: Page): Promise<void> {
   await waitForScreen(page, 'results', 5000);
 }
 
-const perf = (page: Page): Promise<{ draws: number; ringDraws: number; groundPaints: number }> =>
+const perf = (page: Page): Promise<{ draws: number; groundPaints: number }> =>
   page.evaluate(() => window.__SHADY_TEST__!.perf());
 
 /** renderer.draw calls per second over one second, timed in the page. */
@@ -68,24 +69,89 @@ test.describe('render cadence', () => {
     expect(await drawRate(page)).toBeLessThanOrEqual(32);
   });
 
-  test('settled Results repaint only the puddle ring, pixel-identical to a full redraw', async ({ page }) => {
+  test('settled Results draw at most 20 fps and leave the main thread free; the puddle ring still pulses', async ({ page }) => {
     const errors = watchErrors(page);
     await openGame(page);
     await startPlay(page);
     await page.waitForTimeout(600);
     await toResults(page);
     await page.waitForTimeout(3000);
-    const a = await perf(page);
-    await page.waitForTimeout(1000);
-    const b = await perf(page);
-    // Every drawn frame of the second is a ring-only repaint.
-    expect(b.draws - a.draws).toBeGreaterThan(10);
-    expect(b.ringDraws - a.ringDraws).toBe(b.draws - a.draws);
-    const ab = await page.evaluate(() => window.__SHADY_TEST__!.resultsAB());
-    expect(ab).not.toBeNull();
-    expect(ab!.ringPath).toBe(true);
-    expect(ab!.diff).toBe(0);
+    const m = await page.evaluate(async () => {
+      const hook = window.__SHADY_TEST__!;
+      const d0 = hook.perf().draws;
+      let rafs = 0;
+      const t0 = performance.now();
+      while (performance.now() - t0 < 2000) {
+        await new Promise((r) => requestAnimationFrame(r));
+        rafs++;
+      }
+      return { draws: hook.perf().draws - d0, rafs };
+    });
+    expect(m.draws).toBeLessThanOrEqual(45);
+    expect(m.draws).toBeGreaterThanOrEqual(30);
+    expect(m.rafs).toBeGreaterThanOrEqual(100);
+    // Two frames 0.25 s apart differ only around the puddle marker (the ring and the carrot).
+    const diff = await page.evaluate(async () => {
+      const canvas = document.getElementById('game') as HTMLCanvasElement;
+      const g = canvas.getContext('2d')!;
+      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
+      await new Promise((r) => setTimeout(r, 250));
+      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
+      const p = window.__SHADY_TEST__!.nubsScreen();
+      const dpr = canvas.width / canvas.clientWidth;
+      let inside = 0;
+      let outside = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
+        const px = (i >> 2) % canvas.width;
+        const py = Math.floor((i >> 2) / canvas.width);
+        const near = Math.abs(px / dpr - p.x - 4) <= 30 && Math.abs(py / dpr - p.y + 6) <= 30;
+        if (near) inside++;
+        else outside++;
+      }
+      return { inside, outside };
+    });
+    expect(diff.inside).toBeGreaterThan(0);
+    expect(diff.outside).toBe(0);
     expect(errors).toEqual([]);
+  });
+});
+
+/** The Title held at absolute sim tick `tick` of `seed` (?day=&t=, reduced motion so it holds still). */
+async function openAtTick(page: Page, seed: number, tick: number): Promise<void> {
+  let day = 1;
+  while (dayStartTick(day + 1) <= tick) day++;
+  const dt = Math.min(dayTicks(day) - 1, tick - dayStartTick(day));
+  const minutes = 360 + Math.floor((720 * dt) / dayTicks(day));
+  const hhmm = `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
+  await openGame(page, `test=1&seed=${seed}&day=${day}&t=${hhmm}&perf=0`);
+  await page.waitForTimeout(300);
+}
+
+test.describe('shadow composite (GR2)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+
+  test('matched source-over matches the multiply composite within a level', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one DPR-2 run is enough');
+    await seedSave(page, { v: 1, createdAt: 1, settings: { reducedMotion: 'on' } });
+    const rows: string[] = [];
+    for (const [seed, tick] of [
+      [42, 1200],
+      [42, 3000],
+      [42, 20000],
+      [7, 9000],
+      [7, 26000],
+      [99, 14000],
+    ] as const) {
+      await openAtTick(page, seed, tick);
+      const ab = await page.evaluate(() => window.__SHADY_TEST__!.pixelAB({ multiplyShadows: true }, {}));
+      expect(ab).not.toBeNull();
+      rows.push(`seed ${seed} tick ${tick}: mean ${ab!.mean.toFixed(3)} >3 ${(ab!.over3 * 100).toFixed(2)}% max ${ab!.max}`);
+      expect(ab!.mean, rows[rows.length - 1]).toBeLessThanOrEqual(1);
+      expect(ab!.over3, rows[rows.length - 1]).toBeLessThanOrEqual(0.01);
+      expect(ab!.max, rows[rows.length - 1]).toBeLessThanOrEqual(20);
+    }
+    await info.attach('shadow-ab', { body: rows.join('\n'), contentType: 'text/plain' });
   });
 });
 

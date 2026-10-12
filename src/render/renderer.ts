@@ -35,16 +35,13 @@ import { createHalo, drawHalo, updateHalo, type HaloState } from './halo.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudState } from './hud.ts';
 import {
   applyPull,
-  clipAboveSheet,
   createMapFrame,
   drawMeltMap,
-  drawPuddle,
   frameDeath,
   MAP_PULL_S,
   mapAlphas,
   mapSettleT,
   mapTarget,
-  puddleBox,
   type MapFrame,
   type MapOverlay,
 } from './meltMap.ts';
@@ -82,7 +79,6 @@ import {
   type Rings,
 } from './particles.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
-import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
 import { createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
@@ -131,8 +127,6 @@ export interface RenderInput {
   highContrast: boolean;
   reducedMotion: boolean;
   equipped: Equipped;
-  /** Perf governor: ground detail tiles on/off. */
-  detail: boolean;
   /** Perf governor: soft (half-res layer) or crisp (direct multiply fill) shadows. */
   softShadows: boolean;
   /** Paused: UI timers (banners, HUD pops, halo) hold still. */
@@ -171,6 +165,12 @@ export interface RenderScene {
   mapReady: boolean;
   lastTheta: number;
   thetaSpeed: number;
+  /**
+   * The world's animation clock (pickup twinkles, pedestal glints, Nubs' idle motion): the real
+   * clock, stopped once the Results are up, so the Melt Map is a still picture of the moment Nubs
+   * melted and only its puddle ring pulses.
+   */
+  worldTime: number;
   /** CPU ms of the last draw (debug). */
   ms: number;
 }
@@ -204,6 +204,7 @@ export function createScene(): RenderScene {
     mapReady: false,
     lastTheta: NaN,
     thetaSpeed: 0,
+    worldTime: 0,
     ms: 0,
   };
 }
@@ -214,59 +215,27 @@ export function resizeScene(sc: RenderScene, cssW: number, cssH: number, dpr: nu
 
 const casterBuf: Caster[] = [];
 const box = new Float64Array(4);
-const ringBox = new Float64Array(4);
 
-/**
- * The settled Results (results-static-full-redraw): once the Melt Map has stopped moving and no
- * particle, pop, ring or vignette is alive, the world and the overlay are drawn once into a
- * canvas-sized backdrop; each frame then copies back only the puddle marker's box from it and
- * redraws the pulsing ring and carrot there. The world holds still meanwhile (its clock is frozen
- * at the moment it settled), so a full redraw would give the same pixels.
- */
-interface ResultsBackdrop {
-  canvas: Canvas2D | null;
-  g: CanvasRenderingContext2D | null;
-  valid: boolean;
-  /** What it was drawn for: canvas size, DPR, sheet top, palette and governor flags, cosmetics. */
-  w: number;
-  h: number;
-  dpr: number;
-  sheetTop: number;
-  highContrast: boolean;
-  detail: boolean;
-  soft: boolean;
-  equipped: Equipped | null;
+/** Test/debug render switches (A/B checks). */
+export interface RenderOptions {
+  /** Draw the Melt Map overlay (off for K10 diffs). */
+  mapOverlay: boolean;
+  /** Composite the shadow layer with a multiply of the LUT color (the GR2 A/B reference). */
+  multiplyShadows: boolean;
 }
 
 export class Renderer {
   readonly scene: RenderScene;
-  /** renderer.draw calls so far, and settled-Results frames that only repainted the puddle ring. */
+  /** renderer.draw calls so far. */
   draws = 0;
-  ringDraws = 0;
-  /** Results backdrop renders so far (perf checks). */
-  backdropDraws = 0;
-  /** Test/debug: use the settled-Results backdrop (off = full redraws, for A/B checks). */
-  resultsCache = true;
-  /** Test/debug: draw the Melt Map overlay (off for K10 diffs). */
-  mapOverlay = true;
+  /**
+   * The last frame was the settled Results: the Melt Map has stopped moving and no particle, pop,
+   * ring or vignette is alive (only the puddle ring pulses), so the cadence may draw it at 20 fps.
+   */
+  settled = false;
+  readonly options: RenderOptions = { mapOverlay: true, multiplyShadows: false };
   private readonly g: CanvasRenderingContext2D;
   private readonly canvas: HTMLCanvasElement;
-  private readonly bd: ResultsBackdrop = {
-    canvas: null,
-    g: null,
-    valid: false,
-    w: 0,
-    h: 0,
-    dpr: 0,
-    sheetTop: Number.NaN,
-    highContrast: false,
-    detail: true,
-    soft: true,
-    equipped: null,
-  };
-  /** The world clock while the Results are settled (null = live). */
-  private stillTime: number | null = null;
-  private stillDying = -1;
   /** A draw is in progress (left set when one threw: the next draw resets the context first). */
   private inDraw = false;
 
@@ -297,7 +266,6 @@ export class Renderer {
     if (typeof g.reset === 'function') g.reset();
     else for (let i = 0; i < 8; i++) g.restore();
     const sc = this.scene;
-    this.bd.valid = false;
     sc.nubsSprite.key = Number.NaN;
     sc.hud.layer = null;
     sc.hud.badgeKey = -1;
@@ -320,147 +288,31 @@ export class Renderer {
     this.draws++;
     const t0 = performance.now();
     const sc = this.scene;
-
-    // ---- Settled Results: the backdrop plus the puddle ring -------------------------------------
-    const settled =
+    this.drawScene(inp);
+    this.settled =
       inp.screen === 'results' &&
       inp.sheetTop !== null &&
       sc.mapReady &&
       inp.mapT >= mapSettleT(inp.reducedMotion) &&
-      inp.debug === null &&
       !particlesAlive(sc.particles) &&
       !popsAlive(sc.pops) &&
       !ringsAlive(sc.rings) &&
       !vignettesOn(sc.banners);
-    if (!settled) {
-      this.stillTime = null;
-      this.bd.valid = false;
-      if (inp.screen !== 'results') this.freeBackdrop();
-    } else if (this.stillTime === null) {
-      this.stillTime = inp.time;
-      this.stillDying = inp.dying;
-    }
-    if (settled && this.resultsCache && this.backdropValid(inp)) {
-      this.drawPuddleOver(inp);
-      this.ringDraws++;
-      sc.ms = performance.now() - t0;
-      this.inDraw = false;
-      return;
-    }
-    this.drawScene(inp, settled);
-    if (settled && this.resultsCache) {
-      this.saveBackdrop(inp);
-      this.drawPuddleOver(inp);
-    }
     sc.ms = performance.now() - t0;
     this.inDraw = false;
   }
 
-  private backdropValid(inp: RenderInput): boolean {
-    const b = this.bd;
-    const c = this.canvas;
-    return (
-      b.valid &&
-      b.canvas !== null &&
-      b.w === c.width &&
-      b.h === c.height &&
-      b.dpr === this.scene.view.dpr &&
-      b.sheetTop === inp.sheetTop &&
-      b.highContrast === inp.highContrast &&
-      b.detail === inp.detail &&
-      b.soft === inp.softShadows &&
-      b.equipped === inp.equipped
-    );
-  }
-
-  /** Copies the frame just drawn (world and overlay, without the puddle marker) into the backdrop. */
-  private saveBackdrop(inp: RenderInput): void {
-    const b = this.bd;
-    const c = this.canvas;
-    if (!b.canvas) {
-      b.canvas = makeCanvas(c.width, c.height);
-      b.g = ctx2d(b.canvas);
-    }
-    const bc = b.canvas;
-    const bg = b.g as CanvasRenderingContext2D;
-    if (bc.width !== c.width) bc.width = c.width;
-    if (bc.height !== c.height) bc.height = c.height;
-    bg.setTransform(1, 0, 0, 1, 0, 0);
-    bg.globalAlpha = 1;
-    bg.globalCompositeOperation = 'copy';
-    bg.drawImage(c, 0, 0);
-    bg.globalCompositeOperation = 'source-over';
-    b.valid = true;
-    b.w = c.width;
-    b.h = c.height;
-    b.dpr = this.scene.view.dpr;
-    b.sheetTop = inp.sheetTop ?? Number.NaN;
-    b.highContrast = inp.highContrast;
-    b.detail = inp.detail;
-    b.soft = inp.softShadows;
-    b.equipped = inp.equipped;
-    this.backdropDraws++;
-  }
-
-  /** Frees the backdrop's pixels once the Results are gone. */
-  private freeBackdrop(): void {
-    const b = this.bd;
-    b.valid = false;
-    if (b.canvas && (b.canvas.width > 1 || b.canvas.height > 1)) {
-      b.canvas.width = 1;
-      b.canvas.height = 1;
-    }
-  }
-
-  /**
-   * Restores the puddle marker's box from the backdrop and draws the ring and carrot there, under
-   * the same clips as the full frame (world rect, then above the sheet), so the pixels match a full
-   * redraw exactly.
-   */
-  private drawPuddleOver(inp: RenderInput): void {
-    const sc = this.scene;
-    const v = sc.view;
-    const g = this.g;
-    const b = this.bd;
-    if (!b.canvas || !puddleBox(v, inp.s, ringBox)) return;
-    const dpr = v.dpr;
-    const x0 = Math.max(0, Math.floor((ringBox[0] as number) * dpr));
-    const y0 = Math.max(0, Math.floor((ringBox[1] as number) * dpr));
-    const x1 = Math.min(b.w, Math.ceil((ringBox[2] as number) * dpr));
-    const y1 = Math.min(b.h, Math.ceil((ringBox[3] as number) * dpr));
-    if (x1 <= x0 || y1 <= y0) return;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.drawImage(b.canvas, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!this.mapOverlay) return;
-    g.save();
-    g.beginPath();
-    g.rect(v.vx, v.vy, v.vw, v.vh);
-    g.clip();
-    clipAboveSheet(g, v, inp.sheetTop);
-    g.beginPath();
-    g.rect(x0 / dpr, y0 / dpr, (x1 - x0) / dpr, (y1 - y0) / dpr);
-    g.clip();
-    drawPuddle(g, v, inp.s, mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay).a, inp.time);
-    g.restore();
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-
-  /** The full frame. `still`: the settled Results (world clock frozen, no puddle marker when cached). */
-  private drawScene(inp: RenderInput, still: boolean): void {
+  private drawScene(inp: RenderInput): void {
     const sc = this.scene;
     const g = this.g;
     const v = sc.view;
     const s = inp.s;
     const snap = inp.snap;
-    // While the Results are settled the world holds still: its clock and the melt are frozen and
-    // nothing animates (a full redraw then matches the backdrop, and no backdrop goes stale).
-    const time = still && this.stillTime !== null ? this.stillTime : inp.time;
-    const dying = still ? this.stillDying : inp.dying;
-    const adt = still ? 0 : inp.dt;
-    const agdt = still ? 0 : inp.gdt;
+    if (inp.mapT < 0) sc.worldTime = inp.time;
+    const time = sc.worldTime;
+    const dying = inp.dying;
+    const adt = inp.dt;
+    const agdt = inp.gdt;
 
     // ---- Time of day, palette and light -----------------------------------------------------
     const dl = dayTicks(snap.day);
@@ -551,17 +403,19 @@ export class Renderer {
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    drawBars(g, v, sc.pal, inp.detail);
+    drawBars(g, v, sc.pal);
     g.save();
     g.beginPath();
     g.rect(v.vx, v.vy, v.vw, v.vh);
     g.clip();
 
-    drawGround(g, v, sc.groundPal, inp.detail, sc.ground);
+    drawGround(g, v, sc.groundPal, sc.ground);
     drawTrail(g, v, s.world, sc.groundPal);
     drawFootprints(g, sc.footprints, v, sc.pal);
     drawPickups(g, v, s.world, time, snap.nubsY, night);
-    if (sunUp) drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows);
+    if (sunUp) {
+      drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows, this.options.multiplyShadows);
+    }
 
     // Nubs' pose (needed for the footprint disc and the depth sort).
     const pose = sc.pose;
@@ -636,13 +490,10 @@ export class Renderer {
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
 
-    if (inp.mapT >= 0 && sc.mapReady && this.mapOverlay) {
+    if (inp.mapT >= 0 && sc.mapReady && this.options.mapOverlay) {
       const o = mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay);
       o.sheetTop = inp.sheetTop;
-      // The puddle ring pulses on the live clock even while the rest of the map holds still.
       o.time = inp.time;
-      // The settled Results cache draws the pulsing puddle marker itself, every frame.
-      o.puddle = !(still && this.resultsCache);
       drawMeltMap(g, v, s, sc.map, o);
     }
 
@@ -707,7 +558,7 @@ export class Renderer {
   }
 }
 
-const mapOverlay: MapOverlay = { a: 0, labelA: 0, sheetTop: null, time: 0, puddle: true };
+const mapOverlay: MapOverlay = { a: 0, labelA: 0, sheetTop: null, time: 0 };
 
 function particlesAlive(p: Particles): boolean {
   const life = p.life;

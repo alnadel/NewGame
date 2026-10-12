@@ -61,7 +61,7 @@ import {
 import { readSafeArea, onSafeAreaChange } from '../platform/safeArea.ts';
 import { shareText } from '../platform/share.ts';
 import { requestPersistence } from '../platform/storage.ts';
-import { Renderer, type DebugDraw, type RenderInput, type RenderScreen } from '../render/renderer.ts';
+import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
 import { renderWardrobePreview, resetNubsAnim } from '../render/nubs.ts';
 import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
@@ -130,6 +130,14 @@ export interface MapProbe {
   png: string;
 }
 
+/** pixelAB() result: per-pixel max-channel differences between two renders of one frame. */
+export interface PixelAB {
+  mean: number;
+  over3: number;
+  over8: number;
+  max: number;
+}
+
 export interface DebugStats {
   fps: number;
   frameMs: number;
@@ -174,7 +182,7 @@ export class Session {
   readonly fx: Fx;
   readonly gov = new Governor();
   readonly cadence = new Cadence();
-  private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false };
+  private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false, settled: false };
   readonly stats: DebugStats = { fps: 60, frameMs: 0, simMs: 0, genMs: 0, renderMs: 0, ticks: 0 };
 
   private readonly d: SessionDeps;
@@ -424,7 +432,6 @@ export class Session {
       highContrast: save.settings.highContrast,
       reducedMotion: false,
       equipped: save.equipped,
-      detail: true,
       softShadows: true,
       paused: false,
       debug: null,
@@ -693,7 +700,6 @@ export class Session {
     r.highContrast = save.settings.highContrast;
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
-    r.detail = this.gov.detail;
     r.softShadows = this.gov.softShadows;
     r.paused = this.paused || screenNow === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
@@ -708,6 +714,7 @@ export class Session {
     ci.inputActive = inputDown;
     ci.timeScale = this.clock.timeScale;
     ci.reducedMotion = r.reducedMotion;
+    ci.settled = this.renderer.settled;
     const draw = this.cadence.shouldDraw(ci);
     if (draw) {
       r.dt = Math.min(MAX_DRAW_DT, this.drawDt);
@@ -1578,36 +1585,63 @@ export class Session {
   }
 
   /**
-   * Test hook (settled Results): draws the frame from the cached backdrop (puddle ring only) and
-   * as a full redraw at the same instant, and counts the device pixels that differ.
+   * Test hook (A/B checks): draws the current frame (time frozen) under render options `a` and then
+   * `b`, and compares the device pixels: the mean per-pixel max-channel |Δ|, the share of pixels
+   * more than 3 and 8 levels apart, and the largest |Δ|. The next frame draws as usual.
    */
-  resultsAB(): { diff: number; ringPath: boolean } | null {
-    if (this.ui.current() !== 'results') return null;
-    const r = this.renderIn;
-    const rr = this.renderer;
+  pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null {
     const canvas = this.d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
-    const keep = { dt: r.dt, gdt: r.gdt, cache: rr.resultsCache };
+    const opts = this.renderer.options;
+    const keep = { ...opts };
+    const pixels = (o: Partial<RenderOptions>): Uint8ClampedArray => {
+      Object.assign(opts, keep, o);
+      this.renderer.draw(this.renderIn);
+      return g.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    return this.frozen(() => {
+      try {
+        pixels(a);
+        const pa = pixels(a);
+        const pb = pixels(b);
+        let sum = 0;
+        let over3 = 0;
+        let over8 = 0;
+        let max = 0;
+        const n = pa.length / 4;
+        for (let i = 0; i < pa.length; i += 4) {
+          const d = Math.max(
+            Math.abs((pa[i] as number) - (pb[i] as number)),
+            Math.abs((pa[i + 1] as number) - (pb[i + 1] as number)),
+            Math.abs((pa[i + 2] as number) - (pb[i + 2] as number)),
+          );
+          sum += d;
+          if (d > 3) over3++;
+          if (d > 8) over8++;
+          if (d > max) max = d;
+        }
+        return { mean: sum / n, over3: over3 / n, over8: over8 / n, max };
+      } finally {
+        Object.assign(opts, keep);
+      }
+    });
+  }
+
+  /**
+   * Runs `fn` with the render input frozen (no real or game time passes; particles, pops, the
+   * camera and UI timers hold still), then restores it and has the next frame drawn as usual.
+   */
+  private frozen<T>(fn: () => T): T {
+    const r = this.renderIn;
+    const keep = { dt: r.dt, gdt: r.gdt, paused: r.paused, mapT: r.mapT, sheetTop: r.sheetTop };
     r.dt = 0;
     r.gdt = 0;
+    r.paused = true;
     try {
-      rr.resultsCache = true;
-      rr.draw(r);
-      const rings = rr.ringDraws;
-      rr.draw(r);
-      const ringPath = rr.ringDraws > rings;
-      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      rr.resultsCache = false;
-      rr.draw(r);
-      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      let diff = 0;
-      for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) diff++;
-      return { diff, ringPath };
+      return fn();
     } finally {
-      r.dt = keep.dt;
-      r.gdt = keep.gdt;
-      rr.resultsCache = keep.cache;
+      Object.assign(r, keep);
       this.cadence.invalidate();
     }
   }
@@ -1623,62 +1657,54 @@ export class Session {
    * below the sheet's top edge. The next frame draws as usual.
    */
   mapProbe(mapT: number): MapProbe | null {
-    const r = this.renderIn;
     const sheetTop = this.ui.current() === 'results' ? this.ui.resultsSheetTop() : null;
     if (sheetTop === null || this.resultsAt < 0) return null;
     const rr = this.renderer;
     const canvas = this.d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
-    const keep = { mapT: r.mapT, sheetTop: r.sheetTop, dt: r.dt, gdt: r.gdt, cache: rr.resultsCache, overlay: rr.mapOverlay };
-    r.mapT = mapT;
-    r.sheetTop = sheetTop;
-    r.dt = 0;
-    r.gdt = 0;
-    rr.resultsCache = false;
-    try {
-      rr.mapOverlay = true;
-      // A first draw at this mapT settles the zoom-dependent caches (the ground's whole-pixel tiles
-      // need the scale to hold still for a frame), so the two measured frames take the same paths.
-      rr.draw(r);
-      rr.draw(r);
-      const png = canvas.toDataURL('image/png');
-      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      rr.mapOverlay = false;
-      rr.draw(r);
-      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      const dpr = rr.scene.view.dpr;
-      const cutRow = Math.floor(sheetTop * dpr);
-      const w = canvas.width;
-      let above = 0;
-      let below = 0;
-      /** Device-px box of the differences below the cut (x0, y0, x1, y1), for diagnostics. */
-      const box = [Infinity, Infinity, -Infinity, -Infinity];
-      for (let i = 0; i < a.length; i += 4) {
-        if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
-        const px = i >> 2;
-        const y = Math.floor(px / w);
-        if (y < cutRow) {
-          above++;
-          continue;
+    return this.frozen(() => {
+      const r = this.renderIn;
+      r.mapT = mapT;
+      r.sheetTop = sheetTop;
+      try {
+        // A first draw at this mapT settles the zoom-dependent caches (the ground's whole-pixel tiles
+        // need the scale to hold still for a frame), so the two measured frames take the same paths.
+        rr.options.mapOverlay = true;
+        rr.draw(r);
+        rr.draw(r);
+        const png = canvas.toDataURL('image/png');
+        const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
+        rr.options.mapOverlay = false;
+        rr.draw(r);
+        const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
+        const dpr = rr.scene.view.dpr;
+        const cutRow = Math.floor(sheetTop * dpr);
+        const w = canvas.width;
+        let above = 0;
+        let below = 0;
+        /** Device-px box of the differences below the cut (x0, y0, x1, y1), for diagnostics. */
+        const box = [Infinity, Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < a.length; i += 4) {
+          if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
+          const px = i >> 2;
+          const y = Math.floor(px / w);
+          if (y < cutRow) {
+            above++;
+            continue;
+          }
+          below++;
+          const x = px - y * w;
+          box[0] = Math.min(box[0] as number, x);
+          box[1] = Math.min(box[1] as number, y);
+          box[2] = Math.max(box[2] as number, x);
+          box[3] = Math.max(box[3] as number, y);
         }
-        below++;
-        const x = px - y * w;
-        box[0] = Math.min(box[0] as number, x);
-        box[1] = Math.min(box[1] as number, y);
-        box[2] = Math.max(box[2] as number, x);
-        box[3] = Math.max(box[3] as number, y);
+        return { sheetTop, cutRow, dpr, above, below, belowBox: below > 0 ? box : null, png };
+      } finally {
+        rr.options.mapOverlay = true;
       }
-      return { sheetTop, cutRow, dpr, above, below, belowBox: below > 0 ? box : null, png };
-    } finally {
-      r.mapT = keep.mapT;
-      r.sheetTop = keep.sheetTop;
-      r.dt = keep.dt;
-      r.gdt = keep.gdt;
-      rr.resultsCache = keep.cache;
-      rr.mapOverlay = keep.overlay;
-      this.cadence.invalidate();
-    }
+    });
   }
 
   /** Test hook: the ghost hint's state. */

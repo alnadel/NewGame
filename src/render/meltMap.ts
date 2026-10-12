@@ -49,8 +49,6 @@ export interface MapOverlay {
   /** The Results sheet's top edge (CSS px), or null. */
   sheetTop: number | null;
   time: number;
-  /** Draw the puddle ring and carrot (the Results backdrop cache leaves them out and draws them per frame). */
-  puddle: boolean;
 }
 
 /** Clips to the view above the Results sheet (K10). Call inside save()/restore(). */
@@ -241,21 +239,19 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
       const c = ball ? s.world.byId.get(ball.casterId) : undefined;
       if (c) pin(g, v, c, c.name, s.nubs.x, a, o.labelA, top, limit);
     }
-    if (o.puddle) drawPuddle(g, v, s, a, o.time);
+    drawPuddle(g, v, s, a, o.time);
   }
   g.globalAlpha = 1;
   g.restore();
 }
 
 /** The puddle marker: a pulsing ring and a carrot (the only part of a settled map that moves). */
-export function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number, time: number): void {
+function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number, time: number): void {
   const d = s.death;
   if (!d) return;
   const px = v.ox + d.x * v.S;
   const py = v.oy - d.y * v.S;
   const pr = 14 + 3 * Math.sin(time * 4);
-  // As inside the overlay: the global alpha and the stroke colors both carry the fade. The line
-  // style is set here, so the Results cache and a full frame draw the very same pixels.
   g.globalAlpha = a;
   g.lineCap = 'round';
   g.lineJoin = 'round';
@@ -271,22 +267,6 @@ export function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a:
   g.stroke();
   carrotIcon(g, px + 16, py - 18, a);
   g.globalAlpha = 1;
-}
-
-/**
- * Screen box (CSS px: x0, y0, x1, y1) holding every pixel drawPuddle can touch: the ring at its
- * widest (r 17 + 2, plus half its 3 px stroke) and the carrot (from px + 16, py − 18, ~13 px out).
- */
-export function puddleBox(v: View, s: SimState, out: Float64Array): boolean {
-  const d = s.death;
-  if (!d) return false;
-  const px = v.ox + d.x * v.S;
-  const py = v.oy - d.y * v.S;
-  out[0] = px - 23;
-  out[1] = py - 34;
-  out[2] = px + 32;
-  out[3] = py + 23;
-  return true;
 }
 
 function pin(

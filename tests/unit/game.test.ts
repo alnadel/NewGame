@@ -341,7 +341,7 @@ describe('perf governor (TECH_SPEC §15)', () => {
     expect(g.level).toBeGreaterThanOrEqual(1);
   });
 
-  it('steps down one notch per 3 s on a 60 Hz display that keeps missing frames', () => {
+  it('steps down one notch per 3 s over the 4-level ladder on a 60 Hz display that keeps missing frames', () => {
     const g = new Governor();
     // Every other frame misses vsync: 16.7 / 33.3 ms (mean 25), light JS (the cost is raster).
     feed(g, 6.5, (i) => (i % 2 ? 33.3 : 16.7), 3);
@@ -351,9 +351,13 @@ describe('perf governor (TECH_SPEC §15)', () => {
     feed(g, 3.2, (i) => (i % 2 ? 33.3 : 16.7), 3);
     expect(g.level).toBe(2);
     expect(g.dprScale).toBe(0.75);
+    expect(g.particleCap).toBe(400);
+    feed(g, 3.2, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    expect(g.level).toBe(3);
+    expect([g.softShadows, g.dprScale, g.particleCap]).toEqual([false, 0.625, 200]);
+    // Level 3 is the floor of the ladder.
     feed(g, 30, (i) => (i % 2 ? 33.3 : 16.7), 3);
-    expect(g.level).toBe(5);
-    expect([g.dprScale, g.particleCap, g.detail]).toEqual([0.625, 200, false]);
+    expect(g.level).toBe(3);
   });
 
   it('starts low-end devices at crisp shadows and never steps back above that', () => {
@@ -419,7 +423,7 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
     const frames = Math.round((seconds * 1000) / ms);
     for (let i = 1; i <= frames; i++) {
       const now = 1000 + i * ms + (jitter ? Math.sin(i * 12.9898) * jitter : 0);
-      const inp: CadenceInput = { now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, ...over };
+      const inp: CadenceInput = { now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, settled: false, ...over };
       if (c.shouldDraw(inp)) {
         c.drawn(now);
         draws++;
@@ -464,6 +468,16 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
     expect(title).toBeGreaterThanOrEqual(9);
     expect(title).toBeLessThanOrEqual(11);
     expect(run(new Cadence(), 4, 16.7, { screen: 'title' })).toBeGreaterThanOrEqual(59);
+  });
+
+  it('draws the settled Results at 20 fps (GR4), and at full rate until they settle', () => {
+    const settled = run(new Cadence(), 4, 1000 / 60, { screen: 'results', settled: true });
+    expect(settled).toBeGreaterThanOrEqual(19);
+    expect(settled).toBeLessThanOrEqual(21);
+    expect(run(new Cadence(), 4, 1000 / 120, { screen: 'results', settled: true })).toBeLessThanOrEqual(21);
+    expect(run(new Cadence(), 4, 1000 / 60, { screen: 'results' })).toBeGreaterThanOrEqual(59);
+    // The flag only applies to the Results.
+    expect(run(new Cadence(), 4, 1000 / 60, { screen: 'play', settled: true })).toBeGreaterThanOrEqual(59);
   });
 
   it('draws a menu once, and again only when invalidated or the screen changes', () => {

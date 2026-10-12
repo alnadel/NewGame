@@ -105,7 +105,18 @@ export interface ShadyPerf {
   dpr: number;
   govLevel: number;
   draws: number;
-  ringDraws: number;
+}
+
+export interface PixelAB {
+  mean: number;
+  over3: number;
+  over8: number;
+  max: number;
+}
+
+export interface RenderOptions {
+  mapOverlay: boolean;
+  multiplyShadows: boolean;
 }
 
 export interface MapProbe {
@@ -137,9 +148,9 @@ declare global {
       runCfg(): RunCfg;
       cameraFx(): { zoom: number; shakeX: number; shakeY: number };
       hudPb(): number;
-      renderOptions(o: { resultsCache?: boolean; mapOverlay?: boolean }): void;
+      renderOptions(o: Partial<RenderOptions>): void;
       mapProbe(mapT: number): MapProbe | null;
-      resultsAB(): { diff: number; ringPath: boolean } | null;
+      pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
     };
   }

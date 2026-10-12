@@ -2,9 +2,9 @@
 
 import { BOT_KINDS, runHeadless, type BotKind } from '../core/index.ts';
 import type { ShadyAudio } from '../audio/index.ts';
-import type { DebugDraw } from '../render/renderer.ts';
+import type { DebugDraw, RenderOptions } from '../render/renderer.ts';
 import { shakeOf, zoomOf } from './camera.ts';
-import type { MapProbe, Session } from './session.ts';
+import type { MapProbe, PixelAB, Session } from './session.ts';
 
 export interface ShadyTestHook {
   screen(): string;
@@ -40,8 +40,6 @@ export interface ShadyTestHook {
     govLevel: number;
     /** renderer.draw calls so far (the render cadence skips the rest of the rAFs). */
     draws: number;
-    /** Settled-Results frames that only repainted the puddle ring from the cached backdrop. */
-    ringDraws: number;
   };
   /** The current run's config (the Title's held run between runs); drain = cfg.drain ?? the profile's. */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number };
@@ -49,15 +47,15 @@ export interface ShadyTestHook {
   cameraFx(): { zoom: number; shakeX: number; shakeY: number };
   /** The best flag the HUD shows (frozen for the run in progress). */
   hudPb(): number;
-  /** Render switches for A/B checks: the settled-Results backdrop cache and the Melt Map overlay. */
-  renderOptions(o: { resultsCache?: boolean; mapOverlay?: boolean }): void;
+  /** Render switches for A/B checks (render/renderer.ts RenderOptions). */
+  renderOptions(o: Partial<RenderOptions>): void;
   /**
    * Results: draws the Melt Map at `mapT` with and without its overlay (time frozen) and counts the
    * device pixels that differ above and below the sheet's top edge (K10 checks).
    */
   mapProbe(mapT: number): MapProbe | null;
-  /** Settled Results: cached-backdrop frame vs a full redraw at the same instant (device px that differ). */
-  resultsAB(): { diff: number; ringPath: boolean } | null;
+  /** The current frame drawn under render options `a` and then `b` (time frozen), compared pixel by pixel. */
+  pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
   /** A core bot plays the runs from now on ('reactive', 'oracle'…; null stops it). The runs stay scored. */
   bot(kind: string | null): void;
 }
@@ -100,7 +98,6 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       dpr: session.renderer.scene.view.dpr,
       govLevel: session.gov.level,
       draws: session.renderer.draws,
-      ringDraws: session.renderer.ringDraws,
     }),
     runCfg: () => session.runCfg(),
     cameraFx: () => {
@@ -109,11 +106,11 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     },
     hudPb: () => session.hudPb(),
     renderOptions: (o) => {
-      if (o.resultsCache !== undefined) session.renderer.resultsCache = o.resultsCache;
-      if (o.mapOverlay !== undefined) session.renderer.mapOverlay = o.mapOverlay;
+      Object.assign(session.renderer.options, o);
+      session.cadence.invalidate();
     },
     mapProbe: (mapT) => session.mapProbe(mapT),
-    resultsAB: () => session.resultsAB(),
+    pixelAB: (a, b) => session.pixelAB(a, b),
     bot: (kind) => session.setTestBot(kind !== null && (BOT_KINDS as readonly string[]).includes(kind) ? (kind as BotKind) : null),
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
     timeScale: () => session.clock.timeScale,
