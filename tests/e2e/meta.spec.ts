@@ -206,6 +206,58 @@ for (const width of [360, 390, 430]) {
   });
 }
 
+// A run that completes a mission and unlocks things: the stamps and chips land without moving the
+// score. Auto-scroll only moves the stats/missions list, only downward, and never the body that
+// holds the score (one-scroll mode on short screens).
+for (const size of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+]) {
+  test(`Results at ${size.width}x${size.height}: the score stays in the sheet while stamps and chips land (UM8)`, async ({ page }, info) => {
+    await seedSave(page, { v: 2, createdAt: 1, settings: { name: 'Sam' }, stats: { runs: 12, comfort: 3, bestMinutes: 800, wallet: 300 } });
+    await page.setViewportSize(size);
+    await openGame(page, 'test=1&seed=20261014');
+    await startRun(page);
+    await page.evaluate(() => {
+      window.__SHADY_TEST__!.bot('oracle');
+      window.__SHADY_TEST__!.setTimeScale(4);
+    });
+    // Past 9:00 AM ('Reach 9:00 AM' completes), however slowly the page runs.
+    await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.state())).minutes, { timeout: 30_000 }).toBeGreaterThanOrEqual(200);
+    await page.evaluate(() => {
+      window.__SHADY_TEST__!.setTimeScale(1);
+      window.__SHADY_TEST__!.bot(null);
+    });
+    await die(page);
+    const probe = (): Promise<{ score: number[]; sheet: number[]; body: number; list: number; stamped: number }> =>
+      page.evaluate(() => {
+        const r = (sel: string): number[] => {
+          const b = document.querySelector(sel)!.getBoundingClientRect();
+          return [b.top, b.bottom];
+        };
+        return {
+          score: r('.scr-results .res-score'),
+          sheet: r('.scr-results .res-sheet'),
+          body: document.querySelector('.scr-results .res-body')!.scrollTop,
+          list: document.querySelector('.scr-results .res-scroll')!.scrollTop,
+          stamped: document.querySelectorAll('.scr-results .mrow.is-new').length,
+        };
+      });
+    let lastList = 0;
+    for (const ms of [600, 900, 1500, 1500]) {
+      await page.waitForTimeout(ms);
+      const p = await probe();
+      expect(p.body, 'the body holding the score never scrolls').toBe(0);
+      expect(p.list, 'the list only scrolls down').toBeGreaterThanOrEqual(lastList - 1);
+      lastList = p.list;
+      expect(p.score[0], 'score top inside the sheet').toBeGreaterThanOrEqual(p.sheet[0]! - 1);
+      expect(p.score[1], 'score bottom inside the sheet').toBeLessThanOrEqual(p.sheet[1]! + 1);
+    }
+    expect((await probe()).stamped, 'a mission stamp landed').toBeGreaterThan(0);
+    await info.attach(`results-stamps-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
+  });
+}
+
 test('Missions reach the Journal and come back (UM10)', async ({ page }) => {
   await seedSave(page, richSave());
   await openGame(page);

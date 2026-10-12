@@ -1389,10 +1389,12 @@
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   margin: 0 -4px;
-  padding: 0 4px 14px;
-  /* Soft fade at the bottom edge hints that the sheet scrolls on short screens. */
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+  padding: 0 4px 28px;
+  /* A soft fade at the bottom edge (results.ts SCROLL_FADE_PX) says the list goes on, so a tile cut
+     by the Retry bar fades out instead of ending in hard-cut text; the padding lets the last row
+     scroll clear of it. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
 /* ...unless the screen is short or the text large (results.ts measure()): then the whole body
@@ -1405,14 +1407,14 @@
   touch-action: pan-y;
   margin: 0 -4px;
   padding: 0 4px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
 .res-sheet.is-one-scroll .res-scroll {
   overflow: visible;
   margin: 0;
-  padding: 0 0 14px;
+  padding: 0 0 28px;
   -webkit-mask-image: none;
   mask-image: none;
 }

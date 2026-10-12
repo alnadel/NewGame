@@ -41,7 +41,8 @@ const TYPE_CPS = 30;
 const COUNT_MS = 700;
 const STAMP_FIRST_MS = 650;
 const STAMP_GAP_MS = 300;
-const TOAST_GAP_MS = 650;
+/** Award chips pop this far apart, before the stamps. */
+const CHIP_GAP_MS = 280;
 /** Below this viewport height the sheet body scrolls as one. */
 const ONE_SCROLL_BELOW_PX = 520;
 /** The stats/missions scroll area must keep at least this much height, or the body scrolls as one. */
@@ -53,6 +54,8 @@ const MIN_SCROLL_PX = 120;
  */
 const MAP_MIN_PX = 96;
 const SHEET_MIN_FRACTION = 0.58;
+/** The scroll area's bottom fade (ui.css .res-scroll mask): revealed rows stop above it. */
+const SCROLL_FADE_PX = 28;
 const SHEET_MAX_FRACTION = 0.68;
 /** Sun Strip rows: the last 4 days, or 2 on screens under 700 px tall. */
 const STRIP_ROWS = 4;
@@ -216,6 +219,15 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const hh = sheet.offsetHeight;
     mapCatch.style.bottom = `${hh}px`;
     sheetTopPx = el.getBoundingClientRect().top + screenH - hh;
+  };
+  /**
+   * Scrolls the stats/missions list (only) down so `el` shows above its bottom fade. Never scrolls
+   * up, and never the sheet body: in one-scroll mode the score must stay in view, so nothing moves.
+   */
+  const reveal = (el: HTMLElement, smooth: boolean): void => {
+    if (sheet.classList.contains('is-one-scroll')) return;
+    const below = el.getBoundingClientRect().bottom - (scroll.getBoundingClientRect().bottom - SCROLL_FADE_PX);
+    if (below > 0) scroll.scrollBy({ top: below, behavior: smooth ? 'smooth' : 'auto' });
   };
   if (typeof ResizeObserver === 'function') {
     const ro = new ResizeObserver(measure);
@@ -418,30 +430,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       snowValue.textContent = `+${outcome.snowEarned}`;
     }
 
-    // Missions and Today's errand, with stamps landing one after another.
-    const items: { justCompleted: boolean }[] = [...outcome.missions, ...(outcome.errand ? [outcome.errand] : [])];
-    const rows = [...outcome.missions.map(missionRow), ...(outcome.errand ? [errandRow(outcome.errand)] : [])];
-    setChildren(missionList, ...rows);
-    let stampAt = STAMP_FIRST_MS;
-    items.forEach((m, i) => {
-      if (!m.justCompleted) return;
-      const row = rows[i] as HTMLElement;
-      if (reduced) {
-        row.classList.add('is-stamped');
-        later(0, () => row.scrollIntoView({ block: 'nearest' }));
-        return;
-      }
-      later(stampAt, () => {
-        row.classList.add('is-stamped', 'is-new');
-        // On short screens the missions sit below the fold: bring each stamp into view as it lands.
-        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        ctx.sound('stamp');
-      });
-      stampAt += STAMP_GAP_MS;
-    });
-
-    // Unlocks: chips at the top of the scroll area (their space is held from the start so nothing
-    // jumps), popping in one by one after the stamps.
+    // The run's unlocks first, then the mission stamps. Chips sit at the top of the scroll area
+    // (their space is held from the start so nothing reflows) and pop in quickly; the stamps follow,
+    // each scrolled into view as it lands. Auto-scroll only ever moves the stats/missions list, and
+    // only downward: never the sheet body that holds the score (one-scroll mode on short screens).
     const chips = outcome.toasts.map((t) =>
       h(
         'li',
@@ -453,11 +445,35 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     setChildren(awards, ...chips);
     hide(awards, chips.length === 0);
     chips.forEach((chip, i) => {
-      later(stampAt + 250 + i * TOAST_GAP_MS, () => {
+      if (reduced) {
         chip.classList.add('is-in');
-        chip.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+        return;
+      }
+      later(STAMP_FIRST_MS + i * CHIP_GAP_MS, () => {
+        chip.classList.add('is-in');
         ctx.sound('unlock');
       });
+    });
+
+    // Missions and Today's errand, with stamps landing one after another.
+    const items: { justCompleted: boolean }[] = [...outcome.missions, ...(outcome.errand ? [outcome.errand] : [])];
+    const rows = [...outcome.missions.map(missionRow), ...(outcome.errand ? [errandRow(outcome.errand)] : [])];
+    setChildren(missionList, ...rows);
+    let stampAt = STAMP_FIRST_MS + (chips.length > 0 ? chips.length * CHIP_GAP_MS + 200 : 0);
+    items.forEach((m, i) => {
+      if (!m.justCompleted) return;
+      const row = rows[i] as HTMLElement;
+      if (reduced) {
+        row.classList.add('is-stamped');
+        later(0, () => reveal(row, false));
+        return;
+      }
+      later(stampAt, () => {
+        row.classList.add('is-stamped', 'is-new');
+        reveal(row, true);
+        ctx.sound('stamp');
+      });
+      stampAt += STAMP_GAP_MS;
     });
 
     // Retry arms after 0.3 s (the sheet is readable before a stray tap can fire it).
