@@ -1640,6 +1640,7 @@ export class Session {
       srcW: v.vw * dpr,
       srcH: Math.max(1, (sheetTop - v.vy) * dpr),
       focusX: (v.ox + (death ? death.x : this.s.nubs.x) * v.S) * dpr,
+      focusY: (v.oy - (death ? death.y : this.s.nubs.y) * v.S) * dpr,
       callouts: Array.from(calloutBoxes.subarray(0, 4 * calloutsDrawn()), (x) => x * dpr),
       day,
       time: formatTimeOfDay(minute),

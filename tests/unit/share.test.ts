@@ -9,6 +9,7 @@ import {
   dayStripLines,
   endlessShareText,
   glyphStrip,
+  linkLabel,
   resolveShareBase,
 } from '../../src/meta/share.ts';
 import { decodeChallenge } from '../../src/meta/challenge.ts';
@@ -184,6 +185,15 @@ describe('buildShare', () => {
     const d = buildShare(result({ mode: 'daily', dailyDate: '2026-10-11' }), null, 1);
     expect(d.text.split('\n')).toHaveLength(3);
     expect(d.text).not.toMatch(/#c=|https?:|file:/);
+  });
+});
+
+describe('postcard link label', () => {
+  it('reads as a short address: no scheme, www., code, query, index.html or trailing slash', () => {
+    expect(linkLabel('https://alnadel.github.io/NewGame/#c=eyJ2IjoxLCJrIjoiZSIsInNlZWQiOjF9')).toBe('alnadel.github.io/NewGame');
+    expect(linkLabel('http://localhost:4173/#c=abc&x=1')).toBe('localhost:4173');
+    expect(linkLabel('https://www.shady.example/play/index.html?ref=card#c=abc')).toBe('shady.example/play');
+    expect(linkLabel('')).toBe('');
   });
 });
 

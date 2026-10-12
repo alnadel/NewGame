@@ -546,6 +546,32 @@ test.describe('postcard (GR14)', () => {
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1080, 1350]);
   });
 
+  test('the map panel is one fixed 1000×720 frame whatever the screen shape (no dead band above the footer)', async ({ page }) => {
+    await toPostcard(page);
+    await expect(page.locator('.res-postcard-img')).toHaveAttribute('src', /^blob:/);
+    // The panel's bottom edge (with its 8 px drop shadow): the lowest row above the text that is not paper.
+    const bottom = await page.evaluate(async () => {
+      const img = document.querySelector<HTMLImageElement>('.res-postcard-img')!;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const g = c.getContext('2d')!;
+      g.drawImage(img, 0, 0);
+      const paper = [0xff, 0xf8, 0xee];
+      for (let y = 800; y > 40; y--) {
+        for (const x of [300, 540, 780]) {
+          const d = g.getImageData(x, y, 1, 1).data;
+          if (Math.abs(d[0]! - paper[0]!) + Math.abs(d[1]! - paper[1]!) + Math.abs(d[2]! - paper[2]!) > 12) return { y, size: [c.width, c.height] };
+        }
+      }
+      return { y: -1, size: [c.width, c.height] };
+    });
+    expect(bottom.size).toEqual([1080, 1350]);
+    expect(bottom.y).toBeGreaterThanOrEqual(758);
+    expect(bottom.y).toBeLessThanOrEqual(769);
+  });
+
   test('with a share sheet that takes files, the pill hands it one PNG and the text in the same task', async ({ page }) => {
     await page.addInitScript(() => {
       const w = window as Window & { shared?: { files: number; name: string; text: string } | null };

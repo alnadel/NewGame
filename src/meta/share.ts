@@ -208,6 +208,20 @@ export function resolveShareBase(p: ShareBaseInput): string | null {
   return configured !== '' ? configured : null;
 }
 
+/**
+ * A link as people read it on the postcard: no scheme, no www., no challenge code, query or
+ * index.html, no trailing slash ("https://alnadel.github.io/NewGame/#c=eyJ2…" → "alnadel.github.io/NewGame").
+ * The full link travels in the share text beside the image.
+ */
+export function linkLabel(url: string): string {
+  return url
+    .replace(/[#?].*$/s, '')
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/index\.html?$/i, '')
+    .replace(/\/+$/, '');
+}
+
 /** resolveShareBase for this page: location, isNative() and the build's VITE_SHARE_URL. */
 export function shareBase(): string | null {
   if (typeof location === 'undefined') return null;

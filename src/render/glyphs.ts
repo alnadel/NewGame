@@ -115,6 +115,28 @@ export function drawForecastGlyph(g: CanvasRenderingContext2D, id: ForecastId, x
   g.restore();
 }
 
+/**
+ * A small sun for a clear day, where a row of forecasts needs a mark in every slot (the postcard's
+ * day rows); the HUD and the Day card show nothing on a clear day.
+ */
+export function drawClearGlyph(g: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  begin(g, x, y, size);
+  g.strokeStyle = '#F2A516';
+  g.lineWidth = 1.4;
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i * TAU) / 8;
+    g.moveTo(Math.cos(a) * 4.6, Math.sin(a) * 4.6);
+    g.lineTo(Math.cos(a) * 6.4, Math.sin(a) * 6.4);
+  }
+  g.stroke();
+  g.fillStyle = '#FFC93C';
+  g.beginPath();
+  g.arc(0, 0, 3.3, 0, TAU);
+  g.fill();
+  g.restore();
+}
+
 /** A tree for the Meadow, a house for the Old Town. */
 export function drawBiomeGlyph(g: CanvasRenderingContext2D, biome: BiomeId, x: number, y: number, size: number): void {
   begin(g, x, y, size);

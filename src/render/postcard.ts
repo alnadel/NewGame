@@ -1,13 +1,15 @@
 // The postcard (GR14, A11): a 1080×1350 (4:5) PNG of the run on paper. Its map panel is a cover-crop
 // of the main canvas once the Melt Map has settled (no second renderer), under the guilty sun in the
 // equipped shades; then the score, the death line, the last two days as vector hour tiles (never
-// emoji) with each day's forecast glyph, and a footer with the wordmark and the full challenge link.
+// emoji) with each day's forecast glyph (a sun on a clear day, so the rows line up), and a footer
+// with the wordmark and the game's address (the full challenge link travels in the share text).
 // It is built in stages, one per idle callback (crop, header, tiles and footer, encode), so no stage
 // holds the main thread for long.
 
 import type { ForecastId, HourGlyph } from '../core/index.ts';
 import type { ShadesLook } from '../meta/content.ts';
-import { drawForecastGlyph } from './glyphs.ts';
+import { linkLabel } from '../meta/share.ts';
+import { drawClearGlyph, drawForecastGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 import { createSunGlyph, drawSun } from './sun.ts';
 
@@ -16,10 +18,14 @@ export const POSTCARD_H = 1350;
 const PAPER = '#FFF8EE';
 const INK = '#2B2140';
 const SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-/** The map panel: full width, as tall as the source's shape asks within 440-820 px (little upscaling). */
+/**
+ * The map panel: one fixed 1000×720 frame on every device, a cover-crop of the source centred on
+ * the puddle, so a wide desktop map and a tall phone map make the same card.
+ */
 const MAP_X = 40;
 const MAP_Y = 40;
 const MAP_W = 1000;
+const MAP_H = 720;
 const SUN_R = 70;
 const FOOTER_TOP = 1236;
 const TILE = 60;
@@ -32,8 +38,9 @@ export interface PostcardInput {
   srcY: number;
   srcW: number;
   srcH: number;
-  /** The puddle's x in the source (device px): the crop centres on it. */
+  /** The puddle in the source (device px): the crop centres on it as far as the source allows. */
   focusX: number;
+  focusY: number;
   /** The Melt Map's callout boxes in the source (device px, x y w h each): the sun keeps off them. */
   callouts: readonly number[];
   day: number;
@@ -45,7 +52,7 @@ export interface PostcardInput {
   forecasts: readonly ForecastId[];
   /** 'Daily #12' for a Daily, else ''. */
   daily: string;
-  /** The challenge link ('' when there is no web address). */
+  /** The challenge link ('' when there is no web address); the card prints only its address. */
   url: string;
   shades: ShadesLook;
   /** The wordmark's layers (shadow, word), drawn in order when they have loaded. */
@@ -56,8 +63,7 @@ export interface PostcardJob {
   readonly inp: PostcardInput;
   readonly canvas: Canvas2D;
   readonly g: CanvasRenderingContext2D;
-  /** The map panel's height, the crop (source device px) it shows, and where the text block starts. */
-  readonly mapH: number;
+  /** The crop (source device px) the map panel shows, and where the text block starts. */
   readonly crop: Float64Array;
   readonly textTop: number;
   /** Next stage (0 crop, 1 header, 2 tiles and footer, 3 encode, 4 done). */
@@ -68,17 +74,16 @@ export interface PostcardJob {
 
 export function createPostcardJob(inp: PostcardInput): PostcardJob {
   const canvas = makeCanvas(POSTCARD_W, POSTCARD_H);
-  const mapH = Math.round(Math.max(440, Math.min(820, (MAP_W * inp.srcH) / inp.srcW)));
   // Cover-crop: fill the panel, centred on the puddle as far as the source allows.
-  const k = Math.max(MAP_W / inp.srcW, mapH / inp.srcH);
+  const k = Math.max(MAP_W / inp.srcW, MAP_H / inp.srcH);
   const cw = MAP_W / k;
-  const ch = mapH / k;
+  const ch = MAP_H / k;
   const cx = Math.max(inp.srcX, Math.min(inp.srcX + inp.srcW - cw, inp.focusX - cw / 2));
-  const cy = inp.srcY + (inp.srcH - ch) / 2;
+  const cy = Math.max(inp.srcY, Math.min(inp.srcY + inp.srcH - ch, inp.focusY - ch / 2));
   // The text block (score, death line, tile rows) takes a third of the spare room above it.
   const block = 292 + inp.days.length * (TILE + GAP) - GAP;
-  const textTop = MAP_Y + mapH + Math.max(0, (FOOTER_TOP - MAP_Y - mapH - block) / 3);
-  return { inp, canvas, g: ctx2d(canvas), mapH, crop: Float64Array.of(cx, cy, cw, ch), textTop, stage: 0, stageMs: [] };
+  const textTop = MAP_Y + MAP_H + Math.max(0, (FOOTER_TOP - MAP_Y - MAP_H - block) / 3);
+  return { inp, canvas, g: ctx2d(canvas), crop: Float64Array.of(cx, cy, cw, ch), textTop, stage: 0, stageMs: [] };
 }
 
 /** Runs the next drawing stage; true once only the encode is left (stage 3). */
@@ -101,7 +106,7 @@ export function postcardName(day: number, time: string): string {
 }
 
 function drawMapPanel(g: CanvasRenderingContext2D, job: PostcardJob): void {
-  const h = job.mapH;
+  const h = MAP_H;
   const c = job.crop;
   g.fillStyle = PAPER;
   g.fillRect(0, 0, POSTCARD_W, POSTCARD_H);
@@ -180,18 +185,18 @@ function drawTilesAndFooter(g: CanvasRenderingContext2D, job: PostcardJob): void
     const y = top + r * (TILE + GAP);
     const hours = inp.days[r] as readonly HourGlyph[];
     let x = MAP_X + 8;
+    // Every row starts with its forecast (a sun on a clear day), so the hour tiles line up.
     const fc = inp.forecasts[r] ?? 'clear';
-    if (fc !== 'clear') {
-      drawForecastGlyph(g, fc, x + TILE / 2, y + TILE / 2, 44);
-      x += TILE + GAP;
-    }
+    if (fc === 'clear') drawClearGlyph(g, x + TILE / 2, y + TILE / 2, 44);
+    else drawForecastGlyph(g, fc, x + TILE / 2, y + TILE / 2, 44);
+    x += TILE + GAP;
     for (const h of hours) {
       hourTile(g, h, x, y);
       x += TILE + GAP;
     }
     if (hours.length === 12) moonTile(g, x, y);
   }
-  // Footer: the wordmark, the Daily's number and the full link.
+  // Footer: the wordmark, then the Daily's number and the game's address, one line each.
   const fy = 1262;
   for (const img of inp.logo) {
     if (img.complete && img.naturalWidth > 0) g.drawImage(img, MAP_X - 4, POSTCARD_H - 34 - 84, (84 * img.naturalWidth) / img.naturalHeight, 84);
@@ -204,12 +209,11 @@ function drawTilesAndFooter(g: CanvasRenderingContext2D, job: PostcardJob): void
     g.font = `800 26px ${SANS}`;
     g.fillText(inp.daily, right, fy + 22);
   }
-  if (inp.url) {
+  const link = linkLabel(inp.url);
+  if (link) {
     g.fillStyle = '#6B6280';
-    g.font = `600 19px ${SANS}`;
-    const lines = breakAnywhere(g, `Beat it → ${inp.url}`, MAP_W - 260, inp.daily ? 2 : 3);
-    const y0 = inp.daily ? fy + 50 : fy + 22;
-    for (let i = 0; i < lines.length; i++) g.fillText(lines[i] as string, right, y0 + i * 24);
+    g.font = `700 26px ${SANS}`;
+    g.fillText(ellipsize(g, `Beat it → ${link}`, MAP_W - 300), right, inp.daily ? fy + 56 : fy + 22);
   }
   g.textAlign = 'left';
 }
@@ -250,19 +254,6 @@ function ellipsize(g: CanvasRenderingContext2D, s: string, max: number): string 
   let t = s;
   while (t.length > 1 && g.measureText(`${t}…`).width > max) t = t.slice(0, -1);
   return `${t.trimEnd()}…`;
-}
-
-/** Breaks a link anywhere so it all shows, in at most `n` lines of `max` px. */
-function breakAnywhere(g: CanvasRenderingContext2D, s: string, max: number, n: number): string[] {
-  const out: string[] = [];
-  let rest = s;
-  while (rest && out.length < n) {
-    let k = rest.length;
-    while (k > 1 && g.measureText(rest.slice(0, k)).width > max) k--;
-    out.push(rest.slice(0, k));
-    rest = rest.slice(k);
-  }
-  return out;
 }
 
 function hourTile(g: CanvasRenderingContext2D, h: HourGlyph, x: number, y: number): void {
