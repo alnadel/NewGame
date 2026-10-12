@@ -70,6 +70,10 @@ export interface ShadyTestHook {
   pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
   /** A core bot plays the runs from now on ('reactive', 'oracle'…; null stops it). The runs stay scored. */
   bot(kind: string | null): void;
+  /** The HUD row's layout as last built: left panel and ruler shown, ruler width (CSS px), Snow's flake icon. */
+  hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean };
+  /** Sets the run's Snow (layout checks with long numbers). */
+  setSnow(n: number): void;
 }
 
 declare global {
@@ -125,6 +129,11 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     nubsScreen: () => ({ x: session.renderer.scene.pose.x, y: session.renderer.scene.pose.y }),
     timeScale: () => session.clock.timeScale,
     hint: () => session.hintState(),
+    hud: () => {
+      const h = session.renderer.scene.hud;
+      return { snow: h.builtSnow, left: h.leftShown, ruler: h.leftShown && h.rulerShown, rulerW: h.rulerShown ? h.rulerX1 - h.rulerX0 : 0, icon: h.iconS > 0 };
+    },
+    setSnow: (n) => session.testSetSnow(n),
   };
   window.__SHADY_TEST__ = hook;
 }

@@ -325,3 +325,26 @@ test('a Wardrobe toast clears the menu header', async ({ page }, info) => {
   expect(intersects(t, wallet), 'toast over the wallet chip').toBe(false);
   await info.attach('wardrobe-toast', { body: await page.screenshot(), contentType: 'image/png' });
 });
+
+// The day ruler carries the day's progress, the noon boss, the recent-best flag and the next goal:
+// it never drops, even on a forecast day with long Snow numbers on a narrow phone.
+for (const size of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+]) {
+  test(`HUD ${size.width}x${size.height}: a forecast day with 3- and 4-digit Snow keeps the day ruler`, async ({ page }, info) => {
+    await page.setViewportSize(size);
+    await openGame(page, 'test=1&seed=7&forecast=breezy&perf=0');
+    await page.mouse.click(Math.round(size.width / 2), Math.round(size.height * 0.4));
+    await waitForScreen(page, 'play');
+    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
+    expect((await page.evaluate(() => window.__SHADY_TEST__!.state())).forecast).toBe('breezy');
+    for (const snow of [0, 999, 1234]) {
+      await page.evaluate((n) => window.__SHADY_TEST__!.setSnow(n), snow);
+      await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.hud()), { timeout: 3000 }).toMatchObject({ snow, left: true, ruler: true });
+      const hud = await page.evaluate(() => window.__SHADY_TEST__!.hud());
+      expect(hud.rulerW, `ruler width with Snow ${snow}`).toBeGreaterThanOrEqual(48);
+    }
+    await info.attach(`hud-${size.width}`, { body: await page.screenshot({ clip: { x: 0, y: 0, width: size.width, height: 64 } }), contentType: 'image/png' });
+  });
+}

@@ -1977,6 +1977,11 @@ export class Session {
     };
   }
 
+  /** Test hook: sets the run's Snow (HUD layout checks with long numbers). */
+  testSetSnow(n: number): void {
+    if (Number.isFinite(n) && n >= 0) this.s.stats.snow = Math.floor(n);
+  }
+
   /** Test hook: the config of the current run (the Title's held run between runs). */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
     const s = this.s;

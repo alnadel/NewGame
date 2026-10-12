@@ -166,6 +166,8 @@ declare global {
       postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
       pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
+      hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean };
+      setSnow(n: number): void;
     };
   }
 }

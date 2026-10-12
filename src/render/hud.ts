@@ -1,5 +1,5 @@
 // Canvas HUD (V1_PLAN §9, GDD §5, archive/CRITIQUE #25): one compact row under the safe inset, to the right
-// of the DOM pause button: a "D2" badge (and the day's forecast glyph unless it is clear), the clock
+// of the DOM pause button: a "D2" badge (with the day's forecast as a sticker unless it is clear), the clock
 // in 10-minute steps, and the day ruler (dawn → noon → dusk gradient, progress, the noon "boss"
 // icon, a gold PB flag and a teal challenge flag); Snow and the multiplier badge (pop on ×up, shake
 // on reset) on the right.
@@ -322,10 +322,12 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   g.drawImage(layer, h.layerX, h.layerY, h.layerW, h.layerH);
   const cy = h.cy;
 
-  // Snow flake icon (pops on +Snow).
-  const pop = h.snowPop > 0 ? 1 + 0.18 * Math.sin((Math.PI * h.snowPop) / 0.18) : 1;
-  const iz = h.iconS * pop;
-  g.drawImage(flake(), h.iconX + h.iconS / 2 - iz / 2, cy - iz / 2, iz, iz);
+  // Snow flake icon (pops on +Snow); a tight row drops it (buildLayer).
+  if (h.iconS > 0) {
+    const pop = h.snowPop > 0 ? 1 + 0.18 * Math.sin((Math.PI * h.snowPop) / 0.18) : 1;
+    const iz = h.iconS * pop;
+    g.drawImage(flake(), h.iconX + h.iconS / 2 - iz / 2, cy - iz / 2, iz, iz);
+  }
 
   // Multiplier badge: pops 1 → 1.4 → 1 on ×up (elastic), shakes ±4 px on reset; gold from ×2.
   const m = s.nubs.mult;
@@ -451,7 +453,11 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     h.badgeKey = -1;
   }
 
-  // --- Right: Snow + multiplier ---------------------------------------------------------------
+  // --- Layout: the ruler never drops ---------------------------------------------------------
+  // The ruler carries the day's progress, the noon boss, the recent-best flag and the next goal, so
+  // it keeps at least RULER_MIN px: the forecast glyph rides on the D-badge (no width of its own),
+  // the clock reserves the widest clock of a day, and when the row is still tight the clock font
+  // shrinks a little (to 90 %), then the Snow pill drops its flake icon and the clock may shrink to 70 %.
   const snowW = tabularWidth(g, h, h.snowFont, h.snowText);
   // The badge is sized for one digit ("×5"), as the multiplier never exceeds 5.
   const multW = tabularWidth(g, h, h.multFont, '×5');
@@ -459,15 +465,38 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   const badgeW = multW + 14 * k;
   const badgeH = 24 * k;
   if (badgeW !== h.badgeW || badgeH !== h.badgeH) h.badgeKey = -1;
-  const rightW = 10 * k + iconS + 6 * k + snowW + 8 * k + badgeW + 6 * k;
   const rx1 = v.vx + v.vw - v.safe.right - 8;
+  const lx0 = v.vx + v.safe.left + 8 + 48 + 8;
+  // A forecast sticker sits on the badge's right cap: the badge grows so it clears the digits.
+  const dW = tabularWidth(g, h, h.dayFont, h.dayText) + 12 * k + (h.builtForecast !== 'clear' ? 5 * k : 0);
+  const rightOf = (icon: boolean): number => 10 * k + (icon ? iconS + 6 * k : 0) + snowW + 8 * k + badgeW + 6 * k;
+  const rulerOf = (rightW: number, clockW: number): number => rx1 - rightW - 8 - 12 * k - (lx0 + 8 * k + dW + 7 * k + clockW + 10 * k);
+  let icon = true;
+  let clockFont = h.clockFont;
+  let clockW = widestClock(g, h, clockFont);
+  const fit = (fMin: number): void => {
+    for (let f = 0.95; f >= fMin - 0.001 && rulerOf(rightOf(icon), clockW) < RULER_MIN; f -= 0.05) {
+      clockFont = `800 ${Math.round(19 * k * f)}px ${FONT}`;
+      clockW = widestClock(g, h, clockFont);
+    }
+  };
+  fit(0.9);
+  if (rulerOf(rightOf(true), clockW) < RULER_MIN) {
+    icon = false;
+    clockFont = h.clockFont;
+    clockW = widestClock(g, h, clockFont);
+    fit(0.7);
+  }
+
+  // --- Right: Snow + multiplier ---------------------------------------------------------------
+  const rightW = rightOf(icon);
   const rx0 = rx1 - rightW;
   const panelH = 40 * k > ROW_H ? ROW_H : 40 * k;
   pill(g, rx0, cy - panelH / 2, rightW, panelH, cssa(0xffffff, 0.9), true);
   let x = rx0 + 10 * k;
   h.iconX = x;
-  h.iconS = iconS;
-  x += iconS + 6 * k;
+  h.iconS = icon ? iconS : 0;
+  if (icon) x += iconS + 6 * k;
   g.fillStyle = '#2B5A8A';
   drawTabular(g, h, h.snowFont, h.snowText, x, cy + 1);
   x += snowW + 8 * k;
@@ -475,33 +504,51 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   h.badgeW = badgeW;
   h.badgeH = badgeH;
 
-  // --- Left: D-badge, clock, ruler --------------------------------------------------------------
-  const lx0 = v.vx + v.safe.left + 8 + 48 + 8;
+  // --- Left: D-badge (with the forecast sticker), clock, ruler ----------------------------------
   const lx1 = rx0 - 8;
   h.leftShown = lx1 - lx0 >= 120;
   h.rulerShown = false;
+  h.rulerX0 = h.rulerX1 = 0;
   if (!h.leftShown) return;
   pill(g, lx0, cy - panelH / 2, lx1 - lx0, panelH, cssa(0xffffff, 0.9), true);
-  const dW = tabularWidth(g, h, h.dayFont, h.dayText) + 12 * k;
   const dH = 22 * k;
   let cx = lx0 + 8 * k;
   pill(g, cx, cy - dH / 2, dW, dH, '#2B2140', false);
   g.fillStyle = '#FFF8EE';
   drawTabular(g, h, h.dayFont, h.dayText, cx + 6 * k, cy + 1);
-  cx += dW + 7 * k;
   if (h.builtForecast !== 'clear') {
-    drawForecastGlyph(g, h.builtForecast as ForecastId, cx + 7 * k, cy, 14 * k);
-    cx += 21 * k;
+    // A round sticker on the badge's top-right corner: "Day 3, breezy".
+    const sr = 8 * k;
+    const sx = cx + dW - 2 * k;
+    const sy = cy - dH / 2 + 1 * k;
+    g.fillStyle = cssa(INK, 0.18);
+    g.beginPath();
+    g.arc(sx, sy + 1, sr, 0, TAU);
+    g.fill();
+    g.fillStyle = '#FFFFFF';
+    g.beginPath();
+    g.arc(sx, sy, sr, 0, TAU);
+    g.fill();
+    drawForecastGlyph(g, h.builtForecast as ForecastId, sx, sy, 12 * k);
   }
+  cx += dW + 7 * k;
   g.fillStyle = '#2B2140';
-  drawTabular(g, h, h.clockFont, h.clock, cx, cy + 1);
+  drawTabular(g, h, clockFont, h.clock, cx, cy + 1);
   // Reserve the width of the widest clock so the ruler doesn't jump.
-  cx += tabularWidth(g, h, h.clockFont, '12:00 PM') + 10 * k;
+  cx += clockW + 10 * k;
   const r0 = cx;
   const r1 = lx1 - 12 * k;
   if (r1 - r0 <= 24) return;
   h.rulerShown = true;
   drawRulerStatic(g, h, s, r0, r1, cy, k, inp, passed === 1, night === 1, dpr);
+}
+
+/** The ruler keeps at least this width (CSS px) whenever the left panel shows. */
+const RULER_MIN = 48;
+
+/** The widest clock a day can show ('10:00 AM' or '12:00 PM', with tabular digits). */
+function widestClock(g: CanvasRenderingContext2D, h: HudState, font: string): number {
+  return Math.max(tabularWidth(g, h, font, '10:00 AM'), tabularWidth(g, h, font, '12:00 PM'));
 }
 
 /** The ruler's still parts into the layer, plus the bar and head sprites for the moving parts. */
