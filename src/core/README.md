@@ -72,7 +72,8 @@ startDay?, startT?, startChill?, dailyDate?, drain?, noonCloud?, lesson?, foreca
 `startDay`/`startT` (seconds after that dawn) and `startChill` are debug hooks. v1.1 (CC-1, A1):
 - `noonCloud?: 0 | 1 | 2` — the Day-1 parked training cloud (1 = 11:00 AM-1:00 PM, 2 = 11:30 AM-
   12:30 PM, 0 = none); unset = 1 for profiles 0-2, 0 for 3 (`effectiveNoonCloud`). World identity.
-- `lesson?` — the first-run lesson floor (Chill ≥ 12) until `lessonDone` (CC-5, A5); no world effect.
+- `lesson?` — the first-run lesson floor (Chill ≥ 12) until `lessonDone` (CC-5, A5), then held to daylight
+  tick 750 and faded out over 600 ticks (`lessonGrace`); no world effect.
 - `forecast?` — debug: that forecast on every day it fits (A8), Day Plan on.
 - `plan?` — the Day Plan on or off; `World.planOn = forecast !== undefined || (plan ?? (profile
   === 3 && !tutorial))`. Dailies set `plan: date >= PLAN_START_DATE` ('2026-10-14'); challenge
@@ -87,9 +88,9 @@ tutorialDone })` → `{ profile, drain, noonCloud, tutorial: rung === 0, lesson 
 | Rung | Profile | Drain | Noon cloud | |
 |---|---|---|---|---|
 | 0 | 0 | 30 | 1 | tutorial, lifetime run 0 only |
-| 1 | 2 | 40 | 1 | |
-| 2 | 3 | 44 | 1 | |
-| 3 | 3 | 50 | 2 | |
+| 1 | 1 | 35 | 1 | a gentle floor (fix round 1) |
+| 2 | 2 | 38 | 1 | classic clear days |
+| 3 | 3 | 42 | 1 | the Day Plan |
 | 4 | 3 | 55 | 0 | standard: the Daily's rules |
 
 `comfortAfterRun(rung, minutes)` (`COMFORT_STEPS = { standard: 1440, up: 390, down: 300 }`):
