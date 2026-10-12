@@ -11,11 +11,11 @@ import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runHeadless } from '../../src/core/sim/headless.ts';
 import { createReplay, playReplay, recordFrame } from '../../src/core/sim/replay.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { CHECK_EVERY, oracleHashes, SCRIPT_TICKS, scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
+import { CHECK_EVERY, forecastHashes, oracleHashes, rungHashes, SCRIPT_TICKS, scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
-) as { scripted: string[]; oracle3min: string[]; headless_7_3600_reactive: string };
+) as { scripted: string[]; oracle3min: string[]; headless_7_3600_reactive: string; forecasts: Record<string, string>; rungs: string[] };
 
 describe('determinism', () => {
   it('the scripted input run is identical twice and matches the golden hashes', () => {
@@ -26,11 +26,15 @@ describe('determinism', () => {
     expect(new Set(a).size).toBeGreaterThan(10);
   }, 30_000);
 
-  it('a 3-minute oracle run is identical twice and matches the golden hashes', () => {
+  it('a 3-minute oracle run matches the golden hashes (equality with Node-made goldens is the determinism proof)', () => {
     const a = oracleHashes();
     expect(a.length).toBe(SCRIPT_TICKS / CHECK_EVERY);
-    expect(oracleHashes()).toEqual(a);
     expect(a).toEqual(golden.oracle3min);
+  }, 60_000);
+
+  it('a forced run of every forecast and a run at every comfort rung match the golden hashes', () => {
+    expect(forecastHashes()).toEqual(golden.forecasts);
+    expect(rungHashes()).toEqual(golden.rungs);
   }, 60_000);
 
   it('runHeadless(7, 3600, reactive) matches the golden hash (also checked in the browser e2e)', () => {
@@ -95,8 +99,7 @@ describe('determinism', () => {
     const frames = Array.from({ length: 2000 }, (_, i) => scriptedInput(i));
     expect(frames.some((f) => f.upEdge && f.release > 100)).toBe(true);
     expect(frames.some((f) => f.downEdge && f.upEdge)).toBe(true);
-    expect(frames.some((f) => f.key === 1)).toBe(true);
-    expect(frames.some((f) => f.key === -1)).toBe(true);
+    for (const key of [1, -1, 2, -2]) expect(frames.some((f) => f.key === key)).toBe(true);
     expect(frames.every((f) => f.dTheta * 1024 === Math.round(f.dTheta * 1024))).toBe(true);
   });
 });

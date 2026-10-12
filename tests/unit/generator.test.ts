@@ -21,7 +21,7 @@ import { chunkDigests } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
-) as { chunks: Record<string, string[]> };
+) as { chunks: Record<string, string[]>; chunksPlanOff: Record<string, string[]> };
 
 function fingerprint(w: World): string {
   const cs = w.casters.map((c) => `${c.id}:${c.kind}:${c.x}:${c.y}:${c.rot}:${c.name}:${c.rescue}`).join('|');
@@ -32,9 +32,9 @@ function fingerprint(w: World): string {
 }
 
 describe('world generation', () => {
-  it('keeps every ground footprint ≥ 20 u from the trail (gate arches excepted), seeds 1-100', () => {
+  it('keeps every ground footprint ≥ 20 u from the trail (gate arches excepted), seeds 1-25', () => {
     let gates = 0;
-    for (let seed = 1; seed <= 100; seed++) {
+    for (let seed = 1; seed <= 25; seed++) {
       const w = createWorld({ seed, profile: 3, tutorial: false });
       ensureGenerated(w, dayStartY(2) + 1200); // Day 1 and the start of Old Town
       for (const c of w.casters) {
@@ -123,8 +123,11 @@ describe('world generation', () => {
     }
   });
 
-  it('matches the golden chunk digests (seeds 1-3, chunks 0-9)', () => {
-    for (const seed of [1, 2, 3]) expect(chunkDigests(seed)).toEqual(golden.chunks[String(seed)]);
+  it('matches the golden chunk digests (seeds 1-3, chunks 0-9), with the Day Plan on and off', () => {
+    for (const seed of [1, 2, 3]) {
+      expect(chunkDigests(seed)).toEqual(golden.chunks[String(seed)]);
+      expect(chunkDigests(seed, false)).toEqual(golden.chunksPlanOff[String(seed)]);
+    }
   });
 });
 

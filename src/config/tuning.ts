@@ -306,6 +306,14 @@ const tuning = {
     recentTicks: 128,
   },
 
+  /**
+   * Death recap tips (sim/recap.ts): "shade was close" needs ≥ exposureSec in the sun at the end and
+   * shade within maxAwayDeg; "short dips add up" needs litShare of the last 10 s lit (0.35, not the
+   * planned 0.5: the human model's deaths at standard rules are mostly flicker deaths at 35-50% lit,
+   * which this line describes best); the noon line covers deaths noonFrom-noonTo minutes after 6 AM.
+   */
+  recap: { exposureSec: 1.5, maxAwayDeg: 90, litShare: 0.35, noonFrom: 300, noonTo: 420 },
+
   /** Headless bots (V1_PLAN §13). Turn rates in °/s. */
   bots: {
     novice: { lagTicks: 12, rate: 180, blur: 6, penalty: 0.2 },
@@ -314,9 +322,20 @@ const tuning = {
     /**
      * Seeded human model (tooling only, never an acceptance gate): reaction lag U(lagMin, lagMax)
      * per decision, aim error N(0, aimSigma)° plus a ±N(0, gainSigma) over/undershoot, min-jerk
-     * drags lasting moveBase + moveMsPerDeg·|Δθ| ms, then a settle pause; lifts at ω = 0.
+     * drags lasting moveBase + moveMsPerDeg·|Δθ| ms, then a settle pause; lifts at ω = 0. The
+     * humanDial variant reads lasting arcs (≥ lastingMinArc°) on lastingShare of its decisions.
      */
-    human: { lagMinMs: 250, lagMaxMs: 350, aimSigmaDeg: 10, gainSigma: 0.2, settleMs: 120, moveBaseMs: 120, moveMsPerDeg: 0.9 },
+    human: {
+      lagMinMs: 250,
+      lagMaxMs: 350,
+      aimSigmaDeg: 10,
+      gainSigma: 0.2,
+      settleMs: 120,
+      moveBaseMs: 120,
+      moveMsPerDeg: 0.9,
+      lastingShare: 0.5,
+      lastingMinArc: 20,
+    },
   },
 };
 

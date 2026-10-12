@@ -6,10 +6,13 @@
 // - reactive: sees guide.now and guide.next without lag, turns at 200°/s.
 // - oracle: plans with the validator's per-step lit counts (3-step human model) over a 4 s horizon
 //   using a backward "Chill needed to survive" DP, and turns at 240°/s.
-// - human: a seeded model of a new player (tooling only: the sim's advisory rows). It perceives the
-//   guide masks 250-350 ms late (lag drawn per decision) and acts only when that stale view shows
-//   Nubs lit or the sun's current angle unsafe; it aims with Gaussian error and over/undershoot,
-//   drags with minimum-jerk motion (120 ms + 0.9 ms/°), lifts at ω = 0 and pauses 120 ms.
+// - human: a seeded model of a new player (tooling only). It perceives the guide masks 250-350 ms
+//   late (lag drawn per decision) and acts only when that stale view shows Nubs lit or the sun's
+//   current angle unsafe; it aims with Gaussian error and over/undershoot, drags with minimum-jerk
+//   motion (120 ms + 0.9 ms/°), lifts at ω = 0 and pauses 120 ms.
+// - humanDial: the same player reading the v1.1 dial, perception-limited (A6): on half of its
+//   decisions (a seeded coin per decision) it takes the lasting shade (now ∧ next of its stale view,
+//   arcs ≥ 20° only) as the target, else the plain `now` arcs. The sim's advisory and career rows use it.
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, DT, elevation, TICK_HZ } from '../clock.ts';
@@ -21,8 +24,8 @@ import { rngFor, type Rng } from '../rng.ts';
 import { effectiveDrain } from './nubs.ts';
 import type { InputFrame, SimState } from './types.ts';
 
-export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human';
-export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human'] as BotKind[]);
+export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial';
+export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial'] as BotKind[]);
 
 export interface Bot {
   readonly kind: BotKind;
@@ -278,18 +281,57 @@ function humanTarget(now: Uint8Array, lit: Uint8Array, theta: number): number {
   return best;
 }
 
-function humanBot(): Bot {
+/**
+ * Fills `out` with the bins of now ∧ next that belong to arcs at least `minArc` bins wide (circular).
+ * Returns false when there is none.
+ */
+function wideLasting(now: Uint8Array, next: Uint8Array, minArc: number, out: Uint8Array): boolean {
+  let start = -1;
+  for (let b = 0; b < BINS; b++) {
+    out[b] = 0;
+    if (start < 0 && (now[b] === 0 || next[b] === 0)) start = b;
+  }
+  if (start < 0) {
+    out.fill(1); // shade that lasts all the way round
+    return true;
+  }
+  let any = false;
+  let run = 0;
+  for (let k = 1; k <= BINS; k++) {
+    const b = (start + k) % BINS;
+    if (k < BINS && now[b] === 1 && next[b] === 1) {
+      run++;
+      continue;
+    }
+    if (run >= minArc) {
+      any = true;
+      for (let j = 1; j <= run; j++) out[(b - j + BINS) % BINS] = 1;
+    }
+    run = 0;
+  }
+  return any;
+}
+
+/**
+ * The human model; `lastingShare` is the share of decisions that read the lasting shade (0 for
+ * 'human', so it draws exactly the v1.0 stream).
+ */
+function humanBot(kind: 'human' | 'humanDial', lastingShare: number): Bot {
   const cfg = TUNING.bots.human;
   const msTicks = (ms: number): number => Math.round((ms * TICK_HZ) / 1000);
   const f = frame();
-  // Ring of past guide snapshots (now, lit, and whether Nubs was lit) with their sim tick.
+  // Ring of past guide snapshots (now, next, lit, and whether Nubs was lit) with their sim tick.
   const SLOTS = 8;
   const now: Uint8Array[] = [];
+  const next: Uint8Array[] = [];
   const lit: Uint8Array[] = [];
   for (let i = 0; i < SLOTS; i++) {
     now.push(new Uint8Array(BINS));
+    next.push(new Uint8Array(BINS));
     lit.push(new Uint8Array(BINS));
   }
+  const lasting = new Uint8Array(BINS);
+  let useLasting = false;
   const ticks = new Float64Array(SLOTS).fill(-1);
   const nubsLit = new Uint8Array(SLOTS);
   let head = 0;
@@ -323,12 +365,13 @@ function humanBot(): Bot {
   }
 
   return {
-    kind: 'human',
+    kind,
     next(s: SimState): InputFrame {
-      if (!rng) rng = rngFor(s.cfg.seed, 'bot', 'human');
+      if (!rng) rng = rngFor(s.cfg.seed, 'bot', kind);
       if (s.guide.tick !== seenGuide) {
         seenGuide = s.guide.tick;
         (now[head] as Uint8Array).set(s.guide.now);
+        if (lastingShare > 0) (next[head] as Uint8Array).set(s.guide.next);
         (lit[head] as Uint8Array).set(s.guide.lit);
         ticks[head] = s.guide.tick;
         nubsLit[head] = s.nubs.f > 0 ? 1 : 0;
@@ -353,7 +396,10 @@ function humanBot(): Bot {
         return f;
       }
       if (s.phase !== 'day' || !s.sunUp) return f;
-      if (lag < 0) lag = msTicks(rng.range(cfg.lagMinMs, cfg.lagMaxMs));
+      if (lag < 0) {
+        lag = msTicks(rng.range(cfg.lagMinMs, cfg.lagMaxMs));
+        if (lastingShare > 0) useLasting = rng.next() < lastingShare;
+      }
       // Newest snapshot at least `lag` ticks old: what the player has taken in by now.
       let pick = -1;
       for (let i = 0; i < SLOTS; i++) {
@@ -363,7 +409,8 @@ function humanBot(): Bot {
       if (pick < 0) return f;
       // The sun's own position is seen live; the shade state is stale.
       const theta = s.sun.theta;
-      const mask = now[pick] as Uint8Array;
+      const mask =
+        useLasting && wideLasting(now[pick] as Uint8Array, next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (now[pick] as Uint8Array);
       if (nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
       const target = humanTarget(mask, lit[pick] as Uint8Array, theta);
       const want = angleDiff(target, theta);
@@ -390,7 +437,9 @@ export function createBot(kind: BotKind): Bot {
     case 'reactive':
       return reactiveBot();
     case 'human':
-      return humanBot();
+      return humanBot('human', 0);
+    case 'humanDial':
+      return humanBot('humanDial', TUNING.bots.human.lastingShare);
     default:
       return oracleBot();
   }
