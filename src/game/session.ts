@@ -327,6 +327,9 @@ export class Session {
   private last = -1;
   private time = 0;
   private swayPhase = 0;
+  /** The Title logo shadow offset last published (CSS px). */
+  private logoShadowX = Number.NaN;
+  private logoShadowY = Number.NaN;
   private swayOut = 0;
   private booted = false;
   private raf = 0;
@@ -692,6 +695,24 @@ export class Session {
     root.setProperty('--world-height', `${Math.round(v.vh)}px`);
   }
 
+  /**
+   * The Title sundial (GR17, CC-14): the logo's shadow falls the way the world's shadows do, from
+   * the swaying sun, longer when the sun is low (--lsx / --lsy, CSS px; rewritten only when they
+   * move a quarter pixel).
+   */
+  private publishLogoShadow(sway: number): void {
+    const th = ((this.s.sun.theta + sway) * Math.PI) / 180;
+    const k = 6 * (1 + 0.6 * (1 - this.renderer.scene.light.elev));
+    const x = -Math.cos(th) * k;
+    const y = Math.sin(th) * k;
+    if (Math.abs(x - this.logoShadowX) < 0.25 && Math.abs(y - this.logoShadowY) < 0.25) return;
+    this.logoShadowX = x;
+    this.logoShadowY = y;
+    const root = document.documentElement.style;
+    root.setProperty('--lsx', `${x.toFixed(1)}px`);
+    root.setProperty('--lsy', `${y.toFixed(1)}px`);
+  }
+
   private frame(now: number): void {
     const t0 = performance.now();
     const realMs = this.last < 0 ? 16.7 : now - this.last;
@@ -831,6 +852,7 @@ export class Session {
       this.cadence.drawn(now);
       this.frameDrew = true;
       if (screenNow === 'results' && this.renderer.settled) this.startPostcard();
+      if (screenNow === 'title') this.publishLogoShadow(r.sway);
     }
     if (r.screen === 'title') {
       // Past the boot frames, keep the play HUD's row built for the held run (change-detected, so
