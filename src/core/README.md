@@ -364,7 +364,8 @@ Polish wave (all in the golden hashes regenerated with it):
 novice p3 median Day 1 10:57 / 11:07 / 11:02 AM; novice p0 first night 100%; reactive p3 median
 Day 3 11:12 AM; oracle 100% to Day 8; rescues/chunk p3 0.514 / 0.524 / 0.545, unresolved 0. melted%:
 novice p3 25.2-26.5%, reactive p3 27.7-28.6%. (v1.0 numbers; v1.1 runs the rows on the plan mix
-and every forecast, and its advisory rows by comfort rung.)
+and every forecast, and its advisory rows by comfort rung: the integrated numbers, with the career
+sim's, are in `docs/V1_1_PLAN.md` §0 "Final numbers".)
 
 ## 12. Decisions beyond the docs
 
