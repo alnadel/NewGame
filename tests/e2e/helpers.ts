@@ -9,6 +9,14 @@ export interface ShadyState {
   snow: number;
   theta: number;
   f: number;
+  profile: number;
+  /** Comfort rung of an endless ladder run, −1 otherwise. */
+  rung: number;
+  drain: number;
+  noonCloud: number;
+  forecast: string;
+  biome: string;
+  lessonOn: boolean;
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
@@ -105,7 +113,21 @@ export interface ShadyPerf {
   dpr: number;
   govLevel: number;
   draws: number;
-  ringDraws: number;
+  fullScreenPasses: number;
+  decals: number;
+}
+
+export interface PixelAB {
+  mean: number;
+  over3: number;
+  over8: number;
+  max: number;
+}
+
+export interface RenderOptions {
+  mapOverlay: boolean;
+  multiplyShadows: boolean;
+  decor: boolean;
 }
 
 export interface MapProbe {
@@ -137,9 +159,12 @@ declare global {
       runCfg(): RunCfg;
       cameraFx(): { zoom: number; shakeX: number; shakeY: number };
       hudPb(): number;
-      renderOptions(o: { resultsCache?: boolean; mapOverlay?: boolean }): void;
+      renderOptions(o: Partial<RenderOptions>): void;
       mapProbe(mapT: number): MapProbe | null;
-      resultsAB(): { diff: number; ringPath: boolean } | null;
+      mapCallouts(): number[][];
+      resultsTip(): string | null;
+      postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
+      pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
     };
   }

@@ -1,17 +1,20 @@
 // Canvas HUD (V1_PLAN §9, GDD §5, CRITIQUE #25): one compact row under the safe inset, to the right
-// of the DOM pause button: a "D2" badge, the clock in 10-minute steps, and the day ruler (dawn →
-// noon → dusk gradient, progress, the noon "boss" icon, a gold PB flag and a teal challenge flag);
-// Snow and the multiplier badge (pop on ×up, shake on reset) on the right.
+// of the DOM pause button: a "D2" badge (and the day's forecast glyph unless it is clear), the clock
+// in 10-minute steps, and the day ruler (dawn → noon → dusk gradient, progress, the noon "boss"
+// icon, a gold PB flag and a teal challenge flag); Snow and the multiplier badge (pop on ×up, shake
+// on reset) on the right.
 //
 // Cost: the row is rendered into an offscreen layer and rebuilt only when what it shows changes
-// (Snow, the clock's 10-minute step, the day, noon passed, night, the flags, the layout) — about
-// once every 0.7 s of play. Each frame then blits that layer and draws the few moving parts on top
-// from small cached sprites: the flake icon (pops), the multiplier badge (pops, shakes, glows at
-// ×5), the elapsed part of the ruler and its progress head.
+// (Snow, the clock's 10-minute step, the day and its forecast, noon passed, night, the flags, the
+// layout) — about once every 0.7 s of play. Each frame then blits that layer and draws the few
+// moving parts on top from small cached sprites: the flake icon (pops), the multiplier badge (pops,
+// shakes, glows at ×5), the elapsed part of the ruler and its progress head.
 
 import { dayTicks, hudClock, minutesOfDay, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex } from './color.ts';
+import { drawForecastGlyph } from './glyphs.ts';
+import { forecastOf, type ForecastId } from './shims.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
@@ -41,11 +44,13 @@ export interface HudState {
   dayText: string;
   builtSnow: number;
   builtDay: number;
+  builtForecast: ForecastId | '';
   builtClock: number;
   builtPassed: number;
   builtNight: number;
   builtPb: number;
   builtChallenge: number;
+  builtGoal: number;
   builtVx: number;
   builtVw: number;
   builtTop: number;
@@ -111,11 +116,13 @@ export function createHud(): HudState {
     dayText: 'D1',
     builtSnow: NaN,
     builtDay: NaN,
+    builtForecast: '',
     builtClock: NaN,
     builtPassed: NaN,
     builtNight: NaN,
     builtPb: NaN,
     builtChallenge: NaN,
+    builtGoal: -2,
     builtVx: NaN,
     builtVw: NaN,
     builtTop: NaN,
@@ -243,9 +250,10 @@ function sized(c: Canvas2D | null, w: number, h: number): Canvas2D {
 
 export interface HudInput {
   s: SimState;
-  /** Absolute target minutes (or −1): personal best and challenge. */
+  /** Absolute target minutes (or −1): the recent best (gold flag), the challenge (teal flag) and the next milestone (a white tick). */
   pbMinutes: number;
   challengeMinutes: number;
+  goalMinutes: number;
   alpha: number;
   time: number;
 }
@@ -281,11 +289,13 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
     h.layer === null ||
     h.builtSnow !== h.snowVal ||
     h.builtDay !== h.dayVal ||
+    h.builtForecast !== forecastOf(s.params) ||
     h.builtClock !== h.clockKey ||
     h.builtPassed !== passed ||
     h.builtNight !== night ||
     h.builtPb !== inp.pbMinutes ||
     h.builtChallenge !== inp.challengeMinutes ||
+    h.builtGoal !== inp.goalMinutes ||
     h.builtVx !== v.vx ||
     h.builtVw !== v.vw ||
     h.builtTop !== v.safe.top ||
@@ -400,11 +410,13 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   h.cy = cy;
   h.builtSnow = h.snowVal;
   h.builtDay = h.dayVal;
+  h.builtForecast = forecastOf(s.params);
   h.builtClock = h.clockKey;
   h.builtPassed = passed;
   h.builtNight = night;
   h.builtPb = inp.pbMinutes;
   h.builtChallenge = inp.challengeMinutes;
+  h.builtGoal = inp.goalMinutes;
   h.builtVx = v.vx;
   h.builtVw = v.vw;
   h.builtTop = v.safe.top;
@@ -478,6 +490,10 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   g.fillStyle = '#FFF8EE';
   drawTabular(g, h, h.dayFont, h.dayText, cx + 6 * k, cy + 1);
   cx += dW + 7 * k;
+  if (h.builtForecast !== 'clear') {
+    drawForecastGlyph(g, h.builtForecast as ForecastId, cx + 7 * k, cy, 14 * k);
+    cx += 21 * k;
+  }
   g.fillStyle = '#2B2140';
   drawTabular(g, h, h.clockFont, h.clock, cx, cy + 1);
   // Reserve the width of the widest clock so the ruler doesn't jump.
@@ -612,6 +628,15 @@ function drawRulerStatic(
   };
   flag(inp.pbMinutes, '#FFC23D');
   flag(inp.challengeMinutes, '#2EC4B6');
+  // The next milestone: a small white tick across the ruler.
+  const gm = inp.goalMinutes - dayStart;
+  if (inp.goalMinutes >= 0 && gm >= 0 && gm <= 720) {
+    const gx = x0 + ((x1 - x0) * gm) / 720;
+    g.fillStyle = '#2B2140';
+    g.fillRect(gx - 2, y - 3, 4, hgt + 6);
+    g.fillStyle = '#FFFFFF';
+    g.fillRect(gx - 1, y - 2, 2, hgt + 4);
+  }
 
   // At night the head is a moon at the end of the (full) ruler: part of the layer.
   if (night) {

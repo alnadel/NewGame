@@ -5,23 +5,31 @@
 import {
   dayTicks,
   nightTicks,
+  PICKUP_ALIVE,
   queryCasters,
+  queryPickups,
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
   type Caster,
+  type Pickup,
   type RenderSnap,
   type SimState,
+  type World,
 } from '../core/index.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
 import type { Equipped } from '../meta/content.ts';
 import type { Insets } from '../platform/safeArea.ts';
-import { drawBanners, drawVignettes, createBanners, updateBanners, type Banners } from './banners.ts';
-import { createLight, drawCaster, type Light } from './casters.ts';
+import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, type AtmosphereIn } from './atmosphere.ts';
+import { drawBanners, createBanners, updateBanners, type Banners } from './banners.ts';
+import { createLight, drawCaster, drawContactAO, drawWindowGlow, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
-import { cssa } from './color.ts';
+import { drawFriendPennant, drawFriendPuddle, friendSpot } from './friend.ts';
+import { cssa, hex } from './color.ts';
+import { radialSprite, type Canvas2D } from './sprites.ts';
 import {
   createFootprints,
+  biomeSeamIn,
   createGroundPaint,
   drawBars,
   drawFootprints,
@@ -35,16 +43,13 @@ import { createHalo, drawHalo, updateHalo, type HaloState } from './halo.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudState } from './hud.ts';
 import {
   applyPull,
-  clipAboveSheet,
   createMapFrame,
   drawMeltMap,
-  drawPuddle,
   frameDeath,
   MAP_PULL_S,
   mapAlphas,
   mapSettleT,
   mapTarget,
-  puddleBox,
   type MapFrame,
   type MapOverlay,
 } from './meltMap.ts';
@@ -57,6 +62,7 @@ import {
   drawOwnShadow,
   drawSizzle,
   looksFor,
+  hopLift,
   nubsBox,
   renderNubsSprite,
   updateNubsAnim,
@@ -81,12 +87,17 @@ import {
   type Pops,
   type Rings,
 } from './particles.ts';
+import { createDeathBeat, drawGrey, drawHatPop, greyOf, startDeathBeat, type DeathBeat } from './deathbeat.ts';
+import { createDecor, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
-import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
-import { createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
+import { forecastOf, shadesLook, worldPlan } from './shims.ts';
+import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
+/** The moon's shadow length factor (a low moon). */
+const MOON_COT = 1.2;
+let moonRim: Canvas2D | null = null;
 
 export type RenderScreen = 'boot' | 'title' | 'play' | 'pause' | 'dying' | 'results' | 'menu';
 
@@ -118,8 +129,12 @@ export interface RenderInput {
   dragging: boolean;
   guideAlpha: number;
   hint: HintView;
+  /** HUD ruler: the recent best (gold flag), the challenge target (teal flag), the next milestone (white tick); −1 = none. */
   pbMinutes: number;
   challengeMinutes: number;
+  goalMinutes: number;
+  /** Challenge runs: the sender's name ('' = none) on the friend's pennant. */
+  challengeName: string;
   /** Game seconds since the death (after hit-stop), or −1. */
   dying: number;
   /** Real seconds since Results appeared, or −1. */
@@ -131,10 +146,10 @@ export interface RenderInput {
   highContrast: boolean;
   reducedMotion: boolean;
   equipped: Equipped;
-  /** Perf governor: ground detail tiles on/off. */
-  detail: boolean;
-  /** Perf governor: soft (half-res layer) or crisp (direct multiply fill) shadows. */
+  /** Perf governor: soft (half-res layer) or crisp (direct fill) shadows. */
   softShadows: boolean;
+  /** Perf governor level 0..3 (game/perf.ts): level 3 drops the atmosphere's gradients and the contact AO. */
+  govLevel: number;
   /** Paused: UI timers (banners, HUD pops, halo) hold still. */
   paused: boolean;
   debug: DebugDraw | null;
@@ -149,6 +164,13 @@ export interface RenderScene {
    * (ground.ts GroundPaint) are repainted about once a second, not every frame. */
   groundPal: Palette;
   ground: GroundPaint;
+  /** Seeded ground decals (decor.ts) and the frame inputs handed to them. */
+  decor: Decor;
+  decorIn: DecorFrame;
+  /** The death beat: grey-out, cool wash and the popped hat (deathbeat.ts). */
+  death: DeathBeat;
+  /** The moonlight shadow colour (#0A0D2A) as a palette for drawShadowLayer. */
+  moonPal: Palette;
   light: Light;
   shadow: ShadowLayer;
   particles: Particles;
@@ -162,6 +184,15 @@ export interface RenderScene {
   sun: SunGlyph;
   sunMood: SunMood;
   relief: number;
+  /** Seconds left of the sun's worried look after noon has passed. */
+  sunWorried: number;
+  /** The biome the ground shows (1 Old Town) for day `townDay` of world `townWorld`. */
+  town: number;
+  townDay: number;
+  townWorld: World | null;
+  /** The last 16 heat-wisp spawn tries (x, y, 1 lit / 0 shaded), for the debug overlay. */
+  wispTries: Float32Array;
+  wispTry: number;
   hud: HudState;
   banners: Banners;
   map: MapFrame;
@@ -171,8 +202,31 @@ export interface RenderScene {
   mapReady: boolean;
   lastTheta: number;
   thetaSpeed: number;
+  /**
+   * The world's animation clock (pickup twinkles, pedestal glints, Nubs' idle motion): the real
+   * clock, stopped once the Results are up, so the Melt Map is a still picture of the moment Nubs
+   * melted and only its puddle ring pulses.
+   */
+  worldTime: number;
   /** CPU ms of the last draw (debug). */
   ms: number;
+  atm: Atmosphere;
+  atmIn: AtmosphereIn;
+  /** The friend's puddle on a challenge run: [x, y] for the score `friendFor` of world `friendWorld`. */
+  friend: Float64Array;
+  friendFor: number;
+  friendWorld: World | null;
+  /**
+   * Full-viewport layers composited over the ground in the last frame (soft shadow blit, the
+   * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
+   */
+  passes: number;
+}
+
+function moonPalette(): Palette {
+  const p = createPalette();
+  p.shadow = hex('#0A0D2A');
+  return p;
 }
 
 export function createScene(): RenderScene {
@@ -183,6 +237,10 @@ export function createScene(): RenderScene {
     pal,
     groundPal: createPalette(),
     ground: createGroundPaint(),
+    decor: createDecor(),
+    decorIn: { time: 0, dt: 0, night: 0, effects: true },
+    death: createDeathBeat(),
+    moonPal: moonPalette(),
     light: createLight(pal),
     shadow: createShadowLayer(),
     particles: createParticles(),
@@ -196,6 +254,12 @@ export function createScene(): RenderScene {
     sun: createSunGlyph(),
     sunMood: 'smug',
     relief: 0,
+    sunWorried: 0,
+    town: 0,
+    townDay: -1,
+    townWorld: null,
+    wispTries: new Float32Array(48),
+    wispTry: 0,
     hud: createHud(),
     banners: createBanners(),
     map: createMapFrame(),
@@ -204,7 +268,14 @@ export function createScene(): RenderScene {
     mapReady: false,
     lastTheta: NaN,
     thetaSpeed: 0,
+    worldTime: 0,
     ms: 0,
+    atm: createAtmosphere(),
+    atmIn: createAtmosphereIn(),
+    friend: new Float64Array(2),
+    friendFor: -1,
+    friendWorld: null,
+    passes: 0,
   };
 }
 
@@ -214,59 +285,29 @@ export function resizeScene(sc: RenderScene, cssW: number, cssH: number, dpr: nu
 
 const casterBuf: Caster[] = [];
 const box = new Float64Array(4);
-const ringBox = new Float64Array(4);
 
-/**
- * The settled Results (results-static-full-redraw): once the Melt Map has stopped moving and no
- * particle, pop, ring or vignette is alive, the world and the overlay are drawn once into a
- * canvas-sized backdrop; each frame then copies back only the puddle marker's box from it and
- * redraws the pulsing ring and carrot there. The world holds still meanwhile (its clock is frozen
- * at the moment it settled), so a full redraw would give the same pixels.
- */
-interface ResultsBackdrop {
-  canvas: Canvas2D | null;
-  g: CanvasRenderingContext2D | null;
-  valid: boolean;
-  /** What it was drawn for: canvas size, DPR, sheet top, palette and governor flags, cosmetics. */
-  w: number;
-  h: number;
-  dpr: number;
-  sheetTop: number;
-  highContrast: boolean;
-  detail: boolean;
-  soft: boolean;
-  equipped: Equipped | null;
+/** Test/debug render switches (A/B checks). */
+export interface RenderOptions {
+  /** Draw the Melt Map overlay (off for K10 diffs). */
+  mapOverlay: boolean;
+  /** Composite the shadow layer with a multiply of the LUT color (the GR2 A/B reference). */
+  multiplyShadows: boolean;
+  /** Draw the ground decals (GR11; off for A/B timing). */
+  decor: boolean;
 }
 
 export class Renderer {
   readonly scene: RenderScene;
-  /** renderer.draw calls so far, and settled-Results frames that only repainted the puddle ring. */
+  /** renderer.draw calls so far. */
   draws = 0;
-  ringDraws = 0;
-  /** Results backdrop renders so far (perf checks). */
-  backdropDraws = 0;
-  /** Test/debug: use the settled-Results backdrop (off = full redraws, for A/B checks). */
-  resultsCache = true;
-  /** Test/debug: draw the Melt Map overlay (off for K10 diffs). */
-  mapOverlay = true;
+  /**
+   * The last frame was the settled Results: the Melt Map has stopped moving and no particle, pop,
+   * ring or vignette is alive (only the puddle ring pulses), so the cadence may draw it at 20 fps.
+   */
+  settled = false;
+  readonly options: RenderOptions = { mapOverlay: true, multiplyShadows: false, decor: true };
   private readonly g: CanvasRenderingContext2D;
   private readonly canvas: HTMLCanvasElement;
-  private readonly bd: ResultsBackdrop = {
-    canvas: null,
-    g: null,
-    valid: false,
-    w: 0,
-    h: 0,
-    dpr: 0,
-    sheetTop: Number.NaN,
-    highContrast: false,
-    detail: true,
-    soft: true,
-    equipped: null,
-  };
-  /** The world clock while the Results are settled (null = live). */
-  private stillTime: number | null = null;
-  private stillDying = -1;
   /** A draw is in progress (left set when one threw: the next draw resets the context first). */
   private inDraw = false;
 
@@ -283,7 +324,7 @@ export class Renderer {
    * frames, so the first play frame of a run doesn't pay for it).
    */
   prebuildHud(inp: RenderInput): void {
-    syncHud(this.scene.hud, this.scene.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, alpha: 1, time: inp.time });
+    syncHud(this.scene.hud, this.scene.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: 1, time: inp.time });
   }
 
   /**
@@ -297,12 +338,13 @@ export class Renderer {
     if (typeof g.reset === 'function') g.reset();
     else for (let i = 0; i < 8; i++) g.restore();
     const sc = this.scene;
-    this.bd.valid = false;
     sc.nubsSprite.key = Number.NaN;
     sc.hud.layer = null;
     sc.hud.badgeKey = -1;
     sc.ground.meadow.T = 0;
     sc.ground.town.T = 0;
+    sc.ground.seam.T = 0;
+    invalidateDecor(sc.decor);
   }
 
   /** Resizes the backing store (CSS size × dpr) and re-fits the view. */
@@ -320,163 +362,54 @@ export class Renderer {
     this.draws++;
     const t0 = performance.now();
     const sc = this.scene;
-
-    // ---- Settled Results: the backdrop plus the puddle ring -------------------------------------
-    const settled =
+    this.drawScene(inp);
+    this.settled =
       inp.screen === 'results' &&
       inp.sheetTop !== null &&
       sc.mapReady &&
       inp.mapT >= mapSettleT(inp.reducedMotion) &&
-      inp.debug === null &&
       !particlesAlive(sc.particles) &&
       !popsAlive(sc.pops) &&
       !ringsAlive(sc.rings) &&
       !vignettesOn(sc.banners);
-    if (!settled) {
-      this.stillTime = null;
-      this.bd.valid = false;
-      if (inp.screen !== 'results') this.freeBackdrop();
-    } else if (this.stillTime === null) {
-      this.stillTime = inp.time;
-      this.stillDying = inp.dying;
-    }
-    if (settled && this.resultsCache && this.backdropValid(inp)) {
-      this.drawPuddleOver(inp);
-      this.ringDraws++;
-      sc.ms = performance.now() - t0;
-      this.inDraw = false;
-      return;
-    }
-    this.drawScene(inp, settled);
-    if (settled && this.resultsCache) {
-      this.saveBackdrop(inp);
-      this.drawPuddleOver(inp);
-    }
     sc.ms = performance.now() - t0;
     this.inDraw = false;
   }
 
-  private backdropValid(inp: RenderInput): boolean {
-    const b = this.bd;
-    const c = this.canvas;
-    return (
-      b.valid &&
-      b.canvas !== null &&
-      b.w === c.width &&
-      b.h === c.height &&
-      b.dpr === this.scene.view.dpr &&
-      b.sheetTop === inp.sheetTop &&
-      b.highContrast === inp.highContrast &&
-      b.detail === inp.detail &&
-      b.soft === inp.softShadows &&
-      b.equipped === inp.equipped
-    );
-  }
-
-  /** Copies the frame just drawn (world and overlay, without the puddle marker) into the backdrop. */
-  private saveBackdrop(inp: RenderInput): void {
-    const b = this.bd;
-    const c = this.canvas;
-    if (!b.canvas) {
-      b.canvas = makeCanvas(c.width, c.height);
-      b.g = ctx2d(b.canvas);
-    }
-    const bc = b.canvas;
-    const bg = b.g as CanvasRenderingContext2D;
-    if (bc.width !== c.width) bc.width = c.width;
-    if (bc.height !== c.height) bc.height = c.height;
-    bg.setTransform(1, 0, 0, 1, 0, 0);
-    bg.globalAlpha = 1;
-    bg.globalCompositeOperation = 'copy';
-    bg.drawImage(c, 0, 0);
-    bg.globalCompositeOperation = 'source-over';
-    b.valid = true;
-    b.w = c.width;
-    b.h = c.height;
-    b.dpr = this.scene.view.dpr;
-    b.sheetTop = inp.sheetTop ?? Number.NaN;
-    b.highContrast = inp.highContrast;
-    b.detail = inp.detail;
-    b.soft = inp.softShadows;
-    b.equipped = inp.equipped;
-    this.backdropDraws++;
-  }
-
-  /** Frees the backdrop's pixels once the Results are gone. */
-  private freeBackdrop(): void {
-    const b = this.bd;
-    b.valid = false;
-    if (b.canvas && (b.canvas.width > 1 || b.canvas.height > 1)) {
-      b.canvas.width = 1;
-      b.canvas.height = 1;
-    }
-  }
-
-  /**
-   * Restores the puddle marker's box from the backdrop and draws the ring and carrot there, under
-   * the same clips as the full frame (world rect, then above the sheet), so the pixels match a full
-   * redraw exactly.
-   */
-  private drawPuddleOver(inp: RenderInput): void {
-    const sc = this.scene;
-    const v = sc.view;
-    const g = this.g;
-    const b = this.bd;
-    if (!b.canvas || !puddleBox(v, inp.s, ringBox)) return;
-    const dpr = v.dpr;
-    const x0 = Math.max(0, Math.floor((ringBox[0] as number) * dpr));
-    const y0 = Math.max(0, Math.floor((ringBox[1] as number) * dpr));
-    const x1 = Math.min(b.w, Math.ceil((ringBox[2] as number) * dpr));
-    const y1 = Math.min(b.h, Math.ceil((ringBox[3] as number) * dpr));
-    if (x1 <= x0 || y1 <= y0) return;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.drawImage(b.canvas, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!this.mapOverlay) return;
-    g.save();
-    g.beginPath();
-    g.rect(v.vx, v.vy, v.vw, v.vh);
-    g.clip();
-    clipAboveSheet(g, v, inp.sheetTop);
-    g.beginPath();
-    g.rect(x0 / dpr, y0 / dpr, (x1 - x0) / dpr, (y1 - y0) / dpr);
-    g.clip();
-    drawPuddle(g, v, inp.s, mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay).a, inp.time);
-    g.restore();
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-
-  /** The full frame. `still`: the settled Results (world clock frozen, no puddle marker when cached). */
-  private drawScene(inp: RenderInput, still: boolean): void {
+  private drawScene(inp: RenderInput): void {
     const sc = this.scene;
     const g = this.g;
     const v = sc.view;
     const s = inp.s;
     const snap = inp.snap;
-    // While the Results are settled the world holds still: its clock and the melt are frozen and
-    // nothing animates (a full redraw then matches the backdrop, and no backdrop goes stale).
-    const time = still && this.stillTime !== null ? this.stillTime : inp.time;
-    const dying = still ? this.stillDying : inp.dying;
-    const adt = still ? 0 : inp.dt;
-    const agdt = still ? 0 : inp.gdt;
+    if (inp.mapT < 0) sc.worldTime = inp.time;
+    const time = sc.worldTime;
+    const dying = inp.dying;
+    const adt = inp.dt;
+    const agdt = inp.gdt;
 
     // ---- Time of day, palette and light -----------------------------------------------------
     const dl = dayTicks(snap.day);
     const nt = nightTicks(snap.day);
     let dayFrac = Math.min(1, snap.dayTick / dl);
     let night = 0;
-    let town = snap.day % 2 === 0 ? 1 : 0;
+    // The ground's biome is the day's plan; past midnight it is already tomorrow's (A9).
+    let planDay = snap.day;
     if (snap.dayTick > dl) {
       const tn = (snap.dayTick - dl) / 60;
       const nl = nt / 60;
       night = smooth(Math.min(1, tn / 1.5)) * (1 - smooth(Math.max(0, (tn - (nl - 1.5)) / 1.5)));
       if (tn > nl / 2) {
         dayFrac = 0;
-        town = (snap.day + 1) % 2 === 0 ? 1 : 0;
+        planDay = snap.day + 1;
       }
     }
+    if (planDay !== sc.townDay || s.world !== sc.townWorld) {
+      sc.town = worldPlan(s.world, planDay).biome === 'oldtown' ? 1 : 0;
+      sc.townDay = planDay;
+      sc.townWorld = s.world;
+    }
+    const town = sc.town;
     updatePalette(sc.pal, dayFrac, night, town, inp.highContrast);
     // The ground steps through the day in 1/64ths (≈ 0.8 s): a 1-3 level change at most.
     updatePalette(sc.groundPal, Math.round(dayFrac * 64) / 64, Math.round(night * 16) / 16, town, inp.highContrast);
@@ -541,6 +474,7 @@ export class Renderer {
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
     updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta);
     sc.relief = Math.max(0, sc.relief - adt);
+    sc.sunWorried = Math.max(0, sc.sunWorried - adt);
     if (inp.screen === 'play' && walking) {
       stepFootprints(sc.footprints, snap.nubsX, snap.nubsY, trailSlope(s.world.trail, snap.nubsY), s.nubs.f === 0, gdt);
     } else {
@@ -548,20 +482,54 @@ export class Renderer {
     }
 
     // ---- Draw ------------------------------------------------------------------------------
+    sc.passes = 0;
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    drawBars(g, v, sc.pal, inp.detail);
+    drawBars(g, v, sc.pal, s.world);
     g.save();
     g.beginPath();
     g.rect(v.vx, v.vy, v.vw, v.vh);
     g.clip();
 
-    drawGround(g, v, sc.groundPal, inp.detail, sc.ground);
+    drawGround(g, v, sc.groundPal, sc.ground, s.world);
     drawTrail(g, v, s.world, sc.groundPal);
+    const di = sc.decorIn;
+    di.time = time;
+    di.dt = udt;
+    di.night = night;
+    di.effects = inp.govLevel < 2;
+    if (this.options.decor) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);
     drawFootprints(g, sc.footprints, v, sc.pal);
+    // A challenge run: the friend's puddle where the sender melted.
+    const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;
+    if (friend) {
+      if (sc.friendFor !== inp.challengeMinutes || sc.friendWorld !== s.world) {
+        friendSpot(s.world, inp.challengeMinutes, sc.friend);
+        sc.friendFor = inp.challengeMinutes;
+        sc.friendWorld = s.world;
+      }
+      drawFriendPuddle(g, v, sc.friend[0] as number, sc.friend[1] as number);
+    }
     drawPickups(g, v, s.world, time, snap.nubsY, night);
-    if (sunUp) drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows);
+    if (sunUp) {
+      const multiply = this.options.multiplyShadows;
+      if (drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows, multiply)) {
+        sc.passes++;
+      }
+    } else if (night > 0.05) {
+      // Moonlight (GR16): soft indigo shadows thrown the other way (θ + 180°), long and low. Chill
+      // ignores them; the dial stays hidden at night.
+      if (drawShadowLayer(g, sc.shadow, v, s.world, sc.moonPal, sc.groundPal.ground, -ux, -uy, MOON_COT, snap.tAbs, 0.32 * night, inp.softShadows, false)) {
+        sc.passes++;
+      }
+    }
+    // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
+    // source-over fill stays exact), the depth sort below.
+    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
+    if (inp.govLevel < 3) drawContactAO(g, v, casterBuf, n, night);
+    const glows = night > 0.05 && inp.govLevel < 2;
+    if (glows) drawWindowGlow(g, v, casterBuf, n, night);
 
     // Nubs' pose (needed for the footprint disc and the depth sort).
     const pose = sc.pose;
@@ -575,8 +543,11 @@ export class Renderer {
     pose.w3 = s.nubs.w[3] as number;
     pose.w4 = s.nubs.w[4] as number;
     pose.f = s.nubs.f;
-    pose.lookX = ux;
-    pose.lookY = -uy;
+    pose.sunX = ux;
+    pose.sunY = -uy;
+    lookAt(sc.nubs, s, snap.nubsX, snap.nubsY, ux, -uy, sunUp && walking && s.nubs.f === 0, gdt);
+    pose.lookX = sc.nubs.lookX;
+    pose.lookY = sc.nubs.lookY;
     pose.sunUp = sunUp;
     pose.walking = walking;
     pose.night = night;
@@ -596,6 +567,16 @@ export class Renderer {
 
     drawOwnShadow(g, pose, sc.pal.shadow, sc.pal.shadowAlpha);
     drawFootprintDisc(g, pose, sc.pal.trail);
+    if (glows) {
+      // Moonlight rim under Nubs.
+      const rr = 26 * v.S;
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = night;
+      moonRim ??= radialSprite('191,211,255', 64, 0.18, 0.5, 0.08);
+      g.drawImage(moonRim, pose.x - rr, pose.y - rr, 2 * rr, 2 * rr);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+    }
     if (sunUp) drawGlare(g, v, s.world, ux, uy, snap.cot, snap.eps, time);
     drawGroundParticles(g, sc.particles, v);
     drawRings(g, sc.rings, v);
@@ -603,8 +584,10 @@ export class Renderer {
     // Depth-sorted objects, far (north) first, with Nubs inserted at his y.
     const looks = looksFor(inp.equipped);
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr);
+    const beat = sc.death;
+    if (dying >= 0 && beat.t < 0) startDeathBeat(beat, snap.nubsX, snap.nubsY, ux, looks, v.S * v.dpr);
+    else if (beat.t >= 0) beat.t += adt;
     nubsBox(pose.x, pose.y, v.S, box);
-    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
     let nubsDrawn = false;
     let occluded = false;
     for (let i = n - 1; i >= 0; i--) {
@@ -632,22 +615,47 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
+    if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
+    drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
+    // The death beat drains the world to grey around the puddle (full rendering quality only, A12).
+    const grey = greyOf(beat, inp.mapT < 0 ? -1 : inp.mapT / MAP_PULL_S);
+    if (grey > 0.005 && inp.govLevel === 0 && v.dpr <= 2) {
+      drawGrey(g, v, beat, grey);
+      sc.passes++;
+    }
 
-    if (inp.mapT >= 0 && sc.mapReady && this.mapOverlay) {
+    // The atmosphere: sun-side light, noon bleach, night pool and the edge vignettes in one layer.
+    // On the Results the Melt Map's wash takes its place.
+    if (inp.mapT < 0) {
+      const at = sc.atmIn;
+      const b = sc.banners;
+      at.ux = ux;
+      at.uy = uy;
+      at.elev = L.elev;
+      at.dayFrac = dayFrac;
+      at.night = night;
+      at.nubsX = pose.x;
+      at.nubsY = pose.y;
+      at.heat = b.heat;
+      at.heatPhase = b.heatPhase;
+      at.cool = b.coolPulse;
+      at.gold = b.goldPulse;
+      at.wash = 0.08 * grey;
+      at.forecast = forecastOf(s.params);
+      at.full = inp.govLevel < 3;
+      if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;
+    } else if (sc.mapReady && this.options.mapOverlay) {
       const o = mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay);
       o.sheetTop = inp.sheetTop;
-      // The puddle ring pulses on the live clock even while the rest of the map holds still.
       o.time = inp.time;
-      // The settled Results cache draws the pulsing puddle marker itself, every frame.
-      o.puddle = !(still && this.resultsCache);
-      drawMeltMap(g, v, s, sc.map, o);
+      if (drawMeltMap(g, v, s, sc.map, o)) sc.passes++;
     }
 
     // Debug geometry.
-    if (inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose);
+    if (inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 
     // Halo dial (play/title; fades out on death and under the map).
     const showHalo = inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'title' || inp.screen === 'dying');
@@ -678,8 +686,7 @@ export class Renderer {
     }
     g.restore();
 
-    drawVignettes(g, sc.banners, v);
-    drawPops(g, sc.pops, v, hudScale(v));
+    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion));
 
     // Edge sun mascot (decoration), kept below the HUD band.
     if (inp.mapT < 0 && inp.screen !== 'title' && inp.screen !== 'menu') {
@@ -689,17 +696,24 @@ export class Renderer {
       if (dying >= 0) sc.sun.guilty = Math.min(1, sc.sun.guilty + adt * 3);
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);
-      const mood: SunMood =
-        dying >= 0 ? 'guilty' : sc.relief > 0 ? 'relief' : snap.chill >= 60 ? 'smug' : snap.chill >= 30 ? 'worried' : 'horrified';
+      // Around noon the sun is the boss (unless Nubs is nearly gone: then it is horrified).
+      const boss = sunUp && night === 0 ? bossWeight(dayFrac, forecastOf(s.params) === 'heat') : 0;
+      let mood: SunMood;
+      if (dying >= 0) mood = 'guilty';
+      else if (sc.relief > 0) mood = 'relief';
+      else if (snap.chill < 30) mood = 'horrified';
+      else if (sc.sunWorried > 0) mood = 'worried';
+      else if (boss > 0.6) mood = 'boss';
+      else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
-      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1);
+      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, shadesLook(inp.equipped));
     }
 
     // HUD.
     const hudVisible = inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'dying';
     if (hudVisible) {
       const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : 1;
-      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, alpha: a, time: time });
+      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: a, time: time });
     }
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
     drawScreenParticles(g, sc.particles, v.dpr);
@@ -707,7 +721,49 @@ export class Renderer {
   }
 }
 
-const mapOverlay: MapOverlay = { a: 0, labelA: 0, sheetTop: null, time: 0, puddle: true };
+const mapOverlay: MapOverlay = { a: 0, labelA: 0, sheetTop: null, time: 0 };
+const pickBuf: Pickup[] = [];
+
+/**
+ * Eases Nubs' face toward what he looks at (8/s; the sprite quantizes it to 5° steps): the sun,
+ * or, while he walks in full shade, the nearest flake or crystal within 70 u ahead.
+ */
+function lookAt(a: NubsAnim, s: SimState, nx: number, ny: number, sunX: number, sunY: number, shaded: boolean, dt: number): void {
+  let tx = sunX;
+  let ty = sunY;
+  if (shaded) {
+    const n = queryPickups(s.world, ny, ny + 70, pickBuf);
+    let best = Infinity;
+    for (let i = 0; i < n; i++) {
+      const pk = pickBuf[i] as Pickup;
+      if (pk.state !== PICKUP_ALIVE || pk.kind === 'flower') continue;
+      const dx = pk.x - nx;
+      const dy = pk.y - ny;
+      const d = dx * dx + dy * dy;
+      if (d < best && d > 1 && d <= 70 * 70) {
+        best = d;
+        tx = dx;
+        ty = -dy;
+      }
+    }
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len;
+    ty /= len;
+  }
+  const k = dt > 0 ? Math.min(1, 8 * dt) : 0;
+  let lx = a.lookX + (tx - a.lookX) * k;
+  let ly = a.lookY + (ty - a.lookY) * k;
+  const len = Math.hypot(lx, ly);
+  if (len < 1e-3) {
+    lx = tx;
+    ly = ty;
+  } else {
+    lx /= len;
+    ly /= len;
+  }
+  a.lookX = lx;
+  a.lookY = ly;
+}
 
 function particlesAlive(p: Particles): boolean {
   const life = p.life;
@@ -744,6 +800,7 @@ function drawDebug(
   cot: number,
   tAbs: number,
   pose: NubsPose,
+  wisps: Float32Array,
 ): void {
   if (d.outlines && cot > 0) {
     g.strokeStyle = 'rgba(255,0,180,0.8)';
@@ -764,6 +821,16 @@ function drawDebug(
       g.arc(x, y, 2.5, 0, Math.PI * 2);
       g.fill();
       g.stroke();
+    }
+    // Heat-wisp spawn tries: amber where the ground was lit (a wisp rose), teal where it was shaded.
+    for (let i = 0; i < wisps.length; i += 3) {
+      const x = wisps[i] as number;
+      const y = wisps[i + 1] as number;
+      if (x === 0 && y === 0) continue;
+      g.fillStyle = wisps[i + 2] === 1 ? '#FF8A3D' : '#2EC4B6';
+      g.beginPath();
+      g.arc(v.ox + x * v.S, v.oy - y * v.S, 4, 0, Math.PI * 2);
+      g.fill();
     }
   }
   if (d.masks) {

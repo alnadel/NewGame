@@ -1,20 +1,25 @@
-// The halo dial around Nubs (V1_PLAN §9, CRITIQUE #5/#6): the main control readout. A 40 u ring
-// around his ground point carries the sun pointer (never fades), teal safe arcs (solid = shaded
-// now, dashed = in 0.6 s), red hatched glare arcs (always shown), 24 detent ticks and a curved
-// rotation arrow while dragging, and an inner Chill gauge whose color follows the GDD bands. The
-// whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays (V1_PLAN §6.2)
-// the dial shows where to put the sun: the target arc pulses, dots mark the way round, and a ghost
-// sun glides from the sun pointer into the arc in step with the ghost thumb's swipe.
+// The halo dial around Nubs (V1_PLAN §9, CRITIQUE #5/#6, GR6 dial v2): the main control readout.
+// A 40 u ring around his ground point carries the sun pointer (never fades), the teal shade arcs in
+// three weights, red hatched glare arcs (always shown), 24 detent ticks and a curved rotation arrow
+// while dragging, and an inner Chill gauge. Teal means only shade and red only glare:
+//   - lasting (shaded now and in 0.6 s): thick, round caps, a white inner edge: "go here";
+//   - ending (shaded now, lit in 0.6 s): thin;
+//   - coming (lit now, shaded in 0.6 s): a thin dashed arc just outside the ring;
+//   - when nothing lasts, the now-arcs are drawn medium-thick, so the dial is never blank.
+// The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below 50 and dashed and pulsing
+// below 25. The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
+// (V1_PLAN §6.2) the dial shows where to put the sun: the target arc pulses, dots mark the way
+// round, and a ghost sun glides from the sun pointer into the arc in step with the ghost thumb.
 
 import { ghostSwipe } from '../game/assist.ts';
-import { cssa, hex, type Rgb } from './color.ts';
+import { cssa, hex } from './color.ts';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 const TEAL = hex('#2EC4B6');
 const RED = hex('#FF5D5D');
-const GOLD = hex('#FFC23D');
-const BLUE = hex('#5AB8FF');
+const FROST = hex('#EAF6FF');
+const AMBER = hex('#FFA53D');
 const INK = hex('#2B2140');
 
 export interface HaloState {
@@ -25,10 +30,15 @@ export interface HaloState {
   /** Smoothed rotation direction for the arrow (+1 CCW, −1 CW) and its strength. */
   arrow: number;
   arrowA: number;
+  /** A SWING: seconds left of its swept arc (0.3 s) and the signed sweep that ended at θ (°). */
+  swingT: number;
+  swingDeg: number;
 }
 
+export const SWING_ARC_S = 0.3;
+
 export function createHalo(): HaloState {
-  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0 };
+  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0, swingT: 0, swingDeg: 0 };
 }
 
 export interface HaloInput {
@@ -62,11 +72,13 @@ export interface HaloInput {
 }
 
 const swipe = new Float64Array(2);
+const split = createShadeSplit();
 
 export function updateHalo(h: HaloState, dt: number, dragging: boolean, chill: number, dTheta: number): void {
   const target = dragging || chill < 99 ? 1 : 0.35;
   h.alpha += (target - h.alpha) * Math.min(1, dt * (target > h.alpha ? 12 : 3));
   for (let i = 0; i < 24; i++) if ((h.flash[i] as number) > 0) h.flash[i] = Math.max(0, (h.flash[i] as number) - dt);
+  h.swingT = Math.max(0, h.swingT - dt);
   if (dragging && Math.abs(dTheta) > 0.05) {
     const dir = dTheta > 0 ? 1 : -1;
     h.arrow = dir;
@@ -82,8 +94,44 @@ export function flashDetent(h: HaloState, index: number): void {
   h.flash[i] = 0.22;
 }
 
-/** Calls fn(startDeg, endDeg) for every circular run of set bins (degrees, inclusive edges ±0.5). */
-function runs(mask: Uint8Array, fn: (a0: number, a1: number) => void): void {
+/** The shade masks split by how long they last (GR6), refilled every frame. */
+export interface ShadeSplit {
+  readonly lasting: Uint8Array;
+  readonly ending: Uint8Array;
+  readonly coming: Uint8Array;
+}
+
+export function createShadeSplit(): ShadeSplit {
+  return { lasting: new Uint8Array(360), ending: new Uint8Array(360), coming: new Uint8Array(360) };
+}
+
+/**
+ * lasting = now ∧ next, ending = now ∧ ¬next, coming = next ∧ ¬now. Returns 'lasting' when some
+ * shade lasts, 'fallback' when only short shade exists now (the dial then draws `now` medium-thick),
+ * 'none' when nothing is shaded now.
+ */
+export function splitShade(now: Uint8Array, next: Uint8Array, out: ShadeSplit): 'lasting' | 'fallback' | 'none' {
+  let anyLasting = false;
+  let anyNow = false;
+  for (let b = 0; b < 360; b++) {
+    const n = now[b] !== 0;
+    const x = next[b] !== 0;
+    out.lasting[b] = n && x ? 1 : 0;
+    out.ending[b] = n && !x ? 1 : 0;
+    out.coming[b] = x && !n ? 1 : 0;
+    if (n) {
+      anyNow = true;
+      if (x) anyLasting = true;
+    }
+  }
+  return anyLasting ? 'lasting' : anyNow ? 'fallback' : 'none';
+}
+
+/** Circular runs of set bins as [start, end] degree pairs (edges ±0.5), from the last runs() call. */
+const runBuf = new Float32Array(2 * 181);
+
+/** Collects every circular run of set bins into runBuf; returns the number of runs. */
+function runs(mask: Uint8Array): number {
   let start = -1;
   // Find a gap to start from so wrap-around runs are handled once.
   let first = -1;
@@ -94,17 +142,32 @@ function runs(mask: Uint8Array, fn: (a0: number, a1: number) => void): void {
     }
   }
   if (first < 0) {
-    fn(0, 360);
-    return;
+    runBuf[0] = 0;
+    runBuf[1] = 360;
+    return 1;
   }
+  let n = 0;
   for (let k = 1; k <= 360; k++) {
     const b = (first + k) % 360;
     const on = mask[b] !== 0;
     if (on && start < 0) start = first + k;
     if (!on && start >= 0) {
-      fn(start - 0.5, first + k - 0.5);
+      runBuf[2 * n] = start - 0.5;
+      runBuf[2 * n + 1] = first + k - 0.5;
+      n++;
       start = -1;
     }
+  }
+  return n;
+}
+
+/** Adds every run of `mask` to the current path at radius r, each trimmed by `inset` degrees per end. */
+function arcRuns(g: CanvasRenderingContext2D, mask: Uint8Array, cx: number, cy: number, r: number, inset: number): void {
+  const n = runs(mask);
+  for (let i = 0; i < n; i++) {
+    const a0 = (runBuf[2 * i] as number) + inset;
+    const a1 = (runBuf[2 * i + 1] as number) - inset;
+    if (a1 > a0) arcPath(g, cx, cy, r, a0, a1);
   }
 }
 
@@ -112,10 +175,6 @@ function arcPath(g: CanvasRenderingContext2D, cx: number, cy: number, r: number,
   // World angle θ maps to canvas angle −θ (screen y is down).
   g.moveTo(cx + Math.cos(-a1 * DEG) * r, cy + Math.sin(-a1 * DEG) * r);
   g.arc(cx, cy, r, -a1 * DEG, -a0 * DEG);
-}
-
-export function chillColor(chill: number): Rgb {
-  return chill >= 50 ? BLUE : chill >= 25 ? GOLD : RED;
 }
 
 export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInput): void {
@@ -137,22 +196,43 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   g.stroke();
 
   if (inp.sunUp) {
-    // Safe arcs: lookahead dashed (under), now solid.
+    // Shade arcs by how long the shade lasts.
     const ga = inp.guideAlpha * A;
     if (ga > 0.01) {
-      g.setLineDash([5, 4]);
-      g.lineWidth = 3;
-      g.strokeStyle = cssa(TEAL, 0.55 * ga);
+      const kind = splitShade(inp.now, inp.next, split);
+      g.setLineDash([4, 5]);
+      g.lineWidth = 2;
+      g.strokeStyle = cssa(TEAL, 0.35 * ga);
       g.beginPath();
-      runs(inp.next, (a0, a1) => arcPath(g, cx, cy, R + 6, a0, a1));
+      arcRuns(g, split.coming, cx, cy, R + 6, 0);
       g.stroke();
       g.setLineDash([]);
-      g.lineWidth = 6;
-      g.lineCap = 'round';
-      g.strokeStyle = cssa(TEAL, 0.85 * ga);
-      g.beginPath();
-      runs(inp.now, (a0, a1) => arcPath(g, cx, cy, R, a0 + 0.5, a1 - 0.5));
-      g.stroke();
+      if (kind === 'fallback') {
+        g.lineWidth = 5;
+        g.lineCap = 'round';
+        g.strokeStyle = cssa(TEAL, 0.75 * ga);
+        g.beginPath();
+        arcRuns(g, inp.now, cx, cy, R, 0.5);
+        g.stroke();
+      } else if (kind === 'lasting') {
+        g.lineWidth = 3;
+        g.strokeStyle = cssa(TEAL, 0.45 * ga);
+        g.beginPath();
+        arcRuns(g, split.ending, cx, cy, R, 0);
+        g.stroke();
+        g.lineWidth = 8;
+        g.lineCap = 'round';
+        g.strokeStyle = cssa(TEAL, 0.95 * ga);
+        g.beginPath();
+        arcRuns(g, split.lasting, cx, cy, R, 1);
+        g.stroke();
+        // The white inner edge: "go here".
+        g.lineWidth = 1;
+        g.strokeStyle = cssa(0xffffff, 0.85 * ga);
+        g.beginPath();
+        arcRuns(g, split.lasting, cx, cy, R - 4.5, 1);
+        g.stroke();
+      }
       g.lineCap = 'butt';
     }
     // Glare arcs: red with hatching, always shown.
@@ -167,13 +247,15 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineWidth = 7;
       g.strokeStyle = cssa(RED, 0.35 * Math.max(0.6, A));
       g.beginPath();
-      runs(inp.glare, (a0, a1) => arcPath(g, cx, cy, R, a0, a1));
+      arcRuns(g, inp.glare, cx, cy, R, 0);
       g.stroke();
       g.lineWidth = 1.6;
       g.strokeStyle = cssa(RED, 0.95 * Math.max(0.6, A));
       g.beginPath();
-      runs(inp.glare, (a0, a1) => {
-        for (let a = a0 + 2; a < a1; a += 6) {
+      const n = runs(inp.glare);
+      for (let i = 0; i < n; i++) {
+        const a1 = runBuf[2 * i + 1] as number;
+        for (let a = (runBuf[2 * i] as number) + 2; a < a1; a += 6) {
           const c0 = Math.cos(-a * DEG);
           const s0 = Math.sin(-a * DEG);
           const c1 = Math.cos(-(a + 4) * DEG);
@@ -181,35 +263,48 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
           g.moveTo(cx + c0 * (R - 4), cy + s0 * (R - 4));
           g.lineTo(cx + c1 * (R + 4), cy + s1 * (R + 4));
         }
-      });
+      }
       g.stroke();
     }
   }
 
   if (inp.sunUp) drawHint(g, inp, A);
 
-  // Chill gauge inside the ring: clockwise from the top, dashed red when low.
-  const chill = Math.max(0, Math.min(100, inp.chill));
-  const col = chillColor(chill);
-  const gR = R - 7;
-  g.lineWidth = 3;
-  g.strokeStyle = cssa(INK, 0.1 * A);
-  g.beginPath();
-  g.arc(cx, cy, gR, 0, TAU);
-  g.stroke();
-  if (chill > 0.5) {
-    if (chill < 25) g.setLineDash([4, 3]);
+  // A SWING: the arc the sun swept to hand the shade over, flashing teal and fading out.
+  if (h.swingT > 0 && h.swingDeg !== 0) {
+    const a1 = inp.theta;
+    const a0 = a1 - h.swingDeg;
+    g.lineWidth = 7;
     g.lineCap = 'round';
-    const pulse = chill < 25 ? 0.75 + 0.25 * Math.sin(inp.time * TAU * 1.1) : 1;
-    // Quiet while Chill is high (the teal safe arcs lead), loud as it drains.
-    const urgency = 0.45 + 0.55 * (1 - chill / 100);
-    g.lineWidth = chill < 50 ? 3.5 : 2.5;
-    g.strokeStyle = cssa(col, Math.min(1, urgency * 1.1) * Math.max(A, chill < 99 ? 0.9 : A) * pulse);
+    g.strokeStyle = cssa(TEAL, 0.6 * (h.swingT / SWING_ARC_S) * inp.fade);
     g.beginPath();
-    g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
+    arcPath(g, cx, cy, R + 3, Math.min(a0, a1), Math.max(a0, a1));
     g.stroke();
-    g.setLineDash([]);
     g.lineCap = 'butt';
+  }
+
+  // Chill gauge inside the ring, clockwise from the top: frost-white, amber below 50, dashed and
+  // pulsing below 25; hidden while Chill is full (the teal arcs lead then).
+  const chill = Math.max(0, Math.min(100, inp.chill));
+  if (chill < 99) {
+    const gR = R - 8;
+    const gA = Math.max(A, 0.9);
+    g.lineWidth = 3;
+    g.strokeStyle = cssa(INK, 0.15 * gA);
+    g.beginPath();
+    g.arc(cx, cy, gR, 0, TAU);
+    g.stroke();
+    if (chill > 0.5) {
+      if (chill < 25) g.setLineDash([4, 3]);
+      g.lineCap = 'round';
+      const pulse = chill < 25 ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
+      g.strokeStyle = cssa(chill < 50 ? AMBER : FROST, gA * pulse);
+      g.beginPath();
+      g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
+      g.stroke();
+      g.setLineDash([]);
+      g.lineCap = 'butt';
+    }
   }
 
   // Detent ticks and the rotation arrow while dragging.
@@ -389,4 +484,55 @@ function drawHint(g: CanvasRenderingContext2D, inp: HaloInput, A: number): void 
   } else if (inp.reducedMotion) {
     sunPointer(g, cx, cy, R, c, ha * (0.45 + 0.35 * pulse), 0, true);
   }
+}
+
+const frozen = createShadeSplit();
+
+/**
+ * The dial frozen at the melt (the Melt Map's 'frozen' mode): a faint ring, the thick teal shade that
+ * lasted (or the shade there was), a dotted short way from the sun pointer to its nearest bin, and
+ * the sun pointer at θ.
+ */
+export function drawFrozenDial(g: CanvasRenderingContext2D, cx: number, cy: number, R: number, theta: number, now: Uint8Array, next: Uint8Array, a: number): void {
+  const mode = splitShade(now, next, frozen);
+  const mask = mode === 'lasting' ? frozen.lasting : now;
+  g.globalAlpha = a;
+  g.strokeStyle = 'rgba(255,255,255,0.55)';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(cx, cy, R, 0, TAU);
+  g.stroke();
+  if (mode === 'none') {
+    sunPointer(g, cx, cy, R, theta, a, 0, false);
+    return;
+  }
+  g.lineCap = 'round';
+  g.strokeStyle = cssa(0x2ec4b6, 0.95 * a);
+  g.lineWidth = 6;
+  g.beginPath();
+  arcRuns(g, mask, cx, cy, R, 1);
+  g.stroke();
+  g.strokeStyle = cssa(0xffffff, 0.9 * a);
+  g.lineWidth = 1;
+  g.beginPath();
+  arcRuns(g, mask, cx, cy, R - 3, 1);
+  g.stroke();
+  // The short way from θ to the nearest set bin, in dots.
+  let best = 999;
+  for (let b = 0; b < 360; b++) {
+    if (mask[b] === 0) continue;
+    const d = ((b - theta + 540) % 360) - 180;
+    if (Math.abs(d) < Math.abs(best)) best = d;
+  }
+  if (Math.abs(best) >= 6) {
+    g.fillStyle = cssa(0xffffff, 0.95 * a);
+    const steps = Math.floor(Math.abs(best) / 8);
+    for (let k = 1; k <= steps; k++) {
+      const ang = -(theta + Math.sign(best) * k * 8) * DEG;
+      g.beginPath();
+      g.arc(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R, 1.8, 0, TAU);
+      g.fill();
+    }
+  }
+  sunPointer(g, cx, cy, R, theta, a, 0, false);
 }

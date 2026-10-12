@@ -71,6 +71,8 @@ test.describe('smoke', () => {
       await page.waitForTimeout(16);
       if ((await state(page)).f === 0) break;
     }
+    // Hold the sun there (no release flick) while Nubs stays in the shade.
+    await page.waitForTimeout(800);
     await page.mouse.up();
     await expect.poll(async () => (await hint()).lesson, { timeout: 3000 }).toBe(false);
     await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.timeScale()), { timeout: 3000 }).toBe(1);

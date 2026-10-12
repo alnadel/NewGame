@@ -9,6 +9,7 @@ import type { View } from '../game/camera.ts';
 import { OBLIQUE } from '../game/camera.ts';
 import { css, cssa, darken, hex, lighten, mix, type Rgb } from './color.ts';
 import { faceShade, tint, type Palette } from './palette.ts';
+import { radialSprite, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 
@@ -19,7 +20,7 @@ const TAU = Math.PI * 2;
 const MAT = {
   trunk: hex('#8A5A3C'),
   trunkSide: hex('#6E4630'),
-  canopy: hex('#6DBE7B'),
+  canopy: hex('#66B675'),
   canopyShade: hex('#4E9A63'),
   oak: hex('#5AA86E'),
   oakShade: hex('#3F8A57'),
@@ -27,18 +28,16 @@ const MAT = {
   cottageSide: hex('#D9C7AA'),
   cottageRoof: hex('#D9644A'),
   cottageRoofSide: hex('#B44E3A'),
-  stone: hex('#C9C3B5'),
-  stoneSide: hex('#A39C8E'),
+  stone: hex('#B5AE9F'),
+  stoneSide: hex('#948D80'),
   hedge: hex('#5E9E5A'),
   hedgeSide: hex('#467C45'),
   hut: hex('#C08A5B'),
   hutSide: hex('#9C6B41'),
   hutRoof: hex('#8E6B4E'),
-  house: hex('#EBD8C3'),
-  houseSide: hex('#CDB59C'),
-  houseRoof: hex('#6E8FB8'),
-  houseRoofSide: hex('#557299'),
-  arch: hex('#D8C7B0'),
+  house: hex('#F7EDE0'),
+  houseSide: hex('#D9C6B0'),
+  arch: hex('#F2E8DA'),
   archSide: hex('#B7A48C'),
   stallRed: hex('#E8475A'),
   stallCream: hex('#FFF4DC'),
@@ -47,15 +46,23 @@ const MAT = {
   columnSide: hex('#BDB5A6'),
   wall: hex('#CFB79A'),
   wallSide: hex('#AE987D'),
+  wallTop: hex('#EFE4D4'),
   ball: hex('#BFE6FF'),
-  pedestal: hex('#C9C3B5'),
+  pedestal: hex('#F4F1EA'),
   pedestalSide: hex('#A39C8E'),
-  rock: hex('#A7B2C6'),
-  rockSide: hex('#7D88A3'),
+  rock: hex('#96A2B8'),
+  rockSide: hex('#6F7A95'),
   window: hex('#5D6F94'),
   windowLit: hex('#FFD27A'),
   door: hex('#7A4E36'),
 };
+
+/**
+ * Old Town roof decks, picked by caster id: blue, terracotta, ochre, sage (and each one's side). Like
+ * every caster top they differ from the noon ground of their biome by at least 15 % in luminance.
+ */
+const HOUSE_ROOFS: readonly Rgb[] = [hex('#6E8FB8'), hex('#D9644A'), hex('#D4952F'), hex('#7FA88A')];
+const HOUSE_ROOF_SIDES: readonly Rgb[] = HOUSE_ROOFS.map((c) => darken(c, 0.2));
 
 /** Per-frame lighting context shared by every caster draw. */
 export interface Light {
@@ -481,12 +488,13 @@ function drawHouse(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): v
     sideFaces(g, v, L, p.pts, p.pts, p.n, p.h - 7, p.h - 4, 0x2b2140, 0x2b2140);
     g.globalAlpha = 1;
   }
-  // Flat roof: parapet ring (wall color) around a darker blue roof deck.
+  // Flat roof: parapet ring (wall color) around a darker roof deck in one of four colours.
+  const roof = c.id % HOUSE_ROOFS.length;
   fillTop(g, v, p.pts, p.n, p.h, topColor(L, MAT.house));
   scaled(p.pts, p.n, 0.86, tmp);
-  fillTop(g, v, tmp, p.n, p.h, tint(L.pal, MAT.houseRoofSide));
+  fillTop(g, v, tmp, p.n, p.h, tint(L.pal, HOUSE_ROOF_SIDES[roof] as Rgb));
   scaled(p.pts, p.n, 0.8, tmp2);
-  fillTop(g, v, tmp2, p.n, p.h - 1, topColor(L, MAT.houseRoof));
+  fillTop(g, v, tmp2, p.n, p.h - 1, topColor(L, HOUSE_ROOFS[roof] as Rgb));
   // A little chimney/vent block for silhouette.
   rim(g, v, L, p.pts, p.n, p.h);
 }
@@ -645,7 +653,7 @@ function drawWall(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): vo
   // Coping stones: a slightly wider, lighter cap.
   grown(p.pts, p.n, 1.5, tmp);
   if (L.sides) sideFaces(g, v, L, tmp, tmp, p.n, p.h - 4, p.h, MAT.wall, lighten(MAT.wall, 0.2));
-  fillTop(g, v, tmp, p.n, p.h, topColor(L, lighten(MAT.wall, 0.12)));
+  fillTop(g, v, tmp, p.n, p.h, topColor(L, MAT.wallTop));
   rim(g, v, L, tmp, p.n, p.h);
 }
 
@@ -1002,4 +1010,86 @@ export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Ca
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Contact shadows
+// ---------------------------------------------------------------------------------------------
+
+/** Ground padding of the contact shadow around a hull (u). */
+const AO_PAD = 5;
+let aoSprite: Canvas2D | null = null;
+
+/**
+ * Contact shadows (GR5): a soft warm-dark pool under each visible caster's ground hull (prisms and
+ * slabs, never a canopy disc), multiplied onto the ground after the shadow layer (a multiply under
+ * it would break the layer's matched source-over fill), so buildings, trunks and stones sit on it at
+ * any sun angle. One stretched 64 px sprite per caster; its inscribed ellipse is grown by √2 so it
+ * reaches the hull's corners.
+ */
+export function drawContactAO(g: CanvasRenderingContext2D, v: View, cs: readonly Caster[], n: number, night: number): void {
+  aoSprite ??= radialSprite('70,45,30', 64, 0.3, 0.55, 0.18);
+  const spr = aoSprite;
+  g.globalCompositeOperation = 'multiply';
+  g.globalAlpha = 1 - 0.5 * night;
+  for (let i = 0; i < n; i++) {
+    const c = cs[i] as Caster;
+    if (c.hullN < 3 || c.maxX < v.x0 - 20 || c.minX > v.x1 + 20) continue;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    const h = c.hull;
+    for (let k = 0; k < c.hullN; k++) {
+      const x = h[2 * k] as number;
+      const y = h[2 * k + 1] as number;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    const rx = ((x1 - x0) / 2 + AO_PAD) * Math.SQRT2 * v.S;
+    const ry = ((y1 - y0) / 2 + AO_PAD) * Math.SQRT2 * v.S;
+    const cx = v.ox + ((x0 + x1) / 2) * v.S;
+    const cy = v.oy - ((y0 + y1) / 2) * v.S;
+    g.drawImage(spr, cx - rx, cy - ry, 2 * rx, 2 * ry);
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * Night window light (GR16): a warm pool on the ground just south of each lit window face of the
+ * visible cottages and houses ('lighter', at most 12 a frame).
+ */
+let windowGlowSprite: Canvas2D | null = null;
+
+export function drawWindowGlow(g: CanvasRenderingContext2D, v: View, cs: readonly Caster[], n: number, night: number): void {
+  windowGlowSprite ??= radialSprite('255,200,107', 64, 0.35, 0.5, 0.14);
+  const spr = windowGlowSprite;
+  const r = 10 * v.S;
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = night;
+  let drawn = 0;
+  for (let i = 0; i < n && drawn < 12; i++) {
+    const c = cs[i] as Caster;
+    if ((c.kind !== 'cottage' && c.kind !== 'house') || c.maxX < v.x0 - 20 || c.minX > v.x1 + 20) continue;
+    const p = c.parts[0] as PrismPart;
+    for (let k = 0; k < p.n && drawn < 12; k++) {
+      const len = windowFace(p.pts, p.n, k);
+      if (len <= 0) continue;
+      const j = k + 1 === p.n ? 0 : k + 1;
+      const ax = p.pts[2 * k] as number;
+      const ay = p.pts[2 * k + 1] as number;
+      const ex = (p.pts[2 * j] as number) - ax;
+      const ey = (p.pts[2 * j + 1] as number) - ay;
+      // The face's middle, 5 u out along its outward normal (ey, −ex).
+      const x = ax + ex / 2 + (5 * ey) / len;
+      const y = ay + ey / 2 - (5 * ex) / len;
+      g.drawImage(spr, v.ox + x * v.S - r, v.oy - y * v.S - r, 2 * r, 2 * r);
+      drawn++;
+    }
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
 }

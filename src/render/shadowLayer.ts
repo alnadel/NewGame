@@ -1,20 +1,25 @@
 // The shadow layer (TECH_SPEC §9.3, V1_PLAN §9): every visible part shadow, canopy disc and cloud
-// ellipse is appended to ONE path on a half-resolution offscreen canvas and filled once with the
-// opaque LUT shadow color, so overlapping shadows union without darkening. The layer is then
-// multiplied onto the world at the LUT alpha; bilinear upscaling gives a soft penumbra for free.
+// ellipse is appended to ONE path and filled once with an opaque color, so overlapping shadows union
+// without darkening. Soft mode fills a half-resolution offscreen layer and blits it (bilinear
+// upscaling gives a soft penumbra for free); crisp mode (perf governor level ≥ 1 and low-end
+// devices, game/perf.ts) fills the same path straight onto the world.
 //
-// Winding: core polygons are CCW in world space (y up). Projected to screen space (y down) they all
-// become clockwise, and so does every arc/ellipse drawn with anticlockwise = false, so the
-// nonzero rule unions them all.
+// Composite (GR2): the look is a multiply of the LUT shadow color C at the LUT alpha a, but a
+// multiply blend costs about twice a plain source-over in software raster. So the fill is the
+// source-over color K at alpha β that gives exactly the multiplied result over the ground color G
+// the tiles were painted with (matchShadow). Over other colors it is off by (X − G)·(s_c − β) per
+// channel (s_c = a·(1 − C_c/255)): a few levels on texture, up to ~20 on the trail and ~30 on white
+// pickups under the saturated noon blue — invisible in play, measured by the e2e A/B (GR2).
 //
-// Crisp mode (perf governor level ≥ 1 and low-end devices, game/perf.ts): the same one path is
-// filled straight onto the world with `multiply` at the LUT alpha. The colors are identical (a
-// multiply of the opaque shadow color at alpha a), only the soft penumbra of the bilinear upscale is
-// lost, and it skips the full-screen scaled multiply blit that dominates software raster.
+// Winding: subpaths must all wind the same way on screen, or the nonzero rule punches holes where
+// they overlap. Core polygons are CCW in world space (y up); projected to screen space (y down) they
+// are counter-clockwise on screen too (negative shoelace area in y-down coordinates, measured in
+// tests/unit/render.test.ts). Canopy discs and cloud ellipses are therefore drawn with
+// anticlockwise = true, after a moveTo to their start point (no joining segment).
 
 import { cloudShadow, partShadow, queryCasters, queryClouds, type Caster, type Cloud, type Part, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import { css } from './color.ts';
+import { blue, css, green, red, rgb, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
 import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 
@@ -29,11 +34,13 @@ export interface ShadowLayer {
   h: number;
   /** Eased composite alpha (photosensitivity: eases during fast sweeps). */
   alpha: number;
+  /** This frame's matched fill color K (matchShadow). */
+  fill: Rgb;
 }
 
 export function createShadowLayer(): ShadowLayer {
   const canvas = makeCanvas(2, 2);
-  return { canvas, g: ctx2d(canvas), w: 2, h: 2, alpha: 0 };
+  return { canvas, g: ctx2d(canvas), w: 2, h: 2, alpha: 0, fill: 0 };
 }
 
 const casterBuf: Caster[] = [];
@@ -64,7 +71,7 @@ export function traceShadows(
         const sy = v.oy - (poly[1] as number) * S;
         const r = (poly[2] as number) * S;
         g.moveTo(sx + r, sy);
-        g.arc(sx, sy, r, 0, TAU, false);
+        g.arc(sx, sy, r, 0, TAU, true);
         continue;
       }
       // Cull polygons whose bounds miss the view.
@@ -97,35 +104,60 @@ export function traceShadows(
     const sx = v.ox + cx * S;
     const sy = v.oy - cy * S;
     g.moveTo(sx + rx * S, sy);
-    g.ellipse(sx, sy, rx * S, ry * S, 0, 0, TAU, false);
+    g.ellipse(sx, sy, rx * S, ry * S, 0, 0, TAU, true);
   }
 }
 
-/** Renders and composites the shadow layer onto the world (call with the world clip active). */
+/**
+ * The source-over fill that matches a multiply of the shadow color `shadow` at alpha `a` over the
+ * ground color `ground` (GR2): M_c = 1 − a·(1 − C_c/255), β = 1 − min(M), K_c = G_c·(M_c − 1 + β)/β.
+ * Writes K into out.fill and returns β (0 when there is nothing to draw).
+ */
+export function matchShadow(out: { fill: Rgb }, shadow: Rgb, ground: Rgb, a: number): number {
+  const mr = 1 - a * (1 - red(shadow) / 255);
+  const mg = 1 - a * (1 - green(shadow) / 255);
+  const mb = 1 - a * (1 - blue(shadow) / 255);
+  const beta = 1 - Math.min(mr, mg, mb);
+  if (beta < 0.002) return 0;
+  out.fill = rgb((red(ground) * (mr - 1 + beta)) / beta, (green(ground) * (mg - 1 + beta)) / beta, (blue(ground) * (mb - 1 + beta)) / beta);
+  return beta;
+}
+
+/**
+ * Renders and composites the shadow layer onto the world (call with the world clip active): the
+ * matched source-over fill (GR2), or a multiply of the shadow color when `multiply` is set (the
+ * test hook's A/B reference). Returns true when it blitted the soft layer (a full-screen pass).
+ */
 export function drawShadowLayer(
   g: CanvasRenderingContext2D,
   layer: ShadowLayer,
   v: View,
   world: World,
   pal: Palette,
+  ground: Rgb,
   ux: number,
   uy: number,
   cot: number,
   tAbs: number,
   alpha: number,
-  soft = true,
-): void {
-  if (alpha <= 0.002 || cot <= 0) return;
+  soft: boolean,
+  multiply: boolean,
+): boolean {
+  if (cot <= 0) return false;
+  const a = multiply ? alpha : matchShadow(layer, pal.shadow, ground, alpha);
+  if (a <= 0.002) return false;
+  const color = css(multiply ? pal.shadow : layer.fill);
+  const op = multiply ? 'multiply' : 'source-over';
   if (!soft) {
-    g.globalCompositeOperation = 'multiply';
-    g.globalAlpha = alpha;
-    g.fillStyle = css(pal.shadow);
+    g.globalCompositeOperation = op;
+    g.globalAlpha = a;
+    g.fillStyle = color;
     g.beginPath();
     traceShadows(g, v, world, ux, uy, cot, tAbs);
     g.fill('nonzero');
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    return;
+    return false;
   }
   const w = Math.max(2, Math.ceil(v.vw / 2));
   const h = Math.max(2, Math.ceil(v.vh / 2));
@@ -139,15 +171,16 @@ export function drawShadowLayer(
   s.setTransform(1, 0, 0, 1, 0, 0);
   s.clearRect(0, 0, w, h);
   s.setTransform(0.5, 0, 0, 0.5, -v.vx * 0.5, -v.vy * 0.5);
-  s.fillStyle = css(pal.shadow);
+  s.fillStyle = color;
   s.beginPath();
   traceShadows(s, v, world, ux, uy, cot, tAbs);
   s.fill('nonzero');
 
-  g.globalCompositeOperation = 'multiply';
-  g.globalAlpha = alpha;
+  g.globalCompositeOperation = op;
+  g.globalAlpha = a;
   g.imageSmoothingEnabled = true;
   g.drawImage(layer.canvas, 0, 0, w, h, v.vx, v.vy, w * 2, h * 2);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
+  return true;
 }

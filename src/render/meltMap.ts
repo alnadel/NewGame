@@ -1,17 +1,20 @@
 // The Melt Map (V1_PLAN §9, CRITIQUE #10): after death the camera pulls up (1.4 s, easeInOutCubic;
 // a cut under reduced motion) to frame the last ~600 u of trail above the Results sheet. Footprint
-// dots are colored by Chill, the lit gap gets a red bracket, the named casters from the death line
-// are pinned with callout labels, and the puddle gets a marker with a little carrot.
+// trail is a ribbon coloured by Chill with ticks at the hours it crossed, the lit gap gets a red
+// bracket, the named casters from the death line are pinned with callout labels, the dial is frozen
+// around the puddle as it stood at the melt (the sun, the lasting shade, the short way between), and
+// the puddle gets a marker with a little carrot.
 //
 // K10: nothing of the overlay ever shows under the Results sheet. The whole overlay is clipped to
 // the view above the sheet's top − 4 px; a callout that would cross the sheet's top − 6 px moves
 // above its pin head, and is left out (the pin dot stays) when it still doesn't fit. The callouts
 // fade in only once the camera pull has finished, so they never slide across the screen.
 
-import { historyAt, historyLength, type Caster, type SimState } from '../core/index.ts';
+import { dayAtY, dayLength, historyAt, historyLength, trailX, yAtTime, type Caster, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { setMapping } from '../game/camera.ts';
 import { css, cssa, hex, mix, type Rgb } from './color.ts';
+import { drawFrozenDial } from './halo.ts';
 import { roundRect } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -49,8 +52,6 @@ export interface MapOverlay {
   /** The Results sheet's top edge (CSS px), or null. */
   sheetTop: number | null;
   time: number;
-  /** Draw the puddle ring and carrot (the Results backdrop cache leaves them out and draws them per frame). */
-  puddle: boolean;
 }
 
 /** Clips to the view above the Results sheet (K10). Call inside save()/restore(). */
@@ -148,14 +149,101 @@ export function applyPull(v: View, a: Float64Array, b: Float64Array, t: number):
   setMapping(v, S, lerp(1), lerp(2), lerp(3), lerp(4));
 }
 
+/** Chill colour bands of the ribbon (one stroke each). */
+const BANDS = 6;
+
+function drawRibbon(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame): void {
+  const n = historyLength(s);
+  const S = v.S;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (let pass = -1; pass < BANDS; pass++) {
+    // Pass −1 is the ink outline under the whole ribbon; then one path per Chill band.
+    let any = false;
+    let px = 0;
+    let py = 0;
+    let have = false;
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      historyAt(s, i, h4);
+      const y = h4[1] as number;
+      if (y < m.y0 - 20 || y > m.y1 + 20) {
+        have = false;
+        continue;
+      }
+      const sx = v.ox + (h4[0] as number) * S;
+      const sy = v.oy - y * S;
+      const band = Math.min(BANDS - 1, Math.floor(((h4[2] as number) / 100) * BANDS));
+      if (have && (pass < 0 || band === pass)) {
+        g.moveTo(px, py);
+        g.lineTo(sx, sy);
+        any = true;
+      }
+      px = sx;
+      py = sy;
+      have = true;
+    }
+    if (!any) continue;
+    if (pass < 0) {
+      g.strokeStyle = cssa(0x2b2140, 0.35);
+      g.lineWidth = 3 * S + 2.4;
+    } else {
+      g.strokeStyle = css(chillColor(((pass + 0.5) / BANDS) * 100));
+      g.lineWidth = 3 * S;
+    }
+    g.stroke();
+  }
+}
+
+/** White ticks across the ribbon where the walk passed an hour, labelled 7 … 12 … 5. */
+function drawHourTicks(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame): void {
+  if (historyLength(s) === 0) return;
+  historyAt(s, 0, h4);
+  const from = Math.max(m.y0, h4[1] as number);
+  const top = Math.min(m.y1, s.nubs.y);
+  const d1 = dayAtY(Math.max(0, top));
+  g.font = `800 9px ${FONT}`;
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  g.lineCap = 'round';
+  for (let day = dayAtY(Math.max(0, m.y0)); day <= d1; day++) {
+    const len = dayLength(day);
+    for (let h = 1; h < 12; h++) {
+      const y = yAtTime(day, (h / 12) * len);
+      if (y < from || y > top) continue;
+      const sx = v.ox + trailX(s.world.trail, y) * v.S;
+      const sy = v.oy - y * v.S;
+      const w = 5 * v.S + 2;
+      g.strokeStyle = '#FFFFFF';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(sx - w, sy);
+      g.lineTo(sx + w, sy);
+      g.stroke();
+      const label = HOUR_LABELS[h] as string;
+      g.strokeStyle = cssa(0x2b2140, 0.7);
+      g.lineWidth = 2.5;
+      g.strokeText(label, sx + w + 3, sy);
+      g.fillStyle = '#FFFFFF';
+      g.fillText(label, sx + w + 3, sy);
+    }
+  }
+}
+
+/** Clock labels of the hour boundaries after 6 AM. */
+const HOUR_LABELS = ['6', '7', '8', '9', '10', '11', '12', '1', '2', '3', '4', '5'];
+
 function chillColor(c: number): Rgb {
   return c >= 50 ? mix(GOLD, BLUE, (c - 50) / 50) : mix(RED, GOLD, c / 50);
 }
 
-/** Overlays on the world once the map is up (`o.a` fades them in), clipped above the sheet. */
-export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame, o: MapOverlay): void {
+/**
+ * Overlays on the world once the map is up (`o.a` fades them in), clipped above the sheet. Returns
+ * true when it drew (its paper wash is a full-screen pass).
+ */
+export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m: MapFrame, o: MapOverlay): boolean {
   const a = o.a;
-  if (a <= 0.01) return;
+  if (a <= 0.01) return false;
   g.save();
   clipAboveSheet(g, v, o.sheetTop);
   const S = v.S;
@@ -164,24 +252,10 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
   g.fillStyle = '#FFF8EE';
   g.fillRect(v.vx, v.vy, v.vw, v.vh);
   g.globalAlpha = a;
-  // Footprint dots by Chill.
-  const n = historyLength(s);
-  const r = Math.max(2.2, 3.2 * S);
-  for (let i = 0; i < n; i++) {
-    historyAt(s, i, h4);
-    const y = h4[1] as number;
-    if (y < m.y0 - 20 || y > m.y1 + 20) continue;
-    const sx = v.ox + (h4[0] as number) * S;
-    const sy = v.oy - y * S;
-    g.fillStyle = cssa(0x2b2140, 0.35);
-    g.beginPath();
-    g.arc(sx, sy + 1, r + 1.2, 0, TAU);
-    g.fill();
-    g.fillStyle = css(chillColor(h4[2] as number));
-    g.beginPath();
-    g.arc(sx, sy, r, 0, TAU);
-    g.fill();
-  }
+  // The walk as a 3 u ribbon coloured by Chill (one stroke per colour band over an ink outline),
+  // with white ticks and small labels where it crossed an hour.
+  drawRibbon(g, v, s, m);
+  drawHourTicks(g, v, s, m);
   // The lit gap: a red bracket beside the trail.
   if (!Number.isNaN(m.gapY0) && !Number.isNaN(m.gapY1)) {
     const d = s.death;
@@ -224,6 +298,7 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
   }
   // Pins for the named casters.
   const d = s.death;
+  calloutCount = 0;
   if (d) {
     const limit = o.sheetTop === null ? Number.POSITIVE_INFINITY : o.sheetTop - SHEET_LABEL_GAP;
     const top = v.vy + v.safe.top + 4;
@@ -241,21 +316,22 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
       const c = ball ? s.world.byId.get(ball.casterId) : undefined;
       if (c) pin(g, v, c, c.name, s.nubs.x, a, o.labelA, top, limit);
     }
-    if (o.puddle) drawPuddle(g, v, s, a, o.time);
+    // The dial as it stood when Nubs melted: the sun, the shade that lasted, the short way between.
+    drawFrozenDial(g, v.ox + d.x * v.S, v.oy - d.y * v.S, 40 * v.S, s.sun.theta, s.guide.now, s.guide.next, a);
+    drawPuddle(g, v, s, a, o.time);
   }
   g.globalAlpha = 1;
   g.restore();
+  return true;
 }
 
 /** The puddle marker: a pulsing ring and a carrot (the only part of a settled map that moves). */
-export function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number, time: number): void {
+function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number, time: number): void {
   const d = s.death;
   if (!d) return;
   const px = v.ox + d.x * v.S;
   const py = v.oy - d.y * v.S;
   const pr = 14 + 3 * Math.sin(time * 4);
-  // As inside the overlay: the global alpha and the stroke colors both carry the fade. The line
-  // style is set here, so the Results cache and a full frame draw the very same pixels.
   g.globalAlpha = a;
   g.lineCap = 'round';
   g.lineJoin = 'round';
@@ -273,20 +349,27 @@ export function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a:
   g.globalAlpha = 1;
 }
 
-/**
- * Screen box (CSS px: x0, y0, x1, y1) holding every pixel drawPuddle can touch: the ring at its
- * widest (r 17 + 2, plus half its 3 px stroke) and the carrot (from px + 16, py − 18, ~13 px out).
- */
-export function puddleBox(v: View, s: SimState, out: Float64Array): boolean {
-  const d = s.death;
-  if (!d) return false;
-  const px = v.ox + d.x * v.S;
-  const py = v.oy - d.y * v.S;
-  out[0] = px - 23;
-  out[1] = py - 34;
-  out[2] = px + 32;
-  out[3] = py + 23;
-  return true;
+/** Callout boxes drawn on this map frame (x, y, w, h each; for the overlap rule and the test hook). */
+export const calloutBoxes = new Float64Array(12);
+let calloutCount = 0;
+
+/** Number of callout boxes in calloutBoxes from the last map frame. */
+export function calloutsDrawn(): number {
+  return calloutCount;
+}
+
+/** A callout's left edge `x` kept 6 px inside the view. */
+function calloutX(v: View, x: number, w: number): number {
+  return Math.max(v.vx + 6, Math.min(v.vx + v.vw - 6 - w, x));
+}
+
+function overlapsDrawn(x: number, y: number, w: number, h: number): boolean {
+  for (let i = 0; i < calloutCount; i++) {
+    const bx = calloutBoxes[4 * i] as number;
+    const by = calloutBoxes[4 * i + 1] as number;
+    if (x < bx + (calloutBoxes[4 * i + 2] as number) && bx < x + w && y < by + (calloutBoxes[4 * i + 3] as number) && by < y + h) return true;
+  }
+  return false;
 }
 
 function pin(
@@ -305,22 +388,22 @@ function pin(
   const sy = v.oy - (c.y + 0.25 * Math.min(c.maxZ, 90)) * S;
   // The callout: beside the pin (its bottom 4 px above the head), or straight above the head when
   // that would reach under the sheet; left out when neither fits (or the head itself is hidden).
+  // When it would cover an earlier callout it goes to the other side of its pin.
   if (labelA > 0.01 && sy <= limit) {
-    const right = c.x >= trailX;
+    let right = c.x >= trailX;
     g.font = `800 13px ${FONT}`;
     const label = name.charAt(0).toUpperCase() + name.slice(1);
     const tw = g.measureText(label).width;
     const w = tw + 18;
     const h = 26;
-    let lx = right ? sx + 18 : sx - 18 - w;
-    let ly = sy - 30;
-    let above = false;
-    if (ly + h > limit) {
-      ly = Math.min(sy - 12, limit) - h;
-      lx = sx - w / 2;
-      above = true;
+    const ly0 = sy - 30;
+    const above = ly0 + h > limit;
+    let lx = calloutX(v, above ? sx - w / 2 : right ? sx + 18 : sx - 18 - w, w);
+    const ly = above ? Math.min(sy - 12, limit) - h : ly0;
+    if (!above && overlapsDrawn(lx, ly, w, h)) {
+      right = !right;
+      lx = calloutX(v, right ? sx + 18 : sx - 18 - w, w);
     }
-    lx = Math.max(v.vx + 6, Math.min(v.vx + v.vw - 6 - w, lx));
     // Leader end: the box's near side, or its bottom edge over the head.
     const ax = above ? Math.max(lx + 13, Math.min(lx + w - 13, sx)) : right ? lx : lx + w;
     const ay = above ? ly + h : ly + h / 2;
@@ -341,6 +424,13 @@ function pin(
       g.textAlign = 'left';
       g.textBaseline = 'middle';
       g.fillText(label, lx + 9, ly + h / 2 + 1);
+      if (calloutCount < 3) {
+        calloutBoxes[4 * calloutCount] = lx;
+        calloutBoxes[4 * calloutCount + 1] = ly;
+        calloutBoxes[4 * calloutCount + 2] = w;
+        calloutBoxes[4 * calloutCount + 3] = h;
+        calloutCount++;
+      }
     }
   }
   // Pin head.

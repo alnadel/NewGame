@@ -1,6 +1,6 @@
 // Time-of-day palette LUT (GDD §10): keyframes at 6, 9, 12, 15 and 18 o'clock interpolated linearly
-// in RGB, a separate night keyframe, and the Old Town ground tint. One Palette object is updated in
-// place every frame; materials are tinted through tint().
+// in RGB, a separate night keyframe, and the two biome tints (a green Meadow, a warm terracotta Old
+// Town). One Palette object is updated in place every frame; materials are tinted through tint().
 
 import { hex, mix, multiply, darken, lighten, type Rgb } from './color.ts';
 
@@ -12,18 +12,20 @@ interface Key {
   tint: Rgb;
 }
 
+// Shadows are cool (GR5 colour script): violet-blue at dawn, a clean sky blue at noon (it reads as
+// "cold, safe" on the cream ground), indigo by dusk; the light around them stays warm.
 const KEYS: readonly Key[] = [
-  { ground: hex('#F6B07C'), trail: hex('#E39468'), shadow: hex('#5B4A8A'), shadowAlpha: 0.42, tint: hex('#FF9E6B') },
-  { ground: hex('#F4D49A'), trail: hex('#DDB07A'), shadow: hex('#4F5C8E'), shadowAlpha: 0.5, tint: hex('#FFE8C2') },
-  { ground: hex('#FFF4DC'), trail: hex('#EAD3A6'), shadow: hex('#4B5A73'), shadowAlpha: 0.58, tint: hex('#FFFFFF') },
-  { ground: hex('#F5CF8A'), trail: hex('#D9A564'), shadow: hex('#4A4F8C'), shadowAlpha: 0.5, tint: hex('#FFD59A') },
-  { ground: hex('#E3829E'), trail: hex('#C76784'), shadow: hex('#34306B'), shadowAlpha: 0.45, tint: hex('#D96A8E') },
+  { ground: hex('#F6B07C'), trail: hex('#E39468'), shadow: hex('#4536A0'), shadowAlpha: 0.46, tint: hex('#FF9E6B') },
+  { ground: hex('#F4D49A'), trail: hex('#DDB07A'), shadow: hex('#3550B0'), shadowAlpha: 0.54, tint: hex('#FFE8C2') },
+  { ground: hex('#FFF4DC'), trail: hex('#EAD3A6'), shadow: hex('#2F62C4'), shadowAlpha: 0.62, tint: hex('#FFFFFF') },
+  { ground: hex('#F5CF8A'), trail: hex('#D9A564'), shadow: hex('#3A42A8'), shadowAlpha: 0.54, tint: hex('#FFD59A') },
+  { ground: hex('#E3829E'), trail: hex('#C76784'), shadow: hex('#30247A'), shadowAlpha: 0.5, tint: hex('#D96A8E') },
 ];
 
 const NIGHT: Key = { ground: hex('#1D2247'), trail: hex('#2A2F5E'), shadow: hex('#1D2247'), shadowAlpha: 0, tint: hex('#3A4380') };
-const OLD_TOWN = hex('#F0E6DA');
-/** Meadow ground gets a faint green cast so the two biomes read apart at a glance. */
-const MEADOW = hex('#F2F7E6');
+/** Biome tints multiplied into the ground: the two biomes read apart at a glance (GR11). */
+const OLD_TOWN = hex('#F2D9C4');
+const MEADOW = hex('#E6F2CF');
 const DAY_TINT_MIX = 0.25;
 const NIGHT_TINT_MIX = 0.55;
 
@@ -34,7 +36,10 @@ export interface Palette {
   night: number;
   /** 0 = meadow, 1 = old town. */
   town: number;
+  /** The ground of the current biome blend, and of each biome on its own (its tiles and decor). */
   ground: Rgb;
+  groundMeadow: Rgb;
+  groundTown: Rgb;
   groundDeep: Rgb;
   trail: Rgb;
   trailEdge: Rgb;
@@ -54,6 +59,8 @@ export function createPalette(): Palette {
     night: 0,
     town: 0,
     ground: 0,
+    groundMeadow: 0,
+    groundTown: 0,
     groundDeep: 0,
     trail: 0,
     trailEdge: 0,
@@ -93,8 +100,9 @@ export function updatePalette(p: Palette, dayFrac: number, night: number, town: 
   p.dayFrac = dayFrac;
   p.night = n;
   p.town = town;
-  let ground = mix(multiply(k.ground, MEADOW), multiply(k.ground, OLD_TOWN), town);
-  ground = mix(ground, NIGHT.ground, n);
+  p.groundMeadow = mix(multiply(k.ground, MEADOW), NIGHT.ground, n);
+  p.groundTown = mix(multiply(k.ground, OLD_TOWN), NIGHT.ground, n);
+  const ground = mix(p.groundMeadow, p.groundTown, town);
   p.ground = ground;
   p.groundDeep = darken(ground, 0.08);
   const trail = mix(mix(k.trail, multiply(k.trail, OLD_TOWN), town), NIGHT.trail, n);

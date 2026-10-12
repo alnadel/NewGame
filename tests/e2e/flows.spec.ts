@@ -1,7 +1,8 @@
-// Run lifecycle flows (wave 3, gameRender): the per-run drain of endless runs (K2), challenge links
-// on the Title (held challenge run, Space, same-document #c=), Daily dates on Retry, settings and
-// reset rebuilding the held run, the midnight rollover, the Results' Daily fields (K5), the blur
-// pause, the latched "assisted" marker and the HUD's frozen best flag.
+// Run lifecycle flows (gameRender): the comfort ladder's drain, challenge links on the Title (held
+// challenge run, Space, same-document #c=, the first-timer's warm-up, the sender's rules, the
+// friend's puddle and the PASSED stamp), Daily dates on Retry, settings and reset rebuilding the
+// held run, the midnight rollover, the Results' Daily fields (K5), the blur pause, the latched
+// "assisted" marker and the HUD's frozen best flag.
 import { expect, test, type Page } from '@playwright/test';
 import {
   challengeCode,
@@ -64,14 +65,16 @@ function dailyPlay(page: Page): ReturnType<Page['locator']> {
 }
 
 const ENDLESS_CHALLENGE = challengeCode({ v: 1, k: 'e', seed: 42, m: 1240, s: 0 });
+/** A returning player (one finished run): challenge links play the challenge at once. */
+const PLAYED_SAVE = { v: 1, createdAt: 1, stats: { runs: 1 } };
 
-test.describe('drain (K2)', () => {
-  test('endless runs start at 30 Chill/s and ramp by run', async ({ page }) => {
+test.describe('drain (comfort ladder, A2)', () => {
+  test('the first run is the tutorial rung at 30 Chill/s; a short run leads to rung 1 at 40', async ({ page }) => {
     await openGame(page, 'test=1');
-    expect((await runCfg(page)).drain).toBe(30);
+    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 0, tutorial: true, drain: 30 });
     await forceDeath(page);
     await homeFromResults(page);
-    expect(await runCfg(page)).toMatchObject({ mode: 'endless', drain: 33 });
+    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 2, tutorial: false, drain: 40 });
   });
 
   test('?profile= keeps the profile drain', async ({ page }) => {
@@ -90,6 +93,10 @@ test.describe('drain (K2)', () => {
 });
 
 test.describe('challenge links', () => {
+  test.beforeEach(async ({ page }, info) => {
+    if (!info.title.startsWith('a first-time player')) await seedSave(page, PLAYED_SAVE);
+  });
+
   test('the Title holds the challenge run: a canvas drag plays it', async ({ page }) => {
     const errors = watchErrors(page);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -134,6 +141,46 @@ test.describe('challenge links', () => {
     await page.getByRole('button', { name: 'Dismiss challenge' }).click();
     await expect(page.locator('.challenge')).toBeHidden();
     expect((await runCfg(page)).mode).toBe('endless');
+  });
+
+  test("a first-time player warms up with the tutorial run, then takes the challenge on the sender's rules", async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const code = challengeCode({ v: 1, k: 'e', seed: 42, m: 1240, s: 0, p: 3, dr: 55, n: 'Sam' });
+    await openGame(page, `test=1#c=${code}`);
+    // The banner stays up over the tutorial run.
+    await expect(page.locator('.challenge')).toBeVisible();
+    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 0, tutorial: true });
+    await dragOnCanvas(page);
+    await waitForScreen(page, 'play');
+    expect((await state(page)).profile).toBe(0);
+    await forceDeath(page);
+    const retry = page.locator('.res-retry');
+    await expect.soft(retry).toContainText('Take the challenge');
+    await retry.click();
+    await waitForScreen(page, 'play');
+    expect(await runCfg(page)).toMatchObject({ mode: 'challenge', seed: 42, profile: 3, drain: 55 });
+    const s = await state(page);
+    expect([s.profile, s.drain, s.noonCloud, s.lessonOn]).toEqual([3, 55, 0, false]);
+    // No ghost hint on the sender's rules.
+    await page.waitForTimeout(1500);
+    expect((await page.evaluate(() => window.__SHADY_TEST__!.hint())).mode).toBe('off');
+    expect(errors).toEqual([]);
+  });
+
+  test("the friend's puddle and pennant mark the target; reaching it stamps PASSED", async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const code = challengeCode({ v: 1, k: 'e', seed: 42, m: 15, s: 0, p: 3, dr: 55, n: 'Sam' });
+    await openGame(page, `test=1#c=${code}`);
+    expect((await runCfg(page)).mode).toBe('challenge');
+    await info.attach('friend-puddle', { body: await page.screenshot(), contentType: 'image/png' });
+    await page.evaluate(() => window.__SHADY_TEST__!.demo('passed'));
+    await page.waitForTimeout(400);
+    await info.attach('passed-stamp', { body: await page.screenshot(), contentType: 'image/png' });
+    // Played: the real stamp lands when the run passes 6:15 AM.
+    await dragOnCanvas(page);
+    await waitForScreen(page, 'play');
+    await expect.poll(async () => (await state(page)).minutes, { timeout: 10_000 }).toBeGreaterThanOrEqual(15);
   });
 });
 

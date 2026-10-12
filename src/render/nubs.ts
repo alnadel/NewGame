@@ -1,9 +1,11 @@
-// Nubs the snowman (GDD §10, V1_PLAN §9): a compressed sprite standing on a ground footprint disc
-// that sits exactly over his 5 shade test points (frost rim when shaded, wet and dark when lit),
-// tinted per sample so partial shade reads spatially. Coal eyes look toward the sun and squint in
-// sunlight, the nose points the same way, a scarf with two spring-chain tails, equipped cosmetics,
-// a walk bob, sweat below 60 Chill, a teardrop wobble below 30, a shiver on shade re-entry, and on
-// death a melt into a puddle with the eyes and nose bobbing in it. Also the Wardrobe preview.
+// Nubs the snowman (GDD §10, V1_PLAN §9, GR9 hero pass): a compressed sprite standing on a ground
+// footprint disc that sits exactly over his 5 shade test points (frost rim when shaded, wet and dark
+// when lit), tinted per sample so partial shade reads spatially. Coal eyes look toward the sun and
+// squint in sunlight (in the shade they glance at a flake ahead), the nose points the same way, a
+// scarf with two spring-chain tails, equipped cosmetics, a walk bob, hops (anticipation, airborne
+// stretch, landing squash), sweat below 60 Chill, a teardrop wobble below 30, a shiver on shade
+// re-entry, and on death a melt into a puddle with the eyes and nose bobbing in it. Also the
+// Wardrobe preview.
 
 import { equippedLooks, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
 import { css, cssa, darken, hex, mix, type Rgb } from './color.ts';
@@ -16,7 +18,12 @@ const SNOW_RIM = hex('#CFE6FF');
 const OUTLINE = hex('#7D8FC2');
 const COAL = hex('#2B2B33');
 /** Sprite scale relative to the GDD's 11 u body (the footprint disc keeps the true test area). */
-export const NUBS_SCALE = 1.15;
+export const NUBS_SCALE = 1.4;
+/** Hop timeline (s): anticipation squash, airborne, landing squash; total. */
+const HOP_CROUCH = 0.05;
+const HOP_AIR = 0.21;
+const HOP_LAND = 0.08;
+const HOP_S = HOP_CROUCH + HOP_AIR + HOP_LAND;
 
 /** Spring-chain scarf tails and short-lived expression timers. */
 export interface NubsAnim {
@@ -33,6 +40,14 @@ export interface NubsAnim {
   blink: number;
   blinkIn: number;
   walkPhase: number;
+  /** The hop: seconds into it (−1 none), its height (u), and a queued second hop (delay s, height). */
+  hopT: number;
+  hopH: number;
+  hopNext: number;
+  hopNextH: number;
+  /** The face's look (unit screen vector), eased toward the sun or a flake ahead. */
+  lookX: number;
+  lookY: number;
 }
 
 export function createNubsAnim(): NubsAnim {
@@ -48,9 +63,29 @@ export function createNubsAnim(): NubsAnim {
     blink: 0,
     blinkIn: 2.5,
     walkPhase: 0,
+    hopT: -1,
+    hopH: 0,
+    hopNext: -1,
+    hopNextH: 0,
+    lookX: 1,
+    lookY: 0,
   };
   resetNubsAnim(a);
   return a;
+}
+
+/** A hop of `height` u (and, after `thenIn` s, a second one of `thenH` u). */
+export function hop(a: NubsAnim, height: number, thenIn = -1, thenH = 0): void {
+  a.hopT = 0;
+  a.hopH = height;
+  a.hopNext = thenIn;
+  a.hopNextH = thenH;
+}
+
+/** The hop's lift now (u; 0 on the ground and under reduced motion). */
+export function hopLift(a: NubsAnim, reducedMotion: boolean): number {
+  const t = a.hopT - HOP_CROUCH;
+  return t >= 0 && t < HOP_AIR && !reducedMotion ? a.hopH * Math.sin((Math.PI * t) / HOP_AIR) : 0;
 }
 
 export function resetNubsAnim(a: NubsAnim): void {
@@ -69,6 +104,8 @@ export function resetNubsAnim(a: NubsAnim): void {
   a.glare = 0;
   a.happy = 0;
   a.phew = 0;
+  a.hopT = -1;
+  a.hopNext = -1;
 }
 
 /** Advances springs and timers (dt in game seconds; sx = Nubs' screen x in CSS px; S = px per u). */
@@ -88,6 +125,17 @@ export function updateNubsAnim(a: NubsAnim, dt: number, sx: number, S: number, w
   }
   a.blink = Math.max(0, a.blink - dt);
   if (walking) a.walkPhase += dt * 2.2 * TAU * (speed / 70);
+  if (a.hopT >= 0) {
+    const was = a.hopT;
+    a.hopT += dt;
+    // Take-off: a big hop (×5) flutters the scarf tails once.
+    if (was < HOP_CROUCH && a.hopT >= HOP_CROUCH && a.hopH >= 9) {
+      for (let i = 1; i < 12; i += 2) a.tailV[i] = (a.tailV[i] as number) - 40;
+    }
+    if (a.hopT >= HOP_S) a.hopT = -1;
+  } else if (a.hopNext >= 0 && (a.hopNext -= dt) < 0) {
+    hop(a, a.hopNextH);
+  }
   // Tails: each node is pulled toward a rest point below its parent, with drag from walking
   // (tails stream back = down the screen) and lateral motion (they lag behind sideways moves).
   const steps = dt > 0.02 ? 2 : 1;
@@ -129,7 +177,10 @@ export interface NubsPose {
   w4: number;
   /** Mean lit weight f (0..2). */
   f: number;
-  /** Unit screen direction toward the sun (x right, y down) and whether there is a sun. */
+  /** Unit screen direction toward the sun (x right, y down; it lights the body) and whether there is a sun. */
+  sunX: number;
+  sunY: number;
+  /** Unit screen direction the face looks (eyes, nose, scarf, hat). */
   lookX: number;
   lookY: number;
   sunUp: boolean;
@@ -155,6 +206,8 @@ export function createPose(): NubsPose {
     w3: 0,
     w4: 0,
     f: 0,
+    sunX: 1,
+    sunY: 0,
     lookX: 1,
     lookY: 0,
     sunUp: true,
@@ -217,7 +270,7 @@ export function drawOwnShadow(g: CanvasRenderingContext2D, p: NubsPose, shadowCo
   const len = 9 * p.S * s;
   g.fillStyle = cssa(shadowColor, alpha * 0.55);
   g.beginPath();
-  g.ellipse(p.x - p.lookX * len * 0.8, p.y - p.lookY * len * 0.8, len * 1.1, len * 0.6, Math.atan2(p.lookY, p.lookX), 0, TAU);
+  g.ellipse(p.x - p.sunX * len * 0.8, p.y - p.sunY * len * 0.8, len * 1.1, len * 0.6, Math.atan2(p.sunY, p.sunX), 0, TAU);
   g.fill();
 }
 
@@ -225,7 +278,7 @@ export function drawOwnShadow(g: CanvasRenderingContext2D, p: NubsPose, shadowCo
 // The sprite
 // ---------------------------------------------------------------------------------------------
 
-interface Looks {
+export interface Looks {
   scarf: ScarfLook;
   hat: HatLook;
   nose: NoseLook;
@@ -249,18 +302,21 @@ export function looksFor(e: Equipped): Looks {
 
 /**
  * Whole-sprite motion applied around the ground point: walk bob (scaleY 1 ± 0.04), shiver squash
- * (1.12 / 0.90 easing back over 140 ms) and jitter, and the teardrop's squash and wobble below 30 %
- * Chill. Kept out of the drawing itself so the cached sprite layers stay still (see NubsSprite).
+ * (1.12 / 0.90 easing back over 140 ms) and jitter, the hop (crouch 1.10 / 0.88 for 50 ms, airborne
+ * 0.94 / 1.08 on a sine arc, landing 1.12 / 0.90 eased out over 80 ms; none under reduced motion),
+ * and the teardrop's squash and wobble below 30 % Chill. Kept out of the drawing itself so the
+ * cached sprite layers stay still (see NubsSprite).
  */
 interface Motion {
   sx: number;
   sy: number;
   rot: number;
-  /** Horizontal jitter in pose px. */
+  /** Horizontal jitter and the hop's lift, in pose px. */
   jx: number;
+  dy: number;
 }
 
-const motion: Motion = { sx: 1, sy: 1, rot: 0, jx: 0 };
+const motion: Motion = { sx: 1, sy: 1, rot: 0, jx: 0, dy: 0 };
 
 function nubsMotion(p: NubsPose, a: NubsAnim, out: Motion): Motion {
   const U = p.S * (0.6 + 0.4 * p.chill) * NUBS_SCALE;
@@ -273,6 +329,21 @@ function nubsMotion(p: NubsPose, a: NubsAnim, out: Motion): Motion {
     sx *= 1 + 0.12 * k;
     sy *= 1 - 0.1 * k;
   }
+  if (a.hopT >= 0 && !p.reducedMotion) {
+    const t = a.hopT;
+    if (t < HOP_CROUCH) {
+      sx *= 1.1;
+      sy *= 0.88;
+    } else if (t < HOP_CROUCH + HOP_AIR) {
+      sx *= 0.94;
+      sy *= 1.08;
+    } else {
+      const u = Math.min(1, (t - HOP_CROUCH - HOP_AIR) / HOP_LAND);
+      const e = 1 - (1 - u) * (1 - u);
+      sx *= 1.12 - 0.12 * e;
+      sy *= 0.9 + 0.1 * e;
+    }
+  }
   if (low) {
     // Teardrop: wider and shorter.
     sx *= 1.15;
@@ -280,6 +351,7 @@ function nubsMotion(p: NubsPose, a: NubsAnim, out: Motion): Motion {
   }
   out.sx = sx;
   out.sy = sy;
+  out.dy = hopLift(a, p.reducedMotion) * p.S;
   out.rot = low && !p.reducedMotion ? ((4 * Math.PI) / 180) * Math.sin(p.time * 9) : 0;
   out.jx = a.shiver > 0 && !p.reducedMotion ? Math.sin(p.time * 90) * 0.6 * U : 0;
   return out;
@@ -298,7 +370,7 @@ interface Geom {
 const geom: Geom = { U: 1, low: false, bodyY: 0, bodyR: 1, headY: 0, headR: 1 };
 
 function nubsGeom(p: NubsPose, out: Geom): Geom {
-  // Visual scale 1.15 (V1_PLAN asks 0.9; at 360 u per screen width that read as a 20 px speck).
+  // Visual scale 1.4 (V1_PLAN asks 0.9; at 360 u per screen width that read as a 20 px speck).
   const U = p.S * (0.6 + 0.4 * p.chill) * NUBS_SCALE;
   out.U = U;
   out.low = p.chill < 0.3;
@@ -337,7 +409,7 @@ function drawBackLayer(g: CanvasRenderingContext2D, p: NubsPose, G: Geom): void 
   g.beginPath();
   bodyShape(g, 0, bodyY, bodyR, low);
   g.fill();
-  rimAndHighlight(g, 0, bodyY, bodyR, p.lookX, p.lookY, p.f > 0 && p.sunUp, low);
+  rimAndHighlight(g, 0, bodyY, bodyR, p.sunX, p.sunY, p.f > 0 && p.sunUp, low);
 }
 
 /** Scarf tails (between the layers: in front of the body, behind the head). */
@@ -355,7 +427,7 @@ function drawFrontLayer(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, l
   g.beginPath();
   g.arc(0, headY, headR, 0, TAU);
   g.fill();
-  rimAndHighlight(g, 0, headY, headR, lx, p.lookY, p.f > 0 && p.sunUp, false);
+  rimAndHighlight(g, 0, headY, headR, p.sunX, p.sunY, p.f > 0 && p.sunUp, false);
   drawScarfBand(g, looks.scarf, U, headY + headR * 0.78, headR * 1.1, lx);
   drawFace(g, p, a, U, headY, headR, looks.nose);
   drawHat(g, looks.hat, U, headY, headR, lx);
@@ -379,7 +451,7 @@ export function drawNubs(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, 
   const m = nubsMotion(p, a, motion);
   const G = nubsGeom(p, geom);
   g.save();
-  g.translate(p.x + m.jx, p.y);
+  g.translate(p.x + m.jx, p.y - m.dy);
   g.rotate(m.rot);
   g.scale(m.sx, m.sy);
   drawBackLayer(g, p, G);
@@ -1020,11 +1092,12 @@ export interface NubsSprite {
   anim: NubsAnim | null;
   looks: Looks | null;
   readonly geom: Geom;
-  /** Whole-sprite motion for stamping: scale, rotation (rad) and x jitter (CSS px). */
+  /** Whole-sprite motion for stamping: scale, rotation (rad), x jitter and hop lift (CSS px). */
   sx: number;
   sy: number;
   rot: number;
   jx: number;
+  dy: number;
   /** Layer redraws and compositions so far (perf checks). */
   layerDraws: number;
   composes: number;
@@ -1053,6 +1126,7 @@ export function createNubsSprite(): NubsSprite {
     sy: 1,
     rot: 0,
     jx: 0,
+    dy: 0,
     layerDraws: 0,
     composes: 0,
   };
@@ -1096,7 +1170,7 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
     spritePose.S = pxPerU;
     drawNubs(sp.g, spritePose, a, looks);
     sp.sx = sp.sy = 1;
-    sp.rot = sp.jx = 0;
+    sp.rot = sp.jx = sp.dy = 0;
     sp.key = NaN;
     sp.whole = true;
     sp.composed = true;
@@ -1108,6 +1182,7 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   sp.sy = m.sy;
   sp.rot = m.rot;
   sp.jx = m.jx;
+  sp.dy = m.dy;
 
   // The pose the layers are drawn for, with its continuous inputs quantized.
   Object.assign(spritePose, p);
@@ -1123,6 +1198,10 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   const la = (lookQ * TAU) / steps;
   spritePose.lookX = Math.cos(la);
   spritePose.lookY = Math.sin(la);
+  const sunQ = ((Math.round((Math.atan2(p.sunY, p.sunX) * steps) / TAU) % steps) + steps) % steps;
+  const sa = (sunQ * TAU) / steps;
+  spritePose.sunX = Math.cos(sa);
+  spritePose.sunY = Math.sin(sa);
   const nightQ = Math.round(Math.max(0, Math.min(1, p.night)) * NIGHT_STEPS);
   spritePose.night = nightQ / NIGHT_STEPS;
   // The shade tint follows the quantized night too (the palette's continuous one would redraw the
@@ -1135,7 +1214,7 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   const happy = a.happy > 0 || a.phew > 0 ? 1 : 0;
   const low = spritePose.chill < 0.3 ? 1 : 0;
   const key =
-    ((((((((chillQ * 72 + lookQ) * 32 + tints) * 33 + nightQ) * 2 + lit) * 2 + glare) * 2 + blink) * 2 + happy) * 2 + low) * 2 +
+    (((((((((chillQ * 72 + lookQ) * 72 + sunQ) * 32 + tints) * 33 + nightQ) * 2 + lit) * 2 + glare) * 2 + blink) * 2 + happy) * 2 + low) * 2 +
     (p.sunUp ? 1 : 0);
 
   const G = nubsGeom(spritePose, sp.geom);
@@ -1186,7 +1265,7 @@ export function drawNubsSprite(g: CanvasRenderingContext2D, sp: NubsSprite, x: n
   const ox = ORIGIN_X * sp.scale;
   const oy = ORIGIN_Y * sp.scale;
   g.save();
-  g.translate(x + sp.jx, y);
+  g.translate(x + sp.jx, y - sp.dy);
   if (sp.rot !== 0) g.rotate(sp.rot);
   // Device px from here on, like the layers.
   g.scale(sp.sx * k, sp.sy * k);
@@ -1198,16 +1277,58 @@ export function drawNubsSprite(g: CanvasRenderingContext2D, sp: NubsSprite, x: n
   g.restore();
 }
 
-/** Nubs' screen-space box (CSS px) around a ground point, for occlusion tests. */
+/** Nubs' screen-space box (CSS px) around a ground point (body, head and hat), for occlusion tests. */
 export function nubsBox(x: number, y: number, S: number, out: Float64Array): void {
-  out[0] = x - 16 * S;
-  out[1] = y - 34 * S;
-  out[2] = x + 16 * S;
-  out[3] = y + 8 * S;
+  out[0] = x - 19 * S;
+  out[1] = y - 44 * S;
+  out[2] = x + 19 * S;
+  out[3] = y + 10 * S;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Wardrobe preview
+/** The hat sprite's size (u) and where the hat's base sits in it (u from the left and top). */
+export const HAT_SPRITE_U = 30;
+export const HAT_BASE_X = 15;
+export const HAT_BASE_Y = 22;
+
+/**
+ * The equipped hat on its own (or, bareheaded, the scarf's knot as a little bow), drawn into `c` at
+ * `pxPerU` device px per u: the death beat's pop-off.
+ */
+export function renderHatSprite(c: Canvas2D, looks: Looks, pxPerU: number): void {
+  const n = Math.ceil(HAT_SPRITE_U * pxPerU);
+  c.width = n;
+  c.height = n;
+  const g = ctx2d(c);
+  const U = pxPerU * NUBS_SCALE;
+  g.setTransform(1, 0, 0, 1, HAT_BASE_X * pxPerU, HAT_BASE_Y * pxPerU);
+  if (looks.hat.shape !== 'none') {
+    // The head's top at the base point: headY − headR = 0.
+    drawHat(g, looks.hat, U, 7.5 * U, 7.5 * U, 0);
+    return;
+  }
+  const s = looks.scarf;
+  const main = s.pattern === 'rainbow' ? (s.stripes[0] as string) : s.main;
+  g.fillStyle = main;
+  g.strokeStyle = s.shade;
+  g.lineWidth = 0.6 * U;
+  g.lineJoin = 'round';
+  g.beginPath();
+  for (const side of [-1, 1]) {
+    g.moveTo(0, -2 * U);
+    g.lineTo(side * 4.2 * U, -4.2 * U);
+    g.lineTo(side * 4.2 * U, 0.2 * U);
+    g.closePath();
+  }
+  g.fill();
+  g.stroke();
+  g.beginPath();
+  g.arc(0, -2 * U, 1.5 * U, 0, TAU);
+  g.fill();
+  g.stroke();
+}
+
 // ---------------------------------------------------------------------------------------------
 
 const previewAnim = createNubsAnim();
@@ -1241,8 +1362,8 @@ export function renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equip
   pose.w3 = 0;
   pose.w4 = 0;
   pose.f = 0;
-  pose.lookX = 0.55;
-  pose.lookY = 0.35;
+  pose.lookX = pose.sunX = 0.55;
+  pose.lookY = pose.sunY = 0.35;
   pose.sunUp = true;
   pose.walking = false;
   pose.melt = -1;

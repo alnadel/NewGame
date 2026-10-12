@@ -5,7 +5,8 @@
 // - Menus (Settings, Daily, Missions, Wardrobe: the UI paints an opaque background over the world
 //   rect): one draw on entry, and again only after a resize, a DPR or governor change, or a
 //   canvas-affecting setting (high contrast, the equipped cosmetics). Nothing animates behind them.
-// - Pause: at most 30 fps. The Title under reduced motion: at most 10 fps.
+// - Pause: at most 30 fps. The Title under reduced motion: at most 10 fps. The settled Results (the
+//   Melt Map has stopped moving and only the puddle ring pulses: renderer.settled): at most 20 fps.
 // - Play, dying, Results and the Title: at most 60 fps on fast displays (90/120/144 Hz), on a 60 Hz
 //   timeline so a 90 Hz display still gets 60 (frames 11 and 22 ms apart) rather than 45; but every
 //   rAF while a finger or a key is down (lowest latency under the thumb) or while the clock runs
@@ -24,12 +25,15 @@ export interface CadenceInput {
   /** The game clock's time scale (1 = normal; hit-stop 0, slow-mo, the lesson's slow time). */
   timeScale: number;
   reducedMotion: boolean;
+  /** The last drawn frame was the settled Results (renderer.settled). */
+  settled: boolean;
 }
 
 /** Frame intervals (ms) of the capped screens. */
 export const FRAME_60 = 1000 / 60;
 export const FRAME_PAUSE = 1000 / 30;
 export const FRAME_TITLE_RM = 1000 / 10;
+export const FRAME_SETTLED = 50;
 /**
  * A frame may come this much early on its timeline (rAF timestamps jitter by a fraction of a ms;
  * on a 120 Hz display the 60 fps slot falls every other frame either way).
@@ -62,6 +66,9 @@ export class Cadence {
         return FRAME_PAUSE;
       case 'title':
         if (inp.reducedMotion) return FRAME_TITLE_RM;
+        break;
+      case 'results':
+        if (inp.settled) return FRAME_SETTLED;
         break;
       default:
         break;

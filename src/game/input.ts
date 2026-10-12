@@ -8,7 +8,11 @@
 //   lostpointercapture counts as pointerup.
 // - Release velocity: requested-angle samples of the last 80 ms; 0 if the newest is > 50 ms old.
 // - dTheta is quantized to 1/1024° and release to 1/64 °/s so live play equals replays.
-// - Keys: arrows and A/D only. Escape/P/Enter/Space belong to the UI.
+// - Keys: arrows and A/D only (key ±1; with Shift held, ±2 = the sim's fine rate). Escape/P/Enter/
+//   Space belong to the UI.
+// - Wheel (CC-6): each wheel event is one synthetic tap frame (catch and release at 0 °/s) turning
+//   −15°·sign(deltaY) per notch (line mode) or −0.35°·deltaY (pixel mode), at most ±45° per event,
+//   ignored while a pointer is down; on the Title it starts the run like a key.
 
 import type { InputFrame } from '../core/index.ts';
 
@@ -17,6 +21,10 @@ const BOTTOM_EXTRA = 16;
 const RING = 16;
 const VEL_WINDOW_MS = 80;
 const VEL_STALE_MS = 50;
+/** Wheel turn per notch (line mode), per pixel (pixel mode), and its cap per event (degrees). */
+const WHEEL_NOTCH = 15;
+const WHEEL_PX = 0.35;
+const WHEEL_MAX = 45;
 
 const qTheta = (d: number): number => Math.round(d * 1024) / 1024;
 const qRelease = (w: number): number => Math.round(w * 64) / 64;
@@ -63,6 +71,8 @@ export class Input {
   private release = 0;
   private keyL = false;
   private keyR = false;
+  /** Shift is held: rotation keys turn at the fine rate. */
+  private shift = false;
   private readonly sT = new Float64Array(RING);
   private readonly sA = new Float64Array(RING);
   private sN = 0;
@@ -85,6 +95,7 @@ export class Input {
     this.on(c, 'contextmenu', (e) => e.preventDefault(), { passive: false });
     this.on(window, 'keydown', (e) => this.onKey(e as KeyboardEvent, true), false);
     this.on(window, 'keyup', (e) => this.onKey(e as KeyboardEvent, false), false);
+    this.on(window, 'wheel', (e) => this.onWheel(e as WheelEvent), { passive: false });
     this.on(window, 'blur', () => this.releaseAll(), false);
   }
 
@@ -198,6 +209,7 @@ export class Input {
 
   private onKey(e: KeyboardEvent, down: boolean): void {
     const k = e.key;
+    this.shift = e.shiftKey;
     let left = false;
     let right = false;
     if (k === 'ArrowLeft' || k === 'a' || k === 'A') left = true;
@@ -220,6 +232,17 @@ export class Input {
     }
   }
 
+  /** A wheel turn: one synthetic tap frame with the event's (capped) turn. */
+  private onWheel(e: WheelEvent): void {
+    if (this.held || e.deltaY === 0 || isControl(e.target) || !this.host.accepting()) return;
+    e.preventDefault();
+    const d = e.deltaMode === 1 ? -WHEEL_NOTCH * Math.sign(e.deltaY) : -WHEEL_PX * e.deltaY;
+    this.pending += Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, d));
+    this.presses++;
+    this.host.onPress();
+    this.tap();
+  }
+
   /** Drops any finger, keys and pending motion (pause, resume, new run, blur). */
   releaseAll(): void {
     if (this.held && this.active >= 0) {
@@ -233,6 +256,7 @@ export class Input {
     this.active = -1;
     this.keyL = false;
     this.keyR = false;
+    this.shift = false;
     this.clearPending();
   }
 
@@ -262,7 +286,9 @@ export class Input {
     this.out.length = 0;
     if (n <= 0) return this.out;
     while (this.frames.length < n) this.frames.push(newFrame());
-    const key: -1 | 0 | 1 = this.keyL && !this.keyR ? 1 : this.keyR && !this.keyL ? -1 : 0;
+    const dir = this.keyL && !this.keyR ? 1 : this.keyR && !this.keyL ? -1 : 0;
+    // V11-SHIM: CC-6 — InputFrame.key widens to -2 | -1 | 0 | 1 | 2 (drop the cast).
+    const key = (this.shift ? 2 * dir : dir) as InputFrame['key'];
     const per = qTheta(this.pending / n);
     this.pending -= per * n;
     if (Math.abs(this.pending) < 1e-9) this.pending = 0;

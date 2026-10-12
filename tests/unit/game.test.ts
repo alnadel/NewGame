@@ -57,7 +57,7 @@ describe('ghost-thumb hints (V1_PLAN §6.2)', () => {
     theta: 20,
     dragging: false,
     invert: false,
-    lessonPending: false,
+    lessonOn: false,
     ...over,
   });
   it('shows after 0.3 s lit, toward the shade, at most 3 times, profiles 0-1 only', () => {
@@ -104,29 +104,32 @@ describe('ghost-thumb hints (V1_PLAN §6.2)', () => {
     h.update(0.31, input({ now: m, next: m }));
     expect(h.targetW).toBe(61);
   });
-  it('runs the first lesson until a swing ends in shade, then plain hints', () => {
+  it('loops lesson hints while the sim lesson is on, then plain hints (A5: the sim decides the pass)', () => {
     const h = new HintTracker();
-    const lit = input({ lessonPending: true });
+    const lit = input({ lessonOn: true });
     expect(h.update(0.31, lit)).toBe(true);
-    expect(h.lesson).toBe(true);
+    expect([h.lesson, h.lessonStarted]).toEqual([true, true]);
     // No timeout: still on long after a plain hint would have ended.
     for (let i = 0; i < 50; i++) h.update(0.1, lit);
     expect(h.lesson).toBe(true);
     expect(h.showing(false)).toBe(true);
     expect(h.showing(true)).toBe(false); // the thumb hides while a finger is down
-    // A shadow passing over an idle Nubs ends it without passing.
-    for (let i = 0; i < 4; i++) h.update(0.1, input({ lessonPending: true, f: 0 }));
+    // Nubs in shade (a passing shadow, or the player's swing): the hint rests, the lesson goes on.
+    for (let i = 0; i < 4; i++) h.update(0.1, input({ lessonOn: true, f: 0 }));
     expect(h.lesson).toBe(false);
-    expect(h.lessonPassed).toBe(false);
-    // Lit again: the lesson returns; a 100° swing into the arc passes it.
-    expect(h.update(0.31, lit)).toBe(true);
+    expect(h.lessonStarted).toBe(true);
+    // Lit again: the lesson hint returns, and lesson hints never run out.
+    for (let k = 0; k < 5; k++) {
+      expect(h.update(0.31, lit)).toBe(true);
+      expect(h.lesson).toBe(true);
+      for (let i = 0; i < 4; i++) h.update(0.1, input({ lessonOn: true, f: 0 }));
+    }
+    // The sim ends the lesson (lessonDone): the playing hint stops, later hints are plain ones.
+    h.update(0.31, lit);
     expect(h.lesson).toBe(true);
-    for (let th = 20; th <= 120; th += 10) h.update(0.05, input({ lessonPending: true, theta: th, dragging: true }));
-    for (let i = 0; i < 6; i++) h.update(0.05, input({ lessonPending: true, theta: 120, f: 0 }));
+    h.update(0.05, input({ lessonOn: false }));
     expect(h.lesson).toBe(false);
-    expect(h.lessonPassed).toBe(true);
-    // Later hints are plain ones (they time out).
-    expect(h.update(0.31, input({ lessonPending: false }))).toBe(true);
+    expect(h.update(0.31, input({ lessonOn: false }))).toBe(true);
     expect(h.lesson).toBe(false);
     expect(h.active).toBeGreaterThan(0);
   });
@@ -192,6 +195,14 @@ describe('URL params', () => {
     expect(parseParams('?bot=nope&fast=-3').bot).toBeNull();
     expect(parseParams('?mode=daily&date=2026-10-11').date).toBe('2026-10-11');
   });
+  it('parses ?forecast=, ?rung= and ?plan= (v1.1 debug params)', () => {
+    const p = parseParams('?forecast=heat&rung=2&plan=0');
+    expect([p.forecast, p.rung, p.plan]).toEqual(['heat', 2, false]);
+    expect(parseParams('?plan=1').plan).toBe(true);
+    const bad = parseParams('?forecast=snow&rung=9&plan=yes');
+    expect([bad.forecast, bad.rung, bad.plan]).toEqual([null, null, null]);
+    expect(parseParams('?rung=0').rung).toBe(0);
+  });
   it('accepts a Daily date from the epoch to tomorrow only', () => {
     const today = '2026-10-11';
     expect(parseParams('?mode=daily&date=2026-01-01', today).date).toBe('2026-01-01');
@@ -207,7 +218,7 @@ describe('URL params', () => {
     expect(isDebugRun(parseParams(''))).toBe(false);
     expect(isDebugRun(parseParams('?seed=7&test=1&mute=1&debug=1&perf=0'))).toBe(false);
     expect(isDebugRun(parseParams('?mode=daily&date=2026-10-01'))).toBe(false);
-    for (const q of ['?day=7', '?t=noon', '?chill=20', '?profile=3', '?bot=oracle', '?fast=4', '?guide=always']) {
+    for (const q of ['?day=7', '?t=noon', '?chill=20', '?profile=3', '?bot=oracle', '?fast=4', '?guide=always', '?forecast=breezy', '?rung=1', '?plan=0']) {
       expect(isDebugRun(parseParams(q))).toBe(true);
     }
     expect(isDebugRun(parseParams('?fast=1'))).toBe(false);
@@ -295,6 +306,42 @@ describe('input frames (V1_PLAN §3.1)', () => {
     inp.dispose();
   });
 
+  it('a wheel event is one tap frame turning 15° per notch or 0.35° per pixel, capped at 45° (CC-6)', () => {
+    const inp = new Input(host);
+    const wheel = (deltaY: number, deltaMode: number): void =>
+      (inp as unknown as { onWheel(e: WheelEvent): void }).onWheel({ deltaY, deltaMode, target: null, preventDefault: () => {} } as unknown as WheelEvent);
+    wheel(3, 1);
+    let f = inp.takeFrames(1);
+    expect(f[0]!.downEdge && f[0]!.upEdge).toBe(true);
+    expect([f[0]!.dTheta, f[0]!.release, f[0]!.down]).toEqual([-15, 0, false]);
+    wheel(-40, 0);
+    expect(inp.takeFrames(1)[0]!.dTheta).toBe(14);
+    wheel(1000, 0);
+    f = inp.takeFrames(3);
+    expect(f[0]!.downEdge && f[2]!.upEdge).toBe(true);
+    expect(f[0]!.dTheta + f[1]!.dTheta + f[2]!.dTheta).toBe(-45);
+    // Ignored while a finger is down.
+    inp.begin(ev(200, 0));
+    inp.takeFrames(1);
+    wheel(3, 1);
+    expect(inp.takeFrames(1)[0]!.dTheta).toBe(0);
+    inp.dispose();
+  });
+
+  it('Shift turns the rotation keys to the fine rate (key ±2)', () => {
+    const inp = new Input(host);
+    const key = (k: string, down: boolean, shiftKey: boolean): void =>
+      (inp as unknown as { onKey(e: KeyboardEvent, d: boolean): void }).onKey({ key: k, shiftKey, repeat: false, target: null, preventDefault: () => {} } as unknown as KeyboardEvent, down);
+    key('ArrowLeft', true, false);
+    expect(inp.takeFrames(1)[0]!.key).toBe(1);
+    key('ArrowLeft', true, true);
+    expect(inp.takeFrames(1)[0]!.key).toBe(2);
+    key('ArrowLeft', false, true);
+    key('d', true, true);
+    expect(inp.takeFrames(1)[0]!.key).toBe(-2);
+    inp.dispose();
+  });
+
   it('pointercancel releases at 0 °/s', () => {
     const inp = new Input(host);
     const mv = inp as unknown as { moveTo(x: number, t: number): void; onUp(e: PointerEvent, c: boolean): void };
@@ -341,7 +388,7 @@ describe('perf governor (TECH_SPEC §15)', () => {
     expect(g.level).toBeGreaterThanOrEqual(1);
   });
 
-  it('steps down one notch per 3 s on a 60 Hz display that keeps missing frames', () => {
+  it('steps down one notch per 3 s over the 4-level ladder on a 60 Hz display that keeps missing frames', () => {
     const g = new Governor();
     // Every other frame misses vsync: 16.7 / 33.3 ms (mean 25), light JS (the cost is raster).
     feed(g, 6.5, (i) => (i % 2 ? 33.3 : 16.7), 3);
@@ -351,9 +398,13 @@ describe('perf governor (TECH_SPEC §15)', () => {
     feed(g, 3.2, (i) => (i % 2 ? 33.3 : 16.7), 3);
     expect(g.level).toBe(2);
     expect(g.dprScale).toBe(0.75);
+    expect(g.particleCap).toBe(400);
+    feed(g, 3.2, (i) => (i % 2 ? 33.3 : 16.7), 3);
+    expect(g.level).toBe(3);
+    expect([g.softShadows, g.dprScale, g.particleCap]).toEqual([false, 0.625, 200]);
+    // Level 3 is the floor of the ladder.
     feed(g, 30, (i) => (i % 2 ? 33.3 : 16.7), 3);
-    expect(g.level).toBe(5);
-    expect([g.dprScale, g.particleCap, g.detail]).toEqual([0.625, 200, false]);
+    expect(g.level).toBe(3);
   });
 
   it('starts low-end devices at crisp shadows and never steps back above that', () => {
@@ -419,7 +470,7 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
     const frames = Math.round((seconds * 1000) / ms);
     for (let i = 1; i <= frames; i++) {
       const now = 1000 + i * ms + (jitter ? Math.sin(i * 12.9898) * jitter : 0);
-      const inp: CadenceInput = { now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, ...over };
+      const inp: CadenceInput = { now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, settled: false, ...over };
       if (c.shouldDraw(inp)) {
         c.drawn(now);
         draws++;
@@ -464,6 +515,16 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
     expect(title).toBeGreaterThanOrEqual(9);
     expect(title).toBeLessThanOrEqual(11);
     expect(run(new Cadence(), 4, 16.7, { screen: 'title' })).toBeGreaterThanOrEqual(59);
+  });
+
+  it('draws the settled Results at 20 fps (GR4), and at full rate until they settle', () => {
+    const settled = run(new Cadence(), 4, 1000 / 60, { screen: 'results', settled: true });
+    expect(settled).toBeGreaterThanOrEqual(19);
+    expect(settled).toBeLessThanOrEqual(21);
+    expect(run(new Cadence(), 4, 1000 / 120, { screen: 'results', settled: true })).toBeLessThanOrEqual(21);
+    expect(run(new Cadence(), 4, 1000 / 60, { screen: 'results' })).toBeGreaterThanOrEqual(59);
+    // The flag only applies to the Results.
+    expect(run(new Cadence(), 4, 1000 / 60, { screen: 'play', settled: true })).toBeGreaterThanOrEqual(59);
   });
 
   it('draws a menu once, and again only when invalidated or the screen changes', () => {

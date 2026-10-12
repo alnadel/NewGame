@@ -88,11 +88,9 @@ const HINT_SECONDS = 1.6;
 const TURN_HYSTERESIS = 20;
 /** A tracked target is the same arc while a candidate arc reaches within this many degrees of it. */
 const TRACK_SLACK = 15;
-/** The lesson is passed by a swing of at least this many degrees that ends in full shade... */
-const LESSON_SWING = 15;
-/** ...held for this long (s). */
+/** The lesson hint rests once Nubs has been fully shaded this long (s), until he is lit again. */
 const LESSON_SHADE = 0.25;
-/** A lesson whose target has been gone this long (s) ends unpassed. */
+/** A lesson hint whose target has been gone this long (s) stops (it returns when Nubs is lit). */
 const LESSON_LOST = 0.5;
 /** Gaps of up to this many degrees inside a safe region don't split it into two targets. */
 const MERGE_GAP = 6;
@@ -113,23 +111,25 @@ export interface HintInput {
   dragging: boolean;
   /** Settings → invert: a rightward drag turns the sun counter-clockwise. */
   invert: boolean;
-  /** The first lesson has not been passed yet (it is offered in profiles 0-1 until it is). */
-  lessonPending: boolean;
+  /** The sim's first-run lesson is on (SimState.lessonOn: the Chill floor, until lessonDone). */
+  lessonOn: boolean;
 }
 
 const MAX_ARCS = 180;
 
 /**
- * Per-run ghost-thumb hint state (profiles 0-1 only, at most 3 per run), V1_PLAN §6.2.
+ * Per-run ghost-thumb hint state (profiles 0-1 only, at most 3 plain hints per run), V1_PLAN §6.2.
  *
  * - **Target:** the widest arc that is safe now and still safe 0.6 s ahead (the arc that lasts),
  *   else the widest arc safe now; at least 10° wide.
  * - **Direction:** the short way round to the target's center, but sticky: while the same arc
  *   exists (tracked as it drifts) and the two ways round are within 20° of a half-turn, the first
  *   direction is kept, so a hint never flips sides on an unchanged sun.
- * - **Lesson:** while the first lesson is pending, the first hint of a run does not time out. It
- *   loops (the session slows time to LESSON_TIME_SCALE meanwhile) until a swing of ≥ 15° ends with
- *   Nubs fully shaded for 0.25 s (passed), the target arc is gone for 0.5 s, or the sun sets.
+ * - **Lesson (A5):** while the sim's lesson is on, hints are lesson hints: they don't time out or
+ *   count against the 3, and loop until Nubs is fully shaded for 0.25 s (the hint rests and comes
+ *   back when he is lit again), the target arc is gone for 0.5 s, the sun sets, or the lesson ends.
+ *   The sim decides the pass (lessonDone); the session slows time to LESSON_TIME_SCALE from the
+ *   first lesson hint (`lessonStarted`) until the lesson ends.
  */
 export class HintTracker {
   shown = 0;
@@ -142,30 +142,30 @@ export class HintTracker {
   /** Target arc center and width (degrees); NaN center when there is no target. */
   target = NaN;
   targetW = 0;
-  /** The first lesson is playing (time runs slow, the hint loops until a successful swing). */
+  /** A lesson hint is playing (it loops until Nubs finds shade). */
   lesson = false;
-  /** Latched when the lesson is passed in this run (the session saves it once). */
-  lessonPassed = false;
+  /** A lesson hint has shown in this run (latched: the lesson's slow time runs from here). */
+  lessonStarted = false;
+  /** Plain (non-lesson) hints shown this run. */
+  private plain = 0;
   private lit = 0;
   private lessonLost = 0;
-  private lessonMoved = 0;
   private lessonShade = 0;
-  private lastTheta = NaN;
   private readonly arcStart = new Int16Array(MAX_ARCS);
   private readonly arcWidth = new Int16Array(MAX_ARCS);
   private readonly stable = new Uint8Array(360);
 
   reset(): void {
     this.shown = 0;
+    this.plain = 0;
     this.lit = 0;
     this.active = 0;
     this.turn = 0;
     this.target = NaN;
     this.targetW = 0;
     this.lesson = false;
-    this.lessonPassed = false;
+    this.lessonStarted = false;
     this.lessonLost = 0;
-    this.lastTheta = NaN;
   }
 
   /** The ghost thumb should be on screen now (the lesson hides it while a finger is down). */
@@ -194,8 +194,6 @@ export class HintTracker {
    */
   update(dt: number, p: HintInput): boolean {
     if (this.active > 0) this.active = Math.max(0, this.active - dt);
-    const moved = Number.isNaN(this.lastTheta) ? 0 : Math.abs(angleDiff(p.theta, this.lastTheta));
-    this.lastTheta = p.theta;
     if (p.profile > 1 || !p.sunUp) {
       this.stop();
       return false;
@@ -203,12 +201,9 @@ export class HintTracker {
     this.lit = p.f > 0 ? this.lit + dt : 0;
 
     if (this.lesson) {
-      this.lessonMoved += moved;
       this.lessonShade = p.f === 0 ? this.lessonShade + dt : 0;
-      if (this.lessonShade >= LESSON_SHADE) {
-        // Shaded again: passed if the player swung the sun there, otherwise a shadow came by (the
-        // lesson stays pending and returns the next time Nubs is lit).
-        if (this.lessonMoved >= LESSON_SWING) this.lessonPassed = true;
+      if (!p.lessonOn || this.lessonShade >= LESSON_SHADE) {
+        // The lesson ended, or Nubs is in shade: the hint rests (it returns when he is lit again).
         this.lesson = false;
         this.lit = 0;
         return false;
@@ -221,16 +216,17 @@ export class HintTracker {
       this.track(p);
       return false;
     }
-    if (this.shown >= MAX_HINTS || p.dragging || this.lit < LIT_BEFORE_HINT) return false;
+    if ((!p.lessonOn && this.plain >= MAX_HINTS) || p.dragging || this.lit < LIT_BEFORE_HINT) return false;
     if (!this.track(p)) return false;
     this.shown++;
     this.lit = 0;
-    if (p.lessonPending && !this.lessonPassed) {
+    if (p.lessonOn) {
       this.lesson = true;
+      this.lessonStarted = true;
       this.lessonLost = 0;
-      this.lessonMoved = 0;
       this.lessonShade = 0;
     } else {
+      this.plain++;
       this.active = HINT_SECONDS;
     }
     return true;

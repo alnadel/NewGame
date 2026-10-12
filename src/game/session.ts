@@ -9,17 +9,17 @@ import {
   createSnap,
   dayTicks,
   effectiveDrain,
-  endlessDrain,
+  formatTimeOfDay,
   generateSome,
   lerpSnap,
   prepareRun,
   prepareSome,
+  splitMinutes,
   step,
   takeSnap,
   TUNING,
   type Bot,
   type BotKind,
-  type ProfileId,
   type RenderSnap,
   type RunBuild,
   type RunConfig,
@@ -41,6 +41,7 @@ import {
   dailyProgress,
   dailyTryStarted,
   equipCosmetic,
+  isDailyUnlocked,
   resetProgress,
   shouldShowInstallSheet,
   type RunOutcome,
@@ -61,13 +62,18 @@ import {
 import { readSafeArea, onSafeAreaChange } from '../platform/safeArea.ts';
 import { shareText } from '../platform/share.ts';
 import { requestPersistence } from '../platform/storage.ts';
-import { Renderer, type DebugDraw, type RenderInput, type RenderScreen } from '../render/renderer.ts';
+import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
+import { resetDeathBeat } from '../render/deathbeat.ts';
 import { renderWardrobePreview, resetNubsAnim } from '../render/nubs.ts';
+import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
+import { createPostcardJob, postcardName, stepPostcard, type PostcardJob } from '../render/postcard.ts';
+import { renderSunPreview } from '../render/sun.ts';
+import { logoLayers } from '../ui/art.ts';
 import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
-import type { ChallengeBanner, ImportOutcome, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
+import type { ImportOutcome, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
@@ -77,10 +83,59 @@ import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
+import {
+  biomeAtWorld,
+  COMFORT_MAX,
+  createParJob,
+  type ParJob,
+  deathRecap,
+  deathTip,
+  effectiveNoonCloud,
+  forecastOf,
+  lessonOnOf,
+  lessonShimTick,
+  PLAN_START_DATE,
+  planOnOf,
+  rungConfig,
+  shadesLook,
+  worldPlan,
+  type RunConfigV11,
+  type SimEventV11,
+} from '../render/shims.ts';
+import {
+  challengeRules,
+  comfortOn,
+  comfortStat,
+  historyLength,
+  nextMilestone,
+  recentBest,
+  uiV11,
+  type ApplyRunOptionsV11,
+  type ChallengeBannerV11,
+  type CueId,
+  type ResultsViewV11,
+  dailyPar,
+  setDailyPar,
+  shareFiles,
+  type ShareOutcomeV11,
+  swapMission,
+  type UiCallbacksV11,
+} from './shims.ts';
+import type { StampKind } from '../render/banners.ts';
 
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
+/** The par job's share of an idle frame (A13: ≤ 3 ms) and its sim chunk. */
+const PAR_MS = 3;
+const PAR_TICKS = 6;
+
+/** Runs `fn` in idle time (a frame later where requestIdleCallback is missing). */
+function idle(fn: () => void): void {
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (ric) ric(fn, { timeout: 400 });
+  else setTimeout(fn, 16);
+}
 /**
  * Real ms per frame spent building the next run's world while a death or the Results play: 2.5 ms,
  * or up to a tenth of the frame interval on slow devices (≤ 10 ms), so it is done before Retry.
@@ -130,6 +185,14 @@ export interface MapProbe {
   png: string;
 }
 
+/** pixelAB() result: per-pixel max-channel differences between two renders of one frame. */
+export interface PixelAB {
+  mean: number;
+  over3: number;
+  over8: number;
+  max: number;
+}
+
 export interface DebugStats {
   fps: number;
   frameMs: number;
@@ -137,10 +200,6 @@ export interface DebugStats {
   genMs: number;
   renderMs: number;
   ticks: number;
-}
-
-function profileFor(runs: number): ProfileId {
-  return runs >= 3 ? 3 : (runs as ProfileId);
 }
 
 /** A challenge the game can play: k:'d' dates must be in bounds (params.ts dailyDateInBounds). */
@@ -174,7 +233,7 @@ export class Session {
   readonly fx: Fx;
   readonly gov = new Governor();
   readonly cadence = new Cadence();
-  private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false };
+  private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false, settled: false };
   readonly stats: DebugStats = { fps: 60, frameMs: 0, simMs: 0, genMs: 0, renderMs: 0, ticks: 0 };
 
   private readonly d: SessionDeps;
@@ -187,8 +246,8 @@ export class Session {
   private readonly audioView: AudioView = createAudioView();
   private readonly hints = new HintTracker();
   private readonly hintIn: HintInput;
-  /** The first lesson is still to be passed in this run (profiles 0-1 until the save says done). */
-  private lessonPending = false;
+  /** Cues shown this run (bit per CueId: each at most once per run). */
+  private cues = 0;
   /** Eased visibility of the hint on the halo dial. */
   private hintAlpha = 0;
   private readonly renderIn: RenderInput;
@@ -213,11 +272,26 @@ export class Session {
   private nextRun: SimState | null = null;
   /** The next endless run while its world is still being generated in slices (see stepPrebuild). */
   private nextBuild: RunBuild | null = null;
+  private nextBuildRung = -1;
+  /** The comfort rung a run was built at (endless runs from the ladder; others are absent). */
+  private readonly rungOf = new WeakMap<SimState, number>();
+  /** The rung the last runConfig() built (−1: not from the ladder). */
+  private cfgRung = -1;
+  /** The rung the current run is played at (−1: not an endless ladder run). */
+  private runRung = -1;
   private runActive = false;
   /** Guide "Always" was on at some point of this run (latched: the share's compass marker). */
   private runAssisted = false;
   /** The best the HUD flags during this run, read when it began (checkpoints must not move it). */
   private runPb = -1;
+  /** The next milestone the HUD ticks during this run (−1 none), read when it began. */
+  private runGoal = -1;
+  /** This run is the warm-up a first-time player plays before a friend's challenge (its Retry takes the challenge). */
+  private warmup: Challenge | null = null;
+  /** The in-run stamp still to come: the score that triggers it (−1 none), its look and text. */
+  private stampAt = -1;
+  private stampKind: StampKind = 'teal';
+  private stampText = '';
   /**
    * Sim-altering debug URL params are present (?day, ?t, ?chill, ?profile, ?bot, ?fast, ?guide):
    * such runs are not scored, saved, shared or counted as Daily tries.
@@ -230,6 +304,22 @@ export class Session {
   private resultsAt = -1;
   private result: RunResult | null = null;
   private outcome: RunOutcome | null = null;
+  /** The death recap's line of advice for the Results (null: none fits). */
+  private tip: string | null = null;
+  /** Today's Daily par job (Snowbot) and the date it is for. */
+  private parJob: ParJob | null = null;
+  private parDate = '';
+  /** The postcard of `postcardFor` (built in idle stages once its Melt Map settles) and its file. */
+  private postcardFor: RunResult | null = null;
+  private postcardJob: PostcardJob | null = null;
+  private postcardFile: File | null = null;
+  private postcardUrl: string | null = null;
+  private logoImages: HTMLImageElement[] | null = null;
+
+  /** Test hook: the last Results' recap tip. */
+  get resultsTip(): string | null {
+    return this.tip;
+  }
   private resultsShown = false;
 
   // Frame state.
@@ -237,6 +327,9 @@ export class Session {
   private last = -1;
   private time = 0;
   private swayPhase = 0;
+  /** The Title logo shadow offset last published (CSS px). */
+  private logoShadowX = Number.NaN;
+  private logoShadowY = Number.NaN;
   private swayOut = 0;
   private booted = false;
   private raf = 0;
@@ -307,8 +400,7 @@ export class Session {
         this.syncSentinel();
         return r;
       };
-    this.ui = createUi(deps.uiRoot, {
-      callbacks: {
+    const callbacks: UiCallbacksV11 = {
         startRun: sync((k: RunKind, date?: string) => this.startRun(k, date)),
         retry: sync(() => this.retry()),
         home: sync(() => this.home()),
@@ -374,8 +466,18 @@ export class Session {
           if (this.ui.current() === 'title') this.input.begin(e);
         },
         uiSound: (name) => this.uiSound(name),
-        renderWardrobePreview: (canvas, equipped) => renderWardrobePreview(canvas, equipped),
-      },
+        renderWardrobePreview: (canvas, equipped, subject) =>
+          subject === 'sun' ? renderSunPreview(canvas, shadesLook(equipped)) : renderWardrobePreview(canvas, equipped),
+        swapMission: (slotId) => {
+          const next = swapMission(store.get(), slotId);
+          store.set(next);
+          store.flush();
+          this.ui.setSave(next);
+        },
+        sharePostcard: () => this.sharePostcard(),
+    };
+    this.ui = createUi(deps.uiRoot, {
+      callbacks,
       save,
       today: this.today,
       version: deps.version,
@@ -393,6 +495,7 @@ export class Session {
     this.s = this.createTitleRun();
     this.lifetimeRuns = save.stats.runs;
     this.resetSnaps();
+    this.previewRun();
 
     this.hintIn = {
       profile: 3,
@@ -403,7 +506,7 @@ export class Session {
       theta: 0,
       dragging: false,
       invert: false,
-      lessonPending: false,
+      lessonOn: false,
     };
     this.renderIn = {
       s: this.s,
@@ -415,6 +518,8 @@ export class Session {
       hint: { target: Number.NaN, width: 0, turn: 0, phase: -1, alpha: 0 },
       pbMinutes: -1,
       challengeMinutes: -1,
+      goalMinutes: -1,
+      challengeName: '',
       dying: -1,
       mapT: -1,
       sheetTop: null,
@@ -424,8 +529,8 @@ export class Session {
       highContrast: save.settings.highContrast,
       reducedMotion: false,
       equipped: save.equipped,
-      detail: true,
       softShadows: true,
+      govLevel: 0,
       paused: false,
       debug: null,
     };
@@ -590,6 +695,24 @@ export class Session {
     root.setProperty('--world-height', `${Math.round(v.vh)}px`);
   }
 
+  /**
+   * The Title sundial (GR17, CC-14): the logo's shadow falls the way the world's shadows do, from
+   * the swaying sun, longer when the sun is low (--lsx / --lsy, CSS px; rewritten only when they
+   * move a quarter pixel).
+   */
+  private publishLogoShadow(sway: number): void {
+    const th = ((this.s.sun.theta + sway) * Math.PI) / 180;
+    const k = 6 * (1 + 0.6 * (1 - this.renderer.scene.light.elev));
+    const x = -Math.cos(th) * k;
+    const y = Math.sin(th) * k;
+    if (Math.abs(x - this.logoShadowX) < 0.25 && Math.abs(y - this.logoShadowY) < 0.25) return;
+    this.logoShadowX = x;
+    this.logoShadowY = y;
+    const root = document.documentElement.style;
+    root.setProperty('--lsx', `${x.toFixed(1)}px`);
+    root.setProperty('--lsy', `${y.toFixed(1)}px`);
+  }
+
   private frame(now: number): void {
     const t0 = performance.now();
     const realMs = this.last < 0 ? 16.7 : now - this.last;
@@ -626,6 +749,8 @@ export class Session {
           events.push(ev);
           this.onTickEvent(ev);
         }
+        // V11-SHIM: CC-5 — the v1.0 core has no lesson: emulate its lessonDone (delete with the shim).
+        if (lessonShimTick(s)) this.onTickEvent({ e: 'lessonDone' });
         if (s.phase === 'dead') break;
       }
       if (n > 0) takeSnap(s, this.curr);
@@ -645,12 +770,14 @@ export class Session {
       this.fx.onEvents(events, s);
     }
     this.checkDailyTry();
+    if (stepping) this.checkStamp();
 
     // Idle-time world generation (keeps step() from ever validating a chunk inside a tick).
     const tGen = performance.now();
     if (screen !== 'boot') generateSome(s.world, s.nubs.y + TUNING.world.idleAhead, IDLE_BUDGET);
     // The next run's world is built only while no run is being played.
     if (screen !== 'play' && screen !== 'pause') this.stepPrebuild(Math.min(PREBUILD_MAX_MS, Math.max(PREBUILD_MS, realMs * PREBUILD_SHARE)));
+    if (screen !== 'play' && screen !== 'pause' && screen !== 'dying' && screen !== 'boot') this.stepPar();
     this.stats.genMs = performance.now() - tGen;
 
     const gdt = stepping || screen === 'dying' || screen === 'results' ? this.clock.gameDt : screen === 'pause' ? 0 : real;
@@ -684,8 +811,10 @@ export class Session {
     r.guideAlpha = this.currentGuideAlpha();
     this.fillHintView(real, screenNow);
     const save = this.d.store.get();
-    r.pbMinutes = this.pbMinutes();
+    r.pbMinutes = this.runActive ? this.runPb : this.livePb();
+    r.goalMinutes = this.runActive ? this.runGoal : this.liveGoal();
     r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
+    r.challengeName = this.runChallenge ? challengeRules(this.runChallenge).n : '';
     r.dying = this.deathAt >= 0 ? Math.max(0, this.dyingGame) : -1;
     r.mapT = this.resultsAt >= 0 && screenNow === 'results' ? this.time - this.resultsAt : -1;
     r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
@@ -693,8 +822,8 @@ export class Session {
     r.highContrast = save.settings.highContrast;
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
-    r.detail = this.gov.detail;
     r.softShadows = this.gov.softShadows;
+    r.govLevel = this.gov.level;
     r.paused = this.paused || screenNow === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
 
@@ -708,6 +837,7 @@ export class Session {
     ci.inputActive = inputDown;
     ci.timeScale = this.clock.timeScale;
     ci.reducedMotion = r.reducedMotion;
+    ci.settled = this.renderer.settled;
     const draw = this.cadence.shouldDraw(ci);
     if (draw) {
       r.dt = Math.min(MAX_DRAW_DT, this.drawDt);
@@ -721,6 +851,8 @@ export class Session {
       this.stats.renderMs = performance.now() - tRender;
       this.cadence.drawn(now);
       this.frameDrew = true;
+      if (screenNow === 'results' && this.renderer.settled) this.startPostcard();
+      if (screenNow === 'title') this.publishLogoShadow(r.sway);
     }
     if (r.screen === 'title') {
       // Past the boot frames, keep the play HUD's row built for the held run (change-detected, so
@@ -817,7 +949,19 @@ export class Session {
 
   /** A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`). */
   private makeRun(kind: RunKind, date?: string): SimState {
-    return createRun(this.runConfig(kind, date));
+    const run = createRun(this.runConfig(kind, date));
+    this.rungOf.set(run, this.cfgRung);
+    return run;
+  }
+
+  /**
+   * The comfort rung of the next endless run (A2): the tutorial rung on the very first run, then
+   * the save's rung (at least 1) while adaptive comfort is on, else the standard rules.
+   */
+  private comfortRung(): number {
+    const save = this.d.store.get();
+    if (save.stats.runs === 0) return 0;
+    return comfortOn(save.settings) ? Math.max(1, comfortStat(save)) : COMFORT_MAX;
   }
 
   /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
@@ -825,24 +969,25 @@ export class Session {
     const save = this.d.store.get();
     const p = this.params;
     const rm = this.reducedMotion();
-    let cfg: RunConfig;
+    let cfg: RunConfigV11;
     this.runChallenge = null;
     this.dailyDate = null;
     this.dailyScored = false;
+    this.cfgRung = -1;
     if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
-      cfg = { seed: dailySeed(d), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: d };
-      this.dailyDate = d;
+      cfg = this.dailyConfig(d, rm);
       if (kind === 'endless') this.usedUrlSeed = true;
       this.kind = 'daily';
     } else if (kind === 'challenge' && this.challenge) {
       const c = this.challenge;
       this.runChallenge = c;
       if (c.k === 'd') {
-        cfg = { seed: dailySeed(c.d), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: c.d };
-        this.dailyDate = c.d;
+        cfg = this.dailyConfig(c.d, rm);
       } else {
-        cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: 3, tutorial: false, reducedMotion: rm };
+        // The sender's exact rules (CC-8, A1); never a lesson, hint or cue.
+        const r = challengeRules(c);
+        cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: r.p, tutorial: r.p === 0, reducedMotion: rm, drain: r.dr, noonCloud: r.nc, plan: r.pl === 1 };
       }
       this.kind = 'challenge';
     } else {
@@ -853,11 +998,20 @@ export class Session {
       } else {
         seed = randomSeed();
       }
-      const profile = p.profile ?? profileFor(save.stats.runs);
-      cfg = { seed, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: rm };
-      // K2: endless runs ramp the drain run by run (Daily, challenges, ?profile= and bots keep the
-      // profile's drain).
-      if (p.profile === null && !p.bot) cfg.drain = endlessDrain(save.stats.runs);
+      if (p.profile !== null || p.bot) {
+        // A forced profile or a ?bot= run keeps that profile's own rules (a forced first-run profile
+        // still teaches the lesson until it is passed).
+        const profile = p.profile ?? 3;
+        cfg = { seed, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: rm };
+        if (!p.bot && profile <= 1 && !save.flags.tutorialDone) cfg.lesson = true;
+      } else {
+        // The comfort ladder (A2); ?rung= forces a rung, a forced forecast plays the standard rules.
+        const rung = p.rung ?? (p.forecast !== null ? COMFORT_MAX : this.comfortRung());
+        const r = rungConfig(rung, { tutorialDone: save.flags.tutorialDone });
+        cfg = { seed, mode: 'endless', profile: r.profile, tutorial: r.tutorial, reducedMotion: rm, drain: r.drain, noonCloud: r.noonCloud };
+        if (r.lesson) cfg.lesson = true;
+        this.cfgRung = rung;
+      }
       this.kind = 'endless';
     }
     this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
@@ -866,7 +1020,15 @@ export class Session {
       cfg.profile = p.profile;
       cfg.tutorial = p.profile === 0;
     }
+    if (p.forecast !== null) cfg.forecast = p.forecast;
+    if (p.plan !== null) cfg.plan = p.plan;
     return this.debugStart(cfg);
+  }
+
+  /** A Daily on `date`: the standard rules without the noon cloud; the Day Plan from PLAN_START_DATE (A1). */
+  private dailyConfig(date: string, rm: boolean): RunConfigV11 {
+    this.dailyDate = date;
+    return { seed: dailySeed(date), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: date, noonCloud: 0, plan: date >= PLAN_START_DATE };
   }
 
   /** A Daily of `date` would count as a try now: it is today's and tries are left. */
@@ -874,13 +1036,19 @@ export class Session {
     return !this.debugRuns && date === localDate() && dailyStatus(this.d.store.get(), date).tries < DAILY_TRIES;
   }
 
+  /** A challenge is open on a save that has never finished a run: the tutorial run comes first. */
+  private inWarmup(): boolean {
+    return this.challenge !== null && this.d.store.get().stats.runs === 0;
+  }
+
   /**
    * The Title's live scene, held at dawn: the challenge run while a challenge link is open (so a
-   * press on the canvas or a tray drag starts it), otherwise the next endless run.
+   * press on the canvas or a tray drag starts it) unless the tutorial warm-up comes first,
+   * otherwise the next endless run.
    */
   private createTitleRun(): SimState {
     this.finishPrebuild();
-    if (this.challenge) return this.makeRun('challenge');
+    if (this.challenge && !this.inWarmup()) return this.makeRun('challenge');
     if (this.nextRun && this.nextRun.cfg.mode === 'endless' && this.nextRun.phase === 'hold') {
       const r = this.nextRun;
       this.nextRun = null;
@@ -901,6 +1069,7 @@ export class Session {
     this.nextRun = null;
     this.nextBuild = null;
     if (this.runActive) return;
+    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
     this.lifetimeRuns = this.d.store.get().stats.runs;
     this.runRm = this.reducedMotion();
     this.s = this.createTitleRun();
@@ -908,6 +1077,13 @@ export class Session {
     this.resetSnaps();
     this.resetRender();
     this.cadence.invalidate();
+    this.previewRun();
+  }
+
+  /** Tells the Title which Day 1 the held run plays (null for plan-off worlds). */
+  private previewRun(): void {
+    const w = this.s.world;
+    uiV11(this.ui).setRunPreview?.(planOnOf(w) ? worldPlan(w, 1) : null);
   }
 
   private resetSnaps(): void {
@@ -928,6 +1104,7 @@ export class Session {
     Object.assign(sc.cam, createCameraFx());
     sc.cam.reducedMotion = this.reducedMotion();
     sc.sun.guilty = 0;
+    resetDeathBeat(sc.death);
     sc.relief = 0;
     sc.mapReady = false;
     sc.hud.multPop = 0;
@@ -941,6 +1118,7 @@ export class Session {
   private beginRun(run: SimState, keepInput = false): void {
     this.s = run;
     this.renderIn.s = run;
+    this.dropPostcard();
     this.resetSnaps();
     this.resetRender();
     this.clock.reset();
@@ -951,9 +1129,10 @@ export class Session {
     this.melody = [];
     this.hints.reset();
     this.hintAlpha = 0;
+    this.cues = 0;
+    this.runRung = this.rungOf.get(run) ?? -1;
     const store = this.d.store;
     const save = store.get();
-    this.lessonPending = run.cfg.profile <= 1 && !save.flags.tutorialDone;
     this.dailyTry = null;
     this.dailyCounted = false;
     // Eligibility is decided when the run begins (the Title may have held it since yesterday).
@@ -968,7 +1147,10 @@ export class Session {
     this.runActive = true;
     this.runAssisted = (this.params.guide ?? save.settings.guide) === 'always';
     this.runPb = this.livePb();
+    this.runGoal = this.liveGoal();
     this.lifetimeRuns = save.stats.runs;
+    this.warmup = run.cfg.mode === 'endless' && this.inWarmup() ? this.challenge : null;
+    this.armStamp(run);
     if (!this.debugRuns) {
       const begun = beginRun(save);
       if (begun.save !== save) {
@@ -1083,9 +1265,11 @@ export class Session {
     }
   }
 
-  private startRun(kind: RunKind, date?: string): void {
+  private startRun(want: RunKind, date?: string): void {
     this.d.audio.ensure();
     const held = !this.runActive && this.s.phase === 'hold';
+    // A first-time player plays the tutorial run before a friend's challenge (CC-8 warm-up).
+    const kind = want === 'challenge' && this.inWarmup() ? 'endless' : want;
     if (kind === 'endless') {
       if (!held || this.s.cfg.mode !== 'endless' || this.kind !== 'endless') this.s = this.makeRun('endless');
       this.beginRun(this.s);
@@ -1105,6 +1289,8 @@ export class Session {
   private retry(): void {
     this.d.audio.ensure();
     this.finishPrebuild();
+    // After the warm-up, Retry ("Take the challenge") plays the friend's run.
+    if (this.warmup && this.challenge) this.kind = 'challenge';
     let run: SimState;
     if (this.kind === 'endless' && this.nextRun && this.nextRun.cfg.mode === 'endless') {
       run = this.nextRun;
@@ -1131,16 +1317,17 @@ export class Session {
     this.paused = false;
     this.input.releaseAll();
     if (this.queuedChallenge) {
-      const c = this.queuedChallenge;
+      this.challenge = this.queuedChallenge;
       this.queuedChallenge = null;
-      this.challenge = c;
-      this.ui.setChallenge(this.challengeBanner(c));
     }
+    // The banner drops its warm-up note once the first run is done.
+    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
     this.lifetimeRuns = this.d.store.get().stats.runs;
     this.s = this.createTitleRun();
     this.renderIn.s = this.s;
     this.resetSnaps();
     this.resetRender();
+    this.previewRun();
     this.deathAt = -1;
     this.dyingGame = -1;
     this.resultsAt = -1;
@@ -1151,6 +1338,7 @@ export class Session {
     this.paused = true;
     this.input.releaseAll();
     this.setGhost('off');
+    this.cue(null);
   }
 
   private pauseIfPlaying(): void {
@@ -1171,10 +1359,16 @@ export class Session {
   // Challenges, the date, other tabs
   // -------------------------------------------------------------------------------------------
 
-  private challengeBanner(c: Challenge): ChallengeBanner {
-    if (c.k !== 'd') return { minutes: c.m };
-    const n = dailyNumber(c.d);
-    return { minutes: c.m, note: c.d === localDate() ? `Daily #${n}` : `Daily #${n} · practice run` };
+  private challengeBanner(c: Challenge): ChallengeBannerV11 {
+    const b: ChallengeBannerV11 = { minutes: c.m };
+    const name = challengeRules(c).n;
+    if (name) b.name = name;
+    if (this.inWarmup()) b.warmup = true;
+    if (c.k === 'd') {
+      const n = dailyNumber(c.d);
+      b.note = c.d === localDate() ? `Daily #${n}` : `Daily #${n} · practice run`;
+    }
+    return b;
   }
 
   /** A challenge link opened in this document (same-document navigation to #c=…). */
@@ -1215,10 +1409,26 @@ export class Session {
   // Events, daily bookkeeping, death and results
   // -------------------------------------------------------------------------------------------
 
-  private onTickEvent(ev: SimEvent): void {
+  private onTickEvent(ev: SimEventV11): void {
     switch (ev.e) {
       case 'flake':
         if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
+        break;
+      case 'go':
+        if (this.s.cfg.profile <= 1) this.cue('keep-shade');
+        break;
+      case 'lessonDone':
+        if (!this.debugRuns) {
+          this.d.store.update((sv) => {
+            sv.flags.tutorialDone = true;
+          });
+          this.d.store.flush();
+        }
+        this.cue('shade-found');
+        break;
+      case 'lowChill':
+        // The first scare of a new player; inside the lesson it keeps the drag instruction (A16).
+        if (this.lifetimeRuns <= 2) this.cue('melting', this.hints.lesson ? this.dragDir() : undefined);
         break;
       case 'hourEnd':
         if (this.dailyTry !== null && this.dailyDate) {
@@ -1264,6 +1474,7 @@ export class Session {
     this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
+    this.tip = deathTip(deathRecap(this.s), save.settings.invert);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
     result.assisted = this.runAssisted;
@@ -1272,7 +1483,10 @@ export class Session {
       // Debug runs leave the save alone: no Snow, bests, missions, achievements or Daily tries.
       this.outcome = debugRunOutcome(save, result);
     } else {
-      const { save: next, outcome } = applyRunResult(save, result, { today: localDate(), dailyTry: this.dailyTry });
+      const options: ApplyRunOptionsV11 = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
+      if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
+      if (this.runRung >= 0) options.rung = this.runRung;
+      const { save: next, outcome } = applyRunResult(save, result, options);
       this.d.store.set(next);
       this.d.store.flush();
       this.ui.setSave(next);
@@ -1285,6 +1499,7 @@ export class Session {
       }
     }
     this.setGhost('off');
+    this.cue(null);
     this.input.releaseAll();
     if (this.ui.current() === 'play') this.ui.show('dying');
     // Start building the next endless run: its world is generated a slice per frame while the
@@ -1301,14 +1516,16 @@ export class Session {
     if (this.resultsShown || !this.result || !this.outcome) return;
     this.resultsShown = true;
     const daily = this.result.mode === 'daily';
-    const view = {
+    const view: ResultsViewV11 = {
       result: this.result,
       outcome: this.outcome,
       dailyTry: daily ? this.dailyTry : undefined,
       // K5: every Daily (k:'d' challenges too) says which date it was and whether it could count.
       ...(daily && this.dailyDate !== null ? { dailyDate: this.dailyDate, dailyScored: this.dailyScored } : {}),
-      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m } : {}),
+      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m, challengeName: challengeRules(this.runChallenge).n } : {}),
+      ...(this.warmup ? { warmupFor: { minutes: this.warmup.m, name: challengeRules(this.warmup).n } } : {}),
       ...(this.debugRuns ? { debug: true } : {}),
+      ...(this.tip !== null ? { tip: this.tip } : {}),
     };
     this.ui.show('results', view);
     this.resultsAt = this.time;
@@ -1355,6 +1572,36 @@ export class Session {
   private startPrebuild(): void {
     if (this.kind !== 'endless' || this.nextRun || this.nextBuild) return;
     this.nextBuild = prepareRun(this.endlessConfigQuiet());
+    this.nextBuildRung = this.cfgRung;
+  }
+
+  /**
+   * The Daily par (Snowbot, CC-17): while no run is being played and today's par is missing, the
+   * novice bot plays today's Daily world for at most PAR_MS a frame; the result goes into the save.
+   * A new local date restarts it.
+   */
+  private stepPar(): void {
+    const save = this.d.store.get();
+    const today = this.today;
+    if (!this.d.store.canPersist || !isDailyUnlocked(save) || dailyPar(save, today) !== undefined) {
+      this.parJob = null;
+      return;
+    }
+    if (!this.parJob || this.parDate !== today) {
+      this.parJob = createParJob(dailySeed(today), today >= PLAN_START_DATE);
+      this.parDate = today;
+    }
+    const job = this.parJob;
+    const t0 = performance.now();
+    let done = false;
+    do done = job.step(PAR_TICKS);
+    while (!done && performance.now() - t0 < PAR_MS);
+    if (!done) return;
+    this.parJob = null;
+    const next = setDailyPar(this.d.store.get(), today, job.minutes);
+    this.d.store.set(next);
+    this.d.store.flush();
+    this.ui.setSave(next);
   }
 
   /** Spends up to `ms` of this frame generating the next run's world; creates the run when done. */
@@ -1365,10 +1612,7 @@ export class Session {
     let done = false;
     do done = prepareSome(b, PREBUILD_SLICE);
     while (!done && performance.now() - t0 < ms);
-    if (done) {
-      this.nextBuild = null;
-      this.nextRun = createRun(b.cfg, b);
-    }
+    if (done) this.finishPrebuild();
   }
 
   /** Finishes a pending prebuild now (Retry or Home came before its last slice). */
@@ -1377,6 +1621,94 @@ export class Session {
     if (!b) return;
     this.nextBuild = null;
     this.nextRun = createRun(b.cfg, b);
+    this.rungOf.set(this.nextRun, this.nextBuildRung);
+  }
+
+  /**
+   * Starts the postcard of the settled Results (once per run; not for debug runs, which can't be
+   * shared): one idle callback per stage, then the PNG is encoded off the main thread.
+   */
+  private startPostcard(): void {
+    const result = this.result;
+    const sheetTop = this.ui.resultsSheetTop();
+    if (!result || this.debugRuns || this.postcardFor === result || sheetTop === null) return;
+    this.postcardFor = result;
+    const v = this.renderer.scene.view;
+    const dpr = v.dpr;
+    const death = this.s.death;
+    const { day, minute } = splitMinutes(result.minutes);
+    const first = Math.max(1, result.hourGlyphs.length - 1);
+    const days = result.hourGlyphs.slice(first - 1);
+    const daily = result.mode === 'daily' && result.dailyDate !== undefined ? `Daily #${dailyNumber(result.dailyDate)}` : '';
+    this.logoImages ??= [logoLayers().shadow, logoLayers().word].map((svg) => {
+      const img = new Image();
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      return img;
+    });
+    const job = createPostcardJob({
+      source: this.d.canvas,
+      srcX: v.vx * dpr,
+      srcY: v.vy * dpr,
+      srcW: v.vw * dpr,
+      srcH: Math.max(1, (sheetTop - v.vy) * dpr),
+      focusX: (v.ox + (death ? death.x : this.s.nubs.x) * v.S) * dpr,
+      callouts: Array.from(calloutBoxes.subarray(0, 4 * calloutsDrawn()), (x) => x * dpr),
+      day,
+      time: formatTimeOfDay(minute),
+      deathLine: result.death.line,
+      days,
+      forecasts: days.map((_, i) => worldPlan(this.s.world, first + i).forecast),
+      daily,
+      url: buildShare(result, shareBase(), this.dailyTry).url ?? '',
+      shades: shadesLook(this.d.store.get().equipped),
+      logo: this.logoImages,
+    });
+    this.postcardJob = job;
+    const next = (): void => {
+      if (this.postcardJob !== job) return;
+      // The crop needs the settled map still on screen; the footer waits (briefly) for the wordmark.
+      if (job.stage === 0 && this.ui.current() !== 'results') return this.dropPostcard();
+      if (job.stage === 2 && this.logoImages?.some((img) => !img.complete) && job.stageMs.length < 12) {
+        job.stageMs.push(0);
+        return idle(next);
+      }
+      if (!stepPostcard(job)) return idle(next);
+      job.canvas.toBlob((blob) => {
+        if (this.postcardJob !== job || !blob) return;
+        this.postcardFile = new File([blob], postcardName(day, formatTimeOfDay(minute)), { type: 'image/png' });
+        this.postcardUrl = URL.createObjectURL(blob);
+        job.stage = 4;
+        uiV11(this.ui).setPostcard?.(this.postcardUrl);
+      }, 'image/png');
+    };
+    idle(next);
+  }
+
+  /** Forgets the postcard (a new run started): its thumbnail URL is revoked. */
+  private dropPostcard(): void {
+    this.postcardJob = null;
+    this.postcardFile = null;
+    if (this.postcardUrl !== null) {
+      URL.revokeObjectURL(this.postcardUrl);
+      this.postcardUrl = null;
+      uiV11(this.ui).setPostcard?.(null);
+    }
+  }
+
+  /** Test hook: whether the postcard file is ready, and each drawing stage's ms. */
+  postcardState(): { ready: boolean; stageMs: number[]; bytes: number; name: string } {
+    const f = this.postcardFile;
+    return { ready: f !== null, stageMs: this.postcardJob?.stageMs.slice() ?? [], bytes: f?.size ?? 0, name: f?.name ?? '' };
+  }
+
+  /**
+   * The Postcard pill: the postcard file plus the share text through the native sheet (or a
+   * download and a copied link), called synchronously in the click; the text alone until it is ready.
+   */
+  private sharePostcard(): Promise<ShareOutcomeV11> {
+    if (!this.result || this.debugRuns) return Promise.resolve('failed');
+    const text = buildShare(this.result, shareBase(), this.dailyTry).text;
+    return this.postcardFile ? shareFiles({ file: this.postcardFile, text }) : shareText({ text });
   }
 
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
@@ -1398,33 +1730,72 @@ export class Session {
     return guideAlpha(setting, s.cfg.profile, this.lifetimeRuns, s.day, frac);
   }
 
-  /** The HUD's best flag: frozen for the run in progress, live on the Title and menus. */
-  private pbMinutes(): number {
-    return this.runActive ? this.runPb : this.livePb();
-  }
-
+  /**
+   * The HUD's gold flag (frozen for the run in progress, live on the Title and menus): the Daily's
+   * best on a Daily, else the recent best (the best of the last 10 runs) from lifetime run 3 on.
+   */
   private livePb(): number {
     const save = this.d.store.get();
     if (this.dailyDate) {
       const st = dailyStatus(save, this.dailyDate);
       return st.bestMinutes > 0 ? st.bestMinutes : -1;
     }
-    return save.stats.bestMinutes > 0 && save.stats.runs >= 3 ? save.stats.bestMinutes : -1;
+    const recent = recentBest(save);
+    return recent > 0 && save.stats.runs >= 3 ? recent : -1;
+  }
+
+  /** The HUD's white tick: the next milestone of endless runs. */
+  private liveGoal(): number {
+    if (this.kind !== 'endless') return -1;
+    return nextMilestone(this.d.store.get()) ?? -1;
+  }
+
+  /**
+   * The run's stamp (GR8): a challenge stamps 'PASSED SAM!' when its target is reached; an endless
+   * run with three runs of history stamps 'PAST YOUR RECENT BEST' when it beats that, once.
+   */
+  private armStamp(run: SimState): void {
+    this.stampAt = -1;
+    const save = this.d.store.get();
+    const c = this.runChallenge;
+    if (run.cfg.mode === 'challenge' && c) {
+      const name = challengeRules(c).n;
+      this.stampAt = c.m;
+      this.stampKind = 'teal';
+      this.stampText = name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!';
+    } else if (run.cfg.mode === 'endless' && historyLength(save) >= 3) {
+      this.stampAt = recentBest(save) + 1;
+      this.stampKind = 'gold';
+      this.stampText = 'PAST YOUR RECENT BEST';
+    }
+  }
+
+  /** Fires the run's stamp on the first tick its score is reached. */
+  private checkStamp(): void {
+    const s = this.s;
+    if (this.stampAt < 0 || s.phase === 'hold' || s.minutes < this.stampAt) return;
+    this.stampAt = -1;
+    this.fx.celebrate(this.stampKind, this.stampText);
+    this.d.haptics.play('best');
   }
 
   private updateHints(dt: number, screen: ScreenId): void {
     // Paused (or a menu over a paused run): the hint and the lesson's time scale hold still.
     if (this.paused || screen === 'pause' || screen === 'settings') return;
-    let lessonOn = false;
+    let slow = false;
     if (screen === 'title') {
       this.setGhost('both');
     } else if (screen === 'play') {
       const s = this.s;
       if (s.phase === 'hold') {
         this.setGhost('both');
+      } else if (this.kind === 'challenge') {
+        // The sender's rules: no ghost hint.
+        this.setGhost('off');
       } else {
         const dragging = this.input.pointerDown || this.input.keyDown;
         const h = this.hintIn;
+        const lessonOn = lessonOnOf(s);
         h.profile = s.cfg.profile;
         h.f = s.nubs.f;
         h.sunUp = s.sunUp;
@@ -1433,32 +1804,43 @@ export class Session {
         h.theta = s.sun.theta;
         h.dragging = dragging;
         h.invert = this.input.invert;
-        h.lessonPending = this.lessonPending;
+        h.lessonOn = lessonOn;
         if (this.hints.update(dt, h) && !this.debugRuns) {
           this.d.store.update((sv) => {
             sv.flags.hintsShown += 1;
           });
         }
-        if (this.hints.lessonPassed && this.lessonPending) {
-          // The first successful swing: no more slow time or looping lesson, in this run or later.
-          this.lessonPending = false;
-          if (!this.debugRuns) {
-            this.d.store.update((sv) => {
-              sv.flags.tutorialDone = true;
-            });
-          }
-        }
+        if (this.hints.lesson) this.cue('drag', this.dragDir());
         this.setGhost(this.hints.showing(dragging) ? this.hints.dir : 'off');
-        lessonOn = this.hints.lesson;
+        // The lesson's slow time runs from its first hint until the sim ends the lesson (A5).
+        slow = this.hints.lessonStarted && lessonOn;
       }
     } else {
       this.hints.stop();
     }
     // Ease the lesson's slow time in and out (about 0.2 s).
-    const target = lessonOn ? LESSON_TIME_SCALE : 1;
+    const target = slow ? LESSON_TIME_SCALE : 1;
     const c = this.clock;
     c.assist += (target - c.assist) * Math.min(1, dt * 10);
     if (Math.abs(c.assist - target) < 0.005) c.assist = target;
+  }
+
+  /** The finger direction toward the hint's target: −1 ← or +1 → (invert honoured by the tracker). */
+  private dragDir(): -1 | 1 {
+    return this.hints.dir === 'left' ? -1 : 1;
+  }
+
+  /** Shows a cue once per run (never in challenge runs); null clears the cue line. */
+  private cue(id: CueId | null, dir?: -1 | 1): void {
+    const ui = uiV11(this.ui);
+    if (id === null) {
+      ui.showCue?.(null);
+      return;
+    }
+    const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : 8;
+    if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
+    this.cues |= bit;
+    ui.showCue?.(id, dir);
   }
 
   /** The hint as the halo dial shows it: the target while a hint or the lesson is on, eased. */
@@ -1487,9 +1869,12 @@ export class Session {
   }
 
   private settingsChanged(st: Settings): void {
+    const comfortChanged = comfortOn(st) !== comfortOn(this.d.store.get().settings);
     this.d.store.update((sv) => {
       sv.settings = st;
     });
+    // The next endless run's rung depends on adaptive comfort (not on the player's name, A16).
+    if (comfortChanged) this.refreshTitleRun();
     this.applySettings(st);
     this.ui.setSave(this.d.store.get());
     // Switching to Guide "Always" mid-run marks the run assisted, even if it is switched back.
@@ -1556,6 +1941,45 @@ export class Session {
     return this.runActive;
   }
 
+  /**
+   * Test hook state() (CC-15): the sim at a glance plus the run's rules: profile, comfort rung (−1
+   * when not an endless ladder run), drain, noon cloud, today's forecast and biome, lesson on.
+   */
+  testState(): {
+    phase: string;
+    day: number;
+    minutes: number;
+    chill: number;
+    snow: number;
+    theta: number;
+    f: number;
+    profile: number;
+    rung: number;
+    drain: number;
+    noonCloud: number;
+    forecast: string;
+    biome: string;
+    lessonOn: boolean;
+  } {
+    const s = this.s;
+    return {
+      phase: s.phase,
+      day: s.day,
+      minutes: s.minutes,
+      chill: s.nubs.chill,
+      snow: s.stats.snow,
+      theta: s.sun.theta,
+      f: s.nubs.f,
+      profile: s.cfg.profile,
+      rung: this.runActive ? this.runRung : (this.rungOf.get(s) ?? -1),
+      drain: effectiveDrain(s),
+      noonCloud: effectiveNoonCloud(s.cfg),
+      forecast: forecastOf(s.params),
+      biome: biomeAtWorld(s.world, s.nubs.y),
+      lessonOn: lessonOnOf(s),
+    };
+  }
+
   /** Test hook: the config of the current run (the Title's held run between runs). */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
     const s = this.s;
@@ -1578,36 +2002,63 @@ export class Session {
   }
 
   /**
-   * Test hook (settled Results): draws the frame from the cached backdrop (puddle ring only) and
-   * as a full redraw at the same instant, and counts the device pixels that differ.
+   * Test hook (A/B checks): draws the current frame (time frozen) under render options `a` and then
+   * `b`, and compares the device pixels: the mean per-pixel max-channel |Δ|, the share of pixels
+   * more than 3 and 8 levels apart, and the largest |Δ|. The next frame draws as usual.
    */
-  resultsAB(): { diff: number; ringPath: boolean } | null {
-    if (this.ui.current() !== 'results') return null;
-    const r = this.renderIn;
-    const rr = this.renderer;
+  pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null {
     const canvas = this.d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
-    const keep = { dt: r.dt, gdt: r.gdt, cache: rr.resultsCache };
+    const opts = this.renderer.options;
+    const keep = { ...opts };
+    const pixels = (o: Partial<RenderOptions>): Uint8ClampedArray => {
+      Object.assign(opts, keep, o);
+      this.renderer.draw(this.renderIn);
+      return g.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    return this.frozen(() => {
+      try {
+        pixels(a);
+        const pa = pixels(a);
+        const pb = pixels(b);
+        let sum = 0;
+        let over3 = 0;
+        let over8 = 0;
+        let max = 0;
+        const n = pa.length / 4;
+        for (let i = 0; i < pa.length; i += 4) {
+          const d = Math.max(
+            Math.abs((pa[i] as number) - (pb[i] as number)),
+            Math.abs((pa[i + 1] as number) - (pb[i + 1] as number)),
+            Math.abs((pa[i + 2] as number) - (pb[i + 2] as number)),
+          );
+          sum += d;
+          if (d > 3) over3++;
+          if (d > 8) over8++;
+          if (d > max) max = d;
+        }
+        return { mean: sum / n, over3: over3 / n, over8: over8 / n, max };
+      } finally {
+        Object.assign(opts, keep);
+      }
+    });
+  }
+
+  /**
+   * Runs `fn` with the render input frozen (no real or game time passes; particles, pops, the
+   * camera and UI timers hold still), then restores it and has the next frame drawn as usual.
+   */
+  private frozen<T>(fn: () => T): T {
+    const r = this.renderIn;
+    const keep = { dt: r.dt, gdt: r.gdt, paused: r.paused, mapT: r.mapT, sheetTop: r.sheetTop };
     r.dt = 0;
     r.gdt = 0;
+    r.paused = true;
     try {
-      rr.resultsCache = true;
-      rr.draw(r);
-      const rings = rr.ringDraws;
-      rr.draw(r);
-      const ringPath = rr.ringDraws > rings;
-      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      rr.resultsCache = false;
-      rr.draw(r);
-      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      let diff = 0;
-      for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) diff++;
-      return { diff, ringPath };
+      return fn();
     } finally {
-      r.dt = keep.dt;
-      r.gdt = keep.gdt;
-      rr.resultsCache = keep.cache;
+      Object.assign(r, keep);
       this.cadence.invalidate();
     }
   }
@@ -1623,62 +2074,54 @@ export class Session {
    * below the sheet's top edge. The next frame draws as usual.
    */
   mapProbe(mapT: number): MapProbe | null {
-    const r = this.renderIn;
     const sheetTop = this.ui.current() === 'results' ? this.ui.resultsSheetTop() : null;
     if (sheetTop === null || this.resultsAt < 0) return null;
     const rr = this.renderer;
     const canvas = this.d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
-    const keep = { mapT: r.mapT, sheetTop: r.sheetTop, dt: r.dt, gdt: r.gdt, cache: rr.resultsCache, overlay: rr.mapOverlay };
-    r.mapT = mapT;
-    r.sheetTop = sheetTop;
-    r.dt = 0;
-    r.gdt = 0;
-    rr.resultsCache = false;
-    try {
-      rr.mapOverlay = true;
-      // A first draw at this mapT settles the zoom-dependent caches (the ground's whole-pixel tiles
-      // need the scale to hold still for a frame), so the two measured frames take the same paths.
-      rr.draw(r);
-      rr.draw(r);
-      const png = canvas.toDataURL('image/png');
-      const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      rr.mapOverlay = false;
-      rr.draw(r);
-      const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
-      const dpr = rr.scene.view.dpr;
-      const cutRow = Math.floor(sheetTop * dpr);
-      const w = canvas.width;
-      let above = 0;
-      let below = 0;
-      /** Device-px box of the differences below the cut (x0, y0, x1, y1), for diagnostics. */
-      const box = [Infinity, Infinity, -Infinity, -Infinity];
-      for (let i = 0; i < a.length; i += 4) {
-        if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
-        const px = i >> 2;
-        const y = Math.floor(px / w);
-        if (y < cutRow) {
-          above++;
-          continue;
+    return this.frozen(() => {
+      const r = this.renderIn;
+      r.mapT = mapT;
+      r.sheetTop = sheetTop;
+      try {
+        // A first draw at this mapT settles the zoom-dependent caches (the ground's whole-pixel tiles
+        // need the scale to hold still for a frame), so the two measured frames take the same paths.
+        rr.options.mapOverlay = true;
+        rr.draw(r);
+        rr.draw(r);
+        const png = canvas.toDataURL('image/png');
+        const a = g.getImageData(0, 0, canvas.width, canvas.height).data;
+        rr.options.mapOverlay = false;
+        rr.draw(r);
+        const b = g.getImageData(0, 0, canvas.width, canvas.height).data;
+        const dpr = rr.scene.view.dpr;
+        const cutRow = Math.floor(sheetTop * dpr);
+        const w = canvas.width;
+        let above = 0;
+        let below = 0;
+        /** Device-px box of the differences below the cut (x0, y0, x1, y1), for diagnostics. */
+        const box = [Infinity, Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < a.length; i += 4) {
+          if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
+          const px = i >> 2;
+          const y = Math.floor(px / w);
+          if (y < cutRow) {
+            above++;
+            continue;
+          }
+          below++;
+          const x = px - y * w;
+          box[0] = Math.min(box[0] as number, x);
+          box[1] = Math.min(box[1] as number, y);
+          box[2] = Math.max(box[2] as number, x);
+          box[3] = Math.max(box[3] as number, y);
         }
-        below++;
-        const x = px - y * w;
-        box[0] = Math.min(box[0] as number, x);
-        box[1] = Math.min(box[1] as number, y);
-        box[2] = Math.max(box[2] as number, x);
-        box[3] = Math.max(box[3] as number, y);
+        return { sheetTop, cutRow, dpr, above, below, belowBox: below > 0 ? box : null, png };
+      } finally {
+        rr.options.mapOverlay = true;
       }
-      return { sheetTop, cutRow, dpr, above, below, belowBox: below > 0 ? box : null, png };
-    } finally {
-      r.mapT = keep.mapT;
-      r.sheetTop = keep.sheetTop;
-      r.dt = keep.dt;
-      r.gdt = keep.gdt;
-      rr.resultsCache = keep.cache;
-      rr.mapOverlay = keep.overlay;
-      this.cadence.invalidate();
-    }
+    });
   }
 
   /** Test hook: the ghost hint's state. */
@@ -1687,7 +2130,10 @@ export class Session {
     return { mode: this.ghost, target: h.target, width: h.targetW, turn: h.turn, lesson: h.lesson, shown: h.shown };
   }
 
-  /** Test hook: replays a moment through fx and audio only (the sim is untouched). */
+  /**
+   * Test hook: replays a moment through fx and audio only (the sim is untouched): phew, mult, mult5,
+   * noon (= highnoon), dawn, night, cloud, glare, flake, best, passed, swing, postcard.
+   */
   demo(name: string): void {
     const s = this.s;
     let ev: SimEvent | null = null;
@@ -1702,6 +2148,7 @@ export class Session {
         ev = { e: 'multUp', level: 5 };
         break;
       case 'noon':
+      case 'highnoon':
         ev = { e: 'noonBanner' };
         break;
       case 'dawn':
@@ -1721,6 +2168,19 @@ export class Session {
         break;
       case 'best':
         this.fx.confetti(40);
+        return;
+      case 'passed': {
+        const name = this.runChallenge ? challengeRules(this.runChallenge).n : '';
+        this.fx.celebrate('teal', name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!');
+        return;
+      }
+      case 'postcard':
+        // What the Postcard pill does (no user activation here: the download path in Chromium).
+        void this.sharePostcard();
+        return;
+      case 'swing':
+        // The audio layer ignores SWING: fx only.
+        this.fx.onEvents([{ e: 'swing', deg: 75, chain: 2, snow: 2, x: s.nubs.x, y: s.nubs.y }], s);
         return;
       default:
         return;

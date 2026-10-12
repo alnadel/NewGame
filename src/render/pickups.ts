@@ -160,9 +160,11 @@ function drawFlower(g: CanvasRenderingContext2D, v: View, p: Pickup, sx: number,
   const bloom = raw < 0.33 ? 0.35 : raw < 0.66 ? 0.7 : 1;
   const sy = v.oy - (p.y + 1) * v.S;
   const glow = radialSprite('154,216,255', 64, 0.9, 0.3, 0.3);
-  const gr = 20 * v.S * bloom;
+  // The halo breathes at 0.8 Hz, each flower out of phase with its neighbours.
+  const pulse = 0.85 + 0.15 * Math.sin(time * 0.8 * Math.PI * 2 + p.id * 2.1);
+  const gr = 20 * v.S * bloom * pulse;
   g.globalCompositeOperation = 'lighter';
-  g.globalAlpha = 0.75 * Math.max(0.4, night);
+  g.globalAlpha = 0.75 * Math.max(0.4, night) * pulse;
   g.drawImage(glow, sx - gr, sy - gr, gr * 2, gr * 2);
   g.globalCompositeOperation = 'source-over';
   g.globalAlpha = 1;

@@ -1,9 +1,13 @@
-// Frame-time governor (TECH_SPEC §15). Quality steps down one notch at a time when frames are late —
-// crisp shadows (the shadow path filled straight onto the world instead of the soft half-res layer's
-// full-screen scaled multiply blit), then DPR × 0.75, particles 400 → 200, DPR × 0.625 (never below
-// 1 device px per CSS px), and the ground detail tiles off — and may step back up once.
-// Devices that look low-end before the first frame (≤ 4 GB or ≤ 4 cores, not iOS) start at the crisp
-// shadow step with DPR capped at 1.5 (deviceClass below).
+// Frame-time governor (TECH_SPEC §15). Quality steps down one notch at a time when frames are late,
+// over a 4-level ladder, and may step back up once:
+//   0 full: soft shadows (the half-res layer's full-screen blit);
+//   1 crisp shadows (the shadow path filled straight onto the world, no blit);
+//   2 DPR × 0.75;
+//   3 DPR × 0.625 (never below 1 device px per CSS px) and the particle cap 400 → 200.
+// Devices that look low-end before the first frame (≤ 4 GB or ≤ 4 cores, not iOS) start at level 1
+// with DPR capped at 1.5 (deviceClass below): even with the matched source-over shadow composite,
+// the soft pass alone at DPR 1.5 under a 2× CPU throttle takes ~9 ms of software raster a frame
+// (vs ~16 ms with the multiply blit), over half the 16.7 ms budget, so they keep crisp shadows.
 //
 // Two signals per frame: the rAF interval, which carries everything (JS, canvas raster, compositing,
 // vsync), and the frame's own JS work. Raster cost is only visible in the interval, so the interval
@@ -40,7 +44,7 @@ const CAPPED_WORK_SHARE = 0.6;
 const UP_AFTER_S = 10;
 const UP_MEDIAN_MS = 17.5;
 const UP_WORK_MS = 6;
-const MAX_LEVEL = 5;
+const MAX_LEVEL = 3;
 
 export class Governor {
   enabled = true;
@@ -49,7 +53,6 @@ export class Governor {
   floor = 0;
   dprScale = 1;
   particleCap = 400;
-  detail = true;
   softShadows = true;
   /** Last evaluated cadence (ms) and whether it counted as a capped display rate (debug overlay). */
   median = 0;
@@ -169,9 +172,8 @@ export class Governor {
   private apply(): void {
     const l = this.level;
     this.softShadows = l < 1;
-    this.dprScale = l >= 4 ? 0.625 : l >= 2 ? 0.75 : 1;
+    this.dprScale = l >= 3 ? 0.625 : l >= 2 ? 0.75 : 1;
     this.particleCap = l >= 3 ? 200 : 400;
-    this.detail = l < 5;
   }
 }
 
