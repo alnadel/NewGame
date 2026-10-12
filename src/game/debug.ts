@@ -8,7 +8,8 @@ import type { MapProbe, PixelAB, Session } from './session.ts';
 
 export interface ShadyTestHook {
   screen(): string;
-  state(): { phase: string; day: number; minutes: number; chill: number; snow: number; theta: number; f: number };
+  /** The sim at a glance plus the run's rules (Session.testState). */
+  state(): ReturnType<Session['testState']>;
   forceDeath(): void;
   runHeadless(seed: number, ticks: number, bot: string): string;
   setTimeScale(n: number): void;
@@ -71,18 +72,7 @@ declare global {
 export function installTestHook(session: Session, audio: ShadyAudio): void {
   const hook: ShadyTestHook = {
     screen: () => session.ui.current(),
-    state: () => {
-      const s = session.state;
-      return {
-        phase: s.phase,
-        day: s.day,
-        minutes: s.minutes,
-        chill: s.nubs.chill,
-        snow: s.stats.snow,
-        theta: s.sun.theta,
-        f: s.nubs.f,
-      };
-    },
+    state: () => session.testState(),
     forceDeath: () => session.forceDeath(),
     runHeadless: (seed, ticks, bot) => runHeadless(seed, ticks, bot as BotKind),
     setTimeScale: (n) => {

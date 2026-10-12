@@ -65,13 +65,13 @@ function dailyPlay(page: Page): ReturnType<Page['locator']> {
 
 const ENDLESS_CHALLENGE = challengeCode({ v: 1, k: 'e', seed: 42, m: 1240, s: 0 });
 
-test.describe('drain (K2)', () => {
-  test('endless runs start at 30 Chill/s and ramp by run', async ({ page }) => {
+test.describe('drain (comfort ladder, A2)', () => {
+  test('the first run is the tutorial rung at 30 Chill/s; a short run leads to rung 1 at 40', async ({ page }) => {
     await openGame(page, 'test=1');
-    expect((await runCfg(page)).drain).toBe(30);
+    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 0, tutorial: true, drain: 30 });
     await forceDeath(page);
     await homeFromResults(page);
-    expect(await runCfg(page)).toMatchObject({ mode: 'endless', drain: 33 });
+    expect(await runCfg(page)).toMatchObject({ mode: 'endless', profile: 2, tutorial: false, drain: 40 });
   });
 
   test('?profile= keeps the profile drain', async ({ page }) => {

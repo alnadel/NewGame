@@ -2,6 +2,7 @@
 
 import { BOT_KINDS, dayLength, type BotKind, type ProfileId } from '../core/index.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';
+import { COMFORT_MAX, FORECAST_IDS, type ForecastId } from '../render/shims.ts';
 
 export interface Params {
   seed: number | null;
@@ -21,6 +22,12 @@ export interface Params {
   test: boolean;
   /** Perf governor enabled (default on; ?perf=0 disables it for captures). */
   perf: boolean;
+  /** Forces this forecast on every biome-eligible day (cfg.forecast; the Day Plan turns on). */
+  forecast: ForecastId | null;
+  /** Forces this comfort rung (0..COMFORT_MAX) for endless runs. */
+  rung: number | null;
+  /** Forces the Day Plan on or off (cfg.plan, A1); baselines pin ?plan=0. */
+  plan: boolean | null;
 }
 
 /**
@@ -47,6 +54,9 @@ export function parseParams(search: string, today: string = localDate()): Params
   const date = q.get('date');
   const fast = num('fast');
   const chill = num('chill');
+  const rung = num('rung');
+  const forecast = q.get('forecast');
+  const plan = q.get('plan');
   return {
     seed: seed === null ? null : Math.floor(Math.abs(seed)) >>> 0,
     daily: q.get('mode') === 'daily',
@@ -63,6 +73,9 @@ export function parseParams(search: string, today: string = localDate()): Params
     reset: q.get('reset') === '1',
     test: q.get('test') === '1',
     perf: q.get('perf') !== '0',
+    forecast: forecast && (FORECAST_IDS as readonly string[]).includes(forecast) ? (forecast as ForecastId) : null,
+    rung: rung !== null && rung >= 0 && rung <= COMFORT_MAX ? Math.floor(rung) : null,
+    plan: plan === '1' ? true : plan === '0' ? false : null,
   };
 }
 
@@ -82,10 +95,21 @@ export function startTFor(t: string | null, day: number): number | null {
 
 /**
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
- * a forced profile, fast-forward or a guide override. Such runs are not scored, saved, shared or
- * counted as Daily tries (they work in production builds for QA). ?seed, ?mode=daily&date, ?mute,
- * ?debug, ?test and ?perf don't make a run a debug run.
+ * a forced profile, rung, forecast or Day Plan, fast-forward or a guide override. Such runs are not
+ * scored, saved, shared or counted as Daily tries (they work in production builds for QA). ?seed,
+ * ?mode=daily&date, ?mute, ?debug, ?test and ?perf don't make a run a debug run.
  */
 export function isDebugRun(p: Params): boolean {
-  return p.day !== null || p.t !== null || p.chill !== null || p.profile !== null || p.bot !== null || p.fast > 1 || p.guide !== null;
+  return (
+    p.day !== null ||
+    p.t !== null ||
+    p.chill !== null ||
+    p.profile !== null ||
+    p.bot !== null ||
+    p.fast > 1 ||
+    p.guide !== null ||
+    p.forecast !== null ||
+    p.rung !== null ||
+    p.plan !== null
+  );
 }

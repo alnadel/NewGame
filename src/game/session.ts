@@ -9,7 +9,6 @@ import {
   createSnap,
   dayTicks,
   effectiveDrain,
-  endlessDrain,
   generateSome,
   lerpSnap,
   prepareRun,
@@ -19,7 +18,6 @@ import {
   TUNING,
   type Bot,
   type BotKind,
-  type ProfileId,
   type RenderSnap,
   type RunBuild,
   type RunConfig,
@@ -77,6 +75,21 @@ import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
+import {
+  biomeAtWorld,
+  COMFORT_MAX,
+  effectiveNoonCloud,
+  forecastOf,
+  lessonOnOf,
+  lessonShimTick,
+  PLAN_START_DATE,
+  planOnOf,
+  rungConfig,
+  worldPlan,
+  type RunConfigV11,
+  type SimEventV11,
+} from '../render/shims.ts';
+import { comfortOn, comfortStat, uiV11, type ApplyRunOptionsV11, type CueId } from './shims.ts';
 
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
@@ -147,10 +160,6 @@ export interface DebugStats {
   ticks: number;
 }
 
-function profileFor(runs: number): ProfileId {
-  return runs >= 3 ? 3 : (runs as ProfileId);
-}
-
 /** A challenge the game can play: k:'d' dates must be in bounds (params.ts dailyDateInBounds). */
 function playableChallenge(c: Challenge | null): Challenge | null {
   if (!c) return null;
@@ -195,8 +204,8 @@ export class Session {
   private readonly audioView: AudioView = createAudioView();
   private readonly hints = new HintTracker();
   private readonly hintIn: HintInput;
-  /** The first lesson is still to be passed in this run (profiles 0-1 until the save says done). */
-  private lessonPending = false;
+  /** Cues shown this run (bit per CueId: each at most once per run). */
+  private cues = 0;
   /** Eased visibility of the hint on the halo dial. */
   private hintAlpha = 0;
   private readonly renderIn: RenderInput;
@@ -221,6 +230,13 @@ export class Session {
   private nextRun: SimState | null = null;
   /** The next endless run while its world is still being generated in slices (see stepPrebuild). */
   private nextBuild: RunBuild | null = null;
+  private nextBuildRung = -1;
+  /** The comfort rung a run was built at (endless runs from the ladder; others are absent). */
+  private readonly rungOf = new WeakMap<SimState, number>();
+  /** The rung the last runConfig() built (−1: not from the ladder). */
+  private cfgRung = -1;
+  /** The rung the current run is played at (−1: not an endless ladder run). */
+  private runRung = -1;
   private runActive = false;
   /** Guide "Always" was on at some point of this run (latched: the share's compass marker). */
   private runAssisted = false;
@@ -401,6 +417,7 @@ export class Session {
     this.s = this.createTitleRun();
     this.lifetimeRuns = save.stats.runs;
     this.resetSnaps();
+    this.previewRun();
 
     this.hintIn = {
       profile: 3,
@@ -411,7 +428,7 @@ export class Session {
       theta: 0,
       dragging: false,
       invert: false,
-      lessonPending: false,
+      lessonOn: false,
     };
     this.renderIn = {
       s: this.s,
@@ -634,6 +651,8 @@ export class Session {
           events.push(ev);
           this.onTickEvent(ev);
         }
+        // V11-SHIM: CC-5 — the v1.0 core has no lesson: emulate its lessonDone (delete with the shim).
+        if (lessonShimTick(s)) this.onTickEvent({ e: 'lessonDone' });
         if (s.phase === 'dead') break;
       }
       if (n > 0) takeSnap(s, this.curr);
@@ -826,7 +845,19 @@ export class Session {
 
   /** A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`). */
   private makeRun(kind: RunKind, date?: string): SimState {
-    return createRun(this.runConfig(kind, date));
+    const run = createRun(this.runConfig(kind, date));
+    this.rungOf.set(run, this.cfgRung);
+    return run;
+  }
+
+  /**
+   * The comfort rung of the next endless run (A2): the tutorial rung on the very first run, then
+   * the save's rung (at least 1) while adaptive comfort is on, else the standard rules.
+   */
+  private comfortRung(): number {
+    const save = this.d.store.get();
+    if (save.stats.runs === 0) return 0;
+    return comfortOn(save.settings) ? Math.max(1, comfortStat(save)) : COMFORT_MAX;
   }
 
   /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
@@ -834,22 +865,21 @@ export class Session {
     const save = this.d.store.get();
     const p = this.params;
     const rm = this.reducedMotion();
-    let cfg: RunConfig;
+    let cfg: RunConfigV11;
     this.runChallenge = null;
     this.dailyDate = null;
     this.dailyScored = false;
+    this.cfgRung = -1;
     if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
-      cfg = { seed: dailySeed(d), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: d };
-      this.dailyDate = d;
+      cfg = this.dailyConfig(d, rm);
       if (kind === 'endless') this.usedUrlSeed = true;
       this.kind = 'daily';
     } else if (kind === 'challenge' && this.challenge) {
       const c = this.challenge;
       this.runChallenge = c;
       if (c.k === 'd') {
-        cfg = { seed: dailySeed(c.d), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: c.d };
-        this.dailyDate = c.d;
+        cfg = this.dailyConfig(c.d, rm);
       } else {
         cfg = { seed: c.seed >>> 0, mode: 'challenge', profile: 3, tutorial: false, reducedMotion: rm };
       }
@@ -862,11 +892,20 @@ export class Session {
       } else {
         seed = randomSeed();
       }
-      const profile = p.profile ?? profileFor(save.stats.runs);
-      cfg = { seed, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: rm };
-      // K2: endless runs ramp the drain run by run (Daily, challenges, ?profile= and bots keep the
-      // profile's drain).
-      if (p.profile === null && !p.bot) cfg.drain = endlessDrain(save.stats.runs);
+      if (p.profile !== null || p.bot) {
+        // A forced profile or a ?bot= run keeps that profile's own rules (a forced first-run profile
+        // still teaches the lesson until it is passed).
+        const profile = p.profile ?? 3;
+        cfg = { seed, mode: 'endless', profile, tutorial: profile === 0, reducedMotion: rm };
+        if (!p.bot && profile <= 1 && !save.flags.tutorialDone) cfg.lesson = true;
+      } else {
+        // The comfort ladder (A2); ?rung= forces a rung, a forced forecast plays the standard rules.
+        const rung = p.rung ?? (p.forecast !== null ? COMFORT_MAX : this.comfortRung());
+        const r = rungConfig(rung, { tutorialDone: save.flags.tutorialDone });
+        cfg = { seed, mode: 'endless', profile: r.profile, tutorial: r.tutorial, reducedMotion: rm, drain: r.drain, noonCloud: r.noonCloud };
+        if (r.lesson) cfg.lesson = true;
+        this.cfgRung = rung;
+      }
       this.kind = 'endless';
     }
     this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
@@ -875,7 +914,15 @@ export class Session {
       cfg.profile = p.profile;
       cfg.tutorial = p.profile === 0;
     }
+    if (p.forecast !== null) cfg.forecast = p.forecast;
+    if (p.plan !== null) cfg.plan = p.plan;
     return this.debugStart(cfg);
+  }
+
+  /** A Daily on `date`: the standard rules without the noon cloud; the Day Plan from PLAN_START_DATE (A1). */
+  private dailyConfig(date: string, rm: boolean): RunConfigV11 {
+    this.dailyDate = date;
+    return { seed: dailySeed(date), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: date, noonCloud: 0, plan: date >= PLAN_START_DATE };
   }
 
   /** A Daily of `date` would count as a try now: it is today's and tries are left. */
@@ -917,6 +964,13 @@ export class Session {
     this.resetSnaps();
     this.resetRender();
     this.cadence.invalidate();
+    this.previewRun();
+  }
+
+  /** Tells the Title which Day 1 the held run plays (null for plan-off worlds). */
+  private previewRun(): void {
+    const w = this.s.world;
+    uiV11(this.ui).setRunPreview?.(planOnOf(w) ? worldPlan(w, 1) : null);
   }
 
   private resetSnaps(): void {
@@ -960,9 +1014,10 @@ export class Session {
     this.melody = [];
     this.hints.reset();
     this.hintAlpha = 0;
+    this.cues = 0;
+    this.runRung = this.rungOf.get(run) ?? -1;
     const store = this.d.store;
     const save = store.get();
-    this.lessonPending = run.cfg.profile <= 1 && !save.flags.tutorialDone;
     this.dailyTry = null;
     this.dailyCounted = false;
     // Eligibility is decided when the run begins (the Title may have held it since yesterday).
@@ -1150,6 +1205,7 @@ export class Session {
     this.renderIn.s = this.s;
     this.resetSnaps();
     this.resetRender();
+    this.previewRun();
     this.deathAt = -1;
     this.dyingGame = -1;
     this.resultsAt = -1;
@@ -1160,6 +1216,7 @@ export class Session {
     this.paused = true;
     this.input.releaseAll();
     this.setGhost('off');
+    this.cue(null);
   }
 
   private pauseIfPlaying(): void {
@@ -1224,10 +1281,26 @@ export class Session {
   // Events, daily bookkeeping, death and results
   // -------------------------------------------------------------------------------------------
 
-  private onTickEvent(ev: SimEvent): void {
+  private onTickEvent(ev: SimEventV11): void {
     switch (ev.e) {
       case 'flake':
         if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
+        break;
+      case 'go':
+        if (this.s.cfg.profile <= 1) this.cue('keep-shade');
+        break;
+      case 'lessonDone':
+        if (!this.debugRuns) {
+          this.d.store.update((sv) => {
+            sv.flags.tutorialDone = true;
+          });
+          this.d.store.flush();
+        }
+        this.cue('shade-found');
+        break;
+      case 'lowChill':
+        // The first scare of a new player; inside the lesson it keeps the drag instruction (A16).
+        if (this.lifetimeRuns <= 2) this.cue('melting', this.hints.lesson ? this.dragDir() : undefined);
         break;
       case 'hourEnd':
         if (this.dailyTry !== null && this.dailyDate) {
@@ -1281,7 +1354,10 @@ export class Session {
       // Debug runs leave the save alone: no Snow, bests, missions, achievements or Daily tries.
       this.outcome = debugRunOutcome(save, result);
     } else {
-      const { save: next, outcome } = applyRunResult(save, result, { today: localDate(), dailyTry: this.dailyTry });
+      const options: ApplyRunOptionsV11 = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
+      if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
+      if (this.runRung >= 0) options.rung = this.runRung;
+      const { save: next, outcome } = applyRunResult(save, result, options);
       this.d.store.set(next);
       this.d.store.flush();
       this.ui.setSave(next);
@@ -1294,6 +1370,7 @@ export class Session {
       }
     }
     this.setGhost('off');
+    this.cue(null);
     this.input.releaseAll();
     if (this.ui.current() === 'play') this.ui.show('dying');
     // Start building the next endless run: its world is generated a slice per frame while the
@@ -1364,6 +1441,7 @@ export class Session {
   private startPrebuild(): void {
     if (this.kind !== 'endless' || this.nextRun || this.nextBuild) return;
     this.nextBuild = prepareRun(this.endlessConfigQuiet());
+    this.nextBuildRung = this.cfgRung;
   }
 
   /** Spends up to `ms` of this frame generating the next run's world; creates the run when done. */
@@ -1374,10 +1452,7 @@ export class Session {
     let done = false;
     do done = prepareSome(b, PREBUILD_SLICE);
     while (!done && performance.now() - t0 < ms);
-    if (done) {
-      this.nextBuild = null;
-      this.nextRun = createRun(b.cfg, b);
-    }
+    if (done) this.finishPrebuild();
   }
 
   /** Finishes a pending prebuild now (Retry or Home came before its last slice). */
@@ -1386,6 +1461,7 @@ export class Session {
     if (!b) return;
     this.nextBuild = null;
     this.nextRun = createRun(b.cfg, b);
+    this.rungOf.set(this.nextRun, this.nextBuildRung);
   }
 
   private async share(): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
@@ -1424,7 +1500,7 @@ export class Session {
   private updateHints(dt: number, screen: ScreenId): void {
     // Paused (or a menu over a paused run): the hint and the lesson's time scale hold still.
     if (this.paused || screen === 'pause' || screen === 'settings') return;
-    let lessonOn = false;
+    let slow = false;
     if (screen === 'title') {
       this.setGhost('both');
     } else if (screen === 'play') {
@@ -1434,6 +1510,7 @@ export class Session {
       } else {
         const dragging = this.input.pointerDown || this.input.keyDown;
         const h = this.hintIn;
+        const lessonOn = lessonOnOf(s);
         h.profile = s.cfg.profile;
         h.f = s.nubs.f;
         h.sunUp = s.sunUp;
@@ -1442,32 +1519,43 @@ export class Session {
         h.theta = s.sun.theta;
         h.dragging = dragging;
         h.invert = this.input.invert;
-        h.lessonPending = this.lessonPending;
+        h.lessonOn = lessonOn;
         if (this.hints.update(dt, h) && !this.debugRuns) {
           this.d.store.update((sv) => {
             sv.flags.hintsShown += 1;
           });
         }
-        if (this.hints.lessonPassed && this.lessonPending) {
-          // The first successful swing: no more slow time or looping lesson, in this run or later.
-          this.lessonPending = false;
-          if (!this.debugRuns) {
-            this.d.store.update((sv) => {
-              sv.flags.tutorialDone = true;
-            });
-          }
-        }
+        if (this.hints.lesson) this.cue('drag', this.dragDir());
         this.setGhost(this.hints.showing(dragging) ? this.hints.dir : 'off');
-        lessonOn = this.hints.lesson;
+        // The lesson's slow time runs from its first hint until the sim ends the lesson (A5).
+        slow = this.hints.lessonStarted && lessonOn;
       }
     } else {
       this.hints.stop();
     }
     // Ease the lesson's slow time in and out (about 0.2 s).
-    const target = lessonOn ? LESSON_TIME_SCALE : 1;
+    const target = slow ? LESSON_TIME_SCALE : 1;
     const c = this.clock;
     c.assist += (target - c.assist) * Math.min(1, dt * 10);
     if (Math.abs(c.assist - target) < 0.005) c.assist = target;
+  }
+
+  /** The finger direction toward the hint's target: −1 ← or +1 → (invert honoured by the tracker). */
+  private dragDir(): -1 | 1 {
+    return this.hints.dir === 'left' ? -1 : 1;
+  }
+
+  /** Shows a cue once per run (never in challenge runs); null clears the cue line. */
+  private cue(id: CueId | null, dir?: -1 | 1): void {
+    const ui = uiV11(this.ui);
+    if (id === null) {
+      ui.showCue?.(null);
+      return;
+    }
+    const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : 8;
+    if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
+    this.cues |= bit;
+    ui.showCue?.(id, dir);
   }
 
   /** The hint as the halo dial shows it: the target while a hint or the lesson is on, eased. */
@@ -1496,9 +1584,12 @@ export class Session {
   }
 
   private settingsChanged(st: Settings): void {
+    const comfortChanged = comfortOn(st) !== comfortOn(this.d.store.get().settings);
     this.d.store.update((sv) => {
       sv.settings = st;
     });
+    // The next endless run's rung depends on adaptive comfort (not on the player's name, A16).
+    if (comfortChanged) this.refreshTitleRun();
     this.applySettings(st);
     this.ui.setSave(this.d.store.get());
     // Switching to Guide "Always" mid-run marks the run assisted, even if it is switched back.
@@ -1563,6 +1654,45 @@ export class Session {
 
   get active(): boolean {
     return this.runActive;
+  }
+
+  /**
+   * Test hook state() (CC-15): the sim at a glance plus the run's rules: profile, comfort rung (−1
+   * when not an endless ladder run), drain, noon cloud, today's forecast and biome, lesson on.
+   */
+  testState(): {
+    phase: string;
+    day: number;
+    minutes: number;
+    chill: number;
+    snow: number;
+    theta: number;
+    f: number;
+    profile: number;
+    rung: number;
+    drain: number;
+    noonCloud: number;
+    forecast: string;
+    biome: string;
+    lessonOn: boolean;
+  } {
+    const s = this.s;
+    return {
+      phase: s.phase,
+      day: s.day,
+      minutes: s.minutes,
+      chill: s.nubs.chill,
+      snow: s.stats.snow,
+      theta: s.sun.theta,
+      f: s.nubs.f,
+      profile: s.cfg.profile,
+      rung: this.runActive ? this.runRung : (this.rungOf.get(s) ?? -1),
+      drain: effectiveDrain(s),
+      noonCloud: effectiveNoonCloud(s.cfg),
+      forecast: forecastOf(s.params),
+      biome: biomeAtWorld(s.world, s.nubs.y),
+      lessonOn: lessonOnOf(s),
+    };
   }
 
   /** Test hook: the config of the current run (the Title's held run between runs). */

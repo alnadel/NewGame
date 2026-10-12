@@ -9,6 +9,14 @@ export interface ShadyState {
   snow: number;
   theta: number;
   f: number;
+  profile: number;
+  /** Comfort rung of an endless ladder run, −1 otherwise. */
+  rung: number;
+  drain: number;
+  noonCloud: number;
+  forecast: string;
+  biome: string;
+  lessonOn: boolean;
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
