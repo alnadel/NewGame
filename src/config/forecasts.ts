@@ -72,7 +72,7 @@ export interface ForecastTuning {
 export const FORECAST_TUNING: Readonly<Record<ForecastId, ForecastTuning>> = Object.freeze({
   clear: {},
   breezy: { clouds: 1.5, cloudDrift: 30, overtake: [1.35, 1.6], wait: [0.5, 0.65] },
-  overcast: { clouds: 1.5, cloudRx: [80, 100], spacing: 1.3 },
+  overcast: { clouds: 1.5, cloudRx: [80, 100], spacing: 1.4 },
   heat: { epsNoon: 3, flakes: 1, spacing: 0.92, snow: 1.5 },
   long: { epsNoon: -10, spacing: 1.15, latMax: 10 },
   dazzle: { balls: [6, 12] },

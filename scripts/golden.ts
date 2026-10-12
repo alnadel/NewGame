@@ -7,9 +7,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CASTER_KINDS } from '../src/config/casters.ts';
 import { rungConfig } from '../src/config/days.ts';
-import { FORECAST_IDS } from '../src/config/forecasts.ts';
+import { FORECAST_IDS, forecastFits } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
 import { sinD } from '../src/core/dmath.ts';
+import { planDay } from '../src/core/gen/plan.ts';
 import { createWorld, ensureGenerated } from '../src/core/gen/world.ts';
 import { createBot } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
@@ -116,10 +117,14 @@ export function chunkDigests(seed: number, plan = true): string[] {
   return out;
 }
 
-/** Final hash of a 40 s reactive run on seed 5 with each forecast forced. */
+/** Final hash of a 40 s reactive run with each forecast forced, on the first seed ≥ 5 whose Day 1 it fits. */
 export function forecastHashes(): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const forecast of FORECAST_IDS) out[forecast] = hashState(runBot({ ...headlessConfig(5, 3), forecast }, 2400, 'reactive'));
+  for (const forecast of FORECAST_IDS) {
+    let seed = 5;
+    while (!forecastFits(forecast, planDay(seed, 1).biome)) seed++;
+    out[forecast] = hashState(runBot({ ...headlessConfig(seed, 3), forecast }, 2400, 'reactive'));
+  }
   return out;
 }
 

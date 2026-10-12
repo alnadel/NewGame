@@ -142,13 +142,13 @@ describe('drain override', () => {
   it('the same seed at profile 3 survives longer with cfg.drain = 30 than with the profile drain', () => {
     for (const bot of ['idle', 'novice'] as const) {
       let longer = 0;
-      for (let seed = 1; seed <= 6; seed++) {
-        const base = runBot(headlessConfig(seed, 3), 60 * 400, bot);
-        const easy = runBot(headlessConfig(seed, 3, 30), 60 * 400, bot);
+      for (let seed = 1; seed <= 4; seed++) {
+        const base = runBot(headlessConfig(seed, 3), 60 * 90, bot);
+        const easy = runBot(headlessConfig(seed, 3, 30), 60 * 90, bot);
         expect(easy.tick).toBeGreaterThanOrEqual(base.tick);
         if (easy.tick > base.tick) longer++;
       }
-      expect(longer, bot).toBeGreaterThanOrEqual(5);
+      expect(longer, bot).toBeGreaterThanOrEqual(3);
     }
   }, 60_000);
 

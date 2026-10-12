@@ -2,11 +2,13 @@
 // plan-on rule, and that a forecast never touches the clock.
 import { describe, expect, it } from 'vitest';
 import { START_HUT } from '../../src/config/casters.ts';
+import { TUNING } from '../../src/config/tuning.ts';
 import { dayParams, dayPlan, legacyPlan, type BiomeId, type DayPlan } from '../../src/config/days.ts';
 import { FORECAST_IDS, FORECASTS, forecastFits, PLAN_START_DATE, PLAN_WEIGHTS, type ForecastId } from '../../src/config/forecasts.ts';
 import { dayStartY, yAtTime } from '../../src/core/clock.ts';
 import { biomeAtY, firstTownDay, paramsAt, planDay, worldPlan } from '../../src/core/gen/plan.ts';
-import { createWorld, ensureGenerated, type WorldConfig } from '../../src/core/gen/world.ts';
+import { placeChunk } from '../../src/core/gen/placer.ts';
+import { createWorld, type World, type WorldConfig } from '../../src/core/gen/world.ts';
 import { createBot } from '../../src/core/sim/bots.ts';
 import { createRun, prepareRun, prepareSome } from '../../src/core/sim/create.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
@@ -16,6 +18,20 @@ import { step } from '../../src/core/sim/step.ts';
 import { trailX } from '../../src/core/trail.ts';
 
 const world = (seed: number, extra: Partial<WorldConfig> = {}) => createWorld({ seed, profile: 3, tutorial: false, ...extra });
+
+/** A world with its chunks placed through y but not validated (no rescues): fast, for layout checks. */
+function placed(seed: number, y: number, extra: Partial<WorldConfig> = {}): World {
+  const w = world(seed, extra);
+  for (let k = w.placedThrough + 1; k * TUNING.world.chunkLen < y; k++) {
+    placeChunk(w, k);
+    w.placedThrough = k;
+  }
+  return w;
+}
+
+/** Plan-on worlds of seeds 1-20 placed through Day 4 (shared by the layout checks below). */
+let layouts: World[] | null = null;
+const plannedWorlds = (): World[] => (layouts ??= Array.from({ length: 20 }, (_, i) => placed(i + 1, dayStartY(5))));
 
 describe('Day Plan draws (planDay)', () => {
   it('is pure: the same (seed, day) always gives the same plan, in any call order', () => {
@@ -204,9 +220,8 @@ describe('forecast tuning', () => {
   });
 
   it('every generated Old Town day ≥ 2 has gazing balls unless it is market day (seeds 1-20, days 1-4)', () => {
-    for (let seed = 1; seed <= 20; seed++) {
-      const w = world(seed);
-      ensureGenerated(w, dayStartY(5));
+    for (const w of plannedWorlds()) {
+      const seed = w.seed;
       for (let d = 1; d <= 4; d++) {
         const p = worldPlan(w, d);
         const balls = w.balls.filter((b) => b.day === d).length;
@@ -214,13 +229,12 @@ describe('forecast tuning', () => {
         if ((p.biome === 'meadow' && p.forecast !== 'dazzle') || p.forecast === 'market' || (d === 1 && p.forecast !== 'dazzle')) expect(balls).toBe(0);
       }
     }
-  }, 30_000);
+  });
 
   it('puts the noon gate arch on the first Old Town day ≥ 2 and clears 200 u past the hut when Day 1 is Old Town', () => {
     let townFirst = 0;
-    for (let seed = 1; seed <= 20; seed++) {
-      const w = world(seed);
-      ensureGenerated(w, dayStartY(4));
+    for (const w of plannedWorlds()) {
+      const seed = w.seed;
       const d = firstTownDay(w);
       expect(d).toBe(worldPlan(w, 1).biome === 'oldtown' ? 3 : 2);
       const dl = dayParams(d, 3).dayLen;
@@ -243,8 +257,7 @@ describe('forecast tuning', () => {
       let stalls = 0;
       let all = 0;
       for (let seed = 1; seed <= 12; seed++) {
-        const w = world(seed, { forecast });
-        ensureGenerated(w, dayStartY(4));
+        const w = placed(seed, dayStartY(4), { forecast });
         for (const c of w.casters) {
           if (c.biome !== 'oldtown' || c.rescue || c.kind === 'pedestal' || c.id === w.startHutId) continue;
           if (c.kind === 'stall' || c.gate) stalls++;

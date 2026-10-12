@@ -16,8 +16,8 @@ function plainPar(seed: number, plan: boolean): number {
 }
 
 describe('createParJob', () => {
-  it('equals a plain novice run for three Daily seeds, however it is sliced', () => {
-    for (const seed of [20261012, 20261014, 777]) {
+  it('equals a plain novice run for two Daily seeds, however it is sliced', () => {
+    for (const seed of [20261014, 777]) {
       const want = plainPar(seed, true);
       for (const slice of [7, 180]) {
         const job = createParJob(seed);

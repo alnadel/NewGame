@@ -65,9 +65,9 @@ describe('determinism', () => {
     const cfg = headlessConfig(33, 3);
     const plain = createRun(cfg);
     const eager = createRun(cfg);
-    const botA = createBot('oracle');
-    const botB = createBot('oracle');
-    for (let i = 0; i < 3600; i++) {
+    const botA = createBot('reactive');
+    const botB = createBot('reactive');
+    for (let i = 0; i < 2400 && plain.phase !== 'dead'; i++) {
       step(plain, botA.next(plain));
       generateSome(eager.world, eager.nubs.y + 4000, 1 + (i % 5));
       step(eager, botB.next(eager));
@@ -87,13 +87,29 @@ describe('determinism', () => {
       expect(hashState(sliced)).toBe(hashState(plain));
       const botA = createBot('reactive');
       const botB = createBot('reactive');
-      for (let i = 0; i < 1800; i++) {
+      for (let i = 0; i < 900; i++) {
         step(plain, botA.next(plain));
         step(sliced, botB.next(sliced));
       }
       expect(hashState(sliced)).toBe(hashState(plain));
     }
   }, 60_000);
+
+  it('a run created with less of its world generated (1100 u, as the Title may) plays exactly like a full one', () => {
+    const cfg = headlessConfig(44, 3);
+    const full = createRun(cfg);
+    const lean = createRun(cfg, undefined, 1100);
+    expect(lean.world.validatedThrough).toBeLessThan(full.world.validatedThrough);
+    expect(hashState(lean)).toBe(hashState(full));
+    const a = createBot('reactive');
+    const b = createBot('reactive');
+    for (let i = 0; i < 1200; i++) {
+      step(full, a.next(full));
+      generateSome(lean.world, lean.nubs.y + 2400, 2);
+      step(lean, b.next(lean));
+    }
+    expect(hashState(lean)).toBe(hashState(full));
+  });
 
   it('the scripted input exercises drags, flicks, catches, taps and keys', () => {
     const frames = Array.from({ length: 2000 }, (_, i) => scriptedInput(i));

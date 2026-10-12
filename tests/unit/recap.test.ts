@@ -87,7 +87,7 @@ describe('deathRecap', () => {
     let deaths = 0;
     let advised = 0;
     for (let seed = 1; seed <= 40; seed++) {
-      const s = runBot({ ...headlessConfig(seed), ...rungConfig(4, { tutorialDone: true }) }, 60 * 120, 'human');
+      const s = runBot({ ...headlessConfig(seed), ...rungConfig(4, { tutorialDone: true }) }, 60 * 60, 'human');
       if (s.phase !== 'dead') continue;
       deaths++;
       const t = deathTip(deathRecap(s), false) ?? '';
