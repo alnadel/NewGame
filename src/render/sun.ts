@@ -7,7 +7,8 @@
 
 import { smoothstep } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import { radialSprite } from './sprites.ts';
+import type { ShadesLook } from './shims.ts';
+import { ctx2d, radialSprite } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -93,10 +94,20 @@ export function placeSun(s: SunGlyph, v: View, nx: number, ny: number, dx: numbe
 }
 
 /**
- * Draws the sun (or moon) at the glyph position. `scale` multiplies the 20 px core radius; `boss`
- * (bossWeight) swells it.
+ * Draws the sun (or moon) at the glyph position, wearing `shades`. `scale` multiplies the 20 px core
+ * radius; `boss` (bossWeight) swells it.
  */
-export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood, time: number, scale: number, alpha: number, guiltDx: number, boss: number): void {
+export function drawSun(
+  g: CanvasRenderingContext2D,
+  s: SunGlyph,
+  mood: SunMood,
+  time: number,
+  scale: number,
+  alpha: number,
+  guiltDx: number,
+  boss: number,
+  shades: ShadesLook,
+): void {
   if (alpha <= 0.01) return;
   const night = s.night;
   const r = 20 * scale * (1 + 0.35 * boss);
@@ -154,12 +165,12 @@ export function drawSun(g: CanvasRenderingContext2D, s: SunGlyph, mood: SunMood,
   g.arc(0, 0, r, 0, TAU);
   g.fill();
   g.stroke();
-  drawFace(g, r, mood, time, s.guilty);
+  drawFace(g, r, mood, time, s.guilty, shades);
   g.restore();
   g.globalAlpha = 1;
 }
 
-function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: number, guilty: number): void {
+function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: number, guilty: number, shades: ShadesLook): void {
   const u = r;
   // Glasses slip down when horrified, go up on the forehead for the boss; look aside when guilty.
   const boss = mood === 'boss';
@@ -190,41 +201,11 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
     g.lineTo(0.13 * u, -0.12 * u);
     g.stroke();
   }
-  // Bridge and lenses.
+  // The shades (any of the five shapes) ride the slip, the boss push-up and the look-aside.
   g.save();
   g.translate(look * u, slip * u);
   if (boss) g.scale(0.9, 0.9);
-  g.strokeStyle = '#1E1E28';
-  g.lineWidth = 0.09 * u;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(-0.88 * u, -0.25 * u);
-  g.quadraticCurveTo(0, -0.33 * u, 0.88 * u, -0.25 * u);
-  g.stroke();
-  g.fillStyle = '#1E1E28';
-  for (let sd = -1; sd <= 1; sd += 2) {
-    g.save();
-    g.translate(sd * 0.41 * u, -0.1 * u);
-    g.scale(sd, 1);
-    g.beginPath();
-    g.moveTo(-0.34 * u, -0.15 * u);
-    g.lineTo(0.3 * u, -0.15 * u);
-    g.quadraticCurveTo(0.37 * u, -0.15 * u, 0.35 * u, -0.05 * u);
-    g.quadraticCurveTo(0.3 * u, 0.21 * u, 0.03 * u, 0.22 * u);
-    g.quadraticCurveTo(-0.29 * u, 0.22 * u, -0.35 * u, -0.02 * u);
-    g.quadraticCurveTo(-0.37 * u, -0.15 * u, -0.34 * u, -0.15 * u);
-    g.closePath();
-    g.fill();
-    g.restore();
-  }
-  g.strokeStyle = '#5A5A70';
-  g.lineWidth = 0.055 * u;
-  g.beginPath();
-  g.moveTo(-0.6 * u, -0.08 * u);
-  g.lineTo(-0.5 * u, -0.19 * u);
-  g.moveTo(0.24 * u, -0.08 * u);
-  g.lineTo(0.34 * u, -0.19 * u);
-  g.stroke();
+  drawShades(g, u, shades);
   if (slip > 0) {
     // Wide eyes peeking over the slipped glasses.
     g.fillStyle = '#FFFFFF';
@@ -293,6 +274,104 @@ function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: n
   }
 }
 
+/** Each look's lens fill: lens at the top to lens2 at the bottom, in lens units (built once). */
+const lensFills = new Map<ShadesLook, CanvasGradient>();
+
+function lensFill(g: CanvasRenderingContext2D, k: ShadesLook): CanvasGradient {
+  let f = lensFills.get(k);
+  if (!f) {
+    f = g.createLinearGradient(0, -0.2, 0, 0.3);
+    f.addColorStop(0, k.lens);
+    f.addColorStop(1, k.lens2);
+    lensFills.set(k, f);
+  }
+  return f;
+}
+
+/** One lens in lens units (centre at the origin, +x away from the nose). */
+function lensPath(g: CanvasRenderingContext2D, shape: ShadesLook['shape']): void {
+  g.beginPath();
+  switch (shape) {
+    case 'round':
+      g.arc(0, 0.02, 0.27, 0, TAU);
+      break;
+    case 'aviator':
+      // A teardrop drooping toward the nose.
+      g.moveTo(-0.34, -0.15);
+      g.quadraticCurveTo(0, -0.21, 0.33, -0.15);
+      g.quadraticCurveTo(0.38, 0.14, 0.02, 0.28);
+      g.quadraticCurveTo(-0.3, 0.3, -0.34, -0.15);
+      break;
+    case 'star':
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const rr = i % 2 === 0 ? 0.34 : 0.15;
+        if (i === 0) g.moveTo(Math.cos(a) * rr, 0.04 + Math.sin(a) * rr);
+        else g.lineTo(Math.cos(a) * rr, 0.04 + Math.sin(a) * rr);
+      }
+      break;
+    case 'heart':
+      g.moveTo(0, 0.29);
+      g.bezierCurveTo(-0.44, 0.03, -0.27, -0.32, 0, -0.1);
+      g.bezierCurveTo(0.27, -0.32, 0.44, 0.03, 0, 0.29);
+      break;
+    default:
+      // Classic wayfarers (the v1.0 lenses).
+      g.moveTo(-0.34, -0.15);
+      g.lineTo(0.3, -0.15);
+      g.quadraticCurveTo(0.37, -0.15, 0.35, -0.05);
+      g.quadraticCurveTo(0.3, 0.21, 0.03, 0.22);
+      g.quadraticCurveTo(-0.29, 0.22, -0.35, -0.02);
+      g.quadraticCurveTo(-0.37, -0.15, -0.34, -0.15);
+      break;
+  }
+  g.closePath();
+}
+
+/** The sun's shades at face size `u`: frame bar or bridge and temples, two lenses, two glints. */
+function drawShades(g: CanvasRenderingContext2D, u: number, k: ShadesLook): void {
+  const bar = k.shape === 'classic' || k.shape === 'aviator';
+  g.strokeStyle = k.frame;
+  g.lineCap = 'round';
+  g.lineWidth = 0.09 * u;
+  g.beginPath();
+  if (bar) {
+    g.moveTo(-0.88 * u, -0.25 * u);
+    g.quadraticCurveTo(0, -0.33 * u, 0.88 * u, -0.25 * u);
+  } else {
+    // A small bridge over the nose and the temple arms.
+    g.moveTo(-0.16 * u, -0.1 * u);
+    g.quadraticCurveTo(0, -0.2 * u, 0.16 * u, -0.1 * u);
+    g.moveTo(-0.68 * u, -0.12 * u);
+    g.lineTo(-0.9 * u, -0.22 * u);
+    g.moveTo(0.68 * u, -0.12 * u);
+    g.lineTo(0.9 * u, -0.22 * u);
+  }
+  g.stroke();
+  for (let sd = -1; sd <= 1; sd += 2) {
+    g.save();
+    g.translate(sd * 0.41 * u, -0.1 * u);
+    g.scale(sd * u, u);
+    lensPath(g, k.shape);
+    g.fillStyle = lensFill(g, k);
+    g.fill();
+    g.lineWidth = 0.055;
+    g.lineJoin = 'round';
+    g.stroke();
+    // Two glints across the lens.
+    g.strokeStyle = k.shine;
+    g.globalAlpha *= 0.7;
+    g.lineWidth = 0.05;
+    g.beginPath();
+    g.moveTo(-0.19, 0.02);
+    g.lineTo(-0.09, -0.09);
+    g.moveTo(-0.08, 0.06);
+    g.lineTo(0.0, -0.03);
+    g.stroke();
+    g.restore();
+  }
+}
+
 /** A sweat bead at the temple, bobbing. */
 function sweatDrop(g: CanvasRenderingContext2D, u: number, time: number): void {
   g.fillStyle = '#9AD8FF';
@@ -334,4 +413,24 @@ function drawMoon(g: CanvasRenderingContext2D, x: number, y: number, r: number, 
     g.fillText('z', x + r * 0.9, y - r * (0.7 + zt));
   }
   g.globalAlpha = 1;
+}
+
+const previewGlyph = createSunGlyph();
+
+/**
+ * The Wardrobe's Shades preview: the smug sun at 0.8 of the canvas wearing `shades` (backing store
+ * already CSS × DPR).
+ */
+export function renderSunPreview(canvas: HTMLCanvasElement, shades: ShadesLook): void {
+  const g = ctx2d(canvas);
+  const w = canvas.width;
+  const h = canvas.height;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const s = previewGlyph;
+  s.x = w / 2;
+  s.y = h / 2;
+  s.init = true;
+  // The rays reach 1.62 r: fit them in 0.8 of the smaller side.
+  drawSun(g, s, 'smug', 0, (0.8 * Math.min(w, h)) / 2 / (1.62 * 20), 1, 1, 0, shades);
 }

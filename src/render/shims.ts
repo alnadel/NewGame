@@ -24,6 +24,7 @@ import {
   type SimState,
   type World,
 } from '../core/index.ts';
+import type { Equipped } from '../meta/content.ts';
 
 // V11-SHIM: CC-3 — `export type ForecastId` from src/core/index.ts.
 export type ForecastId = 'clear' | 'breezy' | 'overcast' | 'heat' | 'long' | 'dazzle' | 'market';
@@ -218,4 +219,27 @@ export function deathTip(r: DeathRecap, invert: boolean): string | null {
   if (r.litShare10 >= 0.35) return `In the sun ${Math.round(10 * r.litShare10)} of the last 10 s. Short dips add up.`;
   if (r.minuteOfDay >= 300 && r.minuteOfDay <= 420) return 'Noon shadows are stubs. Ride a cloud or hug tall walls.';
   return null;
+}
+
+// V11-SHIM: CC-12/A15 — `ShadesLook` and the five Sun Shades items in src/meta/content.ts, and
+// `equippedLooks(e).shades` (Equipped gains `shades`, default 'shades-classic'): read
+// `equippedLooks(equipped).shades` instead.
+export interface ShadesLook {
+  slot: 'shades';
+  shape: 'classic' | 'round' | 'aviator' | 'star' | 'heart';
+  frame: string;
+  lens: string;
+  lens2: string;
+  shine: string;
+}
+const SHADES: Readonly<Record<string, ShadesLook>> = {
+  'shades-classic': { slot: 'shades', shape: 'classic', frame: '#2B2140', lens: '#2B2140', lens2: '#4A3D6B', shine: '#FFFFFF' },
+  'shades-round': { slot: 'shades', shape: 'round', frame: '#8A5A3C', lens: '#3A2F5A', lens2: '#5B4A86', shine: '#FFFFFF' },
+  'shades-aviator': { slot: 'shades', shape: 'aviator', frame: '#FFC23D', lens: '#FF9F43', lens2: '#8C3B12', shine: '#FFF3C4' },
+  'shades-star': { slot: 'shades', shape: 'star', frame: '#9B5DE5', lens: '#FFD93D', lens2: '#FF9F43', shine: '#FFFFFF' },
+  'shades-heart': { slot: 'shades', shape: 'heart', frame: '#E8475A', lens: '#FF8FA3', lens2: '#E8475A', shine: '#FFFFFF' },
+};
+export function shadesLook(equipped: Equipped): ShadesLook {
+  const id = (equipped as { shades?: string }).shades;
+  return (id !== undefined ? SHADES[id] : undefined) ?? (SHADES['shades-classic'] as ShadesLook);
 }

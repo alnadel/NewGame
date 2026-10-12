@@ -62,6 +62,7 @@ import { requestPersistence } from '../platform/storage.ts';
 import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
 import { resetDeathBeat } from '../render/deathbeat.ts';
 import { renderWardrobePreview, resetNubsAnim } from '../render/nubs.ts';
+import { renderSunPreview } from '../render/sun.ts';
 import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
@@ -88,6 +89,7 @@ import {
   PLAN_START_DATE,
   planOnOf,
   rungConfig,
+  shadesLook,
   worldPlan,
   type RunConfigV11,
   type SimEventV11,
@@ -104,6 +106,8 @@ import {
   type ChallengeBannerV11,
   type CueId,
   type ResultsViewV11,
+  swapMission,
+  type UiCallbacksV11,
 } from './shims.ts';
 import type { StampKind } from '../render/banners.ts';
 
@@ -362,8 +366,7 @@ export class Session {
         this.syncSentinel();
         return r;
       };
-    this.ui = createUi(deps.uiRoot, {
-      callbacks: {
+    const callbacks: UiCallbacksV11 = {
         startRun: sync((k: RunKind, date?: string) => this.startRun(k, date)),
         retry: sync(() => this.retry()),
         home: sync(() => this.home()),
@@ -429,8 +432,17 @@ export class Session {
           if (this.ui.current() === 'title') this.input.begin(e);
         },
         uiSound: (name) => this.uiSound(name),
-        renderWardrobePreview: (canvas, equipped) => renderWardrobePreview(canvas, equipped),
-      },
+        renderWardrobePreview: (canvas, equipped, subject) =>
+          subject === 'sun' ? renderSunPreview(canvas, shadesLook(equipped)) : renderWardrobePreview(canvas, equipped),
+        swapMission: (slotId) => {
+          const next = swapMission(store.get(), slotId);
+          store.set(next);
+          store.flush();
+          this.ui.setSave(next);
+        },
+    };
+    this.ui = createUi(deps.uiRoot, {
+      callbacks,
       save,
       today: this.today,
       version: deps.version,

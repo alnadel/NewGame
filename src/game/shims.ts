@@ -31,7 +31,7 @@ export function uiV11(ui: Ui): UiV11 {
 export type UiCallbacksV11 = Omit<UiCallbacks, 'renderWardrobePreview'> & {
   renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equipped, subject?: 'nubs' | 'sun'): void;
   swapMission(slotId: string): void;
-  sharePostcard(): Promise<ShareOutcome>;
+  sharePostcard?(): Promise<ShareOutcome>;
 };
 
 // V11-SHIM: CC-11 — ChallengeBanner adds `name?` and `warmup?`.
@@ -109,4 +109,11 @@ export function challengeRules(c: Challenge): ChallengeRules {
   const x = c as Challenge & { p?: ProfileId; dr?: number; nc?: NoonCloud; pl?: 0 | 1; n?: string };
   if (x.p === undefined) return { p: 3, dr: 55, nc: 0, pl: 0, n: x.n ?? '' };
   return { p: x.p, dr: x.dr ?? 55, nc: x.nc ?? 0, pl: x.pl ?? (x.p === 3 ? 1 : 0), n: x.n ?? '' };
+}
+
+// V11-SHIM: CC-10 — `swapMission(save, slotId): Save` from src/meta/progression.ts (that slot's id
+// moves to deferred and the next eligible mission is dealt at once). The v1.0 meta has no stale
+// slots, so nothing is swapped here.
+export function swapMission(save: SaveV1, _slotId: string): SaveV1 {
+  return save;
 }

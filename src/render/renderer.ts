@@ -90,7 +90,7 @@ import { createDeathBeat, drawGrey, drawHatPop, greyOf, startDeathBeat, type Dea
 import { createDecor, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
-import { forecastOf, worldPlan } from './shims.ts';
+import { forecastOf, shadesLook, worldPlan } from './shims.ts';
 import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
@@ -675,7 +675,7 @@ export class Renderer {
       else if (boss > 0.6) mood = 'boss';
       else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
-      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss);
+      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, shadesLook(inp.equipped));
     }
 
     // HUD.
