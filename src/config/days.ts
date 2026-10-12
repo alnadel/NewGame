@@ -124,20 +124,24 @@ export const COMFORT_RUNGS: readonly ComfortRung[] = Object.freeze([
 export const COMFORT_MAX = 4;
 
 /** comfortAfterRun thresholds (score minutes): a jump to standard, one rung up, one rung down. */
-export const COMFORT_STEPS = Object.freeze({ standard: 1440, up: 390, down: 240, tutorialUp: 720 });
+export const COMFORT_STEPS = Object.freeze({ standard: 1440, up: 390, down: 300 });
 
 const clampRung = (r: number, lo: number): number => (r >= lo ? (r <= COMFORT_MAX ? Math.floor(r) : COMFORT_MAX) : lo);
 
 /**
  * The rung of the next endless run after a run at `rung` that scored `minutes`. From the tutorial
- * (rung 0): Day 3 → standard, the first night → 2, else 1. From rung ≥ 1: Day 3 → standard, past
- * 12:30 PM → one up, before 10:00 AM → one down, else the same. Never back to the tutorial.
+ * (rung 0): Day 3 → standard, else 1. From rung ≥ 1: Day 3 → standard, past 12:30 PM → one up,
+ * before 11:00 AM → one down, else the same. Never back to the tutorial.
+ *
+ * Calibrated with the career sim on the humanDial model. Sending a tutorial run that reached night
+ * straight to rung 2 cut runs 1-3 from a 71 s to a 43 s median. Stepping down below 10:00 AM kept
+ * struggling players stuck at rung 2-3; 11:00 AM lets them ease off, and they climb back past 12:30 PM.
  */
 export function comfortAfterRun(rung: number, minutes: number): number {
   const S = COMFORT_STEPS;
   const r = clampRung(rung, 0);
   if (minutes >= S.standard) return COMFORT_MAX;
-  if (r === 0) return minutes >= S.tutorialUp ? 2 : 1;
+  if (r === 0) return 1;
   return clampRung(minutes >= S.up ? r + 1 : minutes < S.down ? r - 1 : r, 1);
 }
 

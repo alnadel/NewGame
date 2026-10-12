@@ -202,10 +202,10 @@ describe('comfort, history and pace', () => {
       s.stats.comfort = rung;
       return applyRunResult(s, run(minutes, {}, { mode, dailyDate: mode === 'daily' ? TODAY : undefined }), opts({ rung })).outcome.comfortAfter;
     };
-    // From the tutorial: Day 3 → standard, the first night → 2, else 1.
-    expect([at(0, 100), at(0, 720), at(0, 1440)]).toEqual([1, 2, 4]);
-    // From rung ≥ 1: up past 12:30 PM, down before 10:00 AM, never below 1 or above 4.
-    expect([at(2, 390), at(2, 389), at(2, 239), at(1, 10), at(4, 400), at(3, 1440)]).toEqual([3, 2, 1, 1, 4, 4]);
+    // From the tutorial: Day 3 → standard, else 1.
+    expect([at(0, 100), at(0, 720), at(0, 1440)]).toEqual([1, 1, 4]);
+    // From rung ≥ 1: up past 12:30 PM, down before 11:00 AM, never below 1 or above 4.
+    expect([at(2, 390), at(2, 389), at(2, 299), at(2, 300), at(1, 10), at(4, 400), at(3, 1440)]).toEqual([3, 2, 1, 2, 1, 4, 4]);
     expect(at(2, 1440, 'daily')).toBe(2);
     // Adaptive comfort switched off: the rung stays.
     const off = quiet();

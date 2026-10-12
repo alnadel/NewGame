@@ -49,20 +49,19 @@ describe('comfort ladder', () => {
     for (let r = 1; r <= COMFORT_MAX; r++) expect(COMFORT_RUNGS[r]!.drain).toBeGreaterThan(COMFORT_RUNGS[r - 1]!.drain);
   });
 
-  it('comfortAfterRun from the tutorial: Day 3 → standard, the first night → 2, else 1', () => {
+  it('comfortAfterRun from the tutorial: Day 3 → standard, else rung 1', () => {
     expect(comfortAfterRun(0, 0)).toBe(1);
-    expect(comfortAfterRun(0, 719)).toBe(1);
-    expect(comfortAfterRun(0, 720)).toBe(2);
-    expect(comfortAfterRun(0, 1439)).toBe(2);
+    expect(comfortAfterRun(0, 720)).toBe(1);
+    expect(comfortAfterRun(0, 1439)).toBe(1);
     expect(comfortAfterRun(0, 1440)).toBe(4);
     expect(comfortAfterRun(0, 9000)).toBe(4);
   });
 
-  it('comfortAfterRun from rungs 1-4: up from 12:30 PM, down before 10:00 AM, standard from Day 3, within [1, 4]', () => {
+  it('comfortAfterRun from rungs 1-4: up from 12:30 PM, down before 11:00 AM, standard from Day 3, within [1, 4]', () => {
     for (let r = 1; r <= 4; r++) {
       expect(comfortAfterRun(r, 0)).toBe(Math.max(1, r - 1));
-      expect(comfortAfterRun(r, 239)).toBe(Math.max(1, r - 1));
-      expect(comfortAfterRun(r, 240)).toBe(r);
+      expect(comfortAfterRun(r, 299)).toBe(Math.max(1, r - 1));
+      expect(comfortAfterRun(r, 300)).toBe(r);
       expect(comfortAfterRun(r, 389)).toBe(r);
       expect(comfortAfterRun(r, 390)).toBe(Math.min(4, r + 1));
       expect(comfortAfterRun(r, 1439)).toBe(Math.min(4, r + 1));
@@ -72,8 +71,8 @@ describe('comfort ladder', () => {
     expect(comfortAfterRun(1, 10)).toBe(1);
     expect(comfortAfterRun(9, 300)).toBe(4);
     expect(comfortAfterRun(-2, 100)).toBe(1);
-    expect(comfortAfterRun(Number.NaN, 800)).toBe(2);
-    expect(comfortAfterRun(2.7, 300)).toBe(2);
+    expect(comfortAfterRun(Number.NaN, 800)).toBe(1);
+    expect(comfortAfterRun(2.7, 320)).toBe(2);
   });
 
   it('rungConfig gives the rung rules, the tutorial on rung 0 and the lesson on rungs 0-1 until passed', () => {
