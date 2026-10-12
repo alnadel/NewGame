@@ -301,11 +301,15 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const save = ctx.save();
     const s = save.stats;
 
-    hide(chipBest, s.runs < BEST_CHIP_RUNS || s.bestMinutes <= 0);
-    const best = splitMinutes(s.bestMinutes);
+    // The first runs' best (gentler rules, never counted) shows as an eased best while it is ahead.
+    const eased = s.easedBest > s.bestMinutes;
+    const shownBest = eased ? s.easedBest : s.bestMinutes;
+    hide(chipBest, s.runs < BEST_CHIP_RUNS || shownBest <= 0);
+    chipBest.classList.toggle('is-eased', eased);
+    const best = splitMinutes(shownBest);
     bestDay.textContent = `D${best.day}`;
     bestValue.textContent = formatTimeOfDay(best.minute);
-    chipBest.setAttribute('aria-label', `Journal, best ${formatScore(s.bestMinutes)}`);
+    chipBest.setAttribute('aria-label', `Journal, ${eased ? 'eased best' : 'best'} ${formatScore(shownBest)}`);
 
     // Three mission pips and a fourth, set apart, for Today's errand.
     const missions = activeMissionViews(save);

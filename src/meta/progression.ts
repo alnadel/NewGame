@@ -217,6 +217,8 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   const countsForBest = r.mode !== 'daily' && runsBefore >= BEST_FROM_RUNS;
   const newBest = countsForBest && prevBestMinutes > 0 && r.minutes > prevBestMinutes;
   if (countsForBest && r.minutes > prevBestMinutes) s.bestMinutes = r.minutes;
+  // The first runs' best is kept apart (an "eased best"), so a good early run isn't just lost.
+  if (r.mode === 'endless' && !countsForBest && r.minutes > s.easedBest) s.easedBest = r.minutes;
 
   // Endless runs: the history and the comfort ladder (Daily and challenge runs never touch them).
   let pace: string | null = null;
@@ -421,6 +423,18 @@ export function nextMilestone(save: Save): number | null {
 }
 
 /**
+ * "So close: …" with one pair of parentheses at most: "Survive a noon (reach 12:30 PM)" at
+ * 11:00 AM reads "So close: Survive a noon · 11:00 AM of 12:30 PM", a count "· 6/10", and a
+ * progress that names its day "(best Day 1 · 2:20 PM)".
+ */
+export function soCloseText(label: string, progress: string): string {
+  const m = /^(.*?)\s*\(reach ([^)]+)\)$/.exec(label);
+  const short = m ? (m[1] as string) : label;
+  if (progress.includes(' · ')) return `So close: ${short} (best ${progress})`;
+  return m ? `So close: ${short} · ${progress} of ${m[2] as string}` : `So close: ${short} · ${progress}`;
+}
+
+/**
  * The Title's next-goal line, from lifetime run BEST_FROM_RUNS on: a mission that is nearly done,
  * else a fresh Daily, else the next milestone. `minutes` is the score it points at, when it has one.
  */
@@ -431,7 +445,7 @@ export function nextGoal(save: Save, today: string): { text: string; minutes: nu
   if (close) {
     const p = parseMissionId(close.id);
     const minutes = p && p.def.scale === 'reach' ? missionTarget(p.def, p.tier) : null;
-    return { text: `So close: ${close.label} (${close.progressText})`, minutes };
+    return { text: soCloseText(close.label, close.progressText), minutes };
   }
   if (isDailyUnlocked(save) && !dailyStatus(save, today).played) return { text: `Daily #${dailyNumber(today)} is fresh`, minutes: null };
   const m = nextMilestone(save);

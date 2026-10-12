@@ -17,11 +17,13 @@ export function createJournalScreen(ctx: UiContext): Screen {
   let origin: ScreenId = 'title';
 
   const bestEndless = h('span', { class: 'jbest-val' });
+  // The first runs never count as a best (gentler rules); their best shows here, marked eased.
+  const bestEased = h('span', { class: 'jbest-eased' });
   const bestDaily = h('span', { class: 'jbest-val' });
   const bests = h(
     'div',
     { class: 'jbests' },
-    h('div', { class: 'jbest' }, h('span', { class: 'kicker' }, 'Best run'), bestEndless),
+    h('div', { class: 'jbest' }, h('span', { class: 'kicker' }, 'Best run'), bestEndless, bestEased),
     h('div', { class: 'jbest' }, h('span', { class: 'kicker' }, 'Best Daily'), bestDaily),
   );
 
@@ -56,6 +58,10 @@ export function createJournalScreen(ctx: UiContext): Screen {
     const save = ctx.save();
     const st = save.stats;
     bestEndless.textContent = st.bestMinutes > 0 ? formatScore(st.bestMinutes) : '–';
+    const eased = st.easedBest > st.bestMinutes;
+    bestEased.textContent = eased ? `Eased: ${formatScore(st.easedBest)}` : '';
+    bestEased.title = eased ? 'Your first runs are on gentler rules, so they never count as a best.' : '';
+    bestEased.hidden = !eased;
     const daily = Object.values(save.daily).reduce((m, e) => Math.max(m, e.bestMinutes), 0);
     bestDaily.textContent = daily > 0 ? formatScore(daily) : '–';
 

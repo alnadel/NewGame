@@ -132,7 +132,9 @@ list and only downward, never the body that holds the score.
 **Journal** (v1.1): bests (endless and Daily), the last 30 endless runs as bars (height ∝ score,
 colour by the day reached, the best in gold, runs on eased rules hatched, an sr-only summary), the
 last-10 average and its change against the 10 before, and lifetime totals. Opened from the Title's
-Best chip ("Journal, best …") and the Missions header.
+Best chip ("Journal, best …") and the Missions header. The first three runs never count as a best
+(gentler rules): their best (`stats.easedBest`) shows under "Best run" as "Eased: …", and on the
+Best chip (its day badge hatched, "Journal, eased best …") while it is ahead of the counted best.
 
 ## 4. `UiCallbacks` reference
 

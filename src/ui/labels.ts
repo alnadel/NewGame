@@ -25,13 +25,12 @@ import type { CueId, ResultsView, ScreenId } from './types.ts';
 const NBSP = '\u00a0';
 
 /**
- * The challenge banner's goal, "Beat Day 2 · 2:40 PM", which may wrap after "Beat" and after "·"
- * but never inside "Day 2" or "2:40 PM": narrow phones show "Beat Day 2 ·" over "2:40 PM" instead
- * of running under Play.
+ * The challenge banner's goal, "Beat Day 2 · 2:40 PM", which may wrap after "Beat" only: the score
+ * is one unbreakable unit, so narrow phones show "Beat" over "Day 2 · 2:40 PM" (never "Beat Day 2 ·"
+ * over "2:40 PM") instead of running under Play.
  */
 export function challengeGoalText(minutes: number): string {
-  const [day, time] = formatScore(minutes).split(' · ');
-  return time === undefined ? `Beat ${day}` : `Beat ${(day ?? '').replace(/ /g, NBSP)}${NBSP}· ${time.replace(/ /g, NBSP)}`;
+  return `Beat ${formatScore(minutes).replace(/ /g, NBSP)}`;
 }
 
 export const NOT_COUNTED_NOTE = 'Melted before 6:30 AM, so no try was used';

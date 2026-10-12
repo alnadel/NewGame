@@ -22,6 +22,11 @@ export interface Settings {
 export interface SaveStats {
   runs: number;
   bestMinutes: number;
+  /**
+   * The best of the first BEST_FROM_RUNS endless runs (progression.ts), which never count as a best
+   * (their gentler rules): shown as an "eased best" while it beats bestMinutes.
+   */
+  easedBest: number;
   bestSnowRun: number;
   lifetimeSnow: number;
   wallet: number;

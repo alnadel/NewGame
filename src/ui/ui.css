@@ -429,6 +429,11 @@
   letter-spacing: 0.02em;
 }
 
+/* An eased best (the first runs, on gentler rules): the day badge hatched like the Journal's bars. */
+.chip.is-eased .day-badge {
+  background: repeating-linear-gradient(135deg, var(--indigo) 0 4px, var(--ink-2) 4px 7px);
+}
+
 .pips {
   display: inline-flex;
   gap: 5px;
@@ -3714,6 +3719,14 @@ body:has(#ui[data-screen='play']) #game:active {
 .jbest-val {
   font-weight: 900;
   font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The first runs' best (never counted: gentler rules), under the counted one. */
+.jbest-eased {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 

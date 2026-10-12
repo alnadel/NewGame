@@ -19,6 +19,7 @@ import {
   itemState,
   MILESTONES,
   nextGoal,
+  soCloseText,
   nextMilestone,
   recentBest,
   resetProgress,
@@ -155,6 +156,16 @@ describe('applyRunResult: stats, bests and wallet', () => {
     expect(applyRunResult(s, run(400, {}, { mode: 'challenge' }), opts()).save.stats.bestMinutes).toBe(400);
   });
 
+  it('keeps the first runs\' best apart as an eased best (they never count as a best)', () => {
+    let s = defaults(1);
+    for (const m of [120, 300, 200]) s = applyRunResult(s, run(m), opts()).save;
+    expect(s.stats.bestMinutes).toBe(0);
+    expect(s.stats.easedBest).toBe(300);
+    s = applyRunResult(s, run(232), opts()).save;
+    expect(s.stats.bestMinutes).toBe(232);
+    expect(s.stats.easedBest).toBe(300);
+  });
+
   it('keeps daily scores out of the endless best', () => {
     const s = applyRunResult(quiet(), run(400, {}, { mode: 'daily', dailyDate: TODAY }), opts()).save;
     expect(s.stats.bestMinutes).toBe(0);
@@ -269,9 +280,11 @@ describe('comfort, history and pace', () => {
     expect(nextGoal(s, TODAY)).toEqual({ text: 'Next: reach Day 2', minutes: 720 });
     s.missions.active[0] = { id: 'flakes-10', progress: 6, done: false, stale: 0 };
     s.missions.active[2] = { id: 'reach-day-2', progress: 500, done: false, stale: 0 };
-    expect(nextGoal(s, TODAY)).toEqual({ text: 'So close: Reach Day 2 (Day 1 · 2:20 PM)', minutes: 720 });
+    expect(nextGoal(s, TODAY)).toEqual({ text: 'So close: Reach Day 2 (best Day 1 · 2:20 PM)', minutes: 720 });
     s.missions.active[2] = { id: 'reach-day-2', progress: 0, done: false, stale: 0 };
-    expect(nextGoal(s, TODAY)).toEqual({ text: 'So close: Collect 10 flakes in one run (6/10)', minutes: null });
+    expect(nextGoal(s, TODAY)).toEqual({ text: 'So close: Collect 10 flakes in one run · 6/10', minutes: null });
+    // One pair of parentheses at most (the noon mission's label carries its own).
+    expect(soCloseText('Survive a noon (reach 12:30 PM)', '11:00 AM')).toBe('So close: Survive a noon · 11:00 AM of 12:30 PM');
     s.missions.active[0] = { id: 'flakes-10', progress: 10, done: true, stale: 0 };
     expect(nextGoal(s, addDays(TODAY, 1))).toEqual({ text: 'Daily #285 is fresh', minutes: null });
     // Not before lifetime run 3.

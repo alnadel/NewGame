@@ -252,11 +252,11 @@ describe('Settings sections (U16)', () => {
 });
 
 describe('challenge banner goal (U10)', () => {
-  it('wraps only after "Beat" and after "·"', () => {
+  it('wraps only after "Beat": the score stays in one piece', () => {
     const t = challengeGoalText(1240);
-    expect(t.replace(/ /g, ' ')).toBe('Beat Day 2 · 2:40 PM');
-    // Breakable spaces: after "Beat" and after "·" only.
-    expect(t.split(' ')).toEqual(['Beat', 'Day 2 ·', '2:40 PM']);
+    expect(t.replace(/\u00a0/g, ' ')).toBe('Beat Day 2 · 2:40 PM');
+    // One breakable space, after "Beat" (never "Beat Day 2 ·" over "2:40 PM").
+    expect(t.split(' ')).toEqual(['Beat', 'Day\u00a02\u00a0·\u00a02:40\u00a0PM']);
   });
 });
 

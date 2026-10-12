@@ -95,7 +95,7 @@ All goals are measured with the seeded bots, the career sim, the perf harness an
    - Sun-path ghosts (they leak the solution).
    - Lazy UI screens (no gain).
 5. **Honest framing.**
-   - Bests count from lifetime run 3 onward.
+   - Bests count from lifetime run 3 onward; the first runs' best is kept as an "eased best" (`stats.easedBest`, fix round 1) and shown, marked, while it is ahead.
    - The gold ruler flag shows your recent best (best of the last 10 runs).
    - Rungs below R6 are visible in the Journal.
    - Adaptive comfort can be switched off in Settings.

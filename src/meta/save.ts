@@ -88,6 +88,7 @@ export function defaults(now: number = Date.now()): Save {
     stats: {
       runs: 0,
       bestMinutes: 0,
+      easedBest: 0,
       bestSnowRun: 0,
       lifetimeSnow: 0,
       wallet: 0,
@@ -336,6 +337,7 @@ function sanitize(r: Rec, now: number): Save {
     stats: {
       runs,
       bestMinutes,
+      easedBest: int(stats.easedBest, 0, 0, BIG),
       bestSnowRun: int(stats.bestSnowRun, 0, 0, BIG),
       lifetimeSnow: int(stats.lifetimeSnow, 0, 0, BIG),
       wallet: int(stats.wallet, 0, 0, BIG),
