@@ -74,9 +74,12 @@ test.describe('first-run lesson (A5)', () => {
     await page.mouse.move(x, c.y);
     await page.mouse.down();
     // Drag the hinted way into full shade and hold the sun there (no release flick); if Nubs walks
-    // out of that shade first, keep dragging.
-    for (let i = 0; i < 200 && (await state(page)).lessonOn; i++) {
-      if ((await state(page)).f > 0 && x > 30 && x < v.width - 30) {
+    // out of that shade first, keep dragging. A shade reached less than 15° after Nubs was last lit
+    // (a shadow crossed on the way) can't pass the lesson (A5): after a while in it, drag on.
+    let shaded = 0;
+    for (let i = 0; i < 300 && (await state(page)).lessonOn; i++) {
+      shaded = (await state(page)).f > 0 ? 0 : shaded + 1;
+      if ((shaded === 0 || shaded > 40) && x > 30 && x < v.width - 30) {
         x += sgn * 3;
         await page.mouse.move(x, c.y);
       }
