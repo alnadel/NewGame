@@ -421,7 +421,10 @@ test.describe('death beat (GR12)', () => {
     await toResults(page);
     await page.waitForTimeout(3000);
     const tip = await page.evaluate(() => window.__SHADY_TEST__!.resultsTip());
-    expect(tip).toMatch(/^(Shade was \d+° (left|right)\. Drag [←→]\.|In the sun \d+ of the last 10 s\. Short dips add up\.|Noon shadows are stubs\. Ride a cloud or hug tall walls\.|Red arcs are glare\. Keep the little sun out\.)$/);
+    // One of core deathTip's lines (their wording rotates run to run): a direction, a count of the
+    // seconds walked in the sun, the noon line or the glare line; never a screen side.
+    expect(tip).toMatch(/\d+° away.*Drag [←→]|Drag [←→]: .*\d+° away|\d+ of the last \d+ s|[Nn]oon|[Gg]lare/);
+    expect(tip).not.toMatch(/\b(left|right)\b/);
     const boxes = await page.evaluate(() => window.__SHADY_TEST__!.mapCallouts());
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {

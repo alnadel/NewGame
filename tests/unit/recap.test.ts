@@ -9,44 +9,62 @@ import { deathRecap, deathTip, type DeathRecap } from '../../src/core/sim/recap.
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT } from '../../src/core/sim/types.ts';
 
-const base: DeathRecap = { cause: 'gap', litShare10: 0.2, theta: 90, away: null, exposure: 0.5, minuteOfDay: 200 };
-const tip = (over: Partial<DeathRecap>, invert = false): string | null => deathTip({ ...base, ...over }, invert);
+const base: DeathRecap = { cause: 'gap', litShare10: 0.2, window: 10, theta: 90, away: null, nowAway: null, exposure: 0.2, minuteOfDay: 200 };
+const tip = (over: Partial<DeathRecap>, invert = false, variant = 0): string | null => deathTip({ ...base, ...over }, invert, variant);
 
 describe('deathTip', () => {
   it('glare comes first', () => {
     expect(tip({ cause: 'glare', away: 20, exposure: 3, litShare10: 1 })).toBe('Red arcs are glare. Keep the little sun out.');
   });
 
-  it('shade was close: the side the sun pointer must move to on screen and the finger direction', () => {
-    // θ 90 (pointer at the top): counter-clockwise moves it left, and a leftward drag turns that way.
-    expect(tip({ away: 40, exposure: 1.5 })).toBe('Shade was 40° left. Drag ←.');
-    expect(tip({ away: -40, exposure: 2 })).toBe('Shade was 40° right. Drag →.');
-    // Inverted controls flip only the finger.
-    expect(tip({ away: 40, exposure: 2 }, true)).toBe('Shade was 40° left. Drag →.');
-    expect(tip({ away: -40, exposure: 2 }, true)).toBe('Shade was 40° right. Drag ←.');
-    // θ 270 (pointer at the bottom): counter-clockwise moves it right.
-    expect(tip({ theta: 270, away: 30.4, exposure: 2 })).toBe('Shade was 30° right. Drag ←.');
-    // Straight down from θ 10° to −10°: the side follows the finger.
-    expect(tip({ theta: 10, away: -20, exposure: 2 })).toBe('Shade was 20° right. Drag →.');
-    expect(tip({ away: 90, exposure: 2 })).toBe('Shade was 90° left. Drag ←.');
+  it('shade in reach: how far and the finger direction only (no screen side to contradict the arrow)', () => {
+    // A leftward drag turns the sun counter-clockwise (+), unless the controls are inverted.
+    expect(tip({ away: 40, nowAway: 40, exposure: 1.5 })).toBe('Thick teal was 40° away. Drag ←.');
+    expect(tip({ away: -40, nowAway: -40, exposure: 2 })).toBe('Thick teal was 40° away. Drag →.');
+    expect(tip({ away: 40, nowAway: 40, exposure: 2 }, true)).toBe('Thick teal was 40° away. Drag →.');
+    expect(tip({ away: -40, nowAway: -40, exposure: 2 }, true)).toBe('Thick teal was 40° away. Drag ←.');
+    // The pointer's place on the dial no longer matters: θ 270 reads the same as θ 90.
+    expect(tip({ theta: 270, away: 30.4, nowAway: 30.4, exposure: 2 })).toBe('Thick teal was 30° away. Drag ←.');
+    // Shade that lasts is preferred; shade that is ending is the fallback.
+    expect(tip({ away: 100, nowAway: -20, exposure: 2 })).toBe('Thick teal was 100° away. Drag ←.');
+    expect(tip({ away: null, nowAway: -20, exposure: 2 })).toBe('Shade was 20° away. Drag →.');
+    expect(tip({ away: 150, nowAway: -60, exposure: 2 })).toBe('Shade was 60° away. Drag →.');
+    for (const t of [tip({ away: 58, nowAway: 58, exposure: 2 }), tip({ theta: 300, away: -58, nowAway: -58, exposure: 2 })]) {
+      expect(t).not.toMatch(/left|right/);
+    }
   });
 
-  it('shade was close needs ≥ 1.5 s of sun, shade within 90° and a turn that rounds to ≥ 1°', () => {
-    expect(tip({ away: 40, exposure: 1.49 })).toBeNull();
-    expect(tip({ away: 91, exposure: 3 })).toBeNull();
-    expect(tip({ away: 0.3, exposure: 3 })).toBeNull();
-    expect(tip({ away: null, exposure: 3 })).toBeNull();
+  it('shade in reach needs ≥ 0.5 s of sun, shade within 120° and a turn that rounds to ≥ 1°', () => {
+    expect(TUNING.recap.exposureSec).toBe(0.5);
+    expect(TUNING.recap.maxAwayDeg).toBe(120);
+    expect(tip({ away: 40, nowAway: 40, exposure: 0.49 })).toBeNull();
+    expect(tip({ away: 120, nowAway: 120, exposure: 0.5 })).toBe('Thick teal was 120° away. Drag ←.');
+    expect(tip({ away: 121, nowAway: 121, exposure: 3 })).toBeNull();
+    expect(tip({ away: 0.3, nowAway: 0.3, exposure: 3 })).toBeNull();
+    expect(tip({ away: null, nowAway: null, exposure: 3 })).toBeNull();
   });
 
-  it('then lots of sun lately, then noon, else nothing', () => {
+  it('then lots of sun lately (over the seconds actually walked), then noon, else nothing', () => {
     expect(tip({ litShare10: 0.35 })).toBe('In the sun 4 of the last 10 s. Short dips add up.');
-    expect(tip({ litShare10: 1, away: 120, exposure: 9 })).toBe('In the sun 10 of the last 10 s. Short dips add up.');
+    expect(tip({ litShare10: 1, away: 130, nowAway: 130, exposure: 9 })).toBe('In the sun 10 of the last 10 s. Short dips add up.');
+    // A run that melted 2 s after it started can't have spent 10 s in the sun.
+    expect(tip({ litShare10: 1, window: 2, exposure: 2 })).toBe('In the sun 2 of the last 2 s. Short dips add up.');
     expect(tip({ litShare10: 0.34 })).toBeNull();
     expect(tip({ minuteOfDay: 300 })).toBe('Noon shadows are stubs. Ride a cloud or hug tall walls.');
     expect(tip({ minuteOfDay: 420 })).toBe('Noon shadows are stubs. Ride a cloud or hug tall walls.');
     expect(tip({ minuteOfDay: 299 })).toBeNull();
     expect(tip({ minuteOfDay: 421 })).toBeNull();
     expect(TUNING.recap.litShare).toBe(0.35);
+  });
+
+  it('the wording rotates with the run count, so the same kind of melt reads fresh', () => {
+    for (const over of [{ litShare10: 0.6 }, { away: 30, nowAway: 30, exposure: 2 }, { minuteOfDay: 360 }, { cause: 'glare' as const }]) {
+      const lines = new Set([0, 1, 2, 3].map((v) => tip(over, false, v)));
+      expect(lines.size, JSON.stringify(over)).toBeGreaterThanOrEqual(2);
+    }
+    // Every phrasing of a sunny melt keeps its numbers.
+    for (let v = 0; v < 3; v++) expect(tip({ litShare10: 0.6 }, false, v)).toMatch(/\b6 of the last 10 s\b/);
+    for (let v = 0; v < 3; v++) expect(tip({ away: -30, nowAway: -30, exposure: 2 }, false, v)).toMatch(/30° away.*→|→.*30° away/);
   });
 });
 
@@ -58,16 +76,21 @@ describe('deathRecap', () => {
     s.world.byId.clear();
     s.world.clouds.length = 0;
     s.world.validatedThrough = 1e6;
+    const y0 = s.nubs.y;
     step(s, { ...NO_INPUT, downEdge: true, upEdge: true });
     while (s.phase !== 'dead') step(s, NO_INPUT);
     const r = deathRecap(s);
     expect(r.cause).toBe('plain');
     expect(r.litShare10).toBe(1);
+    // It melted within seconds: the window covers only the seconds actually walked.
+    expect(r.window).toBe(Math.min(10, Math.max(1, Math.round((s.nubs.y - y0) / s.params.v))));
+    expect(r.window).toBeLessThan(10);
     expect(r.away).toBeNull();
+    expect(r.nowAway).toBeNull();
     expect(r.exposure).toBeCloseTo((100 / 55) * 1, 1);
     expect(r.minuteOfDay).toBe(26);
     expect(r.theta).toBe(s.sun.theta);
-    expect(deathTip(r, false)).toBe('In the sun 10 of the last 10 s. Short dips add up.');
+    expect(deathTip(r, false)).toBe(`In the sun ${r.window} of the last ${r.window} s. Short dips add up.`);
   });
 
   it('prefers shade that lasts (now ∧ next) over shade that is ending', () => {
@@ -79,21 +102,26 @@ describe('deathRecap', () => {
     s.guide.now[60] = 1;
     s.guide.next[60] = 1; // lasts
     expect(deathRecap(s).away).toBe(-40);
+    expect(deathRecap(s).nowAway).toBe(10);
     s.guide.next[60] = 0;
-    expect(deathRecap(s).away).toBe(10);
+    expect(deathRecap(s).away).toBeNull();
+    expect(deathRecap(s).nowAway).toBe(10);
   });
 
-  it('human deaths at standard rules get a "shade was close" or "short dips" tip on ≥ 85% of 40 seeds', () => {
+  it('human deaths at standard rules get a tip on ≥ 85% of 40 seeds, most of them a direction to drag', () => {
     let deaths = 0;
     let advised = 0;
+    let steered = 0;
     for (let seed = 1; seed <= 40; seed++) {
       const s = runBot({ ...headlessConfig(seed), ...rungConfig(4, { tutorialDone: true }) }, 60 * 60, 'human');
       if (s.phase !== 'dead') continue;
       deaths++;
       const t = deathTip(deathRecap(s), false) ?? '';
-      if (t.startsWith('Shade was') || t.startsWith('In the sun')) advised++;
+      if (t !== '') advised++;
+      if (/Drag [←→]/.test(t)) steered++;
     }
     expect(deaths).toBeGreaterThan(30);
     expect(advised / deaths).toBeGreaterThanOrEqual(0.85);
+    expect(steered / deaths).toBeGreaterThanOrEqual(0.4);
   }, 30_000);
 });

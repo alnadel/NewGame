@@ -669,11 +669,11 @@ Teal now means only shade, and red only glare.
 
 **Recap.** `recap.ts` deathTip picks the tip, first match wins:
 1. glare
-2. "Shade was N° left/right. Drag ←/→." (exposure ≥ 1.5 s, |away| ≤ 90)
-3. "In the sun k of the last 10 s."
+2. "Thick teal was N° away. Drag ←/→." (exposure ≥ 0.5 s, lasting shade within 120°; else "Shade was N° away…" for any shade within 120°). Fix round 1 dropped the left/right word (it named the pointer's screen side, which disagreed with the arrow whenever the pointer sat low on the dial) and relaxed 1.5 s / 90°.
+3. "In the sun k of the last w s." (w = the seconds actually walked, at most 10)
 4. noon advice
 
-Shown as ResultsView.tip.
+The wording of each rotates with the lifetime run count. Shown as ResultsView.tip.
 
 **Melt Map.** Callout labels flip when they overlap.
 

@@ -1457,7 +1457,7 @@ export class Session {
     this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
-    this.tip = deathTip(deathRecap(this.s), save.settings.invert);
+    this.tip = deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
     result.assisted = this.runAssisted;

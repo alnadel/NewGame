@@ -309,12 +309,13 @@ const tuning = {
   },
 
   /**
-   * Death recap tips (sim/recap.ts): "shade was close" needs ≥ exposureSec in the sun at the end and
-   * shade within maxAwayDeg; "short dips add up" needs litShare of the last 10 s lit (0.35, not the
-   * planned 0.5: the human model's deaths at standard rules are mostly flicker deaths at 35-50% lit,
-   * which this line describes best); the noon line covers deaths noonFrom-noonTo minutes after 6 AM.
+   * Death recap tips (sim/recap.ts): "thick teal was N° away" needs ≥ exposureSec in the sun at the
+   * end and shade within maxAwayDeg (relaxed from 1.5 s and 90° in fix round 1: most melts used to
+   * fall through to the generic line); "short dips add up" needs litShare of the last 10 s lit (0.35,
+   * not the planned 0.5: the human model's deaths at standard rules are mostly flicker deaths at
+   * 35-50% lit); the noon line covers deaths noonFrom-noonTo minutes after 6 AM.
    */
-  recap: { exposureSec: 1.5, maxAwayDeg: 90, litShare: 0.35, noonFrom: 300, noonTo: 420 },
+  recap: { exposureSec: 0.5, maxAwayDeg: 120, litShare: 0.35, noonFrom: 300, noonTo: 420 },
 
   /** Headless bots (V1_PLAN §13). Turn rates in °/s. */
   bots: {

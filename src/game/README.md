@@ -144,8 +144,8 @@ See V1_1_PLAN §4.2 for the contracts.
 - **Death beat** (GR12): `CameraFx.holdZoom` eases to 1.18 between 80 and 600 ms and holds into the
   Melt Map pull (none under reduced motion). One 'saturation' pass greys the world outside a ring
   around the puddle, only at governor level 0 and DPR ≤ 2 (A12), fading out over the pull; the hat
-  (or scarf knot) pops off. The recap tip is core `deathTip(deathRecap(s), invert)` read on the
-  death tick into `ResultsView.tip`. Melt Map callouts flip sides when they would overlap.
+  (or scarf knot) pops off. The recap tip is core `deathTip(deathRecap(s), invert, save.stats.runs)`
+  read on the death tick into `ResultsView.tip` (the run count rotates its wording). Melt Map callouts flip sides when they would overlap.
 - **Postcard** (GR14, A11): starts on the first drawn frame of settled Results and runs one stage
   per idle callback (`requestIdleCallback` with a 400 ms timeout, else `setTimeout` 16): crop,
   header, tiles and footer, then `toBlob`. Debug runs get none; the object URL is revoked when the
