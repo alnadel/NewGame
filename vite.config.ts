@@ -148,5 +148,10 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.ts'],
     environment: 'node',
+    // One worker per core (vitest's default leaves one core idle), each reused across files (no
+    // per-file module isolation: the unit tests share no mutable module state they don't reset):
+    // ~19 s → ~12 s on 4 cores (CO7). The slowest files are split so the workers stay balanced.
+    isolate: false,
+    maxWorkers: '100%',
   },
 });

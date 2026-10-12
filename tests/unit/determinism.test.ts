@@ -11,7 +11,7 @@ import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runHeadless } from '../../src/core/sim/headless.ts';
 import { createReplay, playReplay, recordFrame } from '../../src/core/sim/replay.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { CHECK_EVERY, forecastHashes, oracleHashes, rungHashes, SCRIPT_TICKS, scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
+import { scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
@@ -25,17 +25,6 @@ describe('determinism', () => {
     expect(a).toEqual(golden.scripted);
     expect(new Set(a).size).toBeGreaterThan(10);
   }, 30_000);
-
-  it('a 3-minute oracle run matches the golden hashes (equality with Node-made goldens is the determinism proof)', () => {
-    const a = oracleHashes();
-    expect(a.length).toBe(SCRIPT_TICKS / CHECK_EVERY);
-    expect(a).toEqual(golden.oracle3min);
-  }, 60_000);
-
-  it('a forced run of every forecast and a run at every comfort rung match the golden hashes', () => {
-    expect(forecastHashes()).toEqual(golden.forecasts);
-    expect(rungHashes()).toEqual(golden.rungs);
-  }, 60_000);
 
   it('runHeadless(7, 3600, reactive) matches the golden hash (also checked in the browser e2e)', () => {
     expect(runHeadless(7, 3600, 'reactive')).toBe(golden.headless_7_3600_reactive);
