@@ -738,8 +738,8 @@ function drawStamp(g: CanvasRenderingContext2D, b: Banners, cx: number, y: numbe
   g.globalAlpha = 1;
 }
 
-/** A five-point star of outer radius r at (x, y). */
-function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
+/** A five-point star of outer radius r at (x, y), filled and outlined (also the HUD's pips). */
+export function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
   g.beginPath();
   for (let i = 0; i < 10; i++) {
     const a = -Math.PI / 2 + (i * Math.PI) / 5;

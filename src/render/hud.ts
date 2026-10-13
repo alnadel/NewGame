@@ -22,6 +22,7 @@
 
 import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, TUNING, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
+import { star } from './banners.ts';
 import { cssa, hex } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
@@ -475,23 +476,6 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
 /** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */
 const STAR_POP_S = 0.5;
 const PIP_R = 8;
-
-/** A five-point star of outer radius r at (x, y), filled and outlined. */
-function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
-  g.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 === 0 ? r : r * 0.45;
-    g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-  }
-  g.closePath();
-  g.fillStyle = fill;
-  g.fill();
-  g.lineWidth = Math.max(1.2, r * 0.16);
-  g.lineJoin = 'round';
-  g.strokeStyle = line;
-  g.stroke();
-}
 
 /** Transparent margin around the badge sprite (CSS px), so its antialiased edge isn't cut. */
 const BADGE_PAD = 2;
