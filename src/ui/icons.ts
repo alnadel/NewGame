@@ -52,10 +52,8 @@ const ICONS = {
   swap: `<path d="M4.6 10a7.6 7.6 0 0 1 13.5-3.6"/><path d="M18.6 3.2v3.9h-3.9"/><path d="M19.4 14a7.6 7.6 0 0 1-13.5 3.6"/><path d="M5.4 20.8v-3.9h3.9"/>`,
   swing: `<path d="M4.4 15.6a8 8 0 0 1 14.8-4.2"/><path d="m20.2 7.6-.9 4.2-4.1-1.2"/><circle cx="12" cy="17.6" r="2.2" ${FILL}/>`,
   clock: `<circle cx="12" cy="12" r="8.6"/><path d="M12 7.4V12l3.2 2.1"/>`,
-  journal: `<path d="M4 20.2h16"/><path d="M7 16.6v-3.8M11 16.6V7.4M15 16.6v-6M19 16.6V4.6" stroke-width="2.8"/>`,
   // Journey (v1.2): the map, stars, a chapter's biome and the concept marks on the level tiles.
   star: `<path d="m12 3.4 2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.8l-5.3 2.8 1.1-5.9-4.3-4.1 5.9-.8Z" ${FILL}/>`,
-  starLine: `<path d="m12 3.4 2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.8l-5.3 2.8 1.1-5.9-4.3-4.1 5.9-.8Z"/>`,
   map: `<path d="M3.6 6.2v13.2l5.6-2.2 5.6 2.2 5.6-2.2V4l-5.6 2.2L9.2 4Z"/><path d="M9.2 4v15.4M14.8 6.2v13.2"/>`,
   tree: `<path d="M12 3.2 6.6 10.4h2.6L5.4 15.6h4.8L7.4 19.4h9.2l-2.8-3.8h4.8l-3.8-5.2h2.6Z" fill="currentColor" fill-opacity=".18"/><path d="M12 19.4v2"/>`,
   town: `<path d="M3.6 20.4h16.8"/><path d="M4.6 20.4v-8.2l4-3.2 4 3.2v8.2"/><path d="M12.6 12.2V6.6h5.6v13.8"/><path d="M14.8 9.4h1.2M14.8 12.6h1.2M14.8 15.8h1.2M7.6 15.6h2"/>`,
@@ -83,7 +81,6 @@ const ICONS = {
   sunset: `<path d="M3.6 16.4h16.8"/><path d="M7.2 16.4a4.8 4.8 0 0 1 9.6 0"/><path d="M12 6.6v2.2M5.6 10.2l1.5 1.5M18.4 10.2l-1.5 1.5"/><path d="M8.4 20h7.2"/>`,
   road: `<path d="M7.6 20.4 10 3.6h4l2.4 16.8"/><path d="M12 6.4v2.2M12 11.4v2.2M12 16.4v2.2"/>`,
   dome: `<path d="M4.4 15.6a7.6 7.6 0 1 1 15.2 0Z"/><path d="M3 19h18"/><path d="M12 4.6v3.4M12 15.6v-3"/>`,
-  sparkle: `<path d="M12 3.6 13.8 10l6.4 1.8-6.4 1.8L12 20l-1.8-6.4-6.4-1.8 6.4-1.8Z" fill="currentColor" fill-opacity=".22"/><path d="M19 3.6v3M17.5 5.1h3"/>`,
   mirror: `<ellipse cx="12" cy="9.4" rx="5" ry="6.6" fill="currentColor" fill-opacity=".18"/><path d="M9.6 7.4l2.6-2.6M12 18v2"/><path d="M5 21h14M7 19.4 5 21l2 1.6M17 19.4l2 1.6-2 1.6"/>`,
   // v1.4: the Snow Globe (rewards: chapters, ranks, the streak).
   globe: `<circle cx="12" cy="10" r="7"/><path d="M6.2 15.6 5 20.6h14l-1.2-5"/><path d="M12 6.8v6.4M9.2 8.4l5.6 3.2M9.2 11.6l5.6-3.2" stroke-width="1.6"/>`,
