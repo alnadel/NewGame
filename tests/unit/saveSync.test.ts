@@ -55,10 +55,9 @@ class Tab implements SaveChangeSource {
   private readonly ownWrite = new Map<string, number>();
   private readonly cbs: ((key: string | null, value: string | null) => void)[] = [];
   readonly storage: StorageAdapter;
-  constructor(
-    private readonly browser: Browser,
-    readonly id: number,
-  ) {
+  readonly id: number;
+  constructor(browser: Browser, id: number) {
+    this.id = id;
     this.cache = new Map(browser.shared);
     this.storage = {
       get: (key) => this.cache.get(key) ?? null,
