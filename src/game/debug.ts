@@ -18,7 +18,7 @@ export interface ShadyTestHook {
   /** Extras for tooling. */
   paused(): boolean;
   presses(): number;
-  /** Plays a render-only moment (phew, mult, noon, dawn, cloud, glare, flake, best) for visual review. */
+  /** Plays a render-only moment (phew, mult, noon, dawn, cloud, glare, flake, best, finish) for visual review. */
   demo(name: string): void;
   /** Nubs' ground point on screen (CSS px), for review tooling. */
   nubsScreen(): { x: number; y: number };
@@ -64,6 +64,8 @@ export interface ShadyTestHook {
   mapCallouts(): number[][];
   /** The death recap's tip handed to the last Results (null: none fitted). */
   resultsTip(): string | null;
+  /** The last Results' campaign verdict (ResultsView.campaign), or null. */
+  campaign(): { id: number; name: string; passed: boolean; stars: number; nextId: number | null; goalLine: string } | null;
   /** The Results postcard: file ready, its size and name, and each drawing stage's ms. */
   postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
   /** The current frame drawn under render options `a` and then `b` (time frozen), compared pixel by pixel. */
@@ -118,6 +120,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     },
     mapProbe: (mapT) => session.mapProbe(mapT),
     resultsTip: () => session.resultsTip,
+    campaign: () => session.campaignResults(),
     postcard: () => session.postcardState(),
     mapCallouts: () => {
       const out: number[][] = [];
