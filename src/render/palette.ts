@@ -28,9 +28,63 @@ const KEYS: readonly Key[] = [
 ];
 
 const NIGHT: Key = { ground: hex('#1D2247'), trail: hex('#2A2F5E'), shadow: hex('#1D2247'), shadowAlpha: 0, tint: hex('#3A4380') };
-/** Biome tints multiplied into the ground: the two biomes read apart at a glance (GR11). */
+/** Old Town's tint of the trail (the theme tints the biomes' ground, GR11). */
 const OLD_TOWN = hex('#F2D9C4');
-const MEADOW = hex('#E6F2CF');
+
+/** Ambient particles of a chapter (fx.ts): spring petals, falling snow, blown leaves, or none. */
+export type ThemeAir = 'petal' | 'snow' | 'leaf' | '';
+
+/**
+ * A look (v1.3): the ground tints of the two biomes and of the trail (multiplied in), a grade washed
+ * over the whole frame by the atmosphere layer (off in high contrast), and the air's particles.
+ */
+export interface Theme {
+  readonly meadow: Rgb;
+  readonly town: Rgb;
+  readonly trail: Rgb;
+  readonly grade: Rgb;
+  readonly gradeA: number;
+  readonly air: ThemeAir;
+}
+
+const th = (meadow: string, town: string, trail: string, grade: string, gradeA: number, air: ThemeAir): Theme =>
+  Object.freeze({ meadow: hex(meadow), town: hex(town), trail: hex(trail), grade: hex(grade), gradeA, air });
+
+/** Endless, Daily and challenge runs: the plain biomes. */
+export const PLAIN_THEME: Theme = th('#E6F2CF', '#F2D9C4', '#FFFFFF', '#FFFFFF', 0, '');
+
+/**
+ * The Journey's 20 chapters, each its own season and light, so progress shows on the ground: spring
+ * meadows, frost, lilac stone, summer straw, harbour salt, moss, brass, snowfields, dusk rose, mint
+ * glass, slate, autumn, saffron, storm, ice, parched gold and the scorched dome.
+ */
+const CHAPTER_THEMES: readonly Theme[] = [
+  th('#E6F2CF', '#F2D9C4', '#FFFFFF', '#FFF4DC', 0, 'petal'),
+  th('#E6F2CF', '#F4D6BE', '#FFF4EA', '#FFD9B0', 0.04, ''),
+  th('#E2EEF8', '#E6E6F0', '#E8F0FF', '#CFE6FF', 0.1, 'snow'),
+  th('#E8E2F0', '#E8D6F0', '#F0E4FF', '#B9A2E6', 0.08, ''),
+  th('#D4EEBC', '#F2D9C4', '#FFF6E8', '#E8FFD8', 0.05, 'petal'),
+  th('#E6F2CF', '#E2DED8', '#ECE8F0', '#C8D4E6', 0.07, ''),
+  th('#F4EDC6', '#F2D9C4', '#FFF0D0', '#FFC46B', 0.06, ''),
+  th('#E6F2CF', '#D8E4EA', '#E8F2F6', '#9CC8E6', 0.08, 'leaf'),
+  th('#CADFAF', '#F2D9C4', '#F2EAD8', '#6E9A5A', 0.06, ''),
+  th('#E6F2CF', '#F0DDB2', '#FFF0C8', '#E6B45A', 0.07, ''),
+  th('#ECF3FA', '#E6E6F0', '#EEF4FF', '#DDEEFF', 0.12, 'snow'),
+  th('#E6F2CF', '#EED0DA', '#FFE4EC', '#C8789E', 0.09, ''),
+  th('#D6F2E6', '#F2D9C4', '#E8FFF6', '#8AE6D8', 0.07, ''),
+  th('#E6F2CF', '#D8D4E8', '#E8E6F4', '#6A6AA0', 0.08, ''),
+  th('#F2DEB4', '#F2D9C4', '#FFE8C8', '#FF9E4A', 0.07, 'leaf'),
+  th('#E6F2CF', '#F8D8AA', '#FFEBC8', '#FFB45A', 0.06, 'petal'),
+  th('#D2DECA', '#F2D9C4', '#E8ECE4', '#7F93A8', 0.13, 'leaf'),
+  th('#E6F2CF', '#E2E8F4', '#EEF2FF', '#BFDCFF', 0.1, 'snow'),
+  th('#F6EAC0', '#F2D9C4', '#FFF0C0', '#FFB04A', 0.07, ''),
+  th('#E6F2CF', '#F4D0B6', '#FFE0C8', '#FF6A3D', 0.08, ''),
+];
+
+/** The look of a run: its Journey chapter's, else the plain biomes. */
+export function themeFor(chapter: number | undefined): Theme {
+  return (chapter !== undefined ? CHAPTER_THEMES[chapter - 1] : undefined) ?? PLAIN_THEME;
+}
 const DAY_TINT_MIX = 0.25;
 const NIGHT_TINT_MIX = 0.55;
 
@@ -99,18 +153,19 @@ const scratch: Key = { ground: 0, trail: 0, shadow: 0, shadowAlpha: 0, tint: 0 }
  * Updates `p` for a daylight fraction, a night blend (0..1) and an Old Town blend (0..1).
  * `highContrast` adds +0.17 shadow alpha (GDD §14).
  */
-export function updatePalette(p: Palette, dayFrac: number, night: number, town: number, highContrast: boolean): void {
+export function updatePalette(p: Palette, dayFrac: number, night: number, town: number, highContrast: boolean, theme: Theme = PLAIN_THEME): void {
   const k = keyAt(dayFrac, scratch);
   const n = night <= 0 ? 0 : night >= 1 ? 1 : night;
   p.dayFrac = dayFrac;
   p.night = n;
   p.town = town;
-  p.groundMeadow = mix(multiply(k.ground, MEADOW), NIGHT.ground, n);
-  p.groundTown = mix(multiply(k.ground, OLD_TOWN), NIGHT.ground, n);
+  p.groundMeadow = mix(multiply(k.ground, theme.meadow), NIGHT.ground, n);
+  p.groundTown = mix(multiply(k.ground, theme.town), NIGHT.ground, n);
   const ground = mix(p.groundMeadow, p.groundTown, town);
   p.ground = ground;
   p.groundDeep = darken(ground, 0.08);
-  const trail = mix(mix(k.trail, multiply(k.trail, OLD_TOWN), town), NIGHT.trail, n);
+  const trailDay = multiply(k.trail, theme.trail);
+  const trail = mix(mix(trailDay, multiply(trailDay, OLD_TOWN), town), NIGHT.trail, n);
   p.trail = trail;
   p.trailEdge = darken(trail, 0.12);
   p.shadow = k.shadow;

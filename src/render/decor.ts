@@ -13,6 +13,7 @@
 import { biomeAtY, queryCasters, smoothstep, trailSlope, trailX, validatedY, worldDayAtY, worldPlan, type Caster, type SimState, type World } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import { OBLIQUE, type View } from '../game/camera.ts';
+import { artOps, drawArt } from './glyphs.ts';
 import { P_STEAM, spawn, type Particles } from './particles.ts';
 import { ctx2d, makeCanvas, roundRect, sparkle, type Canvas2D } from './sprites.ts';
 
@@ -447,11 +448,8 @@ function buildAtlas(prev: Canvas2D | null, b: number, scale: number): Canvas2D {
   for (let i = 0; i < 15; i++) {
     g.save();
     g.translate((i % ATLAS_COLS) * CELL_U + CELL_U / 2, Math.floor(i / ATLAS_COLS) * CELL_U + CELL_U / 2);
-    if (i === PUDDLE) puddle(g);
-    else if (i === FROST_RIM) frostRim(g);
-    else if (i === LAMP) lampPost(g);
-    else if (b === 0) meadowDecal(g, i);
-    else townDecal(g, i);
+    if (i === LAMP) lampPost(g);
+    else drawArt(g, artOps(i === PUDDLE ? PUDDLE_ART : i === FROST_RIM ? FROST_ART : (DECAL_ART[b]?.[i] as string)));
     g.restore();
   }
   g.save();
@@ -466,331 +464,44 @@ function dot(g: CanvasRenderingContext2D, x: number, y: number, r: number): void
   g.arc(x, y, r, 0, TAU);
 }
 
-/** A tiny deterministic stream for the art (the same atlas every time). */
-let art = 7;
-function ar(): number {
-  art = (Math.imul(art, 1664525) + 1013904223) >>> 0;
-  return art / 4294967296;
-}
-
-function meadowDecal(g: CanvasRenderingContext2D, i: number): void {
-  art = 101 + i * 7919;
-  const kind = i >> 1;
-  const flip = i & 1 ? -1 : 1;
-  g.scale(flip, 1);
-  switch (kind) {
-    case 0: {
-      // Clover: trefoils of three soft green leaves.
-      g.fillStyle = 'rgba(127,191,106,0.5)';
-      g.beginPath();
-      const n = i & 1 ? 2 : 3;
-      for (let t = 0; t < n; t++) {
-        const cx = (ar() - 0.5) * 9;
-        const cy = (ar() - 0.5) * 8;
-        const rot = ar() * TAU;
-        for (let l = 0; l < 3; l++) dot(g, cx + Math.cos(rot + (l * TAU) / 3) * 2.2, cy + Math.sin(rot + (l * TAU) / 3) * 2.2, 2.1);
-      }
-      g.fill();
-      break;
-    }
-    case 1: {
-      // Daisies: five white petal dots around a yellow eye.
-      const n = i & 1 ? 2 : 3;
-      for (let t = 0; t < n; t++) {
-        const cx = (ar() - 0.5) * 9;
-        const cy = (ar() - 0.5) * 8;
-        const rot = ar() * TAU;
-        g.fillStyle = '#FFFFFF';
-        g.beginPath();
-        for (let p = 0; p < 5; p++) dot(g, cx + Math.cos(rot + (p * TAU) / 5) * 1.6, cy + Math.sin(rot + (p * TAU) / 5) * 1.6, 1.5);
-        g.fill();
-        g.fillStyle = '#FFD36B';
-        g.beginPath();
-        dot(g, cx, cy, 1);
-        g.fill();
-      }
-      break;
-    }
-    case 2: {
-      // Poppies: red heads on short green stems.
-      const n = i & 1 ? 3 : 4;
-      g.strokeStyle = '#4E9A63';
-      g.lineWidth = 0.9;
-      g.fillStyle = '#E8475A';
-      for (let t = 0; t < n; t++) {
-        const cx = (ar() - 0.5) * 12;
-        const cy = (ar() - 0.5) * 8;
-        g.beginPath();
-        g.moveTo(cx - 1.5, cy + 4.5);
-        g.quadraticCurveTo(cx - 1, cy + 2, cx, cy);
-        g.stroke();
-        g.beginPath();
-        dot(g, cx, cy, 2);
-        g.fill();
-        g.fillStyle = '#2B2140';
-        g.beginPath();
-        dot(g, cx, cy, 0.6);
-        g.fill();
-        g.fillStyle = '#E8475A';
-      }
-      break;
-    }
-    case 3: {
-      // Pebble trio, each with a lighter crescent on top.
-      for (let t = 0; t < 3; t++) {
-        const cx = (t - 1) * 4.5 + (ar() - 0.5) * 2;
-        const cy = (ar() - 0.5) * 5;
-        const rx = 1.8 + ar() * 1.4;
-        const ry = rx * 0.75;
-        g.fillStyle = 'rgba(60,40,30,0.18)';
-        g.beginPath();
-        g.ellipse(cx + 0.5, cy + 0.7, rx, ry, 0, 0, TAU);
-        g.fill();
-        g.fillStyle = '#C9C3B5';
-        g.beginPath();
-        g.ellipse(cx, cy, rx, ry, 0, 0, TAU);
-        g.fill();
-        g.fillStyle = '#E8E4DA';
-        g.beginPath();
-        g.ellipse(cx - 0.3, cy - ry * 0.35, rx * 0.65, ry * 0.4, 0, 0, TAU);
-        g.fill();
-      }
-      break;
-    }
-    case 4: {
-      // A pair of mushrooms: cream caps with red-brown spots.
-      const caps = [
-        [-2.5, 1, 3.6],
-        [3.2, -1.5, 2.6],
-      ] as const;
-      for (const [cx, cy, r] of caps) {
-        g.fillStyle = 'rgba(60,40,30,0.18)';
-        g.beginPath();
-        dot(g, cx + 0.6, cy + 0.8, r);
-        g.fill();
-        g.fillStyle = '#F2E6D0';
-        g.beginPath();
-        dot(g, cx, cy, r);
-        g.fill();
-        g.fillStyle = '#D9644A';
-        g.beginPath();
-        dot(g, cx - r * 0.35, cy - r * 0.2, r * 0.22);
-        dot(g, cx + r * 0.3, cy + r * 0.25, r * 0.18);
-        dot(g, cx + r * 0.25, cy - r * 0.4, r * 0.14);
-        g.fill();
-      }
-      break;
-    }
-    default: {
-      // Leaf litter: a few almond leaves with a midrib.
-      const n = i & 1 ? 3 : 4;
-      for (let t = 0; t < n; t++) {
-        const cx = (ar() - 0.5) * 12;
-        const cy = (ar() - 0.5) * 10;
-        g.save();
-        g.translate(cx, cy);
-        g.rotate(ar() * TAU);
-        g.fillStyle = t % 2 ? '#D9A564' : '#C98A4B';
-        g.beginPath();
-        g.moveTo(-3, 0);
-        g.quadraticCurveTo(0, -2.2, 3, 0);
-        g.quadraticCurveTo(0, 2.2, -3, 0);
-        g.fill();
-        g.strokeStyle = 'rgba(120,70,30,0.5)';
-        g.lineWidth = 0.4;
-        g.beginPath();
-        g.moveTo(-2.6, 0);
-        g.lineTo(2.6, 0);
-        g.stroke();
-        g.restore();
-      }
-      break;
-    }
-  }
-}
-
-function townDecal(g: CanvasRenderingContext2D, i: number): void {
-  art = 211 + i * 104729;
-  if (i <= 2) {
-    // A terracotta flower pot seen from above: a thin rim with a leafy plant spilling over it (and
-    // flowers on two of them).
-    g.fillStyle = 'rgba(60,30,20,0.22)';
-    g.beginPath();
-    dot(g, 0.8, 1, 5.4);
-    g.fill();
-    g.fillStyle = '#D9644A';
-    g.beginPath();
-    dot(g, 0, 0, 5);
-    g.fill();
-    g.fillStyle = '#8E4A33';
-    g.beginPath();
-    dot(g, 0, 0, 3.9);
-    g.fill();
-    for (let l = 0; l < 7; l++) {
-      const a = (l * TAU) / 7 + i * 0.7;
-      g.fillStyle = l % 2 ? '#4E9A63' : '#6DBE7B';
-      g.save();
-      g.rotate(a);
-      g.beginPath();
-      g.ellipse(3.3, 0, 3.4, 1.7, 0, 0, TAU);
-      g.fill();
-      g.restore();
-    }
-    if (i > 0) {
-      g.fillStyle = i === 1 ? '#FFD36B' : '#FF8FA3';
-      g.beginPath();
-      dot(g, -1.6, -1.2, 1.3);
-      dot(g, 1.8, 0.4, 1.3);
-      dot(g, -0.2, 2, 1.2);
-      g.fill();
-      g.fillStyle = '#FFFFFF';
-      g.beginPath();
-      dot(g, -1.6, -1.2, 0.45);
-      dot(g, 1.8, 0.4, 0.45);
-      dot(g, -0.2, 2, 0.45);
-      g.fill();
-    }
-    return;
-  }
-  if (i <= 4) {
-    // A manhole cover: a ring with a grid (or bars) inside.
-    g.strokeStyle = 'rgba(156,143,128,0.6)';
-    g.lineWidth = 1.4;
-    g.beginPath();
-    g.arc(0, 0, 8, 0, TAU);
-    g.stroke();
-    g.fillStyle = 'rgba(156,143,128,0.22)';
-    g.beginPath();
-    dot(g, 0, 0, 7.3);
-    g.fill();
-    g.lineWidth = 0.7;
-    g.beginPath();
-    for (let k = -2; k <= 2; k++) {
-      const o = k * 2.6;
-      const h = Math.sqrt(Math.max(0, 49 - o * o));
-      g.moveTo(o, -h);
-      g.lineTo(o, h);
-      if (i === 3) {
-        g.moveTo(-h, o);
-        g.lineTo(h, o);
-      }
-    }
-    g.stroke();
-    return;
-  }
-  if (i <= 6) {
-    // Chalk hopscotch: 1-2-1-2 boxes (and a number scribble).
-    g.strokeStyle = 'rgba(255,255,255,0.35)';
-    g.lineWidth = 0.9;
-    const s = 5.2;
-    const rows = i === 5 ? [1, 2, 1, 2] : [1, 1, 2, 1];
-    g.save();
-    g.rotate(i === 5 ? 0.12 : -0.2);
-    g.beginPath();
-    for (let r = 0; r < rows.length; r++) {
-      const y = 10 - (r + 1) * s;
-      const n = rows[r] as number;
-      for (let k = 0; k < n; k++) g.rect(-(n * s) / 2 + k * s, y, s, s);
-    }
-    g.stroke();
-    g.fillStyle = 'rgba(255,255,255,0.35)';
-    g.beginPath();
-    dot(g, 0, -12.5, 1.6);
-    g.fill();
-    g.restore();
-    return;
-  }
-  if (i <= 9) {
-    // Cracks in the paving: a jagged line with a branch or two.
-    g.strokeStyle = 'rgba(110,90,72,0.25)';
-    g.lineWidth = 0.8;
-    g.beginPath();
-    let x = -11;
-    let y = (ar() - 0.5) * 6;
-    g.moveTo(x, y);
-    while (x < 8) {
-      x += 2 + ar() * 2.5;
-      y += (ar() - 0.5) * 4;
-      g.lineTo(x, y);
-      if (ar() < 0.25) {
-        g.lineTo(x + 2 + ar() * 2, y + (ar() < 0.5 ? -3 : 3));
-        g.moveTo(x, y);
-      }
-    }
-    g.stroke();
-    return;
-  }
-  // A sleeping cat curled up: ginger with darker stripes, the tail wrapped round.
-  const ginger = i === 10;
-  const body = ginger ? '#E8A15A' : '#B8B0C8';
-  const dark = ginger ? '#C27A3A' : '#8E86A3';
-  g.fillStyle = 'rgba(60,30,20,0.2)';
-  g.beginPath();
-  g.ellipse(0.8, 1.2, 7, 6, 0, 0, TAU);
-  g.fill();
-  g.fillStyle = body;
-  g.beginPath();
-  g.ellipse(0, 0, 6.5, 5.6, 0, 0, TAU);
-  g.fill();
-  g.strokeStyle = dark;
-  g.lineWidth = 0.9;
-  g.beginPath();
-  g.arc(0, 0, 3.8, -0.4, 1.8);
-  g.moveTo(-4.6, -2);
-  g.lineTo(-2.6, -0.8);
-  g.moveTo(-5.2, 0.6);
-  g.lineTo(-3.2, 1);
-  g.stroke();
-  // Head tucked in at the front, ears up.
-  g.fillStyle = body;
-  g.beginPath();
-  g.ellipse(3.6, 2.6, 3, 2.6, 0, 0, TAU);
-  g.moveTo(2, 0.6);
-  g.lineTo(2.4, -1.5);
-  g.lineTo(3.6, 0.2);
-  g.moveTo(4.4, 0.3);
-  g.lineTo(5.6, -1.3);
-  g.lineTo(5.9, 1);
-  g.fill();
-  g.strokeStyle = '#2B2140';
-  g.lineWidth = 0.5;
-  g.beginPath();
-  g.moveTo(2.6, 2.7);
-  g.quadraticCurveTo(3.1, 3.2, 3.6, 2.7);
-  g.moveTo(4.3, 2.7);
-  g.quadraticCurveTo(4.8, 3.2, 5.3, 2.7);
-  g.stroke();
-  // Tail round the front.
-  g.strokeStyle = body;
-  g.lineWidth = 1.8;
-  g.beginPath();
-  g.arc(0, 0, 6.6, 0.9, 2.4);
-  g.stroke();
-}
-
-function puddle(g: CanvasRenderingContext2D): void {
-  g.fillStyle = 'rgba(154,216,255,0.55)';
-  g.beginPath();
-  g.ellipse(0, 0, 5, 3, 0, 0, TAU);
-  g.fill();
-  g.strokeStyle = 'rgba(255,255,255,0.85)';
-  g.lineWidth = 0.7;
-  g.beginPath();
-  g.ellipse(-0.8, -0.6, 2.6, 1.3, 0, Math.PI * 1.1, Math.PI * 1.65);
-  g.stroke();
-}
-
-function frostRim(g: CanvasRenderingContext2D): void {
-  g.strokeStyle = 'rgba(255,255,255,0.95)';
-  g.lineWidth = 1;
-  g.beginPath();
-  g.ellipse(0, 0, 5, 3, 0, 0, TAU);
-  g.stroke();
-  g.fillStyle = 'rgba(234,246,255,0.35)';
-  g.beginPath();
-  g.ellipse(0, 0, 4.5, 2.6, 0, 0, TAU);
-  g.fill();
-}
+/**
+ * The decal art (glyphs.ts path ops, drawn at the cell centre in u): Meadow's clover, daisies,
+ * poppies, pebbles, mushrooms and leaf litter, and Old Town's flower pots, manhole covers, chalk
+ * hopscotch, paving cracks and the sleeping cats, two or three variants each; then the puddle and
+ * its frost rim.
+ */
+const DECAL_ART: readonly (readonly string[])[] = [
+  [
+  'Frgba(127,191,106,0.5) O0.15-0.83 2.1O-2.81 1.57 2.1O-3.41-2.19 2.1O0.55 3.28 2.1O-3.01 1.94 2.1O-0.07-0.48 2.1O5.08-4.05 2.1O3.8-0.46 2.1O1.33-3.37 2.1',
+  'Frgba(127,191,106,0.5) O0.46 3.77 2.1O3.59 1.6 2.1O0.15-0.03 2.1O-0.17 1.74 2.1O1.46-1.7 2.1O-2.34-1.39 2.1',
+  'F#FFFFFF O-1.98-2.89 1.5O-2.16-4.76 1.5O-0.43-5.52 1.5O0.81-4.11 1.5O-0.14-2.49 1.5|F#FFD36B O-0.78-3.95 1|F#FFFFFF O0.34-1.43 1.5O0.17-3.3 1.5O1.9-4.04 1.5O3.14-2.63 1.5O2.18-1.01 1.5|F#FFD36B O1.55-2.48 1|F#FFFFFF O2.68-3.17 1.5O2.46-1.3 1.5O0.62-0.93 1.5O-0.3-2.57 1.5O0.97-3.95 1.5|F#FFD36B O1.29-2.38 1',
+  'F#FFFFFF O1.51-2.54 1.5O-0.23-3.24 1.5O-1.44-1.79 1.5O-0.43-0.2 1.5O1.39-0.66 1.5|F#FFD36B O0.16-1.69 1|F#FFFFFF O-1.14 3.41 1.5O-2.32 1.94 1.5O-4.08 2.61 1.5O-3.99 4.49 1.5O-2.17 4.98 1.5|F#FFD36B O-2.74 3.49 1',
+  'S#4E9A63/0.9 M-0.88 5.08Q-0.38 2.58 0.62 0.58|F#E8475A O0.62 0.58 2|F#2B2140 O0.62 0.58 0.6|S#4E9A63/0.9 M2.03 8Q2.53 5.5 3.53 3.5|F#E8475A O3.53 3.5 2|F#2B2140 O3.53 3.5 0.6|S#4E9A63/0.9 M0.69 5.54Q1.19 3.04 2.19 1.04|F#E8475A O2.19 1.04 2|F#2B2140 O2.19 1.04 0.6|S#4E9A63/0.9 M-2.61 2.36Q-2.11-0.14-1.11-2.14|F#E8475A O-1.11-2.14 2|F#2B2140 O-1.11-2.14 0.6',
+  'S#4E9A63/0.9 M0.06 7.34Q-0.44 4.84-1.44 2.84|F#E8475A O-1.44 2.84 2|F#2B2140 O-1.44 2.84 0.6|S#4E9A63/0.9 M-4.49 1.06Q-4.99-1.44-5.99-3.44|F#E8475A O-5.99-3.44 2|F#2B2140 O-5.99-3.44 0.6|S#4E9A63/0.9 M2.36 6.52Q1.86 4.02 0.86 2.02|F#E8475A O0.86 2.02 2|F#2B2140 O0.86 2.02 0.6',
+  'Frgba(60,40,30,0.18) M-1.54-1.11A2.09 1.56 0 0 1-5.71-1.11A2.09 1.56 0 0 1-1.54-1.11|F#C9C3B5 M-2.04-1.81A2.09 1.56 0 0 1-6.21-1.81A2.09 1.56 0 0 1-2.04-1.81|F#E8E4DA M-3.07-2.36A1.36 0.63 0 0 1-5.78-2.36A1.36 0.63 0 0 1-3.07-2.36|Frgba(60,40,30,0.18) M2.93-0.93A3.02 2.27 0 0 1-3.12-0.93A3.02 2.27 0 0 1 2.93-0.93|F#C9C3B5 M2.43-1.63A3.02 2.27 0 0 1-3.62-1.63A3.02 2.27 0 0 1 2.43-1.63|F#E8E4DA M1.07-2.42A1.97 0.91 0 0 1-2.86-2.42A1.97 0.91 0 0 1 1.07-2.42|Frgba(60,40,30,0.18) M7.51-0.48A3.17 2.38 0 0 1 1.17-0.48A3.17 2.38 0 0 1 7.51-0.48|F#C9C3B5 M7.01-1.18A3.17 2.38 0 0 1 0.67-1.18A3.17 2.38 0 0 1 7.01-1.18|F#E8E4DA M5.6-2.02A2.06 0.95 0 0 1 1.48-2.02A2.06 0.95 0 0 1 5.6-2.02',
+  'Frgba(60,40,30,0.18) M1.11 0.31A2.37 1.78 180 0 0 5.86 0.31A2.37 1.78 180 0 0 1.11 0.31|F#C9C3B5 M1.61-0.39A2.37 1.78 180 0 0 6.36-0.39A2.37 1.78 180 0 0 1.61-0.39|F#E8E4DA M2.74-1.02A1.54 0.71 180 0 0 5.83-1.02A1.54 0.71 180 0 0 2.74-1.02|Frgba(60,40,30,0.18) M-3.37 2.81A3.2 2.4 180 0 0 3.03 2.81A3.2 2.4 180 0 0-3.37 2.81|F#C9C3B5 M-2.87 2.11A3.2 2.4 180 0 0 3.53 2.11A3.2 2.4 180 0 0-2.87 2.11|F#E8E4DA M-1.45 1.27A2.08 0.96 180 0 0 2.71 1.27A2.08 0.96 180 0 0-1.45 1.27|Frgba(60,40,30,0.18) M-7.6-0.41A2.49 1.87 180 0 0-2.62-0.41A2.49 1.87 180 0 0-7.6-0.41|F#C9C3B5 M-7.1-1.11A2.49 1.87 180 0 0-2.12-1.11A2.49 1.87 180 0 0-7.1-1.11|F#E8E4DA M-5.93-1.76A1.62 0.75 180 0 0-2.69-1.76A1.62 0.75 180 0 0-5.93-1.76',
+  'Frgba(60,40,30,0.18) O-1.9 1.8 3.6|F#F2E6D0 O-2.5 1 3.6|F#D9644A O-3.76 0.28 0.79O-1.42 1.9 0.65O-1.6-0.44 0.5|Frgba(60,40,30,0.18) O3.8-0.7 2.6|F#F2E6D0 O3.2-1.5 2.6|F#D9644A O2.29-2.02 0.57O3.98-0.85 0.47O3.85-2.54 0.36',
+  'Frgba(60,40,30,0.18) O1.9 1.8 3.6|F#F2E6D0 O2.5 1 3.6|F#D9644A O3.76 0.28 0.79O1.42 1.9 0.65O1.6-0.44 0.5|Frgba(60,40,30,0.18) O-3.8-0.7 2.6|F#F2E6D0 O-3.2-1.5 2.6|F#D9644A O-2.29-2.02 0.57O-3.98-0.85 0.47O-3.85-2.54 0.36',
+  'F#C98A4B M2.62-2.73Q5.9-4.47 8.55-1.86Q5.27-0.12 2.62-2.73|Srgba(120,70,30,0.5)/0.4 M3.01-2.67L8.16-1.91|F#D9A564 M4.76-5.66Q4.45-1.95 0.82-1.14Q1.13-4.85 4.76-5.66|Srgba(120,70,30,0.5)/0.4 M4.5-5.36L1.08-1.44|F#C98A4B M-0.5-2.49Q2.95-3.89 5.32-1.02Q1.87 0.38-0.5-2.49|Srgba(120,70,30,0.5)/0.4 M-0.11-2.39L4.93-1.12|F#D9A564 M1.47-6.14Q4.75-4.37 4.05-0.72Q0.78-2.48 1.47-6.14|Srgba(120,70,30,0.5)/0.4 M1.65-5.78L3.88-1.08',
+  'F#C98A4B M6-2.43Q3.41 0.24 5.17 3.51Q7.76 0.84 6-2.43|Srgba(120,70,30,0.5)/0.4 M5.94-2.04L5.23 3.11|F#D9A564 M-7.37 3.81Q-4.57 6.26-1.39 4.32Q-4.2 1.87-7.37 3.81|Srgba(120,70,30,0.5)/0.4 M-6.97 3.84L-1.79 4.28|F#C98A4B M2.17-0.59Q5.74 0.47 7.83-2.61Q4.26-3.67 2.17-0.59|Srgba(120,70,30,0.5)/0.4 M2.55-0.73L7.45-2.48',
+  ],
+  [
+  'Frgba(60,30,20,0.22) O0.8 1 5.4|F#D9644A O0 0 5|F#8E4A33 O0 0 3.9|F#6DBE7B M6.7 0A3.4 1.7 0 0 1-0.1 0A3.4 1.7 0 0 1 6.7 0|F#4E9A63 M4.18 5.24A3.4 1.7 51.43 0 1-0.06-0.08A3.4 1.7 51.43 0 1 4.18 5.24|F#6DBE7B M-1.49 6.53A3.4 1.7 102.86 0 1 0.02-0.1A3.4 1.7 102.86 0 1-1.49 6.53|F#4E9A63 M-6.04 2.91A3.4 1.7 154.29 0 1 0.09-0.04A3.4 1.7 154.29 0 1-6.04 2.91|F#6DBE7B M-6.04-2.91A3.4 1.7-154.29 0 1 0.09 0.04A3.4 1.7-154.29 0 1-6.04-2.91|F#4E9A63 M-1.49-6.53A3.4 1.7-102.86 0 1 0.02 0.1A3.4 1.7-102.86 0 1-1.49-6.53|F#6DBE7B M4.18-5.24A3.4 1.7-51.43 0 1-0.06 0.08A3.4 1.7-51.43 0 1 4.18-5.24',
+  'Frgba(60,30,20,0.22) O0.8 1 5.4|F#D9644A O0 0 5|F#8E4A33 O0 0 3.9|F#6DBE7B M5.12 4.32A3.4 1.7 40.11 0 1-0.08-0.06A3.4 1.7 40.11 0 1 5.12 4.32|F#4E9A63 M-0.18 6.7A3.4 1.7 91.54 0 1 0-0.1A3.4 1.7 91.54 0 1-0.18 6.7|F#6DBE7B M-5.35 4.04A3.4 1.7 142.96 0 1 0.08-0.06A3.4 1.7 142.96 0 1-5.35 4.04|F#4E9A63 M-6.49-1.67A3.4 1.7-165.61 0 1 0.1 0.02A3.4 1.7-165.61 0 1-6.49-1.67|F#6DBE7B M-2.74-6.11A3.4 1.7-114.18 0 1 0.04 0.09A3.4 1.7-114.18 0 1-2.74-6.11|F#4E9A63 M3.07-5.96A3.4 1.7-62.75 0 1-0.05 0.09A3.4 1.7-62.75 0 1 3.07-5.96|F#6DBE7B M6.57-1.32A3.4 1.7-11.32 0 1-0.1 0.02A3.4 1.7-11.32 0 1 6.57-1.32|F#FFD36B O-1.6-1.2 1.3O1.8 0.4 1.3O-0.2 2 1.2|F#FFFFFF O-1.6-1.2 0.45O1.8 0.4 0.45O-0.2 2 0.45',
+  'Frgba(60,30,20,0.22) O0.8 1 5.4|F#D9644A O0 0 5|F#8E4A33 O0 0 3.9|F#6DBE7B M1.14 6.6A3.4 1.7 80.21 0 1-0.02-0.1A3.4 1.7 80.21 0 1 1.14 6.6|F#4E9A63 M-4.45 5.01A3.4 1.7 131.64 0 1 0.07-0.07A3.4 1.7 131.64 0 1-4.45 5.01|F#6DBE7B M-6.69-0.36A3.4 1.7-176.93 0 1 0.1 0.01A3.4 1.7-176.93 0 1-6.69-0.36|F#4E9A63 M-3.89-5.45A3.4 1.7-125.5 0 1 0.06 0.08A3.4 1.7-125.5 0 1-3.89-5.45|F#6DBE7B M1.84-6.44A3.4 1.7-74.07 0 1-0.03 0.1A3.4 1.7-74.07 0 1 1.84-6.44|F#4E9A63 M6.18-2.58A3.4 1.7-22.64 0 1-0.09 0.04A3.4 1.7-22.64 0 1 6.18-2.58|F#6DBE7B M5.87 3.23A3.4 1.7 28.79 0 1-0.09-0.05A3.4 1.7 28.79 0 1 5.87 3.23|F#FF8FA3 O-1.6-1.2 1.3O1.8 0.4 1.3O-0.2 2 1.2|F#FFFFFF O-1.6-1.2 0.45O1.8 0.4 0.45O-0.2 2 0.45',
+  'Srgba(156,143,128,0.6)/1.4 O0 0 8|Frgba(156,143,128,0.22) O0 0 7.3|Srgba(156,143,128,0.6)/0.7 M-5.2-4.69L-5.2 4.69M-4.69-5.2L4.69-5.2M-2.6-6.5L-2.6 6.5M-6.5-2.6L6.5-2.6M0-7L0 7M-7 0L7 0M2.6-6.5L2.6 6.5M-6.5 2.6L6.5 2.6M5.2-4.69L5.2 4.69M-4.69 5.2L4.69 5.2',
+  'Srgba(156,143,128,0.6)/1.4 O0 0 8|Frgba(156,143,128,0.22) O0 0 7.3|Srgba(156,143,128,0.6)/0.7 M-5.2-4.69L-5.2 4.69M-2.6-6.5L-2.6 6.5M0-7L0 7M2.6-6.5L2.6 6.5M5.2-4.69L5.2 4.69',
+  'Srgba(255,255,255,0.35)/0.9 M-3.16 4.45L2.01 5.08L1.38 10.24L-3.78 9.62ZM-5.11-1.02L0.05-0.4L-0.57 4.77L-5.74 4.14ZM0.05-0.4L5.21 0.23L4.59 5.39L-0.57 4.77ZM-1.91-5.87L3.25-5.25L2.63-0.09L-2.53-0.71ZM-3.87-11.34L1.29-10.72L0.67-5.56L-4.49-6.18ZM1.29-10.72L6.46-10.1L5.83-4.94L0.67-5.56Z|Frgba(255,255,255,0.35) O1.5-12.41 1.6',
+  'Srgba(255,255,255,0.35)/0.9 M-1.59 5.22L3.5 4.19L4.53 9.28L-0.56 10.32ZM-2.63 0.12L2.47-0.91L3.5 4.19L-1.59 5.22ZM-6.21-4.46L-1.11-5.49L-0.08-0.39L-5.18 0.64ZM-1.11-5.49L3.98-6.52L5.02-1.43L-0.08-0.39ZM-4.69-10.07L0.4-11.1L1.44-6L-3.66-4.97Z|Frgba(255,255,255,0.35) O-2.48-12.25 1.6',
+  'Srgba(110,90,72,0.25)/0.8 M-11-0.4L-7.45 1.53L-4.4 1.4L-1.32 1.15L1.1-0.49L3.28-1.86L7.37-0.21L10.29-1.07',
+  'Srgba(110,90,72,0.25)/0.8 M-11-2.87L-6.66-1.69L-2.75-1.77L-0.21-1.12L2.79 0.02L7.25 0.34L10.55 1.65',
+  'Srgba(110,90,72,0.25)/0.8 M-11 0.66L-8.38 1.09L-6.1 1.05L-4.1 2.62L-0.52 2.52L3.26-0.48M-0.52 2.52L1.59 1.37L4.14 2.11L8.16 0.17',
+  'Frgba(60,30,20,0.2) M7.8 1.2A7 6 0 0 1-6.2 1.2A7 6 0 0 1 7.8 1.2|F#E8A15A M6.5 0A6.5 5.6 0 0 1-6.5 0A6.5 5.6 0 0 1 6.5 0|S#C27A3A/0.9 M3.5-1.48A3.8 3.8 0 0 1-0.86 3.7M-4.6-2L-2.6-0.8M-5.2 0.6L-3.2 1|F#E8A15A M6.6 2.6A3 2.6 0 0 1 0.6 2.6A3 2.6 0 0 1 6.6 2.6M2 0.6L2.4-1.5L3.6 0.2M4.4 0.3L5.6-1.3L5.9 1|S#2B2140/0.5 M2.6 2.7Q3.1 3.2 3.6 2.7M4.3 2.7Q4.8 3.2 5.3 2.7|S#E8A15A/1.8 M4.1 5.17A6.6 6.6 0 0 1-4.87 4.46',
+  'Frgba(60,30,20,0.2) M7.8 1.2A7 6 0 0 1-6.2 1.2A7 6 0 0 1 7.8 1.2|F#B8B0C8 M6.5 0A6.5 5.6 0 0 1-6.5 0A6.5 5.6 0 0 1 6.5 0|S#8E86A3/0.9 M3.5-1.48A3.8 3.8 0 0 1-0.86 3.7M-4.6-2L-2.6-0.8M-5.2 0.6L-3.2 1|F#B8B0C8 M6.6 2.6A3 2.6 0 0 1 0.6 2.6A3 2.6 0 0 1 6.6 2.6M2 0.6L2.4-1.5L3.6 0.2M4.4 0.3L5.6-1.3L5.9 1|S#2B2140/0.5 M2.6 2.7Q3.1 3.2 3.6 2.7M4.3 2.7Q4.8 3.2 5.3 2.7|S#B8B0C8/1.8 M4.1 5.17A6.6 6.6 0 0 1-4.87 4.46',
+  ],
+];
+const PUDDLE_ART = 'Frgba(154,216,255,0.55) M5 0A5 3 0 0 1-5 0A5 3 0 0 1 5 0|Srgba(255,255,255,0.85)/0.7 M-3.27-1A2.6 1.3 0 0 1 0.38-1.76';
+const FROST_ART = 'Srgba(255,255,255,0.95)/1 M5 0A5 3 0 0 1-5 0A5 3 0 0 1 5 0|Frgba(234,246,255,0.35) M4.5 0A4.5 2.6 0 0 1-4.5 0A4.5 2.6 0 0 1 4.5 0';
 
 function lampPost(g: CanvasRenderingContext2D): void {
   // A lamp post from above: a warm pool of light, the lamp's dark cap and its glass.

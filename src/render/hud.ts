@@ -15,16 +15,18 @@
 // pill counts "flakes/target" or "snow/target" for goal levels, the clock stays, and a wind glyph
 // rides the progress head during a gust.
 
-import { dayTicks, hudClock, minutesOfDay, type ForecastId, type SimState } from '../core/index.ts';
+import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex } from './color.ts';
-import { drawConceptGlyph, drawForecastGlyph, drawWindGlyph } from './glyphs.ts';
+import { drawGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const TAU = Math.PI * 2;
 const ROW_H = 48;
+/** Inputs of the row layer's key (syncHud). */
+const KEYS = 18;
 /** The cached band reaches this far above and below the row (pill shadows, flags, the noon icon). */
 const BAND_PAD = 8;
 
@@ -48,25 +50,10 @@ export interface HudState {
   snowText: string;
   dayVal: number;
   dayText: string;
-  builtSnow: number;
-  builtTarget: number;
-  /** The campaign level the layer was built for (−1 none), with its markers. */
-  builtLevel: number;
-  builtMarks: number;
-  builtDay: number;
+  /** The row layer's inputs (snow, goal, level and its markers, day, forecast, clock, flags, view) when built, and now. */
+  readonly key: Float64Array;
+  readonly nextKey: Float64Array;
   builtForecast: ForecastId | '';
-  builtClock: number;
-  builtPassed: number;
-  builtNight: number;
-  builtPb: number;
-  builtChallenge: number;
-  builtGoal: number;
-  builtVx: number;
-  builtVw: number;
-  builtTop: number;
-  builtLeft: number;
-  builtRight: number;
-  builtDpr: number;
 
   /** The row layer (device px) and where it goes (CSS px). */
   layer: Canvas2D | null;
@@ -125,24 +112,9 @@ export function createHud(): HudState {
     snowText: '0',
     dayVal: NaN,
     dayText: 'D1',
-    builtSnow: NaN,
-    builtTarget: NaN,
-    builtLevel: NaN,
-    builtMarks: NaN,
-    builtDay: NaN,
+    key: new Float64Array(KEYS).fill(NaN),
+    nextKey: new Float64Array(KEYS),
     builtForecast: '',
-    builtClock: NaN,
-    builtPassed: NaN,
-    builtNight: NaN,
-    builtPb: NaN,
-    builtChallenge: NaN,
-    builtGoal: -2,
-    builtVx: NaN,
-    builtVw: NaN,
-    builtTop: NaN,
-    builtLeft: NaN,
-    builtRight: NaN,
-    builtDpr: NaN,
     layer: null,
     layerG: null,
     layerX: 0,
@@ -322,27 +294,29 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   const passed = s.dayTick > dl * 0.6 ? 1 : 0;
 
   const marks = c ? (c.markGate >= 0 ? 1 : 0) + (c.markEclipse >= 0 ? 2 : 0) : 0;
-  if (
-    h.layer === null ||
-    h.builtSnow !== h.snowVal ||
-    h.builtTarget !== h.snowTarget ||
-    h.builtLevel !== (c ? c.id : -1) ||
-    h.builtMarks !== marks ||
-    h.builtDay !== h.dayVal ||
-    h.builtForecast !== s.params.forecast ||
-    h.builtClock !== h.clockKey ||
-    h.builtPassed !== passed ||
-    h.builtNight !== night ||
-    h.builtPb !== inp.pbMinutes ||
-    h.builtChallenge !== inp.challengeMinutes ||
-    h.builtGoal !== inp.goalMinutes ||
-    h.builtVx !== v.vx ||
-    h.builtVw !== v.vw ||
-    h.builtTop !== v.safe.top ||
-    h.builtLeft !== v.safe.left ||
-    h.builtRight !== v.safe.right ||
-    h.builtDpr !== v.dpr
-  ) {
+  const n = h.nextKey;
+  n[0] = h.snowVal;
+  n[1] = h.snowTarget;
+  n[2] = c ? c.id : -1;
+  n[3] = marks;
+  n[4] = h.dayVal;
+  n[5] = FORECAST_IDS.indexOf(s.params.forecast);
+  n[6] = h.clockKey;
+  n[7] = passed;
+  n[8] = night;
+  n[9] = inp.pbMinutes;
+  n[10] = inp.challengeMinutes;
+  n[11] = inp.goalMinutes;
+  n[12] = v.vx;
+  n[13] = v.vw;
+  n[14] = v.safe.top;
+  n[15] = v.safe.left;
+  n[16] = v.safe.right;
+  n[17] = v.dpr;
+  let same = h.layer !== null;
+  for (let i = 0; i < KEYS && same; i++) same = n[i] === h.key[i];
+  if (!same) {
+    h.key.set(n);
     buildLayer(h, v, inp, passed, night);
   }
   if (h.badgeKey !== s.nubs.mult) renderBadge(h, v, s.nubs.mult);
@@ -419,7 +393,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.beginPath();
       g.arc(wx, wy, 8.5 * k, 0, TAU);
       g.fill();
-      drawWindGlyph(g, wx, wy, 13 * k, dir);
+      drawGlyph(g, 'gusts', wx, wy, 13 * k, undefined, dir < 0);
     }
     if (h.noonSparkle > 0) {
       const t = 1 - h.noonSparkle / 1.2;
@@ -466,24 +440,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   const top = v.safe.top + 8;
   const cy = top + ROW_H / 2;
   h.cy = cy;
-  h.builtSnow = h.snowVal;
-  h.builtTarget = h.snowTarget;
-  h.builtLevel = c ? c.id : -1;
-  h.builtMarks = c ? (c.markGate >= 0 ? 1 : 0) + (c.markEclipse >= 0 ? 2 : 0) : 0;
-  h.builtDay = h.dayVal;
   h.builtForecast = s.params.forecast;
-  h.builtClock = h.clockKey;
-  h.builtPassed = passed;
-  h.builtNight = night;
-  h.builtPb = inp.pbMinutes;
-  h.builtChallenge = inp.challengeMinutes;
-  h.builtGoal = inp.goalMinutes;
-  h.builtVx = v.vx;
-  h.builtVw = v.vw;
-  h.builtTop = v.safe.top;
-  h.builtLeft = v.safe.left;
-  h.builtRight = v.safe.right;
-  h.builtDpr = dpr;
 
   // The layer covers the viewport's width and the HUD band, aligned to device pixels.
   const lx = Math.floor(v.vx * dpr) / dpr;
@@ -589,7 +546,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     g.beginPath();
     g.arc(sx, sy, sr, 0, TAU);
     g.fill();
-    drawForecastGlyph(g, h.builtForecast as ForecastId, sx, sy, 12 * k);
+    drawGlyph(g, h.builtForecast, sx, sy, 12 * k);
   }
   cx += dW + 7 * k;
   g.fillStyle = '#2B2140';
@@ -681,7 +638,7 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
     g.moveTo(mx, my + 7 * k);
     g.lineTo(mx, y + hgt);
     g.stroke();
-    drawConceptGlyph(g, id, mx, my, 10 * k);
+    drawGlyph(g, id, mx, my, 10 * k);
   };
   mark(c.markGate, 'gate');
   mark(c.markEclipse, 'eclipse');

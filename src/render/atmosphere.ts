@@ -53,6 +53,7 @@ const GRADES: Readonly<Partial<Record<ForecastId, Grade>>> = {
   dazzle: { color: hex('#FFFDF0'), lo: 0.05, hi: 0.1, warm: 0.9, cool: 1, bleach: 1.4, lowMin: 0 },
 };
 const FORECAST_KEY: Readonly<Record<ForecastId, number>> = { clear: 0, breezy: 1, overcast: 2, heat: 3, long: 4, dazzle: 5, market: 6 };
+const KEYS = 18;
 const MAX_W = 128;
 const MAX_H = 256;
 const TAU = Math.PI * 2;
@@ -80,6 +81,9 @@ export interface AtmosphereIn {
   /** The death beat's cool wash alpha. */
   wash: number;
   forecast: ForecastId;
+  /** The chapter's grade (palette.ts Theme) washed over the frame under the forecast's. */
+  tint: Rgb;
+  tintA: number;
   /** Governor below level 2: the sun-side gradient, the noon bleach and the night pool. */
   full: boolean;
   /** Governor below level 3: the forecast's grade. */
@@ -97,7 +101,7 @@ export interface Atmosphere {
 }
 
 export function createAtmosphere(): Atmosphere {
-  return { canvas: null, g: null, key: new Float64Array(16).fill(Number.NaN), next: new Float64Array(16), visible: false };
+  return { canvas: null, g: null, key: new Float64Array(KEYS).fill(Number.NaN), next: new Float64Array(KEYS), visible: false };
 }
 
 export function createAtmosphereIn(): AtmosphereIn {
@@ -115,6 +119,8 @@ export function createAtmosphereIn(): AtmosphereIn {
     gold: 0,
     wash: 0,
     forecast: 'clear',
+    tint: 0,
+    tintA: 0,
     full: true,
     grade: true,
   };
@@ -145,12 +151,13 @@ export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: V
   const coolA = (0.07 + 0.1 * low) * gr.cool * day;
   const bleachA = a.elev > 0.75 ? 0.22 * ((a.elev - 0.75) / 0.25) * gr.bleach * day : 0;
   const gradeA = a.grade ? (gr.lo + (gr.hi - gr.lo) * a.elev) * (1 - a.night) : 0;
+  const tintA = a.grade ? a.tintA * (1 - 0.6 * a.night) : 0;
   const nightA = a.full ? a.night : 0;
   const heatA = a.heat > 0.01 ? 0.25 * (0.25 + 0.75 * (0.5 - 0.5 * Math.cos(a.heatPhase * TAU * 1.1))) * a.heat : 0;
   const coolP = a.cool > 0 ? 0.18 * Math.sin((Math.PI * a.cool) / 0.25) : 0;
   const goldP = a.gold > 0 ? 0.2 * Math.sin((Math.PI * a.gold) / 0.45) : 0;
   const washA = a.wash;
-  if (warmA < 0.005 && gradeA < 0.005 && nightA < 0.005 && heatA < 0.005 && coolP < 0.005 && goldP < 0.005 && washA < 0.005) {
+  if (warmA < 0.005 && gradeA < 0.005 && tintA < 0.005 && nightA < 0.005 && heatA < 0.005 && coolP < 0.005 && goldP < 0.005 && washA < 0.005) {
     at.visible = false;
     return false;
   }
@@ -175,8 +182,10 @@ export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: V
   n[13] = Math.round(washA * 200);
   n[14] = FORECAST_KEY[a.forecast];
   n[15] = Math.round(gradeA * 200);
+  n[16] = a.tint;
+  n[17] = Math.round(tintA * 200);
   let same = true;
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < KEYS; i++) {
     if (n[i] !== at.key[i]) {
       same = false;
       break;
@@ -184,7 +193,7 @@ export function drawAtmosphere(g: CanvasRenderingContext2D, at: Atmosphere, v: V
   }
   if (!same || !at.canvas) {
     at.key.set(n);
-    paint(at, W, H, a, gr, gradeA, warmA, coolA, bleachA, nightA, heatA, coolP, goldP, washA);
+    paint(at, W, H, a, gr, gradeA, tintA, warmA, coolA, bleachA, nightA, heatA, coolP, goldP, washA);
   }
   at.visible = true;
   g.imageSmoothingEnabled = true;
@@ -199,6 +208,7 @@ function paint(
   a: AtmosphereIn,
   gr: Grade,
   gradeA: number,
+  tintA: number,
   warmA: number,
   coolA: number,
   bleachA: number,
@@ -220,8 +230,12 @@ function paint(
   const cx = W / 2;
   const cy = H / 2;
   const R = Math.sqrt(W * W + H * H) / 2;
+  if (tintA > 0.005) {
+    // The chapter's grade, then the forecast's, under everything else in the layer.
+    g.fillStyle = cssa(a.tint, tintA);
+    g.fillRect(0, 0, W, H);
+  }
   if (gradeA > 0.005) {
-    // The forecast's grade under everything else in the layer.
     g.fillStyle = cssa(gr.color, gradeA);
     g.fillRect(0, 0, W, H);
   }

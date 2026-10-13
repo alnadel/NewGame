@@ -5,6 +5,8 @@ import { campaignConfig as levelConfig, CONCEPTS, type ConceptId, type LevelDef,
 
 /** How long the run freezes on the FINISH stamp before the Results (s). */
 export const FINISH_FREEZE_S = 1.0;
+/** A tap this long after the finish skips the rest of the freeze. */
+export const FINISH_SKIP_S = 0.35;
 
 /**
  * The config of a campaign level (§4): the core's campaignConfig (the level's seed, profile 3, no

@@ -1,7 +1,8 @@
 // The campaign (Journey, v1.2, CAMPAIGN_PLAN §4): ?level= opens a level on its intro card and the
 // first tap starts it with the level's concept; a bot run reaches the Results with stars and Next
-// level starts the level after; the Eclipse level dims the world; the unlock-all setting makes
-// every Journey tile playable (loosely, while the Journey screen is the UI batch's).
+// level starts the level after; a melted level retries without its card; the Eclipse level dims
+// the world; the unlock-all setting makes every Journey tile playable (loosely, while the Journey
+// screen is the UI batch's).
 import { expect, test, type Page } from '@playwright/test';
 import { screen, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
@@ -107,6 +108,18 @@ test.describe('campaign levels', () => {
     await expect
       .poll(async () => `${await screen(page)}:${(await state(page)).level}`, { timeout: 15_000 })
       .toBe('play:3');
+    expect(errors).toEqual([]);
+  });
+
+  test('a melted level retries at once: Retry plays it again without its intro card', async ({ page }) => {
+    const errors = watchErrors(page);
+    await openLevel(page, 'level=4&test=1');
+    await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
+    await waitForScreen(page, 'results', 15_000);
+    expect((await page.evaluate(() => window.__SHADY_TEST__!.campaign()))!.passed).toBe(false);
+    await page.getByRole('button', { name: /^Retry/ }).click();
+    // No card to tap through: the level is under way at once (its start beat, then the day).
+    await expect.poll(async () => `${await screen(page)}:${(await state(page)).level}:${(await state(page)).phase}`, { timeout: 10_000 }).toBe('play:4:day');
     expect(errors).toEqual([]);
   });
 

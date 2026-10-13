@@ -20,7 +20,7 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `game/campaign.ts` | Campaign (Journey, v1.2) runs: a level's run config, the intro card's words, the Results goal line and the HUD goal pill (CAMPAIGN_PLAN §4). |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
-| `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (forecast and biome glyphs) and `postcard.ts`. |
+| `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (every forecast, biome and concept glyph and the ground decals, stored as SVG path ops: `drawGlyph(id)`, `artOps`/`drawArt`) and `postcard.ts`. |
 
 ## Frame
 
@@ -180,30 +180,45 @@ See CAMPAIGN_PLAN §4 for the contract; the core names (`CONCEPTS`, `levelDef`, 
   3, no tutorial chunk, no Day Plan, its concepts as `mods`, drain, start time, biome and forecast;
   the lesson on level 1 until it is passed) and holds it on the intro card until the first press.
   `?level=N` opens a level this way at boot (a normal run unless other debug params are present).
-  Retry and Pause > Restart replay the level; `nextLevel()` starts the next one on its card;
+  Retry and Pause > Restart replay the level at once (no intro card); `nextLevel()` starts the next one on its card;
   `openJourney()` leaves the run like Home and shows the Journey map. Campaign runs never use the
   comfort ladder, bests or the endless history; `?bot=` autoplay goes on to the next level.
 - **Intro card** (`render/banners.ts` `showLevelCard`): "LEVEL 6", the name, the concept's glyph,
   short name and blurb (wrapped, ≤ 3 lines), the goal pill and a breathing "tap or drag to start";
-  it slides in like the Day card, holds through `hold` and slides out on `start`.
+  it slides in (0.32 s), holds through `hold` and slides out (0.3 s) on `start`.
 - **HUD** (`render/hud.ts` `HudCampaign`): the badge reads `L6`, the ruler is a teal progress bar to a
   checkered finish flag with the gate or eclipse marker at the midpoint, the Snow pill counts
   `flakes/target` or `snow/target` on goal levels, the clock stays, and a wind mark rides the
   progress head during a gust.
 - **Finish**: on `levelWon` the session builds the result (the core fills `result.level` and
   `stats.minChill`), fx
-  stamps `FINISH` (a checkered plate, 64 confetti, a hop and a zoom pulse) or the rose miss line
+  stamps `FINISH` (a checkered plate whose earned stars pop in under it one by one, 64 confetti,
+  a gold ring and sparkles, a 60 ms hit-stop, a hop and a zoom pulse) or the rose miss line
   ("NOT ENOUGH FLAKES"/"SNOW"), the sim stays frozen in `won` for `FINISH_FREEZE_S` (1 s, effects
-  still animate), then the Results show with `ResultsView.campaign` (id, name, passed, stars,
+  still animate; a tap after `FINISH_SKIP_S` skips the rest), then the Results show with `ResultsView.campaign` (id, name, passed, stars,
   nextId, goalLine, introduces). A melt is the death flow as before.
 - **Render signatures** (`renderer.ts`): fog (a cached mist band fades the world out 170-330 u ahead,
   the halo loses its `next` arcs), No Dial (`blind`: the halo's shade arcs and hint are off, the
   pointer and glare stay), eclipse (`s.eclipse` dims the palette toward night with a star field and
   slides a dark disc over the sun mascot), gusts (`P_GUST` streaks fly the way the sun is pushed
-  while `s.sun.gust ≠ 0`), Sun Lock (a padlock outside the sun pointer while `s.sun.locked`),
+  while `s.sun.gust ≠ 0`), Sun Lock (a padlock outside the sun pointer while `s.sun.locked`,
+  blinking in 0.6 s before each lock),
   Moonlit (night palette, the sun's own shadows in the moonlight colour, stars, the moon as the sun
   mascot), and the finish line (`casters.ts` `drawFinishArch`: a gate arch as a finish banner with
   a checkered line on the ground, drawn for the core's `kind: 'finish'` caster at `World.finishY`).
+- **Chapter looks** (v1.3, `palette.ts` `themeFor(chapter)`): each of the 20 chapters tints the
+  biomes' ground and the trail, washes its own grade over the frame (the atmosphere layer, off in
+  high contrast) and fills the air with spring petals, winter snow or blown leaves (`fx.ts`, none
+  under reduced motion). Endless, Daily and challenge runs keep `PLAIN_THEME`.
+
+## v1.3 game feel
+
+- **Danger at a glance**: while Nubs stands in the sun the halo ring burns hot (`#FF6A3D`) with a
+  heartbeat glow, 1.2 Hz at full Chill to 3.4 Hz near empty (steady under reduced motion); a hot
+  ring snaps out of the dial when he leaves shade (at most one per 0.6 s); the Chill gauge turns hot
+  below 25.
+- **Start**: GO! (`POP_GO`), a hop and a puff of snow when the start beat ends.
+- **SWING**: a 30 ms hit-stop and a teal ring off the dial, on top of the SWING! pop and swept arc.
 
 ## Test hook (`?test=1`)
 

@@ -8,10 +8,10 @@ import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src
 import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
 import { createDecals, decorIn, FOOTPRINT_CLEAR, PUDDLE, TRAIL_CLEAR, trailDistance } from '../../src/render/decor.ts';
-import { createShadeSplit, splitShade } from '../../src/render/halo.ts';
+import { createHalo, createShadeSplit, splitShade, updateHalo } from '../../src/render/halo.ts';
 import { addHeadline, addPlus, addSwing, createPops, POP_PHEW, updatePops, type Pops } from '../../src/render/particles.ts';
 import { MAP_FADE_S, MAP_LABEL_FADE_S, MAP_PULL_S, mapAlphas, mapSettleT, type MapOverlay } from '../../src/render/meltMap.ts';
-import { createPalette, nubsShadeAt, updatePalette } from '../../src/render/palette.ts';
+import { createPalette, nubsShadeAt, PLAIN_THEME, themeFor, updatePalette } from '../../src/render/palette.ts';
 import { matchShadow, traceShadows } from '../../src/render/shadowLayer.ts';
 import { bossWeight } from '../../src/render/sun.ts';
 
@@ -385,5 +385,41 @@ describe('living ground (GR11)', () => {
         expect(near).toBeGreaterThanOrEqual(FOOTPRINT_CLEAR);
       }
     }
+  });
+});
+
+describe('chapter looks and the hot dial (v1.3)', () => {
+  it('gives each of the 20 chapters its own look and every other run the plain one', () => {
+    const keys = new Set<string>();
+    for (let c = 1; c <= 20; c++) {
+      const t = themeFor(c);
+      keys.add(`${t.meadow}/${t.town}/${t.grade}/${t.gradeA}`);
+    }
+    expect(keys.size).toBe(20);
+    expect(themeFor(undefined)).toBe(PLAIN_THEME);
+    expect(themeFor(21)).toBe(PLAIN_THEME);
+  });
+
+  it('tints the ground per chapter (and the plain theme keeps the biomes as before)', () => {
+    const a = createPalette();
+    const b = createPalette();
+    updatePalette(a, 0.5, 0, 0, false);
+    updatePalette(b, 0.5, 0, 0, false, themeFor(3));
+    expect(a.ground).not.toBe(b.ground);
+    updatePalette(b, 0.5, 0, 0, false, PLAIN_THEME);
+    expect(b.ground).toBe(a.ground);
+  });
+
+  it('heats the dial at once in the sun, cools it in the shade, and beats faster as Chill drops', () => {
+    const h = createHalo();
+    updateHalo(h, 0.2, false, 80, 0, true);
+    expect(h.heat).toBeGreaterThan(0.9);
+    updateHalo(h, 1, false, 80, 0, false);
+    expect(h.heat).toBeLessThan(0.05);
+    const slow = createHalo();
+    const fast = createHalo();
+    updateHalo(slow, 0.1, false, 100, 0, true);
+    updateHalo(fast, 0.1, false, 10, 0, true);
+    expect(fast.beat).toBeGreaterThan(slow.beat);
   });
 });
