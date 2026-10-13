@@ -37,9 +37,9 @@ Settings → Progress carries it elsewhere with a backup code.
 The Title's big **Play** button starts your next **Journey** level (Level 1 on a first launch);
 **Endless** and the **Daily** sit beside it. The map button opens 200 levels in 20 chapters. A level
 is a short, seeded run to a finish line with a goal (reach the finish, collect N flakes, or earn N
-Snow) and up to three stars: one for passing, one for the level's flake count, one for keeping Chill
-above its bar. The first 40 levels each introduce one concept (clouds, glare, the SWING, forecasts,
-fog, an eclipse, a moonlit night…); later levels combine them. Passing a level unlocks the next and
+Snow) and up to three stars: one for passing, one for the level's flake count, one for a **cool run** (only a
+few seconds in the sun, Chill never low). Results name the next star you missed. The first 40 levels each introduce one concept (clouds, glare, the SWING, forecasts,
+fog, an eclipse, a moonlit night…); later levels combine them. Each chapter has its own colours, air particles and music. Passing a level unlocks the next and
 pays a first-pass bonus (twice the level number in Snow). Every star counts toward the **star
 rewards**: the Starry Scarf at 25 stars, then the Night Beanie (75), the Golden Carrot (150), the
 Galaxy Shades (300) and the Star Crown (600). Missions and achievements count as for any run; the
