@@ -18,7 +18,7 @@ import {
   type RunStats,
 } from '../core/index.ts';
 import { challengeVerdict } from '../meta/challenge.ts';
-import type { Feature, Rarity } from '../meta/gamify.ts';
+import type { Rarity } from '../meta/gamify.ts';
 import { DAILY_TRIES, dailySeed } from '../meta/daily.ts';
 import { dailyStatus } from '../meta/progression.ts';
 import type { Save } from '../meta/saveTypes.ts';
@@ -326,19 +326,6 @@ export function levelTileLabel(level: Pick<LevelDef, 'id' | 'name' | 'introduces
 /** The Results kicker of a Journey run: "Level 12 · Passed" (short: it shares its line with Share). */
 export function campaignKicker(c: Pick<ResultsCampaign, 'id' | 'passed'>): string {
   return `Level ${c.id} · ${c.passed ? 'Passed' : 'Not passed'}`;
-}
-
-const FEATURE_LABEL: Readonly<Record<Feature, string>> = {
-  endless: 'Endless',
-  daily: 'the Daily',
-  missions: 'Missions',
-  wardrobe: 'the Wardrobe',
-  profile: 'your Profile',
-};
-
-/** A v1.4 feature's name in a sentence ("Unlocked: the Wardrobe"). */
-export function featureLabel(f: Feature): string {
-  return FEATURE_LABEL[f];
 }
 
 /** A cosmetic's rarity (meta/gamify.ts rarity) as a word. */

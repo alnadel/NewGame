@@ -19,7 +19,7 @@ import {
   nextRunEased,
   totalStars,
 } from '../../meta/progression.ts';
-import { claimables, featureHint, featureIsNew, featureUnlocked, markFeatureSeen, type Feature } from '../../meta/gamify.ts';
+import { claimables, featureHint, featureIsNew, featureName, featureUnlocked, markFeatureSeen, type Feature } from '../../meta/gamify.ts';
 import type { Save } from '../../meta/saveTypes.ts';
 import { logoLayers } from '../art.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
@@ -27,7 +27,7 @@ import { claimDailyReward, claimDot, rankBadge } from '../gamify.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
-import { challengeGoalText, featureLabel, planText } from '../labels.ts';
+import { challengeGoalText, planText } from '../labels.ts';
 import { button, countUp, hide, setButtonLabel } from '../widgets.ts';
 
 /** Travel (px) after which a press is no longer a tap. */
@@ -403,7 +403,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       const fresh = gates.filter((g) => g.el.classList.contains('is-new') && !celebrated.has(g.f));
       for (const g of fresh) {
         celebrated.add(g.f);
-        ctx.toast(`Unlocked: ${featureLabel(g.f)}`, { icon: 'star', tone: 'gold', duration: 3200 });
+        ctx.toast(`${featureName(g.f)} unlocked!`, { icon: 'star', tone: 'gold', duration: 3200 });
       }
       if (fresh.length > 0) ctx.sound('unlock');
     },

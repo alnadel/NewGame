@@ -18,7 +18,6 @@ import { defaults } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
 import {
-  featureLabel,
   RARITY_LABEL,
   campaignKicker,
   challengeGoalText,
@@ -427,8 +426,4 @@ describe('v1.4 labels', () => {
     expect(Object.values(RARITY_LABEL)).toEqual(['Common', 'Rare', 'Epic', 'Legendary']);
   });
 
-  it('names features in a sentence', () => {
-    expect(featureLabel('wardrobe')).toBe('the Wardrobe');
-    expect(featureLabel('endless')).toBe('Endless');
-  });
 });

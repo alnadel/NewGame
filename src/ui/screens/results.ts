@@ -42,7 +42,6 @@ import type { Screen, UiContext } from '../screen.ts';
 import type { ResultsView } from '../types.ts';
 import { toastIconName } from '../overlays.ts';
 import { revealRewards, xpMeter } from '../gamify.ts';
-import { featureLabel } from '../labels.ts';
 import { button, countUp, hide, progressBar, setButtonLabel, setDisabled, starRoad } from '../widgets.ts';
 
 const RETRY_ARM_MS = 300;
@@ -534,9 +533,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // missions done this run pop in as one chip with the first stamp ("2 missions done +20"), so the
     // reward shows even when the rows sit below the fold.
     const done = outcome.missionsCompleted.length;
+    // outcome.toasts carries the run's unlocks, features included (v1.4: "Wardrobe unlocked!").
     const toasts: ToastSpec[] = [...outcome.toasts];
-    // Features this run unlocked (v1.4), with the run's other unlocks.
-    for (const f of outcome.gamify?.featuresUnlocked ?? []) toasts.push({ text: `Unlocked: ${featureLabel(f)}`, icon: 'star', tone: 'gold' });
     if (done > 0) toasts.push({ text: `${done === 1 ? 'Mission' : `${done} missions`} done +${outcome.missionSnow}`, icon: 'check', tone: 'accent' });
     const chips = toasts.map((t) =>
       h(
