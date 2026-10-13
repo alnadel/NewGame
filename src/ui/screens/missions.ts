@@ -1,11 +1,10 @@
-// Missions (GDD §8, V1_PLAN §11.1-§11.2, V1_1_PLAN UM4-UM6): the Sunny Week, Today's errand, the
-// three active missions (with Swap on a stale one) and the achievements wall. Locked achievements
+// Missions (GDD §8, V1_PLAN §11.1-§11.2, V1_1_PLAN UM4-UM6): the Sunny Week, the three active missions (with Swap on a stale one) and the achievements wall. Locked achievements
 // show riddles and the item they grant. The header links to the Journal.
 
 import { ACHIEVEMENTS, getCosmetic } from '../../meta/content.ts';
 import { addDays, formatDateLabel } from '../../meta/daily.ts';
 import type { MissionView } from '../../meta/missions.ts';
-import { activeMissionViews, errandView } from '../../meta/progression.ts';
+import { activeMissionViews } from '../../meta/progression.ts';
 import { SUNNY_REWARDS, sunnyDays, weekFor } from '../../meta/week.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon } from '../icons.ts';
@@ -35,10 +34,6 @@ export function createMissionsScreen(ctx: UiContext): Screen {
   const weekDays = h('ol', { class: 'week-days' });
   const weekNote = h('p', { class: 'card-note' });
   const weekCount = h('span', { class: 'card-count' });
-  const errandLabel = h('span', { class: 'mcard-label' });
-  const errandReward = h('span', { class: 'reward reward--chip' });
-  const errandBottom = h('div', { class: 'mcard-bottom' });
-  const errandCard = h('div', { class: 'mcard mcard--errand' }, h('div', { class: 'mcard-top' }, errandLabel, errandReward), errandBottom);
   const missionList = h('ul', { class: 'mission-list' });
   const badgeCount = h('span', { class: 'card-count' });
   const badges = h('ul', { class: 'badges' });
@@ -54,7 +49,6 @@ export function createMissionsScreen(ctx: UiContext): Screen {
     'div',
     { class: 'menu-body' },
     h('section', { class: 'card card--week' }, h('h3', { class: 'card-title' }, 'Sunny Week', weekCount), weekDays, weekNote),
-    h('section', { class: 'card' }, h('h3', { class: 'card-title' }, "Today's errand"), errandCard),
     h('section', { class: 'card' }, h('h3', { class: 'card-title' }, 'Active missions'), missionList,
       h('p', { class: 'card-note' }, 'Finished missions pay Snow right away and are swapped for new ones when your next run starts.')),
     h('section', { class: 'card' }, h('h3', { class: 'card-title' }, 'Achievements', badgeCount), badges),
@@ -116,14 +110,6 @@ export function createMissionsScreen(ctx: UiContext): Screen {
     weekNote.textContent = next
       ? `Play on ${next.days} days this week for +${next.snow} Snow. Each sun's rays show the Day you reached.`
       : 'A full Sunny Week! Every sun has its rays.';
-
-    // Today's errand: the same for everyone today.
-    const e = errandView(save, today);
-    errandCard.classList.toggle('is-done', e.done);
-    errandLabel.textContent = e.label;
-    setChildren(errandReward, ...reward(e.reward));
-    setChildren(errandBottom, progressBar(e.fraction, 'bar bar--lg'),
-      e.done ? h('span', { class: 'stamp stamp--sm' }, 'Done') : h('span', { class: 'mcard-prog' }, e.progressText));
 
     setChildren(missionList, ...activeMissionViews(save).map(missionCard));
 

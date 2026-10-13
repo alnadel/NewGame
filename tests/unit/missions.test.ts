@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { HourGlyph, RunResult } from '../../src/core/index.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { defaults, migrate } from '../../src/meta/save.ts';
-import { ERRANDS, MISSIONS } from '../../src/meta/content.ts';
-import { addDays } from '../../src/meta/daily.ts';
-import { errandFor, missionGate, refillMissions, type MissionState } from '../../src/meta/missions.ts';
-import { activeMissionViews, applyRunResult, beginRun, errandView, swapMission } from '../../src/meta/progression.ts';
+import { MISSIONS } from '../../src/meta/content.ts';
+import { missionGate, refillMissions, type MissionState } from '../../src/meta/missions.ts';
+import { activeMissionViews, applyRunResult, beginRun, swapMission } from '../../src/meta/progression.ts';
 
 const TODAY = '2026-10-11';
 const def = (id: string) => MISSIONS.find((m) => m.id === id)!;
@@ -135,72 +134,14 @@ describe('stale missions and Swap', () => {
   });
 });
 
-describe("Today's errand", () => {
-  it('is the same for everyone on a date and changes with the date', () => {
-    expect(errandFor(TODAY, true)).toEqual(errandFor(TODAY, true));
-    const a = errandView(withBest(0), TODAY);
-    const b = errandView(defaults(99), TODAY);
-    expect(a.id).toBe(b.id);
-    expect(a).toMatchObject({ reward: 30, progress: 0, done: false, justCompleted: false });
-    const ids = new Set(Array.from({ length: 60 }, (_, i) => errandFor(addDays(TODAY, i), true).id));
-    expect(ids.size).toBe(ERRANDS.length);
-  });
-
-  it('gives way to the next errand while the Daily is locked', () => {
-    // 2026-10-21's errand is "Play today's Daily".
-    expect(errandFor('2026-10-21', true).id).toBe('e-daily');
-    expect(errandFor('2026-10-21', false).id).toBe('e-runs-5');
-    expect(errandView(defaults(1), '2026-10-21').id).toBe('e-runs-5');
-    expect(errandView(withBest(0), '2026-10-21').id).toBe('e-daily');
-  });
-
-  it('sums progress over every finished run of the date in any mode, and pays once', () => {
-    // 2026-10-10's errand is "Collect 25 flakes today".
-    const day = '2026-10-10';
-    let s = withBest(0);
-    s.lastPlay = day;
-    const r1 = applyRunResult(s, run(10, { flakes: 10 }), { today: day });
-    expect(r1.outcome.errand).toMatchObject({ id: 'e-flakes-25', progress: 10, progressText: '10/25', done: false });
-    const r2 = applyRunResult(r1.save, run(10, { flakes: 9 }, { mode: 'challenge' }), { today: day });
-    const r3 = applyRunResult(r2.save, run(10, { flakes: 7 }, { mode: 'daily', dailyDate: day }), { today: day, dailyTry: 1 });
-    expect(r3.outcome.errand).toMatchObject({ progress: 26, done: true, justCompleted: true, fraction: 1, progressText: '25/25' });
-    expect(r3.outcome.bonusSnow).toBe(30);
-    expect(r3.outcome.toasts.map((t) => t.text)).toContain('Errand done +30');
-    const r4 = applyRunResult(r3.save, run(10, { flakes: 30 }), { today: day });
-    expect(r4.outcome.bonusSnow).toBe(0);
-    expect(r4.outcome.errand?.justCompleted).toBe(false);
-    s = r4.save;
-    // A new date replaces it.
-    const next = applyRunResult(s, run(10), { today: TODAY });
-    expect(next.save.missions.errand).toEqual({ date: TODAY, id: 'e-flowers-12', progress: 0, done: false });
-  });
-
-  it('counts each errand from the right part of a run', () => {
-    const at = (date: string, r: RunResult, dailyTry?: number | null): number => {
-      const s = withBest(0);
-      s.daily[date] = { tries: 1, bestMinutes: 0, bestSnow: 0, glyphs: '' };
-      return applyRunResult(s, r, { today: date, dailyTry }).outcome.errand?.progress ?? -1;
-    };
-    // e-phews-2, e-cloud-8, e-mult3-2, e-noon-1, e-9am-3, e-crystals-2, e-flowers-12, e-cool-4, e-swings-3, e-daily, e-runs-5
-    expect(at('2026-10-20', run(10, { phews: 3 }))).toBe(3);
-    expect(at('2026-10-18', run(10, { cloudSeconds: 4.5 }))).toBe(4.5);
-    expect(errandView({ ...withBest(0), missions: { ...withBest(0).missions, errand: { date: '2026-10-18', id: 'e-cloud-8', progress: 4.56, done: false } } }, '2026-10-18').progressText).toBe('4.5/8 s');
-    expect([at('2026-10-31', run(10, { maxMult: 3 })), at('2026-10-31', run(10, { maxMult: 2 }))]).toEqual([1, 0]);
-    expect([at('2026-10-12', run(390)), at('2026-10-12', run(389))]).toEqual([1, 0]);
-    expect([at('2026-10-22', run(180)), at('2026-10-22', run(179))]).toEqual([1, 0]);
-    expect(at('2026-10-13', run(10, { crystals: 2 }))).toBe(2);
-    expect(at('2026-10-09', run(10, { flowers: 5 }))).toBe(5);
-    const cool = run(800);
-    cool.hourGlyphs = [['cool', 'cool', 'warm'], ['cool', 'melt']];
-    expect(at('2026-10-17', cool)).toBe(3);
-    expect(at('2026-10-14', run(10, { swings: 2 }))).toBe(2);
-    const daily = run(10, {}, { mode: 'daily', dailyDate: '2026-10-21' });
-    expect([at('2026-10-21', daily, 1), at('2026-10-21', daily, null), at('2026-10-21', run(10), 1)]).toEqual([1, 0, 0]);
-    expect(at('2026-10-08', run(10))).toBe(1);
-  });
-
-  it('starts empty on old saves and on a fresh save', () => {
-    expect(migrate({ v: 1, stats: { runs: 4 } }, 1).save.missions.errand).toEqual({ date: '', id: '', progress: 0, done: false });
-    expect(errandView(defaults(1), TODAY)).toMatchObject({ id: 'e-flowers-12', label: '12 frost flowers today', target: 12 });
+describe("Today's errand (retired in v1.3)", () => {
+  it('stays empty in every save and never pays', () => {
+    expect(migrate({ v: 1, stats: { runs: 4 }, missions: { errand: { date: TODAY, id: 'e-runs-5', progress: 2, done: false } } }, 1).save.missions.errand)
+      .toEqual({ date: '', id: '', progress: 0, done: false });
+    const s = withBest(0);
+    s.lastPlay = TODAY;
+    const r = applyRunResult(s, run(10, { flakes: 30 }), { today: TODAY });
+    expect(r.outcome.bonusSnow).toBe(0);
+    expect(r.save.missions.errand).toEqual({ date: '', id: '', progress: 0, done: false });
   });
 });

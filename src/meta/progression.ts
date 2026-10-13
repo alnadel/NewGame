@@ -4,29 +4,8 @@
 
 import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, isWarmup, MINUTES_PER_DAY, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { CampaignState, DailyEntry, Save } from './saveTypes.ts';
-import {
-  ACHIEVEMENTS,
-  COSMETICS,
-  ERRAND_REWARD,
-  getAchievement,
-  getCosmetic,
-  type AchievementId,
-  type CosmeticId,
-} from './content.ts';
-import {
-  errandState,
-  getErrand,
-  errandValue,
-  errandViewOf,
-  missionTarget,
-  missionValue,
-  missionView,
-  parseMissionId,
-  refillMissions,
-  swapSlot,
-  type ErrandView,
-  type MissionView,
-} from './missions.ts';
+import { ACHIEVEMENTS, COSMETICS, getAchievement, getCosmetic, type AchievementId, type Cosmetic, type CosmeticId } from './content.ts';
+import { missionTarget, missionValue, missionView, parseMissionId, refillMissions, swapSlot, type MissionView } from './missions.ts';
 import { CAMPAIGN_LEVEL_COUNT, cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest, sameRules, STARS_PER_LEVEL } from './save.ts';
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
@@ -96,7 +75,7 @@ export interface RunOutcome {
   runSnow: number;
   /** Snow paid by missions completed this run. */
   missionSnow: number;
-  /** Morning Snow, Sunny Week and errand rewards. */
+  /** Morning Snow, Sunny Week and Journey first-pass rewards. */
   bonusSnow: number;
   /** runSnow + missionSnow + bonusSnow, all added to the wallet. */
   snowEarned: number;
@@ -115,8 +94,6 @@ export interface RunOutcome {
   pace: string | null;
   /** The pace line says the run was below the usual (shown in neutral ink, not as praise). */
   paceDown: boolean;
-  /** Today's errand after this run. */
-  errand: ErrandView | null;
   /** recentBest before this run (any rules: missions and the Title's milestones measure from it). */
   recentBestBefore: number;
   /** The comfort rung of the next endless run. */
@@ -137,7 +114,7 @@ export interface CampaignOutcome {
 }
 
 export interface ApplyRunOptions {
-  /** Local date of the device ('YYYY-MM-DD') at run end: history, errand, Sunny Week, Morning Snow. */
+  /** Local date of the device ('YYYY-MM-DD') at run end: history, Sunny Week, Morning Snow. */
   today: string;
   /** Daily runs: the try number counted at 6:30 AM by dailyTryStarted, or null/undefined if unscored. */
   dailyTry?: number | null;
@@ -153,8 +130,8 @@ export interface ApplyRunOptions {
 
 type AchievementCheck = (save: Save, run: RunResult, options: ApplyRunOptions) => boolean;
 
-/** Evaluated after the run's stats are merged into the save. */
-const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
+/** Evaluated after the run's stats are merged into the save (star rewards check their `stars`). */
+const ACHIEVEMENT_CHECKS: Readonly<Partial<Record<AchievementId, AchievementCheck>>> = {
   'first-light': (s) => s.stats.runs >= 1,
   'night-owl': (s) => s.stats.reachedNight,
   'high-noon': (s, r) => r.minutes >= HIGH_NOON_MINUTES || s.stats.bestMinutes >= HIGH_NOON_MINUTES,
@@ -204,6 +181,27 @@ export function totalStars(save: Pick<Save, 'campaign'>): number {
 /** The level "Continue" plays: the highest unlocked one (the last level once everything is passed). */
 export function continueLevel(save: Pick<Save, 'campaign'>): number {
   return Math.min(CAMPAIGN_LEVEL_COUNT, Math.max(1, save.campaign.unlocked));
+}
+
+/** The next Journey star reward: the stars so far, the previous and next thresholds, its item. */
+export interface StarGoal {
+  stars: number;
+  from: number;
+  target: number;
+  name: string;
+  item: Cosmetic | undefined;
+}
+
+/** The star reward the player is working toward, or null once every one is earned. */
+export function nextStarGoal(save: Pick<Save, 'campaign'>): StarGoal | null {
+  const stars = totalStars(save);
+  let from = 0;
+  for (const a of ACHIEVEMENTS) {
+    if (a.stars === undefined) continue;
+    if (stars < a.stars) return { stars, from, target: a.stars, name: a.name, item: a.reward ? getCosmetic(a.reward) : undefined };
+    from = a.stars;
+  }
+  return null;
 }
 
 /**
@@ -289,7 +287,7 @@ function forecastNoonBits(r: RunResult): number {
 
 /**
  * Folds a finished, non-debug run into the save: stats and bests, history and comfort, wallet and
- * bonuses (Morning Snow, Welcome back, Sunny Week, Today's errand), missions (progress, staleness),
+ * bonuses (Morning Snow, Welcome back, Sunny Week, Journey first passes), missions (progress, staleness),
  * the Daily best, achievements and their cosmetic rewards. Pure.
  */
 export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOptions): { save: Save; outcome: RunOutcome } {
@@ -373,7 +371,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     recordDailyBest(next, r.dailyDate, r.minutes, rawSnow, glyphs);
   }
 
-  // Bonuses: the day's first run, a return after days away, the Sunny Week and Today's errand.
+  // Bonuses: the day's first run, a return after days away and the Sunny Week.
   const chips: ToastSpec[] = [];
   let bonusSnow = 0;
   let welcomeExtra = 0;
@@ -414,18 +412,6 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     bonusSnow += p.snow;
     chips.push({ text: `Sunny Week: ${p.days} days +${p.snow}`, icon: 'calendar', tone: 'gold' });
   }
-  const errand = { ...errandState(next.missions.errand, today, dailyWasUnlocked) };
-  const errandDef = getErrand(errand.id);
-  let errandDone = false;
-  if (errandDef && !errand.done) {
-    errand.progress += errandValue(errandDef.id, r, options.dailyTry);
-    errandDone = errand.done = errand.progress >= errandDef.target;
-  }
-  if (errandDone) {
-    bonusSnow += ERRAND_REWARD;
-    chips.push({ text: `Errand done +${ERRAND_REWARD}`, icon: 'check', tone: 'accent' });
-  }
-  next.missions.errand = errand;
   next.lastPlay = today;
 
   const runSnow = rawSnow + welcomeExtra;
@@ -438,7 +424,8 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   const achievementsUnlocked: AchievementId[] = [];
   const cosmeticsUnlocked: CosmeticId[] = [];
   for (const a of ACHIEVEMENTS) {
-    if (next.unlocks.achievements.includes(a.id) || !ACHIEVEMENT_CHECKS[a.id](next, r, options)) continue;
+    const earned = a.stars !== undefined ? totalStars(next) >= a.stars : ACHIEVEMENT_CHECKS[a.id]?.(next, r, options) === true;
+    if (next.unlocks.achievements.includes(a.id) || !earned) continue;
     achievementsUnlocked.push(a.id);
     if (a.reward && !next.unlocks.cosmetics.includes(a.reward)) cosmeticsUnlocked.push(a.reward);
   }
@@ -481,7 +468,6 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
       toasts,
       pace: pace?.text ?? null,
       paceDown: pace?.down ?? false,
-      errand: errandViewOf(errand, errandDone),
       recentBestBefore,
       comfortAfter: s.comfort,
       ...(campaign ? { campaign } : {}),
@@ -513,7 +499,6 @@ export function debugRunOutcome(save: Save, result: RunResult): RunOutcome {
     toasts: [],
     pace: null,
     paceDown: false,
-    errand: null,
     recentBestBefore: recentBest(save),
     comfortAfter: save.stats.comfort,
   };
@@ -536,11 +521,6 @@ export function swapMission(save: Save, slotId: string): Save {
 /** Views of the 3 active missions (Title pips, Missions screen). */
 export function activeMissionViews(save: Save): MissionView[] {
   return save.missions.active.map((slot) => missionView(slot)).filter((v): v is MissionView => v !== null);
-}
-
-/** Today's errand as it stands (a new date shows a fresh one). */
-export function errandView(save: Save, today: string): ErrandView {
-  return errandViewOf(errandState(save.missions.errand, today, isDailyUnlocked(save))) as ErrandView;
 }
 
 /** The first milestone above the recent best, or null past the last one. */

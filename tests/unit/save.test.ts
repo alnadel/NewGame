@@ -336,7 +336,6 @@ describe('migrate', () => {
     s.unlocks.cosmetics.push('shades-round');
     s.missions.deferred = ['reach-day-3', 'gate-arch@2'];
     s.missions.active[1] = { ...(s.missions.active[1] as Save['missions']['active'][number]), stale: 6, progress: 3 };
-    s.missions.errand = { date: '2026-10-12', id: 'e-phews-2', progress: 1, done: false };
     s.history = [
       { m: 400, s: 20, r: 2, d: '2026-10-11' },
       { m: 900, s: 61, r: 4, d: '2026-10-12' },

@@ -448,11 +448,6 @@
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9);
 }
 
-.pip--errand {
-  margin-left: 4px;
-  border-radius: 4px;
-}
-
 .pip.is-done {
   background: var(--gold);
   box-shadow:
@@ -806,6 +801,80 @@
   }
 }
 
+/* The modes: the map (with the stars earned), the next level (the primary action) and Endless. A
+   sideways drag on them is handed to the sun like the tray buttons (title.ts pressable). */
+.modes {
+  container: modes / inline-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.modes .btn {
+  flex: none;
+  min-height: 48px;
+  padding: 4px 14px 4px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  touch-action: none;
+}
+
+.modes .play-pill {
+  flex: 1 1 auto;
+  min-height: 56px;
+  font-size: 1.1875rem;
+}
+
+.play-pill .ic {
+  width: 24px;
+  height: 24px;
+}
+
+.journey-pill .ic {
+  color: var(--accent-ink);
+}
+
+/* Narrow columns: Endless keeps its icon (and its aria-label). */
+@container modes (max-width: 351.98px) {
+  .modes .endless-pill {
+    padding: 4px 12px;
+  }
+
+  .endless-pill .btn-label {
+    display: none;
+  }
+}
+
+/* The key mapping under the tagline, for mouse and keyboard players (not with a challenge up). */
+.title-keys {
+  display: none;
+  margin-top: 8px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(43, 33, 64, 0.78);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+@media (pointer: fine) {
+  .title-keys {
+    display: block;
+  }
+}
+
+.sui.is-kbd .title-keys {
+  display: block;
+}
+
+.scr-title:has(.challenge:not([hidden])) .title-keys {
+  display: none;
+}
+
 .tray {
   display: flex;
   justify-content: center;
@@ -931,83 +1000,13 @@
   position: absolute;
   left: 0;
   right: 0;
-  /* The fingertip path sits at 65% of the screen. */
-  top: 65%;
+  /* In play Nubs and his halo dial sit at 68-70% of the height: the hint stays just below them. */
+  top: min(84%, calc(100% - var(--in-bottom) - 72px));
   display: none;
   flex-direction: column;
   align-items: center;
   transform: translateY(-32px);
   pointer-events: none;
-}
-
-/* On the Title the hint sits above Nubs and his halo dial — the word "drag" on top, the swiping
-   hand below it — so neither covers him or the dial's sun pointer. The hand hangs ~50 px below its
-   fingertip path (18 px past the track), so the track ends 26 px above the dial. --nubs-y and
-   --halo-r are set by the game from the camera layout (viewport px, so --nubs-y is taken relative
-   to the world column's top); the fallback is the 68 % Nubs line. */
-.sui[data-screen='title'] .ghost {
-  top: auto;
-  bottom: calc(100% - (var(--nubs-y, 68%) - var(--wt)) + var(--halo-r, 44px) + 26px);
-  flex-direction: column-reverse;
-  transform: none;
-}
-
-.sui[data-screen='title'] .ghost-word {
-  margin: 0 0 2px;
-}
-
-/* Below the dial (title.ts fit(), when the hand fits above the chips): only the hand and its
-   trail, its fingertip path 10 px under the dial, so the thumb it teaches never covers Nubs. */
-.sui:has(.scr-title.is-on.ghost-below) .ghost {
-  top: calc(var(--nubs-y, 68%) - var(--wt) + var(--halo-r, 44px) + 10px - 32px);
-  bottom: auto;
-  flex-direction: column;
-}
-
-.sui:has(.scr-title.is-on.ghost-below) :is(.ghost-word, .ghost-keys) {
-  display: none !important;
-}
-
-/* title.ts fit() measures the hint against the tagline and the challenge banner: the key line goes
-   first, then the word, then (after a smaller logo) the whole hint, so it never overlaps them. */
-.sui:has(.scr-title.is-on.no-ghost-word) .ghost-word,
-.sui:has(.scr-title.is-on.no-ghost-word) .ghost-keys,
-.sui:has(.scr-title.is-on.no-ghost-keys) .ghost-keys {
-  display: none !important;
-}
-
-.sui:has(.scr-title.is-on.no-ghost) .ghost {
-  visibility: hidden;
-}
-
-/* The key mapping under "drag", for mouse players and once a key was pressed. */
-.ghost-keys {
-  display: none;
-  max-width: calc(100% - 32px);
-  margin: 0 0 6px;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: rgba(43, 33, 64, 0.78);
-  color: var(--paper);
-  font-weight: 800;
-  font-size: 0.875rem;
-  line-height: 1.3;
-  text-align: center;
-}
-
-@media (pointer: fine) {
-  .sui[data-screen='title'] .ghost[data-mode='both'] .ghost-keys {
-    display: block;
-  }
-}
-
-.sui.is-kbd[data-screen='title'] .ghost[data-mode='both'] .ghost-keys {
-  display: block;
-}
-
-/* In play Nubs and his halo dial sit at 68-70% of the height: keep the hint just below them. */
-.sui[data-screen='play'] .ghost {
-  top: min(84%, calc(100% - var(--in-bottom) - 72px));
 }
 
 .ghost[data-mode='both'],
@@ -2032,14 +2031,6 @@
   line-height: 1.2;
 }
 
-.mrow-kicker {
-  font-weight: 800;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent-ink);
-}
-
 /* Swap on a mission stuck for 5 runs (Results rows and Missions cards). */
 .btn.btn--swap {
   overflow: visible;
@@ -2820,14 +2811,6 @@
 
 .mcard-bottom .bar {
   flex: 1 1 auto;
-}
-
-.mcard--errand {
-  background: var(--gold-soft);
-}
-
-.mcard--errand.is-done {
-  background: var(--accent-soft);
 }
 
 /* The Sunny Week: seven day stamps, Monday to Sunday. */
@@ -3862,32 +3845,6 @@ body:has(#ui[data-screen='play']) #game:active {
    Journey (v1.2, CAMPAIGN_PLAN §5): the Title pill, the map and the Results variant
    --------------------------------------------------------------------------------------------- */
 
-/* The Title's Journey pill: the primary control above the tray ("Journey · Level 12"). A
-   sideways drag on it is handed to the sun like the tray buttons (title.ts pressable). */
-.journey-pill {
-  min-height: 48px;
-  padding: 4px 14px 4px 14px;
-  border-radius: 999px;
-  font-size: clamp(0.9375rem, calc(var(--cw) * 0.045), 1.0625rem);
-  touch-action: none;
-}
-
-.journey-pill .ic {
-  width: 22px;
-  height: 22px;
-}
-
-.journey-pill .journey-pill-chev {
-  width: 18px;
-  height: 18px;
-  margin-right: -4px;
-  opacity: 0.7;
-}
-
-.journey-pill .btn-label {
-  white-space: nowrap;
-}
-
 /* Tight columns (title.ts fit(), after the tray labels): smaller discs and a slimmer pill. */
 .title-bottom.is-tight .tray-disc {
   width: 48px;
@@ -3899,7 +3856,7 @@ body:has(#ui[data-screen='play']) #game:active {
   height: 24px;
 }
 
-.title-bottom.is-tight .journey-pill {
+.title-bottom.is-tight .modes .btn {
   min-height: 44px;
   padding-top: 2px;
   padding-bottom: 2px;
@@ -3909,7 +3866,7 @@ body:has(#ui[data-screen='play']) #game:active {
   flex-basis: 4px;
 }
 
-/* Tiny screens: the chips row goes before the pill or the tray would (the Journal stays
+/* Tiny screens: the chips row goes before the modes or the tray would (the Journal stays
    reachable from Missions). */
 .title-bottom.no-chips .chips {
   display: none;
@@ -3930,12 +3887,8 @@ body:has(#ui[data-screen='play']) #game:active {
   padding: 0 var(--pad-x-r) 10px var(--pad-x-l);
 }
 
-.journey-where {
-  margin-top: 6px;
-  text-align: center;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--ink-2);
+.journey-sticky .road {
+  margin-top: 10px;
 }
 
 .journey-body {
@@ -3944,7 +3897,29 @@ body:has(#ui[data-screen='play']) #game:active {
 
 .chapter .card-title {
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.chapter > .bar {
+  margin-bottom: 10px;
+}
+
+.chapter .bar i,
+.road .bar i {
+  background: linear-gradient(90deg, var(--gold), #ffd96b);
+}
+
+.chapter.is-locked {
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: none;
+}
+
+.chapter.is-locked .card-title {
+  color: var(--ink-2);
+}
+
+.chapter.is-complete .card-count {
+  color: #8a5a00;
 }
 
 .chapter-name {
@@ -4016,13 +3991,30 @@ body:has(#ui[data-screen='play']) #game:active {
   box-shadow: inset 0 0 0 2px var(--gold);
 }
 
-/* The level in play: the accent fill, as the pill that leads here. */
+/* The level in play: the accent fill, as the Play button that leads here, and a slow glow. */
 .lvl-tile.is-next {
   background: var(--accent);
-  color: #fff;
-  box-shadow:
-    0 3px 0 var(--accent-deep),
-    var(--shadow-sm);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--accent-deep), var(--shadow-sm);
+  animation: next-glow 1.8s ease-in-out infinite;
+}
+
+/* Unlocked since the last visit: the tile pops open. */
+.lvl-tile.is-unlocked {
+  animation: unlock-pop 640ms var(--ease-back) 200ms both, next-glow 1.8s ease-in-out 840ms infinite;
+}
+
+.lvl-star.is-fresh .ic {
+  animation: star-pop 420ms var(--ease-back) var(--d, 0ms) both;
+}
+
+@keyframes next-glow {
+  50% { box-shadow: 0 3px 0 var(--accent-deep), 0 0 0 6px rgba(46, 196, 182, 0.28); }
+}
+
+@keyframes unlock-pop {
+  0% { transform: scale(0.7) rotate(-6deg); }
+  60% { transform: scale(1.12); }
 }
 
 .lvl-tile.is-locked {
@@ -4054,8 +4046,8 @@ body:has(#ui[data-screen='play']) #game:active {
 }
 
 .lvl-tile.is-next .lvl-concept {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ink);
 }
 
 .lvl-concept .ic {
@@ -4080,7 +4072,7 @@ body:has(#ui[data-screen='play']) #game:active {
 }
 
 .lvl-tile.is-next .lvl-star .ic {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(43, 33, 64, 0.2);
 }
 
 .lvl-star.is-on .ic {
@@ -4088,7 +4080,8 @@ body:has(#ui[data-screen='play']) #game:active {
   filter: drop-shadow(0 1px 0 var(--gold-deep));
 }
 
-.lvl-tile.is-locked .lvl-stars {
+.lvl-tile.is-locked .lvl-stars,
+.lvl-tile:not(.is-locked) .lvl-lock {
   display: none;
 }
 
@@ -4119,14 +4112,60 @@ body:has(#ui[data-screen='play']) #game:active {
   }
 }
 
+/* The star road (widgets.ts starRoad): the next star reward's item, name, count and bar. */
+.road {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  text-align: left;
+}
+
+.road-art {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #fff, var(--sky) 75%);
+}
+
+.road-art .swatch {
+  width: 40px;
+  height: 40px;
+}
+
+.road-text {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  line-height: 1.25;
+}
+
+.road-text strong {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.road-count {
+  font-size: 0.9375rem;
+  color: #8a5a00;
+}
+
+.road .bar {
+  grid-column: 2 / 4;
+}
+
 /* Results: a Journey level */
 
 .res-level {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  margin-top: 8px;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  text-align: center;
   font-weight: 900;
   font-size: 1.5rem;
   line-height: 1.15;
@@ -4137,11 +4176,18 @@ body:has(#ui[data-screen='play']) #game:active {
   gap: 4px;
 }
 
+/* The hero: three big stars, the middle one raised. */
 .res-star .ic {
-  width: 34px;
-  height: 34px;
+  width: 52px;
+  height: 52px;
   color: rgba(43, 33, 64, 0.14);
   transition: color var(--t);
+}
+
+.res-star:nth-child(2) .ic {
+  width: 64px;
+  height: 64px;
+  margin-top: -14px;
 }
 
 .res-star.is-on .ic {
@@ -4169,7 +4215,8 @@ body:has(#ui[data-screen='play']) #game:active {
 
 /* The goal line: the accent after a pass, plain ink otherwise. */
 .res-goal {
-  margin-top: 6px;
+  margin-top: 4px;
+  text-align: center;
   font-weight: 700;
   font-size: 1rem;
   color: var(--ink-2);
@@ -4179,31 +4226,45 @@ body:has(#ui[data-screen='play']) #game:active {
   color: var(--accent-ink);
 }
 
-/* "New: Glare — gazing balls throw light back." */
-.res-concept {
+.res-sheet.is-campaign :is(.res-death, .res-tip, .res-awards) {
+  justify-content: center;
+  text-align: center;
+}
+
+.res-top .road {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--gold-soft);
+}
+
+/* A taller sheet (results.ts SHEET_MAX_CAMPAIGN); the stats come first, as one row of small pills,
+   and the missions show as their award chip. */
+.res-sheet.is-campaign {
+  max-height: max(58%, min(82%, calc(100% - 96px)));
+}
+
+.res-sheet.is-campaign .res-scroll {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-  font-size: 0.9375rem;
-  line-height: 1.35;
+  flex-direction: column;
 }
 
-.res-concept-ic {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
+.res-sheet.is-campaign .res-stats {
+  order: -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.res-concept-ic .ic {
-  width: 18px;
-  height: 18px;
+.res-sheet.is-campaign .stat {
+  flex-direction: row;
+  gap: 6px;
+  padding: 4px 12px 4px 10px;
+  border-radius: 999px;
+}
+
+.res-sheet.is-campaign :is(.stat-sub, .res-missions) {
+  display: none;
 }
 
 /* Next level above Retry | Map (or Retry above Map when the level wasn't passed). */

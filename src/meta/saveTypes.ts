@@ -61,7 +61,7 @@ export interface MissionSlot {
   stale: number;
 }
 
-/** Today's errand: the same for everyone on a local date. */
+/** The retired Today's errand (v1.1-v1.2), always empty now (save.ts emptyErrand). */
 export interface ErrandState {
   date: string;
   id: string;

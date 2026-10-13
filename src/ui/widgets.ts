@@ -1,7 +1,11 @@
-// Reusable UI pieces: buttons, switches, segmented controls, sliders, chips, progress bars, headers.
+// Reusable UI pieces: buttons, switches, segmented controls, sliders, chips, progress bars, headers,
+// the star road.
 
+import { nextStarGoal } from '../meta/progression.ts';
+import type { Save } from '../meta/saveTypes.ts';
 import { h, setFlag } from './dom.ts';
 import { icon, type IconName } from './icons.ts';
+import { cosmeticSwatch } from './swatches.ts';
 import type { UiContext } from './screen.ts';
 import type { UiSoundName } from './types.ts';
 
@@ -189,4 +193,30 @@ export function section(title: string, ...children: (HTMLElement | null)[]): HTM
 
 export function hide(el: HTMLElement, hidden: boolean): void {
   setFlag(el, 'hidden', hidden);
+}
+
+/**
+ * The progress to the next Journey star reward: its item, "Starry Scarf at 25 stars", the count and
+ * a bar (the Journey map and a level's Results). Hidden once every reward is earned.
+ */
+export function starRoad(): { el: HTMLElement; update(save: Save): void } {
+  const art = h('span', { class: 'road-art', 'aria-hidden': 'true' });
+  const name = h('strong', null);
+  const target = h('span', null);
+  const count = h('span', { class: 'road-count num' });
+  const bar = progressBar(0);
+  const el = h('p', { class: 'road' }, art, h('span', { class: 'road-text' }, name, target), count, bar);
+  return {
+    el,
+    update(save) {
+      const g = nextStarGoal(save);
+      hide(el, g === null);
+      if (!g) return;
+      art.replaceChildren(g.item ? cosmeticSwatch(g.item) : icon('star'));
+      name.textContent = g.item?.name ?? g.name;
+      target.textContent = ` at ${g.target} stars`;
+      count.textContent = `${g.stars}/${g.target}`;
+      (bar.firstElementChild as HTMLElement).style.width = `${Math.round(((g.stars - g.from) / (g.target - g.from)) * 100)}%`;
+    },
+  };
 }

@@ -1,12 +1,13 @@
 // Results bottom sheet (GDD §5, V1_PLAN §8.4, V1_1_PLAN UM8): the canvas Melt Map shows above it.
 // Big time with the postcard, the Sun Strip (one row of hour tiles per day), NEW BEST ribbon, death
 // line typed at 30 chars/s with the recap tip and the pace line, the run's unlocks and bonuses as
-// award chips (plus one for the missions done), stats, missions and Today's errand with stamps that
-// land in place (and Swap on stale missions).
+// award chips (plus one for the missions done), stats and missions with stamps that land in place
+// (and Swap on stale missions).
 // Retry arms 0.3 s after the sheet appears; a tap on the map area above the sheet also retries.
-// Journey runs (CAMPAIGN_PLAN §5, view.campaign): the stars pop in and the level name replaces the
-// time, the goal line replaces the death line on a pass, and the actions are Next level (primary
-// when passed) / Retry / Map; Back and the map tap follow the primary action.
+// Journey runs (CAMPAIGN_PLAN §5, view.campaign): a compact sheet with the stars as the hero (they
+// pop in), the level name, the goal line (the death line too when it wasn't passed), the progress to
+// the next star reward, the award chips and one row of stats; Next level (primary when passed) /
+// Retry / Map sit at the bottom, in thumb reach. Back and the map tap follow the primary action.
 // The unlocks live in the sheet rather than the top toast stack: toasts there would sit over the
 // top of the Melt Map, where the named caster pins of the death line usually are.
 //
@@ -19,7 +20,7 @@ import type { HourGlyph } from '../../core/sim/events.ts';
 import { formatScore, formatTimeOfDay, splitMinutes } from '../../core/format.ts';
 import { challengeVerdict } from '../../meta/challenge.ts';
 import { dailyNumber } from '../../meta/daily.ts';
-import type { ErrandView, MissionView } from '../../meta/missions.ts';
+import type { MissionView } from '../../meta/missions.ts';
 import { activeMissionViews, type ToastSpec } from '../../meta/progression.ts';
 import { runPlanOn } from '../../meta/share.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
@@ -40,7 +41,7 @@ import {
 import type { Screen, UiContext } from '../screen.ts';
 import type { ResultsView } from '../types.ts';
 import { toastIconName } from '../overlays.ts';
-import { button, hide, progressBar, setButtonLabel, setDisabled } from '../widgets.ts';
+import { button, hide, progressBar, setButtonLabel, setDisabled, starRoad } from '../widgets.ts';
 
 const RETRY_ARM_MS = 300;
 const TYPE_CPS = 30;
@@ -61,6 +62,8 @@ const MIN_SCROLL_PX = 120;
 const MAP_MIN_PX = 96;
 const SHEET_MIN_FRACTION = 0.58;
 const SHEET_MAX_FRACTION = 0.68;
+/** A Journey level's sheet may take more: it has no postcard and its map matters less. */
+const SHEET_MAX_CAMPAIGN = 0.82;
 /** Sun Strip rows: the last 4 days, or 2 on screens under 700 px tall. */
 const STRIP_ROWS = 4;
 const STRIP_ROWS_SHORT = 2;
@@ -175,16 +178,14 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ctx.sound('tap');
     sharePostcard();
   });
-  // Journey: the stars and the level name take the time's place; the goal line and the concept the
-  // level introduced follow the strip.
+  // Journey: the stars and the level name take the time's place; the goal line and the progress to
+  // the next star reward follow.
   const starEls = Array.from({ length: 3 }, () => h('span', { class: 'res-star' }, icon('star')));
   const starsEl = h('span', { class: 'res-stars', role: 'img' }, ...starEls);
   const levelName = h('span', { class: 'res-level-name' });
   const level = h('h2', { class: 'res-level', id: 'res-level' }, starsEl, levelName);
   const goal = h('p', { class: 'res-goal', id: 'res-goal' });
-  const conceptName = h('strong', null);
-  const conceptBlurb = h('span', null);
-  const concept = h('p', { class: 'res-concept' }, h('span', { class: 'res-concept-ic', 'aria-hidden': 'true' }, icon('sparkle')), h('span', null, 'New: ', conceptName, ' ', conceptBlurb));
+  const road = starRoad();
   const strip = h('div', { class: 'strip', role: 'img' });
   const shareBtn = button(ctx, { label: 'Share', icon: 'share', className: 'res-share', onPress: share });
   const homeBtn = button(ctx, { label: 'Home', icon: 'home', round: true, sound: 'back', onPress: home });
@@ -231,12 +232,12 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     level,
     strip,
     goal,
-    concept,
     death,
     tip,
     pace,
     note,
     verdict,
+    road.el,
   );
   const scroll = h('div', { class: 'res-scroll' }, warmup, awards, stats, missionList);
   const actions = h('div', { class: 'res-actions' }, nextBtn, retryBtn, mapBtn);
@@ -250,7 +251,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   let sheetTopPx = 0;
   const measure = (): void => {
     const screenH = el.clientHeight;
-    const maxSheet = Math.max(SHEET_MIN_FRACTION * screenH, Math.min(SHEET_MAX_FRACTION * screenH, screenH - MAP_MIN_PX));
+    const maxFraction = sheet.classList.contains('is-campaign') ? SHEET_MAX_CAMPAIGN : SHEET_MAX_FRACTION;
+    const maxSheet = Math.max(SHEET_MIN_FRACTION * screenH, Math.min(maxFraction * screenH, screenH - MAP_MIN_PX));
     const cs = getComputedStyle(sheet);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const left = maxSheet - padY - top.offsetHeight - actions.offsetHeight;
@@ -275,23 +277,18 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       sub ? h('span', { class: 'stat-sub' }, sub) : null,
     );
 
-  /** A mission or errand row; `swap` adds the Swap button of a stale mission. */
-  const row = (
-    m: Pick<MissionView, 'label' | 'fraction' | 'progressText' | 'done' | 'justCompleted' | 'reward'> & { tierLabel?: string },
-    kicker: string | null,
-    swap: (() => void) | null,
-  ): HTMLElement => {
+  /** A mission row, with Swap on a stale mission. */
+  const missionRow = (m: MissionView): HTMLElement => {
     const side = m.done
       ? h('span', { class: 'stamp stamp--sm' }, 'Complete')
       : h('span', { class: 'mrow-prog' }, m.progressText);
     return h(
       'li',
-      { class: `mrow${m.done ? ' is-done' : ''}${m.done && !m.justCompleted ? ' is-stamped' : ''}${kicker ? ' mrow--errand' : ''}` },
+      { class: `mrow${m.done ? ' is-done' : ''}${m.done && !m.justCompleted ? ' is-stamped' : ''}` },
       h('span', { class: 'mrow-check', 'aria-hidden': 'true' }, icon('check')),
       h(
         'span',
         { class: 'mrow-main' },
-        kicker ? h('span', { class: 'mrow-kicker' }, kicker) : null,
         h('span', { class: 'mrow-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
         progressBar(m.fraction),
       ),
@@ -300,13 +297,12 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
         { class: 'mrow-side' },
         side,
         h('span', { class: 'reward' }, icon('snow'), h('span', { 'aria-hidden': 'true' }, `+${m.reward}`), h('span', { class: 'sr-only' }, `, reward ${m.reward} Snow`)),
-        swap ? button(ctx, { label: 'Swap', icon: 'swap', className: 'btn--swap', ariaLabel: `Swap “${m.label}” for another mission`, onPress: swap }) : null,
+        m.swappable
+          ? button(ctx, { label: 'Swap', icon: 'swap', className: 'btn--swap', ariaLabel: `Swap “${m.label}” for another mission`, onPress: () => ctx.cb.swapMission(m.id) })
+          : null,
       ),
     );
   };
-  const swapFor = (m: MissionView): (() => void) | null => (m.swappable ? () => ctx.cb.swapMission(m.id) : null);
-  const missionRow = (m: MissionView): HTMLElement => row(m, null, swapFor(m));
-  const errandRow = (e: ErrandView): HTMLElement => row(e, "Today's errand", null);
 
   /** Sun Strip rows, tiles popping in one after another as the sheet lands. */
   function renderStrip(view: ResultsView, reduced: boolean): void {
@@ -341,7 +337,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
 
   /**
    * The Journey variant: stars (popping in one after another), the level name, the goal line, the
-   * concept the level introduced, and Next level / Retry / Map. Null restores the endless sheet.
+   * next star reward, and Next level / Retry / Map. Null restores the endless sheet.
    */
   function renderCampaign(c: ResultsView['campaign'] | null, reduced: boolean): void {
     const on = c !== null && c !== undefined;
@@ -350,16 +346,18 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     sheet.classList.toggle('is-passed', on && c.passed);
     hide(level, !on);
     hide(goal, !on);
-    hide(concept, !on || !c.introduces);
+    hide(strip, on);
     hide(time.parentElement as HTMLElement, on);
+    road.update(ctx.save());
+    if (!on) hide(road.el, true);
     actions.classList.toggle('res-actions--campaign', on);
     hide(nextBtn, !nextUp);
     hide(mapBtn, !on);
     // Retry is the primary action unless Next level is.
     retryBtn.classList.toggle('btn--primary', !nextUp);
     retryBtn.classList.toggle('btn--plain', nextUp);
-    retryBtn.classList.toggle('btn--xl', !nextUp);
-    retryBtn.classList.toggle('btn--lg', nextUp);
+    retryBtn.classList.toggle('btn--xl', !on);
+    retryBtn.classList.toggle('btn--lg', on);
     retryBtn.setAttribute('aria-describedby', on ? 'res-level res-goal' : 'res-time res-death');
     if (!on) return;
     levelName.textContent = c.name;
@@ -367,10 +365,6 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     starsEl.setAttribute('aria-label', starsLabel(c.passed ? c.stars : 0));
     goal.textContent = c.goalLine;
     goal.classList.toggle('is-win', c.passed);
-    if (c.introduces) {
-      conceptName.textContent = c.introduces.name;
-      conceptBlurb.textContent = c.introduces.blurb;
-    }
     const lit = c.passed ? c.stars : 0;
     starEls.forEach((star, i) => {
       star.classList.remove('is-on', 'is-pop');
@@ -443,7 +437,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // it starts the challenge.
     setButtonLabel(retryBtn, view.warmupFor ? TAKE_CHALLENGE : retryLabel(view, ctx.save(), ctx.today()));
     renderCampaign(c, reduced);
-    renderStrip(view, reduced);
+    if (!c) renderStrip(view, reduced);
     tip.textContent = view.tip ?? '';
     hide(tip, !view.tip);
     pace.textContent = outcome.pace ?? '';
@@ -551,10 +545,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       });
     });
 
-    // Missions and Today's errand, with stamps landing one after another (the missions chip with
-    // the first one).
-    const items: { justCompleted: boolean }[] = [...outcome.missions, ...(outcome.errand ? [outcome.errand] : [])];
-    const rows = [...outcome.missions.map(missionRow), ...(outcome.errand ? [errandRow(outcome.errand)] : [])];
+    // Missions, with stamps landing one after another (the missions chip with the first one).
+    const rows = outcome.missions.map(missionRow);
     setChildren(missionList, ...rows);
     const firstStamp = STAMP_FIRST_MS + (unlockChips > 0 ? unlockChips * CHIP_GAP_MS + 200 : 0);
     const missionsChip = done > 0 ? (chips[chips.length - 1] as HTMLElement) : null;
@@ -563,7 +555,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       else later(firstStamp, () => missionsChip.classList.add('is-in'));
     }
     let stampAt = firstStamp;
-    items.forEach((m, i) => {
+    outcome.missions.forEach((m, i) => {
       if (!m.justCompleted) return;
       const row = rows[i] as HTMLElement;
       if (reduced) {
@@ -606,12 +598,11 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const views = activeMissionViews(ctx.save());
     const changed = views.length !== view.outcome.missions.length || views.some((v, i) => v.id !== view.outcome.missions[i]?.id);
     if (!changed) return;
-    const errand = missionList.querySelector('.mrow--errand');
     setChildren(missionList, ...views.map((v) => {
       const r = missionRow(v);
       if (v.done) r.classList.add('is-stamped');
       return r;
-    }), errand);
+    }));
   }
 
   return {

@@ -20,7 +20,7 @@ import {
   isAchievementId,
   isCosmeticId,
 } from './content.ts';
-import { getErrand, parseMissionId, refillMissions } from './missions.ts';
+import { parseMissionId, refillMissions } from './missions.ts';
 import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
 import { CAMPAIGN_LEVELS, COMFORT_MAX } from '../core/index.ts';
@@ -75,7 +75,7 @@ export function defaultSettings(): Settings {
   };
 }
 
-/** An empty errand (a date's errand is created on its first run or view). */
+/** The retired Today's errand (v1.1-v1.2): kept empty so the save shape stays v3 for every build. */
 export function emptyErrand(): ErrandState {
   return { date: '', id: '', progress: 0, done: false };
 }
@@ -230,12 +230,6 @@ function sanitizeDaily(raw: unknown): Record<string, DailyEntry> {
  */
 export const HOLD_X5_MIGRATED_PROGRESS = 5;
 
-function sanitizeErrand(raw: unknown): ErrandState {
-  const r = rec(raw);
-  if (typeof r.date !== 'string' || !isDateString(r.date) || typeof r.id !== 'string' || !getErrand(r.id)) return emptyErrand();
-  return { date: r.date, id: r.id, progress: num(r.progress, 0, 0, BIG), done: bool(r.done, false) };
-}
-
 /** `best`: the player's recent best, for dealing replacement slots past the skill gates. */
 function sanitizeMissions(raw: unknown, legacyUnits: boolean, best: number): Save['missions'] {
   const r = rec(raw);
@@ -265,9 +259,9 @@ function sanitizeMissions(raw: unknown, legacyUnits: boolean, best: number): Sav
     tier: int(r.tier, 1, 1, 99),
     active,
     deferred,
-    errand: sanitizeErrand(r.errand),
+    errand: emptyErrand(),
   };
-  // A damaged save (or a v1 'play-daily' slot, now an errand) leaves a gap: deal replacements so
+  // A damaged save (or a retired v1 'play-daily' slot) leaves a gap: deal replacements so
   // there are always three. Completed slots stay as they are until the next run starts.
   if (active.length < ACTIVE_MISSIONS) refillMissions(missions, best, false);
   return missions;
@@ -458,8 +452,8 @@ export interface MigrateResult {
 /**
  * Upgrades from older schemas: MIGRATIONS[i] turns a v(i+1) object into a v(i+2) object; sanitize
  * then fills every field the old schema lacked with its default.
- * - v1 → v2: the comfort rung from lifetime runs (A2). Its 'play-daily' slots no longer parse (the
- *   Daily is an errand now), so sanitize deals replacements.
+ * - v1 → v2: the comfort rung from lifetime runs (A2). Its retired 'play-daily' slots no longer
+ *   parse, so sanitize deals replacements.
  * - v2 → v3: a fresh Journey (no stars, Level 1 playable) and the testing toggle off.
  */
 const MIGRATIONS: readonly ((save: Rec) => Rec)[] = [

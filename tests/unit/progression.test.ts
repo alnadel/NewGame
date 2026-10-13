@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DayPlan, HourGlyph, RunResult, RunStats } from '../../src/core/index.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { defaults } from '../../src/meta/save.ts';
-import { MISSIONS } from '../../src/meta/content.ts';
+import { ACHIEVEMENTS, MISSIONS } from '../../src/meta/content.ts';
 import { addDays } from '../../src/meta/daily.ts';
 import {
   activeMissionViews,
@@ -11,6 +11,7 @@ import {
   continueLevel,
   isLevelPlayable,
   totalStars,
+  nextStarGoal,
   nextRunEased,
   recentBestAt,
   warmupDue,
@@ -97,15 +98,13 @@ function run(minutes: number, over: Partial<Stats> = {}, extra: Partial<RunResul
 }
 
 /**
- * A save that already played today (no Morning Snow) with today's errand done, so a test sees
- * only the rule it is about. `runs` past onboarding by default, so bests count.
+ * A save that already played today (no Morning Snow), so a test sees only the rule it is about. `runs` past onboarding by default, so bests count.
  */
 function quiet(runs = BEST_FROM_RUNS): Save {
   const s = defaults(1);
   s.stats.runs = runs;
   s.lastPlay = TODAY;
   s.unlocks.achievements = ['first-light'];
-  s.missions.errand = { date: TODAY, id: 'e-runs-5', progress: 5, done: true };
   return s;
 }
 
@@ -445,7 +444,7 @@ describe('debug runs (sim-altering URL params)', () => {
     expect(o.runSnow).toBe(40);
     expect([o.achievementsUnlocked, o.cosmeticsUnlocked, o.toasts, o.missionsCompleted]).toEqual([[], [], [], []]);
     expect(o.missions).toEqual(activeMissionViews(save));
-    expect([o.dailyUnlocked, o.pace, o.errand, o.comfortAfter]).toEqual([false, null, null, save.stats.comfort]);
+    expect([o.dailyUnlocked, o.pace, o.comfortAfter]).toEqual([false, null, save.stats.comfort]);
   });
 });
 
@@ -940,6 +939,7 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
     expect(s.unlocks.achievements).not.toContain('journey-10');
     const ten = applyRunResult(s, level(10, true, 3), opts());
     expect(ten.outcome.achievementsUnlocked).toEqual(['journey-10']);
+    // (27 stars after Level 9 already paid the first star reward.)
     expect(ten.outcome.cosmeticsUnlocked).toEqual([]);
     s = ten.save;
     for (let id = 11; id <= 19; id++) s = applyRunResult(s, level(id, true, 3), opts()).save;
@@ -948,11 +948,29 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
     s = applyRunResult(s, level(20, true, 3), opts()).save;
     expect(s.unlocks.achievements).toContain('three-star-20');
     s.campaign.stars = s.campaign.stars.map((n, i) => (i < 99 ? Math.max(1, n) : n));
-    expect(applyRunResult(s, level(100, true, 1), opts()).outcome.achievementsUnlocked).toEqual(['journey-100']);
+    expect(applyRunResult(s, level(100, true, 1), opts()).outcome.achievementsUnlocked).toEqual(['journey-100', 'stars-75']);
     // A gap (the testing toggle skipped a level) holds First Steps back.
     const gap = quiet();
     gap.campaign.stars = gap.campaign.stars.map((_n, i) => (i < 10 && i !== 4 ? 1 : 0));
     expect(applyRunResult(gap, level(10, true, 3), opts()).outcome.achievementsUnlocked).toEqual([]);
+  });
+
+  it('pays the star rewards (an item at 25, 75, 150, 300 and 600 stars) and names the next one', () => {
+    const s = quiet();
+    expect(nextStarGoal(s)).toMatchObject({ stars: 0, from: 0, target: 25, name: 'Stargazer' });
+    expect(nextStarGoal(s)?.item?.id).toBe('scarf-starry');
+    s.campaign.stars = s.campaign.stars.map((_n, i) => (i < 8 ? 3 : 0));
+    s.campaign.unlocked = 9;
+    const r = applyRunResult(s, level(9, true, 1), opts());
+    expect(r.outcome.achievementsUnlocked).toEqual(['stars-25']);
+    expect(r.outcome.cosmeticsUnlocked).toEqual(['scarf-starry']);
+    expect(r.outcome.toasts.map((t) => t.text)).toContain('Unlocked: Starry Scarf');
+    expect(nextStarGoal(r.save)).toMatchObject({ stars: 25, from: 25, target: 75, name: 'Night Sky' });
+    expect(ACHIEVEMENTS.filter((a) => a.stars !== undefined).map((a) => [a.stars, a.reward])).toEqual([
+      [25, 'scarf-starry'], [75, 'hat-nightcap'], [150, 'nose-golden'], [300, 'shades-galaxy'], [600, 'hat-starcrown'],
+    ]);
+    s.campaign.stars = s.campaign.stars.map(() => 3);
+    expect(nextStarGoal(s)).toBeNull();
   });
 
   it('knows which levels are playable, the total stars and where Continue leads', () => {

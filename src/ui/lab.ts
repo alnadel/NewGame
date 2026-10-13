@@ -68,7 +68,7 @@ function richSave(): Save {
       { id: 'cloud-ride', progress: 1.8, done: false, stale: 1 },
     ],
     deferred: ['gate-arch'],
-    errand: { date: today, id: 'e-flakes-25', progress: 14, done: false },
+    errand: s.missions.errand,
   };
   // 30 endless runs: a climb through the comfort ladder, then standard rules.
   s.history = Array.from({ length: 30 }, (_, i) => ({

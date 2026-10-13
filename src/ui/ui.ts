@@ -36,8 +36,6 @@ import type { ChallengeBanner, CueId, GhostMode, ScreenArgs, ScreenId, Ui, UiDep
 
 const STORAGE_WARNING = "Progress can't be saved in this browser mode.";
 const WELCOME_BACK = 'Welcome back! Double Snow this run.';
-/** Shown under the Title's drag hint for mouse and keyboard players. */
-export const KEY_HINT = '← → turn the sun · Space to start · Esc pauses';
 
 const WORLD_VARS = ['--world-left', '--world-top', '--world-width', '--world-height'] as const;
 
@@ -140,14 +138,13 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     screenLayer.append(s.el);
   }
 
-  // Ghost thumb: Title swipe hint and the in-play directional hint (V1_PLAN §6.2). On the Title,
-  // mouse and keyboard players also get the key mapping under the word "drag".
+  // Ghost thumb: the in-play swipe hint (V1_PLAN §6.2): both ways while a run waits for its first
+  // press, one way during the lesson. The Title leads with its Play button instead.
   const ghostEl = h(
     'div',
     { class: 'ghost', 'aria-hidden': 'true' },
     h('div', { class: 'ghost-track' }, h('div', { class: 'ghost-trail' }),
       h('div', { class: 'ghost-hand' }, h('span', { class: 'ghost-tip' }), svgFromMarkup(ghostHandSvg()))),
-    h('p', { class: 'ghost-keys' }, KEY_HINT),
     h('p', { class: 'ghost-word' }, h('span', { class: 'ghost-arrow' }, '‹'), 'drag', h('span', { class: 'ghost-arrow' }, '›')),
   );
   // Keyboard players in play see the key to hold instead of the swiping hand.
@@ -228,14 +225,11 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   let ghostDur = 0;
 
   function updateGhost(): void {
-    const visible = ghost !== 'off' && (current === 'title' || current === 'play') && !rotateBlocking;
-    const mode = visible ? ghost : 'off';
+    const mode = ghost !== 'off' && current === 'play' && !rotateBlocking ? ghost : 'off';
     if (ghostEl.dataset.mode === mode) return;
     ghostEl.dataset.mode = mode;
     ghostAnim = null;
     ghostDur = 0;
-    // The Title keeps the hint clear of its tagline and banner (it measures the shown hint).
-    if (current === 'title') screens.title.relayout?.();
     if (mode === 'off' || !ghostHand || typeof ghostHand.getAnimations !== 'function') return;
     try {
       const a = ghostHand.getAnimations()[0];
