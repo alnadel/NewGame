@@ -2106,24 +2106,7 @@
   padding-top: 10px;
 }
 
-.res-retry::after {
-  /* Arming sweep: Retry becomes live 0.3 s after the sheet appears. */
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(255, 255, 255, 0.35);
-  transform-origin: left;
-  transform: scaleX(0);
-}
-
-.res-retry.is-arming::after {
-  animation: arm 300ms linear forwards;
-}
-
-.res-retry.is-ready {
-  animation: ready-pop 260ms var(--ease-back);
-}
+/* The arming sweep of Retry (and the Journey's Next level): .res-arm, in the Journey section. */
 
 @keyframes arm {
   from { transform: scaleX(1); }
@@ -3873,4 +3856,391 @@ body:has(#ui[data-screen='play']) #game:active {
 .jtotals dd {
   font-weight: 900;
   text-align: right;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Journey (v1.2, CAMPAIGN_PLAN §5): the Title pill, the map and the Results variant
+   --------------------------------------------------------------------------------------------- */
+
+/* The Title's Journey pill: the primary control above the tray ("Journey · Level 12"). A
+   sideways drag on it is handed to the sun like the tray buttons (title.ts pressable). */
+.journey-pill {
+  min-height: 48px;
+  padding: 4px 14px 4px 14px;
+  border-radius: 999px;
+  font-size: clamp(0.9375rem, calc(var(--cw) * 0.045), 1.0625rem);
+  touch-action: none;
+}
+
+.journey-pill .ic {
+  width: 22px;
+  height: 22px;
+}
+
+.journey-pill .journey-pill-chev {
+  width: 18px;
+  height: 18px;
+  margin-right: -4px;
+  opacity: 0.7;
+}
+
+.journey-pill .btn-label {
+  white-space: nowrap;
+}
+
+/* Tight columns (title.ts fit(), after the tray labels): smaller discs and a slimmer pill. */
+.title-bottom.is-tight .tray-disc {
+  width: 48px;
+  height: 48px;
+}
+
+.title-bottom.is-tight .tray-disc .ic {
+  width: 24px;
+  height: 24px;
+}
+
+.title-bottom.is-tight .journey-pill {
+  min-height: 44px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.title-bottom.is-tight .title-gap {
+  flex-basis: 4px;
+}
+
+/* Tiny screens: the chips row goes before the pill or the tray would (the Journal stays
+   reachable from Missions). */
+.title-bottom.no-chips .chips {
+  display: none;
+}
+
+/* The map */
+
+.chip--stars .ic {
+  color: var(--gold-deep);
+}
+
+/* Continue stays above the chapters as they scroll. */
+.journey-sticky {
+  flex: none;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 0 var(--pad-x-r) 10px var(--pad-x-l);
+}
+
+.journey-where {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.journey-body {
+  padding-top: 2px;
+}
+
+.chapter .card-title {
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chapter-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chapter-biome {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--paper-2);
+  color: var(--ink-2);
+}
+
+.chapter-biome .ic {
+  width: 18px;
+  height: 18px;
+}
+
+/* 10 tiles in two rows of 5. At 320 px the column is 256 px wide: 5 × 48 px with 4 px gaps. */
+.lvl-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.lvl-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 6px 2px 5px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  transition: transform 90ms var(--ease-out), box-shadow 90ms var(--ease-out), background var(--t);
+}
+
+@media (hover: hover) {
+  .lvl-tile:not(.is-locked):hover {
+    background: #fff;
+    box-shadow: inset 0 0 0 1.5px var(--line), var(--shadow-sm);
+  }
+}
+
+.lvl-tile:active:not(.is-locked) {
+  transform: translateY(1px);
+}
+
+.lvl-tile.is-done {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.lvl-tile.is-perfect {
+  background: var(--gold-soft);
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+/* The level in play: the accent fill, as the pill that leads here. */
+.lvl-tile.is-next {
+  background: var(--accent);
+  color: #fff;
+  box-shadow:
+    0 3px 0 var(--accent-deep),
+    var(--shadow-sm);
+}
+
+.lvl-tile.is-locked {
+  background: rgba(43, 33, 64, 0.06);
+  color: var(--ink-3);
+  box-shadow: none;
+}
+
+.lvl-num {
+  font-size: 1.0625rem;
+  line-height: 1.1;
+}
+
+.lvl-tile.is-locked .lvl-num {
+  opacity: 0.55;
+}
+
+.lvl-concept {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink-2);
+}
+
+.lvl-tile.is-next .lvl-concept {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.lvl-concept .ic {
+  width: 13px;
+  height: 13px;
+}
+
+.lvl-tile.is-locked .lvl-concept {
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.lvl-stars {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.lvl-star .ic {
+  width: 13px;
+  height: 13px;
+  color: rgba(43, 33, 64, 0.16);
+}
+
+.lvl-tile.is-next .lvl-star .ic {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.lvl-star.is-on .ic {
+  color: var(--gold);
+  filter: drop-shadow(0 1px 0 var(--gold-deep));
+}
+
+.lvl-tile.is-locked .lvl-stars {
+  display: none;
+}
+
+.lvl-lock {
+  display: grid;
+  place-items: center;
+  height: 15px;
+  color: var(--ink-3);
+}
+
+.lvl-lock .ic {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 359.98px) {
+  .chapter {
+    padding: 12px;
+  }
+
+  .lvl-grid {
+    gap: 4px;
+  }
+
+  .lvl-tile {
+    min-height: 56px;
+    border-radius: 12px;
+  }
+}
+
+/* Results: a Journey level */
+
+.res-level {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 8px;
+  font-weight: 900;
+  font-size: 1.5rem;
+  line-height: 1.15;
+}
+
+.res-stars {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.res-star .ic {
+  width: 34px;
+  height: 34px;
+  color: rgba(43, 33, 64, 0.14);
+  transition: color var(--t);
+}
+
+.res-star.is-on .ic {
+  color: var(--gold);
+  filter: drop-shadow(0 2px 0 var(--gold-deep));
+}
+
+.res-star.is-pop .ic {
+  animation: star-pop 420ms var(--ease-back) both;
+}
+
+@keyframes star-pop {
+  0% { opacity: 0; transform: scale(2.2) rotate(-18deg); }
+  70% { opacity: 1; transform: scale(0.92) rotate(2deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+.sui.is-rm .res-star.is-pop .ic {
+  animation: none;
+}
+
+.res-level-name {
+  overflow-wrap: anywhere;
+}
+
+/* The goal line: the accent after a pass, plain ink otherwise. */
+.res-goal {
+  margin-top: 6px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--ink-2);
+}
+
+.res-goal.is-win {
+  color: var(--accent-ink);
+}
+
+/* "New: Glare — gazing balls throw light back." */
+.res-concept {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+
+.res-concept-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.res-concept-ic .ic {
+  width: 18px;
+  height: 18px;
+}
+
+/* Next level above Retry | Map (or Retry above Map when the level wasn't passed). */
+.res-actions--campaign {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.res-actions--campaign .res-next {
+  grid-column: 1 / -1;
+}
+
+.res-actions--campaign .res-next[hidden] + .res-retry,
+.res-actions--campaign .res-next[hidden] + .res-retry + .res-mapbtn {
+  grid-column: 1 / -1;
+}
+
+.res-actions--campaign .res-mapbtn {
+  background: var(--paper);
+}
+
+.res-arm::after {
+  /* Arming sweep: the primary action becomes live 0.3 s after the sheet appears. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.35);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.res-arm.is-arming::after {
+  animation: arm 300ms linear forwards;
+}
+
+.res-arm.is-ready {
+  animation: ready-pop 260ms var(--ease-back);
 }

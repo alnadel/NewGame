@@ -6,6 +6,7 @@
 import { formatScore, formatTimeOfDay, splitMinutes, type DayPlan } from '../../core/index.ts';
 import {
   activeMissionViews,
+  continueLevel,
   dailyStatus,
   errandView,
   isDailyUnlocked,
@@ -144,13 +145,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const dailyDot = h('span', { class: 'tray-dot', 'aria-hidden': 'true' });
   const dailyLock = h('span', { class: 'tray-lock', 'aria-hidden': 'true' }, icon('lock'));
 
-  const trayButton = (label: string, iconName: IconName, onActivate: () => void, extras: HTMLElement[] = []): HTMLButtonElement => {
-    const btn = h(
-      'button',
-      { class: 'tray-btn pe', type: 'button', 'aria-label': label },
-      h('span', { class: 'tray-disc' }, icon(iconName), ...extras),
-      h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
-    );
+  /**
+   * Press handling shared by the tray buttons and the Journey pill: a tap (under 8 px of travel)
+   * activates on click; a sideways drag that starts on the button is handed to the canvas.
+   */
+  const pressable = (btn: HTMLButtonElement, onActivate: () => void): void => {
     let press: { id: number; x: number; y: number } | null = null;
     let moved = false;
     btn.addEventListener('pointerdown', (e) => {
@@ -180,8 +179,33 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       }
       onActivate();
     });
+  };
+
+  const trayButton = (label: string, iconName: IconName, onActivate: () => void, extras: HTMLElement[] = []): HTMLButtonElement => {
+    const btn = h(
+      'button',
+      { class: 'tray-btn pe', type: 'button', 'aria-label': label },
+      h('span', { class: 'tray-disc' }, icon(iconName), ...extras),
+      h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
+    );
+    pressable(btn, onActivate);
     return btn;
   };
+
+  // The Journey pill: the campaign's entry ("Journey · Level 12"), the primary control above the tray.
+  const journeyLevel = h('span', { class: 'journey-pill-level' });
+  const journeyBtn = h(
+    'button',
+    { class: 'btn btn--primary journey-pill pe', type: 'button' },
+    icon('map'),
+    h('span', { class: 'btn-label' }, 'Journey', h('span', { class: 'journey-pill-sep', 'aria-hidden': 'true' }, ' · '), journeyLevel),
+    icon('chevron', 'ic journey-pill-chev'),
+  );
+  pressable(journeyBtn, () => {
+    ctx.sound('tap');
+    ctx.go('journey');
+    ctx.cb.openJourney();
+  });
 
   const openMenu = (id: 'daily' | 'missions' | 'wardrobe' | 'settings'): void => {
     ctx.sound('tap');
@@ -205,6 +229,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const settingsBtn = trayButton('Settings', 'settings', () => openMenu('settings'));
   const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
     journal: chipBest,
+    journey: journeyBtn,
     daily: dailyBtn,
     missions: missionsBtn,
     wardrobe: wardrobeBtn,
@@ -215,7 +240,15 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // After onboarding the tagline names the next goal; the forecast chip previews the run's Day 1.
   const tagline = h('p', { class: 'tagline' }, TAGLINE);
   const forecast = h('p', { class: 'forecast-chip', hidden: true });
-  const bottomCluster = h('div', { class: 'title-bottom' }, chips, h('i', { class: 'title-gap', 'aria-hidden': 'true' }), tray);
+  const bottomCluster = h(
+    'div',
+    { class: 'title-bottom' },
+    chips,
+    h('i', { class: 'title-gap', 'aria-hidden': 'true' }),
+    journeyBtn,
+    h('i', { class: 'title-gap', 'aria-hidden': 'true' }),
+    tray,
+  );
   const el = h(
     'section',
     { class: 'scr scr-title', 'aria-label': REGION_LABEL },
@@ -231,7 +264,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    * layout, never per frame):
    * - the chips stay on one line: the Snow chip is dropped when the row would overflow;
    * - the bottom cluster stays below Nubs' halo (--nubs-y + --halo-r): gaps shrink first (CSS),
-   *   then the tray labels go (the buttons keep their aria-labels);
+   *   then the tray labels go (the buttons keep their aria-labels), then the tray discs and the
+   *   Journey pill shrink (is-tight), then the chips row goes (tiny screens);
    * - a tall challenge banner drops the goal tagline, shrinks the logo, drops the forecast chip,
    *   then the tagline, to stay clear of the chips;
    * - the swiping hand sits below the dial when it fits between the dial and the chips (the thumb
@@ -242,7 +276,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   function fit(): void {
     if (!el.classList.contains('is-on')) return;
     chips.classList.remove('no-wallet');
-    bottomCluster.classList.remove('no-labels');
+    bottomCluster.classList.remove('no-labels', 'is-tight', 'no-chips');
     el.classList.remove('is-compact', 'no-tagline', 'no-forecast', 'no-ghost-keys', 'no-ghost-word', 'no-ghost', 'ghost-below');
     if (chips.scrollWidth > chips.clientWidth + 1) chips.classList.add('no-wallet');
 
@@ -254,7 +288,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       // upward, so measure them rather than the (capped) cluster box. 1 px covers the rounding of
       // the published vars.
       const limit = nubsY + haloR + 1;
-      if (chips.getBoundingClientRect().top < limit) bottomCluster.classList.add('no-labels');
+      const top = (): number => (bottomCluster.classList.contains('no-chips') ? journeyBtn : chips).getBoundingClientRect().top;
+      for (const step of ['no-labels', 'is-tight', 'no-chips']) if (top() < limit) bottomCluster.classList.add(step);
     }
 
     const shed = (fits: () => boolean, steps: readonly string[]): void => {
@@ -338,6 +373,10 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     hide(chipSnow, s.runs === 0);
     walletValue.textContent = String(s.wallet);
     chipSnow.setAttribute('aria-label', `${s.wallet} Snow`);
+
+    const level = continueLevel(save);
+    journeyLevel.textContent = `Level ${level}`;
+    journeyBtn.setAttribute('aria-label', `Journey, continue at Level ${level}`);
 
     const unlocked = isDailyUnlocked(save);
     const unplayed = unlocked && !dailyStatus(save, ctx.today()).played;

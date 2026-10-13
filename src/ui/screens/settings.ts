@@ -1,7 +1,8 @@
 // Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code, V1_1_PLAN UM2/UM9: the name on challenge
 // links and adaptive comfort). Opened from the Title or from Pause;
 // Back returns to wherever it was opened from. Mid-run (from Pause) the backup, restore and reset
-// controls are hidden: replacing the save under a running run would desync it.
+// controls are hidden: replacing the save under a running run would desync it. A "Testing" group
+// holds the Journey's unlock-all toggle (CAMPAIGN_PLAN §5).
 
 import { backupErrorMessage, backupSummary, importBackup } from '../../meta/backup.ts';
 import { sanitizeName } from '../../meta/challenge.ts';
@@ -87,6 +88,9 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     if (e.key === 'Enter') nameInput.blur();
   });
   const comfort = toggleSwitch(ctx, 'Adaptive comfort', (on) => change('comfort', on));
+
+  // Testing: every Journey level playable from the map (progress still counts as usual).
+  const unlockAll = toggleSwitch(ctx, 'Unlock all levels (testing)', (on) => change('unlockAll', on));
 
   // Display & assist
   const motion = segmented(ctx, 'Reduced motion', [
@@ -235,6 +239,10 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       row('contrast', 'High-contrast shadows', null, contrast.el),
       stackRow('compass', 'Shade guide', 'Thick teal: shade that lasts. Thin: shade ending. "Always" marks your shares.', guide.el),
     ),
+    section(
+      'Testing',
+      row('map', 'Unlock all levels (testing)', 'Every Journey level opens from the map. Stars and unlocks still count as usual.', unlockAll.el),
+    ),
     appSection,
     backupSection,
     dangerSection,
@@ -263,6 +271,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     guide.set(current.guide);
     if (document.activeElement !== nameInput) nameInput.value = current.name;
     comfort.set(current.comfort);
+    unlockAll.set(current.unlockAll);
     syncInstall();
   }
 

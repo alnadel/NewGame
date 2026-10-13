@@ -1,8 +1,9 @@
-// Pure progression rules (V1_PLAN §11, V1_1_PLAN UM3-UM6, GDD §6-§8). Every function takes a save
-// and returns a new one; inputs are never mutated, so the session can diff, test and persist freely.
+// Pure progression rules (V1_PLAN §11, V1_1_PLAN UM3-UM6, CAMPAIGN_PLAN §5, GDD §6-§8). Every function
+// takes a save and returns a new one; inputs are never mutated, so the session can diff, test and
+// persist freely.
 
 import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, isWarmup, MINUTES_PER_DAY, type HourGlyph, type RunResult } from '../core/index.ts';
-import type { DailyEntry, Save } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, Save } from './saveTypes.ts';
 import {
   ACHIEVEMENTS,
   COSMETICS,
@@ -26,7 +27,7 @@ import {
   type ErrandView,
   type MissionView,
 } from './missions.ts';
-import { cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest, sameRules } from './save.ts';
+import { CAMPAIGN_LEVEL_COUNT, cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest, sameRules, STARS_PER_LEVEL } from './save.ts';
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
 import { markSunnyDay } from './week.ts';
@@ -72,7 +73,7 @@ const MILESTONE_TEXT: Readonly<Record<number, string>> = {
   6480: 'reach Day 10',
 };
 
-export type ToastIcon = 'trophy' | 'gift' | 'snow' | 'calendar' | 'info' | 'warn' | 'check' | 'share' | 'lock';
+export type ToastIcon = 'trophy' | 'gift' | 'snow' | 'calendar' | 'info' | 'warn' | 'check' | 'share' | 'lock' | 'star';
 export type ToastTone = 'ink' | 'accent' | 'gold' | 'danger';
 
 export interface ToastSpec {
@@ -120,6 +121,19 @@ export interface RunOutcome {
   recentBestBefore: number;
   /** The comfort rung of the next endless run. */
   comfortAfter: number;
+  /** Journey runs: how the level went (absent for every other mode). */
+  campaign?: CampaignOutcome;
+}
+
+/** A Journey level's result folded into the save. */
+export interface CampaignOutcome {
+  passed: boolean;
+  /** Stars this run earned (0 when not passed). */
+  stars: number;
+  /** Stars gained beyond the level's previous record (0 when none). */
+  newStars: number;
+  /** The next level became playable with this run (its first pass). */
+  unlockedNext: boolean;
 }
 
 export interface ApplyRunOptions {
@@ -157,7 +171,40 @@ const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
   'ice-cold': (_s, r) => r.hourGlyphs.some((day) => day.filter((g) => g === 'cool').length >= 9),
   'night-gardener': (_s, r) => r.stats.flowers >= 30,
   forecaster: (s) => (s.stats.forecastNoons & FORECASTER_MASK) === FORECASTER_MASK,
+  'journey-10': (s) => passedThrough(s.campaign, 10),
+  'journey-100': (s) => passedThrough(s.campaign, 100),
+  'three-star-20': (s) => s.campaign.stars.filter((n) => n >= STARS_PER_LEVEL).length >= 20,
 };
+
+// ---------------------------------------------------------------------------------------------
+// Journey (CAMPAIGN_PLAN §5)
+// ---------------------------------------------------------------------------------------------
+
+/** Stars the whole Journey can give (CAMPAIGN_LEVEL_COUNT × 3). */
+export const CAMPAIGN_STARS_MAX = CAMPAIGN_LEVEL_COUNT * STARS_PER_LEVEL;
+
+/** Every level 1..n has been passed (at least one star). */
+function passedThrough(c: CampaignState, n: number): boolean {
+  if (c.stars.length < n) return false;
+  for (let i = 0; i < n; i++) if ((c.stars[i] ?? 0) <= 0) return false;
+  return true;
+}
+
+/** A level can be started: it is unlocked, or the testing toggle opens them all. */
+export function isLevelPlayable(save: Pick<Save, 'campaign' | 'settings'>, id: number): boolean {
+  if (!Number.isInteger(id) || id < 1 || id > CAMPAIGN_LEVEL_COUNT) return false;
+  return id <= save.campaign.unlocked || save.settings.unlockAll;
+}
+
+/** Stars earned so far across the Journey. */
+export function totalStars(save: Pick<Save, 'campaign'>): number {
+  return save.campaign.stars.reduce((n, x) => n + x, 0);
+}
+
+/** The level "Continue" plays: the highest unlocked one (the last level once everything is passed). */
+export function continueLevel(save: Pick<Save, 'campaign'>): number {
+  return Math.min(CAMPAIGN_LEVEL_COUNT, Math.max(1, save.campaign.unlocked));
+}
 
 /**
  * The next endless run is the warm-up after the climb to standard (days.ts STANDARD_WARMUP): comfort
@@ -260,7 +307,8 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   // tutorial run is left out: under the lesson's Chill floor Nubs can't melt, so its score would be
   // a bar no comfort-rung run could reach (it shows in the Journal's bars).
   const bestEased = easedRun(r, options);
-  const counts = r.mode !== 'daily' && runsBefore >= BEST_FROM_RUNS;
+  // Journey levels are finite runs: they never set a best (nor touch the history or the ladder).
+  const counts = r.mode !== 'daily' && r.mode !== 'campaign' && runsBefore >= BEST_FROM_RUNS;
   const prevBestMinutes = bestEased ? s.easedBest : s.bestMinutes;
   const newBest = counts && prevBestMinutes > 0 && r.minutes > prevBestMinutes;
   if (counts && !bestEased && r.minutes > s.bestMinutes) s.bestMinutes = r.minutes;
@@ -329,6 +377,29 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   const chips: ToastSpec[] = [];
   let bonusSnow = 0;
   let welcomeExtra = 0;
+  // Journey levels: the best stars are kept, a pass unlocks the next level and pays the first-pass
+  // bonus (id × 2 Snow); the run's Snow, missions and achievements count as for endless.
+  let campaign: CampaignOutcome | undefined;
+  if (r.mode === 'campaign' && r.level !== undefined) {
+    const lv = r.level;
+    const c = next.campaign;
+    const i = lv.id - 1;
+    const inRange = i >= 0 && i < c.stars.length;
+    const before = inRange ? (c.stars[i] ?? 0) : 0;
+    const stars = lv.passed ? Math.max(1, Math.min(STARS_PER_LEVEL, Math.floor(lv.stars))) : 0;
+    const unlockedBefore = c.unlocked;
+    if (inRange) {
+      c.stars[i] = Math.max(before, stars);
+      if (lv.passed) c.unlocked = Math.min(CAMPAIGN_LEVEL_COUNT + 1, Math.max(c.unlocked, lv.id + 1));
+      c.lastLevel = lv.id;
+    }
+    if (inRange && lv.passed && before === 0) {
+      const bonus = lv.id * 2;
+      bonusSnow += bonus;
+      chips.push({ text: `First pass +${bonus}`, icon: 'star', tone: 'gold' });
+    }
+    campaign = { passed: lv.passed, stars, newStars: Math.max(0, stars - before), unlockedNext: c.unlocked > unlockedBefore };
+  }
   if (next.lastPlay !== '' && daysBetween(next.lastPlay, today) >= WELCOME_BACK_DAYS) {
     welcomeExtra = Math.min(WELCOME_BACK_CAP, rawSnow);
     chips.push({ text: 'Welcome back ×2', icon: 'snow', tone: 'gold' });
@@ -413,6 +484,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
       errand: errandViewOf(errand, errandDone),
       recentBestBefore,
       comfortAfter: s.comfort,
+      ...(campaign ? { campaign } : {}),
     },
   };
 }

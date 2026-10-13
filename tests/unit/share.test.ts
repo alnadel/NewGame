@@ -5,12 +5,14 @@ import {
   GLYPHS,
   MOON,
   buildShare,
+  campaignShareText,
   dailyShareText,
   dayStripLines,
   endlessShareText,
   glyphStrip,
   linkLabel,
   resolveShareBase,
+  starText,
 } from '../../src/meta/share.ts';
 import { decodeChallenge } from '../../src/meta/challenge.ts';
 import { shareFiles } from '../../src/platform/share.ts';
@@ -296,5 +298,34 @@ describe('shareFiles', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } });
     vi.stubGlobal('HTMLElement', class {});
     expect(await shareFiles({ file, text: 'T' })).toBe('saved');
+  });
+});
+
+describe('Journey share (CAMPAIGN_PLAN §5)', () => {
+  it('prints the stars as ★ and ☆', () => {
+    expect(starText(0)).toBe('☆☆☆');
+    expect(starText(2)).toBe('★★☆');
+    expect(starText(3)).toBe('★★★');
+    expect(starText(7)).toBe('★★★');
+    expect(starText(-1)).toBe('☆☆☆');
+  });
+
+  it('formats the level line with the link, and without one', () => {
+    expect(campaignShareText({ id: 12, name: 'Glass Garden', stars: 2, link: 'https://shady.example/' })).toBe(
+      'SHADY Journey · Level 12 ★★☆ · Glass Garden\nhttps://shady.example/',
+    );
+    expect(campaignShareText({ id: 1, name: 'First Shade', stars: 3, link: null })).toBe('SHADY Journey · Level 1 ★★★ · First Shade');
+  });
+
+  it('buildShare links a level to the plain game address, with no challenge code', () => {
+    const r: RunResult = { ...result({}), mode: 'campaign', level: { id: 6, passed: true, stars: 2, introduces: 'glare' } };
+    const p = buildShare(r, 'https://shady.example/play/', null, { name: 'Sam' });
+    expect(p.challenge).toBeNull();
+    expect(p.url).toBe('https://shady.example/play/');
+    expect(p.text).toBe('SHADY Journey · Level 6 ★★☆ · Glass Garden\nhttps://shady.example/play/');
+    // Not passed: no stars. No base URL: no link line.
+    const failed = buildShare({ ...r, level: { id: 6, passed: false, stars: 0, introduces: 'glare' } }, null);
+    expect(failed.text).toBe('SHADY Journey · Level 6 ☆☆☆ · Glass Garden');
+    expect(failed.url).toBeNull();
   });
 });

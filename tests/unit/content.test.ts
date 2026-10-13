@@ -147,11 +147,16 @@ describe('missions and achievements', () => {
     expect(parseMissionId('bogus')).toBeNull();
   });
 
-  it('has 16 achievements with riddles', () => {
+  it('has 19 achievements with riddles (16 plus the three Journey ones)', () => {
     expect(ACHIEVEMENTS.map((a) => a.name)).toEqual([
       'First Light', 'Night Owl', 'High Noon', 'Solstice', 'Seventh Sun', 'Phew-nomenal', 'Cloud Rider', 'Daily Habit',
       'Sundancer', 'Rematch', 'Sunny Week', 'Close Shave', 'Glare-Proof', 'Ice Cold', 'Night Gardener', 'Forecaster',
+      'First Steps', 'Halfway There', 'Starry Road',
     ]);
     for (const a of ACHIEVEMENTS) expect(a.hint.length).toBeGreaterThan(10);
+  });
+
+  it('gives the Journey achievements no item rewards', () => {
+    for (const id of ['journey-10', 'journey-100', 'three-star-20']) expect(getAchievement(id)?.reward).toBeUndefined();
   });
 });

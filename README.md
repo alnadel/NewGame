@@ -7,15 +7,16 @@ Your **score is the time of day you reached**, for example "Day 2 · 2:40 PM".
 
 Every standard run draws its own days: Meadow or Old Town, and a forecast (Clear, Breezy, Overcast,
 Heat Wave, Long Shadows, Dazzle, Market Day). A comfort ladder eases new players in; the Daily
-Solstice gives everyone the same world with 3 tries; challenge links carry the sender's exact rules.
+Solstice gives everyone the same world with 3 tries; challenge links carry the sender's exact rules;
+the **Journey** is a 200-level campaign that teaches one idea at a time.
 
 TypeScript, Vite, Canvas 2D and WebAudio, with **no runtime dependencies**. Installs as a PWA,
 works offline, and keeps the seams open for Capacitor shells.
 
 - Live build: <https://alnadel.github.io/NewGame/>
-- Docs: [v1.1 plan](docs/V1_1_PLAN.md) (wins), then [v1 plan](docs/V1_PLAN.md) (rules, URL
-  parameters in §14), then the module guides; design in [GDD](docs/GDD.md);
-  history in [docs/archive](docs/archive/README.md).
+- Docs: [campaign plan](docs/CAMPAIGN_PLAN.md) (v1.2, the Journey), then [v1.1 plan](docs/V1_1_PLAN.md),
+  then [v1 plan](docs/V1_PLAN.md) (rules, URL parameters in §14), then the module guides; design in
+  [GDD](docs/GDD.md); history in [docs/archive](docs/archive/README.md).
 
 ## How to play
 
@@ -28,6 +29,19 @@ works offline, and keeps the seams open for Capacitor shells.
 Collect snowflakes for **Snow**, swing the shade from one shadow to the next for a **SWING**, and
 spend Snow in the **Wardrobe** (for Nubs, and Sun Shades for the sun). Progress stays on the device;
 Settings → Backup carries it elsewhere.
+
+### Journey
+
+The **Journey** pill on the Title opens a map of 200 levels in 20 chapters. A level is a short,
+seeded run to a finish line with a goal (reach the finish, collect N flakes, or earn N Snow) and up
+to three stars: one for passing, one for the level's flake count, one for keeping Chill above its
+bar. The first 40 levels each introduce one concept (clouds, glare, the SWING, forecasts, fog, an
+eclipse, a moonlit night…); later levels combine them. Passing a level unlocks the next and pays a
+first-pass bonus (twice the level number in Snow); stars, missions and achievements are kept as for
+any run, while the Journal and bests stay endless-only. The map's tiles name the concept they teach,
+"Continue · Level N" picks up where you left off, and Results offer **Next level**, **Retry** and
+**Map**. For testing, Settings → Testing → **Unlock all levels (testing)** opens every tile, and
+`?level=N` opens a level directly.
 
 ## Commands
 
@@ -62,8 +76,9 @@ src/
   game/        session and run lifecycle, loop, input, camera, fx, governor, params, test hook
   render/      Canvas 2D: ground, shadows, casters, Nubs, HUD, Melt Map, postcard
   audio/       synthesized WebAudio
-  ui/          DOM screens (Title, Results, Daily, Missions, Journal, Wardrobe, Settings)
-  meta/        save v2, progression, missions, errands, Sunny Week, Daily, share text, challenges
+  ui/          DOM screens (Title, Journey map, Results, Daily, Missions, Journal, Wardrobe, Settings)
+  meta/        save v3, progression (Journey included), missions, errands, Sunny Week, Daily, share
+               text, challenges
   platform/    storage, haptics, share, lifecycle, PWA, safe areas
 tests/         unit (Vitest), e2e (Playwright), golden hashes
 scripts/       sim.ts, golden.ts, gen-icons.ts, gen-og.ts, inline-build.mjs

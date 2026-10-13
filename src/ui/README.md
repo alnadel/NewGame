@@ -5,15 +5,16 @@ plumbing (storage, share, PWA, lifecycle, safe areas). The in-play HUD is drawn 
 renderer; the only DOM element during play is the pause button (plus a small muted indicator).
 
 ```
-src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab
-src/meta/      save v2, content catalog, progression, missions and errands, Sunny Week, daily, share text,
-               challenge links, backup
+src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab, the Journey map
+src/meta/      save v3, content catalog, progression (Journey levels included), missions and errands,
+               Sunny Week, daily, share text, challenge links, backup
 src/platform/  storage, share, pwa, lifecycle, safeArea, native
 ```
 
 Dev lab: `npx vite` then open `/ui-lab.html` (every screen with fake data and a working fake integrator).
 URL parameters reach any state: `?screen=results&variant=warmup&inset=47&rm=1&bare=1&today=2026-10-18`
-(see `src/ui/lab.ts`).
+(see `src/ui/lab.ts`; `screen=journey` with `regular|fresh|unlock-all|far`, and the Results variants
+`level|level-perfect|level-last|level-fail|level-death`).
 
 ---
 
@@ -24,7 +25,7 @@ import { createUi } from './ui/ui.ts';
 
 const ui = createUi(document.getElementById('ui')!, {
   callbacks,              // UiCallbacks, section 4
-  save: store.get(),      // Save (v2)
+  save: store.get(),      // Save (v3)
   today: localDate(),     // meta/daily.ts
   version: '0.1.0 (a1b2c3d)',
 });
@@ -51,21 +52,22 @@ into a screen only in keyboard mode, and a menu returns focus to the control tha
 
 ```
 boot -> title | play
-title -> play | daily | wardrobe | missions | settings | journal
+title -> play | daily | wardrobe | missions | settings | journal | journey
 daily -> play | title          wardrobe -> title          missions -> title | journal
 journal -> title | missions    (Back returns to wherever the Journal was opened from)
+journey -> play | title        (a tile starts its level; Back returns to the Title)
 settings -> title | pause      (Back returns to wherever Settings was opened from)
 play -> pause | dying | results | title
 pause -> play | title | settings
-dying -> results               results -> play | title
+dying -> results               results -> play | title | journey
 ```
 
 Re-showing the current screen is legal and refreshes it (e.g. `show('results', newView)`).
 Illegal transitions throw in dev and are ignored in production.
 
 **The UI switches screens itself for player intents, then calls the callback.** When `retry()`,
-`resume()`, `pause()`, `home()`, `restart()` or `startRun()` runs, `ui.current()` already reports the
-new screen. **The game switches screens for game events** with `ui.show()`:
+`resume()`, `pause()`, `home()`, `restart()`, `startRun()`, `nextLevel()` or `openJourney()` runs,
+`ui.current()` already reports the new screen. **The game switches screens for game events** with `ui.show()`:
 
 | Game event | Call |
 |---|---|
@@ -77,10 +79,10 @@ new screen. **The game switches screens for game events** with `ui.show()`:
 | `popstate` (V1_PLAN §8.2 sentinel) | play: `ui.show('pause')`; pause: stay; otherwise `ui.back()` |
 
 Input ownership:
-- The UI handles **Escape** (back: play -> pause, pause -> resume, menus -> close, results -> home),
-  **P** (pause in play) and **Enter/Space** (Title: start an endless run, or the challenge while its
-  banner is up; Pause: resume; Dying: skip; Results: retry). Game input should only handle the sun
-  keys (arrows, A/D).
+- The UI handles **Escape** (back: play -> pause, pause -> resume, menus -> close, results -> home,
+  or the Journey map after a level), **P** (pause in play) and **Enter/Space** (Title: start an
+  endless run, or the challenge while its banner is up; Pause: resume; Dying: skip; Results: retry,
+  or Next level after a passed level). Game input should only handle the sun keys (arrows, A/D).
 - Canvas pointer input matters only on `title` and `play`. On every other screen the UI covers the
   canvas (menus, pause scrim, the dying catcher, the results map catcher), so stray taps never reach it.
 
@@ -109,7 +111,7 @@ Input ownership:
 | `destroy()` | Removes listeners and DOM. |
 
 `ResultsView`: `{ result, outcome, dailyTry?, dailyDate?, dailyScored?, challengeTarget?,
-challengeName?, debug?, tip?, warmupFor? }`. For Daily runs (k:'d' challenges included) the session
+challengeName?, debug?, tip?, warmupFor?, campaign? }`. For Daily runs (k:'d' challenges included) the session
 sets `dailyDate` and `dailyScored`; the kicker reads `Daily #N · Try n/3`, `· Not counted` or
 `· Practice`, and Retry reads `Retry · practice` when the next run of that date can't count. `tip` is
 core's death recap line; `warmupFor { minutes, name }` marks the warm-up before a challenge (a card
@@ -130,6 +132,29 @@ start), then the stamps land in place; nothing scrolls by itself, so the warm-up
 and the tiles stay where they are (fix round 2). The missions done this run pop in as one more
 chip with the first stamp ("2 missions done +20"), so the reward shows wherever the rows sit.
 
+**Journey** (v1.2, docs/CAMPAIGN_PLAN.md §5): `ResultsView.campaign = { id, name, passed, stars,
+nextId: number | null, goalLine, introduces?: { name, blurb } }` turns the sheet into the level
+variant: the kicker "Level 12 · Passed", three stars popping in (`.res-stars`, 220 ms apart, with
+the stamp sound), the level name in place of the time, the Sun Strip, the goal line (accent on a
+pass), a "New: Glare …" card for the concept the level introduced, the death line (and tip) only
+when the level wasn't passed, then the award chips, stats and missions as usual. No postcard and no
+Home: the actions are **Next level** (primary, armed like Retry, only when passed and `nextId` is
+set; the map tap and Enter/Space fire it), **Retry** and **Map** (`openJourney()`); Back is Map.
+Share is the accent after a pass. The Journey screen (`'journey'`, `src/ui/screens/journey.ts`)
+reads the save and `CAMPAIGN_LEVELS` itself: the header's total stars `n/600`, a sticky
+"Continue · Level N" (`continueLevel`: the highest unlocked level) with its chapter under it, then
+20 chapter cards (name + biome mark, the chapter's stars `n/30`) of 10 tiles
+`.lvl-tile[data-level]` (number, ★ stars, the concept mark on levels 1-40 with the concept's name
+and blurb as the tooltip and in the aria-label, `.is-locked` with a lock when `isLevelPlayable` is
+false, `.is-next` on Continue's level, `.is-perfect` at 3 stars). A playable tile calls
+`startRun('campaign', undefined, id)`; a locked one toasts "Finish Level N first.". Arrow keys walk
+the tiles (±1, ±5). The scroll position is kept for the session; the first open scrolls to the
+chapter in play. `setSave` and the Settings toggle re-render the tiles in place (focus survives).
+The Title's primary pill "Journey · Level N" (above the tray, 4 tray buttons kept; a sideways drag
+on it still starts the endless run) calls `openJourney()`; when the bottom cluster would reach
+Nubs' halo the Title sheds, in order, the tray labels, then disc/pill size (`is-tight`), then the
+chips row (`no-chips`, 320×568 with large text).
+
 **Journal** (v1.1): bests (endless and Daily), the last 30 endless runs as bars (height ∝ score,
 colour by the day reached, the best in gold, runs on eased rules hatched, an sr-only summary), the
 last-10 average and its change against the 10 before, and lifetime totals. Opened from the Title's
@@ -147,7 +172,9 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 
 | Callback | When / what to do |
 |---|---|
-| `startRun(kind, date?)` | `'endless'` (Space/Enter on the Title), `'challenge'` (the banner's Play, or Space/Enter while the banner is up), `'daily'` with the date the Daily screen showed (it checks that date is still today at press time; if not, it refreshes to today with a toast and doesn't start). Start the run (daily: `dailySeed(date ?? localDate())`, profile 3; challenge: its seed or date, profile 3). UI is on `play`. |
+| `startRun(kind, date?, level?)` | `'endless'` (Space/Enter on the Title), `'challenge'` (the banner's Play, or Space/Enter while the banner is up), `'daily'` with the date the Daily screen showed (it checks that date is still today at press time; if not, it refreshes to today with a toast and doesn't start), `'campaign'` with the level id from a Journey tile or Continue. Start the run (daily: `dailySeed(date ?? localDate())`, profile 3; challenge: its seed or date, profile 3; campaign: `levelDef(level)`, CAMPAIGN_PLAN §4). UI is on `play`. |
+| `nextLevel()` | Results > Next level after a passed Journey level: start `view.campaign.nextId`. UI is on `play`. |
+| `openJourney()` | The Title's Journey pill, and Results > Map (or Back) after a Journey level: leave the run for the Title scene behind the map (the map is opaque). UI is on `journey`. |
 | `retry()` | New run, started at once (the core's 0.8 s start beat then gives the player time to aim before Nubs walks). |
 | `home()` | Abandon/leave to the Title scene. Don't trap back-navigation any more. |
 | `pause()` / `resume()` | Freeze/unfreeze the loop. In `resume`, call `ensureAudio()` synchronously (iOS). |
@@ -156,7 +183,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 | `share()` | `buildShare(result, shareBase(), dailyTry, { name: settings.name, par })` then `shareText({ text })` (text and link; desktop copies). The UI toasts "Copied!" / failure. |
 | `sharePostcard()` | The Postcard pill: `shareFiles({ file, text })` called synchronously in the click task; `'saved'` toasts "Postcard saved · link copied". Optional until gameRender's postcard lands (the pill hides without it). |
 | `swapMission(slotId)` | Swap on a stale mission (Missions card or Results row): `swapMission(save, slotId)`, `store.set`, `ui.setSave`. |
-| `settingsChanged(settings)` | Full new `Settings` (already clamped by the controls). Persist (`store.update`), apply volumes, sensitivity, invert, guide, high contrast. Reduced motion is applied to the DOM by the UI. |
+| `settingsChanged(settings)` | Full new `Settings` (already clamped by the controls). Persist (`store.update`), apply volumes, sensitivity, invert, guide, high contrast. Reduced motion is applied to the DOM by the UI, which also keeps the new settings in its own copy of the save (so the Journey's "Unlock all levels (testing)" toggle refreshes the map at once, before `setSave`). |
 | `buy(id)` | `buyCosmetic(save, id)`; on success `store.set(save)`, `ui.setSave(save)`, return true. |
 | `equip(id)` | `equipCosmetic(save, id)`; `store.set`, `ui.setSave`. |
 | `exportBackup()` | `exportBackup(store.get())`. The UI copies it and shows it in a box. |
@@ -169,8 +196,12 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 
 ## 5. Meta API (pure unless noted)
 
-- `meta/save.ts`: `defaults()`, `migrate(raw) -> { save, status }` (`fresh|ok|corrupt|future`),
-  `sanitizeSettings`, `pruneDaily`, `cloneSave`, and **`SaveStore`** (side effects):
+- `meta/save.ts` (save **v3**: v2 plus `campaign: { stars[200] 0..3, unlocked, lastLevel }` and
+  `settings.unlockAll`; v1 → v2 → v3 migrate in a chain, v2 → v3 fills a fresh Journey; `sanitize`
+  clamps the stars and keeps `unlocked` past every passed level; `emptyCampaign()`,
+  `CAMPAIGN_LEVEL_COUNT`, `STARS_PER_LEVEL`): `defaults()`, `migrate(raw) -> { save, status }`
+  (`fresh|ok|corrupt|future`), `sanitizeSettings`, `pruneDaily`, `cloneSave`, and **`SaveStore`**
+  (side effects):
   `new SaveStore(createStorage())`, `.status` (`fresh|ok|recovered|corrupt|future`), `.degraded`,
   `.get()`, `.set(save)`, `.update(fn)`, `.flush()`, `.subscribe(fn)`. Writes are debounced 300 ms;
   call `flush()` on `onPageHidden` and at run end. A newer-version save is copied to
@@ -197,6 +228,14 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
     { save, outcome }` at run end: bests from lifetime run 3, the history and comfort rung (endless),
     Morning Snow, Welcome back, Sunny Week, Today's errand, missions with staleness, achievements.
     `outcome` adds `bonusSnow`, `pace`, `errand`, `recentBestBefore`, `comfortAfter`.
+  - Journey runs (`result.mode === 'campaign'` with `result.level`): the wallet gets the run's Snow
+    plus a first-pass bonus of `id × 2` (an award chip "First pass +24"), `campaign.stars[id-1]`
+    keeps the best, a pass sets `unlocked = max(unlocked, id + 1)`, `lastLevel = id`; missions,
+    achievements and the daily bonuses count as for endless; the history, comfort ladder and bests
+    are never touched. `outcome.campaign = { passed, stars, newStars, unlockedNext }`. Achievements
+    `journey-10` (levels 1-10 passed), `journey-100`, `three-star-20` carry no items.
+    `isLevelPlayable(save, id)` (`id ≤ unlocked || settings.unlockAll`), `totalStars`,
+    `continueLevel` (the highest unlocked level, the last once all are passed), `CAMPAIGN_STARS_MAX`.
   - `swapMission`, `recentBest` (tutorial runs ignored), `MILESTONES`, `nextMilestone`, `nextGoal`
     (the Title tagline from run 3), `welcomeBackDue` (the launch toast), `errandView`, `setDailyPar`.
   - `dailyTryStarted(save, date) -> { save, tryNumber | null }` when a daily run passes 6:30 AM;
@@ -213,8 +252,10 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 - `meta/daily.ts`: `localDate()`, `dailyNumber(date)` (#284 = 2026-10-11), `dailySeed(date)`,
   `recentDates`, `formatDateLabel`, `addDays`, `isDateString`.
 - `meta/share.ts`: `buildShare(result, baseUrl | null, tryNumber, { name?, par?, plan? }) -> { text,
-  url | null, challenge }` (forecast emojis on Day Plan runs, "Beat Sam's run", Snowbot's par on
-  Dailies), `shareBase()`, the pure `resolveShareBase()`, glyph helpers. `platform/share.ts`:
+  url | null, challenge | null }` (forecast emojis on Day Plan runs, "Beat Sam's run", Snowbot's par
+  on Dailies; a Journey level shares `SHADY Journey · Level 12 ★★☆ · Glass Garden` plus the plain
+  game link, `challenge` null, `campaignShareText`, `starText`), `shareBase()`, the pure
+  `resolveShareBase()`, glyph helpers. `platform/share.ts`:
   `shareText`, `shareFiles({ file, text })` ('saved' = downloaded and copied), `copyText`.
 - `meta/challenge.ts`: `encodeChallenge` (keys v, k, seed|d, m, s, p, dr, nc, pl, n), `decodeChallenge`
   (a v1.0 code decodes to the v1.0 world; invalid optional fields are dropped), `sanitizeName`,
@@ -222,7 +263,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 - `meta/backup.ts`: `exportBackup`, `importBackup`, `backupErrorMessage`.
 
 Endless rules come from the comfort rung (`stats.comfort`, core `rungConfig`); Daily and challenge
-runs use their own rules.
+runs use their own rules; Journey levels come from `levelDef(id)` (core, CAMPAIGN_PLAN §2).
 
 ## 6. Integration recipes
 

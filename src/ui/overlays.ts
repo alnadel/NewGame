@@ -29,6 +29,7 @@ const TOAST_ICON: Record<ToastIcon, IconName> = {
   check: 'check',
   share: 'share',
   lock: 'lock',
+  star: 'star',
 };
 
 /** The icon a toast (or a Results award chip) shows for a ToastSpec icon. */

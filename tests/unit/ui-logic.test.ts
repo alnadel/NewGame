@@ -18,13 +18,17 @@ import { defaults } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
 import {
+  campaignKicker,
   challengeGoalText,
+  chapterTitle,
+  continueLabel,
   cueDuration,
   cueText,
   dailyPlan,
   dailyRunLabel,
   journalChart,
   journalSummary,
+  levelTileLabel,
   minutesDelta,
   multiplierTile,
   NOT_COUNTED_NOTE,
@@ -34,6 +38,7 @@ import {
   resultsAnnouncement,
   retryLabel,
   settingsSections,
+  starsLabel,
   sunStrip,
   tileFill,
 } from '../../src/ui/labels.ts';
@@ -58,8 +63,15 @@ describe('screen transitions', () => {
     ['results', 'play'],
     ['results', 'title'],
     ['results', 'results'],
+    ['title', 'journey'],
+    ['journey', 'play'],
+    ['journey', 'title'],
+    ['results', 'journey'],
   ];
   const illegal: [ScreenId, ScreenId][] = [
+    ['journey', 'results'],
+    ['journey', 'settings'],
+    ['pause', 'journey'],
     ['title', 'results'],
     ['title', 'pause'],
     ['wardrobe', 'play'],
@@ -383,5 +395,35 @@ describe('no aria-label on role-less spans (U17)', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('Journey labels (CAMPAIGN_PLAN §5)', () => {
+  it('words the stars, Continue, the chapters and the tiles', () => {
+    expect(starsLabel(2)).toBe('2 of 3 stars');
+    expect(starsLabel(30, 30)).toBe('30 of 30 stars');
+    expect(continueLabel(12)).toBe('Continue · Level 12');
+    expect(chapterTitle(2, 'Cobbles')).toBe('Chapter 2 · Cobbles');
+    expect(levelTileLabel({ id: 6, name: 'Glass Garden', introduces: 'glare' }, 2, true)).toBe(
+      'Level 6, Glass Garden. Teaches Glass Garden: Gazing balls throw light back. Red arcs on the dial are glare. 2 of 3 stars.',
+    );
+    expect(levelTileLabel({ id: 45, name: 'Quiet Lane', introduces: null }, 0, true)).toBe('Level 45, Quiet Lane. Not passed yet.');
+    expect(levelTileLabel({ id: 45, name: 'Quiet Lane', introduces: null }, 0, false)).toBe('Level 45, Quiet Lane. Locked.');
+  });
+
+  it('kicks and announces a level', () => {
+    expect(campaignKicker({ id: 12, passed: true })).toBe('Level 12 · Passed');
+    expect(campaignKicker({ id: 2, passed: false })).toBe('Level 2 · Not passed');
+    const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 1, nightsReached: 0, minutes: 360, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100 };
+    const outcome = { newBest: false, prevBestMinutes: 0, bestEased: false, runSnow: 0, missionSnow: 0, bonusSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [], pace: null, paceDown: false, errand: null, recentBestBefore: 0, comfortAfter: 4 };
+    const result: RunResult = {
+      mode: 'campaign', seed: 1, profile: 3, drain: 40, noonCloud: 0, plan: [], minutes: 360, day: 1, clock: '', stats, hourGlyphs: [], melody: [], assisted: false,
+      death: { day: 1, tDay: 0, minutes: 360, time: '12:00 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 11:10 AM.' },
+      level: { id: 6, passed: true, stars: 2, introduces: 'glare' },
+    };
+    const passed: ResultsView = { result, outcome, campaign: { id: 6, name: 'Glass Garden', passed: true, stars: 2, nextId: 7, goalLine: 'Reached the finish · 14 flakes' } };
+    expect(resultsAnnouncement(passed)).toBe('Level 6, Glass Garden: passed with 2 of 3 stars. Reached the finish · 14 flakes');
+    const failed: ResultsView = { result, outcome, campaign: { id: 6, name: 'Glass Garden', passed: false, stars: 0, nextId: 7, goalLine: 'Not enough flakes: 5 of 8' } };
+    expect(resultsAnnouncement(failed)).toBe('Level 6, Glass Garden: not passed. Melted by You at 11:10 AM.');
   });
 });

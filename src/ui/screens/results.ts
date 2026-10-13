@@ -4,6 +4,9 @@
 // award chips (plus one for the missions done), stats, missions and Today's errand with stamps that
 // land in place (and Swap on stale missions).
 // Retry arms 0.3 s after the sheet appears; a tap on the map area above the sheet also retries.
+// Journey runs (CAMPAIGN_PLAN §5, view.campaign): the stars pop in and the level name replaces the
+// time, the goal line replaces the death line on a pass, and the actions are Next level (primary
+// when passed) / Retry / Map; Back and the map tap follow the primary action.
 // The unlocks live in the sheet rather than the top toast stack: toasts there would sit over the
 // top of the Melt Map, where the named caster pins of the death line usually are.
 //
@@ -22,11 +25,13 @@ import { runPlanOn } from '../../meta/share.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import {
+  campaignKicker,
   dailyRunLabel,
   multiplierTile,
   NOT_COUNTED_NOTE,
   resultsAnnouncement,
   retryLabel,
+  starsLabel,
   sunStrip,
   tileFill,
   viewDailyDate,
@@ -61,6 +66,9 @@ const STRIP_ROWS = 4;
 const STRIP_ROWS_SHORT = 2;
 const STRIP_SHORT_BELOW_PX = 700;
 const TAKE_CHALLENGE = 'Take the challenge';
+/** Journey stars pop in this long after the sheet, this far apart. */
+const STAR_FIRST_MS = 420;
+const STAR_GAP_MS = 220;
 
 /** The glyph art inside a Sun Strip tile (10 px, white on the tile colour). */
 const TILE_ART: Readonly<Partial<Record<HourGlyph, string>>> = {
@@ -120,6 +128,22 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ctx.go('title');
     ctx.cb.home();
   };
+  // Journey: the next level (a passed level's primary action) and the map.
+  const next = (): void => {
+    if (!armed) return;
+    armed = false;
+    ctx.go('play');
+    ctx.cb.nextLevel();
+  };
+  const map = (): void => {
+    ctx.go('journey');
+    ctx.cb.openJourney();
+  };
+  const hasNext = (): boolean => shown?.campaign?.passed === true && shown.campaign.nextId !== null;
+  /** Retry, or Next level on a passed Journey level (the map tap, Space/Enter). */
+  const primary = (): void => (hasNext() ? next() : retry());
+  /** Back: Home, or the Journey map after a level. */
+  const leave = (): void => (shown?.campaign ? map() : home());
   const shared = (outcome: string): void => {
     if (outcome === 'copied') ctx.toast('Copied! Paste it anywhere.', { icon: 'check', tone: 'accent' });
     else if (outcome === 'saved') ctx.toast('Postcard saved · link copied', { icon: 'check', tone: 'accent' });
@@ -131,7 +155,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
 
   // The map area above the sheet: tap = retry. Hidden from assistive tech (Retry is the real control).
   const mapCatch = h('div', { class: 'res-map pe', 'aria-hidden': 'true' });
-  mapCatch.addEventListener('pointerdown', retry);
+  mapCatch.addEventListener('pointerdown', primary);
 
   const ribbonText = h('span', null, 'New best');
   const ribbon = h('div', { class: 'res-ribbon', 'aria-hidden': 'true' }, icon('trophy'), ribbonText);
@@ -151,9 +175,21 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ctx.sound('tap');
     sharePostcard();
   });
+  // Journey: the stars and the level name take the time's place; the goal line and the concept the
+  // level introduced follow the strip.
+  const starEls = Array.from({ length: 3 }, () => h('span', { class: 'res-star' }, icon('star')));
+  const starsEl = h('span', { class: 'res-stars', role: 'img' }, ...starEls);
+  const levelName = h('span', { class: 'res-level-name' });
+  const level = h('h2', { class: 'res-level', id: 'res-level' }, starsEl, levelName);
+  const goal = h('p', { class: 'res-goal', id: 'res-goal' });
+  const conceptName = h('strong', null);
+  const conceptBlurb = h('span', null);
+  const concept = h('p', { class: 'res-concept' }, h('span', { class: 'res-concept-ic', 'aria-hidden': 'true' }, icon('sparkle')), h('span', null, 'New: ', conceptName, ' ', conceptBlurb));
   const strip = h('div', { class: 'strip', role: 'img' });
   const shareBtn = button(ctx, { label: 'Share', icon: 'share', className: 'res-share', onPress: share });
   const homeBtn = button(ctx, { label: 'Home', icon: 'home', round: true, sound: 'back', onPress: home });
+  const nextBtn = button(ctx, { label: 'Next level', icon: 'play', variant: 'primary', size: 'xl', block: true, className: 'res-next res-arm', onPress: next });
+  const mapBtn = button(ctx, { label: 'Map', icon: 'map', size: 'lg', block: true, className: 'res-mapbtn', sound: 'back', onPress: map });
   // The full line is laid out invisibly so the paragraph has its final height from the first
   // frame; the typed copy is drawn over it. Screen readers get the sr-only copy at once.
   const deathFull = h('span', { class: 'sr-only' });
@@ -181,7 +217,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     variant: 'primary',
     size: 'xl',
     block: true,
-    className: 'res-retry',
+    className: 'res-retry res-arm',
     onPress: retry,
   });
   // Screen readers hear the score and the death line as Retry's description.
@@ -192,7 +228,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     { class: 'res-top' },
     h('div', { class: 'res-head' }, kicker, h('div', { class: 'res-head-actions' }, shareBtn, homeBtn)),
     h('div', { class: 'res-score' }, time, postcardBtn),
+    level,
     strip,
+    goal,
+    concept,
     death,
     tip,
     pace,
@@ -200,7 +239,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     verdict,
   );
   const scroll = h('div', { class: 'res-scroll' }, warmup, awards, stats, missionList);
-  const actions = h('div', { class: 'res-actions' }, retryBtn);
+  const actions = h('div', { class: 'res-actions' }, nextBtn, retryBtn, mapBtn);
   // The score block stays pinned; stats and missions scroll (or the whole body, see sizing above).
   const body = h('div', { class: 'res-body' }, top, scroll);
   const sheet = h('div', { class: 'res-sheet pe', role: 'region', 'aria-label': 'Run results' }, ribbon, body, actions);
@@ -300,6 +339,53 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     );
   }
 
+  /**
+   * The Journey variant: stars (popping in one after another), the level name, the goal line, the
+   * concept the level introduced, and Next level / Retry / Map. Null restores the endless sheet.
+   */
+  function renderCampaign(c: ResultsView['campaign'] | null, reduced: boolean): void {
+    const on = c !== null && c !== undefined;
+    const nextUp = on && c.passed && c.nextId !== null;
+    sheet.classList.toggle('is-campaign', on);
+    sheet.classList.toggle('is-passed', on && c.passed);
+    hide(level, !on);
+    hide(goal, !on);
+    hide(concept, !on || !c.introduces);
+    hide(time.parentElement as HTMLElement, on);
+    actions.classList.toggle('res-actions--campaign', on);
+    hide(nextBtn, !nextUp);
+    hide(mapBtn, !on);
+    // Retry is the primary action unless Next level is.
+    retryBtn.classList.toggle('btn--primary', !nextUp);
+    retryBtn.classList.toggle('btn--plain', nextUp);
+    retryBtn.classList.toggle('btn--xl', !nextUp);
+    retryBtn.classList.toggle('btn--lg', nextUp);
+    retryBtn.setAttribute('aria-describedby', on ? 'res-level res-goal' : 'res-time res-death');
+    if (!on) return;
+    levelName.textContent = c.name;
+    level.setAttribute('aria-label', `Level ${c.id}, ${c.name}, ${c.passed ? starsLabel(c.stars) : 'not passed'}`);
+    starsEl.setAttribute('aria-label', starsLabel(c.passed ? c.stars : 0));
+    goal.textContent = c.goalLine;
+    goal.classList.toggle('is-win', c.passed);
+    if (c.introduces) {
+      conceptName.textContent = c.introduces.name;
+      conceptBlurb.textContent = c.introduces.blurb;
+    }
+    const lit = c.passed ? c.stars : 0;
+    starEls.forEach((star, i) => {
+      star.classList.remove('is-on', 'is-pop');
+      if (i >= lit) return;
+      if (reduced) {
+        star.classList.add('is-on');
+        return;
+      }
+      later(STAR_FIRST_MS + i * STAR_GAP_MS, () => {
+        star.classList.add('is-on', 'is-pop');
+        ctx.sound('stamp');
+      });
+    });
+  }
+
   let shown: ResultsView | null = null;
   let postcardUrl: string | null = null;
 
@@ -318,7 +404,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
 
     // Header
     const dailyDate = viewDailyDate(view);
-    if (view.debug) {
+    const c = view.campaign ?? null;
+    if (c) {
+      kicker.textContent = campaignKicker(c);
+    } else if (view.debug) {
       kicker.textContent = 'Debug run · not saved';
     } else if (dailyDate !== undefined) {
       kicker.textContent = `Daily #${dailyNumber(dailyDate)} · ${dailyRunLabel(view.dailyTry, view.dailyScored)}`;
@@ -328,14 +417,16 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const notCounted = !view.debug && dailyDate !== undefined && view.dailyTry == null && view.dailyScored === true;
     note.textContent = notCounted ? NOT_COUNTED_NOTE : '';
     hide(note, !notCounted);
-    // A debug run's score isn't real: no share text, postcard or challenge link for it.
+    // A debug run's score isn't real: no share text, postcard or challenge link for it. A Journey
+    // level has no Melt Map postcard and leaves for the map, not Home.
     hide(shareBtn, view.debug === true);
-    hide(postcardBtn, view.debug === true);
+    hide(postcardBtn, view.debug === true || c !== null);
+    hide(homeBtn, c !== null);
     const win = view.challengeTarget !== undefined && challengeVerdict(result.minutes, view.challengeTarget).win;
     const shareLabel = win ? 'Send it back' : 'Share';
     setButtonLabel(shareBtn, shareLabel);
     shareBtn.setAttribute('aria-label', shareLabel);
-    shareBtn.classList.toggle('btn--primary', outcome.newBest || view.challengeTarget !== undefined || view.dailyTry != null);
+    shareBtn.classList.toggle('btn--primary', outcome.newBest || view.challengeTarget !== undefined || view.dailyTry != null || c?.passed === true);
     renderPostcard();
     const { day, minute } = splitMinutes(result.minutes);
     dayBadge.textContent = `Day ${day}`;
@@ -351,6 +442,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // Retry replays this run's kind; a Daily that can't count any more says so; after the warm-up
     // it starts the challenge.
     setButtonLabel(retryBtn, view.warmupFor ? TAKE_CHALLENGE : retryLabel(view, ctx.save(), ctx.today()));
+    renderCampaign(c, reduced);
     renderStrip(view, reduced);
     tip.textContent = view.tip ?? '';
     hide(tip, !view.tip);
@@ -363,9 +455,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       warmup.replaceChildren('Now beat ', h('bdi', null, view.warmupFor.name || 'your friend'), `: ${formatScore(view.warmupFor.minutes)}`);
     }
 
-    // Death line, typed.
+    // Death line, typed (a passed Journey level shows its goal line instead).
+    hide(death, c?.passed === true);
     // Keep "4:15 PM" on one line when the sentence wraps.
-    const line = result.death.line.replace(/(\d) ([AP]M)/g, '$1\u00a0$2');
+    const line = c?.passed ? '' : result.death.line.replace(/(\d) ([AP]M)/g, '$1\u00a0$2');
     deathFull.textContent = line;
     deathSpace.textContent = line;
     // A fresh caret restarts its blink (its animation was paused while Results was hidden).
@@ -484,17 +577,21 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       stampAt += STAMP_GAP_MS;
     });
 
-    // Retry arms after 0.3 s (the sheet is readable before a stray tap can fire it).
+    // Retry (and Next level) arm after 0.3 s (the sheet is readable before a stray tap can fire it).
     armed = false;
-    retryBtn.classList.add('is-arming');
-    retryBtn.classList.remove('is-ready');
-    setDisabled(retryBtn, true);
+    for (const b of [retryBtn, nextBtn]) {
+      b.classList.add('is-arming');
+      b.classList.remove('is-ready');
+      setDisabled(b, true);
+    }
     mapCatch.classList.remove('is-armed');
     later(RETRY_ARM_MS, () => {
       armed = true;
-      retryBtn.classList.remove('is-arming');
-      retryBtn.classList.add('is-ready');
-      setDisabled(retryBtn, false);
+      for (const b of [retryBtn, nextBtn]) {
+        b.classList.remove('is-arming');
+        b.classList.add('is-ready');
+        setDisabled(b, false);
+      }
       mapCatch.classList.add('is-armed');
     });
 
@@ -535,12 +632,12 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       postcardUrl = url;
       renderPostcard();
     },
-    back: home,
+    back: leave,
     activate() {
-      retry();
+      primary();
       return true;
     },
-    initialFocus: () => retryBtn,
+    initialFocus: () => (hasNext() ? nextBtn : retryBtn),
     sheetTop: () => sheetTopPx,
     invalidateSheetTop: measure,
   };
