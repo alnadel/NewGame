@@ -1207,6 +1207,21 @@
 
 .scr-pause.is-on .dialog { transform: none; }
 
+.pause-status {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(43, 33, 64, 0.06);
+  text-align: center;
+}
+.pause-st-title { margin: 0; font-weight: 800; font-size: var(--fs-md, 17px); }
+.pause-st-goal { margin: 2px 0 0; font-size: var(--fs-sm, 14px); opacity: 0.8; }
+.pause-st-stars { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.pause-star { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: #fff; font-size: var(--fs-xs, 13px); font-weight: 700; }
+.pause-star-ic { color: #c9c3d6; }
+.pause-star.is-earned .pause-star-ic { color: #f5b82e; }
+.pause-star.is-lost { opacity: 0.55; text-decoration: line-through; }
+
 .pause-badge {
   --d: 56px;
   --ic: 28px;
