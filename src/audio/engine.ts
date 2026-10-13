@@ -1,9 +1,9 @@
 // WebAudio plumbing (archive/TECH_SPEC §10): the lazily created AudioContext and its unlock dance, the
-// bus/master/compressor graph, shared noise buffers, and one-shot "voices" with a per-bus
+// bus/master/compressor/limiter graph, shared noise buffers, and one-shot "voices" with a per-bus
 // voice limiter. Recipes, music and ambience build on the AudioGraph defined here.
 //
-// AudioGraph works on any BaseAudioContext, so the audio lab can render the exact same chain
-// into an OfflineAudioContext to measure levels.
+// AudioGraph works on any BaseAudioContext, so the audio lab renders the exact same chain into an
+// OfflineAudioContext to measure levels.
 
 /** Every gain envelope starts and ends here (−80 dB); exponential ramps can't reach 0. */
 export const GAIN_FLOOR = 0.0001;
@@ -13,20 +13,16 @@ export const STOP_TAIL = 0.05;
 export type BusName = 'sfx' | 'music' | 'amb';
 
 /** Concurrent one-shot voices per bus before the oldest is stolen. */
-const VOICE_CAPS: Readonly<Record<BusName, number>> = { sfx: 24, music: 24, amb: 12 };
+const VOICE_CAPS: Readonly<Record<BusName, number>> = { sfx: 20, music: 20, amb: 12 };
 
-/** Mix constants (GDD §12, plus a gentle top-end shelf so nothing is shrill on cheap speakers). */
+/** Mix constants: a gentle top-end shelf so nothing is shrill on cheap speakers, a glue compressor
+ *  and a fast limiter so no pile-up can clip. README "Mix and levels" has the measurements. */
 const MASTER_GAIN = 0.9;
-const AIR_SHELF_HZ = 7500;
-const AIR_SHELF_DB = -3;
+const AIR_SHELF = { frequency: 7000, gain: -3 } as const;
 const COMP = { threshold: -14, knee: 8, ratio: 4, attack: 0.003, release: 0.25 } as const;
-/**
- * Post-compressor trim. The WebAudio compressor adds automatic make-up gain (about +6 dB with the
- * settings above), so signals under the threshold leave the chain louder than they enter it. This
- * trim was set with the audio lab's level check so the loudest realistic pile-up peaks near
- * −6 dBFS while single cues sit around −16 to −10 dBFS.
- */
-const OUTPUT_TRIM = 0.9;
+const LIMIT = { threshold: -2, knee: 0, ratio: 20, attack: 0.001, release: 0.08 } as const;
+/** Final trim (both compressors add automatic make-up gain; set with the lab's level check). */
+const OUTPUT_TRIM = 0.85;
 /** Ambience follows the music slider, scaled so the default music volume gives the GDD's 0.5. */
 const AMB_PER_MUSIC = 0.5 / 0.6;
 
@@ -50,7 +46,7 @@ export function ahr(p: AudioParam, t: number, peak: number, attack: number, hold
   return t + attack + hold + release;
 }
 
-/** Exponential glide of a (positive) frequency param from `from` to `to` over `dur`. */
+/** Exponential glide of a (positive) param from `from` to `to` over `dur`. */
 export function glide(p: AudioParam, t: number, from: number, to: number, dur: number): void {
   p.setValueAtTime(from, t);
   p.exponentialRampToValueAtTime(to, t + dur);
@@ -217,6 +213,11 @@ export class VoicePool {
     this.cap = cap;
   }
 
+  /** Voices currently held (tests, the lab's node-count check). */
+  get size(): number {
+    return this.voices.length;
+  }
+
   add(v: Voice, now: number): void {
     // Drop entries whose sources already stopped (onended can lag, or never come while suspended).
     for (let i = this.voices.length - 1; i >= 0; i--) {
@@ -248,26 +249,25 @@ export function makePanner(ctx: BaseAudioContext, pan: number): AudioNode & { pa
 export const CRACKLE_GRAINS = 16;
 export const CRACKLE_SLOT = 0.006;
 
-/** Seconds of looped white and pink noise per context. */
+/** Seconds of looped white noise per context. */
 const NOISE_SECONDS = 2;
 /** Prewarm rate: the usual hardware rate; a 44.1 kHz context uses a prefix of the same samples. */
 const PREWARM_RATE = 48000;
 
 /**
  * Noise samples computed ahead of the first tap (first-tap-audio-graph-in-gesture): the context
- * and graph are built inside that gesture, and filling ~200k random samples there cost tens of ms
- * on slow phones. prewarmNoise() fills them during the Title's idle time; AudioGraph then copies
- * them into its buffers (copyToChannel) and falls back to computing them if they aren't ready or
- * don't fit (a context faster than 48 kHz; crackle grains, whose envelope is in samples, need the
- * exact rate).
+ * and graph are built inside that gesture, and filling ~100k random samples there costs tens of ms
+ * on slow phones. prewarmNoise() fills them during the Title's idle time; AudioGraph copies them
+ * into its buffers (copyToChannel) and falls back to computing them if they aren't ready or don't
+ * fit (a context faster than 48 kHz; crackle grains, whose envelope is in samples, need the exact
+ * rate). Every "coloured" noise in the game is this white noise through a filter.
  */
-let warm: { rate: number; white: Float32Array<ArrayBuffer>; pink: Float32Array<ArrayBuffer>; crackle: Float32Array<ArrayBuffer> } | null = null;
+let warm: { rate: number; white: Float32Array<ArrayBuffer>; crackle: Float32Array<ArrayBuffer> } | null = null;
 
 /** Computes the noise tables once (idempotent). */
 export function prewarmNoise(rate: number = PREWARM_RATE): void {
   if (warm && warm.rate === rate) return;
-  const n = Math.floor(rate * NOISE_SECONDS);
-  warm = { rate, white: fillWhite(new Float32Array(n)), pink: fillPink(new Float32Array(n)), crackle: fillCrackle(new Float32Array(crackleLength(rate)), rate) };
+  warm = { rate, white: fillWhite(new Float32Array(Math.floor(rate * NOISE_SECONDS))), crackle: fillCrackle(new Float32Array(crackleLength(rate)), rate) };
 }
 
 /** True once prewarmNoise() has run (tests). */
@@ -281,47 +281,11 @@ function fillWhite(d: Float32Array): Float32Array<ArrayBuffer> {
 }
 
 /** A mono buffer filled from `prefix` (when it is long enough) or by `fill`. */
-function noiseBuffer(
-  ctx: BaseAudioContext,
-  n: number,
-  prefix: Float32Array<ArrayBuffer> | null,
-  fill: (d: Float32Array) => void,
-): AudioBuffer {
+function noiseBuffer(ctx: BaseAudioContext, n: number, prefix: Float32Array<ArrayBuffer> | null, fill: (d: Float32Array) => void): AudioBuffer {
   const buf = ctx.createBuffer(1, n, ctx.sampleRate);
   if (prefix && prefix.length >= n) buf.copyToChannel(prefix.length === n ? prefix : prefix.subarray(0, n), 0);
   else fill(buf.getChannelData(0));
   return buf;
-}
-
-function whiteNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
-  return noiseBuffer(ctx, Math.floor(ctx.sampleRate * seconds), warm?.white ?? null, fillWhite);
-}
-
-/** Pink noise via Paul Kellet's refined filter, normalised to a ±0.9 peak. */
-function pinkNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
-  return noiseBuffer(ctx, Math.floor(ctx.sampleRate * seconds), warm?.pink ?? null, fillPink);
-}
-
-function fillPink(d: Float32Array): Float32Array<ArrayBuffer> {
-  const n = d.length;
-  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-  let peak = 0;
-  for (let i = 0; i < n; i++) {
-    const w = Math.random() * 2 - 1;
-    b0 = 0.99886 * b0 + w * 0.0555179;
-    b1 = 0.99332 * b1 + w * 0.0750759;
-    b2 = 0.969 * b2 + w * 0.153852;
-    b3 = 0.8665 * b3 + w * 0.3104856;
-    b4 = 0.55 * b4 + w * 0.5329522;
-    b5 = -0.7616 * b5 - w * 0.016898;
-    const v = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362;
-    b6 = w * 0.115926;
-    d[i] = v;
-    if (Math.abs(v) > peak) peak = Math.abs(v);
-  }
-  const k = peak > 0 ? 0.9 / peak : 1;
-  for (let i = 0; i < n; i++) d[i] = (d[i] as number) * k;
-  return d as Float32Array<ArrayBuffer>;
 }
 
 function crackleLength(rate: number): number {
@@ -343,30 +307,23 @@ function fillCrackle(d: Float32Array, rate: number): Float32Array<ArrayBuffer> {
   return d as Float32Array<ArrayBuffer>;
 }
 
-function crackleGrains(ctx: BaseAudioContext): AudioBuffer {
-  const rate = ctx.sampleRate;
-  const prefix = warm && warm.rate === rate ? warm.crackle : null;
-  return noiseBuffer(ctx, crackleLength(rate), prefix, (d) => fillCrackle(d, rate));
-}
-
 // ---------------------------------------------------------------------------------------------
 // The mix graph.
 
 /**
- * buses (sfx, music, amb) → master (0.9) → air shelf → compressor → out (trim · mute) → destination.
+ * buses (sfx, music, amb) → master (0.9) → air shelf → compressor → limiter → out (trim · mute) →
+ * destination.
  */
 export class AudioGraph {
   readonly ctx: BaseAudioContext;
   readonly buses: Readonly<Record<BusName, GainNode>>;
   /** Sum of all buses before shaping and compression (tap point for meters). */
   readonly master: GainNode;
-  readonly compressor: DynamicsCompressorNode;
   /** Final output; mute lives here. */
   readonly out: GainNode;
   readonly white: AudioBuffer;
-  readonly pink: AudioBuffer;
   readonly crackle: AudioBuffer;
-  private readonly pools: Readonly<Record<BusName, VoicePool>>;
+  readonly pools: Readonly<Record<BusName, VoicePool>>;
   private readonly busLevels: Readonly<Record<BusName, Smoothed>>;
   private readonly outLevel: Smoothed;
 
@@ -376,19 +333,15 @@ export class AudioGraph {
     this.master.gain.value = MASTER_GAIN;
     const air = ctx.createBiquadFilter();
     air.type = 'highshelf';
-    air.frequency.value = AIR_SHELF_HZ;
-    air.gain.value = AIR_SHELF_DB;
-    this.compressor = ctx.createDynamicsCompressor();
-    this.compressor.threshold.value = COMP.threshold;
-    this.compressor.knee.value = COMP.knee;
-    this.compressor.ratio.value = COMP.ratio;
-    this.compressor.attack.value = COMP.attack;
-    this.compressor.release.value = COMP.release;
+    air.frequency.value = AIR_SHELF.frequency;
+    air.gain.value = AIR_SHELF.gain;
+    const dyn = (o: typeof COMP | typeof LIMIT): DynamicsCompressorNode => {
+      const c = ctx.createDynamicsCompressor();
+      for (const k of ['threshold', 'knee', 'ratio', 'attack', 'release'] as const) c[k].value = o[k];
+      return c;
+    };
     this.out = ctx.createGain();
-    this.master.connect(air);
-    air.connect(this.compressor);
-    this.compressor.connect(this.out);
-    this.out.connect(destination);
+    this.master.connect(air).connect(dyn(COMP)).connect(dyn(LIMIT)).connect(this.out).connect(destination);
     this.outLevel = new Smoothed(this.out.gain, OUTPUT_TRIM);
 
     const bus = (): GainNode => {
@@ -402,14 +355,10 @@ export class AudioGraph {
       music: new Smoothed(this.buses.music.gain, 0.6),
       amb: new Smoothed(this.buses.amb.gain, 0.6 * AMB_PER_MUSIC),
     };
-    this.pools = {
-      sfx: new VoicePool(VOICE_CAPS.sfx),
-      music: new VoicePool(VOICE_CAPS.music),
-      amb: new VoicePool(VOICE_CAPS.amb),
-    };
-    this.white = whiteNoise(ctx, NOISE_SECONDS);
-    this.pink = pinkNoise(ctx, NOISE_SECONDS);
-    this.crackle = crackleGrains(ctx);
+    this.pools = { sfx: new VoicePool(VOICE_CAPS.sfx), music: new VoicePool(VOICE_CAPS.music), amb: new VoicePool(VOICE_CAPS.amb) };
+    this.white = noiseBuffer(ctx, Math.floor(ctx.sampleRate * NOISE_SECONDS), warm?.white ?? null, fillWhite);
+    const rate = ctx.sampleRate;
+    this.crackle = noiseBuffer(ctx, crackleLength(rate), warm && warm.rate === rate ? warm.crackle : null, (d) => fillCrackle(d, rate));
   }
 
   get now(): number {
@@ -430,9 +379,8 @@ export class AudioGraph {
   /** Settings volumes 0..1. Ambience follows the music slider. */
   setVolumes(sfx: number, music: number): void {
     const now = this.ctx.currentTime;
-    const s = clamp01(sfx);
     const m = clamp01(music);
-    this.busLevels.sfx.set(s, now, 0.05);
+    this.busLevels.sfx.set(clamp01(sfx), now, 0.05);
     this.busLevels.music.set(m, now, 0.05);
     this.busLevels.amb.set(m * AMB_PER_MUSIC, now, 0.05);
   }
@@ -500,9 +448,9 @@ export class AudioEngine {
   }
 
   /**
-   * Creates and/or resumes the context. Safe to call from any input handler, any number of
-   * times; it does nothing once audio is running. Call it synchronously inside gesture handlers
-   * (iOS only honours resume() there).
+   * Creates and/or resumes the context. Safe to call from any input handler, any number of times;
+   * it does nothing once audio is running. Call it synchronously inside gesture handlers (iOS only
+   * honours resume() there).
    */
   ensure(): void {
     if (this.unavailable || this.disposed || !allowedToStart()) return;
@@ -543,12 +491,8 @@ export class AudioEngine {
   private create(): boolean {
     const w = globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
     const Ctor = w.AudioContext ?? w.webkitAudioContext;
-    if (!Ctor) {
-      this.unavailable = true;
-      this.emitStatus();
-      return false;
-    }
     try {
+      if (!Ctor) throw new Error('no WebAudio');
       this.ctx = new Ctor({ latencyHint: 'interactive' });
       this.graph = new AudioGraph(this.ctx);
     } catch {

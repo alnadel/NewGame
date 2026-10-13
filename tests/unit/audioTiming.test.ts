@@ -83,6 +83,20 @@ describe('StepClock', () => {
     }
   });
 
+  it('changes tempo from the next step on (chapter palettes)', () => {
+    const c = new StepClock();
+    c.start(0);
+    const times: number[] = [];
+    c.advance(0, 0.5, (step, t) => {
+      times.push(t);
+      if (step === 1) c.stepS = 0.125;
+    });
+    expect(times[0]).toBe(0);
+    expect(times[1]).toBeCloseTo(STEP_S, 9);
+    expect(times[2]).toBeCloseTo(STEP_S + 0.125, 9);
+    expect(c.gridAtOrAfter(times[2] as number + 0.01)).toBeCloseTo(STEP_S + 0.25, 9);
+  });
+
   it('does nothing until started', () => {
     const c = new StepClock();
     let n = 0;

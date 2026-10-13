@@ -51,13 +51,16 @@ export class RateLimiter {
 /**
  * The 16th-note grid. `advance(now, horizon)` reports every step whose start time lies in
  * [now, horizon). Steps that already lie in the past (the timer was throttled, the tab slept, the
- * context was suspended) are skipped silently: a backlog is never burst-scheduled.
+ * context was suspended) are skipped silently: a backlog is never burst-scheduled. `stepS` (the
+ * tempo) may change at any time; the grid continues from the next step at the new spacing.
  */
 export class StepClock {
   /** Index of the next step to schedule. */
   step = 0;
   /** Audio time of `step`. */
   time = 0;
+  /** Length of a 16th note (s). */
+  stepS = STEP_S;
   /** Number of steps skipped by the most recent advance() (for diagnostics and tests). */
   skipped = 0;
   private started = false;
@@ -78,23 +81,21 @@ export class StepClock {
     if (!this.started) return;
     if (this.time < now) {
       // Fell behind: jump to the first grid point at or after `now`, keeping the bar phase.
-      const n = Math.ceil((now - this.time) / STEP_S - 1e-9);
+      const n = Math.ceil((now - this.time) / this.stepS - 1e-9);
       this.step += n;
-      this.time += n * STEP_S;
+      this.time += n * this.stepS;
       this.skipped = n;
     }
     while (this.time < horizon) {
       onStep(this.step, this.time);
       this.step++;
-      this.time += STEP_S;
+      this.time += this.stepS;
     }
   }
 
   /** The earliest grid time at or after `t`. Works before start() too (grid anchored at 0). */
   gridAtOrAfter(t: number): number {
-    const anchor = this.started ? this.time - this.step * STEP_S : 0;
-    const k = Math.ceil((t - anchor) / STEP_S - 1e-9);
-    return anchor + k * STEP_S;
+    return this.time + Math.ceil((t - this.time) / this.stepS - 1e-9) * this.stepS;
   }
 }
 
@@ -113,15 +114,12 @@ export class GridSlots {
   }
 
   claim(clock: StepClock, now: number, margin = 0.005): number {
+    const step = clock.stepS;
     let t = clock.gridAtOrAfter(now + margin);
-    const limit = t + this.maxPush * STEP_S + 1e-6;
-    while (t <= this.lastSlot + 1e-6 && t + STEP_S <= limit) t += STEP_S;
+    const limit = t + this.maxPush * step + 1e-6;
+    while (t <= this.lastSlot + 1e-6 && t + step <= limit) t += step;
     if (t > this.lastSlot) this.lastSlot = t;
     return t;
-  }
-
-  reset(): void {
-    this.lastSlot = Number.NEGATIVE_INFINITY;
   }
 }
 

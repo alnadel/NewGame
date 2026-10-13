@@ -13,7 +13,6 @@ import { RECIPES } from './recipes.ts';
 import type { SfxName, SfxParams } from './recipes.ts';
 import type { AudioView, Scene } from './scene.ts';
 import { SfxRouter } from './sfxRouter.ts';
-import type { RouterOutput } from './sfxRouter.ts';
 
 export type { AudioStatus } from './engine.ts';
 export type { SfxName, SfxParams } from './recipes.ts';
@@ -26,9 +25,8 @@ const PUMP_MS = 25;
 const LOOKAHEAD_S = 0.12;
 /**
  * The pump watchdog: one timeout every WATCHDOG_MS checks that update() ran in the last STALE_MS;
- * if not (no frames: a stalled main thread, a hidden page whose context still runs), the 25 ms
- * interval pump takes over until update() comes back. While frames run, that is 4 timer wake-ups
- * a second instead of 40.
+ * if not (a stalled main thread, a hidden page whose context still runs), the 25 ms interval pump
+ * takes over until update() comes back: 4 timer wake-ups a second instead of 40 while frames run.
  */
 const WATCHDOG_MS = 250;
 const STALE_MS = 100;
@@ -41,10 +39,7 @@ export interface AudioOptions {
   /** Initial volumes, Settings.sfx / Settings.music (0..1). Defaults 0.8 / 0.6. */
   sfx?: number;
   music?: number;
-  /**
-   * Where to listen for unlock gestures (pointerdown, pointerup, touchend, click, keydown;
-   * capture phase, passive). Default `window`. Pass null to only unlock via ensure().
-   */
+  /** Where to listen for unlock gestures (capture, passive). Default `window`; null = only ensure(). */
   unlockTarget?: EventTarget | null;
 }
 
@@ -85,9 +80,7 @@ export interface ShadyAudio {
   dispose(): void;
 }
 
-function now(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
+const nowMs = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export function createAudio(opts: AudioOptions = {}): ShadyAudio {
   return new ShadyAudioImpl(opts);
@@ -95,8 +88,7 @@ export function createAudio(opts: AudioOptions = {}): ShadyAudio {
 
 /** True when the page URL carries `?mute=1`. */
 export function muteParam(): boolean {
-  if (typeof location === 'undefined') return false;
-  return new URLSearchParams(location.search).get('mute') === '1';
+  return typeof location !== 'undefined' && new URLSearchParams(location.search).get('mute') === '1';
 }
 
 class ShadyAudioImpl implements ShadyAudio {
@@ -120,11 +112,7 @@ class ShadyAudioImpl implements ShadyAudio {
     this.sfxVolume = opts.sfx ?? 0.8;
     this.musicVolume = opts.music ?? 0.6;
     this.isMuted = opts.muted ?? muteParam();
-    const output: RouterOutput = {
-      play: (name, params, quantize) => this.start(name, params, quantize),
-      applyScene: (scene) => this.applyScene(scene),
-    };
-    this.router = new SfxRouter(output, () => performance.now());
+    this.router = new SfxRouter({ play: (n, p, q) => this.start(n, p, q), applyScene: (s) => this.applyScene(s) }, nowMs);
     this.engine.onGraph((g) => {
       g.setVolumes(this.sfxVolume, this.musicVolume);
       g.setMuted(this.isMuted);
@@ -178,7 +166,7 @@ class ShadyAudioImpl implements ShadyAudio {
 
   update(view: Readonly<AudioView>, dtReal: number): void {
     this.day = view.day;
-    this.lastUpdate = now();
+    this.lastUpdate = nowMs();
     if (this.fallback !== null) {
       clearInterval(this.fallback);
       this.fallback = null;
@@ -197,12 +185,11 @@ class ShadyAudioImpl implements ShadyAudio {
   }
 
   play(name: SfxName, params: SfxParams = {}): void {
-    this.start(name, params.day === undefined ? { ...params, day: this.day } : params, false);
+    this.router.cue(name, params.day === undefined ? { ...params, day: this.day } : params);
   }
 
   playMelody(degrees: readonly number[], day: number): number {
-    if (!this.music || !this.engine.running) return 0;
-    return this.music.playMelody(degrees, day);
+    return this.music && this.engine.running ? this.music.playMelody(degrees, day) : 0;
   }
 
   stopMelody(): void {
@@ -215,8 +202,7 @@ class ShadyAudioImpl implements ShadyAudio {
 
   meter(): AnalyserNode | null {
     const g = this.engine.graph;
-    if (!g) return null;
-    if (!this.analyser) {
+    if (g && !this.analyser) {
       this.analyser = g.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
       g.out.connect(this.analyser);
@@ -243,28 +229,30 @@ class ShadyAudioImpl implements ShadyAudio {
   private readonly onWatchdog = (): void => {
     this.watchdog = null;
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    if (this.engine.running && this.fallback === null && (now() - this.lastUpdate > STALE_MS || hidden)) {
+    if (this.engine.running && this.fallback === null && (nowMs() - this.lastUpdate > STALE_MS || hidden)) {
       this.fallback = setInterval(this.pump, PUMP_MS);
     }
     this.armWatchdog();
   };
 
-  /** Plays a recipe now or on the grid. Dropped while the context isn't running, so nothing piles up. */
+  /**
+   * Plays a recipe now or on the grid, in the key of the palette playing. Dropped while the
+   * context isn't running, so nothing piles up.
+   */
   private start(name: SfxName, params: SfxParams, quantize: boolean): void {
     const g = this.engine.graph;
     if (!g || !this.engine.running) return;
     const now = g.now + START_AHEAD_S;
     const t = quantize && this.music ? this.music.gridSlot(now) : now;
-    RECIPES[name](g, t, params);
+    RECIPES[name](g, t, this.music && params.key === undefined ? { ...params, key: this.music.key } : params);
   }
 
   /** Skipped while the context isn't running: its clock is frozen, so automation would only pile up. */
   private applyScene(scene: Readonly<Scene>): void {
     const g = this.engine.graph;
     if (!g || !this.music || !this.amb || !this.engine.running) return;
-    const now = g.now;
-    this.music.applyScene(scene, now);
-    this.amb.applyScene(scene, now);
+    this.music.applyScene(scene, g.now);
+    this.amb.applyScene(scene, g.now);
   }
 
   private readonly pump = (): void => {
