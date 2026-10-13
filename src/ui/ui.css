@@ -1742,6 +1742,11 @@
   color: var(--accent-ink);
 }
 
+/* The XP meter (gamify.ts xpMeter) keeps its place while the stars land, then fades in to fill;
+   its margin keeps the "Rank up!" pill off the goal line. */
+.res-sheet .xp-meter { margin-top: 8px; transition: opacity 200ms; }
+.res-sheet .xp-meter.is-waiting { opacity: 0; }
+
 /* The run's unlocks (achievements, cosmetics, the Daily): chips that pop in after the stamps. */
 .res-awards {
   display: flex;

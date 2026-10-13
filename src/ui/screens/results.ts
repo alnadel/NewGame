@@ -593,7 +593,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     setArmed(false);
     revealing = rewards.length > 0;
     if (!revealing) later(RETRY_ARM_MS, () => setArmed(true));
+    // Until it starts filling the meter holds its place unseen (an empty ring and bar read as broken).
+    xp.el.classList.toggle('is-waiting', xpAt > 0);
     later(xpAt, () => {
+      xp.el.classList.remove('is-waiting');
       void xp.show(g, ctx.save()).then(async () => {
         if (!revealing || id !== renders) return;
         await revealRewards(ctx, rewards);
