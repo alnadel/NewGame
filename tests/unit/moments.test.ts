@@ -77,7 +77,7 @@ describe('RunMoments', () => {
     return { log, sinks: { mission: () => log.push('mission'), comeback: () => log.push('comeback') } };
   };
   const dayRun = (level?: number): SimState => {
-    const s = createRun(level ? campaignConfig(levelDef(level)!, false, true) : { seed: 7, profile: 3 });
+    const s = createRun(level ? campaignConfig(levelDef(level)!, false, true) : { seed: 7, mode: 'endless', profile: 3, tutorial: false, reducedMotion: false });
     s.phase = 'day';
     return s;
   };
