@@ -11,14 +11,19 @@ import {
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
+  trailX,
   worldPlan,
   type Caster,
+  type CasterKind,
   type Pickup,
   type RenderSnap,
   type SimState,
   type World,
 } from '../core/index.ts';
+// V12-SHIM: the finish arch's geometry, until the core places a kind 'finish' caster at the line.
+import { gateArchParts, makeCaster } from '../core/gen/catalog.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
+import type { SimStateV12 } from '../core/campaignShim.ts';
 import type { Equipped } from '../meta/content.ts';
 import type { Insets } from '../platform/safeArea.ts';
 import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, type AtmosphereIn } from './atmosphere.ts';
@@ -41,7 +46,7 @@ import {
   type GroundPaint,
 } from './ground.ts';
 import { createHalo, drawHalo, updateHalo, type HaloState } from './halo.ts';
-import { createHud, drawHud, hudScale, syncHud, updateHud, type HudState } from './hud.ts';
+import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudState } from './hud.ts';
 import {
   applyPull,
   createMapFrame,
@@ -78,6 +83,7 @@ import {
   createRings,
   drawAirParticles,
   drawGroundParticles,
+  drawGustStreaks,
   drawPops,
   drawRings,
   drawScreenParticles,
@@ -92,12 +98,55 @@ import { createDeathBeat, drawGrey, drawHatPop, greyOf, startDeathBeat, type Dea
 import { createDecor, drawBunting, drawDecor, invalidateDecor, type Decor, type DecorFrame } from './decor.ts';
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
+import { ctx2d, makeCanvas } from './sprites.ts';
 import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
 /** The moon's shadow length factor (a low moon). */
 const MOON_COT = 1.2;
 let moonRim: Canvas2D | null = null;
+/** Fog (v1.2): the world fades out from FOG_NEAR to FOG_FAR u ahead of Nubs and is gone beyond. */
+const FOG_NEAR = 170;
+const FOG_FAR = 330;
+/** The mist's colour (the band sprite and the fill above it share it). */
+const FOG_RGB = '246,247,250';
+const FOG_ALPHA = 0.97;
+let fogBand: Canvas2D | null = null;
+/** Moonlit shadows: the moon sun's shadow alpha. */
+const MOONLIT_SHADOW = 0.5;
+/** Eclipse: how dark the world goes at full eclipse (0..1 of a full night). */
+const ECLIPSE_DIM = 0.85;
+/** A small fixed star field (fractions of the world rect, plus a size), seeded once. */
+const STAR_N = 56;
+const STARS = new Float32Array(STAR_N * 3);
+{
+  let x = 0x9e3779b9;
+  const next = (): number => {
+    x = (Math.imul(x ^ (x >>> 16), 0x45d9f3b) ^ 0x7f4a7c15) >>> 0;
+    return (x >>> 8) / 0x1000000;
+  };
+  for (let i = 0; i < STAR_N; i++) {
+    STARS[3 * i] = next();
+    STARS[3 * i + 1] = next() * 0.72;
+    STARS[3 * i + 2] = 0.7 + next() * 1.3;
+  }
+}
+
+/** The fog's vertical band sprite: white, transparent at the bottom (near) to opaque at the top (far). */
+function fogSprite(): Canvas2D {
+  if (fogBand) return fogBand;
+  const c = makeCanvas(4, 128);
+  const g = ctx2d(c);
+  const lg = g.createLinearGradient(0, 0, 0, 128);
+  lg.addColorStop(0, `rgba(${FOG_RGB},1)`);
+  lg.addColorStop(0.45, `rgba(${FOG_RGB},0.82)`);
+  lg.addColorStop(0.8, `rgba(${FOG_RGB},0.3)`);
+  lg.addColorStop(1, `rgba(${FOG_RGB},0)`);
+  g.fillStyle = lg;
+  g.fillRect(0, 0, 4, 128);
+  fogBand = c;
+  return c;
+}
 
 export type RenderScreen = 'boot' | 'title' | 'play' | 'pause' | 'dying' | 'results' | 'menu';
 
@@ -120,8 +169,24 @@ export interface HintView {
   alpha: number;
 }
 
+/** A campaign run as the renderer sees it (session fillCampaignView): the HUD row and the finish line. */
+export interface CampaignView {
+  id: number;
+  /** 0..1 to the finish line. */
+  progress: number;
+  goalValue: number;
+  /** −1: the Snow pill shows plain Snow. */
+  goalTarget: number;
+  goalFlakes: boolean;
+  /** Marker positions on the progress bar (0..1), −1 none. */
+  markGate: number;
+  markEclipse: number;
+  /** World y of the finish line. */
+  finishY: number;
+}
+
 export interface RenderInput {
-  s: SimState;
+  s: SimStateV12;
   snap: RenderSnap;
   screen: RenderScreen;
   /** Render-only Title sway added to θ (degrees). */
@@ -135,6 +200,8 @@ export interface RenderInput {
   goalMinutes: number;
   /** Challenge runs: the sender's name ('' = none) on the friend's pennant. */
   challengeName: string;
+  /** A campaign run (null otherwise). */
+  campaign: CampaignView | null;
   /** Game seconds since the death (after hit-stop), or −1. */
   dying: number;
   /** Real seconds since Results appeared, or −1. */
@@ -225,6 +292,12 @@ export interface RenderScene {
    * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
    */
   passes: number;
+  /** The HUD's campaign row (filled from RenderInput.campaign each frame; no allocation). */
+  hudCampaign: HudCampaign;
+  /** V12-SHIM: the finish arch drawn at `finishFor` of world `finishWorld` while the core places none. */
+  finishCaster: Caster | null;
+  finishFor: number;
+  finishWorld: World | null;
 }
 
 function moonPalette(): Palette {
@@ -280,7 +353,83 @@ export function createScene(): RenderScene {
     friendFor: -1,
     friendWorld: null,
     passes: 0,
+    hudCampaign: { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0 },
+    finishCaster: null,
+    finishFor: -1,
+    finishWorld: null,
   };
+}
+
+/** The HUD's campaign row for this frame, or null outside a campaign run. */
+function hudCampaignOf(sc: RenderScene, inp: RenderInput): HudCampaign | null {
+  const c = inp.campaign;
+  if (!c) return null;
+  const h = sc.hudCampaign;
+  h.id = c.id;
+  h.progress = c.progress;
+  h.goalValue = c.goalValue;
+  h.goalTarget = c.goalTarget;
+  h.goalFlakes = c.goalFlakes;
+  h.markGate = c.markGate;
+  h.markEclipse = c.markEclipse;
+  h.gust = inp.s.sun.gust;
+  return h;
+}
+
+/**
+ * V12-SHIM: the finish arch as a caster (gate-arch geometry, kind 'finish') at the level's finish
+ * line, when the world has none of its own there. Inserted into the visible casters in depth order.
+ */
+function shimFinish(sc: RenderScene, s: SimState, finishY: number, buf: Caster[], n: number): number {
+  for (let i = 0; i < n; i++) if (((buf[i] as Caster).kind as string) === 'finish') return n;
+  if (sc.finishFor !== finishY || sc.finishWorld !== s.world || !sc.finishCaster) {
+    const x = trailX(s.world.trail, finishY);
+    sc.finishCaster = makeCaster({
+      id: -2,
+      kind: 'finish' as CasterKind,
+      name: 'the Finish',
+      biome: 'meadow',
+      x,
+      y: finishY,
+      rot: 0,
+      parts: gateArchParts(x, finishY),
+      side: 0,
+      rescue: false,
+      gate: true,
+      ballId: -1,
+      chunk: -1,
+    });
+    sc.finishFor = finishY;
+    sc.finishWorld = s.world;
+  }
+  const f = sc.finishCaster;
+  let at = n;
+  for (let i = 0; i < n; i++) {
+    if ((buf[i] as Caster).y > finishY) {
+      at = i;
+      break;
+    }
+  }
+  for (let i = n; i > at; i--) buf[i] = buf[i - 1] as Caster;
+  buf[at] = f;
+  return n + 1;
+}
+
+/** The eclipse's (and a Moonlit level's) stars over the world rect, twinkling. */
+function drawStars(g: CanvasRenderingContext2D, v: View, a: number, time: number): void {
+  if (a <= 0.01) return;
+  g.fillStyle = '#FFFFFF';
+  for (let i = 0; i < STAR_N; i++) {
+    const tw = 0.55 + 0.45 * Math.sin(time * 2.4 + i * 1.7);
+    g.globalAlpha = a * tw;
+    const r = (STARS[3 * i + 2] as number) * 0.9;
+    const x = v.vx + (STARS[3 * i] as number) * v.vw;
+    const y = v.vy + (STARS[3 * i + 1] as number) * v.vh;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalAlpha = 1;
 }
 
 export function resizeScene(sc: RenderScene, cssW: number, cssH: number, dpr: number, safe: Insets): void {
@@ -328,7 +477,8 @@ export class Renderer {
    * frames, so the first play frame of a run doesn't pay for it).
    */
   prebuildHud(inp: RenderInput): void {
-    syncHud(this.scene.hud, this.scene.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: 1, time: inp.time });
+    const sc = this.scene;
+    syncHud(sc.hud, sc.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: 1, time: inp.time, campaign: hudCampaignOf(sc, inp) });
   }
 
   /**
@@ -433,6 +583,13 @@ export class Renderer {
       sc.townWorld = s.world;
     }
     const town = sc.town;
+    // Campaign concepts (v1.2): a Moonlit level is a night run under a moon sun (the night palette
+    // with the sun's own shadows); an eclipse dims the day toward night while it lasts.
+    const moonlit = s.moonlit;
+    const eclipse = s.eclipse;
+    if (moonlit) night = 1;
+    else if (eclipse > night / ECLIPSE_DIM) night = eclipse * ECLIPSE_DIM;
+    const fog = s.mods.has('fog');
     updatePalette(sc.pal, dayFrac, night, town, inp.highContrast);
     // The ground steps through the day in 1/64ths (≈ 0.8 s): a 1-3 level change at most.
     updatePalette(sc.groundPal, Math.round(dayFrac * 64) / 64, Math.round(night * 16) / 16, town, inp.highContrast);
@@ -538,7 +695,12 @@ export class Renderer {
       drawFriendPuddle(g, v, sc.friend[0] as number, sc.friend[1] as number);
     }
     drawPickups(g, v, s.world, time, snap.nubsY, night);
-    if (sunUp) {
+    if (sunUp && moonlit) {
+      // The moon sun's shadows: the sim's own geometry in the moonlight colour.
+      if (drawShadowLayer(g, sc.shadow, v, s.world, sc.moonPal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, MOONLIT_SHADOW * (1 - eclipse), inp.softShadows, false)) {
+        sc.passes++;
+      }
+    } else if (sunUp) {
       const multiply = this.options.multiplyShadows;
       if (drawShadowLayer(g, sc.shadow, v, s.world, sc.pal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, sc.shadow.alpha, inp.softShadows, multiply)) {
         sc.passes++;
@@ -552,7 +714,9 @@ export class Renderer {
     }
     // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
     // source-over fill stays exact), the depth sort below.
-    const n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
+    let n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
+    const finishY = inp.campaign ? inp.campaign.finishY : -1;
+    if (finishY >= v.y0 - 130 && finishY <= v.y1 + 40) n = shimFinish(sc, s, finishY, casterBuf, n);
     if (inp.govLevel < 2) drawContactAO(g, v, casterBuf, n, night);
     const glows = night > 0.05 && inp.govLevel < 2;
     if (glows) drawWindowGlow(g, v, casterBuf, n, night);
@@ -648,6 +812,20 @@ export class Renderer {
     drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
     drawAirParticles(g, sc.particles, v);
+    if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
+    if (fog && inp.mapT < 0) {
+      // Fog: the world fades out between FOG_NEAR and FOG_FAR u ahead and is gone beyond (one
+      // cached band sprite stretched over the fade, a flat fill above it).
+      const yNear = v.oy - (snap.nubsY + FOG_NEAR) * v.S;
+      const yFar = v.oy - (snap.nubsY + FOG_FAR) * v.S;
+      g.globalAlpha = FOG_ALPHA * (1 - 0.5 * night);
+      if (yFar > v.vy) {
+        g.fillStyle = `rgb(${FOG_RGB})`;
+        g.fillRect(v.vx, v.vy, v.vw, yFar - v.vy + 0.5);
+      }
+      if (yNear > v.vy) g.drawImage(fogSprite(), v.vx, yFar, v.vw, yNear - yFar);
+      g.globalAlpha = 1;
+    }
     // The death beat drains the world to grey around the puddle (full rendering quality only, A12).
     const grey = greyOf(beat, inp.mapT < 0 ? -1 : inp.mapT / MAP_PULL_S);
     if (grey > 0.005 && inp.govLevel === 0 && v.dpr <= 2) {
@@ -676,6 +854,8 @@ export class Renderer {
       at.full = inp.govLevel < 2;
       at.grade = inp.govLevel < 3;
       if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;
+      // Stars: through the eclipse, and all along a Moonlit level.
+      drawStars(g, v, moonlit ? 0.75 : eclipse, time);
     } else if (sc.mapReady && this.options.mapOverlay) {
       const o = mapAlphas(inp.mapT, inp.reducedMotion, mapOverlay);
       o.sheetTop = inp.sheetTop;
@@ -711,6 +891,9 @@ export class Renderer {
         hintPhase: inp.hint.phase,
         hintAlpha: inp.screen === 'play' || inp.screen === 'pause' ? inp.hint.alpha : 0,
         reducedMotion: inp.reducedMotion,
+        blind: s.mods.has('blind'),
+        hideNext: fog,
+        locked: s.sun.locked,
       });
     }
     g.restore();
@@ -726,7 +909,7 @@ export class Renderer {
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);
       // Around noon the sun is the boss (unless Nubs is nearly gone: then it is horrified).
-      const boss = sunUp && night === 0 ? bossWeight(dayFrac, s.params.forecast === 'heat') : 0;
+      const boss = sunUp && night === 0 && !moonlit ? bossWeight(dayFrac, s.params.forecast === 'heat') : 0;
       let mood: SunMood;
       if (dying >= 0) mood = 'guilty';
       else if (sc.relief > 0) mood = 'relief';
@@ -735,14 +918,14 @@ export class Renderer {
       else if (boss > 0.6) mood = 'boss';
       else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
-      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades);
+      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades, moonlit, eclipse);
     }
 
     // HUD.
     const hudVisible = inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'dying';
     if (hudVisible) {
       const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : 1;
-      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: a, time: time });
+      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: a, time: time, campaign: hudCampaignOf(sc, inp) });
     }
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
     drawScreenParticles(g, sc.particles, v.dpr);
@@ -818,6 +1001,7 @@ function smooth(t: number): number {
   const x = t <= 0 ? 0 : t >= 1 ? 1 : t;
   return x * x * (3 - 2 * x);
 }
+
 
 function drawDebug(
   g: CanvasRenderingContext2D,

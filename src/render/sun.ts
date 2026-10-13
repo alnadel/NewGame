@@ -95,7 +95,8 @@ export function placeSun(s: SunGlyph, v: View, nx: number, ny: number, dx: numbe
 
 /**
  * Draws the sun (or moon) at the glyph position, wearing `shades`. `scale` multiplies the 20 px core
- * radius; `boss` (bossWeight) swells it.
+ * radius; `boss` (bossWeight) swells it. A Moonlit level (v1.2) puts the moon in the sun's place;
+ * `eclipse` (0..1) slides a dark disc over the sun, leaving a thin corona.
  */
 export function drawSun(
   g: CanvasRenderingContext2D,
@@ -107,6 +108,8 @@ export function drawSun(
   guiltDx: number,
   boss: number,
   shades: ShadesLook,
+  moonlit = false,
+  eclipse = 0,
 ): void {
   if (alpha <= 0.01) return;
   const night = s.night;
@@ -114,6 +117,11 @@ export function drawSun(
   // Guilty: it turns away and slides 24 px toward the edge.
   const gx = s.x + guiltDx * 24 * s.guilty;
   const gy = s.y;
+  if (moonlit) {
+    // The moon sun: it rides where the sun would, and its light is the light.
+    drawMoon(g, gx, gy, r * 0.9, alpha, time);
+    return;
+  }
   if (night > 0.01) drawMoon(g, s.mx, s.my, r * 0.8, alpha * night, time);
   const a = alpha * (1 - 0.8 * night);
   if (a <= 0.01) return;
@@ -167,7 +175,33 @@ export function drawSun(
   g.stroke();
   drawFace(g, r, mood, time, s.guilty, shades);
   g.restore();
+  if (eclipse > 0.01) drawEclipse(g, gx, gy, r, eclipse, a, time);
   g.globalAlpha = 1;
+}
+
+/**
+ * The eclipse over the sun: a dark disc slides in from the right (fully over the sun at e = 1)
+ * behind a soft white corona that brightens as the disc covers the face.
+ */
+function drawEclipse(g: CanvasRenderingContext2D, x: number, y: number, r: number, e: number, a: number, time: number): void {
+  const cover = smoothstep(0, 1, e);
+  const corona = radialSprite('236,240,255', 128, 0.55, 0.45, 0.2);
+  const cr = r * (1.9 + 0.12 * Math.sin(time * 3));
+  g.globalAlpha = a * cover * 0.9;
+  g.drawImage(corona, x - cr, y - cr, 2 * cr, 2 * cr);
+  g.globalAlpha = a;
+  g.fillStyle = '#1A1633';
+  g.beginPath();
+  g.arc(x + (1 - cover) * r * 2.3, y, r * 1.06, 0, TAU);
+  g.fill();
+  // A thin bright rim once it is centred.
+  if (cover > 0.85) {
+    g.strokeStyle = `rgba(255,246,214,${(cover - 0.85) / 0.15})`;
+    g.lineWidth = Math.max(1, r * 0.08);
+    g.beginPath();
+    g.arc(x, y, r * 1.08, 0, TAU);
+    g.stroke();
+  }
 }
 
 function drawFace(g: CanvasRenderingContext2D, r: number, mood: SunMood, time: number, guilty: number, shades: ShadesLook): void {

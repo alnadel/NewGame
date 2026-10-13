@@ -55,7 +55,15 @@ const MAT = {
   window: hex('#5D6F94'),
   windowLit: hex('#FFD27A'),
   door: hex('#7A4E36'),
+  /** The finish arch (v1.2): cream posts with red stripes, a gold lintel, a white banner. */
+  finishPost: hex('#FFF6E8'),
+  finishPostSide: hex('#D9C7AA'),
+  finishStripe: hex('#E8475A'),
+  finishLintel: hex('#FFC23D'),
+  finishLintelSide: hex('#D99A12'),
 };
+/** Pennant colours strung over the finish arch. */
+const PENNANTS: readonly string[] = ['#FF5D5D', '#FFC23D', '#2EC4B6', '#5AB8FF', '#FF9EB0'];
 
 /**
  * Old Town roof decks, picked by caster id: blue, terracotta, ochre, sage (and each one's side). Like
@@ -715,6 +723,132 @@ function drawArch(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): vo
   fillTop(g, v, tmp, lintel.n, lintel.z1 + 0.5, lighten(topColor(L, MAT.arch), 0.08));
 }
 
+/**
+ * The finish line (CAMPAIGN_PLAN §2): a gate arch skinned as a finish banner. Striped posts, a gold
+ * lintel, a white cloth reading FINISH hanging from it, a string of pennants over the top and a
+ * flag on each post.
+ */
+export function drawFinishArch(g: CanvasRenderingContext2D, v: View, L: Light, parts: readonly Part[], time: number): void {
+  const a = parts[0] as PrismPart;
+  const b = parts[1] as PrismPart;
+  const lintel = parts[2] as SlabPart;
+  const first = a.minY + a.maxY >= b.minY + b.maxY ? a : b;
+  const second = first === a ? b : a;
+  const left = first.minX < second.minX ? first : second;
+  const right = left === first ? second : first;
+  // The line itself: a checkered band on the ground between the posts.
+  {
+    const lx0 = px(v, left.maxX);
+    const lx1 = px(v, right.minX);
+    const ly0 = py(v, lintel.maxY, 0);
+    const ly1 = py(v, lintel.minY, 0);
+    const rows = 2;
+    const sq = (ly1 - ly0) / rows;
+    const cols = Math.max(2, Math.round((lx1 - lx0) / sq));
+    const cw = (lx1 - lx0) / cols;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        g.fillStyle = (r + c) % 2 === 0 ? css(tint(L.pal, 0x2b2140)) : css(tint(L.pal, 0xfff8ee));
+        g.fillRect(lx0 + c * cw, ly0 + r * sq, cw + 0.5, sq + 0.5);
+      }
+    }
+  }
+  for (const post of [first, second]) {
+    prism(g, v, L, post, MAT.finishPostSide, MAT.finishPost, 0, post.h);
+    // Red bands around the south face.
+    const x0 = px(v, post.minX);
+    const x1 = px(v, post.maxX);
+    const yTop = py(v, post.minY, post.h);
+    const yBot = py(v, post.minY, 0);
+    g.save();
+    g.beginPath();
+    g.rect(x0, yTop, x1 - x0, yBot - yTop);
+    g.clip();
+    g.fillStyle = css(tint(L.pal, MAT.finishStripe));
+    const band = 9 * v.S;
+    for (let y = yTop + band; y < yBot; y += band * 2) g.fillRect(x0, y, x1 - x0, band);
+    g.restore();
+    // A little flag on top.
+    const fx = px(v, (post.minX + post.maxX) / 2);
+    const fy = py(v, (post.minY + post.maxY) / 2, post.h);
+    const pole = 16 * v.S;
+    g.strokeStyle = css(MAT.trunkSide);
+    g.lineWidth = Math.max(1, 1.5 * v.S);
+    g.beginPath();
+    g.moveTo(fx, fy);
+    g.lineTo(fx, fy - pole);
+    g.stroke();
+    const wave = Math.sin(time * 5 + fx) * 2 * v.S;
+    g.fillStyle = post === first ? '#FF5D5D' : '#2EC4B6';
+    g.beginPath();
+    g.moveTo(fx, fy - pole);
+    g.lineTo(fx + 11 * v.S, fy - pole + 4 * v.S + wave);
+    g.lineTo(fx, fy - pole + 8 * v.S);
+    g.closePath();
+    g.fill();
+  }
+  drawSlab(g, v, L, lintel, MAT.finishLintelSide, MAT.finishLintel);
+  // The banner cloth hangs from the lintel's south edge between the posts, nearly to the ground
+  // (the oblique view flattens heights, so a short cloth would be a sliver).
+  const cx0 = px(v, left.maxX);
+  const cx1 = px(v, right.minX);
+  const cy0 = py(v, lintel.minY, lintel.z0 + 0.5);
+  const cy1 = py(v, lintel.minY, 14);
+  const cw = cx1 - cx0;
+  const ch = cy1 - cy0;
+  if (cw > 8 && ch > 4) {
+    g.fillStyle = 'rgba(43,33,64,0.18)';
+    g.fillRect(cx0 + 2 * v.S, cy0 + 2 * v.S, cw, ch);
+    g.fillStyle = css(tint(L.pal, 0xffffff));
+    g.fillRect(cx0, cy0, cw, ch);
+    g.strokeStyle = css(MAT.trunkSide);
+    g.lineWidth = Math.max(1, 1.2 * v.S);
+    g.strokeRect(cx0, cy0, cw, ch);
+    // Checker corners.
+    const sq = Math.max(2, 3 * v.S);
+    g.fillStyle = '#2B2140';
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        if ((i + j) % 2 === 1) continue;
+        g.fillRect(cx0 + i * sq, cy0 + j * sq, sq, sq);
+        g.fillRect(cx1 - (i + 1) * sq, cy1 - (j + 1) * sq, sq, sq);
+      }
+    }
+    g.fillStyle = '#2B2140';
+    g.font = `italic 900 ${Math.max(8, Math.round(ch * 0.62))}px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('FINISH', (cx0 + cx1) / 2, (cy0 + cy1) / 2 + 0.5 * v.S, cw - 4 * sq);
+  }
+  // Pennants on a string sagging between the post tops, above the lintel.
+  const sx0 = px(v, (left.minX + left.maxX) / 2);
+  const sx1 = px(v, (right.minX + right.maxX) / 2);
+  const sy = py(v, lintel.minY, lintel.z1 + 14);
+  const sag = 7 * v.S;
+  g.strokeStyle = css(MAT.trunkSide);
+  g.lineWidth = Math.max(0.8, 1 * v.S);
+  g.beginPath();
+  g.moveTo(sx0, sy);
+  g.quadraticCurveTo((sx0 + sx1) / 2, sy + 2 * sag, sx1, sy);
+  g.stroke();
+  const n = 7;
+  const pw = 7 * v.S;
+  const ph = 9 * v.S;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const x = sx0 + (sx1 - sx0) * t;
+    const y = sy + 4 * sag * t * (1 - t);
+    const sway = Math.sin(time * 4 + i) * 1.5 * v.S;
+    g.fillStyle = PENNANTS[i % PENNANTS.length] as string;
+    g.beginPath();
+    g.moveTo(x - pw / 2, y);
+    g.lineTo(x + pw / 2, y);
+    g.lineTo(x + sway, y + ph);
+    g.closePath();
+    g.fill();
+  }
+}
+
 function drawStall(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): void {
   const roof = c.parts[4] as SlabPart;
   // Crates under the awning (render-only), then posts, then the striped roof.
@@ -963,6 +1097,11 @@ function drawTree(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster, oak
 
 /** Draws one caster with its full 3D treatment. */
 export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): void {
+  if ((c.kind as string) === 'finish') {
+    // The campaign's finish line (core kind 'finish', gate-arch geometry).
+    drawFinishArch(g, v, L, c.parts, L.time);
+    return;
+  }
   switch (c.kind) {
     case 'tree':
       drawTree(g, v, L, c, false);

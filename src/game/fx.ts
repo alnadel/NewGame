@@ -19,6 +19,7 @@ import {
   P_FLAKE_FLY,
   P_FROST,
   P_GLINT,
+  P_GUST,
   P_LEAF,
   P_PETAL,
   P_PUFF,
@@ -36,6 +37,7 @@ import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from 
 import type { RenderScene } from '../render/renderer.ts';
 import { bossWeight } from '../render/sun.ts';
 import { addShake, addZoomPulse, holdZoom, OBLIQUE } from './camera.ts';
+import { CAMPAIGN, type SimStateV12 } from '../core/campaignShim.ts';
 import type { FixedClock } from './loop.ts';
 
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
@@ -67,6 +69,7 @@ export class Fx {
   private wispAcc = 0;
   private leafAcc = 0;
   private glintAcc = 0;
+  private gustAcc = 0;
   /** Game seconds until HIGH NOON lands (the sim's noonBanner comes 2 s early), or 0. */
   private noonIn = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
@@ -101,9 +104,10 @@ export class Fx {
           break;
         case 'go': {
           // End of the start beat: a little cheer and a kick of snow dust as Nubs sets off; on a
-          // forecast day the Day card names the weather (later days get theirs at dawn).
+          // forecast day the Day card names the weather (later days get theirs at dawn). A campaign
+          // level had its intro card instead.
           const plan = worldPlan(s.world, s.day);
-          if (plan.forecast !== 'clear') showDayCard(sc.banners, s.day, plan.biome, plan.forecast, s.params.epsNoon);
+          if (plan.forecast !== 'clear' && s.cfg.mode !== CAMPAIGN) showDayCard(sc.banners, s.day, plan.biome, plan.forecast, s.params.epsNoon);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.45);
           for (let i = 0; i < 5; i++) {
             spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-14, 14), rnd(-30, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
@@ -262,6 +266,23 @@ export class Fx {
     this.confetti(24);
   }
 
+  /**
+   * The finish line (v1.2): a FINISH stamp with a burst of confetti, a hop and a zoom pulse; a
+   * missed goal stamps its miss line in rose, with no confetti.
+   */
+  finish(passed: boolean, text: string): void {
+    const sc = this.sc;
+    this.stamp(passed ? 'finish' : 'miss', text, 1.2);
+    if (passed) {
+      this.confetti(64);
+      hop(sc.nubs, 9);
+      sc.nubs.happy = 1;
+      addZoomPulse(sc.cam, 0.05, 0.5);
+    } else {
+      sc.nubs.shiver = 0.3;
+    }
+  }
+
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
     if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);
@@ -358,6 +379,23 @@ export class Fx {
       }
     } else {
       this.leafAcc = 0;
+    }
+    // Gusts (v1.2): while a gust turns the sun, wind streaks fly across the screen the way it pushes
+    // (+1 counter-clockwise reads as a leftward drag), at most 14 at once.
+    const gust = (s as SimStateV12).sun.gust ?? 0;
+    if (gust !== 0) {
+      this.gustAcc += dt * 16;
+      while (this.gustAcc >= 1) {
+        this.gustAcc -= 1;
+        if (countKind(p, P_GUST) >= 14) continue;
+        const v = sc.view;
+        const dir = gust > 0 ? -1 : 1;
+        const speed = rnd(760, 1100);
+        const gi = spawn(p, P_GUST, dir > 0 ? v.vx - 40 : v.vx + v.vw + 40, v.vy + rnd(0.1, 0.92) * v.vh, 0, dir * speed, 0, 0, (v.vw + 120) / speed + 0.2, rnd(60, 130), rnd(1.6, 3), 0xffffff);
+        p.vrot[gi] = 0;
+      }
+    } else {
+      this.gustAcc = 0;
     }
     // Dazzle: glints flash on lit ground around Nubs (at most 6 at once).
     if (fc === 'dazzle' && daylight) {
