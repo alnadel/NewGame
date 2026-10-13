@@ -648,7 +648,7 @@ export function addPlus(p: Pops, n: number): void {
  * out quickly (and take no more values), so the two rows never stack. A headline still up keeps
  * its row and the new one takes the lowest free row above it (three at most).
  */
-export function addHeadline(p: Pops, text: string, style: number, dur: number): void {
+export function addHeadline(p: Pops, text: string, style: number, dur: number, minRow = 0): void {
   let taken = 0;
   for (let i = 0; i < POP_CAP; i++) {
     const s = p.style[i];
@@ -661,7 +661,7 @@ export function addHeadline(p: Pops, text: string, style: number, dur: number): 
     p.dur[i] = Math.min(p.dur[i]!, p.t[i]! + 0.12);
     p.fresh[i] = 1;
   }
-  let row = 0;
+  let row = minRow;
   while (row < 2 && taken & (1 << row)) row++;
   addPop(p, text, style, 0, HEADLINE_Z + row * HEADLINE_ROW_Z, dur);
 }

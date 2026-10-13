@@ -2023,7 +2023,8 @@ export class Session {
         h.next = s.guide.next;
         h.theta = s.sun.theta;
         h.dragging = dragging;
-        h.invert = this.input.invert;
+        // Mirror Sun (concept 'dazzle') turns the sun against the drag, so the hint flips too.
+        h.invert = this.input.invert !== s.mods.has('dazzle');
         h.lessonOn = lessonOn;
         if (this.hints.update(dt, h) && !this.debugRuns) {
           this.d.store.update((sv) => {

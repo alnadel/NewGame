@@ -64,12 +64,30 @@ export function goalText(level: LevelDef): string {
   return 'Reach the finish';
 }
 
-/** The Results goal line: "Collected 9/8 flakes", "Scored 24/20 Snow", "Reached the finish", or the miss. */
-export function goalLine(level: LevelDef, stats: Pick<RunStats, 'flakes' | 'snow'>, passed: boolean): string {
+/**
+ * The Results goal line: "Collected 9/8 flakes", "Scored 24/20 Snow", "Reached the finish", or the
+ * miss. A pass short of three stars adds what the next star needs ("Next ★: 12 flakes").
+ */
+export function goalLine(level: LevelDef, stats: Pick<RunStats, 'flakes' | 'snow'> & Partial<Pick<RunStats, 'litTotal' | 'minChill'>>, passed: boolean): string {
   const g = level.goal;
-  if (g.kind === 'flakes') return passed ? `Collected ${stats.flakes}/${g.target} flakes` : `Not enough flakes: ${stats.flakes}/${g.target}`;
-  if (g.kind === 'snow') return passed ? `Scored ${Math.floor(stats.snow)}/${g.target} Snow` : `Not enough Snow: ${Math.floor(stats.snow)}/${g.target}`;
-  return passed ? 'Reached the finish' : 'Melted before the finish';
+  const snow = Math.floor(stats.snow);
+  if (!passed) {
+    if (g.kind === 'flakes') return `Not enough flakes: ${stats.flakes}/${g.target}`;
+    if (g.kind === 'snow') return `Not enough Snow: ${snow}/${g.target}`;
+    return 'Melted before the finish';
+  }
+  const line = g.kind === 'flakes' ? `Collected ${stats.flakes}/${g.target} flakes` : g.kind === 'snow' ? `Scored ${snow}/${g.target} Snow` : 'Reached the finish';
+  return line + nextStarHint(level, stats);
+}
+
+/** " · Next ★: …" for the first star a pass missed, or "" at three stars (or without the stats). */
+export function nextStarHint(level: LevelDef, stats: Pick<RunStats, 'flakes'> & Partial<Pick<RunStats, 'litTotal' | 'minChill'>>): string {
+  const st = level.stars;
+  if (stats.flakes < st.flakes) return ` · Next ★: ${st.flakes} flakes`;
+  if (stats.litTotal === undefined || stats.minChill === undefined) return '';
+  if (stats.litTotal > st.sunSec) return ` · Next ★: under ${Math.ceil(st.sunSec)} s in the sun (${Math.round(stats.litTotal)} s)`;
+  if (stats.minChill < st.minChill) return ` · Next ★: keep Chill above ${st.minChill}`;
+  return '';
 }
 
 /** The short miss line stamped at the finish of a failed goal. */

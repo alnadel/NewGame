@@ -95,10 +95,14 @@ describe('the words', () => {
     const st = swing.goal.target;
     expect(goalText(flakes)).toBe(`Collect ${ft} flakes`);
     expect(goalText(swing)).toBe(`Score ${st} Snow`);
-    expect(goalLine(flakes, { flakes: ft + 1, snow: 12 }, true)).toBe(`Collected ${ft + 1}/${ft} flakes`);
+    expect(goalLine(flakes, { flakes: ft + 1, snow: 12 }, true).startsWith(`Collected ${ft + 1}/${ft} flakes`)).toBe(true);
     expect(goalLine(flakes, { flakes: 5, snow: 12 }, false)).toBe(`Not enough flakes: 5/${ft}`);
-    expect(goalLine(swing, { flakes: 5, snow: st + 4.7 }, true)).toBe(`Scored ${st + 4}/${st} Snow`);
-    expect(goalLine(finish, { flakes: 0, snow: 0 }, true)).toBe('Reached the finish');
+    expect(goalLine(swing, { flakes: 5, snow: st + 4.7 }, true).startsWith(`Scored ${st + 4}/${st} Snow`)).toBe(true);
+    // A pass short of three stars names the next star: flakes first, then the cool run.
+    expect(goalLine(finish, { flakes: 0, snow: 0, litTotal: 0, minChill: 100 }, true)).toBe(finish.stars.flakes > 0 ? `Reached the finish · Next ★: ${finish.stars.flakes} flakes` : 'Reached the finish');
+    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 5, minChill: 100 }, true)).toMatch(/^Reached the finish · Next ★: under \d+ s in the sun \(\d+ s\)$/);
+    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: 0, minChill: 0 }, true)).toBe(`Reached the finish · Next ★: keep Chill above ${finish.stars.minChill}`);
+    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: 0, minChill: 100 }, true)).toBe('Reached the finish');
     expect(missLine(flakes)).toBe('NOT ENOUGH FLAKES');
     expect(missLine(swing)).toBe('NOT ENOUGH SNOW');
     expect(campaignShareText({ id: 12, name: levelDef(12)!.name, stars: 2, link: null })).toBe('SHADY Journey · Level 12 ★★☆ · Grey Day');

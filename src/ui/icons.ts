@@ -84,6 +84,7 @@ const ICONS = {
   road: `<path d="M7.6 20.4 10 3.6h4l2.4 16.8"/><path d="M12 6.4v2.2M12 11.4v2.2M12 16.4v2.2"/>`,
   dome: `<path d="M4.4 15.6a7.6 7.6 0 1 1 15.2 0Z"/><path d="M3 19h18"/><path d="M12 4.6v3.4M12 15.6v-3"/>`,
   sparkle: `<path d="M12 3.6 13.8 10l6.4 1.8-6.4 1.8L12 20l-1.8-6.4-6.4-1.8 6.4-1.8Z" fill="currentColor" fill-opacity=".22"/><path d="M19 3.6v3M17.5 5.1h3"/>`,
+  mirror: `<ellipse cx="12" cy="9.4" rx="5" ry="6.6" fill="currentColor" fill-opacity=".18"/><path d="M9.6 7.4l2.6-2.6M12 18v2"/><path d="M5 21h14M7 19.4 5 21l2 1.6M17 19.4l2 1.6-2 1.6"/>`,
   basket: `<path d="M3.8 9.6h16.4l-1.6 9.6a1.6 1.6 0 0 1-1.6 1.4H7a1.6 1.6 0 0 1-1.6-1.4Z"/><path d="M8.4 9.6 11 4M15.6 9.6 13 4M9.4 13.4v3.6M12 13.4v3.6M14.6 13.4v3.6"/>`,
 } as const;
 

@@ -19,7 +19,7 @@ const CONCEPT_ICONS: Readonly<Record<ConceptId, IconName>> = {
   long: 'mountain',
   heat: 'thermo',
   overcast: 'fog',
-  dazzle: 'sparkle',
+  dazzle: 'mirror',
   market: 'basket',
   sprint: 'dash',
   stroll: 'steps',

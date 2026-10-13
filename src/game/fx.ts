@@ -119,8 +119,8 @@ export class Fx {
           for (let i = 0; i < 8; i++) {
             spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-22, 22), rnd(-36, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
           }
-          // GO! over his head and a hop as he sets off.
-          addHeadline(sc.pops, 'GO!', POP_GO, 0.7);
+          // GO! high over his head (clear of the first runs' cue pill) and a hop as he sets off.
+          addHeadline(sc.pops, 'GO!', POP_GO, 0.7, 1);
           hop(sc.nubs, 5);
           break;
         }

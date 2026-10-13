@@ -156,7 +156,8 @@ export function showLevelCard(b: Banners, kicker: string, title: string, concept
   b.levelOut = -1;
   b.levelKicker = kicker;
   b.levelTitle = title;
-  b.levelConcept = concept;
+  // The Dazzle forecast keeps its sparkle; the concept with that id is Mirror Sun.
+  b.levelConcept = concept === 'dazzle' ? 'mirror' : concept;
   b.levelConceptName = conceptName;
   b.levelBlurb = blurb;
   b.levelGoal = goal;
