@@ -910,7 +910,7 @@
 /* Progressive disclosure (title.ts renderGates): a locked feature shows its lock (a tap says how to
    unlock it); a newly unlocked one a NEW tag and a pulse until it is opened. */
 :is(.tray-btn, .endless-pill):not(.is-locked) .tray-lock,
-:is(.tray-btn, .endless-pill):not(.is-new) .new-tag { display: none; }
+:is(.tray-btn, .endless-pill, .tile):not(.is-new) .new-tag { display: none; }
 
 .endless-pill { overflow: visible !important; }
 
@@ -2791,7 +2791,71 @@
   text-align: center;
 }
 
-.tile.is-bought .tile-art { animation: bought 600ms var(--ease-back); }
+.tile.is-bought .tile-art,
+.stage-spot.is-hop { animation: bought 600ms var(--ease-back); }
+
+/* Rarity (labels.ts rarityOf): a coloured rim on the tile and a label; common items stay plain. */
+.tile[data-rarity='rare'],
+.rarity[data-rarity='rare'] { --rar: #2559b8; }
+
+.tile[data-rarity='epic'],
+.rarity[data-rarity='epic'] { --rar: #7442c2; }
+
+.tile[data-rarity='legendary'],
+.rarity[data-rarity='legendary'] { --rar: #8a5a00; }
+
+.tile[data-rarity]:not([data-rarity='common']) { box-shadow: inset 0 -4px 0 var(--rar), var(--shadow-sm); }
+
+.tile[data-rarity]:not([data-rarity='common']).is-selected { box-shadow: inset 0 -4px 0 var(--rar), 0 0 0 3px var(--accent), var(--shadow-sm); }
+
+.rarity {
+  align-self: center;
+  justify-self: start;
+  width: fit-content;
+  padding: 1px 10px;
+  border-radius: var(--pill);
+  background: var(--rar, var(--paper-2));
+  color: #fff;
+  font-size: var(--fs-2xs);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rarity[data-rarity='common'] { color: var(--ink-2); }
+
+/* Tabs with new items carry a dot. */
+.tab { position: relative; }
+
+.tab.has-new::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* The collection: owned of all, with a bar. */
+.collection {
+  --ic: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.collection .num { color: var(--ink); }
+
+.collection .bar {
+  flex: 1;
+  height: 8px;
+}
+
+.tile .new-tag { top: 6px; left: auto; right: 6px; transform: rotate(6deg); }
 
 @keyframes bought {
   30% { transform: scale(1.25) rotate(-8deg); }
