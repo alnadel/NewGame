@@ -949,7 +949,7 @@ export class Session {
     const s = this.s;
     let c = r.campaign;
     if (!c) {
-      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0, stars: 0 };
+      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0, stars: 0, coolLeft: 1 };
       r.campaign = c;
     }
     const goal = hudGoal(level, s.stats);
@@ -962,6 +962,7 @@ export class Session {
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
     c.gust = s.sun.gust;
     c.stars = starState(level, s.stats, s.phase === 'won');
+    c.coolLeft = 1 - Math.min(1, s.stats.litTotal / level.stars.sunSec);
     // A star earned mid-run (the goal, the flakes) chimes; the finish has its own jingle.
     if (c.stars & ~this.runStars & 3 && s.phase === 'day') {
       this.d.audio.play('claim');

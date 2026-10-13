@@ -269,6 +269,8 @@ export interface HudCampaign {
   gust: number;
   /** The stars so far (game/campaign.ts starState bits: 1 goal met, 2 flakes star, 4 cool run lost). */
   stars: number;
+  /** The cool run's sun budget left, 1..0 (a ring drains around the third pip as Nubs spends it). */
+  coolLeft: number;
 }
 
 export interface HudInput {
@@ -401,6 +403,18 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     const cw = (bw - 12 * k) * Math.min(1, s.nubs.shadeTicks / TUNING.mult.stepTicks);
     g.fillStyle = m >= 2 ? '#B85A00' : '#2EC4B6';
     g.fillRect(bx - bw / 2 + 6 * k, cy + bh / 2 - 4 * k, cw, 2 * k);
+  }
+
+  // The cool run's sun budget: a ring around the third pip that drains with every second lit.
+  const c = inp.campaign;
+  if (c && h.leftShown && (c.stars & 4) === 0 && c.coolLeft < 1) {
+    const k = hudScale(v);
+    const px = h.pipX + 2 * h.pipStep;
+    g.strokeStyle = c.coolLeft > 0.35 ? '#2EC4B6' : '#FF6A3D';
+    g.lineWidth = 2 * k;
+    g.beginPath();
+    g.arc(px, cy + 1, (PIP_R + 2.5) * k, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0, c.coolLeft));
+    g.stroke();
   }
 
   // A star pip lighting up: a gold star swelling out of it and settling.
