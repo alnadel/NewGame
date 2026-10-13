@@ -24,6 +24,7 @@ export const P_WISP = 12; // heat shimmer rising off lit ground around noon
 export const P_LEAF = 13; // screen space: a leaf blown across a Breezy day
 export const P_GLINT = 14; // a four-point glint on lit ground (Dazzle)
 export const P_GUST = 15; // screen space: a wind streak flying across during a gust (v1.2 Gusts)
+export const P_SNOW = 16; // screen space: a snowflake drifting down (a winter chapter's air)
 
 const CAP = 400;
 
@@ -183,6 +184,11 @@ export function updateParticles(p: Particles, dt: number, nx: number, ny: number
         p.vy[i] = 22 * Math.sin(life * 3.1 + i) + 10;
         if (p.x[i]! < -60 || p.x[i]! > 4000) p.life[i] = 0;
         break;
+      case P_SNOW:
+        // Drifts down at its own pace, swaying.
+        p.vx[i] = 16 * Math.sin(life * 1.7 + i);
+        if (p.y[i]! > screenH + 20) p.life[i] = 0;
+        break;
       case P_GUST:
         // A streak rides the gust straight across, swaying a little.
         p.vy[i] = 14 * Math.sin(life * 6 + i);
@@ -300,7 +306,7 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
     const life = p.life[i]!;
     if (life <= 0) continue;
     const k = p.kind[i]!;
-    if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL || k === P_LEAF) continue;
+    if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL || k === P_LEAF || k === P_SNOW || k === P_GUST) continue;
     if ((k === P_SPARKLE || k === P_FIREFLY || k === P_GLINT) !== glows) continue;
     const t = 1 - life / p.maxLife[i]!;
     const sx = v.ox + p.x[i]! * S;
@@ -379,13 +385,13 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
   g.globalAlpha = 1;
 }
 
-/** Screen-space confetti and petals (dawn card, new best); x/y are CSS px. */
+/** Screen-space confetti, petals, leaves and snow; x/y are CSS px. */
 export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles, dpr: number): void {
   for (let i = 0; i < p.cap; i++) {
     const life = p.life[i]!;
     if (life <= 0) continue;
     const k = p.kind[i]!;
-    if (k !== P_CONFETTI && k !== P_PETAL && k !== P_LEAF) continue;
+    if (k !== P_CONFETTI && k !== P_PETAL && k !== P_LEAF && k !== P_SNOW) continue;
     const t = 1 - life / p.maxLife[i]!;
     const x = p.x[i]!;
     const y = p.y[i]!;
@@ -431,7 +437,7 @@ export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles, d
     } else {
       g.setTransform(cd, sd, -sd, cd, x * dpr, y * dpr);
       g.beginPath();
-      g.ellipse(0, 0, s, s * 0.55, 0, 0, TAU);
+      g.ellipse(0, 0, s, k === P_SNOW ? s : s * 0.55, 0, 0, TAU);
       g.fill();
     }
   }
@@ -553,6 +559,7 @@ export const POP_PHEW = 1;
 export const POP_MULT = 2;
 export const POP_BANG = 3;
 export const POP_SWING = 4;
+export const POP_GO = 5;
 
 /** A +N pop absorbs a new +N within this long of its last change (s); a SWING pop, within 1 s of its first. */
 const PLUS_MERGE_S = 0.45;
@@ -719,9 +726,10 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
         fill = '#FFFFFF';
         stroke = '#1B9A8E';
         break;
+      case POP_GO:
       case POP_MULT:
         scale = popScale(t, 0.2, 1.35);
-        size = 22;
+        size = style === POP_GO ? 36 : 22;
         fill = '#FFE27A';
         stroke = '#2B2140';
         break;

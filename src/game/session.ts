@@ -106,7 +106,7 @@ import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
-import { campaignConfig, FINISH_FREEZE_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
+import { campaignConfig, FINISH_FREEZE_S, FINISH_SKIP_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
 
 /** The sim's finish-line event (CAMPAIGN_PLAN §2). */
 type LevelWon = Extract<SimEvent, { e: 'levelWon' }>;
@@ -428,7 +428,7 @@ export class Session {
         home: sync(() => this.home()),
         pause: sync(() => this.pause()),
         resume: sync(() => this.resume()),
-        restart: sync(() => this.restart()),
+        restart: sync(() => this.retry()),
         skipDying: sync(() => this.showResults()),
         share: () => this.share(),
         settingsChanged: (st) => this.settingsChanged(st),
@@ -1188,7 +1188,7 @@ export class Session {
    * Makes `run` the current run and starts its bookkeeping (it may still be in 'hold'). A press that
    * starts the run keeps its pending input (its downEdge is the run's start frame).
    */
-  private beginRun(run: SimState, keepInput = false): void {
+  private beginRun(run: SimState, keepInput = false, card = true): void {
     this.s = run;
     this.renderIn.s = run;
     this.dropPostcard();
@@ -1241,7 +1241,7 @@ export class Session {
     }
     this.setGhost('off');
     // The level's intro card holds until the first tap (§4).
-    if (this.runLevel && run.phase === 'hold') {
+    if (card && this.runLevel && run.phase === 'hold') {
       const card = introCard(this.runLevel);
       showLevelCard(this.renderer.scene.banners, card.kicker, card.title, card.concept, card.conceptName, card.blurb, card.goal, this.runLevel.biome);
     }
@@ -1348,6 +1348,9 @@ export class Session {
       this.ui.show('play');
       this.beginRun(this.s, true);
       this.syncSentinel();
+    } else if (this.wonAt >= 0 && this.time - this.wonAt >= FINISH_SKIP_S) {
+      // A tap after the FINISH stamp has landed goes straight to the Results.
+      this.showResults();
     }
   }
 
@@ -1385,7 +1388,7 @@ export class Session {
     if (this.warmup && this.challenge) this.kind = 'challenge';
     let run: SimState;
     if (this.kind === 'campaign') {
-      // Retry restarts the same level (Pause > Restart too).
+      // Retry restarts the same level at once, without its intro card (Pause > Restart too).
       run = this.makeRun('campaign', undefined, undefined, this.runLevel?.id ?? 1);
     } else if (this.kind === 'endless' && this.nextRun && this.nextRun.cfg.mode === 'endless') {
       run = this.nextRun;
@@ -1398,12 +1401,8 @@ export class Session {
       const date = this.kind === 'daily' && this.dailyDate !== null ? this.dailyDate : undefined;
       run = this.makeRun(this.kind, date);
     }
-    this.beginRun(run);
+    this.beginRun(run, false, false);
     this.input.tap();
-  }
-
-  private restart(): void {
-    this.retry();
   }
 
   /** Results > Next level: the level after this one waits on its intro card (the UI is on 'play'). */
@@ -1660,7 +1659,7 @@ export class Session {
     this.result = result;
     this.tip = null;
     this.applyResult(save, result);
-    this.fx.finish(ev.passed, ev.passed ? 'FINISH' : missLine(level));
+    this.fx.finish(ev.passed, ev.passed ? 'FINISH' : missLine(level), ev.stars, this.s.nubs.x, this.s.nubs.y);
     this.d.haptics.play('best');
     this.d.audio.play(ev.passed ? 'newBest' : 'uiError');
     this.setGhost('off');
@@ -2468,7 +2467,7 @@ export class Session {
         void this.sharePostcard();
         return;
       case 'finish':
-        this.fx.finish(true, 'FINISH');
+        this.fx.finish(true, 'FINISH', 2, s.nubs.x, s.nubs.y);
         return;
       case 'swing':
         // The audio layer ignores SWING: fx only.

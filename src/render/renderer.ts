@@ -18,6 +18,7 @@ import {
   type SimState,
   type World,
 } from '../core/index.ts';
+import { sunLockedAt } from '../core/sim/sun.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
 import type { Equipped } from '../meta/content.ts';
 import type { Insets } from '../platform/safeArea.ts';
@@ -71,7 +72,7 @@ import {
   type NubsPose,
   type NubsSprite,
 } from './nubs.ts';
-import { createPalette, updatePalette, type Palette } from './palette.ts';
+import { createPalette, themeFor, updatePalette, type Palette } from './palette.ts';
 import {
   createParticles,
   createPops,
@@ -97,6 +98,8 @@ import { ctx2d, makeCanvas } from './sprites.ts';
 import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
+/** Sun Lock's warning: the padlock blinks this many ticks before the lock. */
+const LOCK_WARN_TICKS = 36;
 /** The moon's shadow length factor (a low moon). */
 const MOON_COT = 1.2;
 let moonRim: Canvas2D | null = null;
@@ -537,9 +540,11 @@ export class Renderer {
     if (moonlit) night = 1;
     else if (eclipse > night / ECLIPSE_DIM) night = eclipse * ECLIPSE_DIM;
     const fog = s.mods.has('fog');
-    updatePalette(sc.pal, dayFrac, night, town, inp.highContrast);
+    // A Journey chapter has its own season and light (palette.ts themes).
+    const theme = themeFor(s.level?.chapter);
+    updatePalette(sc.pal, dayFrac, night, town, inp.highContrast, theme);
     // The ground steps through the day in 1/64ths (≈ 0.8 s): a 1-3 level change at most.
-    updatePalette(sc.groundPal, Math.round(dayFrac * 64) / 64, Math.round(night * 16) / 16, town, inp.highContrast);
+    updatePalette(sc.groundPal, Math.round(dayFrac * 64) / 64, Math.round(night * 16) / 16, town, inp.highContrast, theme);
     const theta = snap.theta + inp.sway;
     const ux = Math.cos(theta * DEG);
     const uy = Math.sin(theta * DEG);
@@ -599,7 +604,7 @@ export class Renderer {
     // Nubs stands still through the start beat (the clock waits; the sun already moves).
     const walking = (s.phase === 'day' || s.phase === 'night') && s.ready === 0 && dying < 0;
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
-    updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta);
+    updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta, walking && sunUp && s.nubs.f > 0 && inp.screen === 'play');
     sc.relief = Math.max(0, sc.relief - adt);
     sc.sunWorried = Math.max(0, sc.sunWorried - adt);
     if (inp.screen === 'play' && walking) {
@@ -797,6 +802,8 @@ export class Renderer {
       at.gold = b.goldPulse;
       at.wash = 0.08 * grey;
       at.forecast = s.params.forecast;
+      at.tint = theme.grade;
+      at.tintA = inp.highContrast ? 0 : theme.gradeA;
       at.full = inp.govLevel < 2;
       at.grade = inp.govLevel < 3;
       if (drawAtmosphere(g, sc.atm, v, at)) sc.passes++;
@@ -840,6 +847,7 @@ export class Renderer {
         blind: s.mods.has('blind'),
         hideNext: fog,
         locked: s.sun.locked,
+        lockSoon: !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS),
       });
     }
     g.restore();

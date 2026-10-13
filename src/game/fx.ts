@@ -23,10 +23,12 @@ import {
   P_LEAF,
   P_PETAL,
   P_PUFF,
+  P_SNOW,
   P_SPARKLE,
   P_STEAM,
   P_WISP,
   POP_BANG,
+  POP_GO,
   POP_MULT,
   POP_PHEW,
   spawn,
@@ -35,6 +37,7 @@ import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
 import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { RenderScene } from '../render/renderer.ts';
+import { themeFor } from '../render/palette.ts';
 import { bossWeight } from '../render/sun.ts';
 import { addShake, addZoomPulse, holdZoom, OBLIQUE } from './camera.ts';
 import type { FixedClock } from './loop.ts';
@@ -42,6 +45,9 @@ import type { FixedClock } from './loop.ts';
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
 const FIREFLIES = 14;
 const FROST: number = 0xe6f6ff;
+const HOT: number = 0xff6a3d;
+const TEAL: number = 0x2ec4b6;
+const GOLD: number = 0xffd36b;
 const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
 const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
 const LEAVES: readonly number[] = [0x7cb342, 0x9ccc65, 0xc0ca33, 0xf9a825, 0x8bc34a];
@@ -73,6 +79,8 @@ export class Fx {
   private noonIn = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
   private stampImpact = -1;
+  /** Seconds until another sun-exit ring may show. */
+  private sunT = 0;
   /** The way the sun last turned (+1 counter-clockwise, −1 clockwise): a SWING's arc sweeps that way. */
   private turn: 1 | -1 = 1;
 
@@ -108,9 +116,12 @@ export class Fx {
           const plan = worldPlan(s.world, s.day);
           if (plan.forecast !== 'clear' && s.cfg.mode !== 'campaign') showDayCard(sc.banners, s.day, plan.biome, plan.forecast, s.params.epsNoon);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.45);
-          for (let i = 0; i < 5; i++) {
-            spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-14, 14), rnd(-30, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
+          for (let i = 0; i < 8; i++) {
+            spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-22, 22), rnd(-36, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
           }
+          // GO! over his head and a hop as he sets off.
+          addHeadline(sc.pops, 'GO!', POP_GO, 0.7);
+          hop(sc.nubs, 5);
           break;
         }
         case 'flake': {
@@ -153,6 +164,13 @@ export class Fx {
           if (ev.litFor >= 0.25) {
             addRing(sc.rings, nx, ny, 0, 40, 0.3, 2.2, 0.8, 0xffffff);
             sc.nubs.shiver = 0.14;
+          }
+          break;
+        case 'shadeExit':
+          // Out in the sun: a hot ring snaps out of the dial (at most one every 0.6 s at a ragged edge).
+          if (this.sunT <= 0) {
+            addRing(sc.rings, nx, ny, 36, 48, 0.28, 2.5, 0.75, HOT);
+            this.sunT = 0.6;
           }
           break;
         case 'multUp':
@@ -223,6 +241,9 @@ export class Fx {
           addSwing(sc.pops, ev.chain);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.5);
           hop(sc.nubs, 4);
+          // A beat of weight: a 30 ms hit-stop and a teal ring off the dial.
+          this.clock.addHitStop(0.03);
+          addRing(sc.rings, nx, ny, 40, 58, 0.35, 3, 0.85, TEAL);
           break;
         case 'gateArch':
           if (ev.noon) {
@@ -266,17 +287,25 @@ export class Fx {
   }
 
   /**
-   * The finish line (v1.2): a FINISH stamp with a burst of confetti, a hop and a zoom pulse; a
-   * missed goal stamps its miss line in rose, with no confetti.
+   * The finish line (v1.2): a FINISH stamp whose stars pop in one by one under it, a burst of
+   * confetti and gold sparkles, a hit-stop, a hop and a zoom pulse; a missed goal stamps its miss
+   * line in rose, with no confetti.
    */
-  finish(passed: boolean, text: string): void {
+  finish(passed: boolean, text: string, stars: number, x: number, y: number): void {
     const sc = this.sc;
     this.stamp(passed ? 'finish' : 'miss', text, 1.2);
     if (passed) {
+      sc.banners.stampStars = stars;
       this.confetti(64);
       hop(sc.nubs, 9);
       sc.nubs.happy = 1;
-      addZoomPulse(sc.cam, 0.05, 0.5);
+      addZoomPulse(sc.cam, 0.06, 0.5);
+      this.clock.addHitStop(0.06);
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        spawn(sc.particles, P_SPARKLE, x, y, 14, Math.cos(a) * 110, Math.sin(a) * 110, rnd(20, 70), 0.6, 5, 1.5, GOLD);
+      }
+      addRing(sc.rings, x, y, 8, 70, 0.5, 4, 0.9, GOLD);
     } else {
       sc.nubs.shiver = 0.3;
     }
@@ -285,6 +314,7 @@ export class Fx {
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
     if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);
+    this.sunT -= dt;
     if (this.noonIn > 0 && (this.noonIn -= dt) <= 0) {
       this.noonIn = 0;
       if (playing && s.phase === 'day') this.stamp('noon', 'HIGH NOON', 1.1);
@@ -364,16 +394,23 @@ export class Fx {
     } else {
       this.wispAcc = 0;
     }
-    // Breezy: a few leaves blown across the screen (at most 6 at once), the wind's way.
-    if (fc === 'breezy' && daylight) {
-      this.leafAcc += dt * 1.8;
+    // The air: Breezy days and windy chapters blow leaves across the screen (at most 6 at once,
+    // the wind's way); spring chapters drop petals and winter ones snow (v1.3; none under reduced
+    // motion).
+    const v = sc.view;
+    const air = this.reducedMotion || !daylight ? '' : fc === 'breezy' ? 'leaf' : themeFor(s.level?.chapter).air;
+    if (air !== '') {
+      this.leafAcc += dt * (air === 'snow' ? 8 : 1.6);
       if (this.leafAcc >= 1) {
         this.leafAcc -= 1;
-        if (countKind(p, P_LEAF) < 6) {
-          const v = sc.view;
+        if (air === 'leaf' && countKind(p, P_LEAF) < 6) {
           const dir = s.day % 2 === 0 ? -1 : 1;
           const li = spawn(p, P_LEAF, dir > 0 ? v.vx - 20 : v.vx + v.vw + 20, v.vy + rnd(0.1, 0.8) * v.vh, 0, dir * rnd(110, 170), 0, 0, rnd(3.5, 5.5), rnd(11, 15), 0, LEAVES[Math.floor(rnd(0, LEAVES.length))] as number);
           p.vrot[li] = rnd(-4, 4);
+        } else if (air === 'snow' && countKind(p, P_SNOW) < 48) {
+          spawn(p, P_SNOW, v.vx + rnd(0, v.vw), v.vy - 8, 0, 0, rnd(28, 60), 0, 30, rnd(1.6, 3.2), 0, 0xffffff);
+        } else if (air === 'petal' && countKind(p, P_PETAL) < 8) {
+          spawn(p, P_PETAL, v.vx + rnd(0, v.vw), v.vy - 10, 0, rnd(-30, 30), rnd(20, 50), 0, rnd(5, 7), rnd(3.5, 5.5), 0, PETALS[Math.floor(rnd(0, PETALS.length))] as number);
         }
       }
     } else {
@@ -387,7 +424,6 @@ export class Fx {
       while (this.gustAcc >= 1) {
         this.gustAcc -= 1;
         if (countKind(p, P_GUST) >= 14) continue;
-        const v = sc.view;
         const dir = gust > 0 ? -1 : 1;
         const speed = rnd(760, 1100);
         const gi = spawn(p, P_GUST, dir > 0 ? v.vx - 40 : v.vx + v.vw + 40, v.vy + rnd(0.1, 0.92) * v.vh, 0, dir * speed, 0, 0, (v.vw + 120) / speed + 0.2, rnd(60, 130), rnd(1.6, 3), 0xffffff);

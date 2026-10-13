@@ -240,7 +240,7 @@ describe('?level=', () => {
 });
 
 describe('level card and the finish stamps (render/banners)', () => {
-  it('holds until dismissed, then leaves within 0.4 s', () => {
+  it('holds until dismissed, then leaves within 0.3 s', () => {
     const b = createBanners();
     showLevelCard(b, 'LEVEL 6', 'Glass Garden', 'glare', 'Glare', 'Gazing balls throw light back.', 'Reach the finish', 'meadow');
     expect(b.level).toBe(0);
@@ -249,9 +249,9 @@ describe('level card and the finish stamps (render/banners)', () => {
     expect(b.levelOut).toBe(-1);
     dismissLevelCard(b);
     expect(b.levelOut).toBe(0);
-    for (let i = 0; i < 3; i++) updateBanners(b, 0.1, false);
+    for (let i = 0; i < 2; i++) updateBanners(b, 0.1, false);
     expect(b.level).toBeGreaterThan(0);
-    for (let i = 0; i < 3; i++) updateBanners(b, 0.1, false);
+    for (let i = 0; i < 2; i++) updateBanners(b, 0.1, false);
     expect(b.level).toBe(-1);
     showLevelCard(b, 'LEVEL 7', 'SWING!', 'swing', 'Swing', '', 'Score 20 Snow', 'oldtown');
     resetBanners(b);

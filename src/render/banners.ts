@@ -46,6 +46,8 @@ export interface Banners {
   stampFont: string;
   stampSize: number;
   stampW: number;
+  /** Stars earned shown under a FINISH stamp (−1 none): they pop in one by one. */
+  stampStars: number;
   /** The Day card rays' fill (a radial fade, in card-centred px) and the ray length it was built for. */
   rayFill: CanvasGradient | null;
   rayLen: number;
@@ -92,7 +94,9 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [string, string, string]>>
   miss: ['#FFB3C1', '#B8324F', '#3A1020'],
 };
 /** The level card's slide-out (s). */
-const LEVEL_OUT_S = 0.4;
+const LEVEL_OUT_S = 0.3;
+/** The level card's slide-in (s). */
+const LEVEL_IN_S = 0.32;
 
 export function createBanners(): Banners {
   return {
@@ -117,6 +121,7 @@ export function createBanners(): Banners {
     stampFont: '',
     stampSize: 0,
     stampW: 0,
+    stampStars: -1,
     rayFill: null,
     rayLen: 0,
     fontK: 0,
@@ -173,6 +178,7 @@ export function showStamp(b: Banners, kind: StampKind, text: string, hold: numbe
   b.stampText = text;
   b.stampHold = hold;
   b.stampW = 0;
+  b.stampStars = -1;
 }
 
 export function resetBanners(b: Banners): void {
@@ -279,8 +285,8 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
       if (b.levelOut >= 0) a *= Math.max(0, 1 - b.levelOut / LEVEL_OUT_S);
     } else if (b.levelOut >= 0) {
       x = cx - v.vw * 0.9 * (b.levelOut / LEVEL_OUT_S) ** 2;
-    } else if (t < 0.5) {
-      x = cx + v.vw * 0.7 * (1 - easeOutBack(t / 0.5));
+    } else if (t < LEVEL_IN_S) {
+      x = cx + v.vw * 0.7 * (1 - easeOutBack(t / LEVEL_IN_S));
     }
     // Centred in the space between the HUD band and Nubs' dial (the ghost hand swipes below him).
     levelCard(g, b, v, x, top, scale, a, t);
@@ -487,6 +493,35 @@ function drawStamp(g: CanvasRenderingContext2D, b: Banners, cx: number, y: numbe
   g.textBaseline = 'middle';
   g.fillText(b.stampText, 0, size * 0.04);
   g.restore();
+  // The level's stars under the plate, popping in one by one (earned gold, missed pale).
+  if (b.stampStars < 0) return;
+  const r = 13 * scale;
+  for (let i = 0; i < 3; i++) {
+    const u = reducedMotion ? 1 : Math.min(1, Math.max(0, (t - STAMP_IN - 0.1 - 0.16 * i) / 0.24));
+    if (u <= 0) continue;
+    const k = reducedMotion ? 1 : easeOutBack(u);
+    const on = i < b.stampStars;
+    g.globalAlpha = a;
+    star(g, cx + (i - 1) * 2.6 * r, y + rise + h / 2 + 1.6 * r, r * k, on ? '#FFC23D' : 'rgba(255,255,255,0.75)', on ? '#B87A0A' : 'rgba(43,33,64,0.35)');
+  }
+  g.globalAlpha = 1;
+}
+
+/** A five-point star of outer radius r at (x, y). */
+function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath();
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = Math.max(1.5, r * 0.16);
+  g.lineJoin = 'round';
+  g.strokeStyle = line;
+  g.stroke();
 }
 
 function nightCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: number, scale: number, a: number): void {
