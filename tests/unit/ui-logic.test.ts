@@ -187,7 +187,7 @@ describe('brand art', () => {
 
 describe('Results labels (U3, U8, U17)', () => {
   const TODAY = '2026-10-11';
-  const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 3, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 2, nightsReached: 1, minutes: 1240, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100 };
+  const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 3, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 2, nightsReached: 1, minutes: 1240, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, minChill: 100 };
   const view = (over: Partial<ResultsView> = {}, result: Partial<RunResult> = {}): ResultsView => ({
     result: {
       mode: 'daily', seed: 1, profile: 3, drain: 55, noonCloud: 0, plan: [], minutes: 1240, day: 2, clock: '', stats, hourGlyphs: [], melody: [], assisted: false, dailyDate: TODAY,

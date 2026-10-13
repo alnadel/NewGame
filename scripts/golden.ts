@@ -16,6 +16,7 @@ import { createBot } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import { hashState } from '../src/core/sim/hash.ts';
 import { headlessConfig, runBot, runHeadless } from '../src/core/sim/headless.ts';
+import { campaignConfig } from '../src/core/level.ts';
 import { step } from '../src/core/sim/step.ts';
 import type { InputFrame } from '../src/core/sim/types.ts';
 
@@ -136,6 +137,27 @@ export function rungHashes(): string[] {
   });
 }
 
+/** Campaign levels whose oracle run is a golden: the drag lesson, glare, gusts, eclipse, moonlit and two composed levels. */
+export const GOLDEN_LEVELS: readonly number[] = Object.freeze([1, 6, 32, 36, 38, 100, 200]);
+
+/**
+ * The (campaign-aware) oracle playing each GOLDEN_LEVELS level to its finish line (or its death):
+ * a checkpoint hash every 600 ticks ("level:tick") and the final phase and hash ("level").
+ */
+export function campaignHashes(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const id of GOLDEN_LEVELS) {
+    const s = createRun(campaignConfig(id));
+    const bot = createBot('oracle');
+    for (let i = 0; i < 8000 && s.phase !== 'dead' && s.phase !== 'won'; i++) {
+      step(s, bot.next(s));
+      if ((i + 1) % CHECK_EVERY === 0) out[`${id}:${i + 1}`] = hashState(s);
+    }
+    out[`${id}`] = `${s.phase}:${hashState(s)}`;
+  }
+  return out;
+}
+
 export function goldenValues(): Record<string, unknown> {
   return {
     scripted: scriptedHashes(),
@@ -146,6 +168,7 @@ export function goldenValues(): Record<string, unknown> {
     chunksPlanOff: { 1: chunkDigests(1, false), 2: chunkDigests(2, false), 3: chunkDigests(3, false) },
     forecasts: forecastHashes(),
     rungs: rungHashes(),
+    campaign: campaignHashes(),
   };
 }
 
