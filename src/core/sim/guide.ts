@@ -3,9 +3,11 @@
 // samples shaded, no glare), 0.6 s ahead, and where glare would touch him.
 
 import { TUNING } from '../../config/tuning.ts';
-import { dayTicks, elevation, TICK_HZ, yAtDayTick } from '../clock.ts';
+import { dayStartTick, dayTicks, elevation, TICK_HZ } from '../clock.ts';
 import { tanD } from '../dmath.ts';
+import { worldYAtDayTick } from '../gen/plan.ts';
 import { gatherScene } from '../gen/store.ts';
+import { eclipseAt } from '../gen/world.ts';
 import { BINS, createMaskScene, litMask } from '../intervals.ts';
 import { trailX } from '../trail.ts';
 import type { SimState } from './types.ts';
@@ -28,9 +30,16 @@ export function updateGuide(s: SimState): void {
     return;
   }
   const nb = s.nubs;
-  gatherScene(s.world, scene, nb.x, nb.y, MARGIN, s.tAbs, s.eps, s.cot);
-  litMask(scene, nb.x, nb.y, false, g.lit, g.glare);
-  for (let b = 0; b < BINS; b++) g.now[b] = g.lit[b] === 0 ? 1 : 0;
+  if (s.eclipseOn) {
+    // The eclipse shades everything: every angle is safe now.
+    g.lit.fill(0);
+    g.glare.fill(0);
+    g.now.fill(1);
+  } else {
+    gatherScene(s.world, scene, nb.x, nb.y, MARGIN, s.tAbs, s.eps, s.cot);
+    litMask(scene, nb.x, nb.y, false, g.lit, g.glare);
+    for (let b = 0; b < BINS; b++) g.now[b] = g.lit[b] === 0 ? 1 : 0;
+  }
 
   // 0.6 s ahead: Nubs' position, the elevation and the clouds then (still today's daylight only).
   const t = s.dayTick + AHEAD;
@@ -38,7 +47,11 @@ export function updateGuide(s: SimState): void {
     g.next.fill(0);
     return;
   }
-  const y = yAtDayTick(s.day, t);
+  if (eclipseAt(s.world, dayStartTick(s.day) + t)) {
+    g.next.fill(1);
+    return;
+  }
+  const y = worldYAtDayTick(s.world, s.day, t);
   const x = trailX(s.world.trail, y);
   const eps = elevation(s.params, t / TICK_HZ);
   gatherScene(s.world, scene, x, y, MARGIN, s.tAbs + AHEAD / TICK_HZ, eps, 1 / tanD(eps));

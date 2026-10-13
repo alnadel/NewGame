@@ -3,6 +3,7 @@
 import { formatScore } from '../format.ts';
 import { worldPlan } from '../gen/plan.ts';
 import { deathCause } from './deathcause.ts';
+import { levelOutcome } from '../level.ts';
 import type { RunResult } from './events.ts';
 import { effectiveDrain } from './nubs.ts';
 import type { SimState } from './types.ts';
@@ -31,5 +32,6 @@ export function buildRunResult(s: SimState): RunResult {
     assisted: false,
   };
   if (s.cfg.dailyDate !== undefined) result.dailyDate = s.cfg.dailyDate;
+  if (s.level) result.level = levelOutcome(s.level, s);
   return result;
 }

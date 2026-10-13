@@ -6,12 +6,16 @@
 // never changes, so chunk content is a pure function of the WorldConfig, k and the prior chunks:
 // generating in idle frames, inside step(), in one go or in many slices yields the same world.
 
-import { effectiveNoonCloud } from '../../config/days.ts';
+import { levelDef, type LevelDef } from '../../config/campaign.ts';
+import { foldTuning, type ConceptId } from '../../config/concepts.ts';
+import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
+import { dayStartTick, dayTicks, tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
 import type { RunConfig } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
 import { placeChunk, placeStart } from './placer.ts';
+import { paramsAt } from './plan.ts';
 import type { World } from './store.ts';
 import { beginValidation, stepValidation } from './validator.ts';
 
@@ -22,12 +26,29 @@ const CH = TUNING.world.chunkLen;
 /** Work units charged for placing one chunk (a validator step costs 1). */
 const PLACE_COST = 8;
 
-/** The RunConfig fields that make a world: the same values always build the same world. */
-export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast'>;
+/**
+ * The RunConfig fields that make a world: the same values always build the same world. A campaign
+ * level (`level`) also fixes `mods` and `biome` (createRun derives them; createWorld reads the
+ * level for its start, finish, gate and eclipse geometry and the validator's drain).
+ */
+export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast' | 'mods' | 'biome' | 'level'>;
+
+const NO_MODS: readonly ConceptId[] = Object.freeze([]);
 
 /** Creates a world with its start hut (and tutorial layout); nothing else is generated yet. */
 export function createWorld(cfg: WorldConfig): World {
   const seed = cfg.seed >>> 0;
+  let level: LevelDef | null = null;
+  if (cfg.level !== undefined) {
+    level = levelDef(cfg.level);
+    if (!level) throw new Error(`unknown campaign level ${cfg.level}`);
+  }
+  const modList: readonly ConceptId[] = cfg.mods && cfg.mods.length > 0 ? Object.freeze(cfg.mods.slice()) : NO_MODS;
+  const tune = foldTuning(modList);
+  const walkMul = tune?.walkMul ?? 1;
+  const startTick = level ? tickAtMinute(level.startMinute) : 0;
+  const endTick = level ? tickAtMinute(level.startMinute + level.lengthMinutes) : -1;
+  const midTick = level ? tickAtMinute(level.startMinute + level.lengthMinutes / 2) : -1;
   const w: World = {
     seed,
     profile: cfg.profile,
@@ -35,7 +56,19 @@ export function createWorld(cfg: WorldConfig): World {
     noonCloud: effectiveNoonCloud(cfg),
     planOn: cfg.forecast !== undefined || (cfg.plan ?? (cfg.profile === 3 && !cfg.tutorial)),
     forcedForecast: cfg.forecast ?? null,
+    forcedBiome: cfg.biome ?? null,
     plan: [],
+    mods: new Set(modList),
+    modList,
+    level,
+    walkMul,
+    heightScale: tune?.heightScale ?? 1,
+    startTick,
+    startY: yAtTick(startTick) * walkMul,
+    finishY: level ? yAtTick(endTick) * walkMul : Infinity,
+    gateY: level && modList.includes('gate') ? yAtTick(midTick) * walkMul : -Infinity,
+    eclipseTick: level && modList.includes('eclipse') ? Math.max(startTick, midTick - Math.round((ECLIPSE_SEC / 2) * TICK_HZ)) : -1,
+    validatorDrain: level ? level.drain : dayParams(1, cfg.profile).drain,
     trail: createTrail(seed, cfg.tutorial),
     casters: [],
     byId: new Map(),
@@ -66,8 +99,26 @@ export function createWorld(cfg: WorldConfig): World {
   placeStart(w);
   // At the start only θ0 is reachable: the run begins with the sun pointing at the start hut.
   w.carryC.fill(-1e9);
-  w.carryC[binOf(w.theta0)] = TUNING.nubs.maxChill;
+  w.carryC[binOf(w.theta0)] = paramsAt(w, 1).maxChill;
   return w;
+}
+
+/** The eclipse concept's window (s): f = 0 everywhere, centred on the level's midpoint. */
+export const ECLIPSE_SEC = 6;
+/** Ticks of the eclipse's fade in and out (SimState.eclipse ramps 0 → 1 → 0). */
+export const ECLIPSE_FADE_TICKS = 30;
+
+/** True when absolute tick `tickAbs` is inside world `w`'s eclipse window. */
+export function eclipseAt(w: World, tickAbs: number): boolean {
+  return w.eclipseTick >= 0 && tickAbs >= w.eclipseTick && tickAbs < w.eclipseTick + ECLIPSE_SEC * TICK_HZ;
+}
+
+/** Day and tick after dawn of a world's start (the run's first clock tick). */
+export function startDayTick(w: World): { day: number; dayTick: number } {
+  let day = 1;
+  while (dayStartTick(day + 1) <= w.startTick) day++;
+  const dayTick = Math.min(dayTicks(day) - 1, w.startTick - dayStartTick(day));
+  return { day, dayTick };
 }
 
 /** y up to which the world is placed and validated. */

@@ -99,7 +99,7 @@ function stats(over: Partial<Stats>): Stats {
   return {
     flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0,
     cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 1, nightsReached: 0, minutes: 0,
-    litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, ...over,
+    litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, minChill: 100, ...over,
   };
 }
 

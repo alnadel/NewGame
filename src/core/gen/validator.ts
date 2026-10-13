@@ -6,20 +6,19 @@
 // computation is one work unit, so it can be time-sliced across frames.
 
 import { TUNING } from '../../config/tuning.ts';
-import { dayAtTick, dayStartTick, elevation, TICK_HZ, yAtTick } from '../clock.ts';
+import { dayAtTick, dayStartTick, elevation, TICK_HZ } from '../clock.ts';
 import { SUN_COS, SUN_SIN, tanD } from '../dmath.ts';
-import { BINS, countPrism, createMaskScene, litMask, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
+import { BINS, binOf, countPrism, createMaskScene, litMask, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
 import type { Caster, Cloud, PrismPart } from '../objects.ts';
 import { cloudOffset, distToCasterBounds, shadowLength } from '../shadows.ts';
 import { trailX } from '../trail.ts';
 import { rockHeight } from './catalog.ts';
-import { paramsAt } from './plan.ts';
+import { paramsAt, worldYAtTick } from './plan.ts';
 import { addCloud, commitRescue, findSpot, type Spot } from './placer.ts';
 import { gatherScene, type ChunkLit, type World } from './store.ts';
 
 const STEP = TUNING.validator.stepTicks;
 const TURN = TUNING.validator.turnBins;
-const MAXC = TUNING.nubs.maxChill;
 const DEAD = -1e9;
 const CH = TUNING.world.chunkLen;
 const SAMPLE_MARGIN = TUNING.nubs.sampleOffset + 1;
@@ -97,20 +96,26 @@ export function slidingMaxCircular(src: Float64Array, r: number, out: Float64Arr
   }
 }
 
-const deltaTables = new Map<number, Float64Array>();
+const deltaTables = new Map<string, Float64Array>();
 
-/** Chill change over one 0.1 s step for each lit count 0..10 (f = lit/5), under a profile drain. */
-export function chillDeltaTable(drain: number): Float64Array {
-  const hit = deltaTables.get(drain);
+/** Chill change over one 0.1 s step for each lit count 0..10 (f = lit/5), under a drain and a daylight regen (default 30/s). */
+export function chillDeltaTable(drain: number, regen: number = TUNING.nubs.regen): Float64Array {
+  const key = `${drain}/${regen}`;
+  const hit = deltaTables.get(key);
   if (hit) return hit;
   const t = new Float64Array(11);
   const dt = STEP / TICK_HZ;
   for (let c = 0; c <= 10; c++) {
     const f = c / 5;
-    t[c] = (-drain * f + TUNING.nubs.regen * Math.max(0, 1 - f)) * dt;
+    t[c] = (-drain * f + regen * Math.max(0, 1 - f)) * dt;
   }
-  deltaTables.set(drain, t);
+  deltaTables.set(key, t);
   return t;
+}
+
+/** The drain the validator's DP charges in world `w`: the level's (or the profile's) × the concepts' drainMul. */
+export function validatorDrain(w: World): number {
+  return w.validatorDrain * paramsAt(w, 1).drainMul;
 }
 
 /** Fills a step's geometry: Nubs' position, time, elevation (0 at night). */
@@ -118,7 +123,7 @@ function stepGeometry(w: World, j: number, job: ValidationJob, s: number): void 
   const tick = j * STEP;
   const day = dayAtTick(tick);
   const p = paramsAt(w, day);
-  const y = yAtTick(tick);
+  const y = worldYAtTick(w, tick);
   const tDay = (tick - dayStartTick(day)) / TICK_HZ;
   const eps = j < 0 ? 0 : elevation(p, tDay);
   job.sx[s] = trailX(w.trail, y);
@@ -134,7 +139,7 @@ export function beginValidation(w: World, k: number): ValidationJob {
   const j0 = w.nextStep;
   const pre = w.carryN;
   let n = 0;
-  while (yAtTick((j0 + n) * STEP) < (k + 1) * CH) n++;
+  while (worldYAtTick(w, (j0 + n) * STEP) < (k + 1) * CH) n++;
   const slots = pre + n + 2;
   // Reuse the previous job's buffers (one job per world at a time); all reads stay within slots.
   const old = w.lastJob && w.lastJob.need.length >= slots ? w.lastJob : null;
@@ -207,13 +212,30 @@ function markDirtyCloud(job: ValidationJob, cl: Cloud): number {
   return first;
 }
 
-/** Runs the DP for slot i. Returns max C after the step. */
-function dpSlot(job: ValidationJob, i: number, delta: Float64Array): number {
+/**
+ * Runs the DP for slot i. Returns max C after the step. `maxC` is the world's max Chill. Night
+ * steps refill to maxC with the sun anywhere; so does the ground before a campaign level's start
+ * and past its finish line (unused stretches), and the first step at the start holds only θ0 (the
+ * run begins with the sun on the start hut), as createWorld's carry does at Day 1 dawn.
+ */
+function dpSlot(w: World, job: ValidationJob, i: number, delta: Float64Array, maxC: number): number {
   const c = job.c;
   const o = i * BINS;
-  if ((job.sEps[i] as number) <= 0) {
-    c.fill(MAXC, o, o + BINS); // night (or before the run): Chill refills, the sun can be anywhere
-    return MAXC;
+  if ((job.sEps[i] as number) <= 0 || (job.sy[i] as number) > w.finishY) {
+    c.fill(maxC, o, o + BINS); // night (or before the run): Chill refills, the sun can be anywhere
+    return maxC;
+  }
+  if (w.startTick > 0) {
+    const tick = Math.round((job.sT[i] as number) * TICK_HZ);
+    if (tick < w.startTick) {
+      c.fill(maxC, o, o + BINS);
+      return maxC;
+    }
+    if (tick - STEP < w.startTick) {
+      c.fill(DEAD, o, o + BINS);
+      c[o + binOf(w.theta0)] = maxC;
+      return maxC;
+    }
   }
   slidingMaxCircular(c, TURN, win, (i - 1) * BINS);
   const lit = job.lit;
@@ -228,7 +250,7 @@ function dpSlot(job: ValidationJob, i: number, delta: Float64Array): number {
     if (l1 > lh) lh = l1;
     if (l2 > lh) lh = l2;
     let v = (win[b] as number) + (delta[lh] as number);
-    if (v > MAXC) v = MAXC;
+    if (v > maxC) v = maxC;
     else if (v <= 0) v = DEAD;
     c[o + b] = v;
     if (v > best) best = v;
@@ -416,7 +438,9 @@ function finish(w: World, job: ValidationJob): void {
  * cheap and runs in the same call). Returns the units used.
  */
 export function stepValidation(w: World, job: ValidationJob, budget: number): number {
-  const delta = chillDeltaTable(paramsAt(w, 1).drain);
+  const p1 = paramsAt(w, 1);
+  const delta = chillDeltaTable(validatorDrain(w), p1.regen);
+  const maxC = p1.maxChill;
   let used = 0;
   while (!job.done) {
     // 1) (Re)compute pending lit slots in order.
@@ -438,14 +462,15 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
     let i = job.dpFrom;
     let resume = -1;
     for (; i <= job.pre + job.n; i++) {
-      const maxC = dpSlot(job, i, delta);
-      const floor = paramsAt(w, job.sDay[i] as number).floor;
+      const best = dpSlot(w, job, i, delta, maxC);
+      // The floor scales with the level's tank (ration: 50 of 100 at Day 1 keeps the ratio).
+      const floor = (paramsAt(w, job.sDay[i] as number).floor * maxC) / TUNING.nubs.maxChill;
       if (job.accepting) {
-        if (maxC >= floor) job.accepting = false;
+        if (best >= floor) job.accepting = false;
         continue;
       }
-      if (maxC < floor) {
-        resume = onFailure(w, job, i, floor, maxC);
+      if (best < floor) {
+        resume = onFailure(w, job, i, floor, best);
         break;
       }
     }
@@ -482,7 +507,7 @@ export function stepLit(w: World, j: number, out: Uint8Array): void {
     out.fill(0);
     return;
   }
-  const y = yAtTick(tick);
+  const y = worldYAtTick(w, tick);
   const x = trailX(w.trail, y);
   gatherScene(w, stepScene, x, y, SAMPLE_MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps));
   litMask(stepScene, x, y, true, out, null);

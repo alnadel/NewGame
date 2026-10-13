@@ -20,6 +20,24 @@ export { FORECAST_IDS, FORECAST_TUNING, FORECASTS, forecastFits, PLAN_START_DATE
 export type { ForecastId, ForecastInfo, ForecastTuning } from '../config/forecasts.ts';
 export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';
 export type { CasterKind } from '../config/casters.ts';
+export {
+  buildCampaign,
+  CAMPAIGN_LEVELS,
+  CHAPTER_COUNT,
+  CHAPTERS,
+  chapterOf,
+  CONCEPT_CONFLICTS,
+  CONCEPT_IDS,
+  CONCEPTS,
+  conceptsCompatible,
+  foldTuning,
+  goalMet,
+  LEVEL_COUNT,
+  levelDef,
+  LEVELS_PER_CHAPTER,
+  starsFor,
+} from '../config/campaign.ts';
+export type { Chapter, Concept, ConceptId, ConceptKind, ConceptLevel, DayTuning, GoalKind, LevelDef, LevelStats } from '../config/campaign.ts';
 
 // Clock and formatting
 export {
@@ -41,6 +59,7 @@ export {
   noonPassedTick,
   scoreLabel,
   scoreMinutes,
+  tickAtMinute,
   timeAtY,
   yAtDayTick,
   yAtTime,
@@ -94,7 +113,22 @@ export {
   validatedY,
 } from './gen/world.ts';
 export type { ChunkLit, World, WorldStats } from './gen/world.ts';
-export { biomeAtY, dayAtY, firstTownDay, paramsAt, planDay, worldPlan } from './gen/plan.ts';
+export {
+  biomeAtY,
+  dayAtY,
+  firstTownDay,
+  paramsAt,
+  planDay,
+  worldDayAtY,
+  worldDayStartY,
+  worldPlan,
+  worldTimeAtY,
+  worldYAtDayTick,
+  worldYAtTick,
+  worldYAtTime,
+} from './gen/plan.ts';
+export { ECLIPSE_FADE_TICKS, ECLIPSE_SEC, eclipseAt } from './gen/world.ts';
+export { campaignConfig, levelOutcome, levelProgress, minuteStart, resolveLevelConfig } from './level.ts';
 
 // Simulation
 export { createRun, prepareRun, prepareSome } from './sim/create.ts';
@@ -106,6 +140,7 @@ export type {
   DeathCause,
   DeathInfo,
   HourGlyph,
+  RunLevel,
   RunMode,
   RunResult,
   RunStats,

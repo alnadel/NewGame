@@ -138,7 +138,7 @@ describe('SfxRouter events', () => {
       { e: 'glareTouch', ballId: 2 },
       { e: 'lowChill' },
       { e: 'hourEnd', day: 1, hour: 3, glyph: 'cool' },
-      { e: 'gateArch', noon: true },
+      { e: 'gateArch', noon: true, snow: 0 },
       { e: 'ballPassed', clean: true },
     ];
     t.router.onEvents(events, t.view);

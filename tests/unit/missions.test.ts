@@ -20,7 +20,7 @@ function run(minutes: number, over: Partial<RunResult['stats']> = {}, extra: Par
     stats: {
       flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0,
       ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: day, nightsReached: day - 1, minutes, litTotal: 0, swings: 0,
-      swingChainBest: 0, phewMinChill: 100, ...over,
+      swingChainBest: 0, phewMinChill: 100, minChill: 100, ...over,
     },
     death: { day, tDay: 0, minutes, time: '', x: 0, y: 0, cause: 'plain', line: '' },
     hourGlyphs: glyphs, melody: [], assisted: false, ...extra,

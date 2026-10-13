@@ -22,6 +22,7 @@ import { chillDeltaTable, slidingMaxCircular, stepLit } from '../gen/validator.t
 import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { effectiveDrain } from './nubs.ts';
+import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
 
 export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial';
@@ -155,6 +156,13 @@ function reactiveBot(): Bot {
 
 const INF = 1e9;
 const STEP = TUNING.validator.stepTicks;
+/**
+ * The oracle on a campaign level plays for stars as well as survival: it keeps a larger Chill
+ * margin and, among bins with similar slack, prefers the shaded ones (the multiplier and the flakes
+ * ahead live in shade). Off outside the campaign, so the endless/daily oracle (and its goldens)
+ * is unchanged.
+ */
+const ORACLE_CAMPAIGN = Object.freeze({ margin: 12, shadeWeight: 0.6 });
 
 function oracleBot(): Bot {
   const cfg = TUNING.bots.oracle;
@@ -163,10 +171,11 @@ function oracleBot(): Bot {
   const lits = new Uint8Array((H + 3) * BINS);
   const row = new Uint8Array(BINS);
   const night = new Uint8Array(H + 3);
+  /** 1 where the step falls in a 'lock' window (the sun cannot turn into it). */
+  const locked = new Uint8Array(H + 3);
   const need = new Float64Array((H + 1) * BINS);
   const tmp = new Float64Array(BINS);
   const win = new Float64Array(BINS);
-  const maxC = TUNING.nubs.maxChill;
   const reach = Math.round(cfg.rate * STEP * DT);
   let target = -1;
   let started = false;
@@ -181,30 +190,38 @@ function oracleBot(): Bot {
 
   function plan(s: SimState): void {
     const j0 = Math.round(s.tickAbs / STEP);
+    const lock = s.mods.has('lock');
     for (let h = 0; h < H + 3; h++) {
       const j = j0 - 1 + h;
       stepLit(s.world, j, row);
       lits.set(row, h * BINS);
       const tick = j * STEP;
       const d = dayAtTick(tick);
-      night[h] = elevation(paramsAt(s.world, d), (tick - dayStartTick(d)) / TICK_HZ) > 0 ? 0 : 1;
+      const dayTick = tick - dayStartTick(d);
+      night[h] = elevation(paramsAt(s.world, d), dayTick / TICK_HZ) > 0 ? 0 : 1;
+      locked[h] = lock && sunLockedAt(dayTick) ? 1 : 0;
     }
-    const delta = chillDeltaTable(effectiveDrain(s));
+    const delta = chillDeltaTable(effectiveDrain(s), s.params.regen);
+    const maxC = s.nubs.maxChill;
+    const campaign = s.level !== null;
+    const margin = campaign ? Math.min(ORACLE_CAMPAIGN.margin, maxC / 4) : cfg.margin;
+    const shadeW = campaign ? ORACLE_CAMPAIGN.shadeWeight : 0;
     // need[i][b]: least Chill after step j0 + i at bin b that still survives to the horizon.
-    need.fill(cfg.margin, H * BINS, (H + 1) * BINS);
+    need.fill(margin, H * BINS, (H + 1) * BINS);
     for (let i = H - 1; i >= 0; i--) {
       const o = i * BINS;
       if (night[i + 2] === 1) {
-        need.fill(cfg.margin, o, o + BINS); // the next step is night: Chill refills
+        need.fill(margin, o, o + BINS); // the next step is night: Chill refills
         continue;
       }
       const on = (i + 1) * BINS;
       for (let b = 0; b < BINS; b++) {
         const nn = need[on + b] as number;
         const req = nn - (delta[litH(i + 1, b)] as number);
-        tmp[b] = nn > maxC ? -INF : -(req < cfg.margin ? cfg.margin : req);
+        tmp[b] = nn > maxC ? -INF : -(req < margin ? margin : req);
       }
-      slidingMaxCircular(tmp, cfg.planBins, win);
+      // A locked step cannot be turned into: the bin must already be held (CAMPAIGN 'lock').
+      slidingMaxCircular(tmp, locked[i + 2] === 1 ? 0 : cfg.planBins, win);
       for (let b = 0; b < BINS; b++) need[o + b] = -(win[b] as number);
     }
     // Choose the next step's bin within actual reach: most slack (capped), least turning.
@@ -217,7 +234,7 @@ function oracleBot(): Bot {
       let next = c + (delta[litH(1, b)] as number);
       if (next > maxC) next = maxC;
       const slack = next - (need[BINS + b] as number);
-      const v = (slack > cfg.slackCap ? cfg.slackCap : slack) - cfg.penalty * Math.abs(k);
+      const v = (slack > cfg.slackCap ? cfg.slackCap : slack) - cfg.penalty * Math.abs(k) - shadeW * (lits[2 * BINS + b] as number);
       if (v > bestV) {
         bestV = v;
         best = b;

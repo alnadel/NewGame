@@ -16,7 +16,7 @@ function sunState(theta: number, eps = 30, reducedMotion = false): SimState {
     cfg: { ...base.cfg, reducedMotion },
     eps,
     events: [],
-    sun: { theta, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta / 15), dTheta: 0, keyTicks: 0, keySign: 0 },
+    sun: { theta, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta / 15), dTheta: 0, keyTicks: 0, keySign: 0, gust: 0, locked: false },
   };
   return s;
 }

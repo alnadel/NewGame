@@ -397,3 +397,93 @@ sim's, are in `docs/V1_1_PLAN.md` §0 "Final numbers".)
 - **Results (CC-7, A13).** `RunResult.drain`, `noonCloud`, `plan` (one entry per day reached);
   `deathTip(…)`/`deathRecap(…)` in `sim/recap.ts`; `createParJob(dateSeed)` → `{ step(maxTicks),
   minutes }` for Snowbot's Daily par.
+
+## 14. Campaign (CAMPAIGN_PLAN v1.2, core scope)
+
+The Journey is 200 seeded, finite levels with concepts (gameplay modifiers). Everything below is
+exported from `src/core/index.ts`; the data lives in `src/config/campaign.ts` (levels, re-exporting
+the catalog in `src/config/concepts.ts`).
+
+### Data
+- `ConceptId` (40 ids), `ConceptKind` = `'teach'|'world'|'sun'|'dial'|'chill'|'sky'|'goal'`
+  (`'dial'` = the sun-control rules heavy, slippery, clockwork, gusts, lock, an addition to the
+  plan so they can share a level with a time-of-day `'sun'` concept), `Concept` `{ id, name,
+  blurb, icon, kind, tune?, level? }`, `CONCEPTS: Record<ConceptId, Concept>`, `CONCEPT_IDS`
+  (teaching order), `CONCEPT_CONFLICTS`, `conceptsCompatible(a, b)`, `foldTuning(mods)`.
+  `icon` is a glyph id the UI maps (`drag flake cloud sun town glare swing gate wind shadow heat
+  overcast dazzle market sprint stroll giant low sparse dense drought fleet thaw frost ration melt
+  hardy flurry heavy slippery clockwork gusts lock fog blind eclipse sunset moon marathon boss`).
+- `DayTuning` (a concept's `tune`): `spacing ×`, `latMax +`, `heightScale ×`, `cloudCount ×` (0 =
+  none), `cloudRx ×`, `waitersOnly`, `ballEvery` (s; first at half), `flakesPerCluster`,
+  `clusterGap ×`, `meltBudget` (s, `Infinity` never), `drainMul ×`, `regenMul ×`, `maxChill`,
+  `sunFollow` (°/s cap), `sunFriction` (per-tick coasting factor, 0 = none), `walkMul ×`, `epsNoon`.
+- `LevelDef` `{ id, chapter, name, seed, biome, forecast, concepts, introduces, startMinute,
+  lengthMinutes, goal: { kind: 'finish'|'flakes'|'snow', target }, stars: { flakes, minChill },
+  drain }` exactly as CAMPAIGN_PLAN §2; `CAMPAIGN_LEVELS` (200, `buildCampaign()` at module
+  load, pure), `levelDef(id)` (null outside 1..200), `CHAPTERS` (20 × `{ id, name, biome,
+  concepts }`, biomes alternating from the Meadow), `chapterOf(id)`, `LEVEL_COUNT`,
+  `CHAPTER_COUNT`, `LEVELS_PER_CHAPTER`, `GoalKind`, `LevelStats` (`{ flakes, snow, minChill }`),
+  `goalMet(level, stats)`, `starsFor(level, stats)` → 0 (goal not met) | 1 | 2 (flakes ≥
+  `stars.flakes` or minChill ≥ `stars.minChill`) | 3 (both). Seeds are `hashString('journey-N')`;
+  levels 41-200 draw their concepts from `rngFor(seed, 'campaign', id)`.
+- Curve: drain 31 → 38 over levels 1-40 (level 1: 35; finales +2), 40 → 55 over chapters 5-20
+  (finales at the chapter top, everything capped at 55); the effective drain (× `drainMul`) is
+  capped at 62 and at 40 on lock/gust levels. Lengths 360 → 720 minutes (30-minute steps), time
+  concepts fixed (noon 270+180, sunset 540+180, boss 180+360, marathon 0+1080). Goals and star 2
+  scale with the flakes the level offers (`expectedFlakes`): flake goal 55%, star 2 60% (75% on a
+  flake-goal level), Snow goal one Snow per expected flake (min 8); star 3 = 35% of max Chill.
+
+### Running a level
+- `RunConfig` gains `level?: number`, `mods?: readonly ConceptId[]`, `biome?: BiomeId` (forced
+  Day-1 biome, alternating after; every day clear unless `forecast` fits). `RunMode` gains
+  `'campaign'`. `campaignConfig(id, base?)` → the level's RunConfig (`seed, mode 'campaign',
+  profile 3, tutorial false, plan false, level, mods = level.concepts, biome, drain, startDay,
+  startT, forecast` when not clear; `base` supplies `reducedMotion`, `lesson`, …).
+  `resolveLevelConfig(cfg)` applies that whenever `cfg.level` is set: `createRun`, `prepareRun`
+  and `createWorld` all go through it, so the level is the world's identity whatever else the
+  config says. `minuteStart(m)` → `{ day, dayTick }`; `tickAtMinute(m)` (clock.ts) is the absolute
+  tick of an in-game minute (720 = the last daylight tick of Day 1, 1080 = Day 2 noon).
+- The world: `World.level`, `mods` (Set), `modList`, `forcedBiome`, `walkMul`, `heightScale`,
+  `startTick`/`startY` (the start hut stands at `startY + 10`; the validator's DP starts there),
+  `finishY` (Infinity when none), `gateY`, `eclipseTick`, `validatorDrain`. A `finish` caster
+  (`kind: 'finish'`, gate-arch geometry, `name 'the Finish Line'`, not a gate) stands on the trail
+  at (or within ±120 u of) `finishY`; the stretch past the line is unused by the validator.
+- **walkMul.** The global clock still maps time to y at ×1; a world scales it: `worldYAtDayTick(w,
+  day, dayTick)`, `worldYAtTick(w, tickAbs)`, `worldYAtTime(w, day, t)`, `worldDayStartY(w, day)`,
+  `worldTimeAtY(w, y, out)`, `worldDayAtY(w, y)`; `biomeAtY(w, y)` uses it. Every core reader
+  (sim, placer, validator, guide, bots, death cause) goes through these; `DayParams.v` already
+  includes the multiplier. Render code that converts y ↔ day/time directly (`dayAtY`, `dayStartY`,
+  `yAtTime`) should use the world versions on sprint/stroll levels.
+- `dayParams(day, profile, plan, mods)` applies the concept tunes on top of the forecast; new
+  `DayParams` fields: `heightScale, waitersOnly, clusterGap, meltBudget, drainMul, regen,
+  maxChill, sunFollow, sunFriction, walkMul`. `effectiveDrain(s)` = `(cfg.drain ?? params.drain)
+  · params.drainMul`; the validator uses `validatorDrain(w)` (level drain × drainMul), the level's
+  regen and max Chill (the floor scales with the tank).
+
+### What the session and renderer read
+- `s.level: LevelDef | null`, `s.mods: ReadonlySet<ConceptId>`, `levelProgress(s)` 0..1 (start
+  line → finish; 0 outside the campaign).
+- `s.phase === 'won'`: the finish line was crossed with Chill > 0 (daylight or night); `step()` is
+  a no-op afterwards, `s.death` stays null. Event `{ e: 'levelWon', passed, stars, flakes,
+  minChill }` fires on that tick (`passed` false and `stars` 0 when a flakes/snow goal is unmet).
+  `RunStats.minChill` (lowest daylight Chill, the starting Chill when never lit); `RunResult.level`
+  = `RunLevel { id, passed, stars, introduces }` (`levelOutcome(level, s)`), stars 0 on a death.
+- `s.sun.gust: -1|0|1` (a gust turning the sun this tick; wind glyph), `s.sun.locked` (padlock;
+  every input ignored). `sunLockedAt(dayTick)`, `sunGustAt(dayTick)` give the schedule: locks at
+  daylight ticks 420+k·420 for 72 ticks, gusts at 480+k·480 for 120 ticks at ±25°/s, direction
+  seeded per gust.
+- `s.eclipse` 0..1 (ramps over 0.5 s at both ends of the 6 s window centred on the level
+  midpoint) and `s.eclipseOn` (f forced 0, nothing melts, `guide.now` all shade);
+  `eclipseAt(w, tickAbs)`, `ECLIPSE_SEC`, `ECLIPSE_FADE_TICKS`.
+- `s.moonlit` (moon sun: εnoon 30°, drain × 0.5; the night palette is the renderer's job).
+- `gateArch` events carry `snow` (10 when the 'gate' concept paid for a fully shaded pass, else 0).
+- Behaviour in the sim: heavy (follow ≤ 220°/s, no coast), slippery (coast factor e^(−0.35/60)),
+  clockwork (a release snaps the target to the nearest 30°, no coast), hardy (meltBudget ∞),
+  ration (Chill starts at 50 of 50), frosty (regen 75/s), fog and blind are render-only.
+- The oracle on a campaign level plays for stars too (a 12-Chill margin and a preference for
+  shaded bins) and knows the lock schedule; outside the campaign it is unchanged (goldens hold).
+  `hashState` covers the new state only when concepts are active, so every pre-campaign hash is
+  unchanged; `tests/golden/hashes.json` has a `campaign` section (levels 1, 6, 32, 36, 38, 100, 200).
+- `node scripts/sim.ts --campaign [--level N[,M…]] [--bot oracle|reactive|humanDial|all]`: every
+  level's outcome per bot and the gates (hard: oracle 200/200, reactive ≥ 90% of 1-100; advisory:
+  humanDial ≥ 70% of 1-40).

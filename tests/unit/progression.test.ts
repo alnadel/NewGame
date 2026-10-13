@@ -60,6 +60,7 @@ function stats(over: Partial<Stats> = {}): Stats {
     swings: 0,
     swingChainBest: 0,
     phewMinChill: 100,
+    minChill: 100,
     ...over,
   } satisfies RunStats & Stats;
 }

@@ -123,7 +123,7 @@ function result(over: Partial<RunResult>): RunResult {
     stats: {
       flakes: 30, flakesMelted: 2, crystals: 1, flowers: 8, phews: 2, snow: 61.6, maxMult: 4, x5HoldBest: 0,
       cloudRideBest: 2, cloudSeconds: 3, ballsPassedClean: 2, ballGlared: false, gateNoon: false, dayReached: 2,
-      nightsReached: 1, minutes: 1240, litTotal: 3, swings: 2, swingChainBest: 2, phewMinChill: 30,
+      nightsReached: 1, minutes: 1240, litTotal: 3, swings: 2, swingChainBest: 2, phewMinChill: 30, minChill: 30,
     },
     death: { day: 2, tDay: 30, minutes: 1240, time: '2:40 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 2:40 PM.' },
     hourGlyphs: [DAY1, DAY2],

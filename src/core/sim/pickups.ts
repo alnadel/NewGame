@@ -24,7 +24,7 @@ const MAX_R = TUNING.world.maxCasterRadius;
 
 /** Lit weight of a single ground point (0 shaded, 1 lit, 2 glare) under the current sun. */
 export function pointLitWeight(s: SimState, px: number, py: number): number {
-  if (!s.sunUp) return 0;
+  if (!s.sunUp || s.eclipseOn) return 0;
   const w = s.world;
   const { ux, uy, cot } = s;
   if (glareActive(s.eps)) {
@@ -56,6 +56,7 @@ export function updatePickups(s: SimState, daylight: boolean): void {
   const st = s.stats;
   const ps = s.world.pickups;
   const ahead = P.meltAheadSec * s.params.v;
+  const budget = s.params.meltBudget;
   const radius = TUNING.nubs.collectRadius;
   for (let i = lowerBound(ps, nb.y - radius); i < ps.length; i++) {
     const p = ps[i] as Pickup;
@@ -71,7 +72,7 @@ export function updatePickups(s: SimState, daylight: boolean): void {
     const wgt = pointLitWeight(s, p.x, p.y);
     if (wgt === 0) continue;
     p.melt += wgt * DT;
-    if (p.melt >= P.meltBudget) {
+    if (p.melt >= budget) {
       p.state = PICKUP_MELTED;
       if (p.kind === 'flake') st.flakesMelted++;
       s.events.push({ e: 'flakeMelt', x: p.x, y: p.y });

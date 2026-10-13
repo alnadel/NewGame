@@ -1,7 +1,9 @@
 // World storage: y-sorted object lists, id lookup, range queries and pruning.
 // Generation (placer/validator) inserts; the sim and renderer only read (pickups excepted).
 
-import type { DayPlan, NoonCloud, ProfileId } from '../../config/days.ts';
+import type { LevelDef } from '../../config/campaign.ts';
+import type { ConceptId } from '../../config/concepts.ts';
+import type { BiomeId, DayPlan, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { type MaskScene, sceneAddBall, sceneAddCaster, sceneAddCloud, sceneBegin } from '../intervals.ts';
@@ -49,8 +51,32 @@ export interface World {
   readonly planOn: boolean;
   /** RunConfig.forecast (debug and tooling): every day that fits it gets it, the others are clear. */
   readonly forcedForecast: ForecastId | null;
+  /** RunConfig.biome: the Day-1 biome, alternating from there (campaign levels); null = the plan's. */
+  readonly forcedBiome: BiomeId | null;
   /** worldPlan() memo of the drawn plan, index 0 = Day 1 (plan-on worlds only). */
   readonly plan: DayPlan[];
+  /** Campaign concepts (RunConfig.mods) as a set and in list order (the dayParams cache key). */
+  readonly mods: ReadonlySet<ConceptId>;
+  readonly modList: readonly ConceptId[];
+  /** The campaign level (RunConfig.level), or null. */
+  readonly level: LevelDef | null;
+  /** Walk multiplier of the concepts (see plan.ts worldYAtDayTick) and caster height scale. */
+  readonly walkMul: number;
+  readonly heightScale: number;
+  /**
+   * Campaign geometry: the absolute tick and y where the run starts (0 outside a level: the start
+   * hut stands at startY + 10 and the validator's DP begins there), the finish line's y (Infinity
+   * when none: crossing it with Chill > 0 wins the level; the validator leaves the stretch past it
+   * unused), the 'gate' concept's arch y (−Infinity when none) and the 'eclipse' window's first
+   * absolute tick (−1 when none).
+   */
+  readonly startTick: number;
+  readonly startY: number;
+  readonly finishY: number;
+  readonly gateY: number;
+  readonly eclipseTick: number;
+  /** Drain the validator's DP uses (the level's, else the profile's); × DayParams.drainMul at use. */
+  readonly validatorDrain: number;
   readonly trail: Trail;
   /** Casters sorted by center y (ties by id). */
   readonly casters: Caster[];

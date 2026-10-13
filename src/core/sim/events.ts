@@ -1,6 +1,7 @@
 // Shared contract between the simulation (src/core) and its consumers (audio, UI, meta, render).
 // The sim emits these; nothing else constructs SimEvents. Extend only additively.
 
+import type { ConceptId } from '../../config/concepts.ts';
 import type { DayPlan, NoonCloud } from '../../config/days.ts';
 
 export type HourGlyph = 'cool' | 'warm' | 'hot' | 'melt';
@@ -49,11 +50,12 @@ export type SimEvent =
   | { e: 'glareTouch'; ballId: number }
   | { e: 'lowChill' }
   | { e: 'hourEnd'; day: number; hour: number; glyph: HourGlyph }
-  | { e: 'gateArch'; noon: boolean }
+  | { e: 'gateArch'; noon: boolean; snow: number }
   | { e: 'ballPassed'; clean: boolean }
   | { e: 'swing'; deg: number; chain: number; snow: number; x: number; y: number }
   | { e: 'lessonDone' }
-  | { e: 'death'; info: DeathInfo };
+  | { e: 'death'; info: DeathInfo }
+  | { e: 'levelWon'; passed: boolean; stars: 0 | 1 | 2 | 3; flakes: number; minChill: number };
 
 export type SimEventName = SimEvent['e'];
 
@@ -86,9 +88,19 @@ export interface RunStats {
   swings: number;
   swingChainBest: number;
   phewMinChill: number;
+  /** Lowest Chill during daylight (the starting Chill when never lit; campaign star 3). */
+  minChill: number;
 }
 
-export type RunMode = 'endless' | 'daily' | 'challenge';
+export type RunMode = 'endless' | 'daily' | 'challenge' | 'campaign';
+
+/** A campaign run's outcome (RunResult.level): the level, whether its goal was met at the finish, its stars. */
+export interface RunLevel {
+  id: number;
+  passed: boolean;
+  stars: 0 | 1 | 2 | 3;
+  introduces: ConceptId | null;
+}
 
 export interface RunResult {
   mode: RunMode;
@@ -112,4 +124,6 @@ export interface RunResult {
   melody: number[];
   /** True when the guide was forced on via settings ("Always"). */
   assisted: boolean;
+  /** Campaign runs: the level and its outcome (passed false, stars 0 when Nubs melted). */
+  level?: RunLevel;
 }

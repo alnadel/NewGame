@@ -14,11 +14,12 @@ export type CasterKind =
   | 'column'
   | 'wall'
   | 'pedestal'
-  | 'rock';
+  | 'rock'
+  | 'finish';
 
 /** Every kind in a fixed order (index used by hashes and debug tooling). */
 export const CASTER_KINDS: readonly CasterKind[] = Object.freeze([
-  'hut', 'tree', 'oak', 'cottage', 'stone', 'hedge', 'house', 'arch', 'stall', 'column', 'wall', 'pedestal', 'rock',
+  'hut', 'tree', 'oak', 'cottage', 'stone', 'hedge', 'house', 'arch', 'stall', 'column', 'wall', 'pedestal', 'rock', 'finish',
 ] as CasterKind[]);
 
 /** A solid block on the ground: footprint w × d, height h. */
@@ -132,4 +133,5 @@ export const NAME_NOUNS: Readonly<Record<CasterKind, readonly string[]>> = Objec
   wall: Object.freeze(['Wall']),
   pedestal: Object.freeze(['Gazing Ball']),
   rock: Object.freeze(['Shade Rock']),
+  finish: Object.freeze(['Finish Line']),
 });
