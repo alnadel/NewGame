@@ -113,16 +113,22 @@ test.describe('campaign levels', () => {
   test('?level=36 shows the eclipse: the world dims while it lasts', async ({ page }) => {
     test.slow();
     const errors = watchErrors(page);
-    await openLevel(page, 'level=36&bot=oracle&fast=8&test=1');
+    // The hook's oracle plays the level at 2×: the 6 s eclipse at the midpoint then lasts 3 s of
+    // real time, long enough to spot it and freeze inside it (at ?fast=8 it is over in 0.75 s and
+    // the freeze can land after it). Read the world in the eclipse, then let it pass and read the
+    // daylight of the second half; the sim state vouches for both samples.
+    await openLevel(page, 'level=36&test=1');
     expect((await state(page)).mods).toContain('eclipse');
-    // The eclipse sits at the level's midpoint (soon, at 8×): freeze inside it and read the world,
-    // then let it pass and read the daylight of the second half (the sim state vouches for both).
-    await expect.poll(async () => (await state(page)).eclipse, { timeout: 180_000 }).toBeGreaterThanOrEqual(0.99);
+    await page.evaluate(() => {
+      window.__SHADY_TEST__!.bot('oracle');
+      window.__SHADY_TEST__!.setTimeScale(2);
+    });
+    await expect.poll(async () => (await state(page)).eclipse, { timeout: 120_000 }).toBeGreaterThanOrEqual(0.99);
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
     await page.waitForTimeout(250);
     const dark = await worldBrightness(page);
     expect((await state(page)).eclipse).toBeGreaterThanOrEqual(0.99);
-    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(1));
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(2));
     await expect.poll(async () => `${(await state(page)).phase}:${(await state(page)).eclipse}`, { timeout: 60_000 }).toBe('day:0');
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
     await page.waitForTimeout(250);
