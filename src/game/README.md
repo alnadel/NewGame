@@ -18,6 +18,7 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3), the ghost-thumb hint tracker (§6.2) with its sticky target arc and the first lesson, and the ui.css ghost keyframes as functions (so the canvas moves in step with the DOM hand). |
 | `game/perf.ts` | Frame-time governor, four levels (v1.1 GR4): 0 full → 1 crisp shadows → 2 DPR × 0.75 → 3 DPR × 0.625 and a 200-particle cap (never below 1 device px per CSS px). Late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
+| `game/campaign.ts` | Campaign (Journey, v1.2) runs: a level's run config, the intro card's words, the Results goal line and the HUD goal pill (CAMPAIGN_PLAN §4). |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
 | `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (forecast and biome glyphs) and `postcard.ts`. |
 
@@ -170,13 +171,49 @@ See V1_1_PLAN §4.2 for the contracts.
   "Keep Nubs in the shade" replaces any arrowed cue once the hint rests in shade; a pause clears it
   and it comes back on resume.
 
+## v1.2: the campaign (Journey)
+
+See CAMPAIGN_PLAN §4 for the contract; the core names come from `core/index.ts` (until the core
+batch lands, `core/campaignShim.ts` stands in, every stand-in marked `// V12-SHIM`).
+
+- **Runs**: `startRun('campaign', _, level)` builds `campaignConfig(level)` (the level's seed, profile
+  3, no tutorial chunk, no Day Plan, its concepts as `mods`, drain, start time, biome and forecast;
+  the lesson on level 1 until it is passed) and holds it on the intro card until the first press.
+  `?level=N` opens a level this way at boot (a normal run unless other debug params are present).
+  Retry and Pause > Restart replay the level; `nextLevel()` starts the next one on its card;
+  `openJourney()` leaves the run like Home and shows the Journey map. Campaign runs never use the
+  comfort ladder, bests or the endless history; `?bot=` autoplay goes on to the next level.
+- **Intro card** (`render/banners.ts` `showLevelCard`): "LEVEL 6", the name, the concept's glyph,
+  short name and blurb (wrapped, ≤ 3 lines), the goal pill and a breathing "tap or drag to start";
+  it slides in like the Day card, holds through `hold` and slides out on `start`.
+- **HUD** (`render/hud.ts` `HudCampaign`): the badge reads `L6`, the ruler is a teal progress bar to a
+  checkered finish flag with the gate or eclipse marker at the midpoint, the Snow pill counts
+  `flakes/target` or `snow/target` on goal levels, the clock stays, and a wind mark rides the
+  progress head during a gust.
+- **Finish**: on `levelWon` the session builds the result (`result.level`, `stats.minChill`), fx
+  stamps `FINISH` (a checkered plate, 64 confetti, a hop and a zoom pulse) or the rose miss line
+  ("NOT ENOUGH FLAKES"/"SNOW"), the sim stays frozen in `won` for `FINISH_FREEZE_S` (1 s, effects
+  still animate), then the Results show with `ResultsView.campaign` (id, name, passed, stars,
+  nextId, goalLine, introduces). A melt is the death flow as before.
+- **Render signatures** (`renderer.ts`): fog (a cached mist band fades the world out 170-330 u ahead,
+  the halo loses its `next` arcs), No Dial (`blind`: the halo's shade arcs and hint are off, the
+  pointer and glare stay), eclipse (`s.eclipse` dims the palette toward night with a star field and
+  slides a dark disc over the sun mascot), gusts (`P_GUST` streaks fly the way the sun is pushed
+  while `s.sun.gust ≠ 0`), Sun Lock (a padlock outside the sun pointer while `s.sun.locked`),
+  Moonlit (night palette, the sun's own shadows in the moonlight colour, stars, the moon as the sun
+  mascot), and the finish line (`casters.ts` `drawFinishArch`: a gate arch as a finish banner with
+  a checkered line on the ground, drawn for the core's `kind: 'finish'` caster; until then the
+  renderer inserts one at the level's finish y, `// V12-SHIM`).
+
 ## Test hook (`?test=1`)
 
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
-(−1 outside endless), `drain, noonCloud, forecast, biome, lessonOn`), `forceDeath()`,
+(−1 outside endless), `drain, noonCloud, forecast, biome, lessonOn`, and in v1.2 `level` (−1
+outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locked`, `moonlit`), `forceDeath()`,
 `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; for tooling: `paused()`,
 `presses()`, `demo(name)` (fx and audio only: `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`,
-`cloud`, `glare`, `flake`, `best`, and in v1.1 `passed`, `swing`, `highnoon`, `postcard`), `perf()`
+`cloud`, `glare`, `flake`, `best`, in v1.1 `passed`, `swing`, `highnoon`, `postcard`, and in v1.2
+`finish`), `campaign()` (the last Results' `ResultsView.campaign`, or null), `perf()`
 (frame, sim, generation and render ms, layer counters, the DPR, `govLevel`, `draws`, and in v1.1
 `fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()`, `cameraFx()`,
 `hudPb()`, `renderOptions({ mapOverlay, multiplyShadows, decor })`, `pixelAB(a, b)`,

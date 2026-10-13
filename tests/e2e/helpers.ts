@@ -19,6 +19,14 @@ export interface ShadyState {
   forecast: string;
   biome: string;
   lessonOn: boolean;
+  /** Campaign (v1.2): the level id (−1 none), its concepts and the progress to the finish (0..1). */
+  level: number;
+  mods: string[];
+  levelProgress: number;
+  eclipse: number;
+  gust: number;
+  locked: boolean;
+  moonlit: boolean;
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
@@ -192,6 +200,7 @@ declare global {
       mapProbe(mapT: number): MapProbe | null;
       mapCallouts(): number[][];
       resultsTip(): string | null;
+      campaign(): { id: number; name: string; passed: boolean; stars: number; nextId: number | null; goalLine: string } | null;
       postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
       pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
