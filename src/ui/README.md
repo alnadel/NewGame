@@ -134,7 +134,7 @@ and the tiles stay where they are (fix round 2). The missions done this run pop 
 chip with the first stamp ("2 missions done +20"), so the reward shows wherever the rows sit.
 
 **Journey** (v1.2, docs/CAMPAIGN_PLAN.md §5; Journey-first since v1.3): the Title's bottom
-cluster is the chips (Best → Journal, mission pips, Snow), the **modes** row and the tray (Daily,
+cluster is the chips (Best → Journal, mission pips), the **modes** row and the tray (Daily,
 Missions, Wardrobe, Settings). The modes are the map button `.journey-pill` (the stars earned,
 "Map" before any; `openJourney()`), the primary **Play** `.play-pill` "Level N" (`continueLevel`,
 the highest unlocked level: `startRun('campaign', undefined, N)`; Space/Enter too) and **Endless**
@@ -142,6 +142,31 @@ the highest unlocked level: `startRun('campaign', undefined, N)`; Space/Enter to
 them is handed to the sun. When the cluster would reach Nubs' halo the Title sheds, in order, the
 tray labels, then disc/pill size (`is-tight`), then the chips row (`no-chips`). Mouse and keyboard
 players see the key line "Space: play the level · ← →: Endless · Esc: back" under the tagline.
+
+**v1.4 Title** (docs/V1_4_PLAN.md): a top bar holds the Sun Rank badge (`gamify.ts rankBadge`; it
+opens the Profile once `featureUnlocked(save, 'profile')`, else it toasts `featureHint`), a gold
+"Reward" button while `claimables(save).daily` (it opens the Profile, where the streak is claimed)
+and the Snow wallet (it counts up after a run). Endless, Daily, Missions and Wardrobe are gated by
+`featureUnlocked`: locked, they show a lock badge and a tap toasts `featureHint(f)`; while nothing
+is unlocked yet (and no stars) the locked buttons, the map and the top bar are hidden, so a first
+launch is Play (and Settings) only. A feature unlocked since this device last saw the Title gets
+`.is-new` (a NEW tag and a pulse) until opened, and a one-time "Unlocked: …" toast; `seen.ts`
+keeps those marks per device (the first read takes everything current as seen). Claim dots
+(`claimDot`) go on the badge (globes + trophies) and on the Missions and Wardrobe discs.
+
+**v1.4 Results**: the XP meter (`xpMeter`) sits under the goal line (the score on endless runs) and
+fills once the stars have landed (0.5 s in on endless runs); then `revealRewards(ctx,
+outcome.gamify.rewards)` runs, and Retry / Next level arm only when it resolves (Back, Enter and
+the map tap wait too). With nothing to reveal they arm after 0.3 s as before. Features the run
+unlocked join the award chips ("Unlocked: the Wardrobe").
+
+**v1.4 Journey and Wardrobe**: each chapter card opens with a biome-coloured banner ("Chapter 4"
+over its name) and the chapter's Snow Globe, gold with a check once all ten levels are passed
+(`.is-complete`; a gold rim at 30 stars, `.is-perfect`); a chapter completed since the last visit
+pops its globe and toasts. The Wardrobe shows the collection (owned / all, with a bar), each item's
+rarity (`labels.ts rarityOf`: star rewards legendary, other achievements and 500+ Snow epic, 150+
+rare) as a coloured rim and label, and NEW marks (with a dot on their tab) on wearable or buyable
+items this device hasn't shown yet; a tab's marks clear when it closes.
 
 `ResultsView.campaign = { id, name, passed, stars, nextId: number | null, goalLine, introduces? }`
 turns the sheet into the compact level variant (it may take 82% of the screen, it has no postcard):
@@ -311,6 +336,14 @@ if (shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone() })) 
 uses. `simulateSafeArea({ top: 47 })` fakes a notch for layout tests (it sets `--safe-*` on `<html>`).
 
 ## 7. Styling
+
+**Visual system (v1.4).** One type scale (`--fs-2xs` 13 px … `--fs-2xl` 28 px), a 4 px spacing
+grid (`--sp-1`…`--sp-5`), three elevations (`--shadow-sm`, `--shadow`, `--shadow-lg`), `--pill`
+and a `--gloss` top light on raised controls. One button family (`widgets.ts button`: plain,
+primary, gold, danger × md/lg/xl/round; their colour is `--bg` under the gloss) with one press feel
+(down onto the lip, 0.97 scale). Menu cards rise in one after another; the Title's top rises in
+while its bottom cluster only fades (fit() measures it on entry). `widgets.ts` also has
+`countUp` (Results' Snow, the Title wallet) and `emptyState` (an icon disc, a title, one line).
 
 `ui.css` defines the GDD palette as custom properties on `.sui` (`--ink #2B2140`, `--paper #FFF8EE`,
 `--accent #2EC4B6`, `--gold #FFC23D`, `--danger #FF5D5D`), white 0.92 panels with 20 px radius and
