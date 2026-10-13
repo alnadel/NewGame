@@ -9,8 +9,11 @@
 // Day Plan runs add one forecast emoji per day reached to the header. 🧭 is appended to the last
 // strip when the guide was forced on ("Always"). Without a canonical base URL (a file: or native
 // build with no VITE_SHARE_URL) the link line is left out.
+//
+// Journey (v1.2):                                   SHADY Journey · Level 12 ★★☆ · Glass Garden
+//                                                   <link>            (the plain link, no challenge code)
 
-import { FORECASTS, formatScore, formatTimeOfDay, MINUTES_PER_DAY, PLAN_START_DATE, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
+import { FORECASTS, formatScore, formatTimeOfDay, levelDef, MINUTES_PER_DAY, PLAN_START_DATE, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import { isNative } from '../platform/native.ts';
 import { challengeUrl, type Challenge } from './challenge.ts';
 import { dailyNumber, DAILY_TRIES } from './daily.ts';
@@ -107,6 +110,31 @@ export function dailyShareText(p: DailyShareInput): string {
   return out.join('\n');
 }
 
+export const STAR_ON = '\u2605'; // ★
+export const STAR_OFF = '\u2606'; // ☆
+
+/** "★★☆": `stars` of 3 lit. */
+export function starText(stars: number, max = 3): string {
+  const n = Math.max(0, Math.min(max, Math.floor(stars)));
+  return STAR_ON.repeat(n) + STAR_OFF.repeat(max - n);
+}
+
+export interface CampaignShareInput {
+  id: number;
+  name: string;
+  /** Stars earned (0-3). */
+  stars: number;
+  /** The game's link, or null to leave the link line out. */
+  link: string | null;
+}
+
+/** "SHADY Journey · Level 12 ★★☆ · Glass Garden" and the link (no challenge code for a level). */
+export function campaignShareText(p: CampaignShareInput): string {
+  const out = [`SHADY Journey · Level ${p.id} ${starText(p.stars)} · ${p.name}`];
+  if (p.link !== null) out.push(p.link);
+  return out.join('\n');
+}
+
 const legacyBiome = (day: number): DayPlan['biome'] => (day % 2 === 0 ? 'oldtown' : 'meadow');
 
 /**
@@ -125,7 +153,8 @@ export interface SharePayload {
   text: string;
   /** The challenge link (also the last line of `text`), or null when there is no base URL. */
   url: string | null;
-  challenge: Challenge;
+  /** The encoded run, or null for a Journey level (its link is the plain game address). */
+  challenge: Challenge | null;
 }
 
 export interface ShareExtra {
@@ -144,6 +173,11 @@ export interface ShareExtra {
  * @param tryNumber for daily runs: the counted try, or null for practice.
  */
 export function buildShare(r: RunResult, baseUrl: string | null, tryNumber: number | null = null, extra: ShareExtra = {}): SharePayload {
+  if (r.mode === 'campaign' && r.level !== undefined) {
+    const lv = r.level;
+    const name = levelDef(lv.id)?.name ?? `Level ${lv.id}`;
+    return { text: campaignShareText({ id: lv.id, name, stars: lv.passed ? lv.stars : 0, link: baseUrl }), url: baseUrl, challenge: null };
+  }
   const snow = Math.max(0, Math.floor(r.stats.snow));
   const n = extra.name ? { n: extra.name } : {};
   const planOn = extra.plan ?? runPlanOn(r);

@@ -25,7 +25,10 @@ export type AchievementId =
   | 'glare-proof'
   | 'ice-cold'
   | 'night-gardener'
-  | 'forecaster';
+  | 'forecaster'
+  | 'journey-10'
+  | 'journey-100'
+  | 'three-star-20';
 
 export type CosmeticId =
   | 'scarf-red'
@@ -403,6 +406,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'night-gardener', name: 'Night Gardener', description: '30 frost flowers in one run.', hint: 'The night garden is big.' },
   { id: 'forecaster', name: 'Forecaster', description: 'Survive a noon in Breezy, Overcast, Heat Wave and Long Shadows weather.',
     hint: 'Any weather, same snowman.' },
+  // Journey (v1.2): no item rewards.
+  { id: 'journey-10', name: 'First Steps', description: 'Finish Chapter 1 of the Journey.', hint: 'Ten short walks make a chapter.' },
+  { id: 'journey-100', name: 'Halfway There', description: 'Pass 100 Journey levels.', hint: 'A hundred shades on, the road keeps going.' },
+  { id: 'three-star-20', name: 'Starry Road', description: 'Earn three stars on 20 Journey levels.', hint: 'Twenty times, leave nothing behind.' },
 ];
 
 const ACHIEVEMENT_BY_ID = new Map<string, AchievementDef>(ACHIEVEMENTS.map((a) => [a.id, a]));

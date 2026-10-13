@@ -7,6 +7,10 @@ import { addDays } from '../../src/meta/daily.ts';
 import {
   activeMissionViews,
   applyRunResult,
+  CAMPAIGN_STARS_MAX,
+  continueLevel,
+  isLevelPlayable,
+  totalStars,
   nextRunEased,
   recentBestAt,
   warmupDue,
@@ -862,5 +866,115 @@ describe('misc', () => {
     expect(shouldShowInstallSheet(s, { ios: false, standalone: false })).toBe(false);
     s.flags.installSheetShown = true;
     expect(shouldShowInstallSheet(s, { ios: true, standalone: false })).toBe(false);
+  });
+});
+
+describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
+  /** A finished Journey level: `passed` with `stars`, melted or short of the goal otherwise. */
+  const level = (id: number, passed: boolean, stars: number, over: Partial<Stats> = {}): RunResult =>
+    run(360, { flakes: 12, snow: 30, ...over }, { mode: 'campaign', level: { id, passed, stars, introduces: null } });
+
+  it('pays the run Snow plus the first-pass bonus (id × 2), once', () => {
+    const first = applyRunResult(quiet(), level(6, true, 2), opts());
+    expect(first.outcome.bonusSnow).toBe(12);
+    expect(first.outcome.snowEarned).toBe(30 + 12 + first.outcome.missionSnow);
+    expect(first.outcome.toasts.map((t) => t.text)).toContain('First pass +12');
+    expect(first.outcome.campaign).toEqual({ passed: true, stars: 2, newStars: 2, unlockedNext: true });
+    const again = applyRunResult(first.save, level(6, true, 3), opts());
+    expect(again.outcome.bonusSnow).toBe(0);
+    expect(again.outcome.toasts.map((t) => t.text)).not.toContain('First pass +12');
+    expect(again.outcome.campaign).toEqual({ passed: true, stars: 3, newStars: 1, unlockedNext: false });
+  });
+
+  it('keeps the best stars, unlocks the next level on a pass and remembers the last level', () => {
+    let s = applyRunResult(quiet(), level(1, true, 3), opts()).save;
+    expect(s.campaign.stars[0]).toBe(3);
+    expect(s.campaign.unlocked).toBe(2);
+    expect(s.campaign.lastLevel).toBe(1);
+    s = applyRunResult(s, level(1, true, 1), opts()).save;
+    expect(s.campaign.stars[0]).toBe(3);
+    // A failed level: no stars, nothing unlocked, no bonus, but it was played.
+    const fail = applyRunResult(s, level(2, false, 0, { snow: 9 }), opts());
+    expect(fail.save.campaign.stars[1]).toBe(0);
+    expect(fail.save.campaign.unlocked).toBe(2);
+    expect(fail.save.campaign.lastLevel).toBe(2);
+    expect(fail.outcome.bonusSnow).toBe(0);
+    expect(fail.outcome.runSnow).toBe(9);
+    expect(fail.outcome.campaign).toEqual({ passed: false, stars: 0, newStars: 0, unlockedNext: false });
+    // Playing ahead (the testing toggle) never locks what was unlocked, and stars clamp to 1..3.
+    const ahead = applyRunResult(fail.save, level(40, true, 9), opts()).save;
+    expect(ahead.campaign.unlocked).toBe(41);
+    expect(ahead.campaign.stars[39]).toBe(3);
+    expect(applyRunResult(ahead, level(200, true, 0), opts()).save.campaign.unlocked).toBe(201);
+    // Level 0 or 999 is ignored.
+    expect(applyRunResult(ahead, level(999, true, 3), opts()).save.campaign).toEqual(ahead.campaign);
+  });
+
+  it('never touches the history, the comfort ladder or the bests', () => {
+    const base = quiet(10);
+    base.stats.comfort = 2;
+    base.stats.bestMinutes = 100;
+    const { save, outcome } = applyRunResult(base, level(3, true, 3, { minutes: 700 }), opts({ rung: 4 }));
+    expect(save.history).toEqual([]);
+    expect(save.stats.comfort).toBe(2);
+    expect(save.stats.bestMinutes).toBe(100);
+    expect(save.stats.easedBest).toBe(0);
+    expect(outcome.newBest).toBe(false);
+    expect(outcome.pace).toBeNull();
+    // It still counts as a run: missions progress, the lifetime counters and Morning Snow apply.
+    expect(save.stats.runs).toBe(11);
+    expect(save.stats.flakes).toBe(12);
+    expect(outcome.missions.some((m) => m.fraction > 0)).toBe(true);
+  });
+
+  it('leaves the Journey alone on every other mode', () => {
+    const { save, outcome } = applyRunResult(quiet(), run(400), opts());
+    expect(save.campaign).toEqual(quiet().campaign);
+    expect(outcome.campaign).toBeUndefined();
+  });
+
+  it('unlocks First Steps, Halfway There and Starry Road', () => {
+    let s = quiet();
+    for (let id = 1; id <= 9; id++) s = applyRunResult(s, level(id, true, 3), opts()).save;
+    expect(s.unlocks.achievements).not.toContain('journey-10');
+    const ten = applyRunResult(s, level(10, true, 3), opts());
+    expect(ten.outcome.achievementsUnlocked).toEqual(['journey-10']);
+    expect(ten.outcome.cosmeticsUnlocked).toEqual([]);
+    s = ten.save;
+    for (let id = 11; id <= 19; id++) s = applyRunResult(s, level(id, true, 3), opts()).save;
+    // 19 levels at three stars, then the 20th.
+    expect(s.unlocks.achievements).not.toContain('three-star-20');
+    s = applyRunResult(s, level(20, true, 3), opts()).save;
+    expect(s.unlocks.achievements).toContain('three-star-20');
+    s.campaign.stars = s.campaign.stars.map((n, i) => (i < 99 ? Math.max(1, n) : n));
+    expect(applyRunResult(s, level(100, true, 1), opts()).outcome.achievementsUnlocked).toEqual(['journey-100']);
+    // A gap (the testing toggle skipped a level) holds First Steps back.
+    const gap = quiet();
+    gap.campaign.stars = gap.campaign.stars.map((_n, i) => (i < 10 && i !== 4 ? 1 : 0));
+    expect(applyRunResult(gap, level(10, true, 3), opts()).outcome.achievementsUnlocked).toEqual([]);
+  });
+
+  it('knows which levels are playable, the total stars and where Continue leads', () => {
+    const s = defaults(1);
+    expect(CAMPAIGN_STARS_MAX).toBe(600);
+    expect(isLevelPlayable(s, 1)).toBe(true);
+    expect(isLevelPlayable(s, 2)).toBe(false);
+    expect(isLevelPlayable(s, 0)).toBe(false);
+    expect(isLevelPlayable(s, 201)).toBe(false);
+    expect(continueLevel(s)).toBe(1);
+    expect(totalStars(s)).toBe(0);
+    s.campaign.unlocked = 38;
+    s.campaign.stars[0] = 3;
+    s.campaign.stars[36] = 2;
+    expect(isLevelPlayable(s, 38)).toBe(true);
+    expect(isLevelPlayable(s, 39)).toBe(false);
+    expect(continueLevel(s)).toBe(38);
+    expect(totalStars(s)).toBe(5);
+    s.settings.unlockAll = true;
+    expect(isLevelPlayable(s, 200)).toBe(true);
+    expect(isLevelPlayable(s, 201)).toBe(false);
+    expect(continueLevel(s)).toBe(38);
+    s.campaign.unlocked = 201;
+    expect(continueLevel(s)).toBe(200);
   });
 });
