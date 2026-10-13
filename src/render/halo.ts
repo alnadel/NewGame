@@ -13,6 +13,7 @@
 
 import { ghostSwipe } from '../game/assist.ts';
 import { cssa, hex } from './color.ts';
+import { drawLockGlyph } from './glyphs.ts';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -69,6 +70,10 @@ export interface HaloInput {
   /** Hint visibility (eased 0..1). */
   hintAlpha: number;
   reducedMotion: boolean;
+  /** Campaign concepts (v1.2): No Dial hides the shade arcs and the hint; Fog hides the `next` arcs; Sun Lock shows a padlock. */
+  blind: boolean;
+  hideNext: boolean;
+  locked: boolean;
 }
 
 const swipe = new Float64Array(2);
@@ -195,11 +200,11 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   g.arc(cx, cy, R, 0, TAU);
   g.stroke();
 
-  if (inp.sunUp) {
-    // Shade arcs by how long the shade lasts.
+  if (inp.sunUp && !inp.blind) {
+    // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
     const ga = inp.guideAlpha * A;
     if (ga > 0.01) {
-      const kind = splitShade(inp.now, inp.next, split);
+      const kind = splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split);
       g.setLineDash([4, 5]);
       g.lineWidth = 2;
       g.strokeStyle = cssa(TEAL, 0.35 * ga);
@@ -235,6 +240,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       }
       g.lineCap = 'butt';
     }
+  }
+  if (inp.sunUp) {
     // Glare arcs: red with hatching, always shown.
     let anyGlare = false;
     for (let b = 0; b < 360; b++) {
@@ -268,7 +275,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
 
-  if (inp.sunUp) drawHint(g, inp, A);
+  if (inp.sunUp && !inp.blind) drawHint(g, inp, A);
 
   // A SWING: the arc the sun swept to hand the shade over, flashing teal and fading out.
   if (h.swingT > 0 && h.swingDeg !== 0) {
@@ -367,6 +374,23 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.beginPath();
     g.arc(sx, sy, 5, 0, TAU);
     g.fill();
+  }
+  if (inp.locked) {
+    // Sun Lock: a padlock just outside the pointer, on an ink plate; the ring greys over.
+    g.strokeStyle = cssa(INK, 0.35 * f);
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(cx, cy, R, 0, TAU);
+    g.stroke();
+    const lx = cx + Math.cos(a) * (R + 20);
+    const ly = cy + Math.sin(a) * (R + 20);
+    g.fillStyle = cssa(INK, 0.9 * f);
+    g.beginPath();
+    g.arc(lx, ly, 11, 0, TAU);
+    g.fill();
+    g.globalAlpha = f;
+    drawLockGlyph(g, lx, ly, 15, '#FFFFFF');
+    g.globalAlpha = 1;
   }
 }
 
