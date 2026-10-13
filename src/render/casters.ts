@@ -719,7 +719,6 @@ function drawArch(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): vo
   // Keystone.
   center(lintel.pts, lintel.n, ctr);
   scaled(lintel.pts, lintel.n, 0.16, tmp);
-  for (let i = 0; i < lintel.n; i++) tmp[2 * i + 1] = (tmp[2 * i + 1] as number) + 0;
   fillTop(g, v, tmp, lintel.n, lintel.z1 + 0.5, lighten(topColor(L, MAT.arch), 0.08));
 }
 

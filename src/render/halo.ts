@@ -82,6 +82,15 @@ export interface HaloInput {
   lockSoon: boolean;
 }
 
+/** A dial input to refill every frame. */
+export function createHaloIn(): HaloInput {
+  const none = new Uint8Array(360);
+  return {
+    cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
+    hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
+  };
+}
+
 const swipe = new Float64Array(2);
 const split = createShadeSplit();
 

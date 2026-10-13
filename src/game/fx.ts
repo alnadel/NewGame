@@ -262,6 +262,9 @@ export class Fx {
           addRing(sc.rings, ev.info.x, ev.info.y, 6, 30, 0.9, 2, 0.8, 0xffffff);
           for (let i = 0; i < 14; i++) {
             spawn(sc.particles, P_STEAM, nx + rnd(-8, 8), ny + rnd(-4, 4), rnd(4, 18), rnd(-10, 10), rnd(-4, 4), rnd(25, 45), rnd(0.8, 1.3), 3, 11, 0xffffff);
+            // And a splash of meltwater thrown out around the puddle.
+            const a = (i / 14) * Math.PI * 2;
+            spawn(sc.particles, P_DRIP, nx, ny, rnd(10, 20), Math.cos(a) * rnd(30, 55), Math.sin(a) * rnd(30, 55), rnd(40, 70), 1.4, 1.6, 1.4, 0x7fc8ff);
           }
           break;
         }

@@ -919,7 +919,7 @@ export class Session {
     const s = this.s;
     let c = r.campaign;
     if (!c) {
-      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1 };
+      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0 };
       r.campaign = c;
     }
     const goal = hudGoal(level, s.stats);
@@ -930,6 +930,7 @@ export class Session {
     c.goalFlakes = goal.flakes;
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
+    c.gust = s.sun.gust;
   }
 
   private renderScreen(id: ScreenId): RenderScreen {

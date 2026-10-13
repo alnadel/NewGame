@@ -41,8 +41,8 @@ import {
   type Footprints,
   type GroundPaint,
 } from './ground.ts';
-import { createHalo, drawHalo, updateHalo, type HaloState } from './halo.ts';
-import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudState } from './hud.ts';
+import { createHalo, createHaloIn, drawHalo, updateHalo, type HaloInput, type HaloState } from './halo.ts';
+import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,
   createMapFrame,
@@ -167,19 +167,8 @@ export interface HintView {
   alpha: number;
 }
 
-/** A campaign run as the renderer sees it (session fillCampaignView): the HUD row and the finish line. */
-export interface CampaignView {
-  id: number;
-  /** 0..1 to the finish line. */
-  progress: number;
-  goalValue: number;
-  /** −1: the Snow pill shows plain Snow. */
-  goalTarget: number;
-  goalFlakes: boolean;
-  /** Marker positions on the progress bar (0..1), −1 none. */
-  markGate: number;
-  markEclipse: number;
-}
+/** A campaign run as the renderer sees it (session fillCampaignView): the HUD's campaign row. */
+export type CampaignView = HudCampaign;
 
 export interface RenderInput {
   s: SimState;
@@ -288,8 +277,9 @@ export interface RenderScene {
    * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
    */
   passes: number;
-  /** The HUD's campaign row (filled from RenderInput.campaign each frame; no allocation). */
-  hudCampaign: HudCampaign;
+  /** The HUD's and the dial's inputs, refilled each frame (no allocation). */
+  hudIn: HudInput;
+  haloIn: HaloInput;
 }
 
 function moonPalette(): Palette {
@@ -345,23 +335,21 @@ export function createScene(): RenderScene {
     friendFor: -1,
     friendWorld: null,
     passes: 0,
-    hudCampaign: { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0 },
+    haloIn: createHaloIn(),
+    hudIn: { s: null as unknown as SimState, pbMinutes: -1, challengeMinutes: -1, goalMinutes: -1, alpha: 1, time: 0, campaign: null },
   };
 }
 
-/** The HUD's campaign row for this frame, or null outside a campaign run. */
-function hudCampaignOf(sc: RenderScene, inp: RenderInput): HudCampaign | null {
-  const c = inp.campaign;
-  if (!c) return null;
-  const h = sc.hudCampaign;
-  h.id = c.id;
-  h.progress = c.progress;
-  h.goalValue = c.goalValue;
-  h.goalTarget = c.goalTarget;
-  h.goalFlakes = c.goalFlakes;
-  h.markGate = c.markGate;
-  h.markEclipse = c.markEclipse;
-  h.gust = inp.s.sun.gust;
+/** The HUD's input for this frame. */
+function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
+  const h = sc.hudIn;
+  h.s = inp.s;
+  h.pbMinutes = inp.pbMinutes;
+  h.challengeMinutes = inp.challengeMinutes;
+  h.goalMinutes = inp.goalMinutes;
+  h.alpha = alpha;
+  h.time = sc.worldTime;
+  h.campaign = inp.campaign;
   return h;
 }
 
@@ -428,7 +416,7 @@ export class Renderer {
    */
   prebuildHud(inp: RenderInput): void {
     const sc = this.scene;
-    syncHud(sc.hud, sc.view, { s: inp.s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: 1, time: inp.time, campaign: hudCampaignOf(sc, inp) });
+    syncHud(sc.hud, sc.view, hudInput(sc, inp, 1));
   }
 
   /**
@@ -823,32 +811,32 @@ export class Renderer {
     const showHalo = inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'title' || inp.screen === 'dying');
     if (showHalo) {
       const fade = dying >= 0 ? Math.max(0, 1 - dying / 0.3) : inp.screen === 'title' ? 0.75 : 1;
-      drawHalo(g, sc.halo, {
-        cx: pose.x,
-        cy: pose.y,
-        R: 40 * v.S,
-        theta,
-        dragging: inp.dragging,
-        dTheta: s.sun.dTheta,
-        chill: snap.chill,
-        sunUp,
-        guideAlpha: inp.guideAlpha,
-        now: s.guide.now,
-        next: s.guide.next,
-        glare: s.guide.glare,
-        fade,
-        time: time,
-        hintTarget: inp.hint.target,
-        hintWidth: inp.hint.width,
-        hintTurn: inp.hint.turn,
-        hintPhase: inp.hint.phase,
-        hintAlpha: inp.screen === 'play' || inp.screen === 'pause' ? inp.hint.alpha : 0,
-        reducedMotion: inp.reducedMotion,
-        blind: s.mods.has('blind'),
-        hideNext: fog,
-        locked: s.sun.locked,
-        lockSoon: !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS),
-      });
+      const hi = sc.haloIn;
+      hi.cx = pose.x;
+      hi.cy = pose.y;
+      hi.R = 40 * v.S;
+      hi.theta = theta;
+      hi.dragging = inp.dragging;
+      hi.dTheta = s.sun.dTheta;
+      hi.chill = snap.chill;
+      hi.sunUp = sunUp;
+      hi.guideAlpha = inp.guideAlpha;
+      hi.now = s.guide.now;
+      hi.next = s.guide.next;
+      hi.glare = s.guide.glare;
+      hi.fade = fade;
+      hi.time = time;
+      hi.hintTarget = inp.hint.target;
+      hi.hintWidth = inp.hint.width;
+      hi.hintTurn = inp.hint.turn;
+      hi.hintPhase = inp.hint.phase;
+      hi.hintAlpha = inp.screen === 'play' || inp.screen === 'pause' ? inp.hint.alpha : 0;
+      hi.reducedMotion = inp.reducedMotion;
+      hi.blind = s.mods.has('blind');
+      hi.hideNext = fog;
+      hi.locked = s.sun.locked;
+      hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
+      drawHalo(g, sc.halo, hi);
     }
     g.restore();
 
@@ -879,7 +867,7 @@ export class Renderer {
     const hudVisible = inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'dying';
     if (hudVisible) {
       const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : 1;
-      drawHud(g, sc.hud, v, { s, pbMinutes: inp.pbMinutes, challengeMinutes: inp.challengeMinutes, goalMinutes: inp.goalMinutes, alpha: a, time: time, campaign: hudCampaignOf(sc, inp) });
+      drawHud(g, sc.hud, v, hudInput(sc, inp, a));
     }
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
     drawScreenParticles(g, sc.particles, v.dpr);
