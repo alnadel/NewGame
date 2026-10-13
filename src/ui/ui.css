@@ -1244,32 +1244,33 @@
 
 /* Small phones with a notch: the Pause card drops its subtitle and tightens up so it still sits
    above Nubs' halo (the player checks whether he is lit before resuming). The run's status (v1.4)
-   makes a level's card taller, so the subtitle goes earlier there. */
+   makes the card taller, so with it the subtitle (and the time) go earlier. */
 @container pause (max-height: 30em) {
-  .scr-pause .dialog.has-stars {
+  .scr-pause .dialog.has-status {
     gap: 8px;
     padding-top: 18px;
     padding-bottom: 16px;
   }
 
-  .scr-pause .has-stars :is(.dialog-sub, .pause-st-now) { display: none; }
-  .scr-pause .has-stars .pause-star { padding: 2px 6px; font-size: 0.75rem; }
+  .scr-pause .has-status .dialog-sub,
+  .scr-pause .has-stars .pause-st-now { display: none; }
+  .scr-pause .has-status .pause-star { padding: 2px 6px; font-size: 0.75rem; }
 }
 
-/* Shorter still (small phones, in a level): Restart, Settings and Home share one row, icon over
+/* Shorter still (small phones): Restart, Settings and Home share one row, icon over
    label, and the badge (it would poke out of the top) goes. */
 @container pause (max-height: 22em) {
-  .scr-pause .dialog.has-stars {
+  .scr-pause .dialog.has-status {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .scr-pause .has-stars > * { grid-column: 1 / -1; }
-  .scr-pause .has-stars > .row-2 { display: contents; }
-  .scr-pause .has-stars .pause-badge { display: none; }
+  .scr-pause .has-status > * { grid-column: 1 / -1; }
+  .scr-pause .has-status > .row-2 { display: contents; }
+  .scr-pause .has-status .pause-badge { display: none; }
 
-  .scr-pause .has-stars > .btn:not(.btn--primary),
-  .scr-pause .has-stars > .row-2 > .btn {
+  .scr-pause .has-status > .btn:not(.btn--primary),
+  .scr-pause .has-status > .row-2 > .btn {
     grid-column: auto;
     flex-direction: column;
     gap: 2px;

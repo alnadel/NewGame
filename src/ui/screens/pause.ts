@@ -42,6 +42,7 @@ export function createPauseScreen(ctx: UiContext): Screen {
   const renderStatus = (): void => {
     const v = ctx.cb.runStatus?.() ?? null;
     status.hidden = v === null;
+    card.classList.toggle('has-status', v !== null);
     card.classList.remove('has-stars');
     if (!v) return;
     statusTitle.textContent = v.title;
@@ -54,7 +55,7 @@ export function createPauseScreen(ctx: UiContext): Screen {
       ),
     );
     statusStars.hidden = v.stars.length === 0;
-    // A level's star pips make the card taller: on short screens its subtitle gives way (ui.css).
+    // A level's card is the tallest: on short screens its time gives way to the goal and stars (ui.css).
     card.classList.toggle('has-stars', v.stars.length > 0);
   };
 
