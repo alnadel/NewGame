@@ -27,6 +27,8 @@ export interface Params {
   rung: number | null;
   /** Forces the Day Plan on or off (cfg.plan, A1); baselines pin ?plan=0. */
   plan: boolean | null;
+  /** Opens this campaign level (1..200) directly: a normal campaign run unless other debug params are present. */
+  level: number | null;
 }
 
 /**
@@ -56,6 +58,7 @@ export function parseParams(search: string, today: string = localDate()): Params
   const rung = num('rung');
   const forecast = q.get('forecast');
   const plan = q.get('plan');
+  const level = num('level');
   return {
     seed: seed === null ? null : Math.floor(Math.abs(seed)) >>> 0,
     daily: q.get('mode') === 'daily',
@@ -75,6 +78,7 @@ export function parseParams(search: string, today: string = localDate()): Params
     forecast: forecast && (FORECAST_IDS as readonly string[]).includes(forecast) ? (forecast as ForecastId) : null,
     rung: rung !== null && rung >= 0 && rung <= COMFORT_MAX ? Math.floor(rung) : null,
     plan: plan === '1' ? true : plan === '0' ? false : null,
+    level: level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null,
   };
 }
 
@@ -96,7 +100,7 @@ export function startTFor(t: string | null, day: number): number | null {
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
  * a forced profile, rung, forecast or Day Plan, fast-forward or a guide override. Such runs are not
  * scored, saved, shared or counted as Daily tries (they work in production builds for QA). ?seed,
- * ?mode=daily&date, ?mute, ?debug, ?test and ?perf don't make a run a debug run.
+ * ?mode=daily&date, ?level, ?mute, ?debug, ?test and ?perf don't make a run a debug run.
  */
 export function isDebugRun(p: Params): boolean {
   return (
