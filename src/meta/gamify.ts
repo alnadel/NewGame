@@ -115,15 +115,15 @@ export function runXp(i: RunXpInput): number {
 }
 
 /** XP from Rank 1 to 2; each later rank needs RANK_STEP more, up to RANK_NEED_MAX. */
-const RANK_NEED_1 = 80;
-const RANK_STEP = 40;
+const RANK_NEED_1 = 100;
+const RANK_STEP = 50;
 const RANK_NEED_MAX = 800;
 /** The first rank whose need is capped, and the lifetime XP it starts at. */
 const CAP_LEVEL = 1 + (RANK_NEED_MAX - RANK_NEED_1) / RANK_STEP;
 const CAP_XP = (CAP_LEVEL - 1) * RANK_NEED_1 + (RANK_STEP * (CAP_LEVEL - 1) * (CAP_LEVEL - 2)) / 2;
 export const RANK_MAX = 999;
 
-/** XP rank `level` needs to reach the next one: 80, 120, 160 … 800. */
+/** XP rank `level` needs to reach the next one: 100, 150, 200 … 800. */
 export function rankNeed(level: number): number {
   return Math.min(RANK_NEED_MAX, RANK_NEED_1 + RANK_STEP * (Math.max(1, level) - 1));
 }

@@ -30,6 +30,8 @@ import { button, hide, menuHeader, progressBar } from '../widgets.ts';
 
 /** Bars keep a sliver of height so a 6:05 AM melt still shows. */
 const MIN_BAR = 0.04;
+/** Trophies shown until "Show all": the unlocked ones first, then the closest to done. */
+const TROPHIES_SHOWN = 6;
 
 const card = (title: Node | string, ...children: (Node | null)[]): HTMLElement =>
   h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title), ...children);
@@ -66,6 +68,11 @@ export function createProfileScreen(ctx: UiContext): Screen {
   const trophyCount = h('span', { class: 'card-count' });
   const trophyNew = h('span', { class: 'pf-new' });
   const trophies = h('ul', { class: 'pf-trophies' });
+  let showAll = false;
+  const moreBtn = button(ctx, { label: 'Show all', className: 'pf-more', onPress: () => {
+    showAll = !showAll;
+    refresh();
+  } });
 
   // --- Collection -------------------------------------------------------------------------------
   const collectionCount = h('span', { class: 'card-count' });
@@ -90,12 +97,12 @@ export function createProfileScreen(ctx: UiContext): Screen {
     'div',
     { class: 'menu-body' },
     hero,
-    card('Rank road', road, h('p', { class: 'card-note' }, 'Play Journey levels, Endless runs and Dailies for XP. Missions and trophies pay extra.')),
+    card('Rank road', road, h('p', { class: 'card-note' }, 'Every run earns XP. Missions and trophies pay extra.')),
     globes,
     streak.el,
-    card(h('span', null, 'Trophies', trophyNew), trophies),
+    card(h('span', null, 'Trophies', trophyNew), trophies, moreBtn),
     card(h('span', null, 'Collection'), h('div', { class: 'pf-row' }, collectionBar, collectionCount), swatches,
-      h('div', { class: 'pf-row' }, h('span', { class: 'kicker' }, icon('star'), ' Journey stars '), starsCount, starsBar), h('div', { class: 'pf-row pf-links' }, wardrobeBtn, journeyBtn)),
+      h('div', { class: 'pf-row pf-stars' }, icon('star'), h('span', null, 'Journey stars'), starsCount), starsBar, h('div', { class: 'pf-links' }, wardrobeBtn, journeyBtn)),
     card('Records', bests, chart, chartSummary, chartNote, totals),
   );
   (trophies.parentElement?.querySelector('.card-title') as HTMLElement).append(trophyCount);
@@ -115,7 +122,7 @@ export function createProfileScreen(ctx: UiContext): Screen {
     rankName.textContent = v.title;
     xpFill.style.width = `${(v.fraction * 100).toFixed(1)}%`;
     xpCount.textContent = `${v.into} / ${v.need} XP`;
-    xpNext.textContent = `Snow Globe at Rank ${nextGlobeRank(save)}`;
+    xpNext.textContent = `Globe at Rank ${nextGlobeRank(save)}`;
     hero.setAttribute('aria-label', `Sun Rank ${v.level}, ${v.title}. ${v.into} of ${v.need} XP to Rank ${v.level + 1}.`);
 
     setChildren(
@@ -148,9 +155,11 @@ export function createProfileScreen(ctx: UiContext): Screen {
     hide(trophyNew, fresh === 0);
     const rows = ACHIEVEMENTS.map((a) => ({ a, p: trophyProgress(save, a.id), on: unlocked.has(a.id) }));
     rows.sort((x, y) => Number(y.on) - Number(x.on) || (x.on ? 0 : y.p.value / y.p.target - x.p.value / x.p.target));
+    moreBtn.querySelector('.btn-label')!.textContent = showAll ? 'Show fewer' : `Show all ${ACHIEVEMENTS.length}`;
+    moreBtn.setAttribute('aria-expanded', String(showAll));
     setChildren(
       trophies,
-      ...rows.map(({ a, p, on }) => {
+      ...rows.slice(0, showAll ? rows.length : TROPHIES_SHOWN).map(({ a, p, on }) => {
         const tier = trophyTier(a.id);
         const item = a.reward ? getCosmetic(a.reward)?.name : undefined;
         const counted = p.target > 1;
@@ -227,7 +236,10 @@ export function createProfileScreen(ctx: UiContext): Screen {
       if (from === 'title' || from === 'missions') origin = from;
       const save = ctx.save();
       fresh = Math.max(0, save.unlocks.achievements.length - save.gamify.seenTrophies);
-      if (from !== 'profile') body.scrollTop = 0;
+      if (from !== 'profile') {
+        body.scrollTop = 0;
+        showAll = false;
+      }
       refresh();
       if (fresh > 0 || featureIsNew(save, 'profile')) ctx.cb.updateSave((s) => markFeatureSeen(markTrophiesSeen(s), 'profile'));
     },

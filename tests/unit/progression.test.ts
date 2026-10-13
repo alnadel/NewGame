@@ -882,7 +882,7 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
   it('pays the run Snow plus the first-pass bonus (id × 2), once', () => {
     // Rank 2 just begun, so neither run reaches Rank 3 (whose Snow would join the bonus).
     const base = quiet();
-    base.gamify.xp = 80;
+    base.gamify.xp = 100;
     const first = applyRunResult(base, level(6, true, 2), opts());
     expect(first.outcome.bonusSnow).toBe(12);
     expect(first.outcome.snowEarned).toBe(30 + 12 + first.outcome.missionSnow);
