@@ -18,7 +18,8 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3), the ghost-thumb hint tracker (§6.2) with its sticky target arc and the first lesson, and the ui.css ghost keyframes as functions (so the canvas moves in step with the DOM hand). |
 | `game/perf.ts` | Frame-time governor, four levels (v1.1 GR4): 0 full → 1 crisp shadows → 2 DPR × 0.75 → 3 DPR × 0.625 and a 200-particle cap (never below 1 device px per CSS px). Late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
-| `game/campaign.ts` | Campaign (Journey, v1.2) runs: a level's run config, the intro card's words, the Results goal line and the HUD goal pill (CAMPAIGN_PLAN §4). |
+| `game/campaign.ts` | Campaign (Journey, v1.2) runs: a level's run config, the intro card's words and star rules, the Results goal line, the HUD goal pill and the stars so far (`starState`: the HUD pips and the Pause card) (CAMPAIGN_PLAN §4). |
+| `game/moments.ts` | v1.4 in-run moments: mission toasts ("MISSION ✓ 2/3", the save's active missions measured against the live run every 0.1 s, read-only on the save; scored runs only), the first three Journey levels' contextual tips (`LEVEL_TIPS`, shown until the level is passed), and the COMEBACK (Chill under the PHEW line while lit, then 0.75 s of held shade, no PHEW on the way in; once per dip). |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
 | `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (every forecast, biome and concept glyph and the ground decals, stored as SVG path ops: `drawGlyph(id)`, `artOps`/`drawArt`) and `postcard.ts`. |
 
@@ -65,6 +66,23 @@ audio; only the draw is skipped:
 next to `--nubs-y`, `--halo-r` and `--nubs-clear`: `--world-left`, `--world-top`, `--world-width`
 and `--world-height` (whole CSS px: 400/0/480/800 at 1280×800, 0/0/390/844 at 390×844). The UI lays
 out every screen, control, sheet, toast and dialog inside it.
+
+### In-run UX (v1.4)
+
+- **HUD**: on a level three star pips replace the clock (gold earned, white still open, grey a lost
+  cool run; a pip that lights pops and chimes `claim`), the goal count turns teal when met; the
+  multiplier badge warms with every level and fills a charge bar over its 4 s of shade.
+- **Intro card**: the goal pill, then the three star rules as icons ("Finish", "6 flakes",
+  "≤ 4 s in sun").
+- **Toasts** (`banners.ts showToast`): a card under the HUD band, clear of the pause column, never
+  over Nubs or his dial; they wait while a card or stamp holds the top. A mission goes ahead of a
+  waiting tip (and a tip shown 1.5 s steps aside), a new tip replaces a waiting one, the run's end
+  drops the queue.
+- **Pause**: `UiCallbacks.runStatus()` (and the test hook's `runStatus()`) gives the Pause card the
+  run's title, goal (with its count or progress), the time reached and, on a level, the star rules
+  with their state so far.
+- **Reward cues**: `uiSound` plays `reward`, `rankUp`, `open` and `claim` with the haptic of the
+  same name, and `tick` with a 6 ms tick at most every 90 ms.
 
 ### Back, focus and failures
 
