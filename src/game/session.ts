@@ -971,6 +971,14 @@ export class Session {
     v.chill = s.nubs.chill;
     v.mult = s.nubs.mult;
     v.omega = s.sun.omega;
+    // Campaign: the chapter's music palette, the finish line and the concept signatures.
+    v.chapter = s.level?.chapter ?? 0;
+    v.progress = s.level ? levelProgress(s) : -1;
+    v.gust = s.sun.gust;
+    v.locked = s.sun.locked;
+    v.eclipse = s.eclipse;
+    v.moonlit = s.moonlit;
+    v.fog = s.mods.has('fog');
     return v;
   }
 
@@ -1662,7 +1670,6 @@ export class Session {
     this.applyResult(save, result);
     this.fx.finish(ev.passed, ev.passed ? 'FINISH' : missLine(level), ev.stars, this.s.nubs.x, this.s.nubs.y);
     this.d.haptics.play('best');
-    this.d.audio.play(ev.passed ? 'newBest' : 'uiError');
     this.setGhost('off');
     this.cue(null);
     this.input.releaseAll();

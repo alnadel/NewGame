@@ -1,9 +1,11 @@
-// Adaptive score (GDD §12): a 90 BPM 16th-note grid scheduled ahead of time, a detuned-saw pad
-// cycling I-vi-IV-V every 4 bars with crossfades, a pluck arpeggio whose density follows the
-// Frost multiplier, a key change every dawn, and the results-screen melody replay.
+// Adaptive score (GDD §12): a 16th-note grid scheduled ahead of time, a pad cycling through the
+// palette's progression every 4 bars with crossfades, a pluck arpeggio whose density follows the
+// Frost multiplier, a bass-and-shaker groove, a key change every dawn, and the results-screen
+// melody replay. Each Journey chapter has its own palette (theory.PALETTES): key, tempo, pad and
+// arpeggio voices and chord order; changes land on the next beat.
 //
-// Nothing here runs on its own timer: the owner calls pump(now, horizon) (from a 25 ms interval
-// and every frame) and applyScene() every frame. pump() only ever schedules what falls inside
+// Nothing here runs on its own timer: the owner calls pump(now, horizon) every frame (and from a
+// fallback interval) and applyScene() every frame. pump() only ever schedules what falls inside
 // [now, horizon), so a throttled timer or a suspended context never produces a burst.
 
 import { GAIN_FLOOR, Smoothed, makePanner } from './engine.ts';
@@ -20,69 +22,72 @@ import {
   bellDegree,
   chordAt,
   degreeHz,
+  degreeSemis,
+  grooveHit,
   keyRootHz,
+  paletteFor,
   semis,
+  stepSeconds,
 } from './theory.ts';
-import type { Chord } from './theory.ts';
+import type { ArpVoice, Chord, Palette, PadVoice } from './theory.ts';
 import { GridSlots, StepClock } from './timing.ts';
 
 /**
- * Gain of each triad tone's main saw (its detuned twin runs at PAD_SECOND_SAW of this) and of the
- * bass saw. The GDD's 0.035 per tone masked the arpeggio completely in the level check; at these
- * levels the pad is a soft bed at ≈ −31 dBFS RMS.
+ * Gain of each triad tone's main oscillator (its detuned twin runs at PAD_SECOND of this) and of
+ * the bass, scaled per pad voice so the three voices measure within ~1 dB of each other. At these
+ * levels the pad is a soft bed about 8 dB under the reward cues (README "Mix and levels").
  */
-const PAD_TONE_GAIN = 0.028;
-const PAD_BASS_GAIN = 0.03;
-/**
- * The GDD's two equal saws at ±7 cents cancel completely at each tone's fundamental 1-2 times a
- * second (clear on/off stripes in the lab's spectrogram, an audible tremolo once the dawn cutoff
- * leaves mostly fundamentals). ±4 cents at a 1 : 0.6 balance keeps the chorus but makes it a slow,
- * shallow shimmer; the bass is a single saw so the low end never pumps.
- */
+const PAD_TONE_GAIN = 0.024;
+const PAD_BASS_GAIN = 0.026;
+const PAD_VOICE_GAIN: Readonly<Record<PadVoice, number>> = { sawtooth: 1, triangle: 1.1, square: 0.55 };
+/** ±4 cents at 1 : 0.6 keeps the chorus a slow, shallow shimmer (equal saws at ±7 cents pumped). */
 const PAD_DETUNE_CENTS = 4;
-const PAD_SECOND_SAW = 0.6;
-const PAD_Q = 0.7;
-/** Regular chord changes crossfade 1.5 s in / 2 s out; a dawn key change is quicker and brighter. */
+const PAD_SECOND = 0.6;
+/** Regular chord changes crossfade 1.5 s in / 2 s out; a key or palette change is quicker. */
 const PAD_ATTACK = 1.5;
 const PAD_RELEASE = 2;
 const KEY_ATTACK = 0.5;
 const KEY_RELEASE = 1;
 
-/** Raised from the GDD's 0.03 so plucks read clearly over the pad (peaks ≈ −22 dBFS). */
-const ARP_GAIN = 0.09;
-/**
- * Time for a pluck to fall to the −80 dB floor. The GDD's 180 ms, read that way, leaves a 26 ms
- * click; 0.4 s gives a soft marimba-like pluck that still never smears at ×5.
- */
+/** Arpeggio pluck level per voice (the bell and square are brighter than the triangle). */
+const ARP_GAIN: Readonly<Record<ArpVoice, number>> = { triangle: 0.08, bell: 0.05, square: 0.03 };
+/** Time for a pluck to fall to the −80 dB floor: a soft marimba-like pluck that never smears at ×5. */
 const ARP_DECAY = 0.4;
 const ARP_PAN = 0.3;
+/** Groove: a round bass pluck on the chord root and a quiet shaker. */
+const BASS_GAIN = 0.11;
+const SHAKER_GAIN = 0.022;
+
+/** The whole score sits this far under the cues (−3 dB; README "Mix and levels"). */
+const SCORE_GAIN = 0.7;
 
 /** Results replay: 8th notes at 120 BPM, at most 32 notes. */
 const MELODY_STEP_S = 0.25;
 const MELODY_MAX = 32;
-const MELODY_GAIN = 0.12;
+const MELODY_GAIN = 0.16;
 const MELODY_LEAD_IN_S = 0.35;
 
-/** One sustained pad chord: bass + triad (two detuned saws per triad tone), under one envelope. */
+/** One sustained pad chord: bass + triad (two detuned oscillators per triad tone), under one envelope. */
 class PadChord {
   private readonly voice: Voice;
   private readonly env: GainNode;
 
-  constructor(g: AudioGraph, dest: AudioNode, day: number, chord: Chord, t: number, attack: number) {
+  constructor(g: AudioGraph, dest: AudioNode, root: number, chord: Chord, wave: PadVoice, t: number, attack: number) {
     // Not pooled: pads are long and the music owns their lifetime.
     this.voice = g.voice('music', t, dest, false);
     this.env = this.voice.gain(GAIN_FLOOR);
     // setTargetAtTime (not ramps) so a release can take over mid-attack without a jump.
     this.env.gain.setValueAtTime(GAIN_FLOOR, t);
-    this.env.gain.setTargetAtTime(1, t, attack / 3);
-    const root = keyRootHz(day);
-    this.voice.osc('sawtooth', root * semis(chord.bass), t, undefined, this.voice.gain(PAD_BASS_GAIN, this.env));
+    this.env.gain.setTargetAtTime(PAD_VOICE_GAIN[wave], t, attack / 3);
+    this.voice.osc(wave, root * semis(chord.bass), t, undefined, this.voice.gain(PAD_BASS_GAIN, this.env));
     for (const tone of chord.tones) {
       const f = root * semis(tone);
-      const main = this.voice.gain(PAD_TONE_GAIN, this.env);
-      const second = this.voice.gain(PAD_TONE_GAIN * PAD_SECOND_SAW, this.env);
-      this.voice.osc('sawtooth', f, t, undefined, main).detune.value = -PAD_DETUNE_CENTS;
-      this.voice.osc('sawtooth', f, t, undefined, second).detune.value = PAD_DETUNE_CENTS;
+      for (const [gain, cents] of [
+        [PAD_TONE_GAIN, -PAD_DETUNE_CENTS],
+        [PAD_TONE_GAIN * PAD_SECOND, PAD_DETUNE_CENTS],
+      ] as const) {
+        this.voice.osc(wave, f, t, undefined, this.voice.gain(gain, this.env)).detune.value = cents;
+      }
     }
   }
 
@@ -102,23 +107,29 @@ export class Music {
   private readonly duck: Smoothed;
   private readonly muffle: Smoothed;
   private readonly arpOut: readonly AudioNode[];
-  private readonly melodyOut: GainNode;
+  /** Centred input of the score (bass, shaker, melody). */
+  private readonly center: GainNode;
 
   private pad: PadChord | null = null;
   private chord: Chord = chordAt(0);
   private chordIndex = 0;
   private chordStep = 0;
-  /** Key currently sounding, and the one the scene asks for (changes on the next beat). */
+  /** Key and palette currently sounding, and the ones the scene asks for (change on the next beat). */
   private keyDay = 1;
   private wantDay = 1;
+  private palette: Palette = paletteFor(0);
+  private paletteIndex = 0;
+  private wantPalette = 0;
   private wantArp = 0;
+  private wantVoice: ArpVoice | null = null;
+  private wantGroove = 0;
   /** Arpeggio level latched on the beat: rises wait for the beat, drops apply at once. */
   private arpBeatLevel = 0;
   private arpNote = 0;
 
   private melody: number[] = [];
   private melodyIndex = 0;
-  private melodyDay = 1;
+  private melodyRoot = 0;
   private melodyNext = 0;
 
   constructor(g: AudioGraph) {
@@ -126,7 +137,7 @@ export class Music {
     const ctx = g.ctx;
     // pad → padFilter → padLevel ┐
     // arp → pan L/R ─────────────┼→ duck → muffle → music bus
-    // melody ────────────────────┘
+    // bass, shaker, melody ──────┘
     const muffle = ctx.createBiquadFilter();
     muffle.type = 'lowpass';
     muffle.Q.value = 0.5;
@@ -134,34 +145,38 @@ export class Music {
     this.muffle = new Smoothed(muffle.frequency, MUFFLE_OPEN);
     const duck = ctx.createGain();
     duck.connect(muffle);
-    this.duck = new Smoothed(duck.gain, 1);
+    this.duck = new Smoothed(duck.gain, SCORE_GAIN);
 
     const padLevel = ctx.createGain();
     padLevel.connect(duck);
     this.padLevel = new Smoothed(padLevel.gain, 0);
     this.padFilter = ctx.createBiquadFilter();
     this.padFilter.type = 'lowpass';
-    this.padFilter.Q.value = PAD_Q;
+    this.padFilter.Q.value = 0.7;
     this.padFilter.connect(padLevel);
     this.padCutoff = new Smoothed(this.padFilter.frequency, 400);
 
-    this.arpOut = [-ARP_PAN, ARP_PAN].map((p) => {
-      const pan = makePanner(ctx, p);
-      pan.connect(duck);
-      return pan;
-    });
-    this.melodyOut = ctx.createGain();
-    this.melodyOut.connect(duck);
+    this.arpOut = [-ARP_PAN, ARP_PAN].map((p) => makePanner(ctx, p).connect(duck));
+    this.center = ctx.createGain();
+    this.center.connect(duck);
   }
 
   /** Continuous targets for this frame. */
   applyScene(s: Readonly<Scene>, now: number): void {
     this.wantDay = s.day;
+    this.wantPalette = s.palette;
     this.wantArp = s.arp;
+    this.wantVoice = s.arpVoice;
+    this.wantGroove = s.groove;
     this.padLevel.set(s.pad, now, 0.5);
     this.padCutoff.set(s.padCutoff, now, 0.35);
-    this.duck.set(s.duck, now, s.duck < 1 ? 0.05 : 0.3);
+    this.duck.set(s.duck * SCORE_GAIN, now, s.duck < 1 ? 0.05 : 0.3);
     this.muffle.set(s.muffle, now, 0.12);
+  }
+
+  /** The base key of the palette playing now (tonal one-shots follow it). */
+  get key(): number {
+    return this.palette.key;
   }
 
   /** Schedules every musical event in [now, horizon). */
@@ -176,11 +191,11 @@ export class Music {
     return this.slots.claim(this.clock, now);
   }
 
-  /** Starts the results replay; returns its duration in seconds. */
+  /** Starts the results replay in `day`'s key; returns its duration in seconds. */
   playMelody(degrees: readonly number[], day: number): number {
     this.melody = degrees.slice(0, MELODY_MAX).map(bellDegree);
     this.melodyIndex = 0;
-    this.melodyDay = Math.max(1, Math.floor(day));
+    this.melodyRoot = degreeHz(Math.max(1, Math.floor(day)), 0, 5, this.palette.key);
     this.melodyNext = this.g.now + MELODY_LEAD_IN_S;
     return this.melody.length * MELODY_STEP_S;
   }
@@ -193,35 +208,52 @@ export class Music {
 
   private readonly onStep = (step: number, t: number): void => {
     const onBeat = step % 4 === 0;
-    if (this.pad === null) {
+    const changed = this.wantDay !== this.keyDay || this.wantPalette !== this.paletteIndex;
+    if (this.pad === null || (changed && onBeat)) {
+      // First chord, a dawn key change or a new chapter: start the new key's progression from I.
+      const first = this.pad === null;
       this.keyDay = this.wantDay;
-      this.startChord(step, t, 0, PAD_ATTACK, PAD_RELEASE);
-    } else if (this.wantDay !== this.keyDay && onBeat) {
-      // Dawn: change key on the next beat, starting the new key's progression from I.
-      this.keyDay = this.wantDay;
-      this.startChord(step, t, 0, KEY_ATTACK, KEY_RELEASE);
+      this.paletteIndex = this.wantPalette;
+      this.palette = paletteFor(this.wantPalette);
+      this.clock.stepS = stepSeconds(this.palette.bpm);
+      this.startChord(step, t, 0, first ? PAD_ATTACK : KEY_ATTACK, first ? PAD_RELEASE : KEY_RELEASE);
     } else if (step - this.chordStep >= STEPS_PER_CHORD) {
       this.startChord(step, t, this.chordIndex + 1, PAD_ATTACK, PAD_RELEASE);
     }
 
+    const root = keyRootHz(this.keyDay, this.palette.key);
+    const groove = grooveHit(this.wantGroove, step);
+    if (groove & 1) {
+      const v = this.g.voice('music', t, this.center);
+      const f = root * semis(this.chord.bass);
+      v.tone('triangle', f, t, BASS_GAIN * 0.6, 0.004, 0.35);
+      v.tone('sine', f * 2, t, BASS_GAIN * 0.4, 0.004, 0.25);
+    }
+    if (groove & 2) {
+      const v = this.g.voice('music', t, this.center);
+      v.burst(this.g.white, t, SHAKER_GAIN * (step % 4 === 2 ? 1 : 0.6), 0.008, 0.05, v.filter('bandpass', 5200, 0.9));
+    }
+
     if (onBeat) this.arpBeatLevel = this.wantArp;
     if (step % 16 === 0) this.arpNote = 0;
-    const level = Math.min(this.arpBeatLevel, this.wantArp);
-    const hit = arpHit(level, step);
+    const hit = arpHit(Math.min(this.arpBeatLevel, this.wantArp), step);
     if (hit === 0) return;
     const n = this.arpNote++;
-    if (Math.random() >= ARP_CHANCE[arpLevel(level)]) return;
-    const f = keyRootHz(this.keyDay) * semis(arpNoteSemis(this.chord, n, hit));
+    if (Math.random() >= ARP_CHANCE[arpLevel(Math.min(this.arpBeatLevel, this.wantArp))]) return;
+    const f = root * semis(arpNoteSemis(this.chord, n, hit));
+    const voice = this.wantVoice ?? this.palette.arp;
     const v = this.g.voice('music', t, this.arpOut[n & 1]);
-    v.tone('triangle', f, t, ARP_GAIN, 0.004, ARP_DECAY);
+    const gain = ARP_GAIN[voice];
+    if (voice === 'bell') bellTone(v, t, f, gain, 0.7, 0.25);
+    else v.tone(voice, f, t, gain, 0.004, ARP_DECAY, voice === 'square' ? v.filter('lowpass', 2200, 0.7) : v.out);
   };
 
   private startChord(step: number, t: number, index: number, attack: number, release: number): void {
     this.pad?.release(t, release);
     this.chordIndex = index;
-    this.chord = chordAt(index);
+    this.chord = chordAt(index, this.palette.prog);
     this.chordStep = step;
-    this.pad = new PadChord(this.g, this.padFilter, this.keyDay, this.chord, t, attack);
+    this.pad = new PadChord(this.g, this.padFilter, keyRootHz(this.keyDay, this.palette.key), this.chord, this.palette.pad, t, attack);
   }
 
   private pumpMelody(now: number, horizon: number): void {
@@ -231,8 +263,7 @@ export class Music {
     while (this.melodyIndex < this.melody.length && this.melodyNext < horizon) {
       const d = this.melody[this.melodyIndex++] as number;
       const t = this.melodyNext;
-      const v = this.g.voice('music', t, this.melodyOut);
-      bellTone(v, t, degreeHz(this.melodyDay, d, 5), MELODY_GAIN, 0.9, 0.3);
+      bellTone(this.g.voice('music', t, this.center), t, this.melodyRoot * semis(degreeSemis(d)), MELODY_GAIN, 0.9, 0.3);
       this.melodyNext += MELODY_STEP_S;
     }
   }

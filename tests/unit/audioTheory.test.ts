@@ -3,7 +3,9 @@ import {
   ARP_CHANCE,
   ARP_PATTERNS,
   C4_HZ,
+  PALETTES,
   PROGRESSION,
+  PROGRESSIONS,
   STEP_S,
   arpHit,
   arpLevel,
@@ -14,15 +16,19 @@ import {
   degreeHz,
   degreeSemis,
   detentHz,
+  grooveHit,
   heartbeatPeriod,
   keyOffset,
   keyRootHz,
   multUpNotes,
   noonWindow,
   padCutoffHz,
+  paletteFor,
   sizzleAmount,
   sizzleHz,
+  stepSeconds,
 } from '../../src/audio/theory.ts';
+import { CHAPTER_COUNT } from '../../src/config/campaign.ts';
 
 const pc = (s: number) => ((s % 12) + 12) % 12;
 
@@ -154,6 +160,50 @@ describe('arpeggio density follows the Frost multiplier', () => {
   });
 });
 
+describe('chapter palettes', () => {
+  it('give every Journey chapter its own palette, with the default score at 0', () => {
+    expect(PALETTES).toHaveLength(CHAPTER_COUNT + 1);
+    expect(paletteFor(0)).toBe(PALETTES[0]);
+    expect(paletteFor(99)).toBe(PALETTES[0]);
+    const signatures = new Set(PALETTES.slice(1).map((p) => `${p.key}/${p.bpm}/${p.pad}/${p.arp}/${p.prog}`));
+    expect(signatures.size).toBe(CHAPTER_COUNT);
+    for (const p of PALETTES) {
+      expect(p.bpm).toBeGreaterThanOrEqual(80);
+      expect(p.bpm).toBeLessThanOrEqual(120);
+      expect(PROGRESSIONS[p.prog]).toBeDefined();
+    }
+    // Neighbouring chapters never share both key and tempo.
+    for (let c = 1; c < CHAPTER_COUNT; c++) expect(`${paletteFor(c).key}/${paletteFor(c).bpm}`).not.toBe(`${paletteFor(c + 1).key}/${paletteFor(c + 1).bpm}`);
+    expect(stepSeconds(90)).toBeCloseTo(STEP_S, 12);
+  });
+
+  it('shift the key by the palette base, still a fifth per day within [-5, +6]', () => {
+    expect(keyOffset(1, 5)).toBe(5);
+    expect(keyOffset(2, 5)).toBe(0);
+    expect(keyOffset(1, -2)).toBe(-2);
+    for (let day = 1; day < 20; day++) for (const base of [-5, 3, 6]) expect(Math.abs(keyOffset(day, base) - 0.5)).toBeLessThanOrEqual(5.5);
+    expect(degreeHz(1, 0, 5, 7)).toBeCloseTo(degreeHz(2, 0, 5), 9);
+  });
+
+  it('play every progression as an order of the same four voicings, starting from a tonic or vi', () => {
+    for (const [i, order] of PROGRESSIONS.entries()) {
+      expect([...order].sort()).toEqual([0, 1, 2, 3]);
+      expect(['I', 'vi']).toContain(chordAt(0, i).name);
+      expect(chordAt(3, i).name === 'V' || chordAt(3, i).name === 'IV').toBe(true);
+    }
+    expect(chordAt(1, 1).name).toBe('IV');
+  });
+
+  it('groove: a bass note per bar, then on 1 and 3, then a shaker', () => {
+    const hits = (level: number) => Array.from({ length: 16 }, (_, s) => grooveHit(level, s));
+    expect(hits(0).every((h) => h === 0)).toBe(true);
+    expect(hits(1).filter((h) => h & 1)).toHaveLength(1);
+    expect(hits(2).filter((h) => h & 1)).toHaveLength(2);
+    expect(hits(3).filter((h) => h & 2).length).toBeGreaterThan(2);
+    expect(grooveHit(3, 16)).toBe(grooveHit(3, 0));
+  });
+});
+
 describe('state → sound curves', () => {
   it('pad cutoff: warm at dawn, bright at noon, 500 Hz at night', () => {
     expect(padCutoffHz(0, 48, false)).toBe(300);
@@ -177,9 +227,9 @@ describe('state → sound curves', () => {
   it('sizzle follows f', () => {
     expect(sizzleAmount(0)).toBe(0);
     expect(sizzleAmount(2)).toBe(1.5);
-    expect(sizzleHz(0)).toBe(2500);
-    expect(sizzleHz(1)).toBe(6000);
-    expect(sizzleHz(2)).toBe(6000);
+    expect(sizzleHz(0)).toBe(1800);
+    expect(sizzleHz(1)).toBe(4000);
+    expect(sizzleHz(2)).toBe(4000);
     expect(crackleRate(1, 0)).toBe(20);
     expect(crackleRate(1, 1)).toBe(30);
     expect(crackleRate(2, 1)).toBe(40);

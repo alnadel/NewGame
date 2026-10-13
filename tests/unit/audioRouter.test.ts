@@ -3,7 +3,7 @@ import type { SimEvent } from '../../src/core/sim/events.ts';
 import type { SfxName, SfxParams } from '../../src/audio/recipes.ts';
 import { createAudioView } from '../../src/audio/scene.ts';
 import type { AudioView, Scene } from '../../src/audio/scene.ts';
-import { SfxRouter } from '../../src/audio/sfxRouter.ts';
+import { DUCKS, SfxRouter } from '../../src/audio/sfxRouter.ts';
 
 interface Played {
   name: SfxName;
@@ -125,7 +125,7 @@ describe('SfxRouter events', () => {
     expect(t.played.at(-2)?.name).toBe('nightfall');
   });
 
-  it('maps the remaining cues and keeps bookkeeping events silent', () => {
+  it('maps the remaining cues (a gate arch rings) and keeps bookkeeping events silent', () => {
     const t = setup();
     const events: SimEvent[] = [
       { e: 'start' },
@@ -142,7 +142,7 @@ describe('SfxRouter events', () => {
       { e: 'ballPassed', clean: true },
     ];
     t.router.onEvents(events, t.view);
-    expect(t.names()).toEqual(['catch', 'crystal', 'noon', 'noonPassed', 'cloud', 'glare']);
+    expect(t.names()).toEqual(['catch', 'crystal', 'noon', 'noonPassed', 'cloud', 'glare', 'gate']);
   });
 
   it('plays the death sweep on death', () => {
@@ -160,6 +160,73 @@ describe('SfxRouter events', () => {
     t.router.resetRun();
     t.router.onEvents([{ e: 'flakeMelt', x: 0, y: 0 }], t.view);
     expect(t.played).toHaveLength(4);
+  });
+});
+
+describe('SfxRouter campaign', () => {
+  it('plays the win jingle tiered by stars, or the soft miss sting, and ducks the score under it', () => {
+    const t = setup({ day: 2 });
+    t.router.onEvents([{ e: 'levelWon', passed: true, stars: 3, flakes: 9, minChill: 80 }], t.view);
+    expect(t.played[0]).toMatchObject({ name: 'levelWin', params: { day: 2, level: 3 } });
+    t.frames(2);
+    expect(t.scenes.at(-1)?.duck).toBe(DUCKS.levelWin?.[0]);
+    t.frames(0.6);
+    expect(t.scenes.at(-1)?.duck).toBe(1);
+    t.router.onEvents([{ e: 'levelWon', passed: false, stars: 0, flakes: 1, minChill: 5 }], t.view);
+    expect(t.names().at(-1)).toBe('levelFail');
+  });
+
+  it('ducks direct plays too, never lifting a deeper duck', () => {
+    const t = setup();
+    t.router.cue('levelWin', { level: 1 });
+    t.router.cue('dayFanfare', { day: 2 });
+    t.frames(0.1);
+    expect(t.scenes.at(-1)?.duck).toBe(DUCKS.levelWin?.[0]);
+    t.router.cue('uiTap');
+    expect(t.names()).toEqual(['levelWin', 'dayFanfare', 'uiTap']);
+  });
+
+  it('turns concept edges into signatures: gust, lock and unlock, eclipse, the final stretch (once each)', () => {
+    const t = setup({ progress: 0.5 });
+    t.frames(0.1);
+    expect(t.played).toHaveLength(0);
+    Object.assign(t.view, { gust: -1, locked: true, eclipse: 0.1, progress: 0.9 });
+    t.frames(0.5);
+    expect(t.names()).toEqual(['gust', 'lock', 'eclipse', 'finishNear']);
+    expect(t.played[0]?.params.index).toBe(-1);
+    expect(t.played[1]?.params.index).toBe(0);
+    Object.assign(t.view, { gust: 0, locked: false });
+    t.frames(0.1);
+    expect(t.names().at(-1)).toBe('lock');
+    expect(t.played.at(-1)?.params.index).toBe(1);
+    // A gust that blows again within a second stays quiet.
+    t.view.gust = 1;
+    t.frames(0.1);
+    expect(t.names().filter((n) => n === 'gust')).toHaveLength(1);
+  });
+
+  it('keeps concept cues off the Title and menus, and re-arms the finish line per run', () => {
+    const t = setup({ screen: 'title', progress: 0.5 });
+    t.frames(0.1);
+    Object.assign(t.view, { gust: 1, locked: true, progress: 0.9 });
+    t.frames(0.1);
+    expect(t.played).toHaveLength(0);
+    const r = setup({ progress: 0.8 });
+    r.frames(0.1);
+    r.view.progress = 0.9;
+    r.frames(0.1);
+    r.router.resetRun();
+    r.view.progress = 0.1;
+    r.frames(0.1);
+    r.view.progress = 0.95;
+    r.frames(0.1);
+    expect(r.names()).toEqual(['finishNear', 'finishNear']);
+  });
+
+  it('plays SWING landings climbing with the chain', () => {
+    const t = setup();
+    t.router.onEvents([{ e: 'swing', deg: 80, chain: 2, snow: 1, x: 0, y: 0 }], t.view);
+    expect(t.played[0]).toMatchObject({ name: 'swing', params: { level: 2 } });
   });
 });
 
