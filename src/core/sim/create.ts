@@ -1,16 +1,17 @@
 // createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
 
 import { TUNING } from '../../config/tuning.ts';
-import { dayTicks, yAtDayTick } from '../clock.ts';
-import { paramsAt } from '../gen/plan.ts';
+import { dayTicks } from '../clock.ts';
+import { paramsAt, worldYAtDayTick } from '../gen/plan.ts';
 import { ensureGenerated, createWorld, generateSome, type World } from '../gen/world.ts';
+import { resolveLevelConfig } from '../level.ts';
 import { syncTime } from './step.ts';
 import { computeCoverage } from './nubs.ts';
 import { updateGuide } from './guide.ts';
 import type { RunStats } from './events.ts';
 import type { RunConfig, SimState } from './types.ts';
 
-function freshStats(day: number): RunStats {
+function freshStats(day: number, chill: number): RunStats {
   return {
     flakes: 0,
     flakesMelted: 0,
@@ -32,6 +33,7 @@ function freshStats(day: number): RunStats {
     swings: 0,
     swingChainBest: 0,
     phewMinChill: 100,
+    minChill: chill,
   };
 }
 
@@ -55,12 +57,14 @@ export interface RunBuild {
 }
 
 /** Starts building a run's world (cheap: only the start hut is placed). */
-export function prepareRun(cfg: RunConfig): RunBuild {
+export function prepareRun(cfg0: RunConfig): RunBuild {
+  const cfg = resolveLevelConfig(cfg0);
   const { day, dayTick } = startOf(cfg);
+  const world = createWorld(cfg);
   return {
     cfg: { ...cfg },
-    world: createWorld(cfg),
-    targetY: yAtDayTick(day, dayTick) + TUNING.world.hardAhead,
+    world,
+    targetY: worldYAtDayTick(world, day, dayTick) + TUNING.world.hardAhead,
   };
 }
 
@@ -78,14 +82,22 @@ export function prepareSome(b: RunBuild, budget: number): boolean {
  * the same either way. With `build` (from prepareRun() with the same config) its world is used and
  * only the rest of it is generated now.
  */
-export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNING.world.hardAhead): SimState {
+export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUNING.world.hardAhead): SimState {
+  const cfg = resolveLevelConfig(cfg0);
   const world = build ? build.world : createWorld(cfg);
   const { day, dayTick } = startOf(cfg);
-  const maxChill = TUNING.nubs.maxChill;
+  const params = paramsAt(world, day);
+  const maxChill = params.maxChill;
+  const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? maxChill));
   const theta0 = world.theta0;
   const s: SimState = {
     cfg: { ...cfg },
-    params: paramsAt(world, day),
+    params,
+    mods: world.mods,
+    level: world.level,
+    eclipse: 0,
+    eclipseOn: false,
+    moonlit: world.mods.has('moonlit'),
     phase: 'hold',
     tick: 0,
     ready: 0,
@@ -102,11 +114,11 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
     ux: 1,
     uy: 0,
     theta0,
-    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0, keyTicks: 0, keySign: 0 },
+    sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0, keyTicks: 0, keySign: 0, gust: 0, locked: false },
     nubs: {
       x: 0,
       y: 0,
-      chill: Math.min(maxChill, Math.max(1, cfg.startChill ?? maxChill)),
+      chill,
       maxChill,
       w: new Float64Array(5),
       f: 0,
@@ -146,7 +158,7 @@ export function createRun(cfg: RunConfig, build?: RunBuild, ahead: number = TUNI
       sunUp: false,
     },
     world,
-    stats: freshStats(day),
+    stats: freshStats(day, chill),
     hourGlyphs: [[]],
     hourLit: 0,
     hourHot: false,

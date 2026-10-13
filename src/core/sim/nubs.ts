@@ -48,7 +48,7 @@ export function computeCoverage(s: SimState): void {
   nb.shaderId = -1;
   nb.cloudId = -1;
   nb.glareBallId = -1;
-  if (!s.sunUp) {
+  if (!s.sunUp || s.eclipseOn) {
     nb.w.fill(0);
     nb.f = 0;
     nb.glare = 0;
@@ -148,10 +148,11 @@ export function computeCoverage(s: SimState): void {
 
 /**
  * Drain this run applies (Chill/s at f = 1): RunConfig.drain when set (the endless onboarding
- * ramp), else the profile drain. Every sim reader of the drain goes through this.
+ * ramp, a campaign level's drain), else the profile drain; × the day's concept drainMul (1 outside
+ * the campaign). Every sim reader of the drain goes through this.
  */
 export function effectiveDrain(s: SimState): number {
-  return s.cfg.drain ?? s.params.drain;
+  return (s.cfg.drain ?? s.params.drain) * s.params.drainMul;
 }
 
 /**
@@ -244,7 +245,7 @@ export function applyDaylight(s: SimState): void {
   const wasLit = nb.litSince >= 0;
   const prevChill = nb.chill;
 
-  let c = nb.chill + (-effectiveDrain(s) * f + N.regen * Math.max(0, 1 - f)) * DT;
+  let c = nb.chill + (-effectiveDrain(s) * f + s.params.regen * Math.max(0, 1 - f)) * DT;
   if (c > nb.maxChill) c = nb.maxChill;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
   if (s.lessonOn || s.lessonGrace > 0) {
@@ -252,6 +253,7 @@ export function applyDaylight(s: SimState): void {
     if (c < floor) c = floor;
   }
   nb.chill = c;
+  if (c < st.minChill) st.minChill = c;
 
   // Shade transitions.
   if (lit && !wasLit) {

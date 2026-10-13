@@ -13,7 +13,7 @@ import type { SimState } from './types.ts';
 /** Casters and pickups up to this far ahead of Nubs are hashed (well inside the validated horizon). */
 export const HASH_AHEAD = TUNING.world.hardAhead - 600;
 
-const PHASES = ['hold', 'day', 'night', 'dead'];
+const PHASES = ['hold', 'day', 'night', 'dead', 'won'];
 const MODES = ['idle', 'dragging', 'chasing', 'coasting'];
 
 const dv = new DataView(new ArrayBuffer(8));
@@ -69,6 +69,14 @@ export function hashState(s: SimState): string {
     st.swings,
   ]) {
     feed(v);
+  }
+  // Campaign state (only hashed when concepts are active, so every pre-campaign hash still holds).
+  if (s.mods.size > 0) {
+    feed(s.eclipse);
+    feed(s.eclipseOn ? 1 : 0);
+    feed(sun.gust);
+    feed(sun.locked ? 1 : 0);
+    feed(st.minChill);
   }
   const limit = nb.y + HASH_AHEAD;
   const casters: Caster[] = s.world.casters.filter((c) => c.y < limit);

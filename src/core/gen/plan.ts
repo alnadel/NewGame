@@ -6,7 +6,7 @@
 
 import { dayParams, dayPlan, legacyPlan, type BiomeId, type DayParams, type DayPlan } from '../../config/days.ts';
 import { FORECAST_IDS, forecastFits, PLAN_WEIGHTS, type ForecastId } from '../../config/forecasts.ts';
-import { timeAtY, type YTime } from '../clock.ts';
+import { dayStartY, timeAtY, yAtDayTick, yAtTick, yAtTime, type YTime } from '../clock.ts';
 import { rngFor } from '../rng.ts';
 import type { World } from './store.ts';
 
@@ -52,10 +52,18 @@ export function planDay(seed: number, day: number): DayPlan {
 /**
  * The plan of `day` in world `w` (memoised in w.plan). Plan-off: odd days Meadow, even days Old
  * Town, clear. A forced forecast (RunConfig.forecast) replaces every day's forecast where it fits
- * the biome and makes the other days clear; the biomes still come from planDay.
+ * the biome and makes the other days clear; the biomes still come from planDay. A forced Day-1
+ * biome (RunConfig.biome, campaign levels) alternates from there, every day clear unless the
+ * forced forecast fits it.
  */
 export function worldPlan(w: World, day: number): DayPlan {
   const d = Math.max(1, Math.floor(day));
+  const fb = w.forcedBiome;
+  if (fb !== null) {
+    const biome: BiomeId = d % 2 === 1 ? fb : fb === 'meadow' ? 'oldtown' : 'meadow';
+    const f = w.forcedForecast;
+    return dayPlan(biome, f !== null && forecastFits(f, biome) ? f : 'clear');
+  }
   if (!w.planOn) return legacyPlan(d);
   const memo = w.plan;
   while (memo.length < d) memo.push(drawPlan(w.seed, memo.length + 1, memo.length > 0 ? (memo[memo.length - 1] as DayPlan) : null));
@@ -65,9 +73,38 @@ export function worldPlan(w: World, day: number): DayPlan {
   return dayPlan(p.biome, forecastFits(f, p.biome) ? f : 'clear');
 }
 
-/** The knobs of `day` in world `w`: its profile and its Day Plan entry. */
+/** The knobs of `day` in world `w`: its profile, its Day Plan entry and its concepts (mods). */
 export function paramsAt(w: World, day: number): DayParams {
-  return dayParams(day, w.profile, worldPlan(w, day));
+  return dayParams(day, w.profile, worldPlan(w, day), w.modList);
+}
+
+// World-aware clock ↔ y mapping. The global clock (core/clock.ts) maps time to y at walk ×1; a
+// world's walkMul (the 'sprint'/'stroll' concepts) scales every distance by the same factor, so
+// y_world = y_clock · walkMul exactly, and every reader of the mapping in core goes through these.
+
+/** Nubs' y in world `w` at `dayTick` ticks after Day `day` dawn. */
+export function worldYAtDayTick(w: World, day: number, dayTick: number): number {
+  return yAtDayTick(day, dayTick) * w.walkMul;
+}
+
+/** Nubs' y in world `w` at an absolute tick. */
+export function worldYAtTick(w: World, tickAbs: number): number {
+  return yAtTick(tickAbs) * w.walkMul;
+}
+
+/** y in world `w` of `t` seconds after Day `day` dawn. */
+export function worldYAtTime(w: World, day: number, t: number): number {
+  return yAtTime(day, t) * w.walkMul;
+}
+
+/** y in world `w` of Day `day` dawn. */
+export function worldDayStartY(w: World, day: number): number {
+  return dayStartY(day) * w.walkMul;
+}
+
+/** Inverse of worldYAtDayTick. */
+export function worldTimeAtY(w: World, y: number, out: YTime): YTime {
+  return timeAtY(y / w.walkMul, out);
 }
 
 /** The first Old Town day ≥ 2: it gets the guaranteed noon gate arch (Day 2 or Day 3). */
@@ -82,7 +119,12 @@ export function dayAtY(y: number): number {
   return timeAtY(y, yt).day;
 }
 
+/** Day whose daylight or night contains y in world `w` (walkMul applied). */
+export function worldDayAtY(w: World, y: number): number {
+  return timeAtY(y / w.walkMul, yt).day;
+}
+
 /** Biome of the ground at y in world `w` (the night keeps its day's biome). */
 export function biomeAtY(w: World, y: number): BiomeId {
-  return worldPlan(w, dayAtY(y)).biome;
+  return worldPlan(w, worldDayAtY(w, y)).biome;
 }

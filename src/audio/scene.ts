@@ -17,7 +17,7 @@ import {
 export type ScreenMode = 'title' | 'play' | 'paused' | 'dying' | 'results' | 'menu';
 
 /** SimState.phase. */
-export type SimPhase = 'hold' | 'day' | 'night' | 'dead';
+export type SimPhase = 'hold' | 'day' | 'night' | 'dead' | 'won';
 
 /**
  * Per-frame snapshot the session hands to `audio.update()` and `audio.onEvents()`. Plain numbers

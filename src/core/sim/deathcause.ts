@@ -1,8 +1,9 @@
 // Death line (V1_PLAN §10): the first matching cause of glare, cloud, gap or plain.
 
 import { TUNING } from '../../config/tuning.ts';
-import { dayTicks, elevation, exactClock, TICK_HZ, yAtDayTick } from '../clock.ts';
+import { dayTicks, elevation, exactClock, TICK_HZ } from '../clock.ts';
 import { tanD } from '../dmath.ts';
+import { worldYAtDayTick } from '../gen/plan.ts';
 import { lowerBound } from '../gen/store.ts';
 import { BINS, markCaster, markEllipse, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
 import type { Caster, Cloud } from '../objects.ts';
@@ -46,7 +47,7 @@ function cloudCause(s: SimState): boolean {
   // recent(s, 1) is the death tick itself, so the tick `back` ticks earlier is ago = back + 1.
   if (s.recentCount <= back || s.dayTick - back < 0) return false;
   const dt = s.dayTick - back;
-  const y = yAtDayTick(s.day, dt);
+  const y = worldYAtDayTick(s.world, s.day, dt);
   const x = trailX(s.world.trail, y);
   const eps = elevation(s.params, dt / TICK_HZ);
   if (eps <= 0) return false;
@@ -79,7 +80,7 @@ function cloudCause(s: SimState): boolean {
 function nextCaster(s: SimState, skipId: number): Caster | null {
   const ahead = s.dayTick + Math.round(D.gapAheadSec * TICK_HZ);
   if (ahead >= dayTicks(s.day)) return null;
-  const y = yAtDayTick(s.day, ahead);
+  const y = worldYAtDayTick(s.world, s.day, ahead);
   const x = trailX(s.world.trail, y);
   const eps = elevation(s.params, ahead / TICK_HZ);
   const cot = 1 / tanD(eps);

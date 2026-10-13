@@ -42,8 +42,8 @@ export function isRotatable(kind: CasterKind): boolean {
   return kind !== 'tree' && kind !== 'oak' && kind !== 'rock' && kind !== 'pedestal';
 }
 
-function treeParts(spec: TreeSpec, x: number, y: number): Part[] {
-  return [makePrism(rectPoly(x, y, spec.trunk, spec.trunk, 1, 0), spec.trunkH), makeDisc(x, y, spec.canopyR, spec.canopyZ)];
+function treeParts(spec: TreeSpec, x: number, y: number, k: number): Part[] {
+  return [makePrism(rectPoly(x, y, spec.trunk, spec.trunk, 1, 0), spec.trunkH * k), makeDisc(x, y, spec.canopyR, spec.canopyZ * k)];
 }
 
 /** Arch-like: two square posts at ±postX on the local x axis, plus a lintel slab. */
@@ -53,15 +53,16 @@ function archParts(
   c: number,
   s: number,
   a: { post: number; postH: number; postX: number; lintelW: number; lintelD: number; z0: number; z1: number },
+  k = 1,
 ): Part[] {
   return [
-    makePrism(rectPoly(x - a.postX * c, y - a.postX * s, a.post, a.post, c, s), a.postH),
-    makePrism(rectPoly(x + a.postX * c, y + a.postX * s, a.post, a.post, c, s), a.postH),
-    makeSlab(rectPoly(x, y, a.lintelW, a.lintelD, c, s), a.z0, a.z1),
+    makePrism(rectPoly(x - a.postX * c, y - a.postX * s, a.post, a.post, c, s), a.postH * k),
+    makePrism(rectPoly(x + a.postX * c, y + a.postX * s, a.post, a.post, c, s), a.postH * k),
+    makeSlab(rectPoly(x, y, a.lintelW, a.lintelD, c, s), a.z0 * k, a.z1 * k),
   ];
 }
 
-function stallParts(x: number, y: number, c: number, s: number): Part[] {
+function stallParts(x: number, y: number, c: number, s: number, k: number): Part[] {
   const px = STALL.roofW / 2 - STALL.post / 2;
   const py = STALL.roofD / 2 - STALL.post / 2;
   const parts: Part[] = [];
@@ -71,9 +72,9 @@ function stallParts(x: number, y: number, c: number, s: number): Part[] {
     [px, py],
     [-px, py],
   ] as const) {
-    parts.push(makePrism(rectPoly(x + lx * c - ly * s, y + lx * s + ly * c, STALL.post, STALL.post, c, s), STALL.postH));
+    parts.push(makePrism(rectPoly(x + lx * c - ly * s, y + lx * s + ly * c, STALL.post, STALL.post, c, s), STALL.postH * k));
   }
-  parts.push(makeSlab(rectPoly(x, y, STALL.roofW, STALL.roofD, c, s), STALL.z0, STALL.z1));
+  parts.push(makeSlab(rectPoly(x, y, STALL.roofW, STALL.roofD, c, s), STALL.z0 * k, STALL.z1 * k));
   return parts;
 }
 
@@ -86,26 +87,29 @@ export function rockHeight(tanEps: number): number {
 
 /**
  * Parts of a caster of `kind` centered at (x, y), rotated by rotIdx·15° (ignored for trees).
- * `h` overrides the height of single-prism kinds (rescue rocks).
+ * `h` overrides the height of single-prism kinds (rescue rocks). `scale` multiplies every height
+ * (DayParams.heightScale: the 'giants'/'lowland' concepts); at 1 the parts are exactly the table's.
  */
-export function buildParts(kind: CasterKind, x: number, y: number, rotIdx: number, h = 0): Part[] {
+export function buildParts(kind: CasterKind, x: number, y: number, rotIdx: number, h = 0, scale = 1): Part[] {
   const c = ROT15_COS[rotIdx % 24] as number;
   const s = ROT15_SIN[rotIdx % 24] as number;
   switch (kind) {
     case 'tree':
-      return treeParts(TREE, x, y);
+      return treeParts(TREE, x, y, scale);
     case 'oak':
-      return treeParts(OAK, x, y);
+      return treeParts(OAK, x, y, scale);
     case 'arch':
-      return archParts(x, y, c, s, ARCH);
+      return archParts(x, y, c, s, ARCH, scale);
+    case 'finish':
+      return gateArchParts(x, y);
     case 'stall':
-      return stallParts(x, y, c, s);
+      return stallParts(x, y, c, s, scale);
     case 'rock': {
       return [makePrism(rectPoly(x, y, TUNING.rescue.w, TUNING.rescue.d, 1, 0), h)];
     }
     default: {
       const b = BLOCKS[kind];
-      return [makePrism(rectPoly(x, y, b.w, b.d, c, s), h > 0 ? h : b.h)];
+      return [makePrism(rectPoly(x, y, b.w, b.d, c, s), (h > 0 ? h : b.h) * scale)];
     }
   }
 }

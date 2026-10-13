@@ -1,7 +1,9 @@
 // Simulation state and its inputs (V1_PLAN §3.1). Everything here is advanced only by step(); the
 // renderer and session read it and never write it.
 
-import type { DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
+import type { LevelDef } from '../../config/campaign.ts';
+import type { ConceptId } from '../../config/concepts.ts';
+import type { BiomeId, DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
 import type { World } from '../gen/store.ts';
 import type { DeathInfo, HourGlyph, RunMode, RunStats, SimEvent } from './events.ts';
@@ -74,14 +76,29 @@ export interface RunConfig {
    * Plan on whatever the profile; part of the world's identity. The session treats such runs as debug.
    */
   forecast?: ForecastId;
+  /**
+   * Campaign level id (CAMPAIGN_PLAN §2). createRun/prepareRun derive the run from levelDef(id):
+   * seed, profile 3, tutorial off, plan off, forecast, biome, startDay 1, startT, drain and mods
+   * (resolveLevelConfig), so the level is the world's identity.
+   */
+  level?: number;
+  /**
+   * Concept modifiers (config/concepts.ts); part of the world's identity. Campaign levels set
+   * them from the level; debug runs may pass any set. dayParams applies their tunes; the sim reads
+   * SimState.mods for behaviour rules.
+   */
+  mods?: readonly ConceptId[];
+  /** Forced Day-1 biome (alternating from there, every day clear unless `forecast` fits); part of the world's identity. */
+  biome?: BiomeId;
 }
 
 /**
  * hold: before the first touch (clock, Nubs and Chill frozen); day/night: running (the first
  * `ready` ticks of 'day' are the start beat: the sun moves, everything else waits); dead: Chill hit 0
- * in daylight (step() is then a no-op).
+ * in daylight; won: a campaign level's finish line was crossed with Chill > 0 (step() is a no-op
+ * after dead or won).
  */
-export type Phase = 'hold' | 'day' | 'night' | 'dead';
+export type Phase = 'hold' | 'day' | 'night' | 'dead' | 'won';
 
 export type SunMode = 'idle' | 'dragging' | 'chasing' | 'coasting';
 
@@ -103,6 +120,13 @@ export interface SunState {
   keyTicks: number;
   /** Sign of the key counted by keyTicks (0 none). */
   keySign: number;
+  /**
+   * 'gusts' concept: the direction the wind is turning the sun this tick (+1 CCW, −1 CW), 0 outside a
+   * gust. The HUD shows a wind glyph while it is non-zero.
+   */
+  gust: -1 | 0 | 1;
+  /** 'lock' concept: the sun ignores every input this tick (the halo shows a padlock). */
+  locked: boolean;
 }
 
 export interface NubsState {
@@ -172,8 +196,21 @@ export interface GuideState {
 
 export interface SimState {
   readonly cfg: RunConfig;
-  /** Parameters of the current day (profile applied). */
+  /** Parameters of the current day (profile, Day Plan and concepts applied). */
   params: DayParams;
+  /** Active concepts (RunConfig.mods, a campaign level's); empty outside the campaign. */
+  readonly mods: ReadonlySet<ConceptId>;
+  /** The campaign level being played, or null. */
+  readonly level: LevelDef | null;
+  /**
+   * 'eclipse' concept: intensity 0..1 for the renderer (ramps up over the first 0.5 s of the 6 s
+   * window and down over its last 0.5 s). While eclipseOn, every sample is shaded (f = 0), nothing
+   * melts, and the guide's now mask is all shade.
+   */
+  eclipse: number;
+  eclipseOn: boolean;
+  /** 'moonlit' concept: a moon sun (εnoon 30°, half drain); the renderer uses the night palette. */
+  readonly moonlit: boolean;
   phase: Phase;
   /** Sim ticks since the run started (hold excluded; the start beat counts). */
   tick: number;

@@ -15,14 +15,56 @@
 //   330°/s over the first 15 held ticks of the same sign (a tap turns 2.5°, a held second ≈ 306°);
 //   fine keys (|key| 2, Shift) turn at 90°/s.
 // - Detents (every 15°) emit `detent` events; they are feedback only.
+//
+// Campaign concepts (CAMPAIGN_PLAN §3; SimState.mods and DayParams):
+// - heavy: the follow rate is capped at DayParams.sunFollow (220°/s) and friction 0 means no coast;
+// - slippery: DayParams.sunFriction e^(−0.35/60) per tick, so a flick coasts a long way;
+// - clockwork: on release the finger target snaps to the nearest 30° (no coast): a detent magnet;
+// - gusts: from the 8th second of each 8 s of daylight a 2 s gust turns θ at ±25°/s, its sign
+//   seeded per gust (sun.gust is ±1 while it blows);
+// - lock: from the 7th second of each 7 s of daylight the sun ignores every input for 1.2 s
+//   (sun.locked); coasting stops.
 
 import { TUNING } from '../../config/tuning.ts';
+import { splitmix32 } from '../../config/rng.ts';
 import { angleDiff, smoothstep, wrapDeg } from '../dmath.ts';
-import { DT } from '../clock.ts';
+import { DT, TICK_HZ } from '../clock.ts';
 import type { InputFrame, SimState } from './types.ts';
 
 const S = TUNING.sun;
 const DETENTS = 360 / S.detentDeg;
+/** 'clockwork' snap step (°). */
+const CLOCKWORK_DEG = 30;
+/** 'gusts': period, length (ticks) and turn rate (°/s). */
+const GUST_PERIOD = 8 * TICK_HZ;
+const GUST_TICKS = 2 * TICK_HZ;
+const GUST_RATE = 25;
+/** 'lock': period and length (ticks). */
+const LOCK_PERIOD = 7 * TICK_HZ;
+const LOCK_TICKS = Math.round(1.2 * TICK_HZ);
+
+/** 'lock' concept: true when daylight tick `dayTick` is inside a lock window (the sun takes no input). */
+export function sunLockedAt(dayTick: number): boolean {
+  return dayTick >= LOCK_PERIOD && dayTick % LOCK_PERIOD < LOCK_TICKS;
+}
+
+/** 'gusts' concept: the gust index blowing at daylight tick `dayTick`, or −1. */
+export function sunGustAt(dayTick: number): number {
+  return dayTick >= GUST_PERIOD && dayTick % GUST_PERIOD < GUST_TICKS ? Math.floor(dayTick / GUST_PERIOD) : -1;
+}
+
+/** Gust g of a run's seed blows CCW (+1) or CW (−1): one hash bit, no allocation. */
+function gustDir(seed: number, g: number): 1 | -1 {
+  return (splitmix32((seed ^ Math.imul(g + 1, 0x9e3779b9)) >>> 0) & 1) === 1 ? 1 : -1;
+}
+
+/** Ticks of the running daylight clock: the concepts' timers (0 while holding, during the start beat and at night). */
+function clockTicks(s: SimState): number {
+  return s.phase === 'day' && s.ready === 0 ? s.dayTick : -1;
+}
+
+/** The frame a locked sun sees: no input at all. */
+const LOCKED_INPUT: Readonly<InputFrame> = Object.freeze({ dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 });
 
 /** Follow rate (°/s) for the current elevation and motion setting. */
 export function sunMaxRate(reducedMotion: boolean, eps: number): number {
@@ -31,10 +73,32 @@ export function sunMaxRate(reducedMotion: boolean, eps: number): number {
 }
 
 /** Advances the sun by one tick of input. Emits catch/detent events into s.events. */
-export function updateSun(s: SimState, inp: InputFrame): void {
+export function updateSun(s: SimState, input: InputFrame): void {
   const sun = s.sun;
   const before = sun.theta;
-  const maxStep = sunMaxRate(s.cfg.reducedMotion, s.eps) * DT;
+  const p = s.params;
+  let rate = sunMaxRate(s.cfg.reducedMotion, s.eps);
+  if (p.sunFollow > 0 && p.sunFollow < rate) rate = p.sunFollow;
+  const maxStep = rate * DT;
+  const friction = p.sunFriction;
+  const mods = s.mods;
+  const ct = mods.size > 0 ? clockTicks(s) : -1;
+
+  // 'lock': the sun ignores every input and stops dead for LOCK_TICKS at each LOCK_PERIOD of daylight.
+  let inp = input;
+  const locked = ct >= 0 && mods.has('lock') && sunLockedAt(ct);
+  if (locked !== sun.locked) {
+    sun.locked = locked;
+    if (locked) {
+      sun.omega = 0;
+      sun.omegaRel = 0;
+      sun.lag = 0;
+      if (sun.mode !== 'dragging') sun.mode = 'idle';
+    } else if (sun.mode === 'dragging' && !input.down && !input.downEdge) {
+      sun.mode = 'idle'; // the finger lifted during the lock
+    }
+  }
+  if (locked) inp = LOCKED_INPUT;
 
   if (inp.downEdge) {
     if (Math.abs(sun.omega) > S.catchOmega) s.events.push({ e: 'catch', omega: sun.omega });
@@ -48,7 +112,13 @@ export function updateSun(s: SimState, inp: InputFrame): void {
       const cap = s.cfg.reducedMotion ? S.releaseCapReduced : S.releaseCap;
       // (+ 0 turns the −0 of a slow negative lift into 0.)
       const coast = inp.release * smoothstep(S.flickMin, S.flickFull, Math.abs(inp.release)) + 0;
-      sun.omegaRel = coast > cap ? cap : coast < -cap ? -cap : coast;
+      sun.omegaRel = friction === 0 ? 0 : coast > cap ? cap : coast < -cap ? -cap : coast;
+      if (mods.has('clockwork')) {
+        // The detent magnet: the target snaps to the nearest 30° and the sun chases it, no coast.
+        const target = sun.theta + sun.lag;
+        sun.lag = Math.round(target / CLOCKWORK_DEG) * CLOCKWORK_DEG - sun.theta;
+        sun.omegaRel = 0;
+      }
       sun.mode = 'chasing';
     }
   }
@@ -66,7 +136,7 @@ export function updateSun(s: SimState, inp: InputFrame): void {
     }
   } else if (sun.mode === 'coasting') {
     sun.theta = wrapDeg(sun.theta + sun.omega * DT);
-    sun.omega *= S.friction;
+    sun.omega *= friction;
     sun.lag = 0;
     if (Math.abs(sun.omega) < S.stopOmega) {
       sun.omega = 0;
@@ -90,6 +160,16 @@ export function updateSun(s: SimState, inp: InputFrame): void {
   } else {
     sun.keySign = 0;
     sun.keyTicks = 0;
+  }
+
+  // 'gusts': the wind turns the sun (and the finger target with it) for GUST_TICKS at each GUST_PERIOD.
+  const gust = ct >= 0 && mods.has('gusts') ? sunGustAt(ct) : -1;
+  if (gust >= 0) {
+    const dir = gustDir(s.cfg.seed, gust);
+    sun.gust = dir;
+    sun.theta = wrapDeg(sun.theta + dir * GUST_RATE * DT);
+  } else {
+    sun.gust = 0;
   }
 
   sun.dTheta = angleDiff(sun.theta, before);

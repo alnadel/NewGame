@@ -18,12 +18,12 @@ import {
   scoreMinutes,
   minutesOfDay,
   TICK_HZ,
-  yAtDayTick,
 } from '../clock.ts';
 import { cosD, sinD, tanD } from '../dmath.ts';
-import { paramsAt } from '../gen/plan.ts';
+import { paramsAt, worldYAtDayTick } from '../gen/plan.ts';
 import { lowerBound, pruneWorld } from '../gen/store.ts';
-import { ensureGenerated } from '../gen/world.ts';
+import { ECLIPSE_FADE_TICKS, ECLIPSE_SEC, eclipseAt, ensureGenerated } from '../gen/world.ts';
+import { levelOutcome } from '../level.ts';
 import type { Caster, GazingBall } from '../objects.ts';
 import { trailX } from '../trail.ts';
 import { deathCause } from './deathcause.ts';
@@ -40,6 +40,8 @@ const RECENT = TUNING.death.recentTicks;
 const BALL_PASS = TUNING.glare.cap + TUNING.glare.radius;
 const GATE_NOON_FROM = 300;
 const GATE_NOON_TO = 420;
+/** 'gate' concept: Snow for walking under a gate arch fully shaded. */
+const GATE_SNOW = 10;
 
 /** Derives time, elevation, sun vector and Nubs' position from (day, dayTick, θ). */
 export function syncTime(s: SimState): void {
@@ -54,8 +56,24 @@ export function syncTime(s: SimState): void {
   s.cot = s.sunUp ? 1 / s.tanEps : 0;
   s.ux = cosD(s.sun.theta);
   s.uy = sinD(s.sun.theta);
-  s.nubs.y = yAtDayTick(s.day, s.dayTick);
+  s.nubs.y = worldYAtDayTick(s.world, s.day, s.dayTick);
   s.nubs.x = trailX(s.world.trail, s.nubs.y);
+}
+
+/** 'eclipse' concept: sets eclipseOn and the 0..1 intensity for the current absolute tick. */
+function syncEclipse(s: SimState): void {
+  const w = s.world;
+  if (w.eclipseTick < 0) return;
+  const on = eclipseAt(w, s.tickAbs);
+  s.eclipseOn = on;
+  if (!on) {
+    s.eclipse = 0;
+    return;
+  }
+  const t = s.tickAbs - w.eclipseTick;
+  const left = ECLIPSE_SEC * TICK_HZ - t;
+  const k = t < left ? t : left;
+  s.eclipse = k >= ECLIPSE_FADE_TICKS ? 1 : k / ECLIPSE_FADE_TICKS;
 }
 
 /** Closes the in-game hour that just ended and emits hourEnd. */
@@ -108,7 +126,10 @@ function passObjects(s: SimState, prevY: number): void {
     const m = minutesOfDay(s.day, s.dayTick);
     const noon = s.phase === 'day' && m >= GATE_NOON_FROM && m <= GATE_NOON_TO;
     if (noon) s.stats.gateNoon = true;
-    s.events.push({ e: 'gateArch', noon });
+    // 'gate' concept: walking under an arch fully shaded pays Snow.
+    const snow = s.mods.has('gate') && s.nubs.f === 0 ? GATE_SNOW : 0;
+    if (snow > 0) s.stats.snow += snow;
+    s.events.push({ e: 'gateArch', noon, snow });
   }
   const bs = s.world.balls;
   for (let i = lowerBound(bs, prevY - BALL_PASS); i < bs.length; i++) {
@@ -141,6 +162,16 @@ function die(s: SimState): void {
   s.events.push({ e: 'death', info });
 }
 
+/** Crossing the finish line with Chill > 0: the level ends, passed or not (CAMPAIGN_PLAN §2). */
+function win(s: SimState): void {
+  s.phase = 'won';
+  s.stats.minutes = s.minutes;
+  const level = s.level;
+  if (!level) return;
+  const o = levelOutcome(level, s);
+  s.events.push({ e: 'levelWon', passed: o.passed, stars: o.stars, flakes: s.stats.flakes, minChill: s.stats.minChill });
+}
+
 // Scratch frame for the run-start tick (its rotation is discarded so θ stays exactly θ0).
 const startFrame: InputFrame = { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
 
@@ -164,7 +195,7 @@ function readyTick(s: SimState): void {
 /** Advances the run by one tick. s.events holds this tick's events afterwards. */
 export function step(s: SimState, input: InputFrame): void {
   s.events.length = 0;
-  if (s.phase === 'dead') return;
+  if (s.phase === 'dead' || s.phase === 'won') return;
   let inp = input;
   if (s.phase === 'hold') {
     // Any touch (or a rotation key) starts the run with catch semantics; θ stays θ0 this tick.
@@ -194,6 +225,7 @@ export function step(s: SimState, input: InputFrame): void {
   ensureGenerated(s.world, s.nubs.y + W.hardAhead);
   if (s.tick % TICK_HZ === 0) pruneWorld(s.world, s.nubs.y - W.pruneBehind, s.tAbs - 2);
 
+  syncEclipse(s);
   computeCoverage(s);
   if (daylight) applyDaylight(s);
   else applyNight(s);
@@ -204,6 +236,10 @@ export function step(s: SimState, input: InputFrame): void {
 
   if (daylight && s.nubs.chill <= 0) {
     die(s);
+    return;
+  }
+  if (s.nubs.y >= s.world.finishY) {
+    win(s);
     return;
   }
   if (guideDue(s)) updateGuide(s);

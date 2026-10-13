@@ -137,6 +137,18 @@ export function elevation(params: DayParams, tDay: number): number {
   return EPS_DAWN + (params.epsNoon - EPS_DAWN) * sinD((180 * tDay) / params.dayLen);
 }
 
+/**
+ * Absolute tick of an in-game minute count (minutes since Day 1 6:00 AM; nights have no minutes):
+ * minute 360 is Day 1 noon, 720 the last daylight tick of Day 1 (6:00 PM, before the night), 1080
+ * Day 2 noon. Campaign levels place their start, midpoint and finish with it.
+ */
+export function tickAtMinute(minutes: number): number {
+  const m = Math.max(0, minutes);
+  const day = m <= 0 ? 1 : Math.floor((m - 1) / MINUTES_PER_DAY) + 1;
+  const frac = (m - (day - 1) * MINUTES_PER_DAY) / MINUTES_PER_DAY;
+  return dayStartTick(day) + Math.round(frac * dayTicks(day));
+}
+
 /** In-game minutes since 6:00 AM, 0..720 (720 = 6:00 PM, also used through the night). */
 export function minutesOfDay(day: number, dayTick: number): number {
   const dl = dayTicks(day);
