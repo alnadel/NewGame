@@ -14,7 +14,7 @@ import { h } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
-import { button, hide, menuHeader, section, segmented, slider, toggleSwitch } from '../widgets.ts';
+import { button, hide, menuHeader, section, segmented, setButtonLabel, slider, toggleSwitch } from '../widgets.ts';
 
 const percent = (v: number): string => `${Math.round(v)}%`;
 
@@ -133,12 +133,19 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       );
     },
   });
-  const importArea = h('textarea', { class: 'code-box', rows: 3, placeholder: 'Paste a backup code here', 'aria-label': 'Backup code to restore', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off' });
+  const importArea = h('textarea', { class: 'code-box', rows: 3, hidden: true, placeholder: 'Paste a backup code here', 'aria-label': 'Backup code to restore', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off' });
   const importBtn = button(ctx, {
-    label: 'Restore',
+    label: 'Restore from a code',
     icon: 'restore',
     block: true,
     onPress: () => {
+      // The paste box opens on the first press (Settings stays short until it is needed).
+      if (importArea.hidden) {
+        hide(importArea, false);
+        setButtonLabel(importBtn, 'Restore');
+        importArea.focus();
+        return;
+      }
       const code = importArea.value;
       if (code.trim() === '') {
         ctx.sound('deny');
@@ -216,28 +223,29 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const body = h(
     'div',
     { class: 'menu-body' },
+    // Short groups: one line per control where it fits (sliders sit beside their label).
     section(
       'Sound',
-      stackRow('sound', 'Sound effects', null, sfx.el),
-      stackRow('music', 'Music', null, music.el),
-      row('vibrate', 'Vibration', typeof navigator.vibrate === 'function' ? null : 'Not supported by this browser', haptics.el),
+      row('sound', 'Effects', null, sfx.el),
+      row('music', 'Music', null, music.el),
+      row('vibrate', 'Vibration', typeof navigator.vibrate === 'function' ? null : 'Not supported here', haptics.el),
     ),
     section(
       'Controls',
-      stackRow('gauge', 'Drag sensitivity', 'How far the sun turns per swipe', sensitivity.el),
+      row('gauge', 'Drag speed', null, sensitivity.el),
       row('invert', 'Invert drag', 'Drag right to turn the sun the other way', invert.el),
       keys,
     ),
     section(
       'Play',
       stackRow('flag', 'Name on challenges', 'Friends see it on the links you share.', nameInput),
-      row('sun', 'Adaptive comfort', 'Eases the heat after a rough run. Daily and challenges always use standard rules.', comfort.el),
+      row('sun', 'Adaptive comfort', 'Eases the heat after a rough run (not in Daily or challenges).', comfort.el),
     ),
     section(
       'Accessibility',
       stackRow('motion', 'Reduced motion', 'No shake, zoom or sliding cards', motion.el),
       row('contrast', 'High-contrast shadows', null, contrast.el),
-      stackRow('compass', 'Shade guide', 'Thick teal: shade that lasts. Thin: shade ending. "Always" marks your shares.', guide.el),
+      stackRow('compass', 'Shade guide', 'Thick teal lasts, thin is ending. "Always" marks your shares.', guide.el),
     ),
     section(
       'Testing',
@@ -282,6 +290,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       hide(midRunNote, origin !== 'pause');
       hide(exportArea, true);
       exportArea.value = '';
+      hide(importArea, true);
+      setButtonLabel(importBtn, 'Restore from a code');
       body.scrollTop = 0;
       stopInstallWatch?.();
       stopInstallWatch = onInstallPromptChange(syncInstall);
