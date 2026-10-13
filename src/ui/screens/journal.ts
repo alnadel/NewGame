@@ -8,7 +8,7 @@ import { icon, type IconName } from '../icons.ts';
 import { journalChart, journalSummary, minutesDelta, playTime } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
-import { menuHeader } from '../widgets.ts';
+import { emptyState, menuHeader } from '../widgets.ts';
 
 /** Bars keep a sliver of height so a 6:05 AM melt still shows. */
 const MIN_BAR = 0.04;
@@ -31,7 +31,7 @@ export function createJournalScreen(ctx: UiContext): Screen {
   const chart = h('div', { class: 'jchart', 'aria-hidden': 'true' });
   const summary = h('p', { class: 'sr-only' });
   const average = h('p', { class: 'javerage' });
-  const empty = h('p', { class: 'card-note' }, 'Your endless runs show up here once you have played a few.');
+  const empty = emptyState('journal', 'No runs yet', 'Your endless runs show up here once you have played a few.');
   const legend = h(
     'p',
     { class: 'jlegend', 'aria-hidden': 'true' },

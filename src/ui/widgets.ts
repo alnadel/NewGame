@@ -225,6 +225,18 @@ export function menuHeader(ctx: UiContext, title: string, right?: HTMLElement): 
   return h('header', { class: 'menu-head' }, back, h('h2', { class: 'menu-title' }, title), right ?? h('span', { class: 'menu-spacer' }));
 }
 
+/** An empty state: an icon in a soft disc, a short title and one line (and an optional action). */
+export function emptyState(iconName: IconName, title: string, text: string, action?: HTMLElement): HTMLElement {
+  return h(
+    'div',
+    { class: 'empty' },
+    h('span', { class: 'empty-ic', 'aria-hidden': 'true' }, icon(iconName)),
+    h('strong', { class: 'empty-title' }, title),
+    h('p', { class: 'empty-text' }, text),
+    action ?? null,
+  );
+}
+
 /** A labeled settings/menu section card. */
 export function section(title: string, ...children: (HTMLElement | null)[]): HTMLElement {
   return h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title), ...children);

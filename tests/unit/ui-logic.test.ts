@@ -17,7 +17,10 @@ import type { HourGlyph, RunResult } from '../../src/core/index.ts';
 import { defaults } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
+import { COSMETICS } from '../../src/meta/content.ts';
 import {
+  featureLabel,
+  rarityOf,
   campaignKicker,
   challengeGoalText,
   chapterTitle,
@@ -417,5 +420,21 @@ describe('Journey labels (CAMPAIGN_PLAN §5)', () => {
     expect(resultsAnnouncement(passed)).toBe('Level 6, Glass Garden: passed with 2 of 3 stars. Reached the finish · 14 flakes');
     const failed: ResultsView = { result, outcome, campaign: { id: 6, name: 'Glass Garden', passed: false, stars: 0, nextId: 7, goalLine: 'Not enough flakes: 5 of 8' } };
     expect(resultsAnnouncement(failed)).toBe('Level 6, Glass Garden: not passed. Melted by You at 11:10 AM.');
+  });
+});
+
+describe('v1.4 labels', () => {
+  it('rates every cosmetic: star rewards legendary, pricey or earned items epic, mid prices rare', () => {
+    const r = (id: string): string => rarityOf(COSMETICS.find((c) => c.id === id)!);
+    expect(r('scarf-red')).toBe('common');
+    expect(r('scarf-mint')).toBe('common');
+    expect(r('scarf-plaid')).toBe('rare');
+    expect(r('scarf-midnight')).toBe('epic');
+    expect(COSMETICS.filter((c) => rarityOf(c) === 'legendary').length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('names features in a sentence', () => {
+    expect(featureLabel('wardrobe')).toBe('the Wardrobe');
+    expect(featureLabel('endless')).toBe('Endless');
   });
 });
