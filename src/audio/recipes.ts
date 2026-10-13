@@ -192,6 +192,14 @@ export const RECIPES = {
     bellTone(v, t + 0.16, tonic5(p) * 2, 0.1, 0.9, 0.35);
   },
 
+  /** COMEBACK: a quick pluck climb up the scale landing on a bell fifth over the high tonic. */
+  comeback(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    seq(v, t, root, run([0, 2, 4, 5], 0.06), 'pluck', 0.09, 0.22);
+    seq(v, t + 0.26, root, [[0, 12], [0.03, 19]], 'bell', 0.06, 0.9, 1.3);
+  },
+
   /** Glare touch: a falling sawtooth buzz plus a band of noise at 1.2 kHz. */
   glare(g, t) {
     const v = g.voice('sfx', t);

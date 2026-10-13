@@ -10,12 +10,17 @@
 // moving parts on top from small cached sprites: the flake icon (pops), the multiplier badge (pops,
 // shakes, glows at ×5), the elapsed part of the ruler and its progress head.
 //
-// Campaign variant (v1.2, CAMPAIGN_PLAN §4): the badge reads "L6", the ruler is the level's progress
-// bar (start → a checkered finish, teal, with the gate or eclipse marker at the midpoint), the Snow
-// pill counts "flakes/target" or "snow/target" for goal levels, the clock stays, and a wind glyph
-// rides the progress head during a gust.
+// Campaign variant (v1.2, CAMPAIGN_PLAN §4; v1.4): the badge reads "L6", three star pips take the
+// clock's place (what the run has earned so far: the goal, the flakes star, the cool run, which
+// greys out when lost; a pip pops when it lights), the ruler is the level's progress bar (start → a
+// checkered finish, teal, with the gate or eclipse marker at the midpoint), the Snow pill counts
+// "flakes/target" or "snow/target" for goal levels, and a wind glyph rides the progress head during
+// a gust.
+//
+// The multiplier badge carries a charge bar along its bottom edge: the shade time toward the next
+// level (4 s a level), so the ×N visibly fills before it pops.
 
-import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, type ForecastId, type SimState } from '../core/index.ts';
+import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, TUNING, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
@@ -26,7 +31,7 @@ const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const TAU = Math.PI * 2;
 const ROW_H = 48;
 /** Inputs of the row layer's key (syncHud). */
-const KEYS = 18;
+const KEYS = 19;
 /** The cached band reaches this far above and below the row (pill shadows, flags, the noon icon). */
 const BAND_PAD = 8;
 
@@ -35,6 +40,14 @@ type WidthTable = Float32Array;
 
 export interface HudState {
   multPop: number;
+  /** A star pip lighting up: seconds left of its pop, and which pip (0..2). */
+  starPop: number;
+  starPopI: number;
+  /** The campaign star bits the layer shows (−1 none). */
+  starBits: number;
+  /** The pips' centres (CSS px): the first one's x and the step. */
+  pipX: number;
+  pipStep: number;
   multShake: number;
   snowPop: number;
   noonSparkle: number;
@@ -101,6 +114,11 @@ export interface HudState {
 export function createHud(): HudState {
   return {
     multPop: 0,
+    starPop: 0,
+    starPopI: 0,
+    starBits: -1,
+    pipX: 0,
+    pipStep: 0,
     multShake: 0,
     snowPop: 0,
     noonSparkle: 0,
@@ -153,6 +171,7 @@ export function createHud(): HudState {
 
 export function updateHud(h: HudState, dt: number): void {
   h.multPop = Math.max(0, h.multPop - dt);
+  h.starPop = Math.max(0, h.starPop - dt);
   h.multShake = Math.max(0, h.multShake - dt);
   h.snowPop = Math.max(0, h.snowPop - dt);
   h.noonSparkle = Math.max(0, h.noonSparkle - dt);
@@ -248,6 +267,8 @@ export interface HudCampaign {
   markEclipse: number;
   /** The gust turning the sun now (−1 clockwise, +1 counter-clockwise, 0 none). */
   gust: number;
+  /** The stars so far (game/campaign.ts starState bits: 1 goal met, 2 flakes star, 4 cool run lost). */
+  stars: number;
 }
 
 export interface HudInput {
@@ -294,6 +315,16 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   const passed = s.dayTick > dl * 0.6 ? 1 : 0;
 
   const marks = c ? (c.markGate >= 0 ? 1 : 0) + (c.markEclipse >= 0 ? 2 : 0) : 0;
+  const stars = c ? c.stars : -1;
+  if (stars !== h.starBits) {
+    // A pip that lights up (the goal met, the flakes star) pops; the cool run greys out quietly.
+    const lit = h.starBits >= 0 && stars >= 0 ? stars & ~h.starBits & 3 : 0;
+    if (lit) {
+      h.starPop = STAR_POP_S;
+      h.starPopI = lit & 1 ? 0 : 1;
+    }
+    h.starBits = stars;
+  }
   const n = h.nextKey;
   n[0] = h.snowVal;
   n[1] = h.snowTarget;
@@ -313,6 +344,7 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   n[15] = v.safe.left;
   n[16] = v.safe.right;
   n[17] = v.dpr;
+  n[18] = stars;
   let same = h.layer !== null;
   for (let i = 0; i < KEYS && same; i++) same = n[i] === h.key[i];
   if (!same) {
@@ -363,6 +395,25 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.lineWidth = 2;
     roundRect(g, bx - bw / 2 + 1, cy - bh / 2 + 1, bw - 2, bh - 2, bh / 2 - 1);
     g.stroke();
+  } else if (s.nubs.shadeTicks > 6 && s.phase === 'day') {
+    // The charge toward the next level: a bar under the digits that fills over its 4 s of shade.
+    const k = hudScale(v);
+    const cw = (bw - 12 * k) * Math.min(1, s.nubs.shadeTicks / TUNING.mult.stepTicks);
+    g.fillStyle = m >= 2 ? '#B85A00' : '#2EC4B6';
+    g.fillRect(bx - bw / 2 + 6 * k, cy + bh / 2 - 4 * k, cw, 2 * k);
+  }
+
+  // A star pip lighting up: a gold star swelling out of it and settling.
+  if (h.starPop > 0 && h.leftShown && inp.campaign) {
+    const u = 1 - h.starPop / STAR_POP_S;
+    const k = hudScale(v);
+    const r = PIP_R * k * (1 + 0.9 * Math.sin(Math.PI * Math.min(1, u * 1.4)) * (1 - u));
+    star(g, h.pipX + h.starPopI * h.pipStep, cy + 1, r, '#FFC23D', '#B87A0A');
+    g.strokeStyle = cssa(0xffc23d, 1 - u);
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(h.pipX + h.starPopI * h.pipStep, cy + 1, PIP_R * k * (1 + 2 * u), 0, TAU);
+    g.stroke();
   }
 
   // Ruler: elapsed part and the progress head (a moon at night is part of the layer). On a campaign
@@ -405,6 +456,27 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     }
   }
   g.globalAlpha = 1;
+}
+
+/** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */
+const STAR_POP_S = 0.5;
+const PIP_R = 8;
+
+/** A five-point star of outer radius r at (x, y), filled and outlined. */
+function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath();
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = Math.max(1.2, r * 0.16);
+  g.lineJoin = 'round';
+  g.strokeStyle = line;
+  g.stroke();
 }
 
 /** Transparent margin around the badge sprite (CSS px), so its antialiased edge isn't cut. */
@@ -490,9 +562,11 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   const rulerOf = (rightW: number, clockW: number): number => rx1 - rightW - 8 - 12 * k - (lx0 + 8 * k + dW + 7 * k + clockW + 10 * k);
   let icon = true;
   let clockFont = h.clockFont;
-  let clockW = widestClock(g, h, clockFont);
+  // A level shows its three star pips where an endless run shows the clock (the score).
+  const pipsW = 3 * PIP_STEP * k;
+  let clockW = c ? pipsW : widestClock(g, h, clockFont);
   const fit = (fMin: number): void => {
-    for (let f = 0.95; f >= fMin - 0.001 && rulerOf(rightOf(icon), clockW) < RULER_MIN; f -= 0.05) {
+    for (let f = 0.95; !c && f >= fMin - 0.001 && rulerOf(rightOf(icon), clockW) < RULER_MIN; f -= 0.05) {
       clockFont = `800 ${Math.round(19 * k * f)}px ${FONT}`;
       clockW = widestClock(g, h, clockFont);
     }
@@ -501,7 +575,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   if (rulerOf(rightOf(true), clockW) < RULER_MIN) {
     icon = false;
     clockFont = h.clockFont;
-    clockW = widestClock(g, h, clockFont);
+    if (!c) clockW = widestClock(g, h, clockFont);
     fit(0.7);
   }
 
@@ -514,7 +588,8 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   h.iconX = x;
   h.iconS = icon ? iconS : 0;
   if (icon) x += iconS + 6 * k;
-  g.fillStyle = '#2B5A8A';
+  // A met goal turns its count teal ("4/4").
+  g.fillStyle = h.snowTarget >= 0 && h.snowVal >= h.snowTarget ? '#13857C' : '#2B5A8A';
   drawTabular(g, h, h.snowFont, h.snowText, x, cy + 1);
   x += snowW + 8 * k;
   h.badgeX = x + badgeW / 2;
@@ -549,8 +624,19 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     drawGlyph(g, h.builtForecast, sx, sy, 12 * k);
   }
   cx += dW + 7 * k;
-  g.fillStyle = '#2B2140';
-  drawTabular(g, h, clockFont, h.clock, cx, cy + 1);
+  if (c) {
+    // Gold: earned; white: still to play for; grey: the cool run lost.
+    h.pipStep = PIP_STEP * k;
+    h.pipX = cx + h.pipStep / 2;
+    for (let i = 0; i < 3; i++) {
+      const on = i === 0 ? c.stars & 1 : i === 1 ? c.stars & 2 : 0;
+      const lost = i === 2 && (c.stars & 4) !== 0;
+      star(g, h.pipX + i * h.pipStep, cy + 1, PIP_R * k, on ? '#FFC23D' : lost ? '#D9D3E2' : '#FFFFFF', on ? '#B87A0A' : lost ? '#B5ABC4' : '#8A7FA0');
+    }
+  } else {
+    g.fillStyle = '#2B2140';
+    drawTabular(g, h, clockFont, h.clock, cx, cy + 1);
+  }
   // Reserve the width of the widest clock so the ruler doesn't jump.
   cx += clockW + 10 * k;
   const r0 = cx;
@@ -663,6 +749,9 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
   g.lineWidth = 0.8;
   g.strokeRect(fx + 1, fy - 11 * k, 3 * sq, 3 * sq);
 }
+
+/** Spacing of the campaign star pips (× the HUD scale). */
+const PIP_STEP = 19;
 
 /** The ruler keeps at least this width (CSS px) whenever the left panel shows. */
 const RULER_MIN = 48;

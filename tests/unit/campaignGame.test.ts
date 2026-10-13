@@ -81,6 +81,10 @@ describe('the words', () => {
     expect(c).toMatchObject({ kicker: 'LEVEL 6', title: 'Glass Garden', concept: 'glare', conceptName: 'Glare', goal: 'Reach the finish' });
     expect(conceptLabel({ name: 'Glare' }, 'glare')).toBe('New concept');
     expect(c.blurb).toContain('Gazing balls');
+    // The three star rules: the goal, the level's flakes, a cool run (lit at most sunSec, rounded up).
+    expect(c.stars).toEqual(['Finish', `${levelDef(6)!.stars.flakes} flakes`, `≤ ${Math.ceil(levelDef(6)!.stars.sunSec)} s in sun`]);
+    expect(introCard(levelDef(2)!).stars[0]).toBe(`${levelDef(2)!.goal.target} flakes`);
+    expect(introCard(levelDef(7)!).stars[0]).toBe(`${levelDef(7)!.goal.target} Snow`);
     const combo = introCard(levelDef(41)!);
     expect(combo.concept).toBeNull();
     expect(combo.conceptName).toContain(' · ');
@@ -246,7 +250,7 @@ describe('?level=', () => {
 describe('level card and the finish stamps (render/banners)', () => {
   it('holds until dismissed, then leaves within 0.3 s', () => {
     const b = createBanners();
-    showLevelCard(b, 'LEVEL 6', 'Glass Garden', 'glare', 'Glare', 'Gazing balls throw light back.', 'Reach the finish', 'meadow');
+    showLevelCard(b, introCard(levelDef(6)!), 'meadow');
     expect(b.level).toBe(0);
     for (let i = 0; i < 100; i++) updateBanners(b, 0.1, false);
     expect(b.level).toBeCloseTo(10, 6);
@@ -257,7 +261,7 @@ describe('level card and the finish stamps (render/banners)', () => {
     expect(b.level).toBeGreaterThan(0);
     for (let i = 0; i < 2; i++) updateBanners(b, 0.1, false);
     expect(b.level).toBe(-1);
-    showLevelCard(b, 'LEVEL 7', 'SWING!', 'swing', 'Swing', '', 'Score 20 Snow', 'oldtown');
+    showLevelCard(b, introCard(levelDef(7)!), 'oldtown');
     resetBanners(b);
     expect(b.level).toBe(-1);
   });

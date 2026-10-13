@@ -6,6 +6,7 @@ import type { DebugDraw, RenderOptions } from '../render/renderer.ts';
 import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
 import { shakeOf, zoomOf } from './camera.ts';
 import type { MapProbe, PixelAB, Session } from './session.ts';
+import type { RunStatusView } from '../ui/types.ts';
 
 export interface ShadyTestHook {
   screen(): string;
@@ -73,7 +74,11 @@ export interface ShadyTestHook {
   /** A core bot plays the runs from now on ('reactive', 'oracle'…; null stops it). The runs stay scored. */
   bot(kind: string | null): void;
   /** The HUD row's layout as last built: left panel and ruler shown, ruler width (CSS px), Snow's flake icon. */
-  hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean };
+  hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean; stars: number };
+  /** The Pause card's view of the run in progress (UiCallbacks.runStatus). */
+  runStatus(): RunStatusView | null;
+  /** The in-run toasts: the one showing first, then the queue (kind, kicker, text). */
+  toasts(): { kind: string; kicker: string; text: string }[];
   /** Sets the run's Snow (layout checks with long numbers). */
   setSnow(n: number): void;
 }
@@ -134,8 +139,10 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     hint: () => session.hintState(),
     hud: () => {
       const h = session.renderer.scene.hud;
-      return { snow: h.key[0] as number, left: h.leftShown, ruler: h.leftShown && h.rulerShown, rulerW: h.rulerShown ? h.rulerX1 - h.rulerX0 : 0, icon: h.iconS > 0 };
+      return { snow: h.key[0] as number, left: h.leftShown, ruler: h.leftShown && h.rulerShown, rulerW: h.rulerShown ? h.rulerX1 - h.rulerX0 : 0, icon: h.iconS > 0, stars: h.starBits };
     },
+    runStatus: () => session.runStatus(),
+    toasts: () => session.renderer.scene.banners.toasts.map((t) => ({ kind: t.kind, kicker: t.kicker.replace(/\u200c/g, ''), text: t.text })),
     setSnow: (n) => session.testSetSnow(n),
   };
   window.__SHADY_TEST__ = hook;

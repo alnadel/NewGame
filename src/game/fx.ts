@@ -314,6 +314,23 @@ export class Fx {
     }
   }
 
+  /**
+   * COMEBACK (v1.4): Nubs climbed out of a slow burn (Chill under the PHEW line, then held shade;
+   * game/moments.ts). PHEW's little brother: no slow-mo, a gold headline, a cool ring and a hop.
+   */
+  comeback(x: number, y: number): void {
+    const sc = this.sc;
+    addHeadline(sc.pops, 'COMEBACK!', POP_PHEW, 1.1);
+    hop(sc.nubs, 6);
+    sc.nubs.happy = Math.max(sc.nubs.happy, 0.8);
+    addRing(sc.rings, x, y, 6, 56, 0.45, 3, 0.9, GOLD);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      spawn(sc.particles, P_SPARKLE, x, y, 10, Math.cos(a) * 95, Math.sin(a) * 95, rnd(20, 60), 0.55, 4, 1.5, i % 2 ? GOLD : FROST);
+    }
+    sc.relief = 0.8;
+  }
+
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
     if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);

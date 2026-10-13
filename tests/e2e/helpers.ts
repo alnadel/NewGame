@@ -204,7 +204,9 @@ declare global {
       postcard(): { ready: boolean; stageMs: number[]; bytes: number; name: string };
       pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null;
       bot(kind: string | null): void;
-      hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean };
+      hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean; stars: number };
+      runStatus(): { title: string; goal: string; now: string; stars: { label: string; state: 'earned' | 'open' | 'lost' }[] } | null;
+      toasts(): { kind: string; kicker: string; text: string }[];
       setSnow(n: number): void;
     };
   }
