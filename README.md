@@ -47,6 +47,15 @@ Journal and bests stay endless-only. Results offer **Next level**, **Retry** and
 map centers the level in play and pops the stars you just earned. For testing, Settings → Testing →
 **Unlock all levels (testing)** opens every tile, and `?level=N` opens a level directly.
 
+### Menus
+
+A first launch shows the Title with **Play** only; the other modes and menus unlock as you play.
+A locked button wears a lock and says how to open it, a newly opened one a **NEW** tag. The Title's
+top bar carries your **Sun Rank** (it opens the Profile), a gift when the daily reward is ready,
+and your Snow. Results land the stars first, then the XP, then any rewards. The Journey's chapter
+banners show each chapter's **Snow Globe**, earned by passing all ten levels; the Wardrobe counts
+your collection and marks each item's rarity and what's new.
+
 ## Commands
 
 Node **22.18+** (scripts run through Node's type stripping); Playwright's Chromium for e2e.

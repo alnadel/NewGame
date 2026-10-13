@@ -1,6 +1,10 @@
 // Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, v1.3 Journey-first).
 // The primary action plays the next Journey level ("Level 4"; Space/Enter too); the map and Endless
-// sit beside it, the tray holds Daily, Missions, Wardrobe and Settings. Only the controls take
+// sit beside it, the tray holds Daily, Missions, Wardrobe and Settings. The top bar holds the Sun
+// Rank badge (opens the Profile), the daily reward when one waits, and the Snow wallet (v1.4).
+// Progressive disclosure (v1.4): a feature still locked (meta/gamify featureUnlocked) shows a lock
+// and says how to unlock it; while nothing is unlocked yet the Title is Play (and Settings) only. A
+// feature unlocked since this device last saw the Title wears a NEW mark until opened. Only the controls take
 // pointer events: a press anywhere else reaches the canvas and starts an endless run (the challenge
 // while a challenge banner is up). Tray and mode buttons activate on click with < 8 px of travel,
 // and a sideways drag that starts on one is handed to the canvas.
@@ -17,13 +21,17 @@ import {
   totalStars,
   DAILY_UNLOCK_RUNS,
 } from '../../meta/progression.ts';
+import { claimables, featureHint, featureUnlocked, type Feature } from '../../meta/gamify.ts';
+import type { Save } from '../../meta/saveTypes.ts';
 import { logoLayers } from '../art.ts';
-import { h, setChildren, svgFromMarkup } from '../dom.ts';
+import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
+import { claimDot, rankBadge } from '../gamify.ts';
+import { seenSet } from '../seen.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
-import { challengeGoalText, planText } from '../labels.ts';
-import { button, hide, setButtonLabel } from '../widgets.ts';
+import { challengeGoalText, featureLabel, planText } from '../labels.ts';
+import { button, countUp, hide, setButtonLabel } from '../widgets.ts';
 
 /** Travel (px) after which a press is no longer a tap. */
 const TAP_SLOP = 8;
@@ -141,17 +149,55 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     challengeClose,
   );
 
+  // --- Progressive disclosure ------------------------------------------------------------------
+  // A gated control: locked, it says how to unlock (featureHint) instead of opening; unlocked since
+  // this device last saw the Title, it wears a NEW mark until opened.
+  const seen = seenSet('features');
+  const gates: { f: Feature; el: HTMLButtonElement; name: string }[] = [];
+  // The Daily also waits for its own run count (meta/progression isDailyUnlocked).
+  const isOpen = (save: Save, f: Feature): boolean => featureUnlocked(save, f) && (f !== 'daily' || isDailyUnlocked(save));
+  const deny = (text: string): void => {
+    ctx.sound('deny');
+    ctx.toast(text, { icon: 'lock', tone: 'ink' });
+  };
+  const gated = (f: Feature, open: () => void) => (): void => {
+    const save = ctx.save();
+    if (!isOpen(save, f)) return deny(featureUnlocked(save, f) ? `The Daily unlocks after ${DAILY_UNLOCK_RUNS} runs.` : featureHint(f));
+    seen.see(f);
+    ctx.sound('tap');
+    open();
+  };
+  const lockBadge = (): HTMLElement => h('span', { class: 'tray-lock', 'aria-hidden': 'true' }, icon('lock'));
+  const newTag = (): HTMLElement => h('span', { class: 'new-tag', 'aria-hidden': 'true' }, 'New');
+
+  // --- Top bar: the Sun Rank, a waiting daily reward, the wallet ----------------------------------
+  const badge = rankBadge(ctx);
+  const badgeSlot = h('div', { class: 'title-rank pe' }, badge.el);
+  // The Profile opens from the badge once unlocked; before that the badge says how to get there.
+  badgeSlot.addEventListener(
+    'click',
+    (e) => {
+      if (featureUnlocked(ctx.save(), 'profile')) return;
+      e.stopPropagation();
+      deny(featureHint('profile'));
+    },
+    true,
+  );
+  // The daily streak's reward, when one waits: it is claimed in the Profile.
+  const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', className: 'title-reward pe', ariaLabel: 'Daily reward ready', onPress: () => ctx.go('profile') });
+  const walletValue = h('span', { class: 'num' });
+  const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), walletValue);
+  const hud = h('div', { class: 'title-hud' }, badgeSlot, rewardBtn, h('i', { class: 'title-hud-gap' }), chipSnow);
+
   // --- Chips -------------------------------------------------------------------------------------
   // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Journal.
   const bestDay = h('span', { class: 'day-badge' });
   const bestValue = h('span', { class: 'num' });
   const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('journal'));
-  // The other chips are read as one labeled image each (their aria-label carries the full sentence).
+  // The missions chip is read as one labeled image (its aria-label carries the full sentence).
   const pips = h('span', { class: 'pips' });
   const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
-  const walletValue = h('span', { class: 'num' });
-  const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), walletValue);
-  const chips = h('div', { class: 'chips' }, chipBest, chipMissions, chipSnow);
+  const chips = h('div', { class: 'chips' }, chipBest, chipMissions);
 
   // --- The modes: the map, the next level (primary) and Endless ----------------------------------
   const starsValue = h('span', { class: 'num' });
@@ -160,45 +206,38 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     ctx.cb.openJourney();
   });
   const playBtn = pill('btn--primary play-pill', 'play', h('span', { class: 'btn-label' }), playLevel);
-  const endlessBtn = pill('endless-pill', 'endless', h('span', { class: 'btn-label' }, 'Endless'), () => run('endless'));
-  endlessBtn.setAttribute('aria-label', 'Endless run');
+  const endlessBtn = pressable(
+    h('button', { class: 'btn endless-pill pe', type: 'button' }, icon('endless'), h('span', { class: 'btn-label' }, 'Endless'), lockBadge(), newTag()),
+    gated('endless', () => run('endless')),
+    false,
+  );
+  gates.push({ f: 'endless', el: endlessBtn, name: 'Endless run' });
   const modes = h('div', { class: 'modes' }, mapBtn, playBtn, endlessBtn);
 
   // --- Tray --------------------------------------------------------------------------------------
   const dailyDot = h('span', { class: 'tray-dot', 'aria-hidden': 'true' });
-  const dailyLock = h('span', { class: 'tray-lock', 'aria-hidden': 'true' }, icon('lock'));
-  const trayButton = (label: string, iconName: IconName, onActivate: () => void, extras: HTMLElement[] = [], sound = true): HTMLButtonElement =>
-    pressable(
+  const trayButton = (label: string, iconName: IconName, onActivate: () => void, f?: Feature, extras: HTMLElement[] = []): HTMLButtonElement => {
+    const btn = pressable(
       h(
         'button',
         { class: 'tray-btn pe', type: 'button', 'aria-label': label },
-        h('span', { class: 'tray-disc' }, icon(iconName), ...extras),
+        h('span', { class: 'tray-disc' }, icon(iconName), ...extras, ...(f ? [lockBadge(), newTag()] : [])),
         h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
       ),
-      onActivate,
-      sound,
+      f ? gated(f, onActivate) : onActivate,
+      f === undefined,
     );
-  const dailyBtn = trayButton(
-    'Daily',
-    'daily',
-    () => {
-      if (isDailyUnlocked(ctx.save())) {
-        ctx.sound('tap');
-        ctx.go('daily');
-      } else {
-        ctx.sound('deny');
-        ctx.toast(`The Daily unlocks after ${DAILY_UNLOCK_RUNS} runs.`, { icon: 'lock', tone: 'ink' });
-      }
-    },
-    [dailyDot, dailyLock],
-    false,
-  );
-  const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
+    if (f) gates.push({ f, el: btn, name: label });
+    return btn;
+  };
+  const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily', [dailyDot]);
+  const trayFor: Partial<Record<ScreenId, HTMLElement>> = {
+    profile: badge.el,
     journal: chipBest,
     journey: mapBtn,
     daily: dailyBtn,
-    missions: trayButton('Missions', 'missions', () => ctx.go('missions')),
-    wardrobe: trayButton('Wardrobe', 'wardrobe', () => ctx.go('wardrobe')),
+    missions: trayButton('Missions', 'missions', () => ctx.go('missions'), 'missions'),
+    wardrobe: trayButton('Wardrobe', 'wardrobe', () => ctx.go('wardrobe'), 'wardrobe'),
     settings: trayButton('Settings', 'settings', () => ctx.go('settings')),
   };
   const tray = h('nav', { class: 'tray', 'aria-label': 'Menu' }, dailyBtn, trayFor.missions, trayFor.wardrobe, trayFor.settings);
@@ -211,17 +250,21 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const el = h(
     'section',
     { class: 'scr scr-title' },
+    hud,
     h('div', { class: 'title-top' }, logo(), tagline, forecast, h('p', { class: 'title-keys' }, KEY_HINT), challenge),
     bottomCluster,
   );
   let preview: DayPlan | null = null;
+  /** The wallet as last shown (it counts up from there); null before the first render. */
+  let shownWallet: number | null = null;
+  let stopCount = (): void => {};
+  const celebrated = new Set<Feature>();
   /** The tagline shows the next goal (it gives way first when the Title is crowded). */
   let goalTagline = false;
 
   /**
    * Measures and resolves crowding (called on enter, refresh, resize and the first key press; reads
    * layout, never per frame):
-   * - the chips stay on one line: the Snow chip is dropped when the row would overflow;
    * - the bottom cluster stays below Nubs' halo (--nubs-y + --halo-r): gaps shrink first (CSS),
    *   then the tray labels go (the buttons keep their aria-labels), then the tray discs and the
    *   mode pills shrink (is-tight), then the chips row goes (tiny screens);
@@ -230,10 +273,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    */
   function fit(): void {
     if (!el.classList.contains('is-on')) return;
-    chips.classList.remove('no-wallet');
     bottomCluster.classList.remove('no-labels', 'is-tight', 'no-chips');
     el.classList.remove('is-compact', 'no-tagline', 'no-forecast');
-    if (chips.scrollWidth > chips.clientWidth + 1) chips.classList.add('no-wallet');
 
     // --nubs-y is in viewport px, like the rects.
     const nubsY = ctx.rootPx('--nubs-y');
@@ -283,8 +324,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     tagline.classList.toggle('is-goal', goalTagline);
     renderPreview();
 
+    // The wallet counts up to what the last run earned.
     hide(chipSnow, s.runs === 0);
-    walletValue.textContent = String(s.wallet);
+    stopCount();
+    stopCount = countUp(walletValue, shownWallet ?? s.wallet, s.wallet, ctx);
+    shownWallet = s.wallet;
     chipSnow.setAttribute('aria-label', `${s.wallet} Snow`);
 
     const level = continueLevel(save);
@@ -294,12 +338,10 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     starsValue.textContent = stars > 0 ? `${stars}★` : 'Map';
     mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
-    const unlocked = isDailyUnlocked(save);
-    const unplayed = unlocked && !dailyStatus(save, ctx.today()).played;
-    dailyBtn.classList.toggle('is-locked', !unlocked);
-    hide(dailyLock, unlocked);
+    renderGates(save);
+    const unplayed = isOpen(save, 'daily') && !dailyStatus(save, ctx.today()).played;
     hide(dailyDot, !unplayed);
-    dailyBtn.setAttribute('aria-label', !unlocked ? 'Daily (locked)' : unplayed ? "Daily: today's is new" : 'Daily');
+    if (unplayed) dailyBtn.setAttribute('aria-label', "Daily: today's is new");
 
     const banner = ctx.challenge();
     hide(challenge, banner === null);
@@ -312,6 +354,37 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       hide(challengeNote, note === '');
     }
     fit();
+  }
+
+  /**
+   * Locks, NEW marks and claim dots. While nothing is unlocked yet (a first-time player) the locked
+   * controls, the map and the top bar stay hidden: the Title is Play (and Settings) only.
+   */
+  function renderGates(save: Save): void {
+    const open = gates.map((g) => isOpen(save, g.f));
+    const fresh = !open.some(Boolean) && !featureUnlocked(save, 'profile') && totalStars(save) === 0;
+    seen.init(gates.filter((_, i) => open[i]).map((g) => g.f));
+    gates.forEach((g, i) => {
+      const on = open[i] as boolean;
+      const isNew = on && seen.isNew(g.f);
+      g.el.classList.toggle('is-locked', !on);
+      g.el.classList.toggle('is-new', isNew);
+      hide(g.el, !on && fresh);
+      // The name stays the accessible name; "New" is its description.
+      g.el.setAttribute('aria-label', on ? g.name : `${g.name} (locked)`);
+      setFlag(g.el, 'aria-description', false);
+      if (isNew) g.el.setAttribute('aria-description', 'New');
+    });
+    hide(mapBtn, fresh);
+    hide(chipMissions, !featureUnlocked(save, 'missions'));
+    hide(hud, fresh);
+    badge.update(save);
+    const c = claimables(save);
+    claimDot(badge.el, c.globes + c.trophies);
+    claimDot(trayFor.missions?.firstElementChild as HTMLElement, c.missions);
+    claimDot(trayFor.wardrobe?.firstElementChild as HTMLElement, c.wardrobe);
+    hide(rewardBtn, !c.daily);
+    claimDot(rewardBtn, c.daily ? 1 : 0);
   }
 
   function renderPreview(): void {
@@ -330,8 +403,16 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     enter(from) {
       returnFrom = from;
       refresh();
+      // A feature unlocked since the last visit is announced once per session (its NEW mark stays).
+      const fresh = gates.filter((g) => g.el.classList.contains('is-new') && !celebrated.has(g.f));
+      for (const g of fresh) {
+        celebrated.add(g.f);
+        ctx.toast(`Unlocked: ${featureLabel(g.f)}`, { icon: 'star', tone: 'gold', duration: 3200 });
+      }
+      if (fresh.length > 0) ctx.sound('unlock');
     },
     refresh,
+    leave: () => stopCount(),
     relayout: fit,
     activate() {
       if (ctx.challenge() !== null) run('challenge');

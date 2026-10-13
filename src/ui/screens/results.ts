@@ -41,11 +41,15 @@ import {
 import type { Screen, UiContext } from '../screen.ts';
 import type { ResultsView } from '../types.ts';
 import { toastIconName } from '../overlays.ts';
-import { button, hide, progressBar, setButtonLabel, setDisabled, starRoad } from '../widgets.ts';
+import { revealRewards, xpMeter } from '../gamify.ts';
+import { featureLabel } from '../labels.ts';
+import { button, countUp, hide, progressBar, setButtonLabel, setDisabled, starRoad } from '../widgets.ts';
 
 const RETRY_ARM_MS = 300;
+/** The XP meter starts filling this long after an endless sheet appears, and takes about this long. */
+const XP_ENDLESS_MS = 500;
+const XP_FILL_MS = 900;
 const TYPE_CPS = 30;
-const COUNT_MS = 700;
 const STAMP_FIRST_MS = 650;
 const STAMP_GAP_MS = 300;
 /** Award chips pop this far apart, before the stamps. */
@@ -109,7 +113,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   let armed = false;
   let timers: number[] = [];
   let typing = 0;
-  let countFrame = 0;
+  let stopCount = (): void => {};
 
   const later = (ms: number, fn: () => void): void => {
     timers.push(window.setTimeout(fn, ms));
@@ -118,7 +122,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     for (const t of timers) clearTimeout(t);
     timers = [];
     clearInterval(typing);
-    cancelAnimationFrame(countFrame);
+    stopCount();
   };
 
   const retry = (): void => {
@@ -142,11 +146,15 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ctx.go('journey');
     ctx.cb.openJourney();
   };
+  /** The reward reveal is up: the sheet's actions wait for it. */
+  let revealing = false;
   const hasNext = (): boolean => shown?.campaign?.passed === true && shown.campaign.nextId !== null;
   /** Retry, or Next level on a passed Journey level (the map tap, Space/Enter). */
   const primary = (): void => (hasNext() ? next() : retry());
   /** Back: Home, or the Journey map after a level. */
-  const leave = (): void => (shown?.campaign ? map() : home());
+  const leave = (): void => {
+    if (!revealing) (shown?.campaign ? map : home)();
+  };
   const shared = (outcome: string): void => {
     if (outcome === 'copied') ctx.toast('Copied! Paste it anywhere.', { icon: 'check', tone: 'accent' });
     else if (outcome === 'saved') ctx.toast('Postcard saved · link copied', { icon: 'check', tone: 'accent' });
@@ -186,6 +194,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const level = h('h2', { class: 'res-level', id: 'res-level' }, starsEl, levelName);
   const goal = h('p', { class: 'res-goal', id: 'res-goal' });
   const road = starRoad();
+  // v1.4: the XP the run earned fills the Sun Rank under the stars (the score on endless runs).
+  const xp = xpMeter(ctx);
   const strip = h('div', { class: 'strip', role: 'img' });
   const shareBtn = button(ctx, { label: 'Share', icon: 'share', className: 'res-share', onPress: share });
   const homeBtn = button(ctx, { label: 'Home', icon: 'home', round: true, sound: 'back', onPress: home });
@@ -232,6 +242,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     level,
     strip,
     goal,
+    xp.el,
     death,
     tip,
     pace,
@@ -391,6 +402,20 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     setDisabled(postcardBtn, !ready);
   }
 
+  /** Retry (and Next level) live or not; the arming sweep plays while they wait. */
+  function setArmed(on: boolean): void {
+    armed = on;
+    for (const b of [retryBtn, nextBtn]) {
+      b.classList.toggle('is-arming', !on);
+      b.classList.toggle('is-ready', on);
+      setDisabled(b, !on);
+    }
+    mapCatch.classList.toggle('is-armed', on);
+  }
+
+  /** Counts renders, so a reveal that ends after the sheet was re-shown doesn't arm the new one. */
+  let renders = 0;
+
   function render(view: ResultsView): void {
     shown = view;
     const { result, outcome } = view;
@@ -486,7 +511,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     }
 
     // Stats (Snow counts up into the wallet); tiles with nothing to show are left out.
-    const snowValue = h('span', { class: 'num' }, reduced ? `+${outcome.snowEarned}` : '+0');
+    const snowValue = h('span', { class: 'num' });
     const st = result.stats;
     const mult = multiplierTile(st);
     setChildren(
@@ -500,19 +525,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       st.swings > 0 ? tile('swing', String(st.swings), st.swings === 1 ? 'SWING' : 'SWINGs', 'stat--swing', `best ×${st.swingChainBest}`) : null,
     );
     stats.dataset.n = String(stats.childElementCount);
-    if (!reduced && outcome.snowEarned > 0) {
-      const start = performance.now();
-      const step = (now: number): void => {
-        const k = Math.min(1, (now - start) / COUNT_MS);
-        const eased = 1 - (1 - k) * (1 - k) * (1 - k);
-        snowValue.textContent = `+${Math.round(outcome.snowEarned * eased)}`;
-        if (k < 1) countFrame = requestAnimationFrame(step);
-        else ctx.sound('count');
-      };
-      countFrame = requestAnimationFrame(step);
-    } else {
-      snowValue.textContent = `+${outcome.snowEarned}`;
-    }
+    stopCount = countUp(snowValue, 0, outcome.snowEarned, ctx, { format: (n) => `+${n}` });
 
     // The run's unlocks first, then the mission stamps. Chips sit at the top of the scroll area
     // (their space is held from the start so nothing reflows) and pop in quickly; the stamps land in
@@ -522,6 +535,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // reward shows even when the rows sit below the fold.
     const done = outcome.missionsCompleted.length;
     const toasts: ToastSpec[] = [...outcome.toasts];
+    // Features this run unlocked (v1.4), with the run's other unlocks.
+    for (const f of outcome.gamify?.featuresUnlocked ?? []) toasts.push({ text: `Unlocked: ${featureLabel(f)}`, icon: 'star', tone: 'gold' });
     if (done > 0) toasts.push({ text: `${done === 1 ? 'Mission' : `${done} missions`} done +${outcome.missionSnow}`, icon: 'check', tone: 'accent' });
     const chips = toasts.map((t) =>
       h(
@@ -569,23 +584,27 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       stampAt += STAMP_GAP_MS;
     });
 
-    // Retry (and Next level) arm after 0.3 s (the sheet is readable before a stray tap can fire it).
-    armed = false;
-    for (const b of [retryBtn, nextBtn]) {
-      b.classList.add('is-arming');
-      b.classList.remove('is-ready');
-      setDisabled(b, true);
+    // The rewards sequence (v1.4): the stars land, the XP meter fills under them, then the run's
+    // rewards are revealed one at a time; the actions arm once that is over. With nothing to reveal
+    // Retry (and Next level) arm after 0.3 s, as before: the sheet is readable before a stray tap
+    // can fire it, and a quick retry stays quick.
+    const g = outcome.gamify;
+    const xpAt = reduced ? 0 : c ? STAR_FIRST_MS + (c.passed ? c.stars : 0) * STAR_GAP_MS + 120 : XP_ENDLESS_MS;
+    later(xpAt, () => xp.show(g, ctx.save()));
+    const rewards = g?.rewards ?? [];
+    const id = ++renders;
+    setArmed(false);
+    revealing = rewards.length > 0;
+    if (!revealing) later(RETRY_ARM_MS, () => setArmed(true));
+    else {
+      later(reduced ? 0 : xpAt + XP_FILL_MS, () => {
+        void revealRewards(ctx, rewards).then(() => {
+          if (id !== renders) return;
+          revealing = false;
+          setArmed(true);
+        });
+      });
     }
-    mapCatch.classList.remove('is-armed');
-    later(RETRY_ARM_MS, () => {
-      armed = true;
-      for (const b of [retryBtn, nextBtn]) {
-        b.classList.remove('is-arming');
-        b.classList.add('is-ready');
-        setDisabled(b, false);
-      }
-      mapCatch.classList.add('is-armed');
-    });
 
     scroll.scrollTo({ top: 0 });
     body.scrollTo({ top: 0 });
@@ -625,7 +644,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     },
     back: leave,
     activate() {
-      primary();
+      if (!revealing) primary();
       return true;
     },
     initialFocus: () => (hasNext() ? nextBtn : retryBtn),

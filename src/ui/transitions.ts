@@ -10,12 +10,13 @@ const LEGAL: Readonly<Record<ScreenId, readonly ScreenId[]>> = {
   // v1.4: the Profile (rank, trophies, collection) opens from the rank badge.
   profile: ['title', 'wardrobe', 'journey'],
   daily: ['play', 'title'],
-  wardrobe: ['title'],
+  // Back returns to where the Wardrobe or the map was opened from (the Title, or the v1.4 Profile).
+  wardrobe: ['title', 'profile'],
   missions: ['title', 'journal'],
   // Back returns to where the Journal was opened from.
   journal: ['title', 'missions'],
   // The Journey map: a tile starts its level; Back returns to the Title.
-  journey: ['play', 'title'],
+  journey: ['play', 'title', 'profile'],
   settings: ['title', 'pause'],
   // 'results' directly covers a skipped death animation; 'title' an aborted run.
   play: ['pause', 'dying', 'results', 'title'],
