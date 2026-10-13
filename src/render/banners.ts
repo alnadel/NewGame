@@ -9,7 +9,7 @@
 
 import { FORECASTS, type BiomeId, type ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import { drawBiomeGlyph, drawConceptGlyph, drawGoalGlyph } from './glyphs.ts';
+import { drawGlyph } from './glyphs.ts';
 import { roundRect } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -380,7 +380,7 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
     const rowW = (b.levelConcept ? glyph + 7 * scale : 0) + nameW;
     let rx = cx - rowW / 2;
     if (b.levelConcept) {
-      drawConceptGlyph(g, b.levelConcept, rx + glyph / 2, ly + 1, glyph);
+      drawGlyph(g, b.levelConcept, rx + glyph / 2, ly + 1, glyph);
       rx += glyph + 7 * scale;
     }
     g.fillStyle = '#2B2140';
@@ -406,7 +406,7 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
   g.fillStyle = 'rgba(46,196,182,0.16)';
   roundRect(g, cx - gw / 2, ly, gw, gh, gh / 2);
   g.fill();
-  drawGoalGlyph(g, cx - gw / 2 + 12 * scale, ly + gh / 2, 11 * scale);
+  drawGlyph(g, 'goal', cx - gw / 2 + 12 * scale, ly + gh / 2, 11 * scale);
   g.fillStyle = '#13857C';
   g.textAlign = 'left';
   g.fillText(b.levelGoal, cx - gw / 2 + 22 * scale, ly + gh / 2 + 0.5);
@@ -606,7 +606,7 @@ function dayCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: number,
   // The line: the biome glyph, then the plan in small caps.
   const ly = y + h / 2 - 15 * scale;
   const lx = cx - (glyph + gap + lineW) / 2;
-  drawBiomeGlyph(g, b.dayBiome, lx + glyph / 2, ly, glyph);
+  drawGlyph(g, b.dayBiome, lx + glyph / 2, ly, glyph);
   g.fillStyle = '#6B5A7A';
   g.textAlign = 'left';
   g.font = b.lineFont;

@@ -18,7 +18,7 @@
 import { dayTicks, hudClock, minutesOfDay, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex } from './color.ts';
-import { drawConceptGlyph, drawForecastGlyph, drawWindGlyph } from './glyphs.ts';
+import { drawGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
@@ -419,7 +419,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.beginPath();
       g.arc(wx, wy, 8.5 * k, 0, TAU);
       g.fill();
-      drawWindGlyph(g, wx, wy, 13 * k, dir);
+      drawGlyph(g, 'gusts', wx, wy, 13 * k, undefined, dir < 0);
     }
     if (h.noonSparkle > 0) {
       const t = 1 - h.noonSparkle / 1.2;
@@ -589,7 +589,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     g.beginPath();
     g.arc(sx, sy, sr, 0, TAU);
     g.fill();
-    drawForecastGlyph(g, h.builtForecast as ForecastId, sx, sy, 12 * k);
+    drawGlyph(g, h.builtForecast, sx, sy, 12 * k);
   }
   cx += dW + 7 * k;
   g.fillStyle = '#2B2140';
@@ -681,7 +681,7 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
     g.moveTo(mx, my + 7 * k);
     g.lineTo(mx, y + hgt);
     g.stroke();
-    drawConceptGlyph(g, id, mx, my, 10 * k);
+    drawGlyph(g, id, mx, my, 10 * k);
   };
   mark(c.markGate, 'gate');
   mark(c.markEclipse, 'eclipse');

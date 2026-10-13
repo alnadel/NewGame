@@ -9,7 +9,7 @@
 import type { ForecastId, HourGlyph } from '../core/index.ts';
 import type { ShadesLook } from '../meta/content.ts';
 import { linkLabel } from '../meta/share.ts';
-import { drawClearGlyph, drawForecastGlyph } from './glyphs.ts';
+import { drawGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 import { createSunGlyph, drawSun } from './sun.ts';
 
@@ -187,8 +187,7 @@ function drawTilesAndFooter(g: CanvasRenderingContext2D, job: PostcardJob): void
     let x = MAP_X + 8;
     // Every row starts with its forecast (a sun on a clear day), so the hour tiles line up.
     const fc = inp.forecasts[r] ?? 'clear';
-    if (fc === 'clear') drawClearGlyph(g, x + TILE / 2, y + TILE / 2, 44);
-    else drawForecastGlyph(g, fc, x + TILE / 2, y + TILE / 2, 44);
+    drawGlyph(g, fc, x + TILE / 2, y + TILE / 2, 44);
     x += TILE + GAP;
     for (const h of hours) {
       hourTile(g, h, x, y);

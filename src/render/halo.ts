@@ -13,7 +13,7 @@
 
 import { ghostSwipe } from '../game/assist.ts';
 import { cssa, hex } from './color.ts';
-import { drawLockGlyph } from './glyphs.ts';
+import { drawGlyph } from './glyphs.ts';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -413,7 +413,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.arc(lx, ly, 11, 0, TAU);
     g.fill();
     g.globalAlpha = la;
-    drawLockGlyph(g, lx, ly, 15, '#FFFFFF');
+    drawGlyph(g, 'lock', lx, ly, 15, '#FFFFFF');
     g.globalAlpha = 1;
   }
 }
