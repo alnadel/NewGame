@@ -402,6 +402,9 @@ export class Session {
         startRun: sync((k: RunKind, date?: string) => this.startRun(k, date)),
         retry: sync(() => this.retry()),
         home: sync(() => this.home()),
+        // V12-SHIM: the game batch starts the next level / leaves the run for the Journey map.
+        nextLevel: sync(() => this.retry()),
+        openJourney: sync(() => this.home()),
         pause: sync(() => this.pause()),
         resume: sync(() => this.resume()),
         restart: sync(() => this.restart()),

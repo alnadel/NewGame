@@ -2,6 +2,8 @@
 // The sim emits these; nothing else constructs SimEvents. Extend only additively.
 
 import type { DayPlan, NoonCloud } from '../../config/days.ts';
+// V12-SHIM: ConceptId for RunResult.level until core's campaign work lands.
+import type { ConceptId } from '../../config/campaign.ts';
 
 export type HourGlyph = 'cool' | 'warm' | 'hot' | 'melt';
 
@@ -86,9 +88,12 @@ export interface RunStats {
   swings: number;
   swingChainBest: number;
   phewMinChill: number;
+  /** V12-SHIM (optional here; core makes it required): the lowest Chill during daylight, 100 when never lit. */
+  minChill?: number;
 }
 
-export type RunMode = 'endless' | 'daily' | 'challenge';
+// V12-SHIM: 'campaign' is the Journey's mode (docs/CAMPAIGN_PLAN.md §2).
+export type RunMode = 'endless' | 'daily' | 'challenge' | 'campaign';
 
 export interface RunResult {
   mode: RunMode;
@@ -112,4 +117,6 @@ export interface RunResult {
   melody: number[];
   /** True when the guide was forced on via settings ("Always"). */
   assisted: boolean;
+  /** V12-SHIM: campaign runs: the level played, whether its goal was met and the stars earned. */
+  level?: { id: number; passed: boolean; stars: number; introduces: ConceptId | null };
 }

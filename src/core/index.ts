@@ -128,3 +128,8 @@ export { deathRecap, deathTip } from './sim/recap.ts';
 export type { DeathRecap } from './sim/recap.ts';
 export { createParJob } from './sim/par.ts';
 export type { ParJob } from './sim/par.ts';
+
+// Campaign (v1.2, docs/CAMPAIGN_PLAN.md §2-§3)
+// V12-SHIM: the names below come from a placeholder catalog until core's campaign.ts lands.
+export { CAMPAIGN_LEVELS, CHAPTERS, CONCEPT_IDS, CONCEPTS, levelDef, starsFor } from '../config/campaign.ts';
+export type { Concept, ConceptId, ConceptKind, GoalKind, LevelDef } from '../config/campaign.ts';
