@@ -1,10 +1,10 @@
-// Save v3: defaults, validation/migration and a debounced persistent store (V1_PLAN §11.5,
-// V1_1_PLAN UM1, CAMPAIGN_PLAN §5).
+// Save v4: defaults, validation/migration and a debounced persistent store (V1_PLAN §11.5,
+// V1_1_PLAN UM1, CAMPAIGN_PLAN §5, V1_4_PLAN §2).
 //
 // Loading never throws and never trusts its input: every field is type-checked, clamped and filtered
 // against the content catalog. A save written by a newer build is left untouched on disk.
 
-import type { CampaignState, DailyEntry, ErrandState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, ErrandState, GamifyState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
 import type { StorageAdapter } from '../platform/storage.ts';
 import { onPageVisible } from '../platform/lifecycle.ts';
 import {
@@ -25,6 +25,7 @@ import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
 import { CAMPAIGN_LEVELS, COMFORT_MAX } from '../core/index.ts';
 import { mergeSaves } from './saveMerge.ts';
+import { emptyGamify, FEATURES, MISSIONS_PER_GLOBE, upgradeToV4 } from './gamify.ts';
 
 export const SAVE_KEY = 'shady.save';
 /** Suffixes of the side keys every store keeps next to its main key. */
@@ -34,7 +35,7 @@ const FUTURE_SUFFIX = '.future';
 export const SAVE_BAK_KEY = `${SAVE_KEY}${BAK_SUFFIX}`;
 /** A save written by a newer build, copied aside and never overwritten. */
 export const SAVE_FUTURE_KEY = `${SAVE_KEY}${FUTURE_SUFFIX}`;
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 /** Daily entries kept (newest dates win). */
 export const DAILY_KEEP = 60;
 /** Snowbot pars kept (newest dates win). */
@@ -104,7 +105,7 @@ export function defaults(now: number = Date.now()): Save {
   const missions = { cursor: 0, tier: 1, active: [] as MissionSlot[], deferred: [] as string[], errand: emptyErrand() };
   refillMissions(missions, 0);
   return {
-    v: 3,
+    v: 4,
     createdAt: now,
     settings: defaultSettings(),
     stats: {
@@ -135,6 +136,7 @@ export function defaults(now: number = Date.now()): Save {
     history: [],
     week: emptyWeek(),
     campaign: emptyCampaign(),
+    gamify: emptyGamify(),
     lastPlay: '',
     flags: {
       hintsShown: 0,
@@ -307,6 +309,27 @@ function sanitizeCampaign(raw: unknown): CampaignState {
   return { stars, unlocked, lastLevel: int(r.lastLevel, 0, 0, CAMPAIGN_LEVEL_COUNT) };
 }
 
+/** The v1.4 gamification: counters clamped, unknown features and items dropped, a damaged streak date cleared. */
+function sanitizeGamify(raw: unknown, achievements: number): GamifyState {
+  const r = rec(raw);
+  const st = rec(r.streak);
+  const last = typeof st.last === 'string' && isDateString(st.last) ? st.last : '';
+  const days = last === '' ? 0 : int(st.days, 0, 0, BIG);
+  const features = (list: unknown): GamifyState['features'] => FEATURES.filter((f) => Array.isArray(list) && list.includes(f));
+  const items = new Set(Array.isArray(r.seenItems) ? r.seenItems.filter(isCosmeticId) : []);
+  return {
+    xp: int(r.xp, 0, 0, BIG),
+    globes: int(r.globes, 0, 0, 999),
+    opened: int(r.opened, 0, 0, BIG),
+    missionSet: int(r.missionSet, 0, 0, MISSIONS_PER_GLOBE - 1),
+    streak: { last, days, best: Math.max(days, int(st.best, 0, 0, BIG)), freezeUsed: bool(st.freezeUsed, false) },
+    features: features(r.features),
+    seenFeatures: features(r.seenFeatures),
+    seenItems: COSMETICS.filter((c) => items.has(c.id)).map((c) => c.id),
+    seenTrophies: int(r.seenTrophies, 0, 0, achievements),
+  };
+}
+
 /** Keeps the newest `keep` pars. Mutates and returns `pars`. */
 export function prunePars(pars: Record<string, number>, keep: number = PARS_KEEP): Record<string, number> {
   const dates = Object.keys(pars).sort();
@@ -357,7 +380,7 @@ export function recentBestAt(save: Pick<Save, 'history'>, rung: number, warmup =
   return best;
 }
 
-/** Validates a v3-shaped object into a well-formed Save. */
+/** Validates a v4-shaped object into a well-formed Save. */
 function sanitize(r: Rec, now: number): Save {
   const base = defaults(now);
   const stats = rec(r.stats);
@@ -387,7 +410,7 @@ function sanitize(r: Rec, now: number): Save {
   }
 
   return {
-    v: 3,
+    v: 4,
     createdAt: typeof r.createdAt === 'number' && r.createdAt > 0 && r.createdAt < 1e15 ? r.createdAt : now,
     settings: sanitizeSettings(r.settings),
     stats: {
@@ -419,6 +442,7 @@ function sanitize(r: Rec, now: number): Save {
     history,
     week: sanitizeWeek(r.week),
     campaign: sanitizeCampaign(r.campaign),
+    gamify: sanitizeGamify(r.gamify, achievements.length),
     lastPlay: typeof r.lastPlay === 'string' && isDateString(r.lastPlay) ? r.lastPlay : '',
     flags: {
       hintsShown: int(flags.hintsShown, 0, 0, BIG),
@@ -455,6 +479,8 @@ export interface MigrateResult {
  * - v1 → v2: the comfort rung from lifetime runs (A2). Its retired 'play-daily' slots no longer
  *   parse, so sanitize deals replacements.
  * - v2 → v3: a fresh Journey (no stars, Level 1 playable) and the testing toggle off.
+ * - v3 → v4: the gamification (gamify.ts upgradeToV4, after validation): XP back-filled from the
+ *   lifetime record, a Snow Globe per 5 ranks, v1.3's features unlocked, what it holds marked seen.
  */
 const MIGRATIONS: readonly ((save: Rec) => Rec)[] = [
   (v1) => {
@@ -462,6 +488,7 @@ const MIGRATIONS: readonly ((save: Rec) => Rec)[] = [
     return { ...v1, v: 2, stats: { ...stats, comfort: comfortFromRuns(int(stats.runs, 0, 0, BIG)) } };
   },
   (v2) => ({ ...v2, v: 3, campaign: emptyCampaign(), settings: { ...rec(v2.settings), unlockAll: false } }),
+  (v3) => ({ ...v3, v: 4, gamify: undefined }),
 ];
 
 /** Parses (if a string) and validates raw save data. Never throws. */
@@ -479,6 +506,7 @@ export function migrate(raw: unknown, now: number = Date.now()): MigrateResult {
   let version = obj.v;
   if (typeof version === 'number' && version > SAVE_VERSION) return { save: defaults(now), status: 'future' };
   let current: Rec = obj;
+  const upgrade = typeof version === 'number' && version < 4;
   while (typeof version === 'number' && Number.isInteger(version) && version >= 1 && version < SAVE_VERSION) {
     const step = MIGRATIONS[version - 1];
     if (!step) break;
@@ -486,7 +514,9 @@ export function migrate(raw: unknown, now: number = Date.now()): MigrateResult {
     version = current.v;
   }
   if (version !== SAVE_VERSION) return { save: defaults(now), status: 'corrupt' };
-  return { save: sanitize(current, now), status: 'ok' };
+  const save = sanitize(current, now);
+  if (upgrade) upgradeToV4(save);
+  return { save, status: 'ok' };
 }
 
 // ---------------------------------------------------------------------------------------------

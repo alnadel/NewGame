@@ -1,7 +1,7 @@
 // UI lab (dev only, ui-lab.html): mounts every screen with fake data over a stand-in scene, with a
 // working fake integrator, so screens can be reviewed in isolation. URL parameters make every state
 // reachable for screenshots:
-//   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|journal|journey|rotate
+//   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|journey|profile|rotate
 //   &variant=…   (see VARIANTS)   &inset=47 (simulated top inset)   &rm=1 (reduced motion)
 //   &bare=1 (hide the lab toolbar)   &toast=1 (demo toasts)   &sheet=install|confirm
 
@@ -14,6 +14,7 @@ import { applyRunResult, buyCosmetic, equipCosmetic, resetProgress, swapMission 
 import { backupErrorMessage, exportBackup, importBackup } from '../meta/backup.ts';
 import { buildShare, shareBase } from '../meta/share.ts';
 import { mondayOf } from '../meta/week.ts';
+import { backfillXp } from '../meta/gamify.ts';
 import { shareText } from '../platform/share.ts';
 import { cosmeticSwatch } from './swatches.ts';
 import { simulateSafeArea } from '../platform/safeArea.ts';
@@ -32,9 +33,8 @@ const VARIANTS: Record<LabScreen, readonly string[]> = {
   daily: ['regular', 'used'],
   missions: ['regular', 'fresh'],
   wardrobe: ['regular', 'hats', 'shades', 'poor'],
-  journal: ['regular', 'empty'],
   journey: ['regular', 'fresh', 'unlock-all', 'far'],
-  profile: ['regular', 'fresh'],
+  profile: ['regular', 'fresh', 'globes', 'streak'],
   rotate: ['regular'],
 };
 /** A Title run's Day 1 in the lab. */
@@ -96,6 +96,7 @@ function richSave(): Save {
   s.daily[addDays(today, -4)] = { tries: 1, bestMinutes: 830, bestSnow: 40, glyphs: strip };
   s.daily[addDays(today, -5)] = { tries: 3, bestMinutes: 1505, bestSnow: 70, glyphs: strip };
   s.daily[addDays(today, -8)] = { tries: 1, bestMinutes: 12, bestSnow: 0, glyphs: '💧' };
+  s.gamify = { ...s.gamify, xp: backfillXp(s), missionSet: 1, opened: 4, seenTrophies: 2, streak: { last: addDays(today, -1), days: 3, best: 9, freezeUsed: false } };
   return s;
 }
 
@@ -423,6 +424,8 @@ function mount(screen: LabScreen, variant: string): void {
     save.campaign.unlocked = 154;
     save.campaign.lastLevel = 153;
   }
+  if (screen === 'profile' && variant === 'globes') save.gamify.globes = 3;
+  if (screen === 'profile' && variant === 'streak') save.gamify.streak = { last: addDays(today, -1), days: 6, best: 9, freezeUsed: false };
   if (params.get('rm') === '1') save.settings.reducedMotion = 'on';
 
   const log = (...args: unknown[]): void => console.info('[lab]', ...args);
@@ -516,7 +519,6 @@ function mount(screen: LabScreen, variant: string): void {
     daily: ['title', 'daily'],
     missions: ['title', 'missions'],
     wardrobe: ['title', 'wardrobe'],
-    journal: ['title', 'journal'],
     journey: ['title', 'journey'],
     profile: ['title', 'profile'],
     rotate: ['title', 'play'],
@@ -532,6 +534,7 @@ function mount(screen: LabScreen, variant: string): void {
     const shown = ui;
     if (variant !== 'quiet' && !variant.startsWith('level')) setTimeout(() => shown.setPostcard(postcardThumb()), 900);
   }
+  if (screen === 'profile' && variant === 'globes') (document.querySelector('.pf-open') as HTMLButtonElement | null)?.click();
   if (screen === 'wardrobe' && variant === 'hats') (document.getElementById('tab-hat') as HTMLButtonElement | null)?.click();
   if (screen === 'wardrobe' && variant === 'shades') (document.getElementById('tab-shades') as HTMLButtonElement | null)?.click();
   if (screen === 'play' && variant === 'cue') ui.showCue('drag', -1);

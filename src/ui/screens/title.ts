@@ -142,10 +142,10 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   );
 
   // --- Chips -------------------------------------------------------------------------------------
-  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Journal.
+  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
   const bestDay = h('span', { class: 'day-badge' });
   const bestValue = h('span', { class: 'num' });
-  const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('journal'));
+  const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('profile'));
   // The other chips are read as one labeled image each (their aria-label carries the full sentence).
   const pips = h('span', { class: 'pips' });
   const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
@@ -194,7 +194,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     false,
   );
   const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
-    journal: chipBest,
+    profile: chipBest,
     journey: mapBtn,
     daily: dailyBtn,
     missions: trayButton('Missions', 'missions', () => ctx.go('missions')),
@@ -267,7 +267,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const best = splitMinutes(shownBest);
     bestDay.textContent = `D${best.day}`;
     bestValue.textContent = formatTimeOfDay(best.minute);
-    chipBest.setAttribute('aria-label', `Journal, ${eased ? 'eased best' : 'best'} ${formatScore(shownBest)}`);
+    chipBest.setAttribute('aria-label', `Profile, ${eased ? 'eased best' : 'best'} ${formatScore(shownBest)}`);
 
     const missions = activeMissionViews(save);
     setChildren(pips, ...missions.map((m) => {

@@ -1,4 +1,4 @@
-// Legal screen transitions (V1_PLAN §8 with the v1.1 Journal and the v1.2 Journey). Re-showing the current screen is
+// Legal screen transitions (V1_PLAN §8 with the v1.2 Journey and the v1.4 Profile). Re-showing the current screen is
 // always legal: it refreshes the screen with new data (e.g. Results).
 
 import type { ScreenId } from './types.ts';
@@ -6,14 +6,13 @@ import type { ScreenId } from './types.ts';
 const LEGAL: Readonly<Record<ScreenId, readonly ScreenId[]>> = {
   // 'play' straight from boot covers deep links such as ?bot= autoplay.
   boot: ['title', 'play'],
-  title: ['play', 'daily', 'wardrobe', 'missions', 'settings', 'journal', 'journey', 'profile'],
-  // v1.4: the Profile (rank, trophies, collection) opens from the rank badge.
-  profile: ['title', 'wardrobe', 'journey'],
+  title: ['play', 'daily', 'wardrobe', 'missions', 'settings', 'journey', 'profile'],
+  // v1.4: the Profile (rank, trophies, collection, records) opens from the rank badge, the Title's
+  // best chip and Missions; Back returns there.
+  profile: ['title', 'missions', 'wardrobe', 'journey'],
   daily: ['play', 'title'],
   wardrobe: ['title'],
-  missions: ['title', 'journal'],
-  // Back returns to where the Journal was opened from.
-  journal: ['title', 'missions'],
+  missions: ['title', 'profile'],
   // The Journey map: a tile starts its level; Back returns to the Title.
   journey: ['play', 'title'],
   settings: ['title', 'pause'],

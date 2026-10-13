@@ -14,15 +14,16 @@ import { missionLabel, missionProgressText, missionTarget, parseMissionId, missi
 const HEX = /^#[0-9A-F]{6}$/i;
 
 describe('cosmetics catalog', () => {
-  it('has the 29 items in 4 slots (5 of them Journey star rewards)', () => {
-    expect(COSMETICS).toHaveLength(29);
+  it('has the 35 items in 4 slots (5 of them Journey star rewards, 6 Snow Globe exclusives)', () => {
+    expect(COSMETICS).toHaveLength(35);
     expect(cosmeticsForSlot('scarf').map((c) => c.name)).toEqual([
-      'Red Scarf', 'Mint Scarf', 'Plaid Scarf', 'Rainbow Scarf', 'Midnight Scarf', 'Gold Scarf', 'Aurora Scarf', 'Starry Scarf',
+      'Red Scarf', 'Mint Scarf', 'Plaid Scarf', 'Rainbow Scarf', 'Midnight Scarf', 'Gold Scarf', 'Aurora Scarf', 'Starry Scarf', 'Frost Scarf', 'Candy Scarf',
     ]);
-    expect(cosmeticsForSlot('hat').map((c) => c.name)).toEqual(['No Hat', 'Beanie', 'Top Hat', 'Party Cone', 'Gilded Top Hat', 'Sun Visor', 'Crown', 'Night Beanie', 'Star Crown']);
-    expect(cosmeticsForSlot('nose').map((c) => c.name)).toEqual(['Carrot', 'Parsnip', 'Candy Cane', 'Pinecone', 'Icicle', 'Golden Carrot']);
-    expect(cosmeticsForSlot('shades').map((c) => c.name)).toEqual(['Classic Shades', 'Round Shades', 'Aviators', 'Star Shades', 'Heart Shades', 'Galaxy Shades']);
-    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(29);
+    expect(cosmeticsForSlot('hat').map((c) => c.name)).toEqual(['No Hat', 'Beanie', 'Top Hat', 'Party Cone', 'Gilded Top Hat', 'Sun Visor', 'Crown', 'Night Beanie', 'Star Crown', 'Snow Beanie', 'Mint Cone']);
+    expect(cosmeticsForSlot('nose').map((c) => c.name)).toEqual(['Carrot', 'Parsnip', 'Candy Cane', 'Pinecone', 'Icicle', 'Golden Carrot', 'Mint Cane']);
+    expect(cosmeticsForSlot('shades').map((c) => c.name)).toEqual(['Classic Shades', 'Round Shades', 'Aviators', 'Star Shades', 'Heart Shades', 'Galaxy Shades', 'Sunset Aviators']);
+    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(35);
+    expect(COSMETICS.filter((c) => c.unlock.kind === 'globe')).toHaveLength(6);
   });
 
   it('prices items per GDD §6', () => {

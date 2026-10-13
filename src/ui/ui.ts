@@ -21,7 +21,6 @@ import { createModalHost, createRotateOverlay, createToastStack } from './overla
 import type { Screen, UiContext } from './screen.ts';
 import { createDailyScreen } from './screens/daily.ts';
 import { createDyingScreen } from './screens/dying.ts';
-import { createJournalScreen } from './screens/journal.ts';
 import { createJourneyScreen } from './screens/journey.ts';
 import { createMissionsScreen } from './screens/missions.ts';
 import { createPauseScreen } from './screens/pause.ts';
@@ -120,7 +119,6 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const results = createResultsScreen(ctx);
   const daily = createDailyScreen(ctx);
   const screens: Record<Exclude<ScreenId, 'boot'>, Screen> = {
-    journal: createJournalScreen(ctx),
     journey: createJourneyScreen(ctx),
     title,
     play,

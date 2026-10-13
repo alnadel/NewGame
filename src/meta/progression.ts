@@ -10,15 +10,15 @@ import { CAMPAIGN_LEVEL_COUNT, cloneSave, defaults, HISTORY_KEEP, pruneDaily, pr
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
 import { markSunnyDay } from './week.ts';
-import type { GamifyOutcome } from './gamify.ts';
+import { awardRun, featureName, featureUnlocked, runXp, type GamifyOutcome } from './gamify.ts';
 
 export { recentBest, recentBestAt } from './save.ts';
 
 /**
- * The Daily unlocks after this many completed lifetime runs (V1_PLAN §11.3), i.e. once onboarding
- * is over. A save that already holds a Daily entry keeps it unlocked.
+ * @deprecated v1.4: the Daily is a feature (gamify.ts featureUnlocked, featureHint): it opens with
+ * Level 8 passed, or this many finished runs.
  */
-export const DAILY_UNLOCK_RUNS = 3;
+export const DAILY_UNLOCK_RUNS = 16;
 /** The iOS "Add to Home Screen" sheet is offered once after this many runs. */
 export const INSTALL_SHEET_RUNS = 3;
 /** Bests (and the next-goal line) count from this lifetime run on: onboarding runs set none. */
@@ -27,7 +27,6 @@ export const BEST_FROM_RUNS = 3;
 const HIGH_NOON_MINUTES = 2 * 720 + 390;
 /** Surviving a day's noon: 12:30 PM, 390 minutes after 6 AM. */
 const NOON_MINUTES = 390;
-const MORNING_SNOW = 15;
 /** Welcome back: run Snow ×2 after this many days away, the extra capped. */
 const WELCOME_BACK_DAYS = 3;
 const WELCOME_BACK_CAP = 100;
@@ -76,7 +75,7 @@ export interface RunOutcome {
   runSnow: number;
   /** Snow paid by missions completed this run. */
   missionSnow: number;
-  /** Morning Snow, Sunny Week and Journey first-pass rewards. */
+  /** Journey first-pass rewards and the Snow of rank-ups (v1.4). */
   bonusSnow: number;
   /** runSnow + missionSnow + bonusSnow, all added to the wallet. */
   snowEarned: number;
@@ -101,7 +100,7 @@ export interface RunOutcome {
   comfortAfter: number;
   /** Journey runs: how the level went (absent for every other mode). */
   campaign?: CampaignOutcome;
-  /** v1.4: XP, rank, rewards and unlocks (meta/gamify.ts). V14-SHIM: optional until the meta builder fills it. */
+  /** v1.4: XP, rank, rewards and unlocks (meta/gamify.ts). Absent only for debug runs (debugRunOutcome). */
   gamify?: GamifyOutcome;
 }
 
@@ -117,7 +116,7 @@ export interface CampaignOutcome {
 }
 
 export interface ApplyRunOptions {
-  /** Local date of the device ('YYYY-MM-DD') at run end: history, Sunny Week, Morning Snow. */
+  /** Local date of the device ('YYYY-MM-DD') at run end: history, the week's days, Welcome back. */
   today: string;
   /** Daily runs: the try number counted at 6:30 AM by dailyTryStarted, or null/undefined if unscored. */
   dailyTry?: number | null;
@@ -217,11 +216,11 @@ export function warmupDue(save: Pick<Save, 'settings' | 'stats' | 'history'>): b
 }
 
 /**
- * Unlocked after DAILY_UNLOCK_RUNS completed runs. Any stored Daily entry also counts, so players
- * who unlocked it under the old "first night" rule (or restored such a backup) keep it.
+ * The Daily is open (gamify.ts featureUnlocked 'daily'). Saves from before v1.4 keep it from 3 runs
+ * or any stored Daily entry, as it was.
  */
 export function isDailyUnlocked(save: Save): boolean {
-  return save.stats.runs >= DAILY_UNLOCK_RUNS || Object.keys(save.daily).length > 0;
+  return featureUnlocked(save, 'daily');
 }
 
 /** Cheapest Snow-priced cosmetic the player doesn't own yet. */
@@ -290,8 +289,9 @@ function forecastNoonBits(r: RunResult): number {
 
 /**
  * Folds a finished, non-debug run into the save: stats and bests, history and comfort, wallet and
- * bonuses (Morning Snow, Welcome back, Sunny Week, Journey first passes), missions (progress, staleness),
- * the Daily best, achievements and their cosmetic rewards. Pure.
+ * bonuses (Welcome back, Journey first passes), missions (progress, staleness), the Daily best, the
+ * week's days, achievements and their cosmetic rewards, and the gamification (XP, rank rewards,
+ * Snow Globes, features: gamify.ts awardRun). Pure.
  */
 export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOptions): { save: Save; outcome: RunOutcome } {
   const today = options.today;
@@ -374,13 +374,14 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     recordDailyBest(next, r.dailyDate, r.minutes, rawSnow, glyphs);
   }
 
-  // Bonuses: the day's first run, a return after days away and the Sunny Week.
+  // Bonuses: a return after days away. The week's days still count (the Sunny Week trophy).
   const chips: ToastSpec[] = [];
   let bonusSnow = 0;
   let welcomeExtra = 0;
   // Journey levels: the best stars are kept, a pass unlocks the next level and pays the first-pass
   // bonus (id × 2 Snow); the run's Snow, missions and achievements count as for endless.
   let campaign: CampaignOutcome | undefined;
+  let firstPass = false;
   if (r.mode === 'campaign' && r.level !== undefined) {
     const lv = r.level;
     const c = next.campaign;
@@ -395,6 +396,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
       c.lastLevel = lv.id;
     }
     if (inRange && lv.passed && before === 0) {
+      firstPass = true;
       const bonus = lv.id * 2;
       bonusSnow += bonus;
       chips.push({ text: `First pass +${bonus}`, icon: 'star', tone: 'gold' });
@@ -405,23 +407,8 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     welcomeExtra = Math.min(WELCOME_BACK_CAP, rawSnow);
     chips.push({ text: 'Welcome back ×2', icon: 'snow', tone: 'gold' });
   }
-  if (next.lastPlay !== today) {
-    bonusSnow += MORNING_SNOW;
-    chips.push({ text: `Morning Snow +${MORNING_SNOW}`, icon: 'snow', tone: 'ink' });
-  }
-  const week = markSunnyDay(next.week, today, r.day);
-  if (week.closedSunny) s.sunnyWeeks += 1;
-  for (const p of week.paid) {
-    bonusSnow += p.snow;
-    chips.push({ text: `Sunny Week: ${p.days} days +${p.snow}`, icon: 'calendar', tone: 'gold' });
-  }
+  if (markSunnyDay(next.week, today, r.day)) s.sunnyWeeks += 1;
   next.lastPlay = today;
-
-  const runSnow = rawSnow + welcomeExtra;
-  const snowEarned = runSnow + missionSnow + bonusSnow;
-  const walletBefore = s.wallet;
-  s.wallet += snowEarned;
-  s.lifetimeSnow += snowEarned;
 
   // Achievements and their cosmetic rewards.
   const achievementsUnlocked: AchievementId[] = [];
@@ -435,6 +422,29 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   next.unlocks.achievements = sortedIds(ACHIEVEMENTS, [...next.unlocks.achievements, ...achievementsUnlocked]);
   next.unlocks.cosmetics = sortedIds(COSMETICS, [...next.unlocks.cosmetics, ...cosmeticsUnlocked]);
 
+  // XP, rank rewards, Snow Globes and features (gamify.ts); rank-up Snow joins the bonuses.
+  const xp = runXp({
+    minutes: r.minutes,
+    campaign: r.mode === 'campaign',
+    passed: campaign?.passed ?? false,
+    stars: campaign?.stars ?? 0,
+    firstPass,
+    dailyScored: r.mode === 'daily' && options.dailyTry != null,
+    newBest,
+    missions: missionsCompleted.length,
+    trophies: achievementsUnlocked,
+  });
+  const award = awardRun(next, { before: save, xp, passedLevel: campaign?.passed && r.level ? r.level.id : null, missionsCompleted: missionsCompleted.length, trophies: achievementsUnlocked });
+  const gamify = award.outcome;
+  bonusSnow += award.snow;
+  for (const reward of gamify.rewards) if (reward.title.startsWith('Rank ')) chips.push({ text: reward.kind === 'snow' ? `${reward.title} +${reward.amount}` : `${reward.title} Snow Globe`, icon: 'star', tone: 'gold' });
+
+  const runSnow = rawSnow + welcomeExtra;
+  const snowEarned = runSnow + missionSnow + bonusSnow;
+  const walletBefore = s.wallet;
+  s.wallet += snowEarned;
+  s.lifetimeSnow += snowEarned;
+
   const dailyUnlocked = !dailyWasUnlocked && isDailyUnlocked(next);
 
   const toasts: ToastSpec[] = [];
@@ -445,7 +455,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     toasts.push({ text: `Unlocked: ${getCosmetic(id)?.name ?? id}`, icon: 'gift', tone: 'accent' });
   }
   toasts.push(...chips);
-  if (dailyUnlocked) toasts.push({ text: 'Daily Solstice unlocked!', icon: 'calendar', tone: 'accent' });
+  for (const f of gamify.featuresUnlocked) toasts.push({ text: `${featureName(f)} unlocked!`, icon: f === 'daily' ? 'calendar' : 'gift', tone: 'accent' });
   const cheapest = cheapestUnowned(next);
   if (cheapest && walletBefore < cheapest.cost && s.wallet >= cheapest.cost) {
     toasts.push({ text: `You can afford the ${cheapest.name}!`, icon: 'snow', tone: 'accent' });
@@ -474,6 +484,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
       recentBestBefore,
       comfortAfter: s.comfort,
       ...(campaign ? { campaign } : {}),
+      gamify,
     },
   };
 }

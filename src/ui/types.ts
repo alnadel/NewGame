@@ -17,7 +17,6 @@ export type ScreenId =
   | 'daily'
   | 'missions'
   | 'wardrobe'
-  | 'journal'
   | 'journey'
   | 'profile';
 
