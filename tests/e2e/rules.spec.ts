@@ -44,15 +44,37 @@ test.describe('comfort ladder (A2)', () => {
 });
 
 test.describe('first-run lesson (A5)', () => {
-  test('a fresh first run cannot melt inside the lesson; the cues say keep shade, then drag', async ({ page }) => {
+  test('a fresh first run cannot melt inside the lesson; the cues say keep shade, then drag, always the hint\'s way', async ({ page }) => {
     const errors = watchErrors(page);
     await recordCues(page);
     await openGame(page, 'test=1&seed=5');
     const v = page.viewportSize()!;
     await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
     await waitForScreen(page, 'play');
-    await page.waitForTimeout(15_000);
+    // A passive player for 15 s: Nubs is lit, melts to the lesson's floor, drifts in and out of
+    // shade and the hint changes sides. Each sample reads the cue line, the ghost hint and the sim in
+    // one go (they are set in the same frame): an arrowed cue points the ghost's way, and
+    // "Melting!" shows only while Nubs is lit with Chill low.
+    const samples: { cue: string; mode: string; f: number; chill: number }[] = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < 15_000) {
+      samples.push(
+        await page.evaluate(() => {
+          const T = window.__SHADY_TEST__!;
+          const el = document.querySelector('.cue');
+          const s = T.state();
+          return { cue: el?.classList.contains('is-on') ? (el.textContent ?? '') : '', mode: T.hint().mode, f: s.f, chill: s.chill };
+        }),
+      );
+      await page.waitForTimeout(150);
+    }
     expect(await page.evaluate(() => window.__SHADY_TEST__!.screen())).toBe('play');
+    const arrowOf = (t: string): string | null => (t.includes('←') ? 'left' : t.includes('→') ? 'right' : null);
+    const wrongWay = samples.filter((x) => arrowOf(x.cue) !== null && (x.mode === 'left' || x.mode === 'right') && arrowOf(x.cue) !== x.mode);
+    expect(wrongWay).toEqual([]);
+    expect(samples.filter((x) => x.cue.startsWith('Melting') && (x.f === 0 || x.chill >= 25))).toEqual([]);
+    // The hint showed (and the cue followed) at least once.
+    expect(samples.some((x) => arrowOf(x.cue) !== null && arrowOf(x.cue) === x.mode)).toBe(true);
     const seen = await cues(page);
     expect(seen[0]).toMatch(/Keep Nubs in the shade/);
     expect(seen.some((t) => /Drag/.test(t))).toBe(true);

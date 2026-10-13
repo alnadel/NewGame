@@ -163,6 +163,12 @@ See V1_1_PLAN §4.2 for the contracts.
 - **Title sundial** (GR17): each drawn Title frame sets `--lsx`/`--lsy` on the document element
   when they move 0.25 px: (−cos θ, +sin θ) · 6 px · (1 + 0.6 · (1 − elevation)).
 - New SimEvents (`swing`, `lessonDone`) drive fx, haptics and the cue line; audio ignores them.
+- **Cue line**: event cues (`keep-shade` at go, `shade-found`, the first `swing`, the timed
+  `melting` of runs 1-2) show once per run and keep the line while they last. Inside the lesson the
+  line is live (`lessonCue`): "Drag ←/→" follows the ghost hint's side as it changes, "Melting!"
+  (same arrow) shows only while Nubs is lit with Chill low after the run's first `lowChill`, and
+  "Keep Nubs in the shade" replaces any arrowed cue once the hint rests in shade; a pause clears it
+  and it comes back on resume.
 
 ## Test hook (`?test=1`)
 

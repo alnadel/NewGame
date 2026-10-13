@@ -89,6 +89,7 @@ import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
+import { cueDuration } from '../ui/labels.ts';
 import type { ChallengeBanner, CueId, ImportOutcome, ResultsView, RunKind, ScreenId, Ui, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
@@ -231,6 +232,12 @@ export class Session {
   private readonly hintIn: HintInput;
   /** Cues shown this run (bit per CueId: each at most once per run). */
   private cues = 0;
+  /** The cue on the line as this session last set it (an expired timed cue still counts). */
+  private cueShown: { id: CueId; dir: -1 | 1 | undefined } | null = null;
+  /** An event cue (go, shade found, first SWING, ...) keeps the line until then (performance.now ms). */
+  private cueHold = 0;
+  /** The run's first lowChill came in the lesson: from then on it warns while Chill is low. */
+  private meltWarn = false;
   /** Eased visibility of the hint on the halo dial. */
   private hintAlpha = 0;
   private readonly renderIn: RenderInput;
@@ -1115,6 +1122,9 @@ export class Session {
     this.hints.reset();
     this.hintAlpha = 0;
     this.cues = 0;
+    this.cueShown = null;
+    this.cueHold = 0;
+    this.meltWarn = false;
     this.runRung = this.rungOf.get(run) ?? -1;
     const store = this.d.store;
     const save = store.get();
@@ -1415,8 +1425,11 @@ export class Session {
         if (this.d.store.get().stats.swings === 0 && this.s.stats.swings === 1) this.cue('swing');
         break;
       case 'lowChill':
-        // The first scare of a new player; inside the lesson it keeps the drag instruction (A16).
-        if (this.lifetimeRuns <= 2) this.cue('melting', this.hints.lesson ? this.dragDir() : undefined);
+        // The first scare of a new player. Inside the lesson it is a live warning that keeps the
+        // drag instruction (A16) and lasts while Nubs is lit with Chill low (lessonCue).
+        if (this.lifetimeRuns > 2) break;
+        if (this.s.lessonOn) this.meltWarn = true;
+        else this.cue('melting');
         break;
       case 'hourEnd':
         if (this.dailyTry !== null && this.dailyDate) {
@@ -1808,7 +1821,7 @@ export class Session {
             sv.flags.hintsShown += 1;
           });
         }
-        if (this.hints.lesson) this.cue('drag', this.dragDir());
+        this.lessonCue();
         this.setGhost(this.hints.showing(dragging) ? this.hints.dir : 'off');
         // The lesson's slow time runs from its first hint until the sim ends the lesson (A5).
         slow = this.hints.lessonStarted && lessonOn;
@@ -1828,16 +1841,58 @@ export class Session {
     return this.hints.dir === 'left' ? -1 : 1;
   }
 
-  /** Shows a cue once per run (never in challenge runs); null clears the cue line. */
+  /** Shows an event cue once per run (never in challenge runs); null clears the cue line. */
   private cue(id: CueId | null, dir?: -1 | 1): void {
     if (id === null) {
+      this.cueShown = null;
+      this.cueHold = 0;
       this.ui.showCue(null);
       return;
     }
     const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : id === 'melting' ? 8 : 16;
     if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
     this.cues |= bit;
+    this.cueShown = { id, dir };
+    const ms = cueDuration(id, dir);
+    this.cueHold = ms === null ? 0 : performance.now() + ms;
     this.ui.showCue(id, dir);
+  }
+
+  /**
+   * A live cue (the lesson's): shown whenever its words or arrow differ from the line's, as often
+   * as needed, but never over an event cue that is still up.
+   */
+  private liveCue(id: CueId | null, dir?: -1 | 1): void {
+    if (this.kind === 'challenge' || performance.now() < this.cueHold) return;
+    const cur = this.cueShown;
+    if (id === null) {
+      if (cur !== null) this.cue(null);
+      return;
+    }
+    if (cur !== null && cur.id === id && cur.dir === dir) return;
+    this.cueShown = { id, dir };
+    this.ui.showCue(id, dir);
+  }
+
+  /**
+   * The lesson's cue line says what the ghost hand shows, as it changes: "Drag ← / →" with the
+   * hint's arrow; "Melting!" (with the same arrow) only while Nubs is lit with Chill low; "Keep
+   * Nubs in the shade" once the hint rests in shade. Nothing arrowed is left behind when the hint
+   * or the lesson ends.
+   */
+  private lessonCue(): void {
+    const s = this.s;
+    const cur = this.cueShown;
+    const arrowed = cur !== null && cur.dir !== undefined;
+    if (!s.lessonOn) {
+      if (arrowed) this.liveCue(null);
+      return;
+    }
+    const lit = s.nubs.f > 0;
+    const melting = this.meltWarn && lit && s.nubs.chill < TUNING.nubs.lowChill;
+    if (this.hints.lesson) this.liveCue(melting ? 'melting' : 'drag', this.dragDir());
+    else if (melting) this.liveCue('melting');
+    else if (arrowed || cur?.id === 'melting') this.liveCue(lit ? null : 'keep-shade');
   }
 
   /** The hint as the halo dial shows it: the target while a hint or the lesson is on, eased. */
