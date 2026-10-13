@@ -543,7 +543,8 @@ export function soCloseText(label: string, progress: string): string {
 
 /**
  * The Title's next-goal line, from lifetime run BEST_FROM_RUNS on: a mission that is nearly done,
- * else a fresh Daily, else the next milestone. `minutes` is the score it points at, when it has one.
+ * else a fresh Daily, else the next Journey star reward (once the Journey has begun), else the next
+ * milestone. `minutes` is the score it points at, when it has one.
  */
 export function nextGoal(save: Save, today: string): { text: string; minutes: number | null } | null {
   if (save.stats.runs < BEST_FROM_RUNS) return null;
@@ -555,6 +556,8 @@ export function nextGoal(save: Save, today: string): { text: string; minutes: nu
     return { text: soCloseText(close.label, close.progressText), minutes };
   }
   if (isDailyUnlocked(save) && !dailyStatus(save, today).played) return { text: `Daily #${dailyNumber(today)} is fresh`, minutes: null };
+  const stars = nextStarGoal(save);
+  if (stars && stars.stars > 0) return { text: `${stars.target - stars.stars} more stars for the ${stars.item?.name ?? stars.name}`, minutes: null };
   const m = nextMilestone(save);
   return m === null ? null : { text: `Next: ${MILESTONE_TEXT[m]}`, minutes: m };
 }

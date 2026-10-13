@@ -8,7 +8,7 @@ Your **score is the time of day you reached**, for example "Day 2 · 2:40 PM".
 Every standard run draws its own days: Meadow or Old Town, and a forecast (Clear, Breezy, Overcast,
 Heat Wave, Long Shadows, Dazzle, Market Day). A comfort ladder eases new players in; the Daily
 Solstice gives everyone the same world with 3 tries; challenge links carry the sender's exact rules;
-the **Journey** is a 200-level campaign that teaches one idea at a time.
+the **Journey**, a 200-level campaign that teaches one idea at a time, is what Play starts.
 
 TypeScript, Vite, Canvas 2D and WebAudio, with **no runtime dependencies**. Installs as a PWA,
 works offline, and keeps the seams open for Capacitor shells.
@@ -23,25 +23,29 @@ works offline, and keeps the seams open for Capacitor shells.
 | | Touch | Keyboard and mouse |
 |---|---|---|
 | Turn the sun | drag left or right anywhere | ← → or A D (Shift for fine turns), the wheel, or a mouse drag |
-| Start or retry | drag on the Title, or tap Retry | Space or Enter |
+| Play the next level | tap Play on the Title | Space or Enter |
+| Endless run | tap Endless, or drag on the Title | ← or → on the Title |
+| Retry | tap Retry | Space or Enter |
 | Pause | the pause button | Esc or P |
 
 Collect snowflakes for **Snow**, swing the shade from one shadow to the next for a **SWING**, and
 spend Snow in the **Wardrobe** (for Nubs, and Sun Shades for the sun). Progress stays on the device;
-Settings → Backup carries it elsewhere.
+Settings → Progress carries it elsewhere with a backup code.
 
 ### Journey
 
-The **Journey** pill on the Title opens a map of 200 levels in 20 chapters. A level is a short,
-seeded run to a finish line with a goal (reach the finish, collect N flakes, or earn N Snow) and up
-to three stars: one for passing, one for the level's flake count, one for keeping Chill above its
-bar. The first 40 levels each introduce one concept (clouds, glare, the SWING, forecasts, fog, an
-eclipse, a moonlit night…); later levels combine them. Passing a level unlocks the next and pays a
-first-pass bonus (twice the level number in Snow); stars, missions and achievements are kept as for
-any run, while the Journal and bests stay endless-only. The map's tiles name the concept they teach,
-"Continue · Level N" picks up where you left off, and Results offer **Next level**, **Retry** and
-**Map**. For testing, Settings → Testing → **Unlock all levels (testing)** opens every tile, and
-`?level=N` opens a level directly.
+The Title's big **Play** button starts your next **Journey** level (Level 1 on a first launch);
+**Endless** and the **Daily** sit beside it. The map button opens 200 levels in 20 chapters. A level
+is a short, seeded run to a finish line with a goal (reach the finish, collect N flakes, or earn N
+Snow) and up to three stars: one for passing, one for the level's flake count, one for keeping Chill
+above its bar. The first 40 levels each introduce one concept (clouds, glare, the SWING, forecasts,
+fog, an eclipse, a moonlit night…); later levels combine them. Passing a level unlocks the next and
+pays a first-pass bonus (twice the level number in Snow). Every star counts toward the **star
+rewards**: the Starry Scarf at 25 stars, then the Night Beanie (75), the Golden Carrot (150), the
+Galaxy Shades (300) and the Star Crown (600). Missions and achievements count as for any run; the
+Journal and bests stay endless-only. Results offer **Next level**, **Retry** and **Map**, and the
+map centers the level in play and pops the stars you just earned. For testing, Settings → Testing →
+**Unlock all levels (testing)** opens every tile, and `?level=N` opens a level directly.
 
 ## Commands
 
@@ -77,8 +81,8 @@ src/
   render/      Canvas 2D: ground, shadows, casters, Nubs, HUD, Melt Map, postcard
   audio/       synthesized WebAudio
   ui/          DOM screens (Title, Journey map, Results, Daily, Missions, Journal, Wardrobe, Settings)
-  meta/        save v3, progression (Journey included), missions, errands, Sunny Week, Daily, share
-               text, challenges
+  meta/        save v3, progression (Journey and star rewards included), missions, Sunny Week,
+               Daily, share text, challenges
   platform/    storage, haptics, share, lifecycle, PWA, safe areas
 tests/         unit (Vitest), e2e (Playwright), golden hashes
 scripts/       sim.ts, golden.ts, gen-icons.ts, gen-og.ts, inline-build.mjs

@@ -8,7 +8,7 @@
 import { CAMPAIGN_LEVELS, CONCEPTS, formatScore, levelDef, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { defaults, sanitizeSettings } from '../meta/save.ts';
-import { equippedLooks, getCosmetic, type CosmeticId, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
+import { getCosmetic, type CosmeticId, type Equipped } from '../meta/content.ts';
 import { addDays, localDate } from '../meta/daily.ts';
 import { applyRunResult, buyCosmetic, equipCosmetic, resetProgress, swapMission } from '../meta/progression.ts';
 import { backupErrorMessage, exportBackup, importBackup } from '../meta/backup.ts';
@@ -359,145 +359,22 @@ function drawScene(ui: Ui | null, screen: LabScreen): void {
 // Wardrobe preview placeholder (the integrator injects the real Nubs renderer)
 // ---------------------------------------------------------------------------------------------
 
-function drawScarf(g: CanvasRenderingContext2D, l: ScarfLook, cx: number, y: number): void {
-  const band = (color: string, x: number, wdt: number): void => {
-    g.fillStyle = color;
-    g.fillRect(x, y, wdt, 12);
-  };
-  if (l.pattern === 'rainbow') {
-    l.stripes.forEach((c, i) => band(c, cx - 36 + (72 / l.stripes.length) * i, 72 / l.stripes.length + 0.5));
-  } else {
-    band(l.main, cx - 36, 72);
-  }
-  g.fillStyle = l.pattern === 'rainbow' ? (l.stripes[3] ?? l.main) : l.main;
-  g.fillRect(cx + 12, y + 8, 13, 34);
-  g.fillStyle = l.shine ?? l.stripes[0] ?? l.shade;
-  if (l.pattern === 'stripes' || l.pattern === 'plaid' || l.pattern === 'metallic') {
-    for (let i = 0; i < 4; i++) g.fillRect(cx + 12, y + 14 + i * 7, 13, 2.5);
-  }
-}
-
-function drawHat(g: CanvasRenderingContext2D, l: HatLook, cx: number, top: number): void {
-  g.fillStyle = l.main;
-  switch (l.shape) {
-    case 'beanie':
-      g.beginPath();
-      g.arc(cx, top + 8, 30, Math.PI, 0);
-      g.fill();
-      g.fillStyle = l.shade;
-      g.fillRect(cx - 31, top + 2, 62, 11);
-      g.fillStyle = l.accent;
-      g.beginPath();
-      g.arc(cx, top - 24, 8, 0, Math.PI * 2);
-      g.fill();
-      break;
-    case 'topHat':
-      g.fillRect(cx - 22, top - 36, 44, 40);
-      g.fillStyle = l.accent;
-      g.fillRect(cx - 22, top - 8, 44, 8);
-      g.fillStyle = l.shade;
-      g.fillRect(cx - 34, top + 2, 68, 7);
-      break;
-    case 'partyCone':
-      g.beginPath();
-      g.moveTo(cx - 22, top + 6);
-      g.lineTo(cx + 4, top - 50);
-      g.lineTo(cx + 24, top + 6);
-      g.fill();
-      g.fillStyle = l.accent;
-      g.beginPath();
-      g.arc(cx + 4, top - 50, 7, 0, Math.PI * 2);
-      g.fill();
-      break;
-    case 'sunVisor':
-      g.fillStyle = l.accent;
-      g.fillRect(cx - 30, top + 2, 60, 8);
-      g.fillStyle = l.main;
-      g.beginPath();
-      g.ellipse(cx + 26, top + 8, 28, 7, 0, 0, Math.PI * 2);
-      g.fill();
-      break;
-    case 'crown':
-      g.beginPath();
-      g.moveTo(cx - 26, top + 8);
-      g.lineTo(cx - 26, top - 22);
-      g.lineTo(cx - 13, top - 8);
-      g.lineTo(cx, top - 28);
-      g.lineTo(cx + 13, top - 8);
-      g.lineTo(cx + 26, top - 22);
-      g.lineTo(cx + 26, top + 8);
-      g.fill();
-      g.fillStyle = l.accent;
-      g.beginPath();
-      g.arc(cx, top - 2, 4, 0, Math.PI * 2);
-      g.fill();
-      break;
-    case 'none':
-      break;
-  }
-}
-
-function drawNose(g: CanvasRenderingContext2D, l: NoseLook, cx: number, cy: number): void {
-  g.fillStyle = l.main;
-  const len = 34 * l.length;
-  if (l.shape === 'pinecone') {
-    g.beginPath();
-    g.ellipse(cx + 16, cy, 14, 9, 0, 0, Math.PI * 2);
-    g.fill();
-    return;
-  }
-  if (l.shape === 'candyCane') {
-    g.strokeStyle = l.accent;
-    g.lineWidth = 7;
-    g.beginPath();
-    g.moveTo(cx, cy);
-    g.lineTo(cx + 22, cy);
-    g.arc(cx + 22, cy - 8, 8, Math.PI / 2, -Math.PI / 2, true);
-    g.stroke();
-    return;
-  }
-  g.beginPath();
-  g.moveTo(cx, cy - 6);
-  g.lineTo(cx + len, cy + 1);
-  g.lineTo(cx, cy + 7);
-  g.fill();
-}
-
+/** The worn items' tile art side by side (the sun's shades alone on the Shades tab). */
 function placeholderPreview(target: HTMLCanvasElement, equipped: Equipped, subject: 'nubs' | 'sun'): void {
   const g = target.getContext('2d');
   if (!g) return;
   const s = target.width / 168;
   g.setTransform(s, 0, 0, s, 0, 0);
   g.clearRect(0, 0, 168, 168);
-  if (subject === 'sun') {
-    // The sun in its shades: the tile art, scaled up.
-    const c = getCosmetic(equipped.shades);
+  const ids = subject === 'sun' ? [equipped.shades] : [equipped.hat, equipped.scarf, equipped.nose];
+  ids.forEach((id, i) => {
+    const c = getCosmetic(id);
     if (!c) return;
     const img = new Image();
-    img.onload = () => g.drawImage(img, 4, 4, 160, 160);
+    const [x, y, size] = subject === 'sun' ? [4, 4, 160] : [[44, 0, 80], [0, 84, 80], [88, 84, 80]][i] as [number, number, number];
+    img.onload = () => g.drawImage(img, x, y, size, size);
     img.src = `data:image/svg+xml,${encodeURIComponent(new XMLSerializer().serializeToString(cosmeticSwatch(c)))}`;
-    return;
-  }
-  const looks = equippedLooks(equipped);
-  const cx = 84;
-  g.fillStyle = '#fff';
-  g.strokeStyle = '#C9D8F0';
-  g.lineWidth = 2;
-  for (const [y, r] of [[118, 40], [64, 28]] as const) {
-    g.beginPath();
-    g.arc(cx, y, r, 0, Math.PI * 2);
-    g.fill();
-    g.stroke();
-  }
-  g.fillStyle = '#2B2B33';
-  for (const x of [cx - 10, cx + 10]) {
-    g.beginPath();
-    g.arc(x, 58, 3.4, 0, Math.PI * 2);
-    g.fill();
-  }
-  drawNose(g, looks.nose, cx + 2, 68);
-  drawScarf(g, looks.scarf, cx, 86);
-  drawHat(g, looks.hat, cx, 40);
+  });
 }
 
 /** A stand-in postcard: paper, a map panel and a score line (the game draws the real one). */

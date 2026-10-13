@@ -1,8 +1,10 @@
-// The Journey map (v1.2, CAMPAIGN_PLAN §5): the Title's pill opens it, 200 tiles with locks past
-// the unlocked level, Continue · Level N, the Settings testing toggle opening every level at once,
-// a tile starting its level, keyboard walking, and the layout at phone and desktop sizes.
+// The Journey (v1.2, CAMPAIGN_PLAN §5; Journey-first in v1.3): the Title's Play button starts the
+// next level (Space too), the map button opens 200 tiles with locks past the unlocked level,
+// Continue · Level N, the star road, the Settings testing toggle opening every level at once, a
+// tile starting its level, keyboard walking, the map centering the level in play, and the layout
+// at phone and desktop sizes.
 import { expect, test } from '@playwright/test';
-import { openGame, seedSave, waitForScreen } from './helpers.ts';
+import { openGame, runCfg, seedSave, state, waitForScreen } from './helpers.ts';
 
 /** Levels 1-3 passed (3, 2 and 1 stars), Level 4 next. */
 function journeySave(): object {
@@ -18,10 +20,37 @@ async function openJourney(page: import('@playwright/test').Page): Promise<void>
   await waitForScreen(page, 'journey');
 }
 
-test('the Title pill opens the map: 200 tiles, locks past the unlocked level, Continue · Level 4', async ({ page }) => {
+test('the Title plays the next level: its Play button and Space start Level 4', async ({ page }) => {
   await seedSave(page, journeySave());
   await openGame(page);
-  await expect(page.locator('.scr-title .journey-pill')).toHaveText(/Journey · Level 4/);
+  await expect(page.locator('.scr-title .play-pill')).toHaveText('Level 4');
+  await expect(page.locator('.scr-title .play-pill')).toHaveAttribute('aria-label', 'Play Level 4');
+  await page.locator('.scr-title .play-pill').click();
+  await waitForScreen(page, 'play');
+  expect((await runCfg(page)).mode).toBe('campaign');
+  expect((await state(page)).level).toBe(4);
+  await page.reload();
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'title');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('Space');
+  await waitForScreen(page, 'play');
+  expect((await state(page)).level).toBe(4);
+});
+
+test('a fresh save plays Level 1 first; Endless is one tap away', async ({ page }) => {
+  await openGame(page);
+  await expect(page.locator('.scr-title .play-pill')).toHaveText('Level 1');
+  await expect(page.locator('.scr-title .journey-pill')).toHaveText('Map');
+  await page.locator('.scr-title .endless-pill').click();
+  await waitForScreen(page, 'play');
+  expect((await runCfg(page)).mode).toBe('endless');
+});
+
+test('the map button opens the map: 200 tiles, locks past the unlocked level, Continue · Level 4', async ({ page }) => {
+  await seedSave(page, journeySave());
+  await openGame(page);
+  await expect(page.locator('.scr-title .journey-pill')).toHaveText('6★');
   await openJourney(page);
   const tiles = page.locator('.lvl-tile');
   await expect(tiles).toHaveCount(200);
@@ -34,6 +63,10 @@ test('the Title pill opens the map: 200 tiles, locks past the unlocked level, Co
   await expect(page.locator('.journey-continue')).toHaveText('Continue · Level 4');
   await expect(page.locator('.scr-journey .chip--stars')).toHaveText('6/600');
   await expect(page.locator('.scr-journey .chapter')).toHaveCount(20);
+  await expect(page.locator('.scr-journey .chapter.is-locked')).toHaveCount(19);
+  // The star road: the next star reward and the stars toward it.
+  await expect(page.locator('.scr-journey .road')).toContainText('Starry Scarf at 25 stars');
+  await expect(page.locator('.scr-journey .road-count')).toHaveText('6/25');
   // Levels 1-40 carry their concept; the tile names it.
   await expect(page.locator('.lvl-tile[data-level="6"] .lvl-concept')).toHaveCount(1);
   await expect(page.locator('.lvl-tile[data-level="6"]')).toHaveAttribute('aria-label', /Teaches[: ]/);
@@ -130,17 +163,23 @@ test('arrow keys walk the tiles and Continue takes the keyboard focus', async ({
   await waitForScreen(page, 'play');
 });
 
-test('the map remembers its scroll position for the session', async ({ page }) => {
-  await seedSave(page, journeySave());
+test('the map centers the level in play on every visit', async ({ page }) => {
+  const stars = Array<number>(200).fill(0).map((_n, i) => (i < 56 ? 2 : 0));
+  await seedSave(page, { v: 3, createdAt: 1, stats: { runs: 60 }, campaign: { stars, unlocked: 57, lastLevel: 56 } });
   await openGame(page);
-  await openJourney(page);
-  await page.locator('.scr-journey .menu-body').evaluate((el) => el.scrollTo({ top: 900 }));
-  await page.waitForTimeout(100);
+  const centered = async (): Promise<number> => {
+    await openJourney(page);
+    return page.evaluate(() => {
+      const body = document.querySelector('.scr-journey .menu-body')!.getBoundingClientRect();
+      const tile = document.querySelector('.lvl-tile[data-level="57"]')!.getBoundingClientRect();
+      return Math.abs(tile.top + tile.height / 2 - (body.top + body.height / 2));
+    });
+  };
+  expect(await centered()).toBeLessThan(40);
+  await page.locator('.scr-journey .menu-body').evaluate((el) => el.scrollTo({ top: 0 }));
   await page.keyboard.press('Escape');
   await waitForScreen(page, 'title');
-  await openJourney(page);
-  const top = await page.locator('.scr-journey .menu-body').evaluate((el) => el.scrollTop);
-  expect(top).toBeGreaterThan(800);
+  expect(await centered()).toBeLessThan(40);
 });
 
 for (const size of [

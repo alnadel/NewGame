@@ -363,7 +363,7 @@ describe('comfort, history and pace', () => {
     }
   });
 
-  it('picks the next goal: a nearly done mission, a fresh Daily, then the next milestone', () => {
+  it('picks the next goal: a nearly done mission, a fresh Daily, the next star reward, then the next milestone', () => {
     const s = quiet();
     s.history = history(3, 400);
     s.missions.active = [
@@ -382,6 +382,8 @@ describe('comfort, history and pace', () => {
     expect(soCloseText('Survive a noon (reach 12:30 PM)', '11:00 AM')).toBe('So close: Survive a noon · 11:00 AM of 12:30 PM');
     s.missions.active[0] = { id: 'flakes-10', progress: 10, done: true, stale: 0 };
     expect(nextGoal(s, addDays(TODAY, 1))).toEqual({ text: 'Daily #285 is fresh', minutes: null });
+    s.campaign.stars[0] = 3;
+    expect(nextGoal(s, TODAY)).toEqual({ text: '22 more stars for the Starry Scarf', minutes: null });
     // Not before lifetime run 3.
     s.stats.runs = 2;
     s.daily = {};

@@ -6,8 +6,8 @@ renderer; the only DOM element during play is the pause button (plus a small mut
 
 ```
 src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab, the Journey map
-src/meta/      save v3, content catalog, progression (Journey levels included), missions and errands,
-               Sunny Week, daily, share text, challenge links, backup
+src/meta/      save v3, content catalog, progression (Journey levels and star rewards included),
+               missions, Sunny Week, daily, share text, challenge links, backup
 src/platform/  storage, share, pwa, lifecycle, safeArea, native
 ```
 
@@ -80,9 +80,10 @@ Illegal transitions throw in dev and are ignored in production.
 
 Input ownership:
 - The UI handles **Escape** (back: play -> pause, pause -> resume, menus -> close, results -> home,
-  or the Journey map after a level), **P** (pause in play) and **Enter/Space** (Title: start an
-  endless run, or the challenge while its banner is up; Pause: resume; Dying: skip; Results: retry,
-  or Next level after a passed level). Game input should only handle the sun keys (arrows, A/D).
+  or the Journey map after a level), **P** (pause in play) and **Enter/Space** (Title: play the next
+  Journey level, or the challenge while its banner is up; Pause: resume; Dying: skip; Results:
+  retry, or Next level after a passed level). Game input should only handle the sun keys (arrows,
+  A/D; on the Title they start an endless run, as a canvas drag does).
 - Canvas pointer input matters only on `title` and `play`. On every other screen the UI covers the
   canvas (menus, pause scrim, the dying catcher, the results map catcher), so stray taps never reach it.
 
@@ -100,8 +101,8 @@ Input ownership:
 | `setRunPreview(plan \| null)` | The Title run's Day-1 `DayPlan` for the chip "Forecast: 🌬️ Breezy · Old Town"; null (plan-off runs) hides it. |
 | `showCue(id \| null, dir?)` | The cue line above Nubs (`aria-live` polite, 18 px on an ink pill): `keep-shade` "Keep Nubs in the shade" (2 s), `drag` "Drag ← to swing the sun" ("Hold ←" for keyboard players, Invert honoured; until replaced), `shade-found` "Shade! Thick teal = safe" (1.4 s), `melting` "Melting! Find thick teal" (1.6 s; with `dir`, "Melting! Drag → to the thick teal" until replaced; the session re-sends `drag`/`melting` whenever the lesson's hint changes sides), `swing` "SWING! Straight into the next shade: +Snow" (2.4 s, after the first SWING of a lifetime). Null clears it. Shown only in play. |
 | `setPostcard(url \| null)` | The Results postcard thumbnail (an object URL of the ready PNG; a paper placeholder while null). |
-| `setGhostThumb(mode)` | `'both'`: the Title's looping swipe (below the dial when it fits above the chips, else above Nubs with the word "drag"). `'left'` / `'right'`: the one-way hint in play, or a "Hold ←" key chip for keyboard players. `'off'`. Shown only on `title`/`play`. |
-| `ghostProgress()` | Progress 0..1 through the ghost hand's current animation loop (read from its CSS animation clock), or −1 while it is hidden or only pulsing (reduced motion). The game moves the Title sway and the halo's ghost sun in step with it. |
+| `setGhostThumb(mode)` | `'both'`: the looping swipe with the word "drag" while a run waits for its first press. `'left'` / `'right'`: the one-way hint in play, or a "Hold ←" key chip for keyboard players. `'off'`. Shown only in `play` (the Title leads with its Play button; the game may keep sending `'both'` there). |
+| `ghostProgress()` | Progress 0..1 through the ghost hand's current animation loop (read from its CSS animation clock), or −1 while it is hidden or only pulsing (reduced motion). The game moves the halo's ghost sun (and a run's waiting sway) in step with it. |
 | `setAudioMuted(muted)` | Small muted icon under the pause button while the AudioContext isn't running. |
 | `toast(text, { icon?, tone?, duration? })` | Stack at the top of the world column (below the header on menus, below the HUD row in play), 2.5 s each. Every screen switch fades the old toasts out in ~120 ms; toasts raised by the entering screen (in `enter()` or later) stay. Icons/tones as in `meta/progression` `ToastSpec`. |
 | `showInstallSheet()` | iOS "Play SHADY from your Home Screen": copies a backup code first (the Home Screen app keeps its own storage), then shows the steps. A no-op in in-app browsers (`isInAppBrowser()`). Use `shouldShowInstallSheet()` and set `flags.installSheetShown`. The UI itself offers the restore sheet on the app's first standalone launch with no runs. |
@@ -121,8 +122,8 @@ The sheet (v1.1): the big time with the Postcard pill (its thumbnail), the **Sun
 emoji on Day Plan runs, a night pill after each completed day, ghost outlines after the melt; tiles
 pop in 35 ms apart), the typed death line, the tip and `outcome.pace`, the challenge verdict, the
 warm-up card, `outcome.toasts` as award chips (achievements, items, Morning Snow, Sunny Week, Welcome
-back, the errand), stat tiles with nothing to show left out (Snow always; SWINGs with the best chain),
-the missions with stamps and Swap on stale ones, and Today's errand. Share is a labeled pill (accent
+back), stat tiles with nothing to show left out (Snow always; SWINGs with the best chain),
+the missions with stamps and Swap on stale ones. Share is a labeled pill (accent
 after a new best, a challenge or a counted Daily try; "Send it back" after a won challenge). Retry
 arms 0.3 s after the sheet appears; a tap above the sheet also retries. The sheet grows with its
 content up to 68% of the screen (the Melt Map, and the postcard cropped from it, keep about a third;
@@ -132,28 +133,38 @@ start), then the stamps land in place; nothing scrolls by itself, so the warm-up
 and the tiles stay where they are (fix round 2). The missions done this run pop in as one more
 chip with the first stamp ("2 missions done +20"), so the reward shows wherever the rows sit.
 
-**Journey** (v1.2, docs/CAMPAIGN_PLAN.md §5): `ResultsView.campaign = { id, name, passed, stars,
-nextId: number | null, goalLine, introduces?: { name, blurb } }` turns the sheet into the level
-variant: the kicker "Level 12 · Passed", three stars popping in (`.res-stars`, 220 ms apart, with
-the stamp sound), the level name in place of the time, the Sun Strip, the goal line (accent on a
-pass), a "New: Glare …" card for the concept the level introduced, the death line (and tip) only
-when the level wasn't passed, then the award chips, stats and missions as usual. No postcard and no
-Home: the actions are **Next level** (primary, armed like Retry, only when passed and `nextId` is
-set; the map tap and Enter/Space fire it), **Retry** and **Map** (`openJourney()`); Back is Map.
-Share is the accent after a pass. The Journey screen (`'journey'`, `src/ui/screens/journey.ts`)
-reads the save and `CAMPAIGN_LEVELS` itself: the header's total stars `n/600`, a sticky
-"Continue · Level N" (`continueLevel`: the highest unlocked level) with its chapter under it, then
-20 chapter cards (name + biome mark, the chapter's stars `n/30`) of 10 tiles
-`.lvl-tile[data-level]` (number, ★ stars, the concept mark on levels 1-40 with the concept's name
-and blurb as the tooltip and in the aria-label, `.is-locked` with a lock when `isLevelPlayable` is
-false, `.is-next` on Continue's level, `.is-perfect` at 3 stars). A playable tile calls
-`startRun('campaign', undefined, id)`; a locked one toasts "Finish Level N first.". Arrow keys walk
-the tiles (±1, ±5). The scroll position is kept for the session; the first open scrolls to the
-chapter in play. `setSave` and the Settings toggle re-render the tiles in place (focus survives).
-The Title's primary pill "Journey · Level N" (above the tray, 4 tray buttons kept; a sideways drag
-on it still starts the endless run) calls `openJourney()`; when the bottom cluster would reach
-Nubs' halo the Title sheds, in order, the tray labels, then disc/pill size (`is-tight`), then the
-chips row (`no-chips`, 320×568 with large text).
+**Journey** (v1.2, docs/CAMPAIGN_PLAN.md §5; Journey-first since v1.3): the Title's bottom
+cluster is the chips (Best → Journal, mission pips, Snow), the **modes** row and the tray (Daily,
+Missions, Wardrobe, Settings). The modes are the map button `.journey-pill` (the stars earned,
+"Map" before any; `openJourney()`), the primary **Play** `.play-pill` "Level N" (`continueLevel`,
+the highest unlocked level: `startRun('campaign', undefined, N)`; Space/Enter too) and **Endless**
+`.endless-pill` (`startRun('endless')`; icon only in narrow columns). A sideways drag on any of
+them is handed to the sun. When the cluster would reach Nubs' halo the Title sheds, in order, the
+tray labels, then disc/pill size (`is-tight`), then the chips row (`no-chips`). Mouse and keyboard
+players see the key line "Space: play the level · ← →: Endless · Esc: back" under the tagline.
+
+`ResultsView.campaign = { id, name, passed, stars, nextId: number | null, goalLine, introduces? }`
+turns the sheet into the compact level variant (it may take 82% of the screen, it has no postcard):
+the kicker "Level 12 · Passed", three big stars as the hero (the middle one raised; popping in
+220 ms apart with the stamp sound), the level name, the goal line (accent on a pass), the death
+line and tip only when the level wasn't passed, the **star road** (widgets.ts `starRoad`: the next
+star reward's item, "Starry Scarf at 25 stars", `6/25` and a bar), then one row of stat pills and
+the award chips; mission rows are left out (their award chip says what they paid). The actions sit
+at the bottom: **Next level** (primary, armed like Retry, only when passed and `nextId` is set; the
+map tap and Enter/Space fire it), **Retry** and **Map** (`openJourney()`); Back is Map. Share is
+the accent after a pass. `introduces` is no longer shown (the level's intro card teaches it).
+
+The Journey screen (`'journey'`, `screens/journey.ts`) reads the save and `CAMPAIGN_LEVELS` itself:
+the header's total stars `n/600`, a sticky "Continue · Level N" over the star road, then 20 chapter
+cards (biome mark, name, stars `n/30` with a gold bar; `.is-locked` while their first level is,
+`.is-complete` at 30) of 10 tiles `.lvl-tile[data-level]` (number, stars, the concept mark on levels
+1-40 with the concept's name and blurb as the tooltip and in the aria-label, `.is-locked` with a
+lock when `isLevelPlayable` is false, `.is-next` with a slow glow on Continue's level,
+`.is-perfect` at 3 stars). A playable tile calls `startRun('campaign', undefined, id)`; a locked one
+toasts "Finish Level N first.". Arrow keys walk the tiles (±1, ±5). Every visit centers the level
+in play, and the stars and unlocks earned since the last visit pop in (`.is-fresh` stars one after
+another, `.is-unlocked` tiles, with the stamp or unlock sound). `setSave` and the Settings toggle
+re-render the tiles in place (focus survives).
 
 **Journal** (v1.1): bests (endless and Daily), the last 30 endless runs as bars (height ∝ score,
 colour by the day reached, the best in gold, runs on eased rules hatched, an sr-only summary), the
@@ -172,9 +183,9 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 
 | Callback | When / what to do |
 |---|---|
-| `startRun(kind, date?, level?)` | `'endless'` (Space/Enter on the Title), `'challenge'` (the banner's Play, or Space/Enter while the banner is up), `'daily'` with the date the Daily screen showed (it checks that date is still today at press time; if not, it refreshes to today with a toast and doesn't start), `'campaign'` with the level id from a Journey tile or Continue. Start the run (daily: `dailySeed(date ?? localDate())`, profile 3; challenge: its seed or date, profile 3; campaign: `levelDef(level)`, CAMPAIGN_PLAN §4). UI is on `play`. |
+| `startRun(kind, date?, level?)` | `'endless'` (the Title's Endless button), `'challenge'` (the banner's Play, or Space/Enter while the banner is up), `'daily'` with the date the Daily screen showed (it checks that date is still today at press time; if not, it refreshes to today with a toast and doesn't start), `'campaign'` with the level id from the Title's Play (Space/Enter), a Journey tile or Continue. Start the run (daily: `dailySeed(date ?? localDate())`, profile 3; challenge: its seed or date, profile 3; campaign: `levelDef(level)`, CAMPAIGN_PLAN §4). UI is on `play`. |
 | `nextLevel()` | Results > Next level after a passed Journey level: start `view.campaign.nextId`. UI is on `play`. |
-| `openJourney()` | The Title's Journey pill, and Results > Map (or Back) after a Journey level: leave the run for the Title scene behind the map (the map is opaque). UI is on `journey`. |
+| `openJourney()` | The Title's map button, and Results > Map (or Back) after a Journey level: leave the run for the Title scene behind the map (the map is opaque). UI is on `journey`. |
 | `retry()` | New run, started at once (the core's 0.8 s start beat then gives the player time to aim before Nubs walks). |
 | `home()` | Abandon/leave to the Title scene. Don't trap back-navigation any more. |
 | `pause()` / `resume()` | Freeze/unfreeze the loop. In `resume`, call `ensureAudio()` synchronously (iOS). |
@@ -188,7 +199,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 | `equip(id)` | `equipCosmetic(save, id)`; `store.set`, `ui.setSave`. |
 | `exportBackup()` | `exportBackup(store.get())`. The UI copies it and shows it in a box. |
 | `importBackup(code)` | `importBackup(code)`; on success `store.set(save); store.flush(); ui.setSave(save)` and return `{ ok: true }`, else `{ ok: false, message: backupErrorMessage(error) }`. Return `{ ok: false, message: 'A newer version of SHADY saved progress here. Update the game first.' }` while `!store.canPersist`. The UI confirms before calling and toasts the outcome. |
-| `resetProgress()` | Returns `ImportOutcome`: `resetProgress(save)`; `store.set`, `store.flush`, `ui.setSave`, `{ ok: true }`; the same newer-version message while `!store.canPersist`. The UI confirms before calling and toasts "Progress reset. Fresh snow!" or the message. Settings opened from Pause hides Backup and Reset (one line points to the Title's Settings). |
+| `resetProgress()` | Returns `ImportOutcome`: `resetProgress(save)`; `store.set`, `store.flush`, `ui.setSave`, `{ ok: true }`; the same newer-version message while `!store.canPersist`. The UI confirms before calling and toasts "Progress reset. Fresh snow!" or the message. Settings opened from Pause hides the Progress card (backup, restore, reset; one line points to the Title's Settings). |
 | `dismissChallenge()` | Forget the challenge and clear `#c=` (`history.replaceState`). |
 | `dragHandoff(e)` | A press that began on a Title tray button slid sideways > 10 px: start the run with catch semantics at `e.clientX/Y` and follow `e.pointerId` (listen on `window`; the button released capture). |
 | `uiSound(name)` | `'tap' 'back' 'toggle' 'slide' 'buy' 'equip' 'deny' 'stamp' 'unlock' 'count'`. Map to the GDD "UI tap" recipe (or richer ones) plus the 4 ms UI haptic. |
@@ -226,18 +237,23 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
   - `beginRun(save) -> { save, dealt }` at every run start (completed missions are replaced here).
   - `applyRunResult(save, result, { today, dailyTry?, challengeTarget?, playSeconds?, rung? }) ->
     { save, outcome }` at run end: bests from lifetime run 3, the history and comfort rung (endless),
-    Morning Snow, Welcome back, Sunny Week, Today's errand, missions with staleness, achievements.
-    `outcome` adds `bonusSnow`, `pace`, `errand`, `recentBestBefore`, `comfortAfter`.
+    Morning Snow, Welcome back, Sunny Week, missions with staleness, achievements.
+    `outcome` adds `bonusSnow`, `pace`, `recentBestBefore`, `comfortAfter`. (Today's errand was
+    retired in v1.3; `save.missions.errand` stays empty so the save remains v3.)
   - Journey runs (`result.mode === 'campaign'` with `result.level`): the wallet gets the run's Snow
     plus a first-pass bonus of `id × 2` (an award chip "First pass +24"), `campaign.stars[id-1]`
     keeps the best, a pass sets `unlocked = max(unlocked, id + 1)`, `lastLevel = id`; missions,
     achievements and the daily bonuses count as for endless; the history, comfort ladder and bests
     are never touched. `outcome.campaign = { passed, stars, newStars, unlockedNext }`. Achievements
-    `journey-10` (levels 1-10 passed), `journey-100`, `three-star-20` carry no items.
+    `journey-10` (levels 1-10 passed), `journey-100`, `three-star-20` carry no items; the **star
+    rewards** `stars-25|75|150|300|600` (achievements with `stars`) grant the Starry Scarf, Night
+    Beanie, Golden Carrot, Galaxy Shades and Star Crown. `nextStarGoal(save) -> { stars, from,
+    target, name, item } | null` names the next one (the Title's goal line, the map, Results).
     `isLevelPlayable(save, id)` (`id ≤ unlocked || settings.unlockAll`), `totalStars`,
     `continueLevel` (the highest unlocked level, the last once all are passed), `CAMPAIGN_STARS_MAX`.
   - `swapMission`, `recentBest` (tutorial runs ignored), `MILESTONES`, `nextMilestone`, `nextGoal`
-    (the Title tagline from run 3), `welcomeBackDue` (the launch toast), `errandView`, `setDailyPar`.
+    (the Title tagline from run 3: a nearly done mission, a fresh Daily, the next star reward once the
+    Journey has begun, the next milestone), `welcomeBackDue` (the launch toast), `setDailyPar`.
   - `dailyTryStarted(save, date) -> { save, tryNumber | null }` when a daily run passes 6:30 AM;
     then `store.set(save); store.flush()` immediately. `null` = practice (unscored).
   - `dailyProgress(save, date, minutes, snow, strip?)` every in-game hour of a scored daily run
@@ -246,8 +262,8 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
   - `dailyStatus`, `isDailyUnlocked` (after 3 completed runs, or once any Daily was played),
     `activeMissionViews`, `itemState`, `buyCosmetic`, `equipCosmetic`, `resetProgress`,
     `shouldShowInstallSheet` (not in in-app browsers), `shouldOfferRestoreSheet`.
-- `meta/content.ts`: `COSMETICS` (24 in 4 slots, Sun Shades included, with `look` render params),
-  `equippedLooks`, `MISSIONS` (with skill gates), `ERRANDS`, `ACHIEVEMENTS` (16), lookups.
+- `meta/content.ts`: `COSMETICS` (29 in 4 slots, Sun Shades included, with `look` render params),
+  `equippedLooks`, `MISSIONS` (with skill gates), `ACHIEVEMENTS` (24), lookups.
 - `meta/week.ts`: `markSunnyDay`, `mondayOf`, `weekFor` (local date strings; DST never matters).
 - `meta/daily.ts`: `localDate()`, `dailyNumber(date)` (#284 = 2026-10-11), `dailySeed(date)`,
   `recentDates`, `formatDateLabel`, `addDays`, `isDateString`.

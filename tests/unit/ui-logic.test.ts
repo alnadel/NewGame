@@ -37,7 +37,6 @@ import {
   playTime,
   resultsAnnouncement,
   retryLabel,
-  settingsSections,
   starsLabel,
   sunStrip,
   tileFill,
@@ -253,13 +252,6 @@ describe('Results labels (U3, U8, U17)', () => {
     expect(resultsAnnouncement(best)).toBe('Nubs melted at Day 2 · 2:40 PM. New best!');
     expect(resultsAnnouncement(view({ challengeTarget: 1200 }, { mode: 'challenge', dailyDate: undefined }))).toBe('Nubs melted at Day 2 · 2:40 PM. Challenge beaten.');
     expect(resultsAnnouncement(view({ challengeTarget: 1300 }, { mode: 'challenge', dailyDate: undefined }))).toBe('Nubs melted at Day 2 · 2:40 PM. Challenge not beaten.');
-  });
-});
-
-describe('Settings sections (U16)', () => {
-  it('hides backup, restore and reset mid-run', () => {
-    expect(settingsSections('title')).toEqual({ backup: true, danger: true, backupNote: false });
-    expect(settingsSections('pause')).toEqual({ backup: false, danger: false, backupNote: true });
   });
 });
 

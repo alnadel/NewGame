@@ -1,6 +1,6 @@
 // Pure label logic for the screens (no DOM), so it can be unit-tested: Results' Daily labels, the
-// Retry label, the stats tile for the multiplier, the screen-reader summary of a run, which
-// Settings sections show where, the Sun Strip, the cue line, forecast lines and the Journal chart.
+// Retry label, the stats tile for the multiplier, the screen-reader summary of a run, the Sun
+// Strip, the cue line, forecast lines, the Journal chart and the Journey's labels.
 
 import {
   COMFORT_MAX,
@@ -22,7 +22,7 @@ import { DAILY_TRIES, dailySeed } from '../meta/daily.ts';
 import { dailyStatus } from '../meta/progression.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { scoreText } from '../meta/share.ts';
-import type { CueId, ResultsCampaign, ResultsView, ScreenId } from './types.ts';
+import type { CueId, ResultsCampaign, ResultsView } from './types.ts';
 
 const NBSP = '\u00a0';
 
@@ -90,24 +90,6 @@ export function resultsAnnouncement(view: ResultsView): string {
   }
   if (view.debug) parts.push('Debug run, not saved.');
   return parts.join(' ');
-}
-
-export interface SettingsSections {
-  /** Backup code export/import. */
-  backup: boolean;
-  /** Reset progress. */
-  danger: boolean;
-  /** "Backup, restore and reset are in Settings on the Title screen." */
-  backupNote: boolean;
-}
-
-/**
- * Settings opened from Pause hide Backup/Restore and Reset: replacing the save under a running run
- * would desync it. They live in the Title's Settings.
- */
-export function settingsSections(origin: ScreenId): SettingsSections {
-  const midRun = origin === 'pause';
-  return { backup: !midRun, danger: !midRun, backupNote: midRun };
 }
 
 // ---------------------------------------------------------------------------------------------

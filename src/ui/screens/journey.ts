@@ -1,7 +1,7 @@
 // Journey map (CAMPAIGN_PLAN §5): total stars, a sticky "Continue · Level N" with the progress to the
 // next star reward, then 20 chapter cards (name, stars, a bar) of 10 level tiles each (number, stars,
 // the concept a level introduces, a lock past the unlocked level). Tapping a playable tile starts it.
-// Every visit centers the level in play; stars and unlocks earned since the last visit pop in. The
+// Every visit centers the level in play; stars and unlocks earned since the last visit (or boot) pop in. The
 // tiles are built once and refresh() updates them from the save, so focus survives a save change
 // (the testing toggle, another tab's progress).
 
@@ -36,8 +36,9 @@ interface ChapterView {
 }
 
 export function createJourneyScreen(ctx: UiContext): Screen {
-  /** Stars and the unlocked level at the last visit: what changed since then pops in. */
-  let seen: { stars: number[]; unlocked: number } | null = null;
+  /** Stars and the unlocked level at the last visit (or at boot): what changed since then pops in. */
+  const snapshot = (): { stars: number[]; unlocked: number } => ({ stars: ctx.save().campaign.stars.slice(), unlocked: ctx.save().campaign.unlocked });
+  let seen = snapshot();
   let timer = 0;
 
   const start = (id: number): void => {
@@ -157,12 +158,11 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     });
   }
 
-  /** Pops the stars earned and the levels unlocked since the last visit (none on the first). */
+  /** Pops the stars earned and the levels unlocked since the last visit. */
   function celebrate(): void {
     const c = ctx.save().campaign;
     const before = seen;
-    seen = { stars: c.stars.slice(), unlocked: c.unlocked };
-    if (!before) return;
+    seen = snapshot();
     let fresh = 0;
     for (const t of tiles) {
       const i = t.level.id - 1;

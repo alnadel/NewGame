@@ -12,14 +12,13 @@ import { canPromptInstall, onInstallPromptChange, promptInstall } from '../../pl
 import { copyText } from '../../platform/share.ts';
 import { h } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
-import { settingsSections } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
 import { button, hide, menuHeader, section, segmented, slider, toggleSwitch } from '../widgets.ts';
 
 const percent = (v: number): string => `${Math.round(v)}%`;
 
-export const KEYS_LINE = '← → or A D: turn the sun · Shift: fine turns · Space/Enter: start or retry · P or Esc: pause';
+export const KEYS_LINE = '← → or A D: turn the sun · Shift: fine turns · Space/Enter: play the level, or retry · P or Esc: pause';
 export const MID_RUN_BACKUP_NOTE = 'Backup, restore and reset are in Settings on the Title screen.';
 
 export function createSettingsScreen(ctx: UiContext): Screen {
@@ -92,7 +91,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   // Testing: every Journey level playable from the map (progress still counts as usual).
   const unlockAll = toggleSwitch(ctx, 'Unlock all levels (testing)', (on) => change('unlockAll', on));
 
-  // Display & assist
+  // Accessibility
   const motion = segmented(ctx, 'Reduced motion', [
     { value: 'auto', label: 'Auto' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' },
   ] as const, (v) => change('reducedMotion', v));
@@ -202,15 +201,16 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     },
   });
 
-  const backupSection = section(
-    'Backup',
+  // Backup, restore and reset; hidden mid-run (from Pause), where replacing the save would desync the run.
+  const progressSection = section(
+    'Progress',
     h('p', { class: 'card-note card-note--top' }, 'Browsers can clear saved games. A backup code carries your progress to another browser or device.'),
     exportBtn,
     exportArea,
     importArea,
     importBtn,
+    resetBtn,
   );
-  const dangerSection = section('Danger zone', resetBtn);
   const midRunNote = h('p', { class: 'card card-note set-midrun' }, MID_RUN_BACKUP_NOTE);
 
   const body = h(
@@ -234,7 +234,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       row('sun', 'Adaptive comfort', 'Eases the heat after a rough run. Daily and challenges always use standard rules.', comfort.el),
     ),
     section(
-      'Display & assist',
+      'Accessibility',
       stackRow('motion', 'Reduced motion', 'No shake, zoom or sliding cards', motion.el),
       row('contrast', 'High-contrast shadows', null, contrast.el),
       stackRow('compass', 'Shade guide', 'Thick teal: shade that lasts. Thin: shade ending. "Always" marks your shares.', guide.el),
@@ -244,8 +244,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       row('map', 'Unlock all levels (testing)', 'Every Journey level opens from the map. Stars and unlocks still count as usual.', unlockAll.el),
     ),
     appSection,
-    backupSection,
-    dangerSection,
+    progressSection,
     midRunNote,
     h('p', { class: 'version' }, `SHADY v${ctx.version}`),
   );
@@ -279,10 +278,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     el,
     enter(from) {
       if (from === 'title' || from === 'pause') origin = from;
-      const shown = settingsSections(origin);
-      hide(backupSection, !shown.backup);
-      hide(dangerSection, !shown.danger);
-      hide(midRunNote, !shown.backupNote);
+      hide(progressSection, origin === 'pause');
+      hide(midRunNote, origin !== 'pause');
       hide(exportArea, true);
       exportArea.value = '';
       body.scrollTop = 0;

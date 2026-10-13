@@ -23,9 +23,9 @@ export function createJournalScreen(ctx: UiContext): Screen {
   const bestDaily = h('span', { class: 'jbest-val' });
   const bests = h(
     'div',
-    { class: 'jbests' },
-    h('div', { class: 'jbest' }, h('span', { class: 'kicker' }, 'Best run'), bestEndless, bestEased),
-    h('div', { class: 'jbest' }, h('span', { class: 'kicker' }, 'Best Daily'), bestDaily),
+    { class: 'cells' },
+    h('div', { class: 'cell' }, h('span', { class: 'kicker' }, 'Best run'), bestEndless, bestEased),
+    h('div', { class: 'cell' }, h('span', { class: 'kicker' }, 'Best Daily'), bestDaily),
   );
 
   const chart = h('div', { class: 'jchart', 'aria-hidden': 'true' });

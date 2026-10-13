@@ -23,7 +23,7 @@ import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
 import { challengeGoalText, planText } from '../labels.ts';
-import { hide, setButtonLabel } from '../widgets.ts';
+import { button, hide, setButtonLabel } from '../widgets.ts';
 
 /** Travel (px) after which a press is no longer a tap. */
 const TAP_SLOP = 8;
@@ -127,17 +127,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const challengeName = h('bdi', null);
   const challengeGoal = h('strong', { class: 'challenge-goal' });
   const challengeNote = h('span', { class: 'challenge-note' });
-  const challengePlay = h('button', { class: 'btn btn--primary challenge-play', type: 'button' }, icon('play'), h('span', { class: 'btn-label' }, 'Play'));
-  challengePlay.addEventListener('click', () => {
-    ctx.sound('tap');
-    run('challenge');
-  });
-  const challengeClose = h('button', { class: 'btn btn--round challenge-close', type: 'button', 'aria-label': 'Dismiss challenge' }, icon('close'));
-  challengeClose.addEventListener('click', () => {
-    ctx.sound('back');
+  const challengePlay = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', className: 'challenge-play', onPress: () => run('challenge') });
+  const challengeClose = button(ctx, { label: 'Dismiss challenge', icon: 'close', round: true, sound: 'back', className: 'challenge-close', onPress: () => {
     ctx.clearChallenge();
     ctx.cb.dismissChallenge();
-  });
+  } });
   const challenge = h(
     'div',
     { class: 'challenge pe', role: 'group', 'aria-label': 'Challenge' },
@@ -297,7 +291,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     setButtonLabel(playBtn, `Level ${level}`);
     playBtn.setAttribute('aria-label', `Play Level ${level}`);
     const stars = totalStars(save);
-    starsValue.textContent = stars > 0 ? `${stars}★` : '';
+    starsValue.textContent = stars > 0 ? `${stars}★` : 'Map';
     mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
     const unlocked = isDailyUnlocked(save);
@@ -322,7 +316,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
 
   function renderPreview(): void {
     hide(forecast, preview === null);
-    forecast.textContent = preview ? `Endless: ${planText(preview)}` : '';
+    forecast.textContent = preview ? `Forecast: ${planText(preview)}` : '';
   }
 
   return {
