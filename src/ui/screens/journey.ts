@@ -13,7 +13,7 @@ import { h } from '../dom.ts';
 import { icon } from '../icons.ts';
 import { continueLabel, levelTileLabel, starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
-import { button, menuHeader, progressBar, setButtonLabel, starRoad } from '../widgets.ts';
+import { button, countUp, menuHeader, progressBar, setButtonLabel, starRoad } from '../widgets.ts';
 
 /** Tiles per grid row (arrow keys move by this many up and down). */
 const COLUMNS = 5;
@@ -41,6 +41,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   const snapshot = (): { stars: number[]; unlocked: number } => ({ stars: ctx.save().campaign.stars.slice(), unlocked: ctx.save().campaign.unlocked });
   let seen = snapshot();
   let timer = 0;
+  let stopCount = (): void => {};
   /** Back returns to the Title, or to the Profile when the map was opened from there. */
   let origin: 'title' | 'profile' = 'title';
 
@@ -179,6 +180,9 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     const c = ctx.save().campaign;
     const before = seen;
     seen = snapshot();
+    // The header's total counts up by the stars earned since the last visit.
+    const sum = (a: readonly number[]): number => a.reduce((x, y) => x + y, 0);
+    stopCount = countUp(starsNum, sum(before.stars), sum(c.stars), ctx, { format: (n) => `${n}/${CAMPAIGN_STARS_MAX}`, end: null });
     let fresh = 0;
     for (const t of tiles) {
       const i = t.level.id - 1;
@@ -215,6 +219,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     },
     leave() {
       clearTimeout(timer);
+      stopCount();
       for (const c of chapters) c.el.classList.remove('is-just-complete');
       for (const t of tiles) {
         t.el.classList.remove('is-unlocked');

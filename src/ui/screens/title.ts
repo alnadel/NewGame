@@ -24,7 +24,7 @@ import {
 import { claimables, featureHint, featureUnlocked, type Feature } from '../../meta/gamify.ts';
 import type { Save } from '../../meta/saveTypes.ts';
 import { logoLayers } from '../art.ts';
-import { h, setChildren, svgFromMarkup } from '../dom.ts';
+import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
 import { claimDot, rankBadge } from '../gamify.ts';
 import { seenSet } from '../seen.ts';
 import { icon, type IconName } from '../icons.ts';
@@ -381,7 +381,10 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       g.el.classList.toggle('is-locked', !on);
       g.el.classList.toggle('is-new', isNew);
       hide(g.el, !on && fresh);
-      g.el.setAttribute('aria-label', `${g.name}${on ? (isNew ? ', new' : '') : ' (locked)'}`);
+      // The name stays the accessible name; "New" is its description.
+      g.el.setAttribute('aria-label', on ? g.name : `${g.name} (locked)`);
+      setFlag(g.el, 'aria-description', false);
+      if (isNew) g.el.setAttribute('aria-description', 'New');
     });
     hide(mapBtn, fresh);
     hide(chipMissions, !featureUnlocked(save, 'missions'));
