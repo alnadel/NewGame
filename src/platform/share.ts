@@ -1,6 +1,8 @@
 // Sharing: Web Share API first, then the clipboard (text) or a download (files) (V1_PLAN §11.4,
 // V1_1_PLAN UM7). The caller turns the returned outcome into a toast; nothing here touches the UI.
 
+import { hostFileSaver } from './host.ts';
+
 /**
  * - `shared`: handed to the share sheet. `copied`: the text is on the clipboard.
  * - `saved`: the file was downloaded and the text copied (the copy may have failed).
@@ -51,7 +53,13 @@ export async function shareFiles(p: { file: File; text: string }): Promise<Share
       // A share target that refused the file: save it instead.
     }
   }
-  if (!download(p.file)) return 'failed';
+  const hostSave = hostFileSaver();
+  if (hostSave) {
+    // The artifact viewer blocks <a download>; it saves through its own confirmation instead.
+    const outcome = await hostSave(p.file);
+    if (outcome === 'declined') return 'cancelled';
+    if (outcome === 'failed') return 'failed';
+  } else if (!download(p.file)) return 'failed';
   await copyText(p.text);
   return 'saved';
 }

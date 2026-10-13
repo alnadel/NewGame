@@ -10,6 +10,7 @@ import { parseParams } from './game/params.ts';
 import { Session } from './game/session.ts';
 import { SAVE_BAK_KEY, SAVE_KEY, SaveStore } from './meta/save.ts';
 import { createHaptics } from './platform/haptics.ts';
+import { prepareHostDownloads } from './platform/host.ts';
 import { registerServiceWorker } from './platform/pwa.ts';
 import { createStorage } from './platform/storage.ts';
 import type { DebugDraw } from './render/renderer.ts';
@@ -66,6 +67,7 @@ function boot(): void {
     }
   });
   void registerServiceWorker();
+  prepareHostDownloads();
 }
 
 try {
