@@ -1,7 +1,8 @@
 // Results bottom sheet (GDD §5, V1_PLAN §8.4, V1_1_PLAN UM8): the canvas Melt Map shows above it.
 // Big time with the postcard, the Sun Strip (one row of hour tiles per day), NEW BEST ribbon, death
 // line typed at 30 chars/s with the recap tip and the pace line, the run's unlocks and bonuses as
-// award chips, stats, missions and Today's errand with stamps (and Swap on stale missions).
+// award chips (plus one for the missions done), stats, missions and Today's errand with stamps that
+// land in place (and Swap on stale missions).
 // Retry arms 0.3 s after the sheet appears; a tap on the map area above the sheet also retries.
 // The unlocks live in the sheet rather than the top toast stack: toasts there would sit over the
 // top of the Melt Map, where the named caster pins of the death line usually are.
@@ -16,7 +17,7 @@ import { formatScore, formatTimeOfDay, splitMinutes } from '../../core/format.ts
 import { challengeVerdict } from '../../meta/challenge.ts';
 import { dailyNumber } from '../../meta/daily.ts';
 import type { ErrandView, MissionView } from '../../meta/missions.ts';
-import { activeMissionViews } from '../../meta/progression.ts';
+import { activeMissionViews, type ToastSpec } from '../../meta/progression.ts';
 import { runPlanOn } from '../../meta/share.ts';
 import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
@@ -54,8 +55,6 @@ const MIN_SCROLL_PX = 120;
  */
 const MAP_MIN_PX = 96;
 const SHEET_MIN_FRACTION = 0.58;
-/** The scroll area's bottom fade (ui.css .res-scroll mask): revealed rows stop above it. */
-const SCROLL_FADE_PX = 28;
 const SHEET_MAX_FRACTION = 0.68;
 /** Sun Strip rows: the last 4 days, or 2 on screens under 700 px tall. */
 const STRIP_ROWS = 4;
@@ -220,15 +219,6 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const hh = sheet.offsetHeight;
     mapCatch.style.bottom = `${hh}px`;
     sheetTopPx = el.getBoundingClientRect().top + screenH - hh;
-  };
-  /**
-   * Scrolls the stats/missions list (only) down so `el` shows above its bottom fade. Never scrolls
-   * up, and never the sheet body: in one-scroll mode the score must stay in view, so nothing moves.
-   */
-  const reveal = (el: HTMLElement, smooth: boolean): void => {
-    if (sheet.classList.contains('is-one-scroll')) return;
-    const below = el.getBoundingClientRect().bottom - (scroll.getBoundingClientRect().bottom - SCROLL_FADE_PX);
-    if (below > 0) scroll.scrollBy({ top: below, behavior: smooth ? 'smooth' : 'auto' });
   };
   if (typeof ResizeObserver === 'function') {
     const ro = new ResizeObserver(measure);
@@ -438,10 +428,15 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     }
 
     // The run's unlocks first, then the mission stamps. Chips sit at the top of the scroll area
-    // (their space is held from the start so nothing reflows) and pop in quickly; the stamps follow,
-    // each scrolled into view as it lands. Auto-scroll only ever moves the stats/missions list, and
-    // only downward: never the sheet body that holds the score (one-scroll mode on short screens).
-    const chips = outcome.toasts.map((t) =>
+    // (their space is held from the start so nothing reflows) and pop in quickly; the stamps land in
+    // place. Nothing scrolls by itself (fix round 2): scrolling to a stamp pushed the warm-up's
+    // challenge line, the chips and the wallet out of view and left tiles cut in half. Instead the
+    // missions done this run pop in as one chip with the first stamp ("2 missions done +20"), so the
+    // reward shows even when the rows sit below the fold.
+    const done = outcome.missionsCompleted.length;
+    const toasts: ToastSpec[] = [...outcome.toasts];
+    if (done > 0) toasts.push({ text: `${done === 1 ? 'Mission' : `${done} missions`} done +${outcome.missionSnow}`, icon: 'check', tone: 'accent' });
+    const chips = toasts.map((t) =>
       h(
         'li',
         { class: `award award--${t.tone ?? 'ink'}` },
@@ -451,7 +446,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     );
     setChildren(awards, ...chips);
     hide(awards, chips.length === 0);
-    chips.forEach((chip, i) => {
+    const unlockChips = chips.length - (done > 0 ? 1 : 0);
+    chips.slice(0, unlockChips).forEach((chip, i) => {
       if (reduced) {
         chip.classList.add('is-in');
         return;
@@ -462,22 +458,27 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       });
     });
 
-    // Missions and Today's errand, with stamps landing one after another.
+    // Missions and Today's errand, with stamps landing one after another (the missions chip with
+    // the first one).
     const items: { justCompleted: boolean }[] = [...outcome.missions, ...(outcome.errand ? [outcome.errand] : [])];
     const rows = [...outcome.missions.map(missionRow), ...(outcome.errand ? [errandRow(outcome.errand)] : [])];
     setChildren(missionList, ...rows);
-    let stampAt = STAMP_FIRST_MS + (chips.length > 0 ? chips.length * CHIP_GAP_MS + 200 : 0);
+    const firstStamp = STAMP_FIRST_MS + (unlockChips > 0 ? unlockChips * CHIP_GAP_MS + 200 : 0);
+    const missionsChip = done > 0 ? (chips[chips.length - 1] as HTMLElement) : null;
+    if (missionsChip) {
+      if (reduced) missionsChip.classList.add('is-in');
+      else later(firstStamp, () => missionsChip.classList.add('is-in'));
+    }
+    let stampAt = firstStamp;
     items.forEach((m, i) => {
       if (!m.justCompleted) return;
       const row = rows[i] as HTMLElement;
       if (reduced) {
         row.classList.add('is-stamped');
-        later(0, () => reveal(row, false));
         return;
       }
       later(stampAt, () => {
         row.classList.add('is-stamped', 'is-new');
-        reveal(row, true);
         ctx.sound('stamp');
       });
       stampAt += STAMP_GAP_MS;

@@ -126,8 +126,9 @@ arms 0.3 s after the sheet appears; a tap above the sheet also retries. The shee
 content up to 68% of the screen (the Melt Map, and the postcard cropped from it, keep about a third;
 at least 96 px on tiny screens), then the stats and missions scroll; on short or large-text screens
 the whole body scrolls with Retry pinned. The award chips pop first (their space held from the
-start), then the stamps land, each scrolled into view: auto-scroll moves only the stats/missions
-list and only downward, never the body that holds the score.
+start), then the stamps land in place; nothing scrolls by itself, so the warm-up card, the chips
+and the tiles stay where they are (fix round 2). The missions done this run pop in as one more
+chip with the first stamp ("2 missions done +20"), so the reward shows wherever the rows sit.
 
 **Journal** (v1.1): bests (endless and Daily), the last 30 endless runs as bars (height ∝ score,
 colour by the day reached, the best in gold, runs on eased rules hatched, an sr-only summary), the

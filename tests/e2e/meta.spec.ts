@@ -99,6 +99,27 @@ test.describe('challenges (UM2)', () => {
     await openGame(page, `test=1#c=${SAM}`);
     await expect(page.locator('.challenge-note')).toHaveText('Warm-up run first');
   });
+
+  test("the warm-up's Results keep the challenge line in view while stamps land (fix round 2)", async ({ page }) => {
+    await openGame(page, `test=1#c=${SAM}`);
+    await startRun(page);
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(4));
+    // Past 9:00 AM, so a mission stamps.
+    await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.state())).minutes, { timeout: 30_000 }).toBeGreaterThanOrEqual(200);
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(1));
+    await die(page);
+    const line = page.locator('.res-warmup');
+    await expect(line).toHaveText(/^Now beat Sam: /);
+    await expect.poll(() => page.locator('.mrow.is-new').count(), { timeout: 8000 }).toBeGreaterThan(0);
+    await page.waitForTimeout(800);
+    const inView = await line.evaluate((el) => {
+      const sheet = el.closest('.res-sheet')!;
+      const view = (sheet.classList.contains('is-one-scroll') ? sheet : el.closest('.res-scroll')!).getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return r.top >= view.top - 1 && r.bottom <= view.bottom + 1;
+    });
+    expect(inView).toBe(true);
+  });
 });
 
 test('two runs on one date pay Morning Snow once (UM5)', async ({ page }) => {
@@ -215,7 +236,7 @@ for (const size of [
   { width: 360, height: 640 },
   { width: 390, height: 844 },
 ]) {
-  test(`Results at ${size.width}x${size.height}: the score stays in the sheet while stamps and chips land (UM8)`, async ({ page }, info) => {
+  test(`Results at ${size.width}x${size.height}: the score stays in the sheet and nothing scrolls by itself while stamps and chips land (UM8)`, async ({ page }, info) => {
     await seedSave(page, { v: 2, createdAt: 1, settings: { name: 'Sam' }, stats: { runs: 12, comfort: 3, bestMinutes: 800, wallet: 300 } });
     await page.setViewportSize(size);
     await openGame(page, 'test=1&seed=20261014');
@@ -231,31 +252,38 @@ for (const size of [
       window.__SHADY_TEST__!.bot(null);
     });
     await die(page);
-    const probe = (): Promise<{ score: number[]; sheet: number[]; body: number; list: number; stamped: number }> =>
+    const probe = (): Promise<{ score: number[]; sheet: number[]; body: number; list: number; stamped: number; firstChipShown: boolean }> =>
       page.evaluate(() => {
         const r = (sel: string): number[] => {
           const b = document.querySelector(sel)!.getBoundingClientRect();
           return [b.top, b.bottom];
         };
+        const view = document.querySelector('.scr-results .res-sheet.is-one-scroll') ? '.scr-results .res-sheet' : '.scr-results .res-scroll';
+        const chip = document.querySelector('.scr-results .res-awards .award');
+        const [top, bottom] = r(view);
+        const c = chip?.getBoundingClientRect();
         return {
           score: r('.scr-results .res-score'),
           sheet: r('.scr-results .res-sheet'),
           body: document.querySelector('.scr-results .res-body')!.scrollTop,
           list: document.querySelector('.scr-results .res-scroll')!.scrollTop,
           stamped: document.querySelectorAll('.scr-results .mrow.is-new').length,
+          firstChipShown: !!c && c.top >= top! - 1 && c.bottom <= bottom! + 1,
         };
       });
-    let lastList = 0;
     for (const ms of [600, 900, 1500, 1500]) {
       await page.waitForTimeout(ms);
       const p = await probe();
       expect(p.body, 'the body holding the score never scrolls').toBe(0);
-      expect(p.list, 'the list only scrolls down').toBeGreaterThanOrEqual(lastList - 1);
-      lastList = p.list;
+      // Scrolling to a stamp pushed the chips (and a warm-up's challenge line) out of view (fix round 2).
+      expect(p.list, 'the list never scrolls by itself').toBe(0);
+      expect(p.firstChipShown, 'the first award chip stays in view').toBe(true);
       expect(p.score[0], 'score top inside the sheet').toBeGreaterThanOrEqual(p.sheet[0]! - 1);
       expect(p.score[1], 'score bottom inside the sheet').toBeLessThanOrEqual(p.sheet[1]! + 1);
     }
     expect((await probe()).stamped, 'a mission stamp landed').toBeGreaterThan(0);
+    // The missions done this run show as one chip, wherever their rows are.
+    await expect(page.locator('.scr-results .res-awards .award.is-in', { hasText: /missions? done \+\d+$/i })).toHaveCount(1);
     await info.attach(`results-stamps-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
   });
 }

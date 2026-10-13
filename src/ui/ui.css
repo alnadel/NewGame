@@ -1395,9 +1395,9 @@
   touch-action: pan-y;
   margin: 0 -4px;
   padding: 0 4px 28px;
-  /* A soft fade at the bottom edge (results.ts SCROLL_FADE_PX) says the list goes on, so a tile cut
-     by the Retry bar fades out instead of ending in hard-cut text; the padding lets the last row
-     scroll clear of it. */
+  /* A soft 28 px fade at the bottom edge says the list goes on, so a tile cut by the Retry bar
+     fades out instead of ending in hard-cut text; the padding lets the last row scroll clear of it.
+     The list never scrolls by itself (results.ts). */
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
