@@ -646,7 +646,7 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
     expect(seen).toHaveLength(1);
   });
 
-  it('keeps a pending local settings change through an adopt, then writes the merge', () => {
+  it('keeps a pending local change (settings, a purchase) and the other instance\'s progress, then writes the merge', () => {
     const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
     const remoteSave = otherInstanceSave(store.get());
     remoteSave.settings.music = 0.9;
@@ -660,15 +660,18 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
     backing.map.set(SAVE_KEY, remote);
     changes.storage(SAVE_KEY, remote);
     const got = store.get();
+    // Both changed the music volume: this instance's choice stays.
     expect(got.settings.music).toBe(0.1);
     expect(got.settings.invert).toBe(true);
     expect(got.stats.runs).toBe(9);
     expect(got.stats.wallet).toBe(321);
-    // The outfit worn here is kept where the remote owns it (hat-none); the Candy Cane isn't theirs.
-    expect(got.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-classic' });
+    // Each side's new cosmetics and outfit choices survive.
+    expect(got.unlocks.cosmetics).toEqual(expect.arrayContaining(['hat-beanie', 'nose-cane']));
+    expect(got.equipped).toEqual({ scarf: 'scarf-red', hat: 'hat-beanie', nose: 'nose-cane', shades: 'shades-classic' });
     const written = JSON.parse(backing.getItem(SAVE_KEY) as string) as Save;
     expect(written.settings.music).toBe(0.1);
     expect(written.stats.runs).toBe(9);
+    expect(written.unlocks.cosmetics).toContain('nose-cane');
   });
 
   it('re-reads on becoming visible and adopts bytes changed meanwhile', () => {

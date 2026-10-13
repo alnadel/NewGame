@@ -107,9 +107,10 @@ out every screen, control, sheet, toast and dialog inside it.
   switched on mid-run) and becomes `RunResult.assisted` (the share's compass). The HUD's best flag
   is read when a run begins (`runPb`): Daily checkpoints, which save a new best each in-game hour
   (with the run's hour-glyph strip), no longer move it mid-run.
-- **Other tabs**: the session adopts a save another tab or instance wrote (`ui.setSave`, settings,
-  and between runs the run count and the held run), surfaces the first failed write, writes buys
-  and equips at once, and refuses reset and restore while a newer version's save sits on disk.
+- **Other tabs**: the store merges a save another tab or instance wrote with this one's (meta
+  `SaveStore`, `saveMerge.ts`) and the session adopts the result (`ui.setSave`, settings, and between
+  runs the run count and the held run), surfaces the first failed write, writes buys and equips at
+  once, and refuses reset and restore while a newer version's save sits on disk.
 - **Share links** come from `shareBase()`: the page's address on the web, else `VITE_SHARE_URL`,
   else no link line (a `file:` build never shares a `file:` link).
 

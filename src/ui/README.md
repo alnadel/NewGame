@@ -172,9 +172,14 @@ Best chip (its day badge hatched, "Journal, eased best …") while it is ahead o
   - `.canPersist`: false while a newer version's save is on disk (the store then never writes;
     refuse reset and restore with the newer-version message).
   - `.onExternalChange(cb) -> unsubscribe`: another tab or instance wrote the save (a `storage`
-    event, or a re-read on page visible that finds different bytes) and the store adopted it (only
-    clean `ok` saves; with an unsaved local change it keeps the local settings and owned outfit, then
-    writes). Wire it to `ui.setSave(save)` and the settings, and between runs refresh the run count.
+    event, or a re-read on page visible that finds different bytes) and the store took it in (only
+    clean `ok` saves). Each stored save names the revisions it includes (`revs`), so the store
+    adopts a save that includes everything it has as it is, and otherwise merges the two from the
+    newest save both include (`meta/saveMerge.ts`: counters add both sides' gains, bests take the
+    larger, owned items, Daily tries and run history keep both sides'; settings and outfit keep this
+    instance's) and writes the merge back at once. `flush()` merges a save written meanwhile before
+    writing, so no write replaces progress it never saw. The live save object is updated in place.
+    Wire it to `ui.setSave(save)` and the settings, and between runs refresh the run count.
   - `.onDegraded(cb) -> unsubscribe`: fires once, on the first failed write after boot (wire it to
     `ui.notifyStorageDegraded()`). `.dispose()` flushes and detaches the listeners.
   - `createStorage()` reads the backing store first (so another tab's write is seen) and retries it

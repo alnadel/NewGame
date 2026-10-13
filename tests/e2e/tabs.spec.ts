@@ -1,6 +1,7 @@
 // Two tabs of the game in one browser (save-clobbered-by-second-instance, multi-tab-save-lost-update):
-// each tab adopts the save the other one writes, so neither overwrites the other's runs, purchases
-// or Daily tries with an older copy. Pages that lose focus may pause (blur pause); forceDeath
+// each tab merges the save the other one writes (meta/saveMerge.ts), so neither overwrites the
+// other's runs, purchases or Daily tries with an older copy, even when it wrote before hearing of
+// them (the idle tab's Daily par job, QA fix round 2). Pages that lose focus may pause (blur pause); forceDeath
 // resumes a paused run, and bringToFront hands the focus over.
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { keepAlive, state, waitForScreen } from './helpers.ts';
@@ -57,9 +58,14 @@ test('runs from two tabs all count', async ({ context }) => {
   const m1 = await playRun(b, 700);
   const m2 = await playRun(b, 1200);
   const m3 = await playRun(a, 400);
-  const s = await saved(a);
-  expect(s.stats.runs).toBe(6);
-  expect(s.stats.bestMinutes).toBe(Math.max(m1, m2, m3));
+  // The tabs hear of each other's writes late under load (a storage event can lag by ~0.5 s); a
+  // write made without the other tab's runs is merged and written back as soon as it is heard of.
+  // So the stored save settles on every run, and stays there.
+  await expect.poll(async () => (await saved(a)).stats, { timeout: 10_000 }).toEqual(
+    expect.objectContaining({ runs: 6, bestMinutes: Math.max(m1, m2, m3) }),
+  );
+  await a.waitForTimeout(1000);
+  for (const page of [a, b]) expect((await saved(page)).stats).toEqual(expect.objectContaining({ runs: 6, bestMinutes: Math.max(m1, m2, m3) }));
 });
 
 test('a purchase in one tab survives a run finishing in the other', async ({ context }) => {
@@ -86,8 +92,8 @@ test('a purchase in one tab survives a run finishing in the other', async ({ con
   }
   expect(bought).not.toBeNull();
   await playRun(a, 400);
+  await expect.poll(async () => (await saved(a)).stats.runs, { timeout: 10_000 }).toBe(4);
   expect((await saved(a)).owned).toContain(bought);
-  expect((await saved(a)).stats.runs).toBe(4);
 });
 
 test("a Daily try counted in one tab shows on the other's Daily screen", async ({ context }) => {

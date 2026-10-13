@@ -24,6 +24,7 @@ import { getErrand, parseMissionId, refillMissions } from './missions.ts';
 import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
 import { COMFORT_MAX } from '../core/index.ts';
+import { mergeSaves } from './saveMerge.ts';
 
 export const SAVE_KEY = 'shady.save';
 /** Suffixes of the side keys every store keeps next to its main key. */
@@ -42,6 +43,16 @@ export const PARS_KEEP = 14;
 export const HISTORY_KEEP = 30;
 /** Default write debounce (ms). */
 export const SAVE_DEBOUNCE_MS = 300;
+/**
+ * Revision tokens kept in the stored save (`revs`, newest last): every write appends one, so an
+ * instance can tell which of its own writes and adopted saves another instance's save includes.
+ */
+export const REVS_KEEP = 32;
+/** Saves a store remembers by revision (its own writes and the saves it adopted), newest last. */
+const KNOWN_KEEP = 32;
+/** The revision of a save that carries none (fresh, or written before revisions existed). */
+const ROOT_REV = '';
+const REV_RE = /^[0-9a-z]{1,16}$/;
 
 const BIG = 1_000_000_000;
 const MAX_GLYPHS_LENGTH = 1000;
@@ -434,6 +445,28 @@ export function migrate(raw: unknown, now: number = Date.now()): MigrateResult {
 // SaveStore
 // ---------------------------------------------------------------------------------------------
 
+/** The revision list stored next to a save (store bookkeeping, not part of the Save). Never throws. */
+export function readRevs(raw: string | null): string[] {
+  if (raw === null) return [];
+  try {
+    const revs = rec(JSON.parse(raw)).revs;
+    return Array.isArray(revs) ? revs.filter((r): r is string => typeof r === 'string' && REV_RE.test(r)).slice(-REVS_KEEP) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The stored form: the save with its revision list last. */
+function serialize(save: Save, revs: readonly string[]): string {
+  return JSON.stringify(revs.length > 0 ? { ...save, revs } : save);
+}
+
+function randomRev(): string {
+  return Math.floor(Math.random() * 36 ** 8)
+    .toString(36)
+    .padStart(8, '0');
+}
+
 /**
  * Where a store hears about other instances (another tab, the installed app and its browser tab):
  * `storage` events for writes made elsewhere, and the page becoming visible again (some browsers
@@ -463,6 +496,8 @@ export interface SaveStoreOptions {
   now?: () => number;
   /** Change notifications from other instances; defaults to the browser's (none outside a page). */
   changes?: SaveChangeSource | null;
+  /** New revision tokens (default: 8 random base-36 characters). */
+  newRev?: () => string;
 }
 
 /**
@@ -470,10 +505,14 @@ export interface SaveStoreOptions {
  * `update`); writes are debounced and `flush()` forces them (call on pagehide/hidden and run end).
  *
  * Several instances can share one origin (two tabs, or the Home Screen app next to its browser
- * tab on Android). A save written by another instance is adopted (`onExternalChange`) instead of
- * being overwritten later by this one's stale copy: with nothing pending here it replaces the
- * in-memory save without writing; with a local change pending, the other instance's progress is
- * taken and only this instance's settings and outfit are kept, then written back at once.
+ * tab on Android), and each hears of the other's writes late (a storage event can take a while
+ * under load; Chrome's per-tab localStorage cache is only updated when it arrives). So no write
+ * may simply replace the stored save: every save carries the revisions it includes (`revs`), each
+ * store remembers the saves it wrote or adopted, and a save written elsewhere is merged with this
+ * instance's (saveMerge.ts) from the newest save both include. A save that includes everything
+ * this instance has is adopted as it is; otherwise the merge (which keeps both sides' runs,
+ * purchases and Daily tries) is written back at once, repairing a write made without them.
+ * `flush()` also merges whatever another instance wrote before writing.
  */
 export class SaveStore {
   readonly status: LoadStatus;
@@ -482,8 +521,8 @@ export class SaveStore {
   private readonly key: string;
   private readonly debounceMs: number;
   private readonly now: () => number;
-  /** False after loading a future-version save: that save must never be overwritten. */
-  private readonly writable: boolean;
+  /** False after a future-version save was found on disk: that save must never be overwritten. */
+  private writable: boolean;
   /** Raw pre-migration value to preserve in `.bak` before the first write. */
   private pendingBackup: string | null = null;
   private dirty = false;
@@ -491,6 +530,11 @@ export class SaveStore {
   /** The raw bytes last read from or written to the main key (to spot writes made elsewhere). */
   private lastRaw: string | null;
   private degradedNotified = false;
+  private readonly newRev: () => string;
+  /** The revisions the in-memory save includes (as last written or adopted), newest last. */
+  private revs: string[] = [];
+  /** Saves this store wrote or adopted, by revision, oldest first (merge ancestors). */
+  private readonly known: { rev: string; save: Save }[] = [];
   private readonly listeners = new Set<(save: Save) => void>();
   private readonly externalListeners = new Set<(save: Save) => void>();
   private readonly degradedListeners = new Set<() => void>();
@@ -501,6 +545,7 @@ export class SaveStore {
     this.key = options.key ?? SAVE_KEY;
     this.debounceMs = options.debounceMs ?? SAVE_DEBOUNCE_MS;
     this.now = options.now ?? Date.now;
+    this.newRev = options.newRev ?? randomRev;
     const now = this.now();
     const raw = storage.get(this.key);
     this.lastRaw = raw;
@@ -521,12 +566,16 @@ export class SaveStore {
         this.pendingBackup = raw;
         this.dirty = true;
       }
-    } else if (loaded.status === 'ok' && JSON.stringify(loaded.save) !== raw) {
-      // Validation changed something (older build, repaired field): keep the original in .bak.
-      this.pendingBackup = raw;
-      this.dirty = true;
+    } else if (loaded.status === 'ok') {
+      this.revs = readRevs(raw);
+      if (serialize(loaded.save, this.revs) !== raw) {
+        // Validation changed something (older build, repaired field): keep the original in .bak.
+        this.pendingBackup = raw;
+        this.dirty = true;
+      }
     }
     this.status = status;
+    this.remember(this.revs[this.revs.length - 1] ?? ROOT_REV, this.current);
 
     const source = options.changes === undefined ? browserChangeSource() : options.changes;
     if (source) {
@@ -565,25 +614,17 @@ export class SaveStore {
     this.changed();
   }
 
-  /** Writes now if anything changed since the last write. */
+  /**
+   * Writes now if anything changed since the last write. A save another instance wrote meanwhile
+   * (whose storage event hasn't arrived yet) is merged in first, never overwritten.
+   */
   flush(): void {
-    if (this.timer !== null) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
+    this.clearTimer();
     if (!this.dirty || !this.writable) return;
-    if (this.pendingBackup !== null) {
-      this.storage.set(`${this.key}${BAK_SUFFIX}`, this.pendingBackup);
-      this.pendingBackup = null;
-    }
-    const raw = JSON.stringify(this.current);
-    this.storage.set(this.key, raw);
-    this.lastRaw = raw;
-    this.dirty = false;
-    if (this.storage.degraded && !this.degradedNotified) {
-      this.degradedNotified = true;
-      for (const cb of [...this.degradedListeners]) cb();
-    }
+    const disk = this.storage.get(this.key);
+    const absorbed = disk !== null && disk !== this.lastRaw ? this.absorb(disk) : 'none';
+    if (this.dirty && this.writable) this.write();
+    if (absorbed === 'same' || absorbed === 'merged') this.notifyExternal();
   }
 
   /** Called with the new save after every set/update. Returns an unsubscribe function. */
@@ -623,27 +664,103 @@ export class SaveStore {
     if (raw !== null && raw !== this.lastRaw) this.adopt(raw);
   }
 
+  /**
+   * Another instance wrote `raw` (a storage event or a visibility re-read). Events can arrive late
+   * and out of order, so the stored bytes are read again: the newest save is the one to merge.
+   */
   private adopt(raw: string): void {
-    if (raw === this.lastRaw) return;
-    const remote = migrate(raw, this.now());
-    // A newer build's save (or garbage) is never adopted: this instance keeps what it has.
-    if (remote.status !== 'ok') return;
-    this.lastRaw = raw;
-    if (!this.dirty) {
-      this.current = remote.save;
+    const latest = this.storage.get(this.key) ?? raw;
+    if (latest === this.lastRaw) return;
+    const absorbed = this.absorb(latest);
+    if (absorbed === 'skip') return;
+    if (absorbed === 'merged') {
+      // The stored save lacks progress this instance has: write the merge back now.
+      this.clearTimer();
+      if (this.writable) this.write();
     } else {
-      // A local change is pending: keep the other instance's progress (runs, wallet, cosmetics,
-      // Daily tries) and only this instance's settings and outfit (where the remote owns it).
-      const merged = remote.save;
-      merged.settings = { ...this.current.settings };
-      for (const slot of COSMETIC_SLOTS) {
-        const id = this.current.equipped[slot];
-        if (merged.unlocks.cosmetics.includes(id)) merged.equipped[slot] = id;
-      }
-      this.current = merged;
-      this.flush();
+      this.clearTimer();
     }
+    this.notifyExternal();
+  }
+
+  /**
+   * Takes another instance's stored save into the in-memory one (in place, so references to the
+   * live save stay valid). 'same': the result is the stored save, nothing to write; 'merged': this
+   * instance has progress the stored save lacks (left dirty, to be written); 'skip': not a save
+   * this build can use (garbage, or a newer version's, which also stops all writes).
+   */
+  private absorb(raw: string): 'same' | 'merged' | 'skip' {
+    const remote = migrate(raw, this.now());
+    if (remote.status === 'future') this.writable = false;
+    if (remote.status !== 'ok') return 'skip';
+    const remoteRevs = readRevs(raw);
+    this.lastRaw = raw;
+    const head = this.revs[this.revs.length - 1];
+    let next: Save;
+    if (!this.dirty && (head === undefined || remoteRevs.includes(head))) {
+      // It includes everything this instance has: adopt it as it is.
+      next = remote.save;
+    } else {
+      next = migrate(mergeSaves(this.ancestor(remoteRevs), this.current, remote.save), this.now()).save;
+    }
+    this.remember(remoteRevs[remoteRevs.length - 1] ?? ROOT_REV, remote.save);
+    const same = JSON.stringify(next) === JSON.stringify(remote.save);
+    // The other instance's revisions go last, so the list keeps its newest ones (its next save
+    // will name them): this instance's own unseen ones are only ever named by the merge's.
+    this.revs = same ? remoteRevs : [...this.revs.filter((r) => !remoteRevs.includes(r)), ...remoteRevs].slice(-REVS_KEEP);
+    const target = this.current as unknown as Record<string, unknown>;
+    for (const key of Object.keys(target)) delete target[key];
+    Object.assign(target, next);
+    this.dirty = !same;
+    return same ? 'same' : 'merged';
+  }
+
+  /**
+   * The newest save this store knows that `remoteRevs` includes, or null. A revision-less root (a
+   * fresh or pre-revision save both loaded) is in every save whose list hasn't overflowed yet.
+   */
+  private ancestor(remoteRevs: readonly string[]): Save | null {
+    for (let i = this.known.length - 1; i >= 0; i--) {
+      const k = this.known[i] as { rev: string; save: Save };
+      if (k.rev === ROOT_REV ? remoteRevs.length < REVS_KEEP : remoteRevs.includes(k.rev)) return k.save;
+    }
+    return null;
+  }
+
+  private remember(rev: string, save: Save): void {
+    const i = this.known.findIndex((k) => k.rev === rev);
+    if (i >= 0) this.known.splice(i, 1);
+    this.known.push({ rev, save: structuredClone(save) });
+    if (this.known.length > KNOWN_KEEP) this.known.shift();
+  }
+
+  private write(): void {
+    if (this.pendingBackup !== null) {
+      this.storage.set(`${this.key}${BAK_SUFFIX}`, this.pendingBackup);
+      this.pendingBackup = null;
+    }
+    const rev = this.newRev();
+    this.revs = [...this.revs, rev].slice(-REVS_KEEP);
+    const raw = serialize(this.current, this.revs);
+    this.storage.set(this.key, raw);
+    this.lastRaw = raw;
+    this.remember(rev, this.current);
+    this.dirty = false;
+    if (this.storage.degraded && !this.degradedNotified) {
+      this.degradedNotified = true;
+      for (const cb of [...this.degradedListeners]) cb();
+    }
+  }
+
+  private notifyExternal(): void {
     for (const cb of [...this.externalListeners]) cb(this.current);
+  }
+
+  private clearTimer(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
   }
 
   private changed(): void {
