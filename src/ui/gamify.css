@@ -148,10 +148,11 @@
 }
 
 .xp-meter.is-rankup { box-shadow: 0 0 0 3px var(--gold), var(--shadow-sm); }
-.is-rankup .xp-pop { opacity: 1; animation: pop-in 520ms var(--ease-back); }
+.is-rankup .xp-pop { opacity: 1; animation: gf-pop 520ms var(--ease-back); }
 .is-rankup .rank-ring { animation: pulse 520ms var(--ease-back); }
 
-@keyframes pop-in { from { translate: 0 8px; scale: 0.6; opacity: 0; } }
+/* Named apart from ui.css's keyframes: one stylesheet, and a later @keyframes of the same name wins. */
+@keyframes gf-pop { from { translate: 0 8px; scale: 0.6; opacity: 0; } }
 @keyframes pulse { 50% { scale: 1.22; } }
 
 /* ===== Claim dots ===== */
@@ -173,7 +174,7 @@
   font: 900 0.6875rem/16px var(--font);
   text-align: center;
   pointer-events: none;
-  animation: pop-in 320ms var(--ease-back);
+  animation: gf-pop 320ms var(--ease-back);
 }
 
 /* ===== Snow Globe art ===== */
@@ -257,8 +258,6 @@
 
 .rv.is-open .rv-rays { opacity: 1; animation: spin 9s linear infinite; }
 
-@keyframes spin { to { rotate: 360deg; } }
-
 .rv-globe {
   inset: 0;
   transform-origin: 50% 90%;
@@ -267,7 +266,7 @@
 
 .rv.is-shake .rv-globe {
   opacity: 1;
-  animation: pop-in 300ms var(--ease-back), shake 1100ms ease-in-out 120ms;
+  animation: gf-pop 300ms var(--ease-back), globe-shake 1100ms ease-in-out 120ms;
 }
 
 .rv.is-burst .rv-globe {
@@ -277,7 +276,7 @@
   transition: 360ms var(--ease-out);
 }
 
-@keyframes shake {
+@keyframes globe-shake {
   10%, 34%, 58% { rotate: -10deg; }
   22%, 46% { rotate: 9deg; }
   70% { rotate: 12deg; translate: 0 -6px; }
@@ -429,10 +428,10 @@
   background: linear-gradient(160deg, #fff 35%, var(--sky));
 }
 
-.pf-globes > svg { height: 64px; animation: bob 2.2s ease-in-out infinite; }
+.pf-globes > svg { height: 64px; animation: globe-bob 2.2s ease-in-out infinite; }
 .pf-globes strong { display: block; font-size: 1.125rem; font-weight: 900; color: var(--ink); }
 
-@keyframes bob { 50% { translate: 0 -4px; rotate: -3deg; } }
+@keyframes globe-bob { 50% { translate: 0 -4px; rotate: -3deg; } }
 
 /* The rank road: the current rank and the next five with their rewards. */
 .pf-road {
