@@ -9,6 +9,7 @@ import { keepAlive, state, waitForScreen } from './helpers.ts';
 interface SavedStats {
   runs: number;
   bestMinutes: number;
+  easedBest: number;
 }
 
 async function openTab(context: BrowserContext, save: object | null, query = 'test=1'): Promise<Page> {
@@ -60,12 +61,12 @@ test('runs from two tabs all count', async ({ context }) => {
   const m3 = await playRun(a, 400);
   // The tabs hear of each other's writes late under load (a storage event can lag by ~0.5 s); a
   // write made without the other tab's runs is merged and written back as soon as it is heard of.
-  // So the stored save settles on every run, and stays there.
-  await expect.poll(async () => (await saved(a)).stats, { timeout: 10_000 }).toEqual(
-    expect.objectContaining({ runs: 6, bestMinutes: Math.max(m1, m2, m3) }),
-  );
+  // So the stored save settles on every run, and stays there. (A v1 save with 3 runs plays comfort
+  // rung 2: the runs' best is the eased best.)
+  const settled = expect.objectContaining({ runs: 6, easedBest: Math.max(m1, m2, m3) });
+  await expect.poll(async () => (await saved(a)).stats, { timeout: 10_000 }).toEqual(settled);
   await a.waitForTimeout(1000);
-  for (const page of [a, b]) expect((await saved(page)).stats).toEqual(expect.objectContaining({ runs: 6, bestMinutes: Math.max(m1, m2, m3) }));
+  for (const page of [a, b]) expect((await saved(page)).stats).toEqual(settled);
 });
 
 test('a purchase in one tab survives a run finishing in the other', async ({ context }) => {
