@@ -79,7 +79,7 @@
 }
 
 .rank-name {
-  overflow: hidden;
+  overflow: clip;
   font-weight: 900;
   font-size: 0.9375rem;
   white-space: nowrap;
@@ -605,7 +605,7 @@
 
 .pf-node-t {
   max-width: 100%;
-  overflow: hidden;
+  overflow: clip;
   font-size: 0.75rem;
   color: var(--ink-2);
   white-space: nowrap;
@@ -647,7 +647,7 @@
 .pf-trophy.is-on { background: #fff; box-shadow: inset 0 0 0 1.5px var(--line); }
 
 .pf-trophy-name {
-  overflow: hidden;
+  overflow: clip;
   font-weight: 800;
   font-size: 0.9375rem;
   line-height: 1.15;

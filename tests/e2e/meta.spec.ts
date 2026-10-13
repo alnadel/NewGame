@@ -1,7 +1,7 @@
-// v1.1 meta and UI checks (V1_1_PLAN UM2-UM10): challenge names and the warm-up note, Morning
-// Snow once per date, the Sun Strip against the share strip, the Daily's forecast header, the cue
-// line, and layouts of the Title, Results and the Journal at phone and desktop sizes (no overlaps,
-// no sideways scroll). Screenshots are attached, not asserted.
+// v1.1 meta and UI checks (V1_1_PLAN UM2-UM10): challenge names and the warm-up note, no Morning
+// Snow since v1.4, the Sun Strip against the share strip, the Daily's forecast header, the cue
+// line, and layouts of the Title, Results and the Profile's records (the Journal until v1.4) at
+// phone and desktop sizes (no overlaps, no sideways scroll). Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { challengeCode, keepAlive, openGame, seedSave, waitForScreen } from './helpers.ts';
 
@@ -122,15 +122,10 @@ test.describe('challenges (UM2)', () => {
   });
 });
 
-test('two runs on one date pay Morning Snow once (UM5)', async ({ page }) => {
+test('runs pay no Morning Snow since v1.4 (the daily streak pays instead)', async ({ page }) => {
   await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 3 } });
   await openGame(page);
   await startRun(page);
-  await die(page);
-  await expect(page.locator('.res-awards')).toContainText('Morning Snow +15');
-  await expect(page.locator('.res-retry')).toHaveAttribute('aria-disabled', 'false');
-  await page.locator('.res-retry').click();
-  await waitForScreen(page, 'play');
   await die(page);
   await page.waitForTimeout(400);
   await expect(page.locator('.res-awards')).not.toContainText('Morning Snow');
@@ -201,16 +196,16 @@ for (const size of SIZES) {
     await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
   });
 
-  test(`Journal at ${size.width}x${size.height}: 30 runs, no sideways scroll, back to the Title (UM10)`, async ({ page }, info) => {
+  test(`Profile records at ${size.width}x${size.height}: 30 runs, no sideways scroll, back to the Title (UM10, v1.4)`, async ({ page }, info) => {
     await seedSave(page, richSave());
     await page.setViewportSize(size);
     await openGame(page);
-    await page.getByRole('button', { name: /^Journal, best/ }).click();
-    await waitForScreen(page, 'journal');
-    await expect(page.locator('.jbar')).toHaveCount(30);
-    await expect(page.locator('.scr-journal .sr-only').first()).toHaveText(/^Last 30 runs\. Best: /);
-    await noSidewaysScroll(page, 'Journal');
-    await info.attach(`journal-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await page.getByRole('button', { name: /^Profile, best/ }).click();
+    await waitForScreen(page, 'profile');
+    await expect(page.locator('.pf-chart i')).toHaveCount(30);
+    await expect(page.locator('.scr-profile .sr-only', { hasText: /^Last 30 runs/ })).toHaveText(/^Last 30 runs\. Best: /);
+    await noSidewaysScroll(page, 'Profile');
+    await info.attach(`profile-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
     await page.keyboard.press('Escape');
     await waitForScreen(page, 'title');
   });
@@ -288,14 +283,14 @@ for (const size of [
   });
 }
 
-test('Missions reach the Journal and come back (UM10)', async ({ page }) => {
+test('Missions reach the trophies in the Profile and come back (UM10, v1.4)', async ({ page }) => {
   await seedSave(page, richSave());
   await openGame(page);
   await page.locator('.tray button[aria-label="Missions"]').click();
   await waitForScreen(page, 'missions');
-  await expect(page.locator('.week-days li')).toHaveCount(7);
-  await page.locator('.scr-missions').getByRole('button', { name: 'Journal' }).click();
-  await waitForScreen(page, 'journal');
+  await expect(page.locator('.scr-missions .streak-days li')).toHaveCount(7);
+  await page.locator('.scr-missions').getByRole('button', { name: 'Trophies' }).click();
+  await waitForScreen(page, 'profile');
   await page.keyboard.press('Escape');
   await waitForScreen(page, 'missions');
 });
