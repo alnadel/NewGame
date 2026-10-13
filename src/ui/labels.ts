@@ -335,7 +335,7 @@ export function chapterTitle(id: number, name: string): string {
 export function levelTileLabel(level: Pick<LevelDef, 'id' | 'name' | 'introduces'>, stars: number, playable: boolean): string {
   const concept = level.introduces ? CONCEPTS[level.introduces] : null;
   const parts = [`Level ${level.id}, ${level.name}.`];
-  if (concept) parts.push(`Teaches ${concept.name}: ${concept.blurb}`);
+  if (concept) parts.push(concept.name === level.name ? `Teaches: ${concept.blurb}` : `Teaches ${concept.name}: ${concept.blurb}`);
   parts.push(playable ? (stars > 0 ? `${starsLabel(stars)}.` : 'Not passed yet.') : 'Locked.');
   return parts.join(' ');
 }

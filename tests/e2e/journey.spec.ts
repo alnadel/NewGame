@@ -36,7 +36,7 @@ test('the Title pill opens the map: 200 tiles, locks past the unlocked level, Co
   await expect(page.locator('.scr-journey .chapter')).toHaveCount(20);
   // Levels 1-40 carry their concept; the tile names it.
   await expect(page.locator('.lvl-tile[data-level="6"] .lvl-concept')).toHaveCount(1);
-  await expect(page.locator('.lvl-tile[data-level="6"]')).toHaveAttribute('aria-label', /Teaches /);
+  await expect(page.locator('.lvl-tile[data-level="6"]')).toHaveAttribute('aria-label', /Teaches[: ]/);
   await expect(page.locator('.lvl-tile[data-level="41"] .lvl-concept')).toHaveCount(0);
   // A locked tile (aria-disabled, so Playwright needs force) stays on the map and says what to finish first.
   await page.locator('.lvl-tile[data-level="9"]').click({ force: true });

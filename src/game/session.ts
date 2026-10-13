@@ -106,7 +106,7 @@ import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
-import { campaignConfig, conceptLabel, FINISH_FREEZE_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
+import { campaignConfig, FINISH_FREEZE_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
 
 /** The sim's finish-line event (CAMPAIGN_PLAN §2). */
 type LevelWon = Extract<SimEvent, { e: 'levelWon' }>;
@@ -1737,8 +1737,9 @@ export class Session {
       goalLine: goalLine(level, result.stats, passed),
     };
     if (level.introduces) {
+      // The sheet reads "New: {name} {blurb}"; a concept named after its level keeps just the blurb.
       const c = CONCEPTS[level.introduces];
-      view.introduces = { name: conceptLabel(level, c.id), blurb: c.blurb };
+      view.introduces = { name: c.name === level.name ? '' : c.name, blurb: c.blurb };
     }
     return view;
   }

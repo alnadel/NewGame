@@ -71,7 +71,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       const lock = h('span', { class: 'lvl-lock' }, icon('lock'));
       const el = h(
         'button',
-        { class: 'lvl-tile pe', type: 'button', 'data-level': level.id, title: concept ? `${concept.name}: ${concept.blurb}` : null },
+        { class: 'lvl-tile pe', type: 'button', 'data-level': level.id, title: concept ? (concept.name === level.name ? concept.blurb : `${concept.name}: ${concept.blurb}`) : null },
         h('span', { class: 'lvl-num num' }, String(level.id)),
         concept ? h('span', { class: 'lvl-concept' }, icon(conceptIcon(concept.id))) : null,
         h('span', { class: 'lvl-stars' }, ...stars),

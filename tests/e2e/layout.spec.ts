@@ -258,15 +258,20 @@ for (const size of [
   { width: 320, height: 568 },
   { width: 360, height: 640 },
 ]) {
-  test(`rich save at ${size.width}x${size.height}: the chips clear Nubs' halo`, async ({ page }, info) => {
+  test(`rich save at ${size.width}x${size.height}: the bottom cluster clears Nubs' halo`, async ({ page }, info) => {
     await seedSave(page, RICH_SAVE);
     await page.setViewportSize(size);
     await openGame(page);
     await page.waitForTimeout(300);
-    const chips = await boxOf(page.locator('.chips'), 'chips');
+    // The cluster's top row is the chips; on a tiny screen the Title drops them (no-chips) so the
+    // Journey pill and the tray fit below the halo, and the pill is the top row then.
+    const noChips = await page.locator('.title-bottom.no-chips').count();
+    const topRow = await boxOf(page.locator(noChips ? '.scr-title .journey-pill' : '.chips'), noChips ? 'journey pill' : 'chips');
+    if (noChips) await expect(page.locator('.chips')).toBeHidden();
+    else await expect(page.locator('.chips')).toBeVisible();
     const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
     const haloR = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('ui')!).getPropertyValue('--halo-r')));
-    expect(chips.y, 'chips top below Nubs + halo').toBeGreaterThanOrEqual(nubs.y + haloR);
+    expect(topRow.y, 'cluster top below Nubs + halo').toBeGreaterThanOrEqual(nubs.y + haloR);
     await info.attach(`rich-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
   });
 }
