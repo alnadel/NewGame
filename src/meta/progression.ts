@@ -10,6 +10,7 @@ import { CAMPAIGN_LEVEL_COUNT, cloneSave, defaults, HISTORY_KEEP, pruneDaily, pr
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
 import { markSunnyDay } from './week.ts';
+import type { GamifyOutcome } from './gamify.ts';
 
 export { recentBest, recentBestAt } from './save.ts';
 
@@ -100,6 +101,8 @@ export interface RunOutcome {
   comfortAfter: number;
   /** Journey runs: how the level went (absent for every other mode). */
   campaign?: CampaignOutcome;
+  /** v1.4: XP, rank, rewards and unlocks (meta/gamify.ts). V14-SHIM: optional until the meta builder fills it. */
+  gamify?: GamifyOutcome;
 }
 
 /** A Journey level's result folded into the save. */

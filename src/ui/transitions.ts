@@ -6,7 +6,9 @@ import type { ScreenId } from './types.ts';
 const LEGAL: Readonly<Record<ScreenId, readonly ScreenId[]>> = {
   // 'play' straight from boot covers deep links such as ?bot= autoplay.
   boot: ['title', 'play'],
-  title: ['play', 'daily', 'wardrobe', 'missions', 'settings', 'journal', 'journey'],
+  title: ['play', 'daily', 'wardrobe', 'missions', 'settings', 'journal', 'journey', 'profile'],
+  // v1.4: the Profile (rank, trophies, collection) opens from the rank badge.
+  profile: ['title', 'wardrobe', 'journey'],
   daily: ['play', 'title'],
   wardrobe: ['title'],
   missions: ['title', 'journal'],

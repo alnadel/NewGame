@@ -25,6 +25,7 @@ import { createJournalScreen } from './screens/journal.ts';
 import { createJourneyScreen } from './screens/journey.ts';
 import { createMissionsScreen } from './screens/missions.ts';
 import { createPauseScreen } from './screens/pause.ts';
+import { createProfileScreen } from './screens/profile.ts';
 import { createPlayScreen } from './screens/play.ts';
 import { createResultsScreen } from './screens/results.ts';
 import { createSettingsScreen } from './screens/settings.ts';
@@ -130,6 +131,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     daily,
     missions: createMissionsScreen(ctx),
     wardrobe: createWardrobeScreen(ctx),
+    profile: createProfileScreen(ctx),
   };
 
   const screenLayer = h('div', { class: 'screens' });

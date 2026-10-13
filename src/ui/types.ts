@@ -18,7 +18,8 @@ export type ScreenId =
   | 'missions'
   | 'wardrobe'
   | 'journal'
-  | 'journey';
+  | 'journey'
+  | 'profile';
 
 /**
  * The plain-language cue line above Nubs (ui.showCue):
@@ -41,7 +42,13 @@ export type UiSoundName =
   | 'deny'
   | 'stamp'
   | 'unlock'
-  | 'count';
+  | 'count'
+  // v1.4 rewards: a reward lands, a rank up, a Snow Globe opens, a claim, a counter tick.
+  | 'reward'
+  | 'rankUp'
+  | 'open'
+  | 'claim'
+  | 'tick';
 
 /** Data for the Results sheet. */
 export interface ResultsView {
@@ -157,6 +164,11 @@ export interface UiCallbacks {
   sharePostcard(): Promise<ShareOutcome>;
   /** Missions or Results > Swap on a stale mission: apply meta swapMission, then ui.setSave. */
   swapMission(slotId: string): void;
+  /**
+   * v1.4: apply a pure meta change to the save (claim a reward, open a globe, mark seen), persist
+   * it and push it back with ui.setSave. Returns the new save.
+   */
+  updateSave(change: (save: Save) => Save): Save;
   /** Any Settings change, with the full new settings. Persist and apply (volumes, sensitivity…). */
   settingsChanged(settings: Settings): void;
   /** Wardrobe purchase; return true on success (then push the new save with ui.setSave). */

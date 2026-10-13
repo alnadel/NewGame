@@ -490,6 +490,13 @@ export class Session {
         uiSound: (name) => this.uiSound(name),
         renderWardrobePreview: (canvas, equipped, subject) =>
           subject === 'sun' ? renderSunPreview(canvas, equippedLooks(equipped).shades) : renderWardrobePreview(canvas, equipped),
+        updateSave: (change) => {
+          const next = change(store.get());
+          store.set(next);
+          store.flush();
+          this.ui.setSave(next);
+          return next;
+        },
         swapMission: (slotId) => {
           const next = swapMission(store.get(), slotId);
           store.set(next);
@@ -2158,6 +2165,11 @@ export class Session {
       case 'equip':
       case 'unlock':
       case 'stamp':
+      // V14-SHIM: the reward sounds borrow the buy chime until the audio has their own.
+      case 'reward':
+      case 'rankUp':
+      case 'open':
+      case 'claim':
         a.play('uiBuy');
         break;
       case 'deny':

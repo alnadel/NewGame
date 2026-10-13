@@ -34,6 +34,7 @@ const VARIANTS: Record<LabScreen, readonly string[]> = {
   wardrobe: ['regular', 'hats', 'shades', 'poor'],
   journal: ['regular', 'empty'],
   journey: ['regular', 'fresh', 'unlock-all', 'far'],
+  profile: ['regular', 'fresh'],
   rotate: ['regular'],
 };
 /** A Title run's Day 1 in the lab. */
@@ -449,6 +450,11 @@ function mount(screen: LabScreen, variant: string): void {
       log('sharePostcard');
       return 'saved';
     },
+    updateSave: (change) => {
+      save = change(save);
+      ui?.setSave(save);
+      return save;
+    },
     swapMission: (slotId) => {
       save = swapMission(save, slotId);
       ui?.setSave(save);
@@ -512,6 +518,7 @@ function mount(screen: LabScreen, variant: string): void {
     wardrobe: ['title', 'wardrobe'],
     journal: ['title', 'journal'],
     journey: ['title', 'journey'],
+    profile: ['title', 'profile'],
     rotate: ['title', 'play'],
   }[screen] as ScreenId[];
   for (const id of path) ui.show(id);
