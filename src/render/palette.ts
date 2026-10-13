@@ -60,7 +60,7 @@ export const PLAIN_THEME: Theme = th('#E6F2CF', '#F2D9C4', '#FFFFFF', '#FFFFFF',
  */
 const CHAPTER_THEMES: readonly Theme[] = [
   th('#E6F2CF', '#F2D9C4', '#FFFFFF', '#FFF4DC', 0, 'petal'),
-  th('#E6F2CF', '#F2D9C4', '#FFFFFF', '#FFF4DC', 0, ''),
+  th('#E6F2CF', '#F4D6BE', '#FFF4EA', '#FFD9B0', 0.04, ''),
   th('#E2EEF8', '#E6E6F0', '#E8F0FF', '#CFE6FF', 0.1, 'snow'),
   th('#E8E2F0', '#E8D6F0', '#F0E4FF', '#B9A2E6', 0.08, ''),
   th('#D4EEBC', '#F2D9C4', '#FFF6E8', '#E8FFD8', 0.05, 'petal'),
