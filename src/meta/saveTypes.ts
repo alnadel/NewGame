@@ -70,6 +70,8 @@ export interface RunRecord {
   s: number;
   r: number;
   d: string;
+  /** 1: the warm-up run after the climb to standard (r is 4, the rules were eased: days.ts STANDARD_WARMUP). */
+  w?: 1;
 }
 
 export interface WeekState {

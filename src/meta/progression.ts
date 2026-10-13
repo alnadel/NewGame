@@ -1,7 +1,7 @@
 // Pure progression rules (V1_PLAN §11, V1_1_PLAN UM3-UM6, GDD §6-§8). Every function takes a save
 // and returns a new one; inputs are never mutated, so the session can diff, test and persist freely.
 
-import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, MINUTES_PER_DAY, type HourGlyph, type RunResult } from '../core/index.ts';
+import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, isWarmup, MINUTES_PER_DAY, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { DailyEntry, Save } from './saveTypes.ts';
 import {
   ACHIEVEMENTS,
@@ -125,6 +125,8 @@ export interface ApplyRunOptions {
   playSeconds?: number;
   /** Endless runs: the comfort rung played (0..4; standard when absent). */
   rung?: number;
+  /** Endless runs: the rung-4 run was the warm-up after the climb (days.ts STANDARD_WARMUP). */
+  warmup?: boolean;
 }
 
 type AchievementCheck = (save: Save, run: RunResult, options: ApplyRunOptions) => boolean;
@@ -148,6 +150,15 @@ const ACHIEVEMENT_CHECKS: Readonly<Record<AchievementId, AchievementCheck>> = {
   'night-gardener': (_s, r) => r.stats.flowers >= 30,
   forecaster: (s) => (s.stats.forecastNoons & FORECASTER_MASK) === FORECASTER_MASK,
 };
+
+/**
+ * The next endless run is the warm-up after the climb to standard (days.ts STANDARD_WARMUP): comfort
+ * is on, the ladder stands at standard and the last endless run was played at R3.
+ */
+export function warmupDue(save: Pick<Save, 'settings' | 'stats' | 'history'>): boolean {
+  const last = save.history[save.history.length - 1];
+  return save.settings.comfort && save.stats.runs > 0 && last !== undefined && isWarmup(save.stats.comfort, last.r);
+}
 
 /**
  * Unlocked after DAILY_UNLOCK_RUNS completed runs. Any stored Daily entry also counts, so players
@@ -223,9 +234,13 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   // Endless runs: the history and the comfort ladder (Daily and challenge runs never touch them).
   let pace: string | null = null;
   if (r.mode === 'endless') {
-    next.history.push({ m: r.minutes, s: rawSnow, r: options.rung ?? COMFORT_MAX, d: today });
+    const last = save.history[save.history.length - 1];
+    const rung = options.rung ?? COMFORT_MAX;
+    next.history.push({ m: r.minutes, s: rawSnow, r: rung, d: today, ...(options.warmup && rung === COMFORT_MAX ? { w: 1 as const } : {}) });
     next.history = next.history.slice(-HISTORY_KEEP);
-    if (next.settings.comfort) s.comfort = comfortAfterRun(options.rung ?? s.comfort, r.minutes);
+    // The climb to standard looks at the endless run before this one (a warm-up never counts).
+    const prev = last && last.w === undefined ? { rung: last.r, minutes: last.m } : null;
+    if (next.settings.comfort) s.comfort = comfortAfterRun(options.rung ?? s.comfort, r.minutes, prev);
     pace = paceLine(next.history);
   }
 

@@ -266,7 +266,7 @@ export function journalChart(history: Save['history']): JournalChart {
     day: Math.floor(e.m / MINUTES_PER_DAY) + 1,
     height: top > 0 ? e.m / top : 0,
     best: i === bestAt,
-    eased: e.r < COMFORT_MAX,
+    eased: e.r < COMFORT_MAX || e.w === 1,
   }));
   const last = history.slice(-10).map((e) => e.m);
   const before = history.slice(-20, -10).map((e) => e.m);

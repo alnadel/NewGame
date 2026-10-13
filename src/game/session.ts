@@ -58,6 +58,7 @@ import {
   setDailyPar,
   shouldShowInstallSheet,
   swapMission,
+  warmupDue,
   type ApplyRunOptions,
   type RunOutcome,
 } from '../meta/progression.ts';
@@ -265,6 +266,12 @@ export class Session {
   private nextBuildRung = -1;
   /** The comfort rung a run was built at (endless runs from the ladder; others are absent). */
   private readonly rungOf = new WeakMap<SimState, number>();
+  /** Endless runs built as the warm-up after the climb to standard (days.ts STANDARD_WARMUP). */
+  private readonly warmups = new WeakSet<SimState>();
+  private cfgWarmup = false;
+  private nextBuildWarmup = false;
+  /** The run in play is the warm-up (applyRunResult records it as eased). */
+  private runWarmup = false;
   /** The rung the last runConfig() built (−1: not from the ladder). */
   private cfgRung = -1;
   /** The rung the current run is played at (−1: not an endless ladder run). */
@@ -941,6 +948,7 @@ export class Session {
   private makeRun(kind: RunKind, date?: string, ahead?: number): SimState {
     const run = createRun(this.runConfig(kind, date), undefined, ahead);
     this.rungOf.set(run, this.cfgRung);
+    if (this.cfgWarmup) this.warmups.add(run);
     return run;
   }
 
@@ -964,6 +972,7 @@ export class Session {
     this.dailyDate = null;
     this.dailyScored = false;
     this.cfgRung = -1;
+    this.cfgWarmup = false;
     if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
       cfg = this.dailyConfig(d, rm);
@@ -998,10 +1007,13 @@ export class Session {
       } else {
         // The comfort ladder (A2); ?rung= forces a rung, a forced forecast plays the standard rules.
         const rung = p.rung ?? (p.forecast !== null ? COMFORT_MAX : this.comfortRung());
-        const r = rungConfig(rung, { tutorialDone: save.flags.tutorialDone });
+        // The first run at standard after the climb is the warm-up (not when a rung is forced).
+        const warmup = p.rung === null && p.forecast === null && warmupDue(save);
+        const r = rungConfig(rung, { tutorialDone: save.flags.tutorialDone, warmup });
         cfg = { seed, mode: 'endless', profile: r.profile, tutorial: r.tutorial, reducedMotion: rm, drain: r.drain, noonCloud: r.noonCloud };
         if (r.lesson) cfg.lesson = true;
         this.cfgRung = rung;
+        this.cfgWarmup = r.warmup;
       }
       this.kind = 'endless';
     }
@@ -1126,6 +1138,7 @@ export class Session {
     this.cueHold = 0;
     this.meltWarn = false;
     this.runRung = this.rungOf.get(run) ?? -1;
+    this.runWarmup = this.warmups.has(run);
     const store = this.d.store;
     const save = store.get();
     this.dailyTry = null;
@@ -1487,6 +1500,7 @@ export class Session {
       const options: ApplyRunOptions = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
       if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
       if (this.runRung >= 0) options.rung = this.runRung;
+      if (this.runWarmup) options.warmup = true;
       const { save: next, outcome } = applyRunResult(save, result, options);
       this.d.store.set(next);
       this.d.store.flush();
@@ -1574,6 +1588,7 @@ export class Session {
     if (this.kind !== 'endless' || this.nextRun || this.nextBuild) return;
     this.nextBuild = prepareRun(this.endlessConfigQuiet());
     this.nextBuildRung = this.cfgRung;
+    this.nextBuildWarmup = this.cfgWarmup;
   }
 
   /**
@@ -1623,6 +1638,7 @@ export class Session {
     this.nextBuild = null;
     this.nextRun = createRun(b.cfg, b);
     this.rungOf.set(this.nextRun, this.nextBuildRung);
+    if (this.nextBuildWarmup) this.warmups.add(this.nextRun);
   }
 
   /**
@@ -2013,6 +2029,7 @@ export class Session {
     f: number;
     profile: number;
     rung: number;
+    warmup: boolean;
     drain: number;
     noonCloud: number;
     forecast: string;
@@ -2030,6 +2047,7 @@ export class Session {
       f: s.nubs.f,
       profile: s.cfg.profile,
       rung: this.runActive ? this.runRung : (this.rungOf.get(s) ?? -1),
+      warmup: this.runActive ? this.runWarmup : this.warmups.has(s),
       drain: effectiveDrain(s),
       noonCloud: effectiveNoonCloud(s.cfg),
       forecast: s.params.forecast,

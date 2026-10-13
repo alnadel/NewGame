@@ -5,10 +5,12 @@ import {
   COMFORT_MAX,
   COMFORT_RUNGS,
   comfortAfterRun,
+  isWarmup,
   dayParams,
   effectiveNoonCloud,
   PROFILES,
   rungConfig,
+  STANDARD_WARMUP,
   type NoonCloud,
 } from '../../src/config/days.ts';
 import { TUNING } from '../../src/config/tuning.ts';
@@ -52,24 +54,43 @@ describe('comfort ladder', () => {
     expect(COMFORT_RUNGS.slice(1).map((r) => r.profile)).toEqual([1, 2, 3, 3]);
   });
 
-  it('comfortAfterRun from the tutorial: Day 3 → standard, else rung 1', () => {
+  it('comfortAfterRun from the tutorial: Day 3 → R3 (never straight to standard), else rung 1', () => {
     expect(comfortAfterRun(0, 0)).toBe(1);
     expect(comfortAfterRun(0, 720)).toBe(1);
     expect(comfortAfterRun(0, 1439)).toBe(1);
-    expect(comfortAfterRun(0, 1440)).toBe(4);
-    expect(comfortAfterRun(0, 9000)).toBe(4);
+    expect(comfortAfterRun(0, 1440)).toBe(3);
+    expect(comfortAfterRun(0, 9000)).toBe(3);
   });
 
-  it('comfortAfterRun from rungs 1-4: up from 12:30 PM, down before 11:00 AM, standard from Day 3, within [1, 4]', () => {
-    for (let r = 1; r <= 4; r++) {
-      expect(comfortAfterRun(r, 0)).toBe(Math.max(1, r - 1));
+  it('comfortAfterRun from rungs 1-2: up from 12:30 PM, down before 11:00 AM, Day 3 → R3, within [1, 3]', () => {
+    for (const r of [1, 2]) {
+      expect(comfortAfterRun(r, 0)).toBe(1);
       expect(comfortAfterRun(r, 299)).toBe(Math.max(1, r - 1));
       expect(comfortAfterRun(r, 300)).toBe(r);
       expect(comfortAfterRun(r, 389)).toBe(r);
-      expect(comfortAfterRun(r, 390)).toBe(Math.min(4, r + 1));
-      expect(comfortAfterRun(r, 1439)).toBe(Math.min(4, r + 1));
-      expect(comfortAfterRun(r, 1440)).toBe(4);
+      expect(comfortAfterRun(r, 390)).toBe(r + 1);
+      expect(comfortAfterRun(r, 1439)).toBe(r + 1);
+      expect(comfortAfterRun(r, 1440)).toBe(3);
+      // A strong run before it never skips R3.
+      expect(comfortAfterRun(r, 9000, { rung: 3, minutes: 9000 })).toBe(3);
     }
+  });
+
+  it('comfortAfterRun climbs to standard only from R3: two R3 runs in a row past 12:30 PM, or one into Day 3', () => {
+    expect(comfortAfterRun(3, 390)).toBe(3);
+    expect(comfortAfterRun(3, 1439, { rung: 2, minutes: 2000 })).toBe(3);
+    expect(comfortAfterRun(3, 1439, { rung: 3, minutes: 389 })).toBe(3);
+    expect(comfortAfterRun(3, 390, { rung: 3, minutes: 390 })).toBe(4);
+    expect(comfortAfterRun(3, 1440)).toBe(4);
+    // Rough runs still step down; middling ones stay.
+    expect(comfortAfterRun(3, 299, { rung: 3, minutes: 900 })).toBe(2);
+    expect(comfortAfterRun(3, 300, { rung: 3, minutes: 900 })).toBe(3);
+  });
+
+  it('comfortAfterRun at standard: down to R3 before 11:00 AM, else stays', () => {
+    expect(comfortAfterRun(4, 299)).toBe(3);
+    expect(comfortAfterRun(4, 300)).toBe(4);
+    expect(comfortAfterRun(4, 9000)).toBe(4);
     // Never back to the tutorial, and defensive inputs.
     expect(comfortAfterRun(1, 10)).toBe(1);
     expect(comfortAfterRun(9, 300)).toBe(4);
@@ -79,14 +100,26 @@ describe('comfort ladder', () => {
   });
 
   it('rungConfig gives the rung rules, the tutorial on rung 0 and the lesson on rungs 0-1 until passed', () => {
-    expect(rungConfig(0, { tutorialDone: false })).toEqual({ profile: 0, drain: 30, noonCloud: 1, tutorial: true, lesson: true });
-    expect(rungConfig(1, { tutorialDone: false })).toEqual({ profile: 1, drain: 35, noonCloud: 1, tutorial: false, lesson: true });
+    const base = { tutorial: false, lesson: false, warmup: false };
+    expect(rungConfig(0, { tutorialDone: false })).toEqual({ profile: 0, drain: 30, noonCloud: 1, tutorial: true, lesson: true, warmup: false });
+    expect(rungConfig(1, { tutorialDone: false })).toEqual({ ...base, profile: 1, drain: 35, noonCloud: 1, lesson: true });
     expect(rungConfig(1, { tutorialDone: true }).lesson).toBe(false);
     expect(rungConfig(0, { tutorialDone: true }).lesson).toBe(false);
-    expect(rungConfig(2, { tutorialDone: false })).toEqual({ profile: 2, drain: 38, noonCloud: 1, tutorial: false, lesson: false });
-    expect(rungConfig(3, { tutorialDone: true })).toEqual({ profile: 3, drain: 42, noonCloud: 1, tutorial: false, lesson: false });
-    expect(rungConfig(4, { tutorialDone: true })).toEqual({ profile: 3, drain: 55, noonCloud: 0, tutorial: false, lesson: false });
+    expect(rungConfig(2, { tutorialDone: false })).toEqual({ ...base, profile: 2, drain: 38, noonCloud: 1 });
+    expect(rungConfig(3, { tutorialDone: true })).toEqual({ ...base, profile: 3, drain: 42, noonCloud: 1 });
+    expect(rungConfig(4, { tutorialDone: true })).toEqual({ ...base, profile: 3, drain: 55, noonCloud: 0 });
     expect(rungConfig(17, { tutorialDone: true })).toEqual(rungConfig(4, { tutorialDone: true }));
+  });
+
+  it('the first run at standard after R3 is the warm-up: the standard world at drain 48 with the noon cloud', () => {
+    expect(isWarmup(4, 3)).toBe(true);
+    expect([isWarmup(4, 4), isWarmup(3, 3), isWarmup(4, 2), isWarmup(4, -1)]).toEqual([false, false, false, false]);
+    const w = rungConfig(4, { tutorialDone: true, warmup: true });
+    expect(w).toEqual({ profile: 3, drain: STANDARD_WARMUP.drain, noonCloud: 1, tutorial: false, lesson: false, warmup: true });
+    expect(STANDARD_WARMUP.drain).toBeGreaterThan(COMFORT_RUNGS[3]!.drain);
+    expect(STANDARD_WARMUP.drain).toBeLessThan(COMFORT_RUNGS[4]!.drain);
+    // Only rung 4 has a warm-up.
+    expect(rungConfig(3, { tutorialDone: true, warmup: true })).toEqual(rungConfig(3, { tutorialDone: true }));
   });
 });
 

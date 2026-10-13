@@ -12,6 +12,8 @@ export interface ShadyState {
   profile: number;
   /** Comfort rung of an endless ladder run, −1 otherwise. */
   rung: number;
+  /** The warm-up run after the climb to standard (eased rules at rung 4). */
+  warmup: boolean;
   drain: number;
   noonCloud: number;
   forecast: string;

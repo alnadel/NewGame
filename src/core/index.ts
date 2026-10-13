@@ -10,10 +10,12 @@ export {
   comfortAfterRun,
   dayParams,
   effectiveNoonCloud,
+  isWarmup,
   PROFILES,
   rungConfig,
+  STANDARD_WARMUP,
 } from '../config/days.ts';
-export type { BiomeId, ComfortRung, DayParams, DayPlan, NoonCloud, ProfileId, ProfileParams, RungConfig, SkyParams } from '../config/days.ts';
+export type { BiomeId, ComfortPrev, ComfortRung, DayParams, DayPlan, NoonCloud, ProfileId, ProfileParams, RungConfig, SkyParams } from '../config/days.ts';
 export { FORECAST_IDS, FORECAST_TUNING, FORECASTS, forecastFits, PLAN_START_DATE } from '../config/forecasts.ts';
 export type { ForecastId, ForecastInfo, ForecastTuning } from '../config/forecasts.ts';
 export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';

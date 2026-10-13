@@ -2,7 +2,7 @@
 // and its cues, wheel and keyboard turns, and the Title's Day Plan chip.
 import { expect, test, type Page } from '@playwright/test';
 import { planDay } from '../../src/core/index.ts';
-import { openGame, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
+import { keepAlive, openGame, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
 /** Records every text the cue line shows (a MutationObserver installed before the page's scripts). */
 async function recordCues(page: Page): Promise<void> {
@@ -32,6 +32,29 @@ test.describe('comfort ladder (A2)', () => {
       expect({ profile: s.profile, drain: s.drain, noonCloud: s.noonCloud, rung: s.rung }).toEqual(want);
       await ctx.close();
     }
+  });
+
+  test('the first run at standard after R3 is the warm-up (drain 48, noon cloud); the next one is standard', async ({ page }) => {
+    const r3 = { m: 450, s: 9, r: 3, d: '2026-10-12' };
+    await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 9, comfort: 4 }, history: [r3, r3] });
+    await openGame(page, 'test=1&seed=42');
+    let s = await state(page);
+    expect({ profile: s.profile, drain: s.drain, noonCloud: s.noonCloud, rung: s.rung, warmup: s.warmup }).toEqual({ profile: 3, drain: 48, noonCloud: 1, rung: 4, warmup: true });
+    await keepAlive(page);
+    const v = page.viewportSize()!;
+    await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+    await waitForScreen(page, 'play');
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(4));
+    await expect.poll(async () => (await state(page)).minutes, { timeout: 30_000 }).toBeGreaterThanOrEqual(310);
+    await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
+    await waitForScreen(page, 'results', 15_000);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('shady.save') ?? '{}'));
+    expect(saved.history.at(-1)).toMatchObject({ r: 4, w: 1 });
+    expect(saved.stats.comfort).toBe(4);
+    await page.locator('.res-sheet button[aria-label="Home"]').click();
+    await waitForScreen(page, 'title', 15_000);
+    s = await state(page);
+    expect({ drain: s.drain, noonCloud: s.noonCloud, rung: s.rung, warmup: s.warmup }).toEqual({ drain: 55, noonCloud: 0, rung: 4, warmup: false });
   });
 
   test('?rung= forces a rung for endless runs', async ({ page }) => {

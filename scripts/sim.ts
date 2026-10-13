@@ -27,14 +27,15 @@
 //
 // --career N plays N careers of R runs (default 40) on the comfort ladder: run seed
 // hashString(`career-${c}-${r}`), run 0 at rung 0 (tutorial, lesson), then rungConfig(rung) with the
-// lesson until a lessonDone, and rung = comfortAfterRun(rung, minutes) after each run. --meta folds
+// lesson until a lessonDone (the warm-up rules on the first run at R4 after R3), and
+// rung = comfortAfterRun(rung, minutes, previous run) after each run. --meta folds
 // every run through the meta layer's exported API (A14): beginRun before each run, applyRunResult
 // after it, swapMission on slots stale ≥ 5 runs, the cheapest affordable cosmetic bought after each
 // run, one Daily try per sim-day once the Daily is unlocked; `today` advances a day every 5 runs.
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
-import { comfortAfterRun, rungConfig, type NoonCloud, type ProfileId } from '../src/config/days.ts';
+import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type NoonCloud, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
 import { dayStartTick, dayStartY } from '../src/core/clock.ts';
@@ -171,6 +172,8 @@ function jobConfig(j: Job, seed: number): RunConfig {
 
 interface CareerRun {
   rung: number;
+  /** The warm-up run (rung 4, eased rules) after the climb from R3. */
+  warmup: boolean;
   minutes: number;
   sec: number;
   missionDone: boolean;
@@ -223,19 +226,21 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
   const api = meta?.api;
   let save = api ? api.defaults(CAREER_START) : null;
   let rung = 0;
+  let prev: ComfortPrev | null = null;
+  let prevRung = -1;
   let tutorialDone = false;
   let lastDaily = '';
   const out: CareerOut = { runs: [], achievements: [], owned: 0, missing: meta?.missing ?? [] };
   for (let r = 0; r < runs; r++) {
     const today = dateOf(Math.floor(r / 5));
     if (api && save && api.beginRun) save = api.beginRun(save).save;
-    const rc = rungConfig(rung, { tutorialDone });
+    const rc = rungConfig(rung, { tutorialDone, warmup: isWarmup(rung, prevRung) });
     const cfg: RunConfig = { ...headlessConfig(hashString(`career-${c}-${r}`), rc.profile, rc.drain, rc.noonCloud), tutorial: rc.tutorial, lesson: rc.lesson };
     const { out: o, result } = playRun(cfg, kind, days);
     if (o.lessonDone) tutorialDone = true;
     let missionDone = false;
     if (api && save) {
-      const applied = api.applyRunResult(save, result, { today, playSeconds: o.ticks / 60, rung });
+      const applied = api.applyRunResult(save, result, { today, playSeconds: o.ticks / 60, rung, warmup: rc.warmup });
       save = applied.save;
       missionDone = applied.outcome.missionsCompleted.length > 0;
       if (api.swapMission) for (const slot of save.missions.active) if (!slot.done && (slot.stale ?? 0) >= 5) save = api.swapMission(save, slot.id);
@@ -261,8 +266,11 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
         if (dApplied.outcome.missionsCompleted.length > 0) missionDone = true;
       }
     }
-    out.runs.push({ rung, minutes: o.minutes, sec: o.ticks / 60, missionDone });
-    rung = comfortAfterRun(rung, o.minutes);
+    out.runs.push({ rung, warmup: rc.warmup, minutes: o.minutes, sec: o.ticks / 60, missionDone });
+    const next = comfortAfterRun(rung, o.minutes, prev);
+    prev = rc.warmup ? null : { rung, minutes: o.minutes };
+    prevRung = rung;
+    rung = next;
   }
   if (save) {
     out.achievements = [...save.unlocks.achievements];
@@ -395,6 +403,24 @@ async function careerMain(workers: number, days: number): Promise<void> {
     const std = out.filter((o) => o.runs.slice(1).every((r) => r.rung === 4)).length;
     const r6 = rungAt(5);
     console.log(`standard rung (R4) on every run from run 2: ${((100 * std) / out.length).toFixed(0)}% of careers; at run 6 ${((100 * r6.filter((x) => x >= 3).length) / r6.length).toFixed(0)}% are at R3 or above`);
+  }
+  // The climb to standard (fix round 2): how often careers enter R4, and how the first run there goes.
+  let promotions = 0;
+  const firstAt4: CareerRun[] = [];
+  for (const o of out) {
+    o.runs.forEach((run, i) => {
+      if (run.rung === 4 && (i === 0 || (o.runs[i - 1] as CareerRun).rung !== 4)) {
+        promotions++;
+        firstAt4.push(run);
+      }
+    });
+  }
+  const at4 = out.flatMap((o) => o.runs.filter((r) => r.rung === 4 && !r.warmup));
+  const by20 = out.filter((o) => o.runs.slice(0, 20).some((r) => r.rung === 4)).length;
+  if (firstAt4.length > 0) {
+    console.log(
+      `climb to standard: ${(promotions / out.length).toFixed(2)} entries into R4 per career; first run there (warm-up) median ${median(firstAt4.map((r) => r.sec)).toFixed(1)} s, ${((100 * firstAt4.filter((r) => r.sec < 15).length) / firstAt4.length).toFixed(0)}% under 15 s; standard runs median ${at4.length ? median(at4.map((r) => r.sec)).toFixed(1) : '–'} s; ${((100 * by20) / out.length).toFixed(0)}% of careers reach R4 within 20 runs`,
+    );
   }
   const late: { beat: boolean }[] = [];
   for (const o of out) for (let r = 10; r < runs; r++) late.push({ beat: beatsRecent(o.runs, r) });

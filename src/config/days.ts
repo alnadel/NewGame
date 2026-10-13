@@ -130,39 +130,73 @@ export const COMFORT_RUNGS: readonly ComfortRung[] = Object.freeze([
 
 export const COMFORT_MAX = 4;
 
-/** comfortAfterRun thresholds (score minutes): a jump to standard, one rung up, one rung down. */
+/** comfortAfterRun thresholds (score minutes): Day 3, one rung up, one rung down. */
 export const COMFORT_STEPS = Object.freeze({ standard: 1440, up: 390, down: 300 });
+
+/**
+ * The first endless run at standard after the climb from R3 (comfortAfterRun's promotion): the
+ * standard world, but drain 48 with the noon cloud parked, a step between R3 (42) and R4 (55). It
+ * counts as eased (never a standard best); the run after it plays the full standard rules.
+ */
+export const STANDARD_WARMUP: ComfortRung = Object.freeze({ profile: 3, drain: 48, noonCloud: 1 });
+
+/** The previous endless run: the rung it was played at and its score. */
+export interface ComfortPrev {
+  readonly rung: number;
+  readonly minutes: number;
+}
 
 const clampRung = (r: number, lo: number): number => (r >= lo ? (r <= COMFORT_MAX ? Math.floor(r) : COMFORT_MAX) : lo);
 
 /**
- * The rung of the next endless run after a run at `rung` that scored `minutes`. From the tutorial
- * (rung 0): Day 3 → standard, else 1. From rung ≥ 1: Day 3 → standard, past 12:30 PM → one up,
- * before 11:00 AM → one down, else the same. Never back to the tutorial.
+ * The rung of the next endless run after a run at `rung` that scored `minutes` (`prev`: the
+ * endless run before it, if any). Never back to the tutorial; standard rules only from R3:
+ * - from the tutorial (rung 0): Day 3 → R3, else R1;
+ * - from R1-R2: Day 3 → R3, past 12:30 PM → one up, before 11:00 AM → one down (not below R1);
+ * - from R3: up to standard (R4) after two R3 runs in a row past 12:30 PM, or one into Day 3;
+ *   before 11:00 AM → R2;
+ * - from R4: before 11:00 AM → R3, else R4.
  *
- * Calibrated with the career sim on the humanDial model. Sending a tutorial run that reached night
- * straight to rung 2 cut runs 1-3 from a 71 s to a 43 s median. Stepping down below 10:00 AM kept
- * struggling players stuck at rung 2-3; 11:00 AM lets them ease off, and they climb back past 12:30 PM.
- * With the gentler R1 (fix round 1) runs 4-9 went from a 21 s to a 31 s median.
+ * Calibrated with the career sim on the humanDial and novice models. Sending a tutorial run that
+ * reached night straight to rung 2 cut runs 1-3 from a 71 s to a 43 s median. Stepping down below
+ * 10:00 AM kept struggling players stuck at rung 2-3; 11:00 AM lets them ease off, and they climb
+ * back past 12:30 PM. With the gentler R1 (fix round 1) runs 4-9 went from a 21 s to a 31 s median.
+ * Fix round 2: one good R3 run (or a Day-3 run on any rung) used to jump to standard, where the
+ * humanDial model melts before 11 AM 72% of the time, so players bounced R3 ↔ R4 (5.9 promotions in
+ * 30 runs); the two-run climb and the STANDARD_WARMUP run cut that to 2.5 and runs 10-25 went from a
+ * 21.6 s to a 37.9 s median, while 88% of humanDial careers (100% of novice) still reach standard
+ * within 20 runs.
  */
-export function comfortAfterRun(rung: number, minutes: number): number {
+export function comfortAfterRun(rung: number, minutes: number, prev: ComfortPrev | null = null): number {
   const S = COMFORT_STEPS;
   const r = clampRung(rung, 0);
-  if (minutes >= S.standard) return COMFORT_MAX;
-  if (r === 0) return 1;
+  if (r === 0) return minutes >= S.standard ? 3 : 1;
+  if (r < 3 && minutes >= S.standard) return 3;
+  if (r === 3 && minutes >= S.up) {
+    const twice = prev !== null && clampRung(prev.rung, 0) === 3 && prev.minutes >= S.up;
+    return minutes >= S.standard || twice ? COMFORT_MAX : 3;
+  }
   return clampRung(minutes >= S.up ? r + 1 : minutes < S.down ? r - 1 : r, 1);
+}
+
+/** True when an endless run at `rung` right after one at `prevRung` is the STANDARD_WARMUP run. */
+export function isWarmup(rung: number, prevRung: number): boolean {
+  return clampRung(rung, 0) === COMFORT_MAX && prevRung === COMFORT_MAX - 1;
 }
 
 /** The RunConfig fields of an endless run at `rung` (the session and the career sim both use it). */
 export interface RungConfig extends ComfortRung {
   readonly tutorial: boolean;
   readonly lesson: boolean;
+  /** The STANDARD_WARMUP run (`opts.warmup` at rung 4). */
+  readonly warmup: boolean;
 }
 
-export function rungConfig(rung: number, opts: { readonly tutorialDone: boolean }): RungConfig {
+export function rungConfig(rung: number, opts: { readonly tutorialDone: boolean; readonly warmup?: boolean }): RungConfig {
   const r = clampRung(rung, 0);
-  const c = COMFORT_RUNGS[r] as ComfortRung;
-  return { profile: c.profile, drain: c.drain, noonCloud: c.noonCloud, tutorial: r === 0, lesson: !opts.tutorialDone && r <= 1 };
+  const warmup = r === COMFORT_MAX && opts.warmup === true;
+  const c = warmup ? STANDARD_WARMUP : (COMFORT_RUNGS[r] as ComfortRung);
+  return { profile: c.profile, drain: c.drain, noonCloud: c.noonCloud, tutorial: r === 0, lesson: !opts.tutorialDone && r <= 1, warmup };
 }
 
 interface Row {

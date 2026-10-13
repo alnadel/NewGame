@@ -93,9 +93,13 @@ tutorialDone })` → `{ profile, drain, noonCloud, tutorial: rung === 0, lesson 
 | 3 | 3 | 42 | 1 | the Day Plan |
 | 4 | 3 | 55 | 0 | standard: the Daily's rules |
 
-`comfortAfterRun(rung, minutes)` (`COMFORT_STEPS = { standard: 1440, up: 390, down: 300 }`):
-Day 3 → 4; from rung 0 otherwise 1; from rung ≥ 1 past 12:30 PM one up, before 11:00 AM one down;
-clamped to [1, 4]. Meta stores the rung (`stats.comfort`).
+`comfortAfterRun(rung, minutes, prev?)` (`COMFORT_STEPS = { standard: 1440, up: 390, down: 300 }`;
+`prev` = the endless run before, `{ rung, minutes }`): from rung 0, Day 3 → 3, else 1; from rungs
+1-2, Day 3 → 3, past 12:30 PM one up, before 11:00 AM one down (not below 1); standard (4) only
+from R3, after two R3 runs in a row past 12:30 PM or one into Day 3 (before 11:00 AM → 2); from 4,
+before 11:00 AM → 3. The first run at 4 after R3 (`isWarmup(rung, prevRung)`) is the warm-up:
+`rungConfig(4, { tutorialDone, warmup: true })` plays `STANDARD_WARMUP` (p3, drain 48, noon cloud 1).
+Meta stores the rung (`stats.comfort`) and marks the warm-up in the history (`w: 1`).
 
 ### Building a run in slices
 `createRun(cfg)` generates the world through Nubs + 1600 u at once (≈ 20-60 ms in Node for Day 1).

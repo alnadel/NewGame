@@ -264,7 +264,9 @@ function sanitizeHistory(raw: unknown): RunRecord[] {
   const out: RunRecord[] = [];
   for (const e of Array.isArray(raw) ? raw : []) {
     if (!isRecord(e) || typeof e.d !== 'string' || !isDateString(e.d)) continue;
-    out.push({ m: int(e.m, 0, 0, MAX_MINUTES), s: int(e.s, 0, 0, MAX_SNOW), r: int(e.r, COMFORT_MAX, 0, COMFORT_MAX), d: e.d });
+    const rec: RunRecord = { m: int(e.m, 0, 0, MAX_MINUTES), s: int(e.s, 0, 0, MAX_SNOW), r: int(e.r, COMFORT_MAX, 0, COMFORT_MAX), d: e.d };
+    if (e.w === 1 && rec.r === COMFORT_MAX) rec.w = 1;
+    out.push(rec);
   }
   return out.slice(-HISTORY_KEEP);
 }

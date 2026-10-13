@@ -7,6 +7,7 @@ import { addDays } from '../../src/meta/daily.ts';
 import {
   activeMissionViews,
   applyRunResult,
+  warmupDue,
   beginRun,
   BEST_FROM_RUNS,
   buyCosmetic,
@@ -213,11 +214,29 @@ describe('comfort, history and pace', () => {
       s.stats.comfort = rung;
       return applyRunResult(s, run(minutes, {}, { mode, dailyDate: mode === 'daily' ? TODAY : undefined }), opts({ rung })).outcome.comfortAfter;
     };
-    // From the tutorial: Day 3 → standard, else 1.
-    expect([at(0, 100), at(0, 720), at(0, 1440)]).toEqual([1, 1, 4]);
-    // From rung ≥ 1: up past 12:30 PM, down before 11:00 AM, never below 1 or above 4.
-    expect([at(2, 390), at(2, 389), at(2, 299), at(2, 300), at(1, 10), at(4, 400), at(3, 1440)]).toEqual([3, 2, 1, 2, 1, 4, 4]);
+    // From the tutorial: Day 3 → R3, else 1.
+    expect([at(0, 100), at(0, 720), at(0, 1440)]).toEqual([1, 1, 3]);
+    // From rung ≥ 1: up past 12:30 PM, down before 11:00 AM, never below 1 or above 4; standard
+    // only from R3 (one R3 run past 12:30 PM isn't enough on its own, a Day-3 one is).
+    expect([at(2, 390), at(2, 389), at(2, 299), at(2, 300), at(1, 10), at(4, 400), at(3, 400), at(3, 1440)]).toEqual([3, 2, 1, 2, 1, 4, 3, 4]);
     expect(at(2, 1440, 'daily')).toBe(2);
+    // The second R3 run in a row past 12:30 PM climbs (the endless run before it is in the history).
+    const twice = quiet();
+    twice.stats.comfort = 3;
+    twice.history = [{ m: 450, s: 0, r: 3, d: TODAY }];
+    const climbed = applyRunResult(twice, run(400), opts({ rung: 3 })).save;
+    expect(climbed.stats.comfort).toBe(4);
+    // The next run is the warm-up, recorded as such; the one after it plays standard rules.
+    expect(warmupDue(climbed)).toBe(true);
+    const warmed = applyRunResult(climbed, run(320), opts({ rung: 4, warmup: true })).save;
+    expect(warmed.history.at(-1)).toEqual({ m: 320, s: 0, r: 4, d: TODAY, w: 1 });
+    expect([warmed.stats.comfort, warmupDue(warmed)]).toEqual([4, false]);
+    // A rough standard run steps down; back at R3 the climb needs two good runs again.
+    const back = applyRunResult(warmed, run(100), opts({ rung: 4 })).save;
+    expect(back.stats.comfort).toBe(3);
+    const once = applyRunResult(back, run(500), opts({ rung: 3 })).save;
+    expect(once.stats.comfort).toBe(3);
+    expect(applyRunResult(once, run(420), opts({ rung: 3 })).save.stats.comfort).toBe(4);
     // Adaptive comfort switched off: the rung stays.
     const off = quiet();
     off.stats.comfort = 2;

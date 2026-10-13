@@ -97,7 +97,7 @@ function dailyBoth(l: DailyEntry, r: DailyEntry, a: DailyEntry | undefined): Dai
   };
 }
 
-const runKey = (e: RunRecord): string => `${e.d}|${e.m}|${e.s}|${e.r}`;
+const runKey = (e: RunRecord): string => `${e.d}|${e.m}|${e.s}|${e.r}|${e.w ?? 0}`;
 
 /** The entries of `list` the ancestor doesn't account for (as a multiset), in order. */
 function added(a: readonly RunRecord[], list: readonly RunRecord[]): RunRecord[] {
