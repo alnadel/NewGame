@@ -3,7 +3,7 @@
 // biome's tile carries its own ground colour; where the biome changes (at a dawn) the boundary row
 // fades the new biome in over 64 u (GR11).
 
-import { biomeAtY, dayAtY, dayStartY, trailX, worldPlan, type BiomeId, type World } from '../core/index.ts';
+import { biomeAtY, trailX, worldDayAtY, worldDayStartY, worldPlan, type BiomeId, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { css, cssa, darken, lighten, mix, type Rgb } from './color.ts';
 import type { Palette } from './palette.ts';
@@ -108,10 +108,10 @@ const SEAM_HALF = 32;
  * NaN. The view never spans two of them.
  */
 export function biomeSeamIn(w: World, y0: number, y1: number): number {
-  const d0 = dayAtY(Math.max(0, y0));
-  const d1 = dayAtY(Math.max(0, y1));
+  const d0 = worldDayAtY(w, Math.max(0, y0));
+  const d1 = worldDayAtY(w, Math.max(0, y1));
   for (let d = d0 + 1; d <= d1; d++) {
-    if (worldPlan(w, d).biome !== worldPlan(w, d - 1).biome) return dayStartY(d);
+    if (worldPlan(w, d).biome !== worldPlan(w, d - 1).biome) return worldDayStartY(w, d);
   }
   return Number.NaN;
 }

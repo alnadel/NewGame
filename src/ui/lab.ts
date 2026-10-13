@@ -133,7 +133,7 @@ function fakeRun(minutes: number, over: Partial<Stats>, extra: Partial<RunResult
 }
 
 /** A Journey level's run: finished (passed or not) or melted. */
-function levelRun(id: number, passed: boolean, stars: number, over: Partial<Stats>, line: string): RunResult {
+function levelRun(id: number, passed: boolean, stars: 0 | 1 | 2 | 3, over: Partial<Stats>, line: string): RunResult {
   const lv = levelDef(id);
   const run = fakeRun(lv ? lv.startMinute + lv.lengthMinutes : 360, over, { mode: 'campaign', profile: 3 }, line);
   run.level = { id, passed, stars, introduces: lv?.introduces ?? null };

@@ -37,7 +37,6 @@ import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from 
 import type { RenderScene } from '../render/renderer.ts';
 import { bossWeight } from '../render/sun.ts';
 import { addShake, addZoomPulse, holdZoom, OBLIQUE } from './camera.ts';
-import { CAMPAIGN, type SimStateV12 } from '../core/campaignShim.ts';
 import type { FixedClock } from './loop.ts';
 
 const MULT = ['×1', '×1', '×2', '×3', '×4', '×5'];
@@ -107,7 +106,7 @@ export class Fx {
           // forecast day the Day card names the weather (later days get theirs at dawn). A campaign
           // level had its intro card instead.
           const plan = worldPlan(s.world, s.day);
-          if (plan.forecast !== 'clear' && s.cfg.mode !== CAMPAIGN) showDayCard(sc.banners, s.day, plan.biome, plan.forecast, s.params.epsNoon);
+          if (plan.forecast !== 'clear' && s.cfg.mode !== 'campaign') showDayCard(sc.banners, s.day, plan.biome, plan.forecast, s.params.epsNoon);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.45);
           for (let i = 0; i < 5; i++) {
             spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny - 4, 2, rnd(-14, 14), rnd(-30, -10), rnd(8, 18), 0.45, 2.2, 5, 0xffffff);
@@ -382,7 +381,7 @@ export class Fx {
     }
     // Gusts (v1.2): while a gust turns the sun, wind streaks fly across the screen the way it pushes
     // (+1 counter-clockwise reads as a leftward drag), at most 14 at once.
-    const gust = (s as SimStateV12).sun.gust ?? 0;
+    const gust = s.sun.gust;
     if (gust !== 0) {
       this.gustAcc += dt * 16;
       while (this.gustAcc >= 1) {

@@ -873,7 +873,7 @@ describe('misc', () => {
 describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
   /** A finished Journey level: `passed` with `stars`, melted or short of the goal otherwise. */
   const level = (id: number, passed: boolean, stars: number, over: Partial<Stats> = {}): RunResult =>
-    run(360, { flakes: 12, snow: 30, ...over }, { mode: 'campaign', level: { id, passed, stars, introduces: null } });
+    run(360, { flakes: 12, snow: 30, ...over }, { mode: 'campaign', level: { id, passed, stars: stars as 0 | 1 | 2 | 3, introduces: null } });
 
   it('pays the run Snow plus the first-pass bonus (id × 2), once', () => {
     const first = applyRunResult(quiet(), level(6, true, 2), opts());

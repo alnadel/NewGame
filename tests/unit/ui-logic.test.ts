@@ -414,7 +414,7 @@ describe('Journey labels (CAMPAIGN_PLAN §5)', () => {
   it('kicks and announces a level', () => {
     expect(campaignKicker({ id: 12, passed: true })).toBe('Level 12 · Passed');
     expect(campaignKicker({ id: 2, passed: false })).toBe('Level 2 · Not passed');
-    const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 1, nightsReached: 0, minutes: 360, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100 };
+    const stats = { flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0, cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 1, nightsReached: 0, minutes: 360, litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, minChill: 100 };
     const outcome = { newBest: false, prevBestMinutes: 0, bestEased: false, runSnow: 0, missionSnow: 0, bonusSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [], pace: null, paceDown: false, errand: null, recentBestBefore: 0, comfortAfter: 4 };
     const result: RunResult = {
       mode: 'campaign', seed: 1, profile: 3, drain: 40, noonCloud: 0, plan: [], minutes: 360, day: 1, clock: '', stats, hourGlyphs: [], melody: [], assisted: false,

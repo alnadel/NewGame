@@ -2,7 +2,7 @@
 // a pale-blue puddle on the ground (shade darkens it like the rest of the ground) and a teal
 // pennant with the sender's name on a pill above it.
 
-import { dayLength, trailX, yAtTime, type World } from '../core/index.ts';
+import { dayLength, trailX, worldYAtTime, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { roundRect } from './sprites.ts';
 
@@ -11,7 +11,7 @@ const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 /** Where a score of `minutes` sits on the trail (world u): writes [x, y] into out. */
 export function friendSpot(world: World, minutes: number, out: Float64Array): void {
   const day = Math.floor(minutes / 720) + 1;
-  const y = yAtTime(day, ((minutes % 720) / 720) * dayLength(day));
+  const y = worldYAtTime(world, day, ((minutes % 720) / 720) * dayLength(day));
   out[0] = trailX(world.trail, y);
   out[1] = y;
 }

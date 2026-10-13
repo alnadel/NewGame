@@ -10,7 +10,7 @@
 // above its pin head, and is left out (the pin dot stays) when it still doesn't fit. The callouts
 // fade in only once the camera pull has finished, so they never slide across the screen.
 
-import { dayAtY, dayLength, historyAt, historyLength, trailX, yAtTime, type Caster, type SimState } from '../core/index.ts';
+import { dayLength, historyAt, historyLength, trailX, worldDayAtY, worldYAtTime, type Caster, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { setMapping } from '../game/camera.ts';
 import { css, cssa, hex, mix, type Rgb } from './color.ts';
@@ -201,15 +201,15 @@ function drawHourTicks(g: CanvasRenderingContext2D, v: View, s: SimState, m: Map
   historyAt(s, 0, h4);
   const from = Math.max(m.y0, h4[1] as number);
   const top = Math.min(m.y1, s.nubs.y);
-  const d1 = dayAtY(Math.max(0, top));
+  const d1 = worldDayAtY(s.world, Math.max(0, top));
   g.font = `800 9px ${FONT}`;
   g.textBaseline = 'middle';
   g.textAlign = 'left';
   g.lineCap = 'round';
-  for (let day = dayAtY(Math.max(0, m.y0)); day <= d1; day++) {
+  for (let day = worldDayAtY(s.world, Math.max(0, m.y0)); day <= d1; day++) {
     const len = dayLength(day);
     for (let h = 1; h < 12; h++) {
-      const y = yAtTime(day, (h / 12) * len);
+      const y = worldYAtTime(s.world, day, (h / 12) * len);
       if (y < from || y > top) continue;
       const sx = v.ox + trailX(s.world.trail, y) * v.S;
       const sy = v.oy - y * v.S;

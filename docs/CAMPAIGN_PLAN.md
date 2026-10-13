@@ -2,15 +2,15 @@
 
 **Precedence for campaign work:** this file, then `V1_1_PLAN.md`, then `V1_PLAN.md`, then the module READMEs.
 
-**Status (uiMeta batch, branch `v12/uiMeta`):** §5 built: save v3 (`campaign`, `settings.unlockAll`,
-v2 → v3 migration, merge across tabs), `applyRunResult` for `'campaign'` with the three Journey
-achievements, `isLevelPlayable`/`totalStars`/`continueLevel`, the Journey screen, the Title's pill,
-the Settings testing toggle, the Results level variant, the Journey share text, the lab variants,
-unit tests and `tests/e2e/journey.spec.ts`. The core names of §2-§3 and the session's `nextLevel`/
-`openJourney` are `// V12-SHIM` stand-ins (`src/config/campaign.ts`, `src/core/index.ts`,
-`src/core/sim/events.ts`, `src/game/session.ts`) until the core and game batches land; integration
-removes them. Decisions: the tray keeps 4 buttons (the pill is the entry); the Results kicker reads
-"Level 12 · Passed" (short, beside Share); `RunStats.minChill` is optional in the shim only.
+**Status: built and integrated (v1.2).** The core (`src/config/campaign.ts`, `src/config/concepts.ts`,
+`src/core/level.ts`, the finish line and the behaviour concepts in the sim, `scripts/sim.ts --campaign`),
+the game/render layer (campaign runs, the intro card, the HUD progress bar, the finish stamp, the
+concept render signatures, `?level=N`) and the UI/meta layer (save v3, `applyRunResult` for
+`'campaign'` with the three Journey achievements, the Journey screen, the Title pill, the Settings
+testing toggle, the Results level variant, the Journey share text) all use the names of §2-§5 from
+`src/core/index.ts`; no `V12-SHIM` stand-in remains. Decisions: the tray keeps 4 buttons (the pill
+is the entry); the Results kicker reads "Level 12 · Passed"; a concept named after its teaching
+level ("Glass Garden") shows as "New concept" on the intro card and the Results.
 
 ## 1. What it is
 

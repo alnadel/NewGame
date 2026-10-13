@@ -173,8 +173,8 @@ See V1_1_PLAN §4.2 for the contracts.
 
 ## v1.2: the campaign (Journey)
 
-See CAMPAIGN_PLAN §4 for the contract; the core names come from `core/index.ts` (until the core
-batch lands, `core/campaignShim.ts` stands in, every stand-in marked `// V12-SHIM`).
+See CAMPAIGN_PLAN §4 for the contract; the core names (`CONCEPTS`, `levelDef`, `levelProgress`,
+`campaignConfig`, the `levelWon` event, phase `'won'`) come from `core/index.ts`.
 
 - **Runs**: `startRun('campaign', _, level)` builds `campaignConfig(level)` (the level's seed, profile
   3, no tutorial chunk, no Day Plan, its concepts as `mods`, drain, start time, biome and forecast;
@@ -190,7 +190,8 @@ batch lands, `core/campaignShim.ts` stands in, every stand-in marked `// V12-SHI
   checkered finish flag with the gate or eclipse marker at the midpoint, the Snow pill counts
   `flakes/target` or `snow/target` on goal levels, the clock stays, and a wind mark rides the
   progress head during a gust.
-- **Finish**: on `levelWon` the session builds the result (`result.level`, `stats.minChill`), fx
+- **Finish**: on `levelWon` the session builds the result (the core fills `result.level` and
+  `stats.minChill`), fx
   stamps `FINISH` (a checkered plate, 64 confetti, a hop and a zoom pulse) or the rose miss line
   ("NOT ENOUGH FLAKES"/"SNOW"), the sim stays frozen in `won` for `FINISH_FREEZE_S` (1 s, effects
   still animate), then the Results show with `ResultsView.campaign` (id, name, passed, stars,
@@ -202,8 +203,7 @@ batch lands, `core/campaignShim.ts` stands in, every stand-in marked `// V12-SHI
   while `s.sun.gust ≠ 0`), Sun Lock (a padlock outside the sun pointer while `s.sun.locked`),
   Moonlit (night palette, the sun's own shadows in the moonlight colour, stars, the moon as the sun
   mascot), and the finish line (`casters.ts` `drawFinishArch`: a gate arch as a finish banner with
-  a checkered line on the ground, drawn for the core's `kind: 'finish'` caster; until then the
-  renderer inserts one at the level's finish y, `// V12-SHIM`).
+  a checkered line on the ground, drawn for the core's `kind: 'finish'` caster at `World.finishY`).
 
 ## Test hook (`?test=1`)
 

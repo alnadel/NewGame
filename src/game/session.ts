@@ -6,6 +6,7 @@ import {
   biomeAtY,
   buildRunResult,
   COMFORT_MAX,
+  CONCEPTS,
   createBot,
   createParJob,
   createRun,
@@ -18,6 +19,8 @@ import {
   formatTimeOfDay,
   generateSome,
   lerpSnap,
+  levelDef,
+  levelProgress,
   PLAN_START_DATE,
   prepareRun,
   prepareSome,
@@ -29,12 +32,12 @@ import {
   worldPlan,
   type Bot,
   type BotKind,
+  type LevelDef,
   type ParJob,
   type RenderSnap,
   type RunBuild,
   type RunConfig,
   type RunResult,
-  type RunStats,
   type SimEvent,
   type SimState,
 } from '../core/index.ts';
@@ -92,7 +95,7 @@ import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
 import { cueDuration } from '../ui/labels.ts';
-import type { ChallengeBanner, CueId, ImportOutcome, ResultsView, RunKind, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
+import type { ChallengeBanner, CueId, ImportOutcome, ResultsCampaign, ResultsView, RunKind, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
@@ -103,40 +106,10 @@ import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
-import { campaignConfig, campaignShareText, FINISH_FREEZE_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
-import {
-  asV12,
-  CONCEPTS,
-  isWon,
-  levelDef,
-  levelFinishY,
-  levelProgress,
-  shimCampaignTick,
-  type CampaignRunConfig,
-  type LevelDef,
-  type LevelWonEvent,
-  type SimStateV12,
-} from '../core/campaignShim.ts';
+import { campaignConfig, conceptLabel, FINISH_FREEZE_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
 
-/** RunKind with the campaign (ui/types.ts RunKind gains 'campaign' with the UI batch). */
-export type RunKindV12 = RunKind | 'campaign';
-
-/** ResultsView.campaign (ui/types.ts, UI batch): the level's verdict for the Results sheet. */
-export interface CampaignResultsView {
-  id: number;
-  name: string;
-  passed: boolean;
-  stars: number;
-  nextId: number | null;
-  goalLine: string;
-  introduces?: { name: string; blurb: string };
-}
-
-/** UiCallbacks the campaign adds (ui/types.ts, UI batch): Next level and the Journey map. */
-export interface CampaignCallbacks {
-  nextLevel(): void;
-  openJourney(): void;
-}
+/** The sim's finish-line event (CAMPAIGN_PLAN §2). */
+type LevelWon = Extract<SimEvent, { e: 'levelWon' }>;
 
 const DYING_S = 1.1;
 const MELODY_MAX = 32;
@@ -258,7 +231,7 @@ export class Session {
 
   private readonly d: SessionDeps;
   private readonly params: Params;
-  private s: SimStateV12;
+  private s: SimState;
   private readonly prev: RenderSnap = createSnap();
   private readonly curr: RenderSnap = createSnap();
   private readonly snap: RenderSnap = createSnap();
@@ -279,18 +252,16 @@ export class Session {
   private readonly renderIn: RenderInput;
 
   // Run bookkeeping.
-  private kind: RunKindV12 = 'endless';
+  private kind: RunKind = 'endless';
   /** The campaign level the last runConfig() built (null: not a campaign run). */
   private cfgLevel: LevelDef | null = null;
   /** The level of each campaign run built (the Title never holds one). */
   private readonly levelOf = new WeakMap<SimState, LevelDef>();
   /** The level the current run plays (null outside the campaign). */
   private runLevel: LevelDef | null = null;
-  /** The lowest Chill seen in daylight this run (100 when never lit): star 3 and RunStats.minChill. */
-  private minChill = 100;
   /** The finish: real time the line was crossed (−1 none) and the sim's verdict. */
   private wonAt = -1;
-  private won: LevelWonEvent | null = null;
+  private won: LevelWon | null = null;
   private lifetimeRuns = 0;
   private melody: number[] = [];
   private dailyDate: string | null = null;
@@ -306,7 +277,7 @@ export class Session {
   /** Test hook: a core bot plays the runs (they stay scored, unlike ?bot=). */
   private testBot: BotKind | null = null;
   private usedUrlSeed = false;
-  private nextRun: SimStateV12 | null = null;
+  private nextRun: SimState | null = null;
   /** The next endless run while its world is still being generated in slices (see stepPrebuild). */
   private nextBuild: RunBuild | null = null;
   private nextBuildRung = -1;
@@ -365,10 +336,10 @@ export class Session {
   }
 
   /** Test hook: the last Results' campaign verdict (null outside the campaign or before Results). */
-  campaignResults(): CampaignResultsView | null {
+  campaignResults(): ResultsCampaign | null {
     return this.lastCampaign;
   }
-  private lastCampaign: CampaignResultsView | null = null;
+  private lastCampaign: ResultsCampaign | null = null;
   private resultsShown = false;
 
   // Frame state.
@@ -449,7 +420,7 @@ export class Session {
         this.syncSentinel();
         return r;
       };
-    const callbacks: UiCallbacks & CampaignCallbacks = {
+    const callbacks: UiCallbacks = {
         startRun: sync((k: RunKind, date?: string, level?: number) => this.startRun(k, date, level)),
         nextLevel: sync(() => this.nextLevel()),
         openJourney: sync(() => this.openJourney()),
@@ -788,10 +759,9 @@ export class Session {
     }
 
     const screen = this.ui.current();
-    const won = isWon(this.s);
+    const won = this.s.phase === 'won';
     const stepping = !this.paused && (screen === 'play' || screen === 'dying') && this.s.phase !== 'dead' && !won;
     const s = this.s;
-    const level = this.runLevel;
     let n = 0;
     const events = this.frameEvents;
     events.length = 0;
@@ -808,16 +778,7 @@ export class Session {
           events.push(ev);
           this.onTickEvent(ev);
         }
-        if (s.phase === 'dead') break;
-        if (level) {
-          if (s.phase === 'day' && s.ready === 0 && s.nubs.chill < this.minChill) this.minChill = s.nubs.chill;
-          // V12-SHIM: the sim will set phase 'won', the concept fields and emit levelWon itself.
-          const ev = shimCampaignTick(s as SimStateV12, level, this.minChill);
-          if (ev) {
-            this.onTickEvent(ev);
-            break;
-          }
-        }
+        if (s.phase === 'dead' || s.phase === 'won') break;
       }
       if (n > 0) takeSnap(s, this.curr);
     } else {
@@ -947,7 +908,7 @@ export class Session {
     }
   }
 
-  /** The HUD's campaign row and the finish line for the renderer (null outside a campaign run). */
+  /** The HUD's campaign row for the renderer (null outside a campaign run). */
   private fillCampaignView(): void {
     const r = this.renderIn;
     const level = this.runLevel;
@@ -958,7 +919,7 @@ export class Session {
     const s = this.s;
     let c = r.campaign;
     if (!c) {
-      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, finishY: 0 };
+      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1 };
       r.campaign = c;
     }
     const goal = hudGoal(level, s.stats);
@@ -969,7 +930,6 @@ export class Session {
     c.goalFlakes = goal.flakes;
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
-    c.finishY = levelFinishY(level);
   }
 
   private renderScreen(id: ScreenId): RenderScreen {
@@ -1046,8 +1006,8 @@ export class Session {
    * A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`).
    * `ahead` = how far the world is built now; the first tick completes the rest (same world).
    */
-  private makeRun(kind: RunKindV12, date?: string, ahead?: number, level?: number): SimStateV12 {
-    const run = asV12(createRun(this.runConfig(kind, date, level), undefined, ahead));
+  private makeRun(kind: RunKind, date?: string, ahead?: number, level?: number): SimState {
+    const run = createRun(this.runConfig(kind, date, level), undefined, ahead);
     this.rungOf.set(run, this.cfgRung);
     if (this.cfgWarmup) this.warmups.add(run);
     if (this.cfgLevel) this.levelOf.set(run, this.cfgLevel);
@@ -1065,7 +1025,7 @@ export class Session {
   }
 
   /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
-  private runConfig(kind: RunKindV12, date?: string, level?: number): RunConfig {
+  private runConfig(kind: RunKind, date?: string, level?: number): RunConfig {
     const save = this.d.store.get();
     const p = this.params;
     const rm = this.reducedMotion();
@@ -1158,7 +1118,7 @@ export class Session {
    * press on the canvas or a tray drag starts it) unless the tutorial warm-up comes first,
    * otherwise the next endless run.
    */
-  private createTitleRun(): SimStateV12 {
+  private createTitleRun(): SimState {
     this.finishPrebuild();
     this.runLevel = null;
     if (this.challenge && !this.inWarmup()) return this.makeRun('challenge', undefined, TITLE_AHEAD);
@@ -1228,7 +1188,7 @@ export class Session {
    * Makes `run` the current run and starts its bookkeeping (it may still be in 'hold'). A press that
    * starts the run keeps its pending input (its downEdge is the run's start frame).
    */
-  private beginRun(run: SimStateV12, keepInput = false): void {
+  private beginRun(run: SimState, keepInput = false): void {
     this.s = run;
     this.renderIn.s = run;
     this.dropPostcard();
@@ -1250,7 +1210,6 @@ export class Session {
     this.runRung = this.rungOf.get(run) ?? -1;
     this.runWarmup = this.warmups.has(run);
     this.runLevel = this.levelOf.get(run) ?? null;
-    this.minChill = 100;
     this.wonAt = -1;
     this.won = null;
     const store = this.d.store;
@@ -1392,7 +1351,7 @@ export class Session {
     }
   }
 
-  private startRun(want: RunKindV12, date?: string, level?: number): void {
+  private startRun(want: RunKind, date?: string, level?: number): void {
     this.d.audio.ensure();
     const held = !this.runActive && this.s.phase === 'hold';
     // A first-time player plays the tutorial run before a friend's challenge (CC-8 warm-up).
@@ -1424,7 +1383,7 @@ export class Session {
     this.finishPrebuild();
     // After the warm-up, Retry ("Take the challenge") plays the friend's run.
     if (this.warmup && this.challenge) this.kind = 'challenge';
-    let run: SimStateV12;
+    let run: SimState;
     if (this.kind === 'campaign') {
       // Retry restarts the same level (Pause > Restart too).
       run = this.makeRun('campaign', undefined, undefined, this.runLevel?.id ?? 1);
@@ -1461,19 +1420,10 @@ export class Session {
     this.setGhost('both');
   }
 
-  /**
-   * Results or Pause > Map: leaves the run like Home and shows the Journey map. Without the Journey
-   * screen (the UI batch's) the Title stands in.
-   */
+  /** Results > Map and the Title's Journey pill: leaves the run like Home and shows the Journey map. */
   private openJourney(): void {
     this.home();
-    const id = 'journey' as ScreenId;
-    try {
-      if (this.ui.current() !== id) this.ui.show(id);
-    } catch {
-      // V12-SHIM: no Journey screen in this build; the Title it is.
-      if (this.ui.current() !== 'title') this.ui.show('title');
-    }
+    if (this.ui.current() !== 'journey') this.ui.show('journey');
   }
 
   private home(): void {
@@ -1573,7 +1523,7 @@ export class Session {
   // Events, daily bookkeeping, death and results
   // -------------------------------------------------------------------------------------------
 
-  private onTickEvent(ev: SimEvent | LevelWonEvent): void {
+  private onTickEvent(ev: SimEvent): void {
     switch (ev.e) {
       case 'flake':
         if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
@@ -1674,13 +1624,6 @@ export class Session {
       this.outcome = debugRunOutcome(save, result);
       return;
     }
-    if (this.runLevel) {
-      // V12-SHIM: meta's applyRunResult does not know mode 'campaign' yet (it would file the run
-      // as a standard-rules best); until the uiMeta batch lands, a campaign run is folded in like
-      // a debug run (no wallet Snow, stars or unlocks).
-      this.outcome = debugRunOutcome(save, result);
-      return;
-    }
     const options: ApplyRunOptions = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
     if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
     if (this.runRung >= 0) options.rung = this.runRung;
@@ -1700,10 +1643,10 @@ export class Session {
 
   /**
    * The finish line (§4): the run freezes on a FINISH stamp with confetti (or the miss line when
-   * the goal was not met), the result is built with the level's verdict, and after FINISH_FREEZE_S
-   * the Results show.
+   * the goal was not met), the result is built (the core fills `result.level` and
+   * `stats.minChill`), and after FINISH_FREEZE_S the Results show.
    */
-  private onLevelWon(ev: LevelWonEvent): void {
+  private onLevelWon(ev: LevelWon): void {
     const level = this.runLevel;
     if (!level || this.wonAt >= 0) return;
     this.wonAt = this.time;
@@ -1714,13 +1657,6 @@ export class Session {
     const result = buildRunResult(this.s);
     result.melody = this.melody.slice();
     result.assisted = this.runAssisted;
-    (result.stats as RunStats & { minChill?: number }).minChill = ev.minChill;
-    (result as RunResult & { level?: { id: number; passed: boolean; stars: number; introduces: string | null } }).level = {
-      id: level.id,
-      passed: ev.passed,
-      stars: ev.stars,
-      introduces: level.introduces,
-    };
     this.result = result;
     this.tip = null;
     this.applyResult(save, result);
@@ -1746,7 +1682,7 @@ export class Session {
     if (this.resultsShown || !this.result || !this.outcome) return;
     this.resultsShown = true;
     const daily = this.result.mode === 'daily';
-    const view: ResultsView & { campaign?: CampaignResultsView } = {
+    const view: ResultsView = {
       result: this.result,
       outcome: this.outcome,
       dailyTry: daily ? this.dailyTry : undefined,
@@ -1788,11 +1724,11 @@ export class Session {
   }
 
   /** ResultsView.campaign: the level's verdict (stars, the goal line, the next level, the concept it taught). */
-  private campaignView(level: LevelDef, result: RunResult): CampaignResultsView {
+  private campaignView(level: LevelDef, result: RunResult): ResultsCampaign {
     const won = this.won;
     const passed = won !== null && won.passed;
     const next = levelDef(level.id + 1);
-    const view: CampaignResultsView = {
+    const view: ResultsCampaign = {
       id: level.id,
       name: level.name,
       passed,
@@ -1802,7 +1738,7 @@ export class Session {
     };
     if (level.introduces) {
       const c = CONCEPTS[level.introduces];
-      view.introduces = { name: c.name, blurb: c.blurb };
+      view.introduces = { name: conceptLabel(level, c.id), blurb: c.blurb };
     }
     return view;
   }
@@ -1876,7 +1812,7 @@ export class Session {
     const b = this.nextBuild;
     if (!b) return;
     this.nextBuild = null;
-    this.nextRun = asV12(createRun(b.cfg, b));
+    this.nextRun = createRun(b.cfg, b);
     this.rungOf.set(this.nextRun, this.nextBuildRung);
     if (this.nextBuildWarmup) this.warmups.add(this.nextRun);
   }
@@ -1981,10 +1917,6 @@ export class Session {
    */
   private sharePayload(result: RunResult): { text: string; url: string | null } {
     const save = this.d.store.get();
-    if (this.runLevel) {
-      // V12-SHIM: meta/share.ts gets the campaign text with the uiMeta batch.
-      return { text: campaignShareText(this.runLevel, this.won?.stars ?? 0), url: null };
-    }
     const par = result.dailyDate !== undefined ? (save.pars[result.dailyDate] ?? null) : null;
     return buildShare(result, shareBase(), this.dailyTry, { name: save.settings.name, par, plan: this.s.world.planOn });
   }
@@ -2315,13 +2247,13 @@ export class Session {
       forecast: s.params.forecast,
       biome: biomeAtY(s.world, s.nubs.y),
       lessonOn: s.lessonOn,
-      level: (s.cfg as CampaignRunConfig).level ?? -1,
-      mods: Array.from(s.mods ?? []),
+      level: s.cfg.level ?? -1,
+      mods: Array.from(s.mods),
       levelProgress: levelProgress(s),
-      eclipse: s.eclipse ?? 0,
-      gust: s.sun.gust ?? 0,
-      locked: s.sun.locked ?? false,
-      moonlit: s.moonlit ?? false,
+      eclipse: s.eclipse,
+      gust: s.sun.gust,
+      locked: s.sun.locked,
+      moonlit: s.moonlit,
     };
   }
 

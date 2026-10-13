@@ -10,7 +10,7 @@
 // from a per-biome atlas built lazily at the device scale. Drawn after the trail and before the
 // shadow layer, so shade darkens them like the ground.
 
-import { biomeAtY, dayAtY, queryCasters, smoothstep, trailSlope, trailX, validatedY, worldPlan, type Caster, type SimState, type World } from '../core/index.ts';
+import { biomeAtY, queryCasters, smoothstep, trailSlope, trailX, validatedY, worldDayAtY, worldPlan, type Caster, type SimState, type World } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import { OBLIQUE, type View } from '../game/camera.ts';
 import { P_STEAM, spawn, type Particles } from './particles.ts';
@@ -864,7 +864,7 @@ export function drawBunting(g: CanvasRenderingContext2D, v: View, w: World, fade
   const k0 = Math.floor((v.y0 - 40) / BUNTING_GAP);
   const k1 = Math.ceil((v.y1 + 80) / BUNTING_GAP);
   let any = false;
-  for (let k = k0; k <= k1 && !any; k++) any = worldPlan(w, dayAtY(k * BUNTING_GAP)).forecast === 'market';
+  for (let k = k0; k <= k1 && !any; k++) any = worldPlan(w, worldDayAtY(w, k * BUNTING_GAP)).forecast === 'market';
   if (!any) return;
   g.globalAlpha = fade;
   // Strings first (thin ink), then the pennants batched by colour.
@@ -873,7 +873,7 @@ export function drawBunting(g: CanvasRenderingContext2D, v: View, w: World, fade
   g.beginPath();
   for (let k = k0; k <= k1; k++) {
     const y = k * BUNTING_GAP;
-    if (worldPlan(w, dayAtY(y)).forecast !== 'market') continue;
+    if (worldPlan(w, worldDayAtY(w, y)).forecast !== 'market') continue;
     const cx = trailX(w.trail, y);
     for (let i = 0; i <= 12; i++) {
       const t = i / 12;
@@ -888,7 +888,7 @@ export function drawBunting(g: CanvasRenderingContext2D, v: View, w: World, fade
     g.beginPath();
     for (let k = k0; k <= k1; k++) {
       const y = k * BUNTING_GAP;
-      if (worldPlan(w, dayAtY(y)).forecast !== 'market') continue;
+      if (worldPlan(w, worldDayAtY(w, y)).forecast !== 'market') continue;
       const cx = trailX(w.trail, y);
       for (let i = 0; i < PENNANTS; i++) {
         if ((i + k) % BUNTING_COLORS.length !== c) continue;

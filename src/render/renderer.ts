@@ -11,19 +11,14 @@ import {
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
-  trailX,
   worldPlan,
   type Caster,
-  type CasterKind,
   type Pickup,
   type RenderSnap,
   type SimState,
   type World,
 } from '../core/index.ts';
-// V12-SHIM: the finish arch's geometry, until the core places a kind 'finish' caster at the line.
-import { gateArchParts, makeCaster } from '../core/gen/catalog.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
-import type { SimStateV12 } from '../core/campaignShim.ts';
 import type { Equipped } from '../meta/content.ts';
 import type { Insets } from '../platform/safeArea.ts';
 import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, type AtmosphereIn } from './atmosphere.ts';
@@ -181,12 +176,10 @@ export interface CampaignView {
   /** Marker positions on the progress bar (0..1), −1 none. */
   markGate: number;
   markEclipse: number;
-  /** World y of the finish line. */
-  finishY: number;
 }
 
 export interface RenderInput {
-  s: SimStateV12;
+  s: SimState;
   snap: RenderSnap;
   screen: RenderScreen;
   /** Render-only Title sway added to θ (degrees). */
@@ -294,10 +287,6 @@ export interface RenderScene {
   passes: number;
   /** The HUD's campaign row (filled from RenderInput.campaign each frame; no allocation). */
   hudCampaign: HudCampaign;
-  /** V12-SHIM: the finish arch drawn at `finishFor` of world `finishWorld` while the core places none. */
-  finishCaster: Caster | null;
-  finishFor: number;
-  finishWorld: World | null;
 }
 
 function moonPalette(): Palette {
@@ -354,9 +343,6 @@ export function createScene(): RenderScene {
     friendWorld: null,
     passes: 0,
     hudCampaign: { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0 },
-    finishCaster: null,
-    finishFor: -1,
-    finishWorld: null,
   };
 }
 
@@ -374,45 +360,6 @@ function hudCampaignOf(sc: RenderScene, inp: RenderInput): HudCampaign | null {
   h.markEclipse = c.markEclipse;
   h.gust = inp.s.sun.gust;
   return h;
-}
-
-/**
- * V12-SHIM: the finish arch as a caster (gate-arch geometry, kind 'finish') at the level's finish
- * line, when the world has none of its own there. Inserted into the visible casters in depth order.
- */
-function shimFinish(sc: RenderScene, s: SimState, finishY: number, buf: Caster[], n: number): number {
-  for (let i = 0; i < n; i++) if (((buf[i] as Caster).kind as string) === 'finish') return n;
-  if (sc.finishFor !== finishY || sc.finishWorld !== s.world || !sc.finishCaster) {
-    const x = trailX(s.world.trail, finishY);
-    sc.finishCaster = makeCaster({
-      id: -2,
-      kind: 'finish' as CasterKind,
-      name: 'the Finish',
-      biome: 'meadow',
-      x,
-      y: finishY,
-      rot: 0,
-      parts: gateArchParts(x, finishY),
-      side: 0,
-      rescue: false,
-      gate: true,
-      ballId: -1,
-      chunk: -1,
-    });
-    sc.finishFor = finishY;
-    sc.finishWorld = s.world;
-  }
-  const f = sc.finishCaster;
-  let at = n;
-  for (let i = 0; i < n; i++) {
-    if ((buf[i] as Caster).y > finishY) {
-      at = i;
-      break;
-    }
-  }
-  for (let i = n; i > at; i--) buf[i] = buf[i - 1] as Caster;
-  buf[at] = f;
-  return n + 1;
 }
 
 /** The eclipse's (and a Moonlit level's) stars over the world rect, twinkling. */
@@ -714,9 +661,8 @@ export class Renderer {
     }
     // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
     // source-over fill stays exact), the depth sort below.
+    // (A campaign level's finish banner is a world caster of kind 'finish'; casters.ts draws it.)
     let n = queryCasters(s.world, v.y0 - 130, v.y1 + 40, casterBuf);
-    const finishY = inp.campaign ? inp.campaign.finishY : -1;
-    if (finishY >= v.y0 - 130 && finishY <= v.y1 + 40) n = shimFinish(sc, s, finishY, casterBuf, n);
     if (inp.govLevel < 2) drawContactAO(g, v, casterBuf, n, night);
     const glows = night > 0.05 && inp.govLevel < 2;
     if (glows) drawWindowGlow(g, v, casterBuf, n, night);
