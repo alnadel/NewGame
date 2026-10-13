@@ -42,33 +42,34 @@ export function createPauseScreen(ctx: UiContext): Screen {
   const renderStatus = (): void => {
     const v = ctx.cb.runStatus?.() ?? null;
     status.hidden = v === null;
+    card.classList.remove('has-stars');
     if (!v) return;
     statusTitle.textContent = v.title;
-    statusGoal.textContent = [v.goal, v.now].filter(Boolean).join(' · ');
+    // "Day 1 · 6:47 AM" and "16 %" never break inside; the time may give way on short screens (ui.css).
+    const nb = (t: string): string => t.replace(/ (AM|PM|%)/g, '\u00a0$1').replace(/Day (\d+) · /g, 'Day\u00a0$1\u00a0·\u00a0');
+    statusGoal.replaceChildren(nb(v.goal), v.now ? h('span', { class: 'pause-st-now' }, `${v.goal ? ' · ' : ''}${nb(v.now)}`) : '');
     statusStars.replaceChildren(
       ...v.stars.map((st) =>
         h('li', { class: `pause-star is-${st.state}`, 'aria-label': `${st.label}: ${STAR_WORD[st.state]}` }, h('span', { class: 'pause-star-ic', 'aria-hidden': 'true' }, '★'), st.label),
       ),
     );
     statusStars.hidden = v.stars.length === 0;
+    // A level's star pips make the card taller: on short screens its subtitle gives way (ui.css).
+    card.classList.toggle('has-stars', v.stars.length > 0);
   };
 
-  const el = h(
-    'section',
-    { class: 'scr scr-pause' },
-    h('div', { class: 'scrim' }),
-    h(
-      'div',
-      { class: 'dialog pause-card pe', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pause-title' },
-      h('div', { class: 'pause-badge', 'aria-hidden': 'true' }, icon('pause')),
-      h('h2', { class: 'dialog-title', id: 'pause-title' }, 'Paused'),
-      h('p', { class: 'dialog-sub' }, 'Nubs is chilling. Take your time.'),
-      status,
-      resumeBtn,
-      restartBtn,
-      h('div', { class: 'row-2' }, settingsBtn, homeBtn),
-    ),
+  const card = h(
+    'div',
+    { class: 'dialog pause-card pe', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pause-title' },
+    h('div', { class: 'pause-badge', 'aria-hidden': 'true' }, icon('pause')),
+    h('h2', { class: 'dialog-title', id: 'pause-title' }, 'Paused'),
+    h('p', { class: 'dialog-sub' }, 'Nubs is chilling. Take your time.'),
+    status,
+    resumeBtn,
+    restartBtn,
+    h('div', { class: 'row-2' }, settingsBtn, homeBtn),
   );
+  const el = h('section', { class: 'scr scr-pause' }, h('div', { class: 'scrim' }), card);
 
   return {
     el,

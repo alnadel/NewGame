@@ -1207,16 +1207,16 @@
 .scr-pause.is-on .dialog { transform: none; }
 
 .pause-status {
-  margin: 0 0 14px;
-  padding: 10px 12px;
+  margin: 0 0 4px;
+  padding: 8px 12px;
   border-radius: 14px;
   background: rgba(43, 33, 64, 0.06);
   text-align: center;
 }
 .pause-st-title { margin: 0; font-weight: 800; font-size: var(--fs-md, 17px); }
 .pause-st-goal { margin: 2px 0 0; font-size: var(--fs-sm, 14px); opacity: 0.8; }
-.pause-st-stars { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
-.pause-star { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: #fff; font-size: var(--fs-xs, 13px); font-weight: 700; }
+.pause-st-stars { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.pause-star { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; background: #fff; font-size: var(--fs-xs, 13px); font-weight: 700; white-space: nowrap; }
 .pause-star-ic { color: #c9c3d6; }
 .pause-star.is-earned .pause-star-ic { color: #f5b82e; }
 .pause-star.is-lost { opacity: 0.55; text-decoration: line-through; }
@@ -1243,7 +1243,41 @@
 }
 
 /* Small phones with a notch: the Pause card drops its subtitle and tightens up so it still sits
-   above Nubs' halo (the player checks whether he is lit before resuming). */
+   above Nubs' halo (the player checks whether he is lit before resuming). The run's status (v1.4)
+   makes a level's card taller, so the subtitle goes earlier there. */
+@container pause (max-height: 30em) {
+  .scr-pause .dialog.has-stars {
+    gap: 8px;
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+
+  .scr-pause .has-stars :is(.dialog-sub, .pause-st-now) { display: none; }
+  .scr-pause .has-stars .pause-star { padding: 2px 6px; font-size: 0.75rem; }
+}
+
+/* Shorter still (small phones, in a level): Restart, Settings and Home share one row, icon over
+   label, and the badge (it would poke out of the top) goes. */
+@container pause (max-height: 22em) {
+  .scr-pause .dialog.has-stars {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .scr-pause .has-stars > * { grid-column: 1 / -1; }
+  .scr-pause .has-stars > .row-2 { display: contents; }
+  .scr-pause .has-stars .pause-badge { display: none; }
+
+  .scr-pause .has-stars > .btn:not(.btn--primary),
+  .scr-pause .has-stars > .row-2 > .btn {
+    grid-column: auto;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 4px;
+    font-size: var(--fs-sm);
+  }
+}
+
 @container pause (max-height: 19.5em) {
   .scr-pause .dialog {
     gap: 8px;
