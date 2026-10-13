@@ -6,7 +6,7 @@
 // and says how to unlock it; while nothing is unlocked yet the Title is Play (and Settings) only. A
 // feature unlocked by progress wears a NEW mark until opened (kept in the save). Only the controls take
 // pointer events: a press anywhere else reaches the canvas and starts an endless run (the challenge
-// while a challenge banner is up). Tray and mode buttons activate on click with < 8 px of travel,
+// while a challenge banner is up; the next level while Endless is locked). Tray and mode buttons activate on click with < 8 px of travel,
 // and a sideways drag that starts on one is handed to the canvas.
 
 import { formatScore, formatTimeOfDay, splitMinutes, type DayPlan } from '../../core/index.ts';
@@ -39,8 +39,9 @@ const BEST_CHIP_RUNS = 3;
 /** Gap (px) kept between the challenge banner and the chips. */
 const BANNER_GAP = 6;
 const TAGLINE = "Don't melt Nubs.";
-/** Shown under the tagline for mouse and keyboard players. */
+/** Shown under the tagline for mouse and keyboard players (the arrows play the level until Endless unlocks). */
 export const KEY_HINT = 'Space: play the level · ← →: Endless · Esc: back';
+const KEY_HINT_LOCKED = 'Space or ← →: play the level · Esc: back';
 
 /**
  * The logo as stacked layers (art.ts logoLayers): the sun's bob, the rays' spin and the shadow's
@@ -239,13 +240,14 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // After onboarding the tagline names the next goal; the forecast chip previews the endless run's Day 1.
   const tagline = h('p', { class: 'tagline' }, TAGLINE);
   const forecast = h('p', { class: 'forecast-chip', hidden: true });
+  const keys = h('p', { class: 'title-keys' }, KEY_HINT);
   const gap = (): HTMLElement => h('i', { class: 'title-gap', 'aria-hidden': 'true' });
   const bottomCluster = h('div', { class: 'title-bottom' }, chips, gap(), modes, gap(), tray);
   const el = h(
     'section',
     { class: 'scr scr-title' },
     hud,
-    h('div', { class: 'title-top' }, logo(), tagline, forecast, h('p', { class: 'title-keys' }, KEY_HINT), challenge),
+    h('div', { class: 'title-top' }, logo(), tagline, forecast, keys, challenge),
     bottomCluster,
   );
   let preview: DayPlan | null = null;
@@ -333,6 +335,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
     renderGates(save);
+    keys.textContent = isOpen(save, 'endless') ? KEY_HINT : KEY_HINT_LOCKED;
     const unplayed = isOpen(save, 'daily') && !dailyStatus(save, ctx.today()).played;
     hide(dailyDot, !unplayed);
     if (unplayed) dailyBtn.setAttribute('aria-label', "Daily: today's is new");

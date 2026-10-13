@@ -24,7 +24,7 @@ works offline, and keeps the seams open for Capacitor shells.
 |---|---|---|
 | Turn the sun | drag left or right anywhere | ← → or A D (Shift for fine turns), the wheel, or a mouse drag |
 | Play the next level | tap Play on the Title | Space or Enter |
-| Endless run | tap Endless, or drag on the Title | ← or → on the Title |
+| Endless run (opens after Level 3) | tap Endless, or drag on the Title | ← or → on the Title |
 | Retry | tap Retry | Space or Enter |
 | Pause | the pause button | Esc or P |
 

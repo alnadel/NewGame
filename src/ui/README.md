@@ -141,7 +141,9 @@ the highest unlocked level: `startRun('campaign', undefined, N)`; Space/Enter to
 `.endless-pill` (`startRun('endless')`; icon only in narrow columns). A sideways drag on any of
 them is handed to the sun. When the cluster would reach Nubs' halo the Title sheds, in order, the
 tray labels, then disc/pill size (`is-tight`), then the chips row (`no-chips`). Mouse and keyboard
-players see the key line "Space: play the level · ← →: Endless · Esc: back" under the tagline.
+players see the key line "Space: play the level · ← →: Endless · Esc: back" under the tagline
+("Space or ← →: play the level" while Endless is locked: a canvas press or an arrow then plays the
+next level, session.ts onPress).
 
 **v1.4 Title** (docs/V1_4_PLAN.md): a top bar holds the Sun Rank badge (`gamify.ts rankBadge`; it
 opens the Profile once `featureUnlocked(save, 'profile')`, else it toasts `featureHint`), a gold

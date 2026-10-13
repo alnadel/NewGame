@@ -49,6 +49,7 @@ import { DAILY_TRIES, dailyNumber, dailySeed, localDate } from '../meta/daily.ts
 import {
   applyRunResult,
   beginRun,
+  continueLevel,
   buyCosmetic,
   debugRunOutcome,
   dailyStatus,
@@ -67,6 +68,7 @@ import {
   type RunOutcome,
 } from '../meta/progression.ts';
 import { equippedLooks } from '../meta/content.ts';
+import { featureUnlocked } from '../meta/gamify.ts';
 import type { SaveStore } from '../meta/save.ts';
 import { buildShare, shareBase } from '../meta/share.ts';
 import type { Save, Settings } from '../meta/saveTypes.ts';
@@ -1391,6 +1393,14 @@ export class Session {
     // Audio unlocks from the engine's own gesture listeners (on a first pointerdown it builds the
     // context in a task right after the event, so the press itself stays light).
     if (this.ui.current() === 'title') {
+      // Before Endless unlocks (v1.4), a press plays the next Journey level, like the Play button.
+      const save = this.d.store.get();
+      if (this.challenge === null && !featureUnlocked(save, 'endless')) {
+        this.ui.show('play');
+        this.startRun('campaign', undefined, continueLevel(save));
+        this.syncSentinel();
+        return;
+      }
       // Any press on the canvas starts the Title's run with catch semantics (θ stays θ0); with a
       // challenge link open, that is the challenge run.
       this.ui.show('play');
