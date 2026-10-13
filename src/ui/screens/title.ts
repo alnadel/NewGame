@@ -379,8 +379,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     claimDot(badge.el, c.globes + c.trophies);
     claimDot(trayFor.missions?.firstElementChild as HTMLElement, c.missions);
     claimDot(trayFor.wardrobe?.firstElementChild as HTMLElement, c.wardrobe);
+    // The gold button is the daily's signal itself (a dot would be clipped by the button's rounding).
     hide(rewardBtn, !c.daily);
-    claimDot(rewardBtn, c.daily ? 1 : 0);
   }
 
   function renderPreview(): void {

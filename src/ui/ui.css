@@ -961,6 +961,9 @@
 
 :is(.tray-btn.is-new .tray-disc, .endless-pill.is-new) { animation: new-pulse 1.6s ease-in-out infinite; }
 
+/* The NEW tag speaks for a just-unlocked button: its claim dot waits until it has been opened. */
+.sui .tray-btn.is-new .has-dot::after { display: none; }
+
 @keyframes new-pulse {
   50% { box-shadow: 0 4px 0 rgba(43, 33, 64, 0.16), 0 0 0 7px rgba(255, 194, 61, 0.55); }
 }
