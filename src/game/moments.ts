@@ -7,7 +7,7 @@ import { levelProgress, type LevelDef, type RunResult, type SimEvent, type SimSt
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import type { Save } from '../meta/saveTypes.ts';
-import { showToast, type Banners } from '../render/banners.ts';
+import { endToasts, showToast, type Banners } from '../render/banners.ts';
 import { goalMetLive } from './campaign.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
@@ -40,7 +40,7 @@ const MISSION_EVERY = 6;
 /** Shaded ticks after a slow burn before the COMEBACK lands (0.75 s), and the Chill that re-arms it. */
 const COMEBACK_HOLD = 45;
 const COMEBACK_REARM = 0.5;
-const TIP_HOLD = 4.2;
+const TIP_HOLD = 3.6;
 const MISSION_HOLD = 2.6;
 
 export interface MomentSinks {
@@ -72,6 +72,7 @@ export class RunMoments {
   private level: LevelDef | null = null;
   /** COMEBACK: armed by Chill under the PHEW line while lit; the tick shade was found (−1 none). */
   private burn = false;
+  private spent = false;
   private shadeAt = -1;
 
   constructor(banners: Banners, sinks: MomentSinks) {
@@ -89,6 +90,7 @@ export class RunMoments {
     this.total = 0;
     this.lastCheck = 0;
     this.burn = false;
+    this.spent = false;
     this.shadeAt = -1;
     this.level = level;
     this.tipsShown = 0;
@@ -111,6 +113,11 @@ export class RunMoments {
   /** One tick's event (Session.onTickEvent). */
   onEvent(ev: SimEvent, s: SimState): void {
     switch (ev.e) {
+      case 'death':
+      case 'levelWon':
+        endToasts(this.banners);
+        this.tracked.length = 0;
+        break;
       case 'go':
         this.tip('go');
         break;
@@ -127,6 +134,7 @@ export class RunMoments {
       case 'phew':
         // A PHEW already celebrates this dip.
         this.burn = false;
+        this.spent = true;
         break;
       case 'shadeEnter':
         if (this.burn) this.shadeAt = s.tick;
@@ -149,10 +157,14 @@ export class RunMoments {
     }
     const nb = s.nubs;
     if (!s.lessonOn) {
-      if (nb.f > 0 && nb.chill < s.params.phewT) this.burn = true;
-      else if (nb.chill > COMEBACK_REARM * nb.maxChill && this.shadeAt < 0) this.burn = false;
+      // One COMEBACK per dip: after one, Chill climbs back over half before the next can arm.
+      const high = nb.chill > COMEBACK_REARM * nb.maxChill;
+      if (high) this.spent = false;
+      if (nb.f > 0 && nb.chill < s.params.phewT && !this.spent) this.burn = true;
+      else if (high && this.shadeAt < 0) this.burn = false;
       if (this.burn && this.shadeAt >= 0 && s.tick - this.shadeAt >= COMEBACK_HOLD && nb.f === 0) {
         this.burn = false;
+        this.spent = true;
         this.shadeAt = -1;
         this.sinks.comeback(nb.x, nb.y);
       }

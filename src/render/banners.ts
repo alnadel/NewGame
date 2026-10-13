@@ -236,9 +236,35 @@ const TOAST_QUEUE = 4;
 const TOAST_IN = 0.25;
 const TOAST_OUT = 0.3;
 
-/** Queues an in-run toast (see Banners.toasts). */
+/** A tip on screen at least this long (s) steps aside for a mission. */
+const TIP_YIELD_S = 1.5;
+
+/**
+ * Queues an in-run toast (see Banners.toasts). A mission goes ahead of waiting tips (and a tip that
+ * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one, so tips never pile up.
+ */
 export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number): void {
-  if (b.toasts.length < TOAST_QUEUE) b.toasts.push({ kind, kicker: noLigatures(kicker), text, glyph, hold });
+  const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold };
+  const q = b.toasts;
+  const first = b.toastT >= 0 ? 1 : 0;
+  if (kind === 'tip') {
+    for (let i = q.length - 1; i >= first; i--) if ((q[i] as Toast).kind === 'tip') q.splice(i, 1);
+    if (q.length < TOAST_QUEUE) q.push(t);
+    return;
+  }
+  let at = first;
+  while (at < q.length && (q[at] as Toast).kind === 'mission') at++;
+  if (q.length >= TOAST_QUEUE) q.pop();
+  q.splice(at, 0, t);
+  const shown = q[0] as Toast;
+  if (first === 1 && shown.kind === 'tip' && b.toastT > TOAST_IN + TIP_YIELD_S) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
+}
+
+/** The run ended: drop what waits (the Results take over); the toast on screen fades out. */
+export function endToasts(b: Banners): void {
+  b.toasts.length = Math.min(b.toasts.length, b.toastT >= 0 ? 1 : 0);
+  const shown = b.toasts[0];
+  if (shown) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
 }
 
 export function resetBanners(b: Banners): void {
