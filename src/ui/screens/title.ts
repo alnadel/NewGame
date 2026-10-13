@@ -1,17 +1,20 @@
-// Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, V1_1_PLAN UM9).
-// Only the actual controls take pointer events; a pointerdown anywhere else reaches the canvas and
-// starts the run (the challenge run while a challenge banner is up). Tray buttons activate on click
-// with < 8 px of travel, and a sideways drag that starts on one is handed to the canvas.
+// Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, v1.3 Journey-first).
+// The primary action plays the next Journey level ("Level 4"; Space/Enter too); the map and Endless
+// sit beside it, the tray holds Daily, Missions, Wardrobe and Settings. Only the controls take
+// pointer events: a press anywhere else reaches the canvas and starts an endless run (the challenge
+// while a challenge banner is up). Tray and mode buttons activate on click with < 8 px of travel,
+// and a sideways drag that starts on one is handed to the canvas.
 
 import { formatScore, formatTimeOfDay, splitMinutes, type DayPlan } from '../../core/index.ts';
 import {
   activeMissionViews,
+  CAMPAIGN_STARS_MAX,
   continueLevel,
   dailyStatus,
-  errandView,
   isDailyUnlocked,
   nextGoal,
   nextRunEased,
+  totalStars,
   DAILY_UNLOCK_RUNS,
 } from '../../meta/progression.ts';
 import { logoLayers } from '../art.ts';
@@ -20,22 +23,19 @@ import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
 import { challengeGoalText, planText } from '../labels.ts';
-import { button, hide } from '../widgets.ts';
+import { button, hide, setButtonLabel } from '../widgets.ts';
 
 /** Travel (px) after which a press is no longer a tap. */
 const TAP_SLOP = 8;
 /** Horizontal travel (px) that turns a press on a tray button into a canvas drag. */
 const HANDOFF_DX = 10;
-
 /** Best score shows once onboarding (gentle runs 0-2) is over: no score pressure before that. */
 const BEST_CHIP_RUNS = 3;
-
-/** Gap (px) kept between the challenge banner and the ghost hint. */
+/** Gap (px) kept between the challenge banner and the chips. */
 const BANNER_GAP = 6;
-
 const TAGLINE = "Don't melt Nubs.";
-const REGION_LABEL = 'Drag, or press Space, to start.';
-const REGION_LABEL_CHALLENGE = 'Drag, or press Space, to start the challenge.';
+/** Shown under the tagline for mouse and keyboard players. */
+export const KEY_HINT = 'Space: play the level · ← →: Endless · Esc: back';
 
 /**
  * The logo as stacked layers (art.ts logoLayers): the sun's bob, the rays' spin and the shadow's
@@ -52,104 +52,40 @@ function logo(): HTMLElement {
   return h('h1', { class: 'logo' }, sun, h('span', { class: 'logo-layer logo-drop' }, svgFromMarkup(l.shadow)), svgFromMarkup(l.word));
 }
 
-/** An element's layout box in viewport px, ignoring transforms (the banner pops in with a scale). */
-function layoutRect(e: HTMLElement): DOMRect {
-  let x = 0;
+/** An element's layout box bottom in viewport px, ignoring transforms (the banner pops in with a scale). */
+function layoutBottom(e: HTMLElement): number {
   let y = 0;
   let p: HTMLElement = e;
-  // Sum offsets up to the last offsetParent (the fixed #ui root), then add that root's position.
   for (let next = p.offsetParent as HTMLElement | null; next; next = p.offsetParent as HTMLElement | null) {
-    x += p.offsetLeft;
     y += p.offsetTop;
     p = next;
   }
-  const base = p.getBoundingClientRect();
-  return new DOMRect(base.left + x, base.top + y, e.offsetWidth, e.offsetHeight);
-}
-
-function overlaps(a: DOMRect, b: DOMRect, gap = 0): boolean {
-  return a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0 &&
-    a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap;
+  return p.getBoundingClientRect().top + y + e.offsetHeight;
 }
 
 export interface TitleScreen extends Screen {
-  /** Chips + tray at the bottom of the Title. */
-  readonly bottomCluster: HTMLElement;
   /** The Title run's Day-1 plan for the forecast chip (null hides it). */
   setRunPreview(p: DayPlan | null): void;
 }
 
 export function createTitleScreen(ctx: UiContext): TitleScreen {
-  /** The menu the Title was last left for: keyboard focus returns to its tray button. */
+  /** The menu the Title was last left for: keyboard focus returns to its button. */
   let returnFrom: ScreenId | null = null;
 
-  const start = (): void => {
-    const challengeRun = ctx.challenge() !== null;
+  const run = (kind: 'endless' | 'challenge'): void => {
     ctx.go('play');
-    ctx.cb.startRun(challengeRun ? 'challenge' : 'endless');
+    ctx.cb.startRun(kind);
+  };
+  const playLevel = (): void => {
+    ctx.go('play');
+    ctx.cb.startRun('campaign', undefined, continueLevel(ctx.save()));
   };
 
-  // --- Challenge banner ------------------------------------------------------------------------
-  // "Sam challenges you:" — the name is isolated (<bdi>) so a right-to-left name can't reorder the line.
-  const challengeName = h('bdi', null);
-  const challengeFrom = h('span', { class: 'challenge-from' }, challengeName, ' challenges you:');
-  const challengeGoal = h('strong', { class: 'challenge-goal' });
-  const challengeNote = h('span', { class: 'challenge-note' });
-  const challengePlay = button(ctx, {
-    label: 'Play',
-    icon: 'play',
-    variant: 'primary',
-    className: 'challenge-play',
-    onPress: () => {
-      ctx.go('play');
-      ctx.cb.startRun('challenge');
-    },
-  });
-  const challengeClose = button(ctx, {
-    label: 'Dismiss challenge',
-    icon: 'close',
-    round: true,
-    sound: 'back',
-    className: 'challenge-close',
-    onPress: () => {
-      ctx.clearChallenge();
-      ctx.cb.dismissChallenge();
-    },
-  });
-  const challenge = h(
-    'div',
-    { class: 'challenge pe', role: 'group', 'aria-label': 'Challenge' },
-    h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, icon('flag')),
-    h('div', { class: 'challenge-text' }, challengeFrom, challengeGoal, challengeNote),
-    challengePlay,
-    challengeClose,
-  );
-
-  // --- Chips -------------------------------------------------------------------------------------
-  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Journal.
-  const bestDay = h('span', { class: 'day-badge' });
-  const bestValue = h('span', { class: 'num' });
-  const chipBest = h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev'));
-  chipBest.addEventListener('click', () => {
-    ctx.sound('tap');
-    ctx.go('journal');
-  });
-  // The other chips are read as one labeled image each (their aria-label carries the full sentence).
-  const pips = h('span', { class: 'pips' });
-  const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
-  const walletValue = h('span', { class: 'num' });
-  const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), walletValue);
-  const chips = h('div', { class: 'chips' }, chipBest, chipMissions, chipSnow);
-
-  // --- Tray --------------------------------------------------------------------------------------
-  const dailyDot = h('span', { class: 'tray-dot', 'aria-hidden': 'true' });
-  const dailyLock = h('span', { class: 'tray-lock', 'aria-hidden': 'true' }, icon('lock'));
-
   /**
-   * Press handling shared by the tray buttons and the Journey pill: a tap (under 8 px of travel)
-   * activates on click; a sideways drag that starts on the button is handed to the canvas.
+   * Press handling shared by the tray and mode buttons: a tap (under 8 px of travel) activates on
+   * click; a sideways drag that starts on the button is handed to the canvas.
    */
-  const pressable = (btn: HTMLButtonElement, onActivate: () => void): void => {
+  const pressable = <T extends HTMLButtonElement>(btn: T, onActivate: () => void, sound = true): T => {
     let press: { id: number; x: number; y: number } | null = null;
     let moved = false;
     btn.addEventListener('pointerdown', (e) => {
@@ -177,82 +113,105 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
         moved = false;
         return;
       }
+      if (sound) ctx.sound('tap');
       onActivate();
     });
-  };
-
-  const trayButton = (label: string, iconName: IconName, onActivate: () => void, extras: HTMLElement[] = []): HTMLButtonElement => {
-    const btn = h(
-      'button',
-      { class: 'tray-btn pe', type: 'button', 'aria-label': label },
-      h('span', { class: 'tray-disc' }, icon(iconName), ...extras),
-      h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
-    );
-    pressable(btn, onActivate);
     return btn;
   };
+  /** A mode pill: icon, label and the press handling above. */
+  const pill = (cls: string, iconName: IconName, label: HTMLElement, onActivate: () => void): HTMLButtonElement =>
+    pressable(h('button', { class: `btn ${cls} pe`, type: 'button' }, icon(iconName), label), onActivate);
 
-  // The Journey pill: the campaign's entry ("Journey · Level 12"), the primary control above the tray.
-  const journeyLevel = h('span', { class: 'journey-pill-level' });
-  const journeyBtn = h(
-    'button',
-    { class: 'btn btn--primary journey-pill pe', type: 'button' },
-    icon('map'),
-    h('span', { class: 'btn-label' }, 'Journey', h('span', { class: 'journey-pill-sep', 'aria-hidden': 'true' }, ' · '), journeyLevel),
-    icon('chevron', 'ic journey-pill-chev'),
+  // --- Challenge banner ------------------------------------------------------------------------
+  // "Sam challenges you:" — the name is isolated (<bdi>) so a right-to-left name can't reorder the line.
+  const challengeName = h('bdi', null);
+  const challengeGoal = h('strong', { class: 'challenge-goal' });
+  const challengeNote = h('span', { class: 'challenge-note' });
+  const challengePlay = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', className: 'challenge-play', onPress: () => run('challenge') });
+  const challengeClose = button(ctx, { label: 'Dismiss challenge', icon: 'close', round: true, sound: 'back', className: 'challenge-close', onPress: () => {
+    ctx.clearChallenge();
+    ctx.cb.dismissChallenge();
+  } });
+  const challenge = h(
+    'div',
+    { class: 'challenge pe', role: 'group', 'aria-label': 'Challenge' },
+    h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, icon('flag')),
+    h('div', { class: 'challenge-text' }, h('span', { class: 'challenge-from' }, challengeName, ' challenges you:'), challengeGoal, challengeNote),
+    challengePlay,
+    challengeClose,
   );
-  pressable(journeyBtn, () => {
-    ctx.sound('tap');
+
+  // --- Chips -------------------------------------------------------------------------------------
+  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Journal.
+  const bestDay = h('span', { class: 'day-badge' });
+  const bestValue = h('span', { class: 'num' });
+  const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('journal'));
+  // The other chips are read as one labeled image each (their aria-label carries the full sentence).
+  const pips = h('span', { class: 'pips' });
+  const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
+  const walletValue = h('span', { class: 'num' });
+  const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), walletValue);
+  const chips = h('div', { class: 'chips' }, chipBest, chipMissions, chipSnow);
+
+  // --- The modes: the map, the next level (primary) and Endless ----------------------------------
+  const starsValue = h('span', { class: 'num' });
+  const mapBtn = pill('journey-pill', 'map', starsValue, () => {
     ctx.go('journey');
     ctx.cb.openJourney();
   });
+  const playBtn = pill('btn--primary play-pill', 'play', h('span', { class: 'btn-label' }), playLevel);
+  const endlessBtn = pill('endless-pill', 'endless', h('span', { class: 'btn-label' }, 'Endless'), () => run('endless'));
+  endlessBtn.setAttribute('aria-label', 'Endless run');
+  const modes = h('div', { class: 'modes' }, mapBtn, playBtn, endlessBtn);
 
-  const openMenu = (id: 'daily' | 'missions' | 'wardrobe' | 'settings'): void => {
-    ctx.sound('tap');
-    ctx.go(id);
-  };
+  // --- Tray --------------------------------------------------------------------------------------
+  const dailyDot = h('span', { class: 'tray-dot', 'aria-hidden': 'true' });
+  const dailyLock = h('span', { class: 'tray-lock', 'aria-hidden': 'true' }, icon('lock'));
+  const trayButton = (label: string, iconName: IconName, onActivate: () => void, extras: HTMLElement[] = [], sound = true): HTMLButtonElement =>
+    pressable(
+      h(
+        'button',
+        { class: 'tray-btn pe', type: 'button', 'aria-label': label },
+        h('span', { class: 'tray-disc' }, icon(iconName), ...extras),
+        h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
+      ),
+      onActivate,
+      sound,
+    );
   const dailyBtn = trayButton(
     'Daily',
     'daily',
     () => {
       if (isDailyUnlocked(ctx.save())) {
-        openMenu('daily');
+        ctx.sound('tap');
+        ctx.go('daily');
       } else {
         ctx.sound('deny');
         ctx.toast(`The Daily unlocks after ${DAILY_UNLOCK_RUNS} runs.`, { icon: 'lock', tone: 'ink' });
       }
     },
     [dailyDot, dailyLock],
+    false,
   );
-  const missionsBtn = trayButton('Missions', 'missions', () => openMenu('missions'));
-  const wardrobeBtn = trayButton('Wardrobe', 'wardrobe', () => openMenu('wardrobe'));
-  const settingsBtn = trayButton('Settings', 'settings', () => openMenu('settings'));
   const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
     journal: chipBest,
-    journey: journeyBtn,
+    journey: mapBtn,
     daily: dailyBtn,
-    missions: missionsBtn,
-    wardrobe: wardrobeBtn,
-    settings: settingsBtn,
+    missions: trayButton('Missions', 'missions', () => ctx.go('missions')),
+    wardrobe: trayButton('Wardrobe', 'wardrobe', () => ctx.go('wardrobe')),
+    settings: trayButton('Settings', 'settings', () => ctx.go('settings')),
   };
-  const tray = h('nav', { class: 'tray', 'aria-label': 'Menu' }, dailyBtn, missionsBtn, wardrobeBtn, settingsBtn);
+  const tray = h('nav', { class: 'tray', 'aria-label': 'Menu' }, dailyBtn, trayFor.missions, trayFor.wardrobe, trayFor.settings);
 
-  // After onboarding the tagline names the next goal; the forecast chip previews the run's Day 1.
+  // After onboarding the tagline names the next goal; the forecast chip previews the endless run's Day 1.
   const tagline = h('p', { class: 'tagline' }, TAGLINE);
   const forecast = h('p', { class: 'forecast-chip', hidden: true });
-  const bottomCluster = h(
-    'div',
-    { class: 'title-bottom' },
-    chips,
-    h('i', { class: 'title-gap', 'aria-hidden': 'true' }),
-    journeyBtn,
-    h('i', { class: 'title-gap', 'aria-hidden': 'true' }),
-    tray,
-  );
+  const gap = (): HTMLElement => h('i', { class: 'title-gap', 'aria-hidden': 'true' });
+  const bottomCluster = h('div', { class: 'title-bottom' }, chips, gap(), modes, gap(), tray);
   const el = h(
     'section',
-    { class: 'scr scr-title', 'aria-label': REGION_LABEL },
-    h('div', { class: 'title-top' }, logo(), tagline, forecast, challenge),
+    { class: 'scr scr-title' },
+    h('div', { class: 'title-top' }, logo(), tagline, forecast, h('p', { class: 'title-keys' }, KEY_HINT), challenge),
     bottomCluster,
   );
   let preview: DayPlan | null = null;
@@ -265,19 +224,15 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    * - the chips stay on one line: the Snow chip is dropped when the row would overflow;
    * - the bottom cluster stays below Nubs' halo (--nubs-y + --halo-r): gaps shrink first (CSS),
    *   then the tray labels go (the buttons keep their aria-labels), then the tray discs and the
-   *   Journey pill shrink (is-tight), then the chips row goes (tiny screens);
+   *   mode pills shrink (is-tight), then the chips row goes (tiny screens);
    * - a tall challenge banner drops the goal tagline, shrinks the logo, drops the forecast chip,
-   *   then the tagline, to stay clear of the chips;
-   * - the swiping hand sits below the dial when it fits between the dial and the chips (the thumb
-   *   it teaches then never covers Nubs or what comes at him); otherwise the whole hint sits above
-   *   Nubs and never overlaps the tagline, the forecast chip or the banner: its key line goes first,
-   *   then the goal tagline, the word "drag", and (after a smaller logo) the hint itself.
+   *   then the tagline, to stay clear of the chips.
    */
   function fit(): void {
     if (!el.classList.contains('is-on')) return;
     chips.classList.remove('no-wallet');
     bottomCluster.classList.remove('no-labels', 'is-tight', 'no-chips');
-    el.classList.remove('is-compact', 'no-tagline', 'no-forecast', 'no-ghost-keys', 'no-ghost-word', 'no-ghost', 'ghost-below');
+    el.classList.remove('is-compact', 'no-tagline', 'no-forecast');
     if (chips.scrollWidth > chips.clientWidth + 1) chips.classList.add('no-wallet');
 
     // --nubs-y is in viewport px, like the rects.
@@ -288,49 +243,14 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       // upward, so measure them rather than the (capped) cluster box. 1 px covers the rounding of
       // the published vars.
       const limit = nubsY + haloR + 1;
-      const top = (): number => (bottomCluster.classList.contains('no-chips') ? journeyBtn : chips).getBoundingClientRect().top;
+      const top = (): number => (bottomCluster.classList.contains('no-chips') ? modes : chips).getBoundingClientRect().top;
       for (const step of ['no-labels', 'is-tight', 'no-chips']) if (top() < limit) bottomCluster.classList.add(step);
     }
-
-    const shed = (fits: () => boolean, steps: readonly string[]): void => {
-      for (const step of steps) if (!fits()) el.classList.add(step);
-    };
-    const first = goalTagline ? ['no-tagline'] : [];
     // A tall banner (large text, small phone) must not reach the chips.
     if (ctx.challenge() !== null) {
-      shed(() => layoutRect(challenge).bottom + BANNER_GAP <= chips.getBoundingClientRect().top, [...first, 'is-compact', 'no-forecast', 'no-tagline']);
+      const steps = [...(goalTagline ? ['no-tagline'] : []), 'is-compact', 'no-forecast', 'no-tagline'];
+      for (const step of steps) if (layoutBottom(challenge) + BANNER_GAP > chips.getBoundingClientRect().top) el.classList.add(step);
     }
-
-    const ghost = el.closest('.world')?.querySelector('.ghost');
-    if (!ghost) return;
-    const word = ghost.querySelector('.ghost-word');
-    const keys = ghost.querySelector('.ghost-keys');
-    const track = ghost.querySelector('.ghost-track');
-    const handBox = (): DOMRect | null => {
-      // The hand hangs from the track's center line: 18 px above (its tip glow) to 50 px below it.
-      const t = track?.getBoundingClientRect();
-      if (!t || t.height === 0) return null;
-      const c = t.top + t.height / 2;
-      return new DOMRect(t.left, c - 18, t.width, 68);
-    };
-    // Below the dial: only the hand and its trail, for touch players (mouse and keyboard players
-    // need the key line, which only fits above).
-    if (!ctx.keyboardMode() && !matchMedia('(pointer: fine)').matches) {
-      el.classList.add('ghost-below');
-      if (overlaps(handBox() ?? new DOMRect(), chips.getBoundingClientRect(), 2)) el.classList.remove('ghost-below');
-      else return;
-    }
-    const obstacles = (): DOMRect[] => [tagline, forecast, ...(ctx.challenge() ? [challenge] : [])].map(layoutRect);
-    const hitsAny = (r: DOMRect | null | undefined): boolean => !!r && obstacles().some((o) => overlaps(r, o, BANNER_GAP));
-    const wordHits = (): boolean => hitsAny(word?.getBoundingClientRect());
-    const handHits = (): boolean => hitsAny(handBox());
-    // The key line sits between the word and the hand: dropping it lowers the word, so try that first.
-    if (hitsAny(keys?.getBoundingClientRect()) || wordHits()) el.classList.add('no-ghost-keys');
-    // "drag" and the hand teach the game, so make room before dropping them: the goal tagline, a
-    // smaller logo, the forecast chip, then no tagline (small phones, large text, a tall banner).
-    shed(() => !wordHits() && !handHits(), [...first, 'is-compact', 'no-forecast', 'no-tagline']);
-    if (wordHits()) el.classList.add('no-ghost-word');
-    if (handHits()) el.classList.add('no-ghost-word', 'no-ghost');
   }
 
   function refresh(): void {
@@ -349,20 +269,13 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     bestValue.textContent = formatTimeOfDay(best.minute);
     chipBest.setAttribute('aria-label', `Journal, ${eased ? 'eased best' : 'best'} ${formatScore(shownBest)}`);
 
-    // Three mission pips and a fourth, set apart, for Today's errand.
     const missions = activeMissionViews(save);
-    const errand = errandView(save, ctx.today());
-    const pip = (fraction: number, done: boolean, cls = ''): HTMLElement => {
-      const p = h('i', { class: `pip${done ? ' is-done' : ''}${cls}` });
-      p.style.setProperty('--p', String(fraction));
+    setChildren(pips, ...missions.map((m) => {
+      const p = h('i', { class: `pip${m.done ? ' is-done' : ''}` });
+      p.style.setProperty('--p', String(m.fraction));
       return p;
-    };
-    setChildren(pips, ...missions.map((m) => pip(m.fraction, m.done)), pip(errand.fraction, errand.done, ' pip--errand'));
-    const done = missions.filter((m) => m.done).length;
-    chipMissions.setAttribute(
-      'aria-label',
-      `Missions: ${done} of ${missions.length} complete. Today's errand ${errand.done ? 'done' : errand.progressText}`,
-    );
+    }));
+    chipMissions.setAttribute('aria-label', `Missions: ${missions.filter((m) => m.done).length} of ${missions.length} complete`);
 
     const goal = nextGoal(save, ctx.today());
     goalTagline = goal !== null;
@@ -375,8 +288,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     chipSnow.setAttribute('aria-label', `${s.wallet} Snow`);
 
     const level = continueLevel(save);
-    journeyLevel.textContent = `Level ${level}`;
-    journeyBtn.setAttribute('aria-label', `Journey, continue at Level ${level}`);
+    setButtonLabel(playBtn, `Level ${level}`);
+    playBtn.setAttribute('aria-label', `Play Level ${level}`);
+    const stars = totalStars(save);
+    starsValue.textContent = stars > 0 ? `${stars}★` : 'Map';
+    mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
     const unlocked = isDailyUnlocked(save);
     const unplayed = unlocked && !dailyStatus(save, ctx.today()).played;
@@ -387,8 +303,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
 
     const banner = ctx.challenge();
     hide(challenge, banner === null);
-    el.classList.toggle('has-challenge', banner !== null);
-    el.setAttribute('aria-label', banner ? REGION_LABEL_CHALLENGE : REGION_LABEL);
+    el.setAttribute('aria-label', banner ? 'Press Space to start the challenge.' : `Press Space to play Level ${level}.`);
     if (banner) {
       challengeName.textContent = banner.name || 'A friend';
       challengeGoal.textContent = challengeGoalText(banner.minutes);
@@ -406,7 +321,6 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
 
   return {
     el,
-    bottomCluster,
     setRunPreview(p) {
       if (p?.biome === preview?.biome && p?.forecast === preview?.forecast) return;
       preview = p;
@@ -420,11 +334,12 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     refresh,
     relayout: fit,
     activate() {
-      start();
+      if (ctx.challenge() !== null) run('challenge');
+      else playLevel();
       return true;
     },
-    // Back from a menu: the tray button that opened it. Otherwise nothing is focused, so Space and
-    // Enter start the run (or the challenge) instead of pressing a button.
+    // Back from a menu: the button that opened it. Otherwise nothing is focused, so Space and Enter
+    // play the level (or the challenge) instead of pressing a button.
     initialFocus: () => (returnFrom !== null ? (trayFor[returnFrom] ?? null) : null),
   };
 }

@@ -1,10 +1,10 @@
 // Layout checks (archive/TECH_SPEC §16.3): at 320×568, 360×640, 390×844 and 430×932 with a simulated 47 px
 // notch, the pause button and the Results buttons sit inside the viewport and below the inset, and
-// the Title's ghost hint and the Pause card stay clear of Nubs and his halo dial; a phone held
+// the Title's controls and the Pause card stay clear of Nubs and his halo dial; a phone held
 // landscape shows the rotate overlay. Wave 3: on wide screens every control lies inside the world
 // rect the game publishes (K9), short viewports keep Retry reachable, large text keeps the tray
-// labels apart, a rich save's chips clear Nubs' halo, the challenge banner clears the ghost hint,
-// and a toast clears the menu header. Screenshots are attached, not asserted.
+// labels apart, a rich save's chips clear Nubs' halo, the challenge banner clears the chips, and
+// a toast clears the menu header. Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { challengeCode, drag, keepAlive, openGame, seedSave, waitForScreen } from './helpers.ts';
 
@@ -62,14 +62,10 @@ for (const size of SIZES) {
     await simulateNotch(page);
     await page.waitForTimeout(200);
     await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
-    if ((await page.locator('.scr-title.ghost-below').count()) > 0) {
-      // UM9: on touch, when the hand fits above the tray chips, it alone sits under the dial.
-      await expectBelowNubs(page, page.locator('.ghost-hand'), 'Title ghost hand');
-      await expect(page.locator('.ghost-word')).toBeHidden();
-    } else {
-      await expectAboveNubs(page, page.locator('.ghost-hand'), 'Title ghost hand');
-      await expectAboveNubs(page, page.locator('.ghost-word'), 'Title "drag" word');
-    }
+    // The Title's controls sit below Nubs and his dial, inside the screen.
+    await expectBelowNubs(page, page.locator('.scr-title .modes'), 'Title modes');
+    await expectInside(page, page.locator('.scr-title .play-pill'), 'Play');
+    await expectInside(page, page.locator('.tray button[aria-label="Settings"]'), 'Settings');
 
     await drag(page, Math.round(size.width / 2), Math.round(size.height * 0.4), -40);
     await waitForScreen(page, 'play');
@@ -264,9 +260,9 @@ for (const size of [
     await openGame(page);
     await page.waitForTimeout(300);
     // The cluster's top row is the chips; on a tiny screen the Title drops them (no-chips) so the
-    // Journey pill and the tray fit below the halo, and the pill is the top row then.
+    // modes and the tray fit below the halo, and the modes are the top row then.
     const noChips = await page.locator('.title-bottom.no-chips').count();
-    const topRow = await boxOf(page.locator(noChips ? '.scr-title .journey-pill' : '.chips'), noChips ? 'journey pill' : 'chips');
+    const topRow = await boxOf(page.locator(noChips ? '.scr-title .modes' : '.chips'), noChips ? 'modes' : 'chips');
     if (noChips) await expect(page.locator('.chips')).toBeHidden();
     else await expect(page.locator('.chips')).toBeVisible();
     const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
@@ -283,22 +279,16 @@ for (const size of [
   { width: 360, height: 640 },
   { width: 390, height: 844 },
 ]) {
-  test(`challenge banner at ${size.width}x${size.height} clears the ghost hint`, async ({ page }, info) => {
+  test(`challenge banner at ${size.width}x${size.height} clears the chips`, async ({ page }, info) => {
     await page.setViewportSize(size);
     await openGame(page, `test=1#c=${CHALLENGE}`);
     await expect(page.locator('.challenge')).toBeVisible();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
     const banner = await boxOf(page.locator('.challenge'), 'banner');
     const goal = await boxOf(page.locator('.challenge-goal'), 'goal');
     const play = await boxOf(page.locator('.challenge').getByRole('button', { name: 'Play' }), 'banner Play');
-    // Sample the moving hand over a loop of its animation.
-    for (let i = 0; i < 6; i++) {
-      for (const sel of ['.ghost-hand', '.ghost-word']) {
-        const b = await page.locator(sel).boundingBox();
-        if (b) expect(intersects(b, banner), `${sel} meets the banner`).toBe(false);
-      }
-      await page.waitForTimeout(250);
-    }
+    const cluster = page.locator('.scr-title .title-bottom > :visible:not(.title-gap)').first();
+    expect(banner.y + banner.height, 'banner above the bottom cluster').toBeLessThanOrEqual((await boxOf(cluster, 'cluster top')).y);
     expect(intersects(goal, play), 'goal text under the Play button').toBe(false);
     await info.attach(`challenge-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
   });

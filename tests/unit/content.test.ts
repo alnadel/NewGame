@@ -14,15 +14,15 @@ import { missionLabel, missionProgressText, missionTarget, parseMissionId, missi
 const HEX = /^#[0-9A-F]{6}$/i;
 
 describe('cosmetics catalog', () => {
-  it('has the 24 items in 4 slots', () => {
-    expect(COSMETICS).toHaveLength(24);
+  it('has the 29 items in 4 slots (5 of them Journey star rewards)', () => {
+    expect(COSMETICS).toHaveLength(29);
     expect(cosmeticsForSlot('scarf').map((c) => c.name)).toEqual([
-      'Red Scarf', 'Mint Scarf', 'Plaid Scarf', 'Rainbow Scarf', 'Midnight Scarf', 'Gold Scarf', 'Aurora Scarf',
+      'Red Scarf', 'Mint Scarf', 'Plaid Scarf', 'Rainbow Scarf', 'Midnight Scarf', 'Gold Scarf', 'Aurora Scarf', 'Starry Scarf',
     ]);
-    expect(cosmeticsForSlot('hat').map((c) => c.name)).toEqual(['No Hat', 'Beanie', 'Top Hat', 'Party Cone', 'Gilded Top Hat', 'Sun Visor', 'Crown']);
-    expect(cosmeticsForSlot('nose').map((c) => c.name)).toEqual(['Carrot', 'Parsnip', 'Candy Cane', 'Pinecone', 'Icicle']);
-    expect(cosmeticsForSlot('shades').map((c) => c.name)).toEqual(['Classic Shades', 'Round Shades', 'Aviators', 'Star Shades', 'Heart Shades']);
-    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(24);
+    expect(cosmeticsForSlot('hat').map((c) => c.name)).toEqual(['No Hat', 'Beanie', 'Top Hat', 'Party Cone', 'Gilded Top Hat', 'Sun Visor', 'Crown', 'Night Beanie', 'Star Crown']);
+    expect(cosmeticsForSlot('nose').map((c) => c.name)).toEqual(['Carrot', 'Parsnip', 'Candy Cane', 'Pinecone', 'Icicle', 'Golden Carrot']);
+    expect(cosmeticsForSlot('shades').map((c) => c.name)).toEqual(['Classic Shades', 'Round Shades', 'Aviators', 'Star Shades', 'Heart Shades', 'Galaxy Shades']);
+    expect(new Set(COSMETICS.map((c) => c.id)).size).toBe(29);
   });
 
   it('prices items per GDD §6', () => {
@@ -147,16 +147,16 @@ describe('missions and achievements', () => {
     expect(parseMissionId('bogus')).toBeNull();
   });
 
-  it('has 19 achievements with riddles (16 plus the three Journey ones)', () => {
+  it('has 24 achievements with riddles (16, the three Journey ones and the five star rewards)', () => {
     expect(ACHIEVEMENTS.map((a) => a.name)).toEqual([
       'First Light', 'Night Owl', 'High Noon', 'Solstice', 'Seventh Sun', 'Phew-nomenal', 'Cloud Rider', 'Daily Habit',
       'Sundancer', 'Rematch', 'Sunny Week', 'Close Shave', 'Glare-Proof', 'Ice Cold', 'Night Gardener', 'Forecaster',
-      'First Steps', 'Halfway There', 'Starry Road',
+      'First Steps', 'Halfway There', 'Starry Road', 'Stargazer', 'Night Sky', 'Constellation', 'Milky Way', 'Every Star',
     ]);
     for (const a of ACHIEVEMENTS) expect(a.hint.length).toBeGreaterThan(10);
   });
 
-  it('gives the Journey achievements no item rewards', () => {
+  it('gives the Journey feats no item rewards (the star rewards carry them)', () => {
     for (const id of ['journey-10', 'journey-100', 'three-star-20']) expect(getAchievement(id)?.reward).toBeUndefined();
   });
 });

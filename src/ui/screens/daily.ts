@@ -62,9 +62,9 @@ export function createDailyScreen(ctx: UiContext): Screen {
     h('p', { class: 'daily-blurb' }, 'Same world for everyone today. You get 3 tries and your best one counts.'),
     h(
       'div',
-      { class: 'daily-meta' },
-      h('div', { class: 'daily-meta-cell' }, h('span', { class: 'kicker' }, 'Tries'), h('span', { class: 'daily-tries' }, tryPips, tryText)),
-      h('div', { class: 'daily-meta-cell' }, h('span', { class: 'kicker' }, 'Best today'), best),
+      { class: 'cells' },
+      h('div', { class: 'cell' }, h('span', { class: 'kicker' }, 'Tries'), h('span', { class: 'daily-tries' }, tryPips, tryText)),
+      h('div', { class: 'cell' }, h('span', { class: 'kicker' }, 'Best today'), best),
     ),
     par,
     play,

@@ -1,14 +1,13 @@
 // Pure mission logic: tiered goals, skill gates, labels, run measurement, dealing with a deferred
-// queue, stale swaps, Today's errand and view models (V1_PLAN §11.1, V1_1_PLAN UM4).
+// queue, stale swaps and view models (V1_PLAN §11.1, V1_1_PLAN UM4).
 //
 // Slot ids encode the tier so a mixed set (e.g. two tier-I and one tier-II mission after the pool
 // wraps) needs no extra save fields: 'flakes-10' is tier I, 'flakes-10@2' is tier II.
 
 import { formatScore, formatTimeOfDay, MINUTES_PER_DAY } from '../core/format.ts';
-import { hashString } from '../core/rng.ts';
-import type { ErrandState, MissionSlot } from './saveTypes.ts';
+import type { MissionSlot } from './saveTypes.ts';
 import type { RunResult } from '../core/index.ts';
-import { ACTIVE_MISSIONS, ERRAND_REWARD, ERRANDS, MISSIONS, type ErrandDef, type ErrandId, type MissionDef, type MissionId } from './content.ts';
+import { ACTIVE_MISSIONS, MISSIONS, type MissionDef, type MissionId } from './content.ts';
 
 /** Keeps "3 s" together when a label wraps. */
 const NBSP = '\u00a0';
@@ -294,92 +293,4 @@ export function swapSlot(state: MissionState, slotId: string, best: number): Mis
   state.active[i] = slot;
   defer(state, slotId);
   return slot;
-}
-
-// ---------------------------------------------------------------------------------------------
-// Today's errand
-// ---------------------------------------------------------------------------------------------
-
-const ERRAND_BY_ID = new Map<string, ErrandDef>(ERRANDS.map((e) => [e.id, e]));
-
-export function getErrand(id: string): ErrandDef | undefined {
-  return ERRAND_BY_ID.get(id);
-}
-
-/**
- * The errand of a local date, the same for everyone. While the Daily is locked, "Play today's
- * Daily" gives way to the next errand in the list.
- */
-export function errandFor(date: string, dailyUnlocked: boolean): ErrandDef {
-  const i = hashString(`shady-errand-${date}`) % ERRANDS.length;
-  const e = ERRANDS[i] as ErrandDef;
-  return e.id === 'e-daily' && !dailyUnlocked ? (ERRANDS[(i + 1) % ERRANDS.length] as ErrandDef) : e;
-}
-
-/** A date's errand: the stored one when it belongs to that date, else a fresh one. */
-export function errandState(stored: ErrandState, date: string, dailyUnlocked: boolean): ErrandState {
-  return stored.date === date && getErrand(stored.id) ? stored : { date, id: errandFor(date, dailyUnlocked).id, progress: 0, done: false };
-}
-
-/** What one finished run adds to an errand's day total. */
-export function errandValue(id: ErrandId, result: RunResult, dailyTry: number | null | undefined): number {
-  const s = result.stats;
-  switch (id) {
-    case 'e-flakes-25':
-      return s.flakes;
-    case 'e-phews-2':
-      return s.phews;
-    case 'e-cloud-8':
-      return s.cloudSeconds;
-    case 'e-mult3-2':
-      return s.maxMult >= 3 ? 1 : 0;
-    case 'e-noon-1':
-      return result.minutes >= 390 ? 1 : 0;
-    case 'e-9am-3':
-      return result.minutes >= 180 ? 1 : 0;
-    case 'e-crystals-2':
-      return s.crystals;
-    case 'e-flowers-12':
-      return s.flowers;
-    case 'e-cool-4':
-      return result.hourGlyphs.reduce((n, day) => n + day.filter((g) => g === 'cool').length, 0);
-    case 'e-swings-3':
-      return s.swings;
-    case 'e-daily':
-      return result.mode === 'daily' && dailyTry != null ? 1 : 0;
-    case 'e-runs-5':
-      return 1;
-  }
-}
-
-export interface ErrandView {
-  id: string;
-  label: string;
-  reward: number;
-  progress: number;
-  target: number;
-  /** Progress toward the goal in [0, 1]. */
-  fraction: number;
-  progressText: string;
-  done: boolean;
-  /** Completed by the run whose outcome this view belongs to. */
-  justCompleted: boolean;
-}
-
-export function errandViewOf(state: ErrandState, justCompleted = false): ErrandView | null {
-  const def = getErrand(state.id);
-  if (!def) return null;
-  const shown = Math.min(state.progress, def.target);
-  return {
-    id: def.id,
-    label: def.label,
-    reward: ERRAND_REWARD,
-    progress: state.progress,
-    target: def.target,
-    fraction: state.done ? 1 : Math.max(0, Math.min(1, state.progress / def.target)),
-    progressText:
-      def.id === 'e-cloud-8' ? `${(Math.floor(shown * 10) / 10).toFixed(1)}/${def.target}${NBSP}s` : `${Math.floor(shown)}/${def.target}`,
-    done: state.done,
-    justCompleted,
-  };
 }

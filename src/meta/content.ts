@@ -1,5 +1,5 @@
-// Meta content catalog (pure data): Wardrobe cosmetics, the mission pool, Today's errands and
-// achievements (GDD §6 + §8, V1_PLAN §11, V1_1_PLAN UM4/UM6). Ids are persisted in saves: never rename one.
+// Meta content catalog (pure data): Wardrobe cosmetics, the mission pool and achievements (the
+// Journey's star rewards among them) (GDD §6 + §8, V1_PLAN §11, V1_1_PLAN UM4/UM6). Ids are persisted in saves: never rename one.
 
 // ---------------------------------------------------------------------------------------------
 // Cosmetics
@@ -28,7 +28,12 @@ export type AchievementId =
   | 'forecaster'
   | 'journey-10'
   | 'journey-100'
-  | 'three-star-20';
+  | 'three-star-20'
+  | 'stars-25'
+  | 'stars-75'
+  | 'stars-150'
+  | 'stars-300'
+  | 'stars-600';
 
 export type CosmeticId =
   | 'scarf-red'
@@ -54,7 +59,12 @@ export type CosmeticId =
   | 'shades-round'
   | 'shades-aviator'
   | 'shades-star'
-  | 'shades-heart';
+  | 'shades-heart'
+  | 'scarf-starry'
+  | 'hat-nightcap'
+  | 'hat-starcrown'
+  | 'nose-golden'
+  | 'shades-galaxy';
 
 export type CosmeticUnlock =
   | { kind: 'default' }
@@ -141,7 +151,7 @@ const snow = (cost: number): CosmeticUnlock => ({ kind: 'snow', cost });
 const DEFAULT: CosmeticUnlock = { kind: 'default' };
 const byAchievement = (achievement: AchievementId): CosmeticUnlock => ({ kind: 'achievement', achievement });
 
-/** All 24 cosmetics, grouped by slot in Wardrobe display order. */
+/** All 29 cosmetics, grouped by slot in Wardrobe display order. */
 export const COSMETICS: readonly Cosmetic[] = [
   // Scarves
   { id: 'scarf-red', slot: 'scarf', name: 'Red Scarf', unlock: DEFAULT,
@@ -159,6 +169,8 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'scarf', pattern: 'metallic', main: '#FFC23D', shade: '#C98A12', stripes: [], shine: '#FFF3C4' } },
   { id: 'scarf-aurora', slot: 'scarf', name: 'Aurora Scarf', unlock: byAchievement('sunny-week'),
     look: { slot: 'scarf', pattern: 'rainbow', main: '#2EC4B6', shade: '#1B9A8E', stripes: ['#2EC4B6', '#5AB8FF', '#9B5DE5', '#6BCB77'] } },
+  { id: 'scarf-starry', slot: 'scarf', name: 'Starry Scarf', unlock: byAchievement('stars-25'),
+    look: { slot: 'scarf', pattern: 'stripes', main: '#34306B', shade: '#24204F', stripes: ['#FFC23D'] } },
 
   // Hats
   { id: 'hat-none', slot: 'hat', name: 'No Hat', unlock: DEFAULT,
@@ -175,6 +187,10 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'hat', shape: 'sunVisor', main: '#FFE27A', shade: '#E8B93A', accent: '#FF8A2B', detail: '#FF8A2B' } },
   { id: 'hat-crown', slot: 'hat', name: 'Crown', unlock: byAchievement('solstice'),
     look: { slot: 'hat', shape: 'crown', main: '#FFC23D', shade: '#D99A1A', accent: '#FF5D5D', detail: '#2EC4B6' } },
+  { id: 'hat-nightcap', slot: 'hat', name: 'Night Beanie', unlock: byAchievement('stars-75'),
+    look: { slot: 'hat', shape: 'beanie', main: '#34306B', shade: '#24204F', accent: '#FFC23D', detail: '#FFC23D' } },
+  { id: 'hat-starcrown', slot: 'hat', name: 'Star Crown', unlock: byAchievement('stars-600'),
+    look: { slot: 'hat', shape: 'crown', main: '#E8ECFF', shade: '#9AA6D8', accent: '#FFC23D', detail: '#5AB8FF' } },
 
   // Noses
   { id: 'nose-carrot', slot: 'nose', name: 'Carrot', unlock: DEFAULT,
@@ -187,6 +203,8 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'nose', shape: 'pinecone', main: '#8A5A3C', shade: '#5E3B25', accent: '#B07A52', length: 0.75 } },
   { id: 'nose-icicle', slot: 'nose', name: 'Icicle', unlock: byAchievement('ice-cold'),
     look: { slot: 'nose', shape: 'carrot', main: '#CFEFFF', shade: '#9AD8FF', accent: '#FFFFFF', length: 1.1 } },
+  { id: 'nose-golden', slot: 'nose', name: 'Golden Carrot', unlock: byAchievement('stars-150'),
+    look: { slot: 'nose', shape: 'carrot', main: '#FFC23D', shade: '#D99A12', accent: '#FFF1C9', length: 1.05 } },
 
   // Sun Shades (worn by the sun)
   { id: 'shades-classic', slot: 'shades', name: 'Classic Shades', unlock: DEFAULT,
@@ -199,6 +217,8 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'shades', shape: 'star', frame: '#9B5DE5', lens: '#FFD93D', lens2: '#FF9F43', shine: '#FFFFFF' } },
   { id: 'shades-heart', slot: 'shades', name: 'Heart Shades', unlock: byAchievement('rematch'),
     look: { slot: 'shades', shape: 'heart', frame: '#E8475A', lens: '#FF8FA3', lens2: '#E8475A', shine: '#FFFFFF' } },
+  { id: 'shades-galaxy', slot: 'shades', name: 'Galaxy Shades', unlock: byAchievement('stars-300'),
+    look: { slot: 'shades', shape: 'round', frame: '#34306B', lens: '#5B4A86', lens2: '#9B5DE5', shine: '#FFF3C4' } },
 ];
 
 const COSMETIC_BY_ID = new Map<string, Cosmetic>(COSMETICS.map((c) => [c.id, c]));
@@ -303,8 +323,8 @@ export interface MissionDef {
 /**
  * The ordered pool (V1_PLAN §11.1). Three are active; completed ones are replaced from here, and a
  * mission above the player's recent best waits in the deferred queue (missions.ts). hold-x5 keeps
- * its id (saves persist it) but is "Reach a ×4 multiplier"; swings-3 took play-daily's index (now
- * an errand), so saved cursors stay valid.
+ * its id (saves persist it) but is "Reach a ×4 multiplier"; swings-3 took play-daily's index, so
+ * saved cursors stay valid.
  */
 export const MISSIONS: readonly MissionDef[] = [
   { id: 'reach-9am', metric: 'minutes', scale: 'reach', base: 180, reward: 10, gate: 0 },
@@ -326,49 +346,6 @@ export const MISSIONS: readonly MissionDef[] = [
 export const ACTIVE_MISSIONS = 3;
 
 // ---------------------------------------------------------------------------------------------
-// Today's errand: one per local date, the same for everyone (missions.ts errandFor)
-// ---------------------------------------------------------------------------------------------
-
-export type ErrandId =
-  | 'e-flakes-25'
-  | 'e-phews-2'
-  | 'e-cloud-8'
-  | 'e-mult3-2'
-  | 'e-noon-1'
-  | 'e-9am-3'
-  | 'e-crystals-2'
-  | 'e-flowers-12'
-  | 'e-cool-4'
-  | 'e-swings-3'
-  | 'e-daily'
-  | 'e-runs-5';
-
-export interface ErrandDef {
-  id: ErrandId;
-  label: string;
-  /** Summed over every finished run of the date (missions.ts errandValue). */
-  target: number;
-}
-
-/** Fixed index order: the date's hash picks the index. */
-export const ERRANDS: readonly ErrandDef[] = [
-  { id: 'e-flakes-25', label: 'Collect 25 flakes today', target: 25 },
-  { id: 'e-phews-2', label: '2 PHEWs today', target: 2 },
-  { id: 'e-cloud-8', label: '8 s of cloud shade today', target: 8 },
-  { id: 'e-mult3-2', label: 'Reach ×3 in 2 runs today', target: 2 },
-  { id: 'e-noon-1', label: 'Survive a noon today', target: 1 },
-  { id: 'e-9am-3', label: 'Reach 9:00 AM in 3 runs today', target: 3 },
-  { id: 'e-crystals-2', label: '2 Ice Crystals today', target: 2 },
-  { id: 'e-flowers-12', label: '12 frost flowers today', target: 12 },
-  { id: 'e-cool-4', label: '4 cool hours today', target: 4 },
-  { id: 'e-swings-3', label: '3 SWINGs today', target: 3 },
-  { id: 'e-daily', label: "Play today's Daily", target: 1 },
-  { id: 'e-runs-5', label: 'Finish 5 runs today', target: 5 },
-];
-
-export const ERRAND_REWARD = 30;
-
-// ---------------------------------------------------------------------------------------------
 // Achievements
 // ---------------------------------------------------------------------------------------------
 
@@ -381,6 +358,8 @@ export interface AchievementDef {
   hint: string;
   /** Cosmetic granted on unlock. */
   reward?: CosmeticId;
+  /** A Journey star reward: unlocked at this many stars (progression.ts nextStarGoal). */
+  stars?: number;
 }
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = [
@@ -406,10 +385,15 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'night-gardener', name: 'Night Gardener', description: '30 frost flowers in one run.', hint: 'The night garden is big.' },
   { id: 'forecaster', name: 'Forecaster', description: 'Survive a noon in Breezy, Overcast, Heat Wave and Long Shadows weather.',
     hint: 'Any weather, same snowman.' },
-  // Journey (v1.2): no item rewards.
+  // Journey (v1.2).
   { id: 'journey-10', name: 'First Steps', description: 'Finish Chapter 1 of the Journey.', hint: 'Ten short walks make a chapter.' },
   { id: 'journey-100', name: 'Halfway There', description: 'Pass 100 Journey levels.', hint: 'A hundred shades on, the road keeps going.' },
   { id: 'three-star-20', name: 'Starry Road', description: 'Earn three stars on 20 Journey levels.', hint: 'Twenty times, leave nothing behind.' },
+  // The star rewards: every Journey star counts toward the next item.
+  ...([[25, 'Stargazer', 'scarf-starry'], [75, 'Night Sky', 'hat-nightcap'], [150, 'Constellation', 'nose-golden'],
+    [300, 'Milky Way', 'shades-galaxy'], [600, 'Every Star', 'hat-starcrown']] as const).map(([n, name, reward]): AchievementDef => ({
+    id: `stars-${n}`, name, description: `Earn ${n} Journey stars.`, hint: `Earn ${n} Journey stars.`, reward, stars: n,
+  })),
 ];
 
 const ACHIEVEMENT_BY_ID = new Map<string, AchievementDef>(ACHIEVEMENTS.map((a) => [a.id, a]));
