@@ -114,11 +114,6 @@ export function firstTownDay(w: World): number {
 
 const yt: YTime = { day: 1, dayTick: 0, night: false };
 
-/** Day whose daylight or night contains y (Day 1 for y < 0). */
-export function dayAtY(y: number): number {
-  return timeAtY(y, yt).day;
-}
-
 /** Day whose daylight or night contains y in world `w` (walkMul applied). */
 export function worldDayAtY(w: World, y: number): number {
   return timeAtY(y / w.walkMul, yt).day;

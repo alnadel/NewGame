@@ -405,7 +405,7 @@ describe('Journey labels (CAMPAIGN_PLAN §5)', () => {
     expect(continueLabel(12)).toBe('Continue · Level 12');
     expect(chapterTitle(2, 'Cobbles')).toBe('Chapter 2 · Cobbles');
     expect(levelTileLabel({ id: 6, name: 'Glass Garden', introduces: 'glare' }, 2, true)).toBe(
-      'Level 6, Glass Garden. Teaches: Gazing balls throw light back. Red arcs on the dial are glare. 2 of 3 stars.',
+      'Level 6, Glass Garden. Teaches Glare: Gazing balls throw light back. Red arcs on the dial are glare. 2 of 3 stars.',
     );
     expect(levelTileLabel({ id: 45, name: 'Quiet Lane', introduces: null }, 0, true)).toBe('Level 45, Quiet Lane. Not passed yet.');
     expect(levelTileLabel({ id: 45, name: 'Quiet Lane', introduces: null }, 0, false)).toBe('Level 45, Quiet Lane. Locked.');

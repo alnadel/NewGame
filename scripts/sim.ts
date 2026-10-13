@@ -1,43 +1,30 @@
 // Headless balance simulation, acceptance check and career sim (V1_PLAN §13, V1_1_PLAN §6).
 //
-//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F]
-//                       [--check] [--margin PTS] [--workers W]
+//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
-//   node scripts/sim.ts --campaign [--level N] [--bot oracle|reactive|humanDial|all] [--workers W]
+//   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W]
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
-// per row, death-time quantiles, melted% (flakes melted ÷ (melted + collected)), first-night share,
-// median run length in real seconds, mean Snow, SWINGs per daylight minute and lit share (∫f dt ÷
-// daylight seconds), plus world stats (rescues per chunk, unresolved validator failures), generation
-// ms/chunk and sim µs/tick.
+// per row, death-time quantiles, melted%, first-night share, median run seconds, mean Snow, SWINGs
+// per daylight minute and lit share, plus world stats (rescues per chunk, unresolved validator
+// failures), generation ms/chunk and sim µs/tick.
 //
-// Rows. The V1_PLAN §13 rows run on the plan mix (profile 3 with the Day Plan on), plus idle p0 for
-// the first-run lesson's floor (CO4). --forecast F sets RunConfig.forecast on every task. --check
-// also runs idle, novice, reactive and oracle with each forecast forced (same seed count, same
-// worker pool) and checks them. ADVISORY rows run the perception-limited human model (humanDial,
-// A6) at comfort rungs R0-R4 and print PASS/MISS against the V1_1_PLAN §6 targets; they never fail
-// --check.
+// Rows: the V1_PLAN §13 rows on the plan mix, idle p0 for the lesson's floor (CO4); --check adds
+// idle/novice/reactive/oracle with each forecast forced. ADVISORY rows (humanDial at rungs R0-R4)
+// print PASS/MISS against V1_1_PLAN §6 and never fail --check. --check exits non-zero when a hard
+// target fails or passes by less than --margin points of seeds (default 3): a share must clear its
+// bar by the margin, a median window needs 50% + margin of the seeds on each side of each edge. The
+// oracle's 100% and the world targets (rescues per chunk ≤ 0.8, unresolved 0) have no margin.
 //
-// --check exits non-zero if a hard target fails, or passes by less than --margin percentage points
-// of seeds (default 3), so a target that only just passes fails CI before a small tuning change or a
-// different seed count tips it over:
-//   - share targets ("≥ 90% of seeds"): the share must clear the bar by the margin (≥ 93%);
-//   - median-window targets: at least 50% + margin of the seeds must die at or after the window's
-//     start, and 50% + margin at or before its end (the median sits inside with room to spare).
-// The oracle's 100% and the world targets (rescues per chunk ≤ 0.8, unresolved 0) have no margin.
+// --campaign plays the Journey (CAMPAIGN_PLAN §3): oracle, reactive and humanDial on every level
+// (humanDial --tries times, each with its own decision stream), each level's outcome, a per-chapter
+// pass/stars table and the gates (hard: oracle 200/200, reactive ≥ 95% of 1-100; advisory: humanDial
+// ≥ 75% of 1-40 and ≥ 90% of 1-10). Exit 1 on a hard miss.
 //
-// --campaign plays the Journey (CAMPAIGN_PLAN §3 "Fairness"): the oracle, reactive and humanDial
-// bots on all 200 levels (or --level N) at full speed, printing each level's outcome (pass, stars,
-// flakes, Snow, lowest Chill) per bot and the gates: hard, the oracle passes 200/200 and reactive
-// passes ≥ 90% of levels 1-100; advisory, humanDial passes ≥ 70% of levels 1-40. Exit 1 on a hard miss.
-//
-// --career N plays N careers of R runs (default 40) on the comfort ladder: run seed
-// hashString(`career-${c}-${r}`), run 0 at rung 0 (tutorial, lesson), then rungConfig(rung) with the
-// lesson until a lessonDone (the warm-up rules on the first run at R4 after R3), and
-// rung = comfortAfterRun(rung, minutes, previous run) after each run. --meta folds
-// every run through the meta layer's exported API (A14): beginRun before each run, applyRunResult
-// after it, swapMission on slots stale ≥ 5 runs, the cheapest affordable cosmetic bought after each
-// run, one Daily try per sim-day once the Daily is unlocked; `today` advances a day every 5 runs.
+// --career N plays N careers of R runs (default 40) on the comfort ladder (run seed
+// hashString(`career-${c}-${r}`), rungConfig/comfortAfterRun between runs). --meta folds every run
+// through the meta API (A14): beginRun, applyRunResult, stale missions swapped, the cheapest
+// affordable cosmetic bought, one Daily try per sim-day once unlocked; a sim-day is 5 runs.
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
@@ -53,10 +40,10 @@ import { BOT_KINDS, createBot, type BotKind } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import type { RunResult } from '../src/core/sim/events.ts';
 import { headlessConfig } from '../src/core/sim/headless.ts';
-import { campaignConfig } from '../src/core/level.ts';
+import { campaignConfig, levelProgress } from '../src/core/level.ts';
 import { buildRunResult } from '../src/core/sim/result.ts';
 import { step } from '../src/core/sim/step.ts';
-import type { RunConfig } from '../src/core/sim/types.ts';
+import type { RunConfig, SimState } from '../src/core/sim/types.ts';
 
 /** One row of the report: a bot on one kind of run. */
 interface Job {
@@ -132,40 +119,16 @@ function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false): 
   }
   // Bot decisions are timed and subtracted, so stepMs is the cost of step() alone.
   const stepMs = performance.now() - start - botMs;
+  const { flakes, flakesMelted, snow, swings, litTotal } = s.stats;
+  const out = { died: s.phase === 'dead', minutes: s.minutes, day: s.day, flakes, flakesMelted, snow, swings, swingSnow, ticks: s.tick, daylight, litTotal, lessonDone, stepMs, genMs };
+  return { out: { ...out, ...worldStats(s) }, result: buildRunResult(s) };
+}
+
+/** Chunks generated, rescues (total and the most in one chunk), parked clouds and unresolved failures of a run's world. */
+function worldStats(s: SimState): { chunks: number; rescues: number; maxRescues: number; parked: number; unresolved: number } {
   const w = s.world.stats;
-  let rescues = 0;
-  let maxRescues = 0;
-  let chunks = 0;
-  for (const r of w.rescuesPerChunk) {
-    if (r === undefined) continue;
-    chunks++;
-    rescues += r;
-    if (r > maxRescues) maxRescues = r;
-  }
-  return {
-    out: {
-      died: s.phase === 'dead',
-      minutes: s.minutes,
-      day: s.day,
-      flakes: s.stats.flakes,
-      flakesMelted: s.stats.flakesMelted,
-      snow: s.stats.snow,
-      swings: s.stats.swings,
-      swingSnow,
-      ticks: s.tick,
-      daylight,
-      litTotal: s.stats.litTotal,
-      lessonDone,
-      stepMs,
-      genMs,
-      chunks,
-      rescues,
-      maxRescues,
-      parked: w.parkedClouds,
-      unresolved: w.unresolved,
-    },
-    result: buildRunResult(s),
-  };
+  const per = w.rescuesPerChunk.filter((r): r is number => r !== undefined);
+  return { chunks: per.length, rescues: per.reduce((a, r) => a + r, 0), maxRescues: Math.max(0, ...per), parked: w.parkedClouds, unresolved: w.unresolved };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -182,7 +145,6 @@ interface LevelOut {
   minChill: number;
   /** Where the run ended: the level's progress 0..1 (1 at the finish line). */
   progress: number;
-  ticks: number;
   ms: number;
   rescues: number;
   chunks: number;
@@ -190,39 +152,17 @@ interface LevelOut {
 }
 
 /** A bot plays one campaign level to its finish line (or Nubs melts). */
-function playLevel(id: number, kind: BotKind): LevelOut {
+function playLevel(id: number, kind: BotKind, salt: number): LevelOut {
   const t0 = performance.now();
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
   const s = createRun(campaignConfig(id, { lesson: id === 1 }));
-  const bot = createBot(kind);
-  // A level is at most 1080 minutes (one and a half days): 6000 ticks is a safe ceiling.
-  const limit = 8000;
-  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < limit) step(s, bot.next(s));
-  const r = buildRunResult(s);
-  const w = s.world;
-  let rescues = 0;
-  let chunks = 0;
-  for (const n of w.stats.rescuesPerChunk) {
-    if (n === undefined) continue;
-    chunks++;
-    rescues += n;
-  }
-  return {
-    id,
-    bot: kind,
-    phase: s.phase,
-    passed: r.level?.passed ?? false,
-    stars: r.level?.stars ?? 0,
-    flakes: s.stats.flakes,
-    snow: s.stats.snow,
-    minChill: s.stats.minChill,
-    progress: Number.isFinite(w.finishY) ? Math.min(1, (s.nubs.y - w.startY) / (w.finishY - w.startY)) : 0,
-    ticks: s.tick,
-    ms: performance.now() - t0,
-    rescues,
-    chunks,
-    unresolved: w.stats.unresolved,
-  };
+  const bot = createBot(kind, salt);
+  // A level is at most 1080 minutes (one and a half days, ~6000 ticks).
+  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) step(s, bot.next(s));
+  const r = buildRunResult(s).level;
+  const { flakes, snow, minChill } = s.stats;
+  const { rescues, chunks, unresolved } = worldStats(s);
+  return { id, bot: kind, phase: s.phase, passed: r?.passed ?? false, stars: r?.stars ?? 0, flakes, snow, minChill, progress: levelProgress(s), ms: performance.now() - t0, rescues, chunks, unresolved };
 }
 
 function jobConfig(j: Job, seed: number): RunConfig {
@@ -249,56 +189,31 @@ interface CareerOut {
   /** --meta only: achievements unlocked and cosmetics owned at the end. */
   achievements: string[];
   owned: number;
-  missing: string[];
 }
 
-/** The meta API the career harness folds runs through (A14), typed loosely: it may predate v1.1. */
-interface MetaApi {
-  defaults: (now?: number) => MetaSave;
-  beginRun?: (save: MetaSave) => { save: MetaSave };
-  applyRunResult: (save: MetaSave, result: RunResult, options: Record<string, unknown>) => { save: MetaSave; outcome: { missionsCompleted: unknown[] } };
-  swapMission?: (save: MetaSave, slotId: string) => MetaSave;
-  buyCosmetic: (save: MetaSave, id: string) => { ok: boolean; save?: MetaSave };
-  dailyTryStarted?: (save: MetaSave, date: string) => { save: MetaSave; tryNumber: number | null };
-  isDailyUnlocked?: (save: MetaSave) => boolean;
-  COSMETICS: readonly { id: string; unlock: { kind: string; cost?: number } }[];
-  ACHIEVEMENTS: readonly { id: string }[];
-}
+/** The meta API the career harness folds runs through (A14), loaded only for --meta. */
+type Meta = typeof import('../src/meta/save.ts') & typeof import('../src/meta/progression.ts') & typeof import('../src/meta/content.ts');
 
-interface MetaSave {
-  stats: { runs: number; wallet: number };
-  unlocks: { cosmetics: string[]; achievements: string[] };
-  missions: { active: { id: string; stale?: number; done: boolean }[] };
-}
-
-const META_NAMES = ['defaults', 'beginRun', 'applyRunResult', 'swapMission', 'buyCosmetic', 'dailyTryStarted', 'COSMETICS', 'ACHIEVEMENTS'];
-
-async function loadMeta(): Promise<{ api: MetaApi; missing: string[] }> {
-  const mods: Record<string, unknown>[] = [];
-  for (const m of ['save', 'progression', 'content']) mods.push((await import(`../src/meta/${m}.ts`)) as Record<string, unknown>);
-  const api: Record<string, unknown> = {};
-  for (const name of [...META_NAMES, 'isDailyUnlocked']) {
-    for (const mod of mods) if (name in mod) api[name] = mod[name];
-  }
-  return { api: api as unknown as MetaApi, missing: META_NAMES.filter((n) => !(n in api)) };
+async function loadMeta(): Promise<Meta> {
+  const [save, progression, content] = await Promise.all([import('../src/meta/save.ts'), import('../src/meta/progression.ts'), import('../src/meta/content.ts')]);
+  return { ...save, ...progression, ...content };
 }
 
 const CAREER_START = Date.UTC(2026, 10, 2);
 const dateOf = (dayIndex: number): string => new Date(CAREER_START + dayIndex * 86_400_000).toISOString().slice(0, 10);
 
 async function runCareer(c: number, runs: number, kind: BotKind, days: number, withMeta: boolean): Promise<CareerOut> {
-  const meta = withMeta ? await loadMeta() : null;
-  const api = meta?.api;
+  const api = withMeta ? await loadMeta() : null;
   let save = api ? api.defaults(CAREER_START) : null;
   let rung = 0;
   let prev: ComfortPrev | null = null;
   let prevRung = -1;
   let tutorialDone = false;
   let lastDaily = '';
-  const out: CareerOut = { runs: [], achievements: [], owned: 0, missing: meta?.missing ?? [] };
+  const out: CareerOut = { runs: [], achievements: [], owned: 0 };
   for (let r = 0; r < runs; r++) {
     const today = dateOf(Math.floor(r / 5));
-    if (api && save && api.beginRun) save = api.beginRun(save).save;
+    if (api && save) save = api.beginRun(save).save;
     const rc = rungConfig(rung, { tutorialDone, warmup: isWarmup(rung, prevRung) });
     const cfg: RunConfig = { ...headlessConfig(hashString(`career-${c}-${r}`), rc.profile, rc.drain, rc.noonCloud), tutorial: rc.tutorial, lesson: rc.lesson };
     const { out: o, result } = playRun(cfg, kind, days);
@@ -308,25 +223,20 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
       const applied = api.applyRunResult(save, result, { today, playSeconds: o.ticks / 60, rung, warmup: rc.warmup });
       save = applied.save;
       missionDone = applied.outcome.missionsCompleted.length > 0;
-      if (api.swapMission) for (const slot of save.missions.active) if (!slot.done && (slot.stale ?? 0) >= 5) save = api.swapMission(save, slot.id);
-      let cheapest: { id: string; cost: number } | null = null;
-      for (const item of api.COSMETICS) {
-        const cost = item.unlock.cost;
-        if (item.unlock.kind !== 'snow' || cost === undefined || cost > save.stats.wallet || save.unlocks.cosmetics.includes(item.id)) continue;
-        if (!cheapest || cost < cheapest.cost) cheapest = { id: item.id, cost };
-      }
-      if (cheapest) {
-        const bought = api.buyCosmetic(save, cheapest.id);
-        if (bought.ok && bought.save) save = bought.save;
-      }
-      const unlocked = api.isDailyUnlocked ? api.isDailyUnlocked(save) : save.stats.runs >= 3;
-      if (api.dailyTryStarted && unlocked && today !== lastDaily) {
+      for (const slot of save.missions.active) if (!slot.done && (slot.stale ?? 0) >= 5) save = api.swapMission(save, slot.id);
+      // The cheapest affordable Snow cosmetic not owned yet.
+      const owned = save.unlocks.cosmetics as readonly string[];
+      const wallet = save.stats.wallet;
+      const cost = (i: (typeof api.COSMETICS)[number]): number => (i.unlock.kind === 'snow' ? i.unlock.cost : Infinity);
+      const buy = api.COSMETICS.filter((i) => cost(i) <= wallet && !owned.includes(i.id)).sort((a, b) => cost(a) - cost(b))[0];
+      const bought = buy ? api.buyCosmetic(save, buy.id) : null;
+      if (bought?.ok && bought.save) save = bought.save;
+      if (api.isDailyUnlocked(save) && today !== lastDaily) {
         lastDaily = today;
         const tried = api.dailyTryStarted(save, today);
-        save = tried.save;
         const daily: RunConfig = { ...headlessConfig(hashString(`daily-${today}`), 3), mode: 'daily', dailyDate: today, plan: today >= PLAN_START_DATE };
         const d = playRun(daily, kind, days);
-        const dApplied = api.applyRunResult(save, d.result, { today, dailyTry: tried.tryNumber, playSeconds: d.out.ticks / 60 });
+        const dApplied = api.applyRunResult(tried.save, d.result, { today, dailyTry: tried.tryNumber, playSeconds: d.out.ticks / 60 });
         save = dApplied.save;
         if (dApplied.outcome.missionsCompleted.length > 0) missionDone = true;
       }
@@ -350,7 +260,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
 type WorkerMsg =
   | { kind: 'run'; task: Task; job: Job }
   | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean }
-  | { kind: 'level'; id: number; bot: BotKind };
+  | { kind: 'level'; id: number; bot: BotKind; salt: number };
 
 if (!isMainThread && workerData === 'sim') {
   parentPort?.on('message', (m: WorkerMsg) => {
@@ -358,7 +268,7 @@ if (!isMainThread && workerData === 'sim') {
       const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen);
       parentPort?.postMessage({ ...out, job: m.task.job, seed: m.task.seed });
     } else if (m.kind === 'level') {
-      parentPort?.postMessage(playLevel(m.id, m.bot));
+      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt));
     } else {
       void runCareer(m.c, m.runs, m.bot, m.days, m.meta).then((o) => parentPort?.postMessage(o));
     }
@@ -502,8 +412,6 @@ async function careerMain(workers: number, days: number): Promise<void> {
     console.log(`${sec >= 18 && death >= 240 ? 'PASS' : 'MISS'}  human runs 10-25: median run ${sec.toFixed(1)} s (≥ 18), median death ${formatScore(death)} (≥ Day 1 · 10:00 AM)`);
   }
   if (!withMeta) return;
-  const missing = out[0]?.missing ?? [];
-  if (missing.length) console.log(`\nmeta API missing (folded without it): ${missing.join(', ')}`);
   const withLate = out.filter((o) => o.runs.slice(30, 40).some((r) => r.missionDone)).length;
   const lastDone = out.map((o) => {
     let last = 0;
@@ -514,7 +422,7 @@ async function careerMain(workers: number, days: number): Promise<void> {
   });
   console.log(`\nmeta: careers with a mission completed in runs 31-40: ${((100 * withLate) / out.length).toFixed(0)}% (advisory ≥ 80%)`);
   console.log(`meta: median last mission completion: run ${median(lastDone)} (advisory ≥ 36)`);
-  const { api } = await loadMeta();
+  const api = await loadMeta();
   const catalog = api.COSMETICS.length;
   console.log(`meta: catalog owned ${((100 * out.reduce((a, o) => a + o.owned, 0)) / (out.length * catalog)).toFixed(1)}% of ${catalog} (mean over careers)`);
   console.log('meta: achievements unlocked (% of careers):');
@@ -526,76 +434,71 @@ const CAMPAIGN_BOTS: readonly BotKind[] = ['oracle', 'reactive', 'humanDial'];
 async function campaignMain(workers: number): Promise<void> {
   const levelArg = arg('level', '');
   const botArg = arg('bot', 'all');
+  // --tries N: the human models play each level N times (another player's decisions each try).
+  const tries = Math.max(1, Number(arg('tries', '1')));
   const bots: BotKind[] = botArg === 'all' ? [...CAMPAIGN_BOTS] : (botArg.split(',') as BotKind[]);
   for (const b of bots) if (!BOT_KINDS.includes(b)) throw new Error(`unknown bot ${b}`);
   const ids = levelArg !== '' ? levelArg.split(',').map(Number) : Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1);
   for (const id of ids) if (!CAMPAIGN_LEVELS[id - 1]) throw new Error(`unknown level ${id}`);
   const msgs: WorkerMsg[] = [];
-  for (const id of ids) for (const bot of bots) msgs.push({ kind: 'level', id, bot });
+  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t });
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
-  const at = (id: number, bot: BotKind): LevelOut | undefined => outs.find((o) => o.id === id && o.bot === bot);
-  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}, ${workers} workers, ${wall.toFixed(1)} s\n`);
-  const cell = (o: LevelOut | undefined): string => {
+  const of = (bot: BotKind, lo = 1, hi = LEVEL_COUNT): LevelOut[] => outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
+  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}, ${workers} workers, ${wall.toFixed(1)} s\n`);
+  const cell = (rs: LevelOut[]): string => {
+    const o = rs[0];
     if (!o) return '-'.padEnd(22);
     const mark = o.passed ? `${'★'.repeat(o.stars)}${'☆'.repeat(3 - o.stars)}` : o.phase === 'won' ? 'goal✗' : `melt ${(100 * o.progress).toFixed(0)}%`;
-    return `${mark} f${o.flakes} s${o.snow} c${Math.max(0, o.minChill).toFixed(0)}`.padEnd(22);
+    const n = rs.length > 1 ? `${rs.filter((r) => r.passed).length}/${rs.length} ` : '';
+    return `${n}${mark} f${o.flakes} s${o.snow} c${Math.max(0, o.minChill).toFixed(0)}`.padEnd(22);
   };
   console.log(`${'lvl'.padEnd(4)} ${'name'.padEnd(18)} ${'start+len'.padEnd(9)} ${'goal'.padEnd(10)} ${'drain'.padEnd(5)} ${bots.map((b) => b.padEnd(22)).join(' ')} concepts`);
   for (const id of ids) {
     const l = CAMPAIGN_LEVELS[id - 1] as LevelDef;
     const goal = l.goal.kind === 'finish' ? 'finish' : `${l.goal.kind} ${l.goal.target}`;
     console.log(
-      `${String(id).padEnd(4)} ${l.name.padEnd(18)} ${`${l.startMinute}+${l.lengthMinutes}`.padEnd(9)} ${goal.padEnd(10)} ${String(l.drain).padEnd(5)} ${bots.map((b) => cell(at(id, b))).join(' ')} ${l.concepts.join(',')}`,
+      `${String(id).padEnd(4)} ${l.name.padEnd(18)} ${`${l.startMinute}+${l.lengthMinutes}`.padEnd(9)} ${goal.padEnd(10)} ${String(l.drain).padEnd(5)} ${bots.map((b) => cell(of(b, id, id))).join(' ')} ${l.concepts.join(',')}`,
     );
   }
-  // Summary per bot: pass rates by chapter block and stars.
+  const pct = (rs: LevelOut[]): number => (100 * rs.filter((o) => o.passed).length) / Math.max(1, rs.length);
+  const meanStars = (rs: LevelOut[]): number => rs.reduce((a, o) => a + o.stars, 0) / Math.max(1, rs.length);
   console.log('\nSummary:');
   for (const bot of bots) {
-    const rs = outs.filter((o) => o.bot === bot);
-    const passed = rs.filter((o) => o.passed).length;
-    const stars = rs.reduce((a, o) => a + o.stars, 0);
-    const three = rs.filter((o) => o.stars === 3).length;
-    const ms = rs.reduce((a, o) => a + o.ms, 0) / Math.max(1, rs.length);
+    const rs = of(bot);
     console.log(
-      `  ${bot.padEnd(9)} passed ${passed}/${rs.length} (${((100 * passed) / Math.max(1, rs.length)).toFixed(1)}%), stars ${stars}/${3 * rs.length}, 3-star ${three}, melted ${rs.filter((o) => o.phase === 'dead').length}, goal missed ${rs.filter((o) => o.phase === 'won' && !o.passed).length}, ${ms.toFixed(0)} ms/level`,
+      `  ${bot.padEnd(9)} passed ${pct(rs).toFixed(1)}% of ${rs.length}, stars ${meanStars(rs).toFixed(2)}/level (1-40: ${meanStars(of(bot, 1, 40)).toFixed(2)}), 3-star ${rs.filter((o) => o.stars === 3).length}, melted ${rs.filter((o) => o.phase === 'dead').length}, goal missed ${rs.filter((o) => o.phase === 'won' && !o.passed).length}, ${(rs.reduce((a, o) => a + o.ms, 0) / Math.max(1, rs.length)).toFixed(0)} ms/level`,
     );
   }
-  const worlds = new Map<number, LevelOut>();
-  for (const o of outs) {
-    const cur = worlds.get(o.id);
-    if (!cur || o.chunks > cur.chunks) worlds.set(o.id, o);
+  // Per chapter: pass % and mean stars for each bot (the chapter ramp).
+  console.log(`\n  ${'chapter'.padEnd(8)} ${bots.map((b) => `${b} pass ★`.padEnd(18)).join(' ')}`);
+  for (let c = 1; c <= LEVEL_COUNT / 10; c++) {
+    if (!ids.some((id) => Math.ceil(id / 10) === c)) continue;
+    console.log(`  ${String(c).padEnd(8)} ${bots.map((b) => `${pct(of(b, c * 10 - 9, c * 10)).toFixed(0)}% ${meanStars(of(b, c * 10 - 9, c * 10)).toFixed(2)}`.padEnd(18)).join(' ')}`);
   }
+  const worlds = new Map<number, LevelOut>();
+  for (const o of outs) if (!worlds.has(o.id) || o.chunks > (worlds.get(o.id) as LevelOut).chunks) worlds.set(o.id, o);
   const ws = [...worlds.values()];
   const chunks = ws.reduce((a, o) => a + o.chunks, 0);
   console.log(`  worlds: ${chunks} chunks, rescues/chunk ${(ws.reduce((a, o) => a + o.rescues, 0) / Math.max(1, chunks)).toFixed(3)}, unresolved ${ws.reduce((a, o) => a + o.unresolved, 0)}`);
 
   // Gates (CAMPAIGN_PLAN §3 "Fairness").
   const failures: string[] = [];
-  const gate = (hard: boolean, what: string, ok: boolean, got: string): void => {
+  const gate = (hard: boolean, what: string, bot: BotKind, hi: number, bar: number): void => {
+    if (!bots.includes(bot)) return;
+    const rs = of(bot, 1, hi);
+    const p = pct(rs);
+    const ok = rs.length > 0 && p >= 100 * bar;
     if (hard && !ok) failures.push(what);
-    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}`);
-  };
-  const share = (bot: BotKind, lo: number, hi: number): [number, number] => {
-    const rs = outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
-    return [rs.filter((o) => o.passed).length, rs.length];
+    const failed = [...new Set(rs.filter((o) => !o.passed).map((o) => o.id))];
+    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${p.toFixed(1)}% of ${rs.length}${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
   };
   console.log('\nGates:');
-  if (bots.includes('oracle')) {
-    const [p, n] = share('oracle', 1, LEVEL_COUNT);
-    const failed = outs.filter((o) => o.bot === 'oracle' && !o.passed).map((o) => o.id);
-    gate(true, 'oracle passes every level', p === n && n > 0, `${p}/${n}${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
-  }
-  if (bots.includes('reactive')) {
-    const [p, n] = share('reactive', 1, 100);
-    const failed = outs.filter((o) => o.bot === 'reactive' && o.id <= 100 && !o.passed).map((o) => o.id);
-    gate(true, 'reactive passes ≥ 90% of levels 1-100', n > 0 && p / n >= 0.9, `${p}/${n} (${((100 * p) / Math.max(1, n)).toFixed(1)}%)${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
-  }
-  if (bots.includes('humanDial')) {
-    const [p, n] = share('humanDial', 1, 40);
-    gate(false, 'humanDial passes ≥ 70% of levels 1-40 (advisory)', n > 0 && p / n >= 0.7, `${p}/${n} (${((100 * p) / Math.max(1, n)).toFixed(1)}%)`);
-  }
+  gate(true, 'oracle passes every level', 'oracle', LEVEL_COUNT, 1);
+  gate(true, 'reactive passes ≥ 95% of levels 1-100', 'reactive', 100, 0.95);
+  gate(false, 'humanDial passes ≥ 75% of levels 1-40 (advisory)', 'humanDial', 40, 0.75);
+  gate(false, 'humanDial passes ≥ 90% of levels 1-10 (advisory)', 'humanDial', 10, 0.9);
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
     process.exit(1);

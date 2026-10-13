@@ -10,7 +10,7 @@
 import { dayParams, type DayParams } from '../config/days.ts';
 import { TUNING } from '../config/tuning.ts';
 import { sinD } from './dmath.ts';
-import { formatScore, formatTimeOfDay, formatTimeOfDay10, MINUTES_PER_DAY } from './format.ts';
+import { formatTimeOfDay, formatTimeOfDay10, MINUTES_PER_DAY } from './format.ts';
 
 export const TICK_HZ = TUNING.tick.hz;
 export const DT = TUNING.tick.dt;
@@ -170,11 +170,6 @@ export function hudClock(day: number, dayTick: number): string {
 /** Exact clock, e.g. "2:47 PM" (death line, results). */
 export function exactClock(day: number, dayTick: number): string {
   return formatTimeOfDay(minutesOfDay(day, dayTick));
-}
-
-/** Full score label, e.g. "Day 2 · 2:40 PM". */
-export function scoreLabel(minutes: number): string {
-  return formatScore(minutes);
 }
 
 /** Ticks per in-game hour of `day` (12 daylight hours). */

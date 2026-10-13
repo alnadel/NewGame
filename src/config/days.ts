@@ -184,15 +184,9 @@ const clampRung = (r: number, lo: number): number => (r >= lo ? (r <= COMFORT_MA
  *   before 11:00 AM → R2;
  * - from R4: before 11:00 AM → R3, else R4.
  *
- * Calibrated with the career sim on the humanDial and novice models. Sending a tutorial run that
- * reached night straight to rung 2 cut runs 1-3 from a 71 s to a 43 s median. Stepping down below
- * 10:00 AM kept struggling players stuck at rung 2-3; 11:00 AM lets them ease off, and they climb
- * back past 12:30 PM. With the gentler R1 (fix round 1) runs 4-9 went from a 21 s to a 31 s median.
- * Fix round 2: one good R3 run (or a Day-3 run on any rung) used to jump to standard, where the
- * humanDial model melts before 11 AM 72% of the time, so players bounced R3 ↔ R4 (5.9 promotions in
- * 30 runs); the two-run climb and the STANDARD_WARMUP run cut that to 2.5 and runs 10-25 went from a
- * 21.6 s to a 37.9 s median, while 88% of humanDial careers (100% of novice) still reach standard
- * within 20 runs.
+ * Calibrated with the career sim on the humanDial and novice models (V1_1_PLAN §0): the two-run
+ * climb and the STANDARD_WARMUP run stop players bouncing R3 ↔ R4, and 88% of humanDial careers
+ * still reach standard within 20 runs.
  */
 export function comfortAfterRun(rung: number, minutes: number, prev: ComfortPrev | null = null): number {
   const S = COMFORT_STEPS;

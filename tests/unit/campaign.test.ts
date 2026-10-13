@@ -109,12 +109,16 @@ describe('the level table', () => {
       expect(l.concepts.length).toBeLessThanOrEqual(3);
       expect(new Set(l.concepts).size).toBe(l.concepts.length);
       expect(l.lengthMinutes).toBeGreaterThan(0);
-      expect(l.drain).toBeGreaterThanOrEqual(25);
+      expect(l.drain).toBeGreaterThanOrEqual(22);
       expect(l.drain).toBeLessThanOrEqual(55);
-      // The effective drain (× the concepts' drainMul) is capped, and lock/gust levels stay ≤ 40.
+      // The effective drain (× the concepts' drainMul) is capped: 40 with lock/gusts, 45 with an eclipse.
       const mul = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts).drainMul;
       expect(l.drain * mul).toBeLessThanOrEqual(62 + 1e-9);
       if (l.concepts.includes('lock') || l.concepts.includes('gusts')) expect(l.drain * mul).toBeLessThanOrEqual(40 + 1e-9);
+      if (l.concepts.includes('eclipse')) expect(l.drain * mul).toBeLessThanOrEqual(45 + 1e-9);
+      // Star 3 (a cool run) allows 22% of the level's daylight in the sun and 20% of the tank.
+      expect(Math.abs(l.stars.sunSec - (0.22 * l.lengthMinutes * 50) / 720)).toBeLessThanOrEqual(0.05 + 1e-9);
+      expect(l.stars.minChill).toBe(Math.round(0.2 * dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts).maxChill));
       expect(forecastFits(l.forecast, l.biome)).toBe(true);
       expect(CHAPTERS[l.chapter - 1]?.id).toBe(l.chapter);
       // Only a marathon spans a night.
@@ -136,14 +140,19 @@ describe('the level table', () => {
       const l = levelDef(id) as LevelDef;
       expect(l.introduces).toBe(CONCEPT_IDS[id - 1]);
       expect(l.concepts).toEqual([CONCEPT_IDS[id - 1]]);
-      expect(l.name).toBe(CONCEPTS[CONCEPT_IDS[id - 1] as ConceptId].name);
+      // The level is titled for its lesson; the concept keeps a short name of its own.
+      const c = CONCEPTS[CONCEPT_IDS[id - 1] as ConceptId];
+      expect(l.name).toBe(c.title);
+      expect(c.name).not.toBe(c.title);
     }
+    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(40);
     for (let id = 41; id <= 200; id++) expect((levelDef(id) as LevelDef).introduces).toBeNull();
   });
 
   it('follows the plan rows: level 1, 2, 4, 25, 37, 39 and 40', () => {
+    // Level 1 is the gentlest of all: dawn to 10 AM at drain 28.
     const l1 = levelDef(1) as LevelDef;
-    expect([l1.biome, l1.startMinute, l1.lengthMinutes, l1.drain, l1.goal.kind]).toEqual(['meadow', 0, 360, 35, 'finish']);
+    expect([l1.biome, l1.startMinute, l1.lengthMinutes, l1.drain, l1.goal.kind]).toEqual(['meadow', 0, 240, 28, 'finish']);
     expect(dayParams(1, 3, dayPlan('meadow', 'clear'), l1.concepts).clouds).toHaveLength(0);
     const l2 = levelDef(2) as LevelDef;
     expect(l2.goal.kind).toBe('flakes');
@@ -153,13 +162,29 @@ describe('the level table', () => {
     expect((levelDef(5) as LevelDef).biome).toBe('oldtown');
     expect((levelDef(7) as LevelDef).goal.kind).toBe('snow');
     expect((levelDef(14) as LevelDef).forecast).toBe('market');
-    expect((levelDef(13) as LevelDef).biome).toBe('meadow');
-    expect((levelDef(25) as LevelDef).stars.minChill).toBe(Math.round(0.35 * 50));
+    expect((levelDef(25) as LevelDef).stars.minChill).toBe(10);
     expect([(levelDef(37) as LevelDef).startMinute, (levelDef(37) as LevelDef).lengthMinutes]).toEqual([540, 180]);
     expect((levelDef(39) as LevelDef).lengthMinutes).toBe(1080);
     const l40 = levelDef(40) as LevelDef;
-    expect([l40.startMinute, l40.lengthMinutes, l40.drain]).toEqual([180, 360, 55]);
+    expect([l40.startMinute, l40.lengthMinutes]).toEqual([180, 360]);
     for (const id of [32, 33]) expect((levelDef(id) as LevelDef).drain).toBeLessThanOrEqual(40);
+  });
+
+  it('shapes a sawtooth: teaching levels end before noon, finales are spikes, hard concepts pay for themselves', () => {
+    const at = (id: number): LevelDef => levelDef(id) as LevelDef;
+    // Teaching levels (no time concept) end before noon; their chapter finales run an hour longer.
+    for (const id of [1, 2, 3, 5, 9]) expect(at(id).lengthMinutes).toBe(240);
+    for (const id of [12, 25, 35]) expect(at(id).lengthMinutes).toBe(300);
+    expect(at(10).lengthMinutes).toBe(300);
+    for (const id of [20, 30]) expect(at(id).lengthMinutes).toBe(360);
+    // On the curve (drain + the concepts' costs) a finale is a spike: above its chapter and the next start.
+    const curve = (id: number): number => at(id).drain + at(id).concepts.reduce((a, c) => a + (CONCEPTS[c].level?.cost ?? 0), 0);
+    for (const f of [10, 20, 30]) expect(curve(f)).toBeGreaterThan(Math.max(curve(f - 1), curve(f + 1)));
+    expect(curve(31)).toBeGreaterThan(curve(11));
+    // A costly concept lowers the drain: Lowland (18) drains less than Giants (17).
+    expect(at(18).drain).toBeLessThan(at(17).drain);
+    // Composed chapters: the first two levels are a step shorter than the rest.
+    expect(at(101).lengthMinutes).toBe(at(105).lengthMinutes - 30);
   });
 
   it('composes levels 41-200 from compatible concepts around the chapter, with finales every ten and a rising curve', () => {
@@ -180,11 +205,9 @@ describe('the level table', () => {
         if (need) expect(l.biome).toBe(need);
       }
     }
-    // The curve: chapter 5 starts near 40 and chapter 20 finales at 55; lengths grow 360 → 720.
-    expect((levelDef(41) as LevelDef).drain).toBeLessThanOrEqual(42);
-    expect((levelDef(200) as LevelDef).drain).toBe(55);
+    // Lengths grow 330 → 720 chapter by chapter (each chapter's first two levels a step shorter).
     const plain = (id: number): boolean => !(levelDef(id) as LevelDef).concepts.some((c) => CONCEPTS[c].level?.lengthMinutes !== undefined);
-    const lens = CAMPAIGN_LEVELS.filter((l) => l.id > 40 && plain(l.id)).map((l) => l.lengthMinutes);
+    const lens = CAMPAIGN_LEVELS.filter((l) => l.id > 40 && plain(l.id) && (l.id - 1) % 10 >= 2).map((l) => l.lengthMinutes);
     expect(Math.min(...lens)).toBe(360);
     expect(Math.max(...lens)).toBe(720);
     for (let i = 1; i < lens.length; i++) expect(lens[i]).toBeGreaterThanOrEqual(lens[i - 1]!);
@@ -201,6 +224,10 @@ describe('the level table', () => {
     expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: 0 })).toBe(2);
     expect(starsFor(l, { flakes: l.goal.target, snow: 0, minChill: l.stars.minChill })).toBe(2);
     expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill })).toBe(3);
+    // The cool-run star needs both: little sun (litTotal ≤ sunSec) and a safe lowest Chill.
+    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec })).toBe(3);
+    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec + 0.1 })).toBe(2);
+    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill - 1, litTotal: 0 })).toBe(2);
     const s7 = levelDef(7) as LevelDef;
     expect(goalMet(s7, { flakes: 0, snow: s7.goal.target, minChill: 0 })).toBe(true);
     expect(goalMet(levelDef(1) as LevelDef, { flakes: 0, snow: 0, minChill: 0 })).toBe(true);
@@ -238,25 +265,27 @@ describe('concept tunes reach dayParams', () => {
     expect(at('dense').latMax).toBe(base.latMax - 10);
     expect(at('drought').clouds).toHaveLength(0);
     expect(at('fleet').clouds).toHaveLength(base.clouds.length * 3);
-    expect(at('fleet').sky.rxMin).toBeCloseTo(base.sky.rxMin * 0.8, 9);
+    expect(at('fleet').spacing).toBeCloseTo(base.spacing * 1.6, 9);
     expect(at('cloud').waitersOnly).toBe(true);
     expect([at('glare').ballStart, at('glare').ballEvery]).toEqual([6, 12]);
     expect(at('flurry').flakesPerCluster).toBe(7);
     expect(at('flurry').clusterGap).toBe(0.6);
     expect(at('meltfast').meltBudget).toBe(0.5);
     expect(at('hardy').meltBudget).toBe(Infinity);
-    expect(at('thaw').drainMul).toBe(1.4);
+    expect(at('thaw').regen).toBeCloseTo(TUNING.nubs.regen * 0.45, 9);
     expect(at('frosty').regen).toBe(TUNING.nubs.regen * 2.5);
     expect(at('ration').maxChill).toBe(50);
     expect(at('heavy').sunFollow).toBe(220);
     expect(at('heavy').sunFriction).toBe(0);
     expect(at('slippery').sunFriction).toBeCloseTo(0.9941836, 6);
     expect(at('moonlit').epsNoon).toBe(30);
-    expect(at('moonlit').drainMul).toBe(0.5);
+    expect(at('moonlit').drainMul).toBe(0.7);
     expect(at('boss').epsNoon).toBe(80);
     expect(at('noon').epsNoon).toBe(48);
-    // Multipliers fold: stroll × thaw.
-    expect(at('stroll', 'thaw').drainMul).toBeCloseTo(1.25 * 1.4, 9);
+    // Multipliers fold: stroll × moonlit; latMax adds; overrides take the last value.
+    expect(at('stroll', 'moonlit').drainMul).toBeCloseTo(1.25 * 0.7, 9);
+    expect(at('dense', 'dense').latMax).toBe(base.latMax - 20);
+    expect(at('noon', 'boss').epsNoon).toBe(80);
     // The clock is untouched by walkMul: the day is as long as ever.
     expect([at('sprint').dayLen, at('sprint').nightLen]).toEqual([base.dayLen, base.nightLen]);
   });
@@ -265,7 +294,7 @@ describe('concept tunes reach dayParams', () => {
 describe('campaign runs', () => {
   it('campaignConfig/resolveLevelConfig derive the run from the level and win it at the finish line', () => {
     const cfg = campaignConfig(1, { reducedMotion: true });
-    expect(cfg).toMatchObject({ seed: hashString('journey-1'), mode: 'campaign', profile: 3, tutorial: false, plan: false, level: 1, biome: 'meadow', drain: 35, startDay: 1, startT: 0, reducedMotion: true });
+    expect(cfg).toMatchObject({ seed: hashString('journey-1'), mode: 'campaign', profile: 3, tutorial: false, plan: false, level: 1, biome: 'meadow', drain: 28, startDay: 1, startT: 0, reducedMotion: true });
     expect(cfg.mods).toEqual(['drag']);
     expect(cfg.forecast).toBeUndefined();
     expect(campaignConfig(9).forecast).toBe('breezy');
@@ -298,8 +327,8 @@ describe('campaign runs', () => {
     step(s, TAP);
     expect(hashState(s)).toBe(h);
     expect(s.events).toHaveLength(0);
-    // The level ends at noon: 360 minutes after a dawn start.
-    expect(s.minutes).toBe(360);
+    // The level ends at 10 AM: 240 minutes after a dawn start.
+    expect(s.minutes).toBe(240);
   });
 
   it('the finish line is at yAtMinute(start + length); a mid-day start puts the start hut by Nubs', () => {
@@ -368,7 +397,7 @@ describe('campaign runs', () => {
     for (let i = 0; i < 120; i++) step(s, NO_INPUT);
     expect(s.nubs.y).toBeCloseTo(yAtDayTick(1, s.dayTick) * 1.35, 9);
     expect(s.dayTick).toBe(120);
-    expect(s.world.finishY).toBeCloseTo(yAtDayTick(1, tickAtMinute(360)) * 1.35, 9);
+    expect(s.world.finishY).toBeCloseTo(yAtDayTick(1, tickAtMinute(300)) * 1.35, 9);
     // Chunks hold the same clock span scaled: the finish banner sits at the line.
     const banner = s.world.casters.find((c) => c.kind === 'finish');
     expect(banner).toBeDefined();
@@ -387,7 +416,7 @@ describe('campaign runs', () => {
 
   it('the gate concept puts a gate arch at the midpoint and pays +10 Snow when passed fully shaded', () => {
     const w = createWorld(campaignConfig(8));
-    const mid = yAtDayTick(1, tickAtMinute(180));
+    const mid = yAtDayTick(1, tickAtMinute(120));
     ensureGenerated(w, mid + 1000);
     const gate = w.casters.find((c) => c.gate);
     expect(gate).toBeDefined();
@@ -413,11 +442,11 @@ describe('campaign runs', () => {
     expect(paid).toBe(0);
   }, 30_000);
 
-  it('eclipse: 6 s of full shade everywhere at the midpoint, with a 0..1 intensity for the renderer', () => {
+  it('eclipse: 6 s of full shade everywhere at the midpoint, then the sun comes back on the far side', () => {
     const s = started(36);
     const w = s.world;
     expect(w.eclipseTick).toBeGreaterThan(0);
-    expect(w.eclipseTick + ECLIPSE_SEC * 60).toBe(tickAtMinute(180) + 180);
+    expect(w.eclipseTick + ECLIPSE_SEC * 60).toBe(tickAtMinute(150) + 180);
     // An empty world (Nubs in full sun), the clock jumped to just before the window.
     strip(s);
     jumpTo(s, w.eclipseTick - 5);
@@ -425,6 +454,7 @@ describe('campaign runs', () => {
     let shadedTicks = 0;
     let lastOn = -1;
     let litBefore = 0;
+    let thetaIn = Number.NaN;
     while (s.phase === 'day' && s.tickAbs < w.eclipseTick + ECLIPSE_SEC * 60 + 10) {
       step(s, NO_INPUT);
       if (s.eclipseOn) {
@@ -438,7 +468,10 @@ describe('campaign runs', () => {
         if (s.nubs.f === 1) litBefore++;
       }
       if (s.eclipse > maxEclipse) maxEclipse = s.eclipse;
+      if (s.eclipseOn) thetaIn = s.sun.theta;
     }
+    expect(Math.abs(angleDiff(s.sun.theta, thetaIn))).toBeCloseTo(180, 9);
+    expect([s.sun.mode, s.sun.omega, s.sun.lag]).toEqual(['idle', 0, 0]);
     expect(s.phase).toBe('day');
     expect(litBefore).toBeGreaterThan(0);
     expect(shadedTicks).toBe(ECLIPSE_SEC * 60);
@@ -549,17 +582,17 @@ describe('campaign runs', () => {
     expect(Math.abs(travel)).toBeGreaterThan(900);
   });
 
-  it('moonlit: a moon sun with noon elevation 30° and half the drain; s.moonlit for the renderer', () => {
+  it('moonlit: a moon sun with noon elevation 30° and 0.7× the drain; s.moonlit for the renderer', () => {
     const s = createRun(campaignConfig(38));
     expect(s.moonlit).toBe(true);
     expect(createRun(campaignConfig(1)).moonlit).toBe(false);
     expect(s.params.epsNoon).toBe(30);
     expect(elevation(s.params, s.params.dayLen / 2)).toBe(30);
-    expect(s.params.drainMul).toBe(0.5);
+    expect(s.params.drainMul).toBe(0.7);
     const lab = started(38);
     strip(lab);
     for (let i = 0; i < 60; i++) step(lab, NO_INPUT);
-    expect(lab.nubs.chill).toBeCloseTo(100 - (levelDef(38) as LevelDef).drain * 0.5, 6);
+    expect(lab.nubs.chill).toBeCloseTo(100 - (levelDef(38) as LevelDef).drain * 0.7, 6);
   });
 
   it('the validator uses the level drain, regen and max Chill, and skips the stretch after the finish', () => {
@@ -570,7 +603,7 @@ describe('campaign runs', () => {
     // Past the finish line nothing is rescued (that stretch is unused).
     expect(w.casters.some((c) => c.rescue && c.y > w.finishY + 300)).toBe(false);
     const boss = createWorld(campaignConfig(40));
-    expect(boss.validatorDrain).toBe(55);
+    expect(boss.validatorDrain).toBe((levelDef(40) as LevelDef).drain);
   });
 
   it('a level prepared in slices is the level built at once, and campaign state is hashed', () => {

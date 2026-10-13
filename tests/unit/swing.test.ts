@@ -54,11 +54,12 @@ function handoff(theta: number, gap: number, held = CONFIRM, s = rig()): { s: Si
 }
 
 describe('SWING', () => {
-  it('needs a ≥ 45° turn: 44° gives nothing, 45° a SWING worth 1 Snow', () => {
-    expect(handoff(44, 5).swings).toHaveLength(0);
-    const { s, swings } = handoff(45, 5);
+  it('needs a ≥ 38° turn: 37° gives nothing, 38° a SWING worth 1 Snow', () => {
+    expect(TUNING.swing.minDeg).toBe(38);
+    expect(handoff(37, 5).swings).toHaveLength(0);
+    const { s, swings } = handoff(38, 5);
     expect(swings).toHaveLength(1);
-    expect(swings[0]).toMatchObject({ deg: 45, chain: 1, snow: 1, x: s.nubs.x, y: s.nubs.y });
+    expect(swings[0]).toMatchObject({ deg: 38, chain: 1, snow: 1, x: s.nubs.x, y: s.nubs.y });
     expect(s.stats.swings).toBe(1);
     expect(s.stats.swingChainBest).toBe(1);
   });

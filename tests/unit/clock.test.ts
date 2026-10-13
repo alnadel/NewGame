@@ -14,7 +14,6 @@ import {
   nightTicks,
   noonBannerTick,
   noonPassedTick,
-  scoreLabel,
   scoreMinutes,
   timeAtY,
   yAtDayTick,
@@ -56,7 +55,7 @@ describe('clock', () => {
     const t240 = Math.ceil((520 / 720) * dayTicks(2));
     expect(scoreMinutes(2, t240)).toBe(1240);
     expect(formatScore(1240)).toBe('Day 2 · 2:40 PM');
-    expect(scoreLabel(2 * 720 + 520)).toBe('Day 3 · 2:40 PM');
+    expect(formatScore(2 * 720 + 520)).toBe('Day 3 · 2:40 PM');
     expect(minutesOfDay(1, 0)).toBe(0);
     expect(minutesOfDay(1, dayTicks(1))).toBe(720);
     expect(minutesOfDay(1, dayTicks(1) + 100)).toBe(720);

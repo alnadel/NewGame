@@ -22,6 +22,7 @@
 // - clockwork: on release the finger target snaps to the nearest 30° (no coast): a detent magnet;
 // - gusts: from the 8th second of each 8 s of daylight a 2 s gust turns θ at ±25°/s, its sign
 //   seeded per gust (sun.gust is ±1 while it blows);
+// - dazzle (Mirror Sun): every turn of the input is reversed (dTheta, release and key);
 // - lock: from the 7th second of each 7 s of daylight the sun ignores every input for 1.2 s
 //   (sun.locked); coasting stops.
 
@@ -66,6 +67,18 @@ function clockTicks(s: SimState): number {
 /** The frame a locked sun sees: no input at all. */
 const LOCKED_INPUT: Readonly<InputFrame> = Object.freeze({ dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 });
 
+const mirrored: InputFrame = { ...LOCKED_INPUT };
+/** `i` with every turn reversed (the 'dazzle' concept). */
+function mirror(i: InputFrame): InputFrame {
+  mirrored.dTheta = -i.dTheta;
+  mirrored.release = -i.release;
+  mirrored.key = -i.key as InputFrame['key'];
+  mirrored.down = i.down;
+  mirrored.downEdge = i.downEdge;
+  mirrored.upEdge = i.upEdge;
+  return mirrored;
+}
+
 /** Follow rate (°/s) for the current elevation and motion setting. */
 export function sunMaxRate(reducedMotion: boolean, eps: number): number {
   if (reducedMotion) return S.maxRateReduced;
@@ -84,8 +97,9 @@ export function updateSun(s: SimState, input: InputFrame): void {
   const mods = s.mods;
   const ct = mods.size > 0 ? clockTicks(s) : -1;
 
+  // 'dazzle' (Mirror Sun): the finger and the keys turn the sun the other way.
+  let inp = mods.has('dazzle') ? mirror(input) : input;
   // 'lock': the sun ignores every input and stops dead for LOCK_TICKS at each LOCK_PERIOD of daylight.
-  let inp = input;
   const locked = ct >= 0 && mods.has('lock') && sunLockedAt(ct);
   if (locked !== sun.locked) {
     sun.locked = locked;

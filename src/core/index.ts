@@ -57,7 +57,6 @@ export {
   nightTicks,
   noonBannerTick,
   noonPassedTick,
-  scoreLabel,
   scoreMinutes,
   tickAtMinute,
   timeAtY,
@@ -115,7 +114,6 @@ export {
 export type { ChunkLit, World, WorldStats } from './gen/world.ts';
 export {
   biomeAtY,
-  dayAtY,
   firstTownDay,
   paramsAt,
   planDay,

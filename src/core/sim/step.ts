@@ -19,7 +19,7 @@ import {
   minutesOfDay,
   TICK_HZ,
 } from '../clock.ts';
-import { cosD, sinD, tanD } from '../dmath.ts';
+import { cosD, sinD, tanD, wrapDeg } from '../dmath.ts';
 import { paramsAt, worldYAtDayTick } from '../gen/plan.ts';
 import { lowerBound, pruneWorld } from '../gen/store.ts';
 import { ECLIPSE_FADE_TICKS, ECLIPSE_SEC, eclipseAt, ensureGenerated } from '../gen/world.ts';
@@ -65,6 +65,16 @@ function syncEclipse(s: SimState): void {
   const w = s.world;
   if (w.eclipseTick < 0) return;
   const on = eclipseAt(w, s.tickAbs);
+  if (s.eclipseOn && !on) {
+    // The sun comes back on the far side: every shadow flips, so the player must swing to shade.
+    const sun = s.sun;
+    sun.theta = wrapDeg(sun.theta + 180);
+    sun.detent = Math.floor(sun.theta / TUNING.sun.detentDeg);
+    sun.omega = sun.omegaRel = sun.lag = 0;
+    if (sun.mode !== 'dragging') sun.mode = 'idle';
+    s.ux = cosD(sun.theta);
+    s.uy = sinD(sun.theta);
+  }
   s.eclipseOn = on;
   if (!on) {
     s.eclipse = 0;
