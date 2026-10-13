@@ -22,6 +22,7 @@ import type { Screen, UiContext } from './screen.ts';
 import { createDailyScreen } from './screens/daily.ts';
 import { createDyingScreen } from './screens/dying.ts';
 import { createJournalScreen } from './screens/journal.ts';
+import { createJourneyScreen } from './screens/journey.ts';
 import { createMissionsScreen } from './screens/missions.ts';
 import { createPauseScreen } from './screens/pause.ts';
 import { createPlayScreen } from './screens/play.ts';
@@ -107,6 +108,9 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     changeSettings: (settings) => {
       motionSetting = settings.reducedMotion;
       applyMotion();
+      // The screens read the new settings at once (the Journey's testing toggle), whether or not
+      // the integrator pushes the persisted save back with setSave.
+      save = { ...save, settings };
       cb.settingsChanged(settings);
     },
     confirm: (options) => modals.confirm(options),
@@ -118,6 +122,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const daily = createDailyScreen(ctx);
   const screens: Record<Exclude<ScreenId, 'boot'>, Screen> = {
     journal: createJournalScreen(ctx),
+    journey: createJourneyScreen(ctx),
     title,
     play,
     pause: createPauseScreen(ctx),

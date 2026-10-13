@@ -4,6 +4,7 @@
 
 import {
   COMFORT_MAX,
+  CONCEPTS,
   FORECASTS,
   formatScore,
   MINUTES_PER_DAY,
@@ -13,6 +14,7 @@ import {
   type DayPlan,
   type ForecastInfo,
   type HourGlyph,
+  type LevelDef,
   type RunStats,
 } from '../core/index.ts';
 import { challengeVerdict } from '../meta/challenge.ts';
@@ -20,7 +22,7 @@ import { DAILY_TRIES, dailySeed } from '../meta/daily.ts';
 import { dailyStatus } from '../meta/progression.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { scoreText } from '../meta/share.ts';
-import type { CueId, ResultsView, ScreenId } from './types.ts';
+import type { CueId, ResultsCampaign, ResultsView, ScreenId } from './types.ts';
 
 const NBSP = '\u00a0';
 
@@ -72,6 +74,11 @@ export function multiplierTile(stats: Pick<RunStats, 'x5HoldBest' | 'maxMult'>):
 
 /** What the live region says when Results open, e.g. "Nubs melted at Day 2 · 2:40 PM. New best!". */
 export function resultsAnnouncement(view: ResultsView): string {
+  const c = view.campaign;
+  if (c) {
+    const how = c.passed ? `passed with ${starsLabel(c.stars)}` : 'not passed';
+    return `Level ${c.id}, ${c.name}: ${how}. ${c.passed ? c.goalLine : view.result.death.line}`;
+  }
   const parts = [`Nubs melted at ${formatScore(view.result.minutes)}.`];
   if (view.outcome.newBest) parts.push('New best!');
   if (view.challengeTarget !== undefined) {
@@ -300,4 +307,40 @@ export function journalSummary(c: JournalChart): string {
   if (c.average !== null) parts.push(`Last 10 average: ${scoreText(c.average)}.`);
   if (c.delta !== null) parts.push(`${minutesDelta(c.delta)} against the ${c.previous} runs before.`);
   return parts.join(' ');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Journey (CAMPAIGN_PLAN §5)
+// ---------------------------------------------------------------------------------------------
+
+/** "2 of 3 stars". */
+export function starsLabel(stars: number, max = 3): string {
+  return `${stars} of ${max} star${max === 1 ? '' : 's'}`;
+}
+
+/** "Continue · Level 12". */
+export function continueLabel(id: number): string {
+  return `Continue · Level ${id}`;
+}
+
+/** "Chapter 2 · Cobbles". */
+export function chapterTitle(id: number, name: string): string {
+  return `Chapter ${id} · ${name}`;
+}
+
+/**
+ * A level tile's accessible name: "Level 6, Glass Garden. Teaches Glare: gazing balls throw light
+ * back. 2 of 3 stars." or "Level 45, Quiet Lane. Locked."
+ */
+export function levelTileLabel(level: Pick<LevelDef, 'id' | 'name' | 'introduces'>, stars: number, playable: boolean): string {
+  const concept = level.introduces ? CONCEPTS[level.introduces] : null;
+  const parts = [`Level ${level.id}, ${level.name}.`];
+  if (concept) parts.push(`Teaches ${concept.name}: ${concept.blurb}`);
+  parts.push(playable ? (stars > 0 ? `${starsLabel(stars)}.` : 'Not passed yet.') : 'Locked.');
+  return parts.join(' ');
+}
+
+/** The Results kicker of a Journey run: "Level 12 · Passed" (short: it shares its line with Share). */
+export function campaignKicker(c: Pick<ResultsCampaign, 'id' | 'passed'>): string {
+  return `Level ${c.id} · ${c.passed ? 'Passed' : 'Not passed'}`;
 }

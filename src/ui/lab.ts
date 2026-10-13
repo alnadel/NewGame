@@ -1,11 +1,11 @@
 // UI lab (dev only, ui-lab.html): mounts every screen with fake data over a stand-in scene, with a
 // working fake integrator, so screens can be reviewed in isolation. URL parameters make every state
 // reachable for screenshots:
-//   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|journal|rotate
+//   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|journal|journey|rotate
 //   &variant=…   (see VARIANTS)   &inset=47 (simulated top inset)   &rm=1 (reduced motion)
 //   &bare=1 (hide the lab toolbar)   &toast=1 (demo toasts)   &sheet=install|confirm
 
-import { formatScore, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
+import { CAMPAIGN_LEVELS, CONCEPTS, formatScore, levelDef, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { defaults, sanitizeSettings } from '../meta/save.ts';
 import { equippedLooks, getCosmetic, type CosmeticId, type Equipped, type HatLook, type NoseLook, type ScarfLook } from '../meta/content.ts';
@@ -27,12 +27,13 @@ const VARIANTS: Record<LabScreen, readonly string[]> = {
   play: ['regular', 'muted', 'hint', 'cue', 'kbd'],
   pause: ['regular'],
   dying: ['regular'],
-  results: ['best', 'first', 'daily', 'challenge', 'warmup', 'long', 'quiet'],
+  results: ['best', 'first', 'daily', 'challenge', 'warmup', 'long', 'quiet', 'level', 'level-perfect', 'level-last', 'level-fail', 'level-death'],
   settings: ['regular', 'from-pause'],
   daily: ['regular', 'used'],
   missions: ['regular', 'fresh'],
   wardrobe: ['regular', 'hats', 'shades', 'poor'],
   journal: ['regular', 'empty'],
+  journey: ['regular', 'fresh', 'unlock-all', 'far'],
   rotate: ['regular'],
 };
 /** A Title run's Day 1 in the lab. */
@@ -84,6 +85,10 @@ function richSave(): Save {
   }
   s.lastPlay = addDays(today, -1);
   s.pars[today] = 455;
+  // The Journey: 37 levels passed with mixed stars.
+  s.campaign.stars = CAMPAIGN_LEVELS.map((l) => (l.id > 37 ? 0 : l.id % 5 === 0 ? 3 : l.id % 3 === 0 ? 1 : 2));
+  s.campaign.unlocked = 38;
+  s.campaign.lastLevel = 37;
   const strip = '❄️❄️❄️🟨❄️❄️🔥🟨❄️❄️❄️❄️🌙\n❄️❄️🟨🟨🔥🔥🟨💧';
   s.daily[addDays(today, -1)] = { tries: 3, bestMinutes: 1240, bestSnow: 61, glyphs: strip };
   s.daily[addDays(today, -2)] = { tries: 2, bestMinutes: 455, bestSnow: 22, glyphs: '❄️❄️🟨🟨🔥🔥🟨💧' };
@@ -99,7 +104,7 @@ function stats(over: Partial<Stats>): Stats {
   return {
     flakes: 0, flakesMelted: 0, crystals: 0, flowers: 0, phews: 0, snow: 0, maxMult: 1, x5HoldBest: 0, cloudRideBest: 0,
     cloudSeconds: 0, ballsPassedClean: 0, ballGlared: false, gateNoon: false, dayReached: 1, nightsReached: 0, minutes: 0,
-    litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, ...over,
+    litTotal: 0, swings: 0, swingChainBest: 0, phewMinChill: 100, minChill: 100, ...over,
   };
 }
 
@@ -124,6 +129,28 @@ function fakeRun(minutes: number, over: Partial<Stats>, extra: Partial<RunResult
     stats: stats({ minutes, dayReached: day, nightsReached: day - 1, ...over }),
     death: { day, tDay: 0, minutes, time: '', x: 0, y: 0, cause: 'gap', line },
     hourGlyphs: glyphs, melody: [], assisted: false, ...extra,
+  };
+}
+
+/** A Journey level's run: finished (passed or not) or melted. */
+function levelRun(id: number, passed: boolean, stars: number, over: Partial<Stats>, line: string): RunResult {
+  const lv = levelDef(id);
+  const run = fakeRun(lv ? lv.startMinute + lv.lengthMinutes : 360, over, { mode: 'campaign', profile: 3 }, line);
+  run.level = { id, passed, stars, introduces: lv?.introduces ?? null };
+  return run;
+}
+
+function campaignView(id: number, run: RunResult, goalLine: string): ResultsView['campaign'] {
+  const lv = levelDef(id);
+  const intro = lv?.introduces ? CONCEPTS[lv.introduces] : null;
+  return {
+    id,
+    name: lv?.name ?? `Level ${id}`,
+    passed: run.level?.passed ?? false,
+    stars: run.level?.stars ?? 0,
+    nextId: id < CAMPAIGN_LEVELS.length ? id + 1 : null,
+    goalLine,
+    ...(intro ? { introduces: { name: intro.name, blurb: intro.blurb } } : {}),
   };
 }
 
@@ -164,6 +191,21 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
     case 'quiet':
       run = fakeRun(95, { flakes: 3, flakesMelted: 3, snow: 3 }, {}, 'Melted by You at 7:35 AM.');
       break;
+    case 'level':
+      run = levelRun(6, true, 2, { flakes: 14, snow: 31, maxMult: 3, minChill: 12 }, 'Finished at 12:00 PM.');
+      break;
+    case 'level-perfect':
+      run = levelRun(38, true, 3, { flakes: 26, snow: 58, maxMult: 5, x5HoldBest: 4.2, swings: 2, swingChainBest: 2, minChill: 61 }, 'Finished at 12:00 PM.');
+      break;
+    case 'level-last':
+      run = levelRun(200, true, 1, { flakes: 9, snow: 40, maxMult: 2, minChill: 4 }, 'Finished at 6:00 PM.');
+      break;
+    case 'level-fail':
+      run = levelRun(2, false, 0, { flakes: 5, flakesMelted: 3, snow: 6, maxMult: 2, minChill: 30 }, 'Reached the finish with 5 flakes at 12:00 PM.');
+      break;
+    case 'level-death':
+      run = levelRun(12, false, 0, { flakes: 7, snow: 9, maxMult: 2, minChill: 0 }, 'Glared by the Fancy Gazing Ball at 9:15 AM.');
+      break;
     default:
       run = fakeRun(2095, { flakes: 48, flakesMelted: 6, snow: 112, phews: 3, maxMult: 5, x5HoldBest: 9.2, cloudRideBest: 4.1, swings: 5, swingChainBest: 3 }, {},
         'Melted by You at 10:55 AM, between the Mossy Oak and the Little Hut.');
@@ -172,6 +214,17 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
   const r = applyRunResult(base, run, { today, dailyTry, challengeTarget, rung, playSeconds: 140 });
   const view: ResultsView = { result: run, outcome: r.outcome, dailyTry, challengeTarget, tip, warmupFor };
   if (challengeTarget !== undefined) view.challengeName = 'Sam';
+  if (run.level) {
+    const goal: Record<string, string> = {
+      level: 'Reached the finish · 14 flakes · lowest Chill 12',
+      'level-perfect': 'Reached the finish · 26 flakes · lowest Chill 61',
+      'level-last': 'Reached the finish · 9 flakes · lowest Chill 4',
+      'level-fail': 'Not enough flakes: 5 of 8',
+      'level-death': 'Melted before the finish · 7 of 8 flakes',
+    };
+    view.campaign = campaignView(run.level.id, run, goal[variant] ?? '');
+    if (variant === 'level-death') view.tip = 'Tip: red arcs on the dial are glare. Keep the sun off them.';
+  }
   return { view, save: r.save };
 }
 
@@ -486,13 +539,21 @@ function mount(screen: LabScreen, variant: string): void {
   if (screen === 'title' && variant === 'warmup') save = defaults();
   if (screen === 'daily' && variant === 'used') save.daily[today] = { tries: 3, bestMinutes: 1290, bestSnow: 52, glyphs: '❄️❄️🟨💧' };
   if (screen === 'wardrobe' && variant === 'poor') save.stats.wallet = 40;
+  if (screen === 'journey' && variant === 'unlock-all') save.settings.unlockAll = true;
+  if (screen === 'journey' && variant === 'far') {
+    save.campaign.stars = CAMPAIGN_LEVELS.map((l) => (l.id > 153 ? 0 : l.id % 4 === 0 ? 3 : 2));
+    save.campaign.unlocked = 154;
+    save.campaign.lastLevel = 153;
+  }
   if (params.get('rm') === '1') save.settings.reducedMotion = 'on';
 
   const log = (...args: unknown[]): void => console.info('[lab]', ...args);
   let lastResults: ResultsView | null = null;
   const callbacks: UiCallbacks = {
-    startRun: (kind, date) => log('startRun', kind, date ?? ''),
+    startRun: (kind, date, level) => log('startRun', kind, date ?? '', level ?? ''),
     retry: () => log('retry'),
+    nextLevel: () => log('nextLevel'),
+    openJourney: () => log('openJourney'),
     home: () => log('home'),
     pause: () => log('pause'),
     resume: () => log('resume'),
@@ -517,6 +578,7 @@ function mount(screen: LabScreen, variant: string): void {
     },
     settingsChanged: (settings) => {
       save = { ...save, settings: sanitizeSettings(settings) };
+      ui?.setSave(save);
       log('settings', settings);
     },
     buy: (id: CosmeticId) => {
@@ -572,6 +634,7 @@ function mount(screen: LabScreen, variant: string): void {
     missions: ['title', 'missions'],
     wardrobe: ['title', 'wardrobe'],
     journal: ['title', 'journal'],
+    journey: ['title', 'journey'],
     rotate: ['title', 'play'],
   }[screen] as ScreenId[];
   for (const id of path) ui.show(id);
@@ -583,7 +646,7 @@ function mount(screen: LabScreen, variant: string): void {
     ui.show('results', r.view);
     // The postcard arrives a moment after the sheet (built in idle time by the game).
     const shown = ui;
-    if (variant !== 'quiet') setTimeout(() => shown.setPostcard(postcardThumb()), 900);
+    if (variant !== 'quiet' && !variant.startsWith('level')) setTimeout(() => shown.setPostcard(postcardThumb()), 900);
   }
   if (screen === 'wardrobe' && variant === 'hats') (document.getElementById('tab-hat') as HTMLButtonElement | null)?.click();
   if (screen === 'wardrobe' && variant === 'shades') (document.getElementById('tab-shades') as HTMLButtonElement | null)?.click();

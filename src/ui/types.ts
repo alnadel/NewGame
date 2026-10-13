@@ -17,7 +17,8 @@ export type ScreenId =
   | 'daily'
   | 'missions'
   | 'wardrobe'
-  | 'journal';
+  | 'journal'
+  | 'journey';
 
 /**
  * The plain-language cue line above Nubs (ui.showCue):
@@ -27,7 +28,7 @@ export type ScreenId =
  */
 export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing';
 
-export type RunKind = 'endless' | 'daily' | 'challenge';
+export type RunKind = 'endless' | 'daily' | 'challenge' | 'campaign';
 
 /** Short UI sounds the audio layer should provide (all may map to the GDD "UI tap" recipe). */
 export type UiSoundName =
@@ -69,6 +70,23 @@ export interface ResultsView {
    * reads "Take the challenge" (the session's retry() then starts the challenge).
    */
   warmupFor?: { minutes: number; name: string };
+  /**
+   * Journey runs (docs/CAMPAIGN_PLAN.md §5): the level, whether its goal was met, the stars earned
+   * (0-3), the next level to play (null after the last), the goal line ("Reach the finish with 8
+   * flakes · 9 collected") and the concept the level introduced, if any. The sheet then shows the
+   * stars and the level name in place of the time, and Next level / Retry / Map instead of Home.
+   */
+  campaign?: ResultsCampaign;
+}
+
+export interface ResultsCampaign {
+  id: number;
+  name: string;
+  passed: boolean;
+  stars: number;
+  nextId: number | null;
+  goalLine: string;
+  introduces?: { name: string; blurb: string };
 }
 
 /** Title banner shown when the page was opened from a challenge link. */
@@ -103,9 +121,17 @@ export interface UiCallbacks {
   /**
    * Start a run. 'endless' from Space/Enter on the Title; 'challenge' from the banner's Play (or
    * Space/Enter while the banner is up); 'daily' from the Daily screen with the date it shows (the
-   * UI has checked it is still today). The UI is already on 'play'.
+   * UI has checked it is still today); 'campaign' from a Journey tile with its level id. The UI is
+   * already on 'play'.
    */
-  startRun(kind: RunKind, date?: string): void;
+  startRun(kind: RunKind, date?: string, level?: number): void;
+  /** Results > Next level on a passed Journey level: start `campaign.nextId`. The UI is already on 'play'. */
+  nextLevel(): void;
+  /**
+   * Results > Map (or Back) on a Journey run, and the Title's Journey pill: leave the run for the
+   * Title scene behind the map. The UI is already on 'journey'.
+   */
+  openJourney(): void;
   /** Results: Retry button, Space/Enter, or a tap on the map above the sheet. The UI is already on 'play'. */
   retry(): void;
   /** Back to the Title (Pause > Home, Results > Home). The UI is already on 'title'. */

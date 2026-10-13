@@ -1,0 +1,65 @@
+// The Journey's concept and biome marks (CAMPAIGN_PLAN §3): each concept id maps to one of the UI's
+// inline icons (the render layer draws its own glyphs on the canvas; the DOM map uses these so the
+// tiles render identically everywhere). Unknown ids fall back to a flag.
+
+import type { BiomeId, ConceptId } from '../core/index.ts';
+import type { IconName } from './icons.ts';
+import { BIOME_NAMES } from './labels.ts';
+
+const CONCEPT_ICONS: Readonly<Record<ConceptId, IconName>> = {
+  drag: 'drag',
+  flakes: 'flake',
+  cloud: 'cloud',
+  noon: 'sun',
+  oldtown: 'town',
+  glare: 'ball',
+  swing: 'swing',
+  gate: 'gate',
+  breezy: 'wind',
+  long: 'mountain',
+  heat: 'thermo',
+  overcast: 'fog',
+  dazzle: 'sparkle',
+  market: 'basket',
+  sprint: 'dash',
+  stroll: 'steps',
+  giants: 'tree',
+  lowland: 'flat',
+  sparse: 'dots',
+  dense: 'grid',
+  drought: 'sun',
+  fleet: 'cloud',
+  thaw: 'thaw',
+  frosty: 'snow',
+  ration: 'half',
+  meltfast: 'droplet',
+  hardy: 'anchor',
+  flurry: 'flakes',
+  heavy: 'gauge',
+  slippery: 'spin',
+  clockwork: 'detent',
+  gusts: 'wind',
+  lock: 'lock',
+  fog: 'fog',
+  blind: 'eyeOff',
+  eclipse: 'eclipse',
+  sunset: 'sunset',
+  moonlit: 'moon',
+  marathon: 'road',
+  boss: 'dome',
+};
+
+/** The icon of a concept (a flag for an id this build doesn't know). */
+export function conceptIcon(id: string): IconName {
+  return (CONCEPT_ICONS as Partial<Record<string, IconName>>)[id] ?? 'flag';
+}
+
+const BIOME_ICONS: Readonly<Record<BiomeId, IconName>> = { meadow: 'tree', oldtown: 'town' };
+
+export function biomeIcon(id: BiomeId): IconName {
+  return BIOME_ICONS[id] ?? 'tree';
+}
+
+export function biomeName(id: BiomeId): string {
+  return BIOME_NAMES[id] ?? id;
+}
