@@ -261,8 +261,9 @@ export function rarity(c: Cosmetic): Rarity {
   }
 }
 
-/** A globe's pick weight per rarity (commons come up most). */
+/** A globe's pick weight per rarity (commons come up most); globe-only items weigh 3 times more. */
 const RARITY_WEIGHT: Readonly<Record<Rarity, number>> = { common: 6, rare: 4, epic: 2, legendary: 1 };
+const weight = (c: Cosmetic): number => RARITY_WEIGHT[rarity(c)] * (c.unlock.kind === 'globe' ? 3 : 1);
 /** What a globe holds once every globe item is owned. */
 export const GLOBE_SNOW = 100;
 
@@ -285,7 +286,7 @@ function globeRoll(save: Save): number {
 }
 
 /**
- * Opens one Snow Globe: a seeded, rarity-weighted pick of an item the player doesn't own (added to
+ * Opens one Snow Globe: a seeded, weighted pick of an item the player doesn't own (added to
  * the Wardrobe, not worn), or GLOBE_SNOW Snow once there is none. Null when no globe is waiting.
  */
 export function openGlobe(save: Save): { save: Save; reward: Reward } | null {
@@ -299,11 +300,11 @@ export function openGlobe(save: Save): { save: Save; reward: Reward } | null {
     next.stats.lifetimeSnow += GLOBE_SNOW;
     reward = { kind: 'snow', amount: GLOBE_SNOW, title: 'Snow Globe' };
   } else {
-    const total = pool.reduce((n, c) => n + RARITY_WEIGHT[rarity(c)], 0);
+    const total = pool.reduce((n, c) => n + weight(c), 0);
     let roll = globeRoll(save) % total;
     let pick = pool[0] as Cosmetic;
     for (const c of pool) {
-      roll -= RARITY_WEIGHT[rarity(c)];
+      roll -= weight(c);
       if (roll < 0) {
         pick = c;
         break;

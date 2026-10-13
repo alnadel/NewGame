@@ -282,6 +282,14 @@ describe('Snow Globes', () => {
       counts[rarity(c)] = (counts[rarity(c)] ?? 0) + 1;
     }
     expect(counts.common!).toBeGreaterThan(counts.legendary ?? 0);
+    // Globe-only items come up most often: 6 of the 35.
+    let exclusive = 0;
+    for (let i = 0; i < 400; i++) {
+      const s = withGlobes(1);
+      s.createdAt = NOW + i * 7919;
+      if (getCosmetic(openGlobe(s)!.reward.cosmetic as string)!.unlock.kind === 'globe') exclusive++;
+    }
+    expect(exclusive).toBeGreaterThan(150);
   });
 
   it('unlocks the Wardrobe with the first globe', () => {
