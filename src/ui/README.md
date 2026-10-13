@@ -339,7 +339,7 @@ uses. `simulateSafeArea({ top: 47 })` fakes a notch for layout tests (it sets `-
 ## 7. Styling
 
 **Visual system (v1.4).** One type scale (`--fs-2xs` 13 px … `--fs-2xl` 28 px), a 4 px spacing
-grid (`--sp-1`…`--sp-5`), three elevations (`--shadow-sm`, `--shadow`, `--shadow-lg`), `--pill`
+grid, three elevations (`--shadow-sm`, `--shadow`, `--shadow-lg`), `--pill`
 and a `--gloss` top light on raised controls. One button family (`widgets.ts button`: plain,
 primary, gold, danger × md/lg/xl/round; their colour is `--bg` under the gloss) with one press feel
 (down onto the lip, 0.97 scale). Menu cards rise in one after another; the Title's top rises in

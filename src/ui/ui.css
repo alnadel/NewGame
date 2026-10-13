@@ -38,7 +38,7 @@
   --indigo: #34306b;
   --sky: #dff1ff;
   --panel: rgba(255, 255, 255, 0.92);
-  /* The visual system (v1.4): one type scale, a 4 px spacing grid, three elevations, pill radius.
+  /* The visual system (v1.4): one type scale (spacing keeps a 4 px grid), three elevations, pill radius.
      Body and control text never goes under --fs-md on menus; the smaller steps are for chips. */
   --fs-2xs: 0.8125rem;
   --fs-xs: 0.875rem;
@@ -47,11 +47,6 @@
   --fs-lg: 1.125rem;
   --fs-xl: 1.375rem;
   --fs-2xl: 1.75rem;
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 24px;
   --radius: 20px;
   --pill: 999px;
   --shadow-sm: 0 3px 10px rgba(43, 33, 64, 0.12);
@@ -532,9 +527,9 @@
   inset: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 8px;
   min-height: 48px;
-  padding: calc(var(--in-top) + var(--sp-2)) var(--pad-x-r) 0 var(--pad-x-l);
+  padding: calc(var(--in-top) + 8px) var(--pad-x-r) 0 var(--pad-x-l);
 }
 
 .title-hud-gap { flex: 1; }
@@ -806,6 +801,15 @@
   flex: 1 1 auto;
   min-height: 52px;
   font-size: 1.1875rem;
+}
+
+/* The main call to action breathes a soft glow (no transform: fit() measures this row). */
+.modes .play-pill { animation: cta-glow 2.4s ease-in-out infinite; }
+
+.modes .play-pill:active { animation: none; }
+
+@keyframes cta-glow {
+  50% { box-shadow: 0 4px 0 var(--lip), 0 10px 20px var(--glow), 0 0 0 7px rgba(46, 196, 182, 0.25); }
 }
 
 .journey-pill .ic { color: var(--accent-ink); }

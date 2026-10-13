@@ -154,12 +154,15 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // this device last saw the Title, it wears a NEW mark until opened.
   const seen = seenSet('features');
   const gates: { f: Feature; el: HTMLButtonElement; name: string }[] = [];
+  // The Daily also waits for its own run count (meta/progression isDailyUnlocked).
+  const isOpen = (save: Save, f: Feature): boolean => featureUnlocked(save, f) && (f !== 'daily' || isDailyUnlocked(save));
+  const deny = (text: string): void => {
+    ctx.sound('deny');
+    ctx.toast(text, { icon: 'lock', tone: 'ink' });
+  };
   const gated = (f: Feature, open: () => void) => (): void => {
-    if (!featureUnlocked(ctx.save(), f)) {
-      ctx.sound('deny');
-      ctx.toast(featureHint(f), { icon: 'lock', tone: 'ink' });
-      return;
-    }
+    const save = ctx.save();
+    if (!isOpen(save, f)) return deny(featureUnlocked(save, f) ? `The Daily unlocks after ${DAILY_UNLOCK_RUNS} runs.` : featureHint(f));
     seen.see(f);
     ctx.sound('tap');
     open();
@@ -174,13 +177,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   badgeSlot.addEventListener(
     'click',
     (e) => {
-      if (featureUnlocked(ctx.save(), 'profile')) {
-        seen.see('profile');
-        return;
-      }
+      if (featureUnlocked(ctx.save(), 'profile')) return;
       e.stopPropagation();
-      ctx.sound('deny');
-      ctx.toast(featureHint('profile'), { icon: 'lock', tone: 'ink' });
+      deny(featureHint('profile'));
     },
     true,
   );
@@ -232,17 +231,6 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     return btn;
   };
   const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily', [dailyDot]);
-  // The Daily also waits for its own run count (meta/progression isDailyUnlocked).
-  dailyBtn.addEventListener(
-    'click',
-    (e) => {
-      if (!featureUnlocked(ctx.save(), 'daily') || isDailyUnlocked(ctx.save())) return;
-      e.stopImmediatePropagation();
-      ctx.sound('deny');
-      ctx.toast(`The Daily unlocks after ${DAILY_UNLOCK_RUNS} runs.`, { icon: 'lock', tone: 'ink' });
-    },
-    true,
-  );
   const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
     journal: chipBest,
     journey: mapBtn,
@@ -350,7 +338,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
     renderGates(save);
-    const unplayed = featureUnlocked(save, 'daily') && isDailyUnlocked(save) && !dailyStatus(save, ctx.today()).played;
+    const unplayed = isOpen(save, 'daily') && !dailyStatus(save, ctx.today()).played;
     hide(dailyDot, !unplayed);
     if (unplayed) dailyBtn.setAttribute('aria-label', "Daily: today's is new");
 
@@ -372,9 +360,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    * controls, the map and the top bar stay hidden: the Title is Play (and Settings) only.
    */
   function renderGates(save: Save): void {
-    const open = gates.map((g) => featureUnlocked(save, g.f) && (g.f !== 'daily' || isDailyUnlocked(save)));
+    const open = gates.map((g) => isOpen(save, g.f));
     const fresh = !open.some(Boolean) && !featureUnlocked(save, 'profile') && totalStars(save) === 0;
-    seen.init([...gates.filter((_, i) => open[i]).map((g) => g.f), ...(featureUnlocked(save, 'profile') ? ['profile'] : [])]);
+    seen.init(gates.filter((_, i) => open[i]).map((g) => g.f));
     gates.forEach((g, i) => {
       const on = open[i] as boolean;
       const isNew = on && seen.isNew(g.f);
