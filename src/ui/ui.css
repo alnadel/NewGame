@@ -550,7 +550,15 @@
   padding: 4px 14px 4px 10px;
   border-radius: var(--pill);
   font-size: var(--fs-sm);
+  white-space: nowrap;
   animation: pop-in 420ms var(--ease-back) both, nudge 2.4s ease-in-out 1s infinite;
+}
+
+/* Narrow columns: the gift alone (its aria-label names it). */
+@media (max-width: 379.98px) {
+  .title-reward { padding: 0 11px; }
+
+  .title-reward .btn-label { display: none; }
 }
 
 @keyframes nudge {
