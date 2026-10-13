@@ -52,10 +52,11 @@ into a screen only in keyboard mode, and a menu returns focus to the control tha
 
 ```
 boot -> title | play
-title -> play | daily | wardrobe | missions | settings | journal | journey
-daily -> play | title          wardrobe -> title          missions -> title | journal
+title -> play | daily | wardrobe | missions | settings | journal | journey | profile
+profile -> title | wardrobe | journey  (v1.4; the Wardrobe and the map return to it)
+daily -> play | title          wardrobe -> title | profile          missions -> title | journal
 journal -> title | missions    (Back returns to wherever the Journal was opened from)
-journey -> play | title        (a tile starts its level; Back returns to the Title)
+journey -> play | title | profile  (a tile starts its level; Back returns where it opened from)
 settings -> title | pause      (Back returns to wherever Settings was opened from)
 play -> pause | dying | results | title
 pause -> play | title | settings

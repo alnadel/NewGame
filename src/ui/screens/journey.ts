@@ -41,6 +41,8 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   const snapshot = (): { stars: number[]; unlocked: number } => ({ stars: ctx.save().campaign.stars.slice(), unlocked: ctx.save().campaign.unlocked });
   let seen = snapshot();
   let timer = 0;
+  /** Back returns to the Title, or to the Profile when the map was opened from there. */
+  let origin: 'title' | 'profile' = 'title';
 
   const start = (id: number): void => {
     const save = ctx.save();
@@ -199,7 +201,8 @@ export function createJourneyScreen(ctx: UiContext): Screen {
 
   return {
     el,
-    enter() {
+    enter(from) {
+      if (from !== 'journey') origin = from === 'profile' ? 'profile' : 'title';
       refresh();
       celebrate();
       // The level in play sits in the middle of the view.
@@ -219,7 +222,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       }
     },
     refresh,
-    back: () => ctx.go('title'),
+    back: () => ctx.go(origin),
     initialFocus: () => continueBtn,
   };
 }

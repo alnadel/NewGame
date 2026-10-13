@@ -76,6 +76,8 @@ interface Tile {
 }
 
 export function createWardrobeScreen(ctx: UiContext): Screen {
+  /** Back returns here: the Title, or the Profile it was opened from. */
+  let origin: 'title' | 'profile' = 'title';
   let slot: CosmeticSlot = 'scarf';
   /** Try-on selection per slot (starts at what's equipped). */
   let selected: Equipped = { ...ctx.save().equipped };
@@ -296,7 +298,8 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
 
   return {
     el,
-    enter() {
+    enter(from) {
+      if (from === 'title' || from === 'profile') origin = from;
       slot = 'scarf';
       selected = { ...ctx.save().equipped };
       body.scrollTop = 0;
@@ -304,7 +307,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     },
     refresh,
     leave: seeVisited,
-    back: () => ctx.go('title'),
+    back: () => ctx.go(origin),
     initialFocus: () => tabButtons.get(slot) ?? null,
   };
 }
