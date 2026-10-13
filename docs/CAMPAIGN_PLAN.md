@@ -2,6 +2,16 @@
 
 **Precedence for campaign work:** this file, then `V1_1_PLAN.md`, then `V1_PLAN.md`, then the module READMEs.
 
+**Status (uiMeta batch, branch `v12/uiMeta`):** §5 built: save v3 (`campaign`, `settings.unlockAll`,
+v2 → v3 migration, merge across tabs), `applyRunResult` for `'campaign'` with the three Journey
+achievements, `isLevelPlayable`/`totalStars`/`continueLevel`, the Journey screen, the Title's pill,
+the Settings testing toggle, the Results level variant, the Journey share text, the lab variants,
+unit tests and `tests/e2e/journey.spec.ts`. The core names of §2-§3 and the session's `nextLevel`/
+`openJourney` are `// V12-SHIM` stand-ins (`src/config/campaign.ts`, `src/core/index.ts`,
+`src/core/sim/events.ts`, `src/game/session.ts`) until the core and game batches land; integration
+removes them. Decisions: the tray keeps 4 buttons (the pill is the entry); the Results kicker reads
+"Level 12 · Passed" (short, beside Share); `RunStats.minChill` is optional in the shim only.
+
 ## 1. What it is
 
 A **campaign of 200 levels** ("Journey") beside Endless, Daily and challenges. A level is a seeded, finite run with a goal, up to 3 stars, and a set of **concepts** (gameplay modifiers). The first 40 levels each introduce exactly one new concept; levels 41-200 combine concepts with rising difficulty. The catalog and the level table are data, so adding concepts or levels later is a data change.
