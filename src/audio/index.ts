@@ -107,12 +107,14 @@ class ShadyAudioImpl implements ShadyAudio {
   private isMuted: boolean;
   /** Key for direct play() calls: the day of the latest view. */
   private day = 1;
+  onHeartbeat: ((strong: boolean) => void) | null = null;
 
   constructor(opts: AudioOptions) {
     this.sfxVolume = opts.sfx ?? 0.8;
     this.musicVolume = opts.music ?? 0.6;
     this.isMuted = opts.muted ?? muteParam();
     this.router = new SfxRouter({ play: (n, p, q) => this.start(n, p, q), applyScene: (s) => this.applyScene(s) }, nowMs);
+    this.router.onHeartbeat = (strong) => this.onHeartbeat?.(strong);
     this.engine.onGraph((g) => {
       g.setVolumes(this.sfxVolume, this.musicVolume);
       g.setMuted(this.isMuted);
@@ -135,14 +137,6 @@ class ShadyAudioImpl implements ShadyAudio {
 
   get muted(): boolean {
     return this.isMuted;
-  }
-
-  get onHeartbeat(): ((strong: boolean) => void) | null {
-    return this.router.onHeartbeat;
-  }
-
-  set onHeartbeat(cb: ((strong: boolean) => void) | null) {
-    this.router.onHeartbeat = cb;
   }
 
   ensure(): void {

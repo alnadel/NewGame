@@ -8,38 +8,6 @@ import { GAIN_FLOOR, ahr, glide, perc } from './engine.ts';
 import type { AudioGraph, Voice } from './engine.ts';
 import { bellDegree, degreeHz, degreeSemis, detentHz, keyRootHz, multUpNotes, semis } from './theory.ts';
 
-export type SfxName =
-  | 'detent'
-  | 'catch'
-  | 'ahh'
-  | 'bell'
-  | 'crystal'
-  | 'flower'
-  | 'melt'
-  | 'multUp'
-  | 'multReset'
-  | 'phew'
-  | 'glare'
-  | 'cloud'
-  | 'gust'
-  | 'swing'
-  | 'lock'
-  | 'gate'
-  | 'eclipse'
-  | 'death'
-  | 'noon'
-  | 'noonPassed'
-  | 'nightfall'
-  | 'dayFanfare'
-  | 'finishNear'
-  | 'levelWin'
-  | 'levelFail'
-  | 'newBest'
-  | 'heartbeat'
-  | 'uiTap'
-  | 'uiBuy'
-  | 'uiError';
-
 export interface SfxParams {
   /** Day whose key tonal cues use (default 1 = C), and the chapter palette's base key (default 0). */
   day?: number;
@@ -138,7 +106,7 @@ function thump(g: AudioGraph, v: Voice, t: number, peak: number, dur: number): v
 /** The octave-5 tonic of the cue's key. */
 const tonic5 = (p: SfxParams): number => degreeHz(p.day ?? 1, 0, 5, p.key ?? 0);
 
-export const RECIPES: Readonly<Record<SfxName, Recipe>> = {
+export const RECIPES = {
   /** Sun detent: a tiny triangle tick on a five-step pitch ladder plus a 6 ms air burst. */
   detent(g, t, p) {
     const v = g.voice('sfx', t);
@@ -276,8 +244,8 @@ export const RECIPES: Readonly<Record<SfxName, Recipe>> = {
     const v = g.voice('sfx', t);
     const env = v.gain(GAIN_FLOOR);
     env.gain.setValueAtTime(GAIN_FLOOR, t);
-    env.gain.linearRampToValueAtTime(0.11, t + 0.015);
-    env.gain.linearRampToValueAtTime(0.07, t + 0.55);
+    env.gain.linearRampToValueAtTime(0.1, t + 0.015);
+    env.gain.linearRampToValueAtTime(0.065, t + 0.55);
     env.gain.exponentialRampToValueAtTime(GAIN_FLOOR, t + 0.78);
     const whistle = v.osc('sine', 1200, t, t + 0.78, env);
     glide(whistle.frequency, t, 1200, 280, 0.75);
@@ -285,7 +253,7 @@ export const RECIPES: Readonly<Record<SfxName, Recipe>> = {
     v.osc('sine', 6, t, t + 0.78, wobble);
     wobble.connect(whistle.frequency);
     const tp = t + 0.8;
-    glide(v.tone('sine', 180, tp, 0.2, 0.004, 0.14).frequency, tp, 180, 60, 0.12);
+    glide(v.tone('sine', 180, tp, 0.16, 0.004, 0.14).frequency, tp, 180, 60, 0.12);
     glide(v.tone('sine', 360, tp, 0.06, 0.004, 0.1).frequency, tp, 360, 120, 0.12);
   },
 
@@ -386,6 +354,9 @@ export const RECIPES: Readonly<Record<SfxName, Recipe>> = {
     v.tone('triangle', 233, t, 0.07, 0.004, 0.07, lp);
     v.tone('triangle', 220, t + 0.09, 0.07, 0.004, 0.09, lp);
   },
-};
+} satisfies Record<string, Recipe>;
+
+/** Every cue name (the keys of RECIPES). */
+export type SfxName = keyof typeof RECIPES;
 
 export const SFX_NAMES = Object.keys(RECIPES) as readonly SfxName[];

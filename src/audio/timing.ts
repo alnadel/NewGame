@@ -9,41 +9,29 @@ import { STEP_S } from './theory.ts';
  * apart. Rejected calls are dropped, not queued. Allocation-free after construction.
  */
 export class RateLimiter {
-  readonly minGapMs: number;
-  readonly maxPerWindow: number;
-  readonly windowMs: number;
-  /** Ring of accepted timestamps; when full, `head` is the oldest. */
+  private readonly minGapMs: number;
+  private readonly windowMs: number;
+  /** Ring of the last `maxPerWindow` accepted timestamps; `head` is the oldest. */
   private readonly stamps: Float64Array;
   private head = 0;
-  private count = 0;
   private last = Number.NEGATIVE_INFINITY;
 
   constructor(minGapMs: number, maxPerWindow: number, windowMs = 1000) {
     this.minGapMs = minGapMs;
-    this.maxPerWindow = Math.max(1, Math.floor(maxPerWindow));
     this.windowMs = windowMs;
-    this.stamps = new Float64Array(this.maxPerWindow);
+    this.stamps = new Float64Array(Math.max(1, Math.floor(maxPerWindow))).fill(Number.NEGATIVE_INFINITY);
   }
 
   /** True (and recorded) if an action at time `nowMs` is allowed. */
   tryAcquire(nowMs: number): boolean {
-    if (nowMs - this.last < this.minGapMs) return false;
-    const cap = this.maxPerWindow;
-    if (this.count === cap) {
-      if (nowMs - (this.stamps[this.head] as number) < this.windowMs) return false;
-      this.stamps[this.head] = nowMs;
-      this.head = (this.head + 1) % cap;
-    } else {
-      this.stamps[(this.head + this.count) % cap] = nowMs;
-      this.count++;
-    }
-    this.last = nowMs;
+    if (nowMs - this.last < this.minGapMs || nowMs - (this.stamps[this.head] as number) < this.windowMs) return false;
+    this.stamps[this.head] = this.last = nowMs;
+    this.head = (this.head + 1) % this.stamps.length;
     return true;
   }
 
   reset(): void {
-    this.head = 0;
-    this.count = 0;
+    this.stamps.fill(Number.NEGATIVE_INFINITY);
     this.last = Number.NEGATIVE_INFINITY;
   }
 }

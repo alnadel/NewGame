@@ -30,12 +30,7 @@ const CICADA_TAU = 0.4;
 /** Crickets: two sines, panned ±0.4; a chirp is 3 × (25 ms on, 25 ms off). */
 const CRICKET_GAIN = 0.05;
 const CRICKET_TAU = 0.6;
-const CHIRP_PULSES = 3;
-const CHIRP_ON = 0.025;
-const CHIRP_PERIOD = 0.05;
-const CHIRP_EDGE = 0.004;
-const CHIRP_EVERY = 0.7;
-const CHIRP_JITTER = 0.15;
+const CHIRP = { pulses: 3, on: 0.025, period: 0.05, edge: 0.004, every: 0.7, jitter: 0.15 } as const;
 /** Eclipse drone: a low open fifth with a slow beat, under a lowpass; fades with the eclipse. */
 const DRONE_GAIN = 0.04;
 const DRONE_TAU = 0.5;
@@ -77,18 +72,9 @@ export class Ambience {
   private readonly layers: Record<LayerName, Layer | null> = { sizzle: null, cicadas: null, crickets: null, drone: null };
   private crackleRate = 0;
   private crackleNext = 0;
-  /** Layer builds and stops so far (tests and the audio lab). */
-  starts = 0;
-  stops = 0;
 
   constructor(g: AudioGraph) {
     this.g = g;
-  }
-
-  /** Which layers are built right now (tests, the audio lab). */
-  get live(): Record<LayerName, boolean> {
-    const l = this.layers;
-    return { sizzle: l.sizzle !== null, cicadas: l.cicadas !== null, crickets: l.crickets !== null, drone: l.drone !== null };
   }
 
   applyScene(s: Readonly<Scene>, now: number): void {
@@ -116,7 +102,7 @@ export class Ambience {
       if (c.next < now) c.next = now + Math.random() * 0.4;
       while (c.next < horizon) {
         this.chirp(c, c.next);
-        c.next += CHIRP_EVERY + (Math.random() * 2 - 1) * CHIRP_JITTER;
+        c.next += CHIRP.every + (Math.random() * 2 - 1) * CHIRP.jitter;
       }
     }
   }
@@ -163,7 +149,6 @@ export class Ambience {
       src.stop(now + LAYER_STOP_FADE_S + 0.01);
     }
     if (live === 0) done();
-    this.stops++;
   }
 
   private build(name: LayerName, t: number): Layer {
@@ -171,7 +156,6 @@ export class Ambience {
     const level = ctx.createGain();
     level.connect(name === 'sizzle' ? this.g.buses.sfx : this.g.buses.amb);
     const l: Layer = { level, levelS: new Smoothed(level.gain, 0), nodes: [level], sources: [], idleSince: -1 };
-    this.starts++;
     // Connects a chain of nodes into the layer's level and tracks them.
     const chain = (...nodes: AudioNode[]): AudioNode => {
       nodes.reduce((a, b) => a.connect(b)).connect(level);
@@ -271,12 +255,12 @@ export class Ambience {
   private chirp(c: Cricket, t: number): void {
     c.osc.frequency.setValueAtTime(c.hz * (1 + (Math.random() - 0.5) * 0.02), t);
     const p = c.gate.gain;
-    for (let i = 0; i < CHIRP_PULSES; i++) {
-      const t0 = t + i * CHIRP_PERIOD;
+    for (let i = 0; i < CHIRP.pulses; i++) {
+      const t0 = t + i * CHIRP.period;
       p.setValueAtTime(GAIN_FLOOR, t0);
-      p.linearRampToValueAtTime(1, t0 + CHIRP_EDGE);
-      p.setValueAtTime(1, t0 + CHIRP_ON - CHIRP_EDGE);
-      p.linearRampToValueAtTime(GAIN_FLOOR, t0 + CHIRP_ON);
+      p.linearRampToValueAtTime(1, t0 + CHIRP.edge);
+      p.setValueAtTime(1, t0 + CHIRP.on - CHIRP.edge);
+      p.linearRampToValueAtTime(GAIN_FLOOR, t0 + CHIRP.on);
     }
   }
 

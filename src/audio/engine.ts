@@ -213,11 +213,6 @@ export class VoicePool {
     this.cap = cap;
   }
 
-  /** Voices currently held (tests, the lab's node-count check). */
-  get size(): number {
-    return this.voices.length;
-  }
-
   add(v: Voice, now: number): void {
     // Drop entries whose sources already stopped (onended can lag, or never come while suspended).
     for (let i = this.voices.length - 1; i >= 0; i--) {
@@ -270,11 +265,6 @@ export function prewarmNoise(rate: number = PREWARM_RATE): void {
   warm = { rate, white: fillWhite(new Float32Array(Math.floor(rate * NOISE_SECONDS))), crackle: fillCrackle(new Float32Array(crackleLength(rate)), rate) };
 }
 
-/** True once prewarmNoise() has run (tests). */
-export function noiseWarm(): boolean {
-  return warm !== null;
-}
-
 function fillWhite(d: Float32Array): Float32Array<ArrayBuffer> {
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   return d as Float32Array<ArrayBuffer>;
@@ -323,7 +313,7 @@ export class AudioGraph {
   readonly out: GainNode;
   readonly white: AudioBuffer;
   readonly crackle: AudioBuffer;
-  readonly pools: Readonly<Record<BusName, VoicePool>>;
+  private readonly pools: Readonly<Record<BusName, VoicePool>>;
   private readonly busLevels: Readonly<Record<BusName, Smoothed>>;
   private readonly outLevel: Smoothed;
 
@@ -466,18 +456,12 @@ export class AudioEngine {
 
   /**
    * Listens for gestures on `target` (capture phase, passive) and calls ensure() until audio
-   * runs. Listeners re-arm whenever the context drops out of 'running'. Returns a detach function.
+   * runs. Listeners re-arm whenever the context drops out of 'running'.
    */
-  attachUnlock(target: EventTarget): () => void {
+  attachUnlock(target: EventTarget): void {
     this.targets.push(target);
     if (this.armed) for (const type of UNLOCK_EVENTS) target.addEventListener(type, this.onGesture, LISTEN);
     else this.syncListeners();
-    return () => {
-      const i = this.targets.indexOf(target);
-      if (i < 0) return;
-      this.targets.splice(i, 1);
-      for (const type of UNLOCK_EVENTS) target.removeEventListener(type, this.onGesture, LISTEN);
-    };
   }
 
   dispose(): void {
