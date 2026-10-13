@@ -172,6 +172,45 @@ export function snowChip(value: string): HTMLElement {
   return h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), h('span', { class: 'num' }, value));
 }
 
+/**
+ * Counts `el`'s number from `from` up to `to` (ease-out, `ms` long, a soft tick on the way and the
+ * `end` sound at the end); instant under reduced motion or when nothing changes. Returns a stop.
+ */
+export function countUp(
+  el: HTMLElement,
+  from: number,
+  to: number,
+  ctx: UiContext,
+  o: { ms?: number; format?: (n: number) => string; end?: UiSoundName | null } = {},
+): () => void {
+  const format = o.format ?? String;
+  if (ctx.reducedMotion() || from === to) {
+    el.textContent = format(to);
+    return () => {};
+  }
+  const ms = o.ms ?? 700;
+  const start = performance.now();
+  let frame = 0;
+  let ticks = 0;
+  const step = (now: number): void => {
+    const k = Math.min(1, (now - start) / ms);
+    el.textContent = format(Math.round(from + (to - from) * (1 - (1 - k) * (1 - k) * (1 - k))));
+    // A tick every ~120 ms while counting.
+    if (Math.floor((k * ms) / 120) > ticks && k < 1) {
+      ticks += 1;
+      ctx.sound('tick');
+    }
+    if (k < 1) frame = requestAnimationFrame(step);
+    else if (o.end !== null) ctx.sound(o.end ?? 'count');
+  };
+  el.textContent = format(from);
+  frame = requestAnimationFrame(step);
+  return () => {
+    cancelAnimationFrame(frame);
+    el.textContent = format(to);
+  };
+}
+
 /** A thin progress bar; `fraction` in [0, 1]. */
 export function progressBar(fraction: number, className = 'bar'): HTMLElement {
   const fill = h('i');

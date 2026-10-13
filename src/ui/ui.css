@@ -38,9 +38,27 @@
   --indigo: #34306b;
   --sky: #dff1ff;
   --panel: rgba(255, 255, 255, 0.92);
+  /* The visual system (v1.4): one type scale, a 4 px spacing grid, three elevations, pill radius.
+     Body and control text never goes under --fs-md on menus; the smaller steps are for chips. */
+  --fs-2xs: 0.8125rem;
+  --fs-xs: 0.875rem;
+  --fs-sm: 0.9375rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
   --radius: 20px;
-  --shadow: 0 8px 24px rgba(43, 33, 64, 0.18);
+  --pill: 999px;
   --shadow-sm: 0 3px 10px rgba(43, 33, 64, 0.12);
+  --shadow: 0 8px 24px rgba(43, 33, 64, 0.18);
+  --shadow-lg: 0 18px 44px rgba(43, 33, 64, 0.3);
+  /* A soft top light on raised controls (buttons, discs, tiles). */
+  --gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 55%);
   --t: 180ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -155,7 +173,7 @@
 }
 
 .sui .kicker {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -211,10 +229,10 @@
   padding: 6px 20px;
   border: 0;
   border-radius: 16px;
-  background: #fff;
+  background: var(--gloss), var(--bg, #fff);
   color: var(--ink);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.1;
   letter-spacing: 0.01em;
   --lip: rgba(43, 33, 64, 0.16);
@@ -225,10 +243,10 @@
   isolation: isolate;
 }
 
-.btn:active:not([aria-disabled='true']) {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 var(--lip), 0 2px 6px var(--glow);
-}
+/* One press feel for every raised control: down onto its lip and a touch smaller. */
+:is(.btn, .chip--btn):active:not([aria-disabled='true']) { transform: translateY(3px) scale(0.97); }
+
+.btn:active:not([aria-disabled='true']) { box-shadow: 0 1px 0 var(--lip), 0 2px 6px var(--glow); }
 
 .btn[aria-disabled='true'] { cursor: default; }
 
@@ -246,19 +264,19 @@
 .btn--primary {
   --lip: var(--accent-deep);
   --glow: rgba(46, 196, 182, 0.28);
-  background: var(--accent);
+  --bg: var(--accent);
 }
 
 .btn--gold {
   --lip: var(--gold-deep);
   --glow: rgba(255, 194, 61, 0.3);
-  background: var(--gold);
+  --bg: var(--gold);
 }
 
 .btn--danger {
   --lip: var(--danger-deep);
   --glow: rgba(255, 93, 93, 0.25);
-  background: var(--danger);
+  --bg: var(--danger);
 }
 
 .btn--plain[aria-disabled='true'] {
@@ -269,14 +287,14 @@
 
 .btn--lg {
   min-height: 56px;
-  font-size: 1.125rem;
+  font-size: var(--fs-lg);
   border-radius: 18px;
 }
 
 .btn--xl {
   --ic: 26px;
   min-height: 64px;
-  font-size: 1.375rem;
+  font-size: var(--fs-xl);
   border-radius: 20px;
   letter-spacing: 0.02em;
 }
@@ -338,7 +356,7 @@
   gap: 6px;
   min-height: 36px;
   padding: 0 11px 0 8px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--panel);
   box-shadow: var(--shadow-sm);
   font-weight: 800;
@@ -360,8 +378,6 @@
   transition: transform 90ms var(--ease-out);
 }
 
-.chip--btn:active { transform: translateY(2px); }
-
 .chip .chip-chev {
   width: 16px;
   height: 16px;
@@ -376,7 +392,7 @@
   border-radius: 7px;
   background: var(--indigo);
   color: var(--paper);
-  font-size: 0.8125rem;
+  font-size: var(--fs-2xs);
   font-weight: 900;
   letter-spacing: 0.02em;
 }
@@ -430,7 +446,7 @@
   align-items: center;
   gap: 3px;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
   color: var(--accent-ink);
   white-space: nowrap;
@@ -438,7 +454,7 @@
 
 .reward--chip {
   padding: 4px 9px 4px 7px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--accent-soft);
 }
 
@@ -449,7 +465,7 @@
   border-radius: 6px;
   background: var(--gold-soft);
   color: #8a5a00;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: 1.15;
@@ -463,7 +479,7 @@
   border-radius: 8px;
   color: var(--accent-ink);
   background: rgba(215, 245, 241, 0.7);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -472,7 +488,7 @@
 }
 
 .stamp--sm {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   padding: 1px 6px;
   border-width: 2px;
   letter-spacing: 0.04em;
@@ -491,8 +507,43 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--in-top) + clamp(10px, calc(var(--ch) * 0.045), 44px));
+  /* Below the top bar (48 px), with a little air on taller screens. */
+  top: calc(var(--in-top) + 52px + clamp(0px, calc(var(--ch) * 0.02), 24px));
   padding: 0 var(--pad-x-r) 0 var(--pad-x-l);
+}
+
+/* The top bar (v1.4): the Sun Rank badge (gamify.ts rankBadge), a waiting daily reward, the wallet. */
+.title-hud {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 48px;
+  padding: calc(var(--in-top) + var(--sp-2)) var(--pad-x-r) 0 var(--pad-x-l);
+}
+
+.title-hud-gap { flex: 1; }
+
+.title-hud .chip { min-height: 40px; }
+
+/* The stub badge (before the gamification lands) is an empty button: nothing to show. */
+.title-rank .rank-badge:empty { display: none; }
+
+.title-reward {
+  --ic: 20px;
+  min-height: 44px;
+  padding: 4px 14px 4px 10px;
+  border-radius: var(--pill);
+  font-size: var(--fs-sm);
+  animation: pop-in 420ms var(--ease-back) both, nudge 2.4s ease-in-out 1s infinite;
+}
+
+@keyframes nudge {
+  0%, 80%, 100% { transform: none; }
+  85% { transform: rotate(-6deg) scale(1.06); }
+  90% { transform: rotate(5deg) scale(1.06); }
+  95% { transform: rotate(-3deg); }
 }
 
 .logo {
@@ -551,11 +602,11 @@
 .tagline {
   margin-top: 2px;
   padding: 6px 16px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(255, 248, 238, 0.82);
   box-shadow: var(--shadow-sm);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   letter-spacing: 0.01em;
 }
 
@@ -563,7 +614,7 @@
 .tagline.is-goal {
   max-width: min(100%, 360px);
   padding: 5px 14px;
-  font-size: 0.9375rem;
+  font-size: var(--fs-sm);
   line-height: 1.3;
   text-align: center;
 }
@@ -572,11 +623,11 @@
 .forecast-chip {
   margin-top: 8px;
   padding: 4px 12px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(43, 33, 64, 0.72);
   color: var(--paper);
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
   line-height: 1.3;
   white-space: nowrap;
   max-width: 100%;
@@ -620,7 +671,7 @@
 
 .challenge-from {
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
   line-height: 1.25;
   color: var(--accent-ink);
   overflow-wrap: anywhere;
@@ -629,14 +680,14 @@
 /* May wrap after "Beat" and after "·" (title.ts challengeGoalText keeps "Day 2" and "2:40 PM"). */
 .challenge-goal {
   font-weight: 900;
-  font-size: 1.0625rem;
+  font-size: var(--fs-lg);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   white-space: normal;
 }
 
 .challenge-note {
-  font-size: 0.8125rem;
+  font-size: var(--fs-2xs);
   color: var(--ink-2);
 }
 
@@ -707,12 +758,6 @@
   max-width: 100%;
 }
 
-.chips.no-wallet .chip--snow { display: none; }
-
-@media (max-width: 339.98px) {
-  .chips .chip--snow { display: none; }
-}
-
 /* The modes: the map (with the stars earned), the next level (the primary action) and Endless. A
    sideways drag on them is handed to the sun like the tray buttons (title.ts pressable). */
 .modes {
@@ -729,7 +774,7 @@
   flex: none;
   min-height: 48px;
   padding: 4px 14px 4px 12px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   white-space: nowrap;
   touch-action: none;
 }
@@ -755,11 +800,11 @@
   display: none;
   margin-top: 8px;
   padding: 3px 12px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(43, 33, 64, 0.78);
   color: var(--paper);
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
   text-align: center;
 }
 
@@ -814,7 +859,7 @@
 .tray-label {
   max-width: calc(100% + 12px);
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(255, 248, 238, 0.82);
   font-weight: 800;
   font-size: clamp(12px, calc(var(--cw) * 0.036), 14px);
@@ -862,6 +907,41 @@
   box-shadow: 0 0 0 2.5px #fff;
 }
 
+/* Progressive disclosure (title.ts renderGates): a locked feature shows its lock (a tap says how to
+   unlock it); a newly unlocked one a NEW tag and a pulse until it is opened. */
+:is(.tray-btn, .endless-pill):not(.is-locked) .tray-lock,
+:is(.tray-btn, .endless-pill):not(.is-new) .new-tag { display: none; }
+
+.endless-pill { overflow: visible !important; }
+
+.endless-pill.is-locked {
+  --bg: rgba(255, 255, 255, 0.72);
+  color: var(--ink-3);
+}
+
+.new-tag {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  padding: 1px 6px;
+  border-radius: var(--pill);
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+  font-size: 0.6875rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  transform: translateX(-50%) rotate(-6deg);
+}
+
+:is(.tray-btn.is-new .tray-disc, .endless-pill.is-new) { animation: new-pulse 1.6s ease-in-out infinite; }
+
+@keyframes new-pulse {
+  50% { box-shadow: 0 4px 0 rgba(43, 33, 64, 0.16), 0 0 0 7px rgba(255, 194, 61, 0.55); }
+}
+
 /* ===== Ghost thumb ===== */
 
 .ghost {
@@ -901,7 +981,7 @@
   color: var(--ink);
   box-shadow: 0 4px 0 rgba(43, 33, 64, 0.25), var(--shadow-sm);
   font-weight: 900;
-  font-size: 1.125rem;
+  font-size: var(--fs-lg);
   white-space: nowrap;
   transform: translate(-50%, -50%);
 }
@@ -988,7 +1068,7 @@
   margin-top: 34px;
   color: var(--paper);
   font-weight: 900;
-  font-size: 1.375rem;
+  font-size: var(--fs-xl);
   letter-spacing: 0.08em;
   text-shadow: 0 2px 0 rgba(43, 33, 64, 0.55), 0 0 14px rgba(43, 33, 64, 0.3);
 }
@@ -996,7 +1076,7 @@
 .ghost[data-mode='both'] .ghost-word { display: flex; }
 
 .ghost-arrow {
-  font-size: 1.75rem;
+  font-size: var(--fs-2xl);
   line-height: 1;
   opacity: 0.85;
 }
@@ -1010,7 +1090,7 @@
   width: max-content;
   max-width: calc(100% - 32px);
   padding: 7px 16px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(43, 33, 64, 0.8);
   color: var(--paper);
   font-weight: 800;
@@ -1117,7 +1197,7 @@
 
 .dialog-sub {
   color: var(--ink-2);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   margin-bottom: 6px;
 }
 
@@ -1240,7 +1320,7 @@
   background: var(--gold);
   color: var(--ink);
   font-weight: 900;
-  font-size: 0.9375rem;
+  font-size: var(--fs-sm);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1284,9 +1364,9 @@
   min-height: 46px;
   padding: 4px 14px 4px 10px;
   gap: 6px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--paper);
-  font-size: 0.9375rem;
+  font-size: var(--fs-sm);
 }
 
 .res-share.btn--primary { background: var(--accent); }
@@ -1314,11 +1394,11 @@
   min-height: 48px;
   padding: 4px 12px 4px 6px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--paper);
   color: var(--ink);
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
   transition: opacity var(--t);
 }
 
@@ -1391,11 +1471,11 @@
 
 .strip-more {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--paper-2);
   color: var(--ink-2);
   font-weight: 800;
-  font-size: 0.8125rem;
+  font-size: var(--fs-2xs);
 }
 
 .strip-row {
@@ -1479,7 +1559,7 @@
   margin-top: 4px;
   color: var(--accent-ink);
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: var(--fs-sm);
 }
 
 /* "Below your usual": a plain fact, not praise. */
@@ -1497,7 +1577,7 @@
   box-shadow: inset 0 0 0 2px var(--accent);
   color: var(--accent-ink);
   font-weight: 900;
-  font-size: 1.0625rem;
+  font-size: var(--fs-lg);
 }
 
 .res-kicker { min-width: 0; }
@@ -1515,7 +1595,7 @@
   border-radius: 10px;
   background: var(--indigo);
   color: var(--paper);
-  font-size: 1.0625rem;
+  font-size: var(--fs-lg);
   font-weight: 900;
   letter-spacing: 0.02em;
 }
@@ -1534,7 +1614,7 @@
   margin-top: 6px;
   color: var(--ink-2);
   font-weight: 600;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.35;
 }
 
@@ -1569,7 +1649,7 @@
   background: var(--danger-soft);
   color: #a52727;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 /* "Not counted": why a Daily run used no try. */
@@ -1577,7 +1657,7 @@
   margin-top: 4px;
   color: var(--ink-2);
   font-weight: 700;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.3;
 }
 
@@ -1603,7 +1683,7 @@
   border-radius: 12px;
   background: var(--paper);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.25;
   opacity: 0;
   transform: scale(0.8);
@@ -1665,7 +1745,7 @@
 .stat--snow .stat-val .ic { color: var(--accent-deep); }
 
 .stat-cap {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   color: var(--ink-2);
   line-height: 1.15;
@@ -1674,7 +1754,7 @@
 }
 
 .stat-sub {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 800;
   color: #b23b3b;
   line-height: 1.15;
@@ -1737,7 +1817,7 @@
 
 .mrow-label {
   font-weight: 700;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.2;
 }
 
@@ -1748,9 +1828,9 @@
   min-height: 36px;
   padding: 4px 12px 4px 9px;
   gap: 5px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--paper);
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
   box-shadow: 0 3px 0 rgba(43, 33, 64, 0.14), var(--shadow-sm);
 }
 
@@ -1761,7 +1841,7 @@
   inset: -6px 0;
 }
 
-.mrow-side .reward { font-size: 1rem; }
+.mrow-side .reward { font-size: var(--fs-md); }
 
 .mrow-side {
   display: flex;
@@ -1818,6 +1898,19 @@
 
 .scr-menu.is-on .menu { transform: none; }
 
+/* The cards rise in one after another as a menu opens (staggered entrance). */
+.scr-menu.is-on :is(.menu-body, .journey-sticky) > * { animation: rise 340ms var(--ease-out) both; }
+
+.scr-menu.is-on .menu-body > :nth-child(2) { animation-delay: 50ms; }
+
+.scr-menu.is-on .menu-body > :nth-child(3) { animation-delay: 100ms; }
+
+.scr-menu.is-on .menu-body > :nth-child(n + 4) { animation-delay: 150ms; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+}
+
 .menu-head {
   display: grid;
   grid-template-columns: 48px 1fr minmax(48px, auto);
@@ -1835,7 +1928,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 900;
-  font-size: 1.375rem;
+  font-size: var(--fs-xl);
   letter-spacing: 0.01em;
 }
 
@@ -1843,7 +1936,7 @@
 
 .menu-head .chip {
   justify-self: end;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 /* A header link to another menu (Missions → Journal). */
@@ -1852,8 +1945,8 @@
   justify-self: end;
   min-height: 44px;
   padding: 4px 14px 4px 10px;
-  border-radius: 999px;
-  font-size: 0.9375rem;
+  border-radius: var(--pill);
+  font-size: var(--fs-sm);
 }
 
 .menu-body {
@@ -1890,11 +1983,11 @@
   justify-content: space-between;
   margin-bottom: 10px;
   font-weight: 900;
-  font-size: 1.0625rem;
+  font-size: var(--fs-lg);
 }
 
 .card-count {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 800;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
@@ -1903,7 +1996,7 @@
 .card-note {
   margin-top: 10px;
   color: var(--ink-2);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.4;
 }
 
@@ -1945,12 +2038,12 @@
 
 .set-label {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 .set-hint {
   color: var(--ink-2);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.3;
 }
 
@@ -1970,7 +2063,7 @@
   border-radius: 14px;
   background: var(--paper);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -2001,7 +2094,7 @@
   min-width: 3.4em;
   text-align: right;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2062,7 +2155,7 @@
   height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(43, 33, 64, 0.18);
   transition: background-color var(--t);
 }
@@ -2112,7 +2205,7 @@
   background: transparent;
   color: var(--ink-2);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   overflow-wrap: anywhere;
   transition: background-color var(--t), color var(--t), box-shadow var(--t);
 }
@@ -2155,7 +2248,7 @@
 .version {
   text-align: center;
   color: var(--ink-3);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 700;
 }
 
@@ -2216,10 +2309,10 @@
 /* Day 1's weather and place (the Day Plan; the classic clear Meadow before it started). */
 .daily-plan {
   padding: 3px 12px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: rgba(43, 33, 64, 0.08);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 /* Snowbot's par: what the novice bot made of today's world. */
@@ -2243,7 +2336,7 @@
 .daily-blurb {
   max-width: 320px;
   color: var(--ink-2);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.4;
 }
 
@@ -2292,13 +2385,13 @@
 .try-pips i.is-used { background: var(--accent); }
 
 .daily-tries-text {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   color: var(--ink-2);
 }
 
 .daily-best-val {
   font-weight: 900;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2338,7 +2431,7 @@
 }
 
 .drow-date {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   color: var(--ink-2);
   font-weight: 600;
 }
@@ -2351,7 +2444,7 @@
 
 .drow-score {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2374,7 +2467,7 @@
 
 .drow-tries {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -2407,13 +2500,13 @@
 
 .mcard-label {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.25;
 }
 
 .mcard-hint {
   margin: 2px 0 0;
-  font-size: 0.8125rem;
+  font-size: var(--fs-2xs);
   line-height: 1.3;
   color: var(--ink-2);
 }
@@ -2481,13 +2574,13 @@
 
 .wk-name {
   font-weight: 800;
-  font-size: 0.8125rem;
+  font-size: var(--fs-2xs);
   color: var(--ink-2);
 }
 
 .mcard-prog {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2524,13 +2617,13 @@
 
 .badge-name {
   font-weight: 900;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 .badge:not(.is-on) .badge-name { color: var(--ink-2); }
 
 .badge-desc {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.3;
   color: var(--ink-2);
 }
@@ -2544,11 +2637,11 @@
   gap: 4px;
   margin-top: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--gold-soft);
   color: #7a4c00;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 /* Wardrobe */
@@ -2580,7 +2673,7 @@
   max-width: 300px;
   margin-bottom: 8px;
   color: var(--ink-2);
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.3;
 }
 
@@ -2618,7 +2711,7 @@
     align-self: end;
     min-height: 48px;
     padding: 4px 12px;
-    font-size: 1rem;
+    font-size: var(--fs-md);
   }
 }
 
@@ -2666,7 +2759,7 @@
 .tile-name {
   max-width: 100%;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.15;
   overflow-wrap: break-word;
 }
@@ -2679,7 +2772,7 @@
   justify-content: center;
   gap: 3px;
   margin-top: auto;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 800;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
@@ -2723,11 +2816,11 @@
 
 /* On menus they sit 8 px below the header (Back button and wallet chip): its padding (10 + 10) plus
    its single-line row, the 48 px Back button or the title's line box at large text sizes. */
-.sui[data-screen='settings'] .toasts,
-.sui[data-screen='daily'] .toasts,
-.sui[data-screen='missions'] .toasts,
-.sui[data-screen='journal'] .toasts,
-.sui[data-screen='wardrobe'] .toasts { top: calc(var(--in-top) + 28px + max(48px, 1.375rem * 1.35)); }
+.sui:is([data-screen='settings'], [data-screen='daily'], [data-screen='missions'], [data-screen='journal'], [data-screen='wardrobe'],
+  [data-screen='journey'], [data-screen='profile']) .toasts { top: calc(var(--in-top) + 28px + max(48px, 1.375rem * 1.35)); }
+
+/* On the Title, below its top bar (rank, reward, wallet). */
+.sui[data-screen='title'] .toasts { top: calc(var(--in-top) + 64px); }
 
 .toast {
   display: flex;
@@ -2739,7 +2832,7 @@
   background: #fff;
   box-shadow: var(--shadow);
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   line-height: 1.3;
   animation: toast-in 280ms var(--ease-back) both;
   transition: opacity 200ms ease, transform 200ms ease;
@@ -3066,13 +3159,13 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 
 .jbest-val {
   font-weight: 900;
-  font-size: 1.0625rem;
+  font-size: var(--fs-lg);
   font-variant-numeric: tabular-nums;
 }
 
 /* The first runs' best (never counted: gentler rules), under the counted one. */
 .jbest-eased {
-  font-size: 0.8125rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
@@ -3123,11 +3216,11 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 
 .jdelta {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--pill);
   background: var(--paper-2);
   color: var(--ink-2);
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
 }
 
 .jdelta.is-up {
@@ -3141,7 +3234,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
   margin-top: 8px;
   color: var(--ink-2);
   font-weight: 700;
-  font-size: 0.875rem;
+  font-size: var(--fs-xs);
 }
 
 .jkey::before {
@@ -3335,7 +3428,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 }
 
 .lvl-num {
-  font-size: 1.0625rem;
+  font-size: var(--fs-lg);
   line-height: 1.1;
 }
 
@@ -3421,7 +3514,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 }
 
 .road-text {
-  font-size: 0.9375rem;
+  font-size: var(--fs-sm);
   font-weight: 700;
   color: var(--ink-2);
   line-height: 1.25;
@@ -3433,7 +3526,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 }
 
 .road-count {
-  font-size: 0.9375rem;
+  font-size: var(--fs-sm);
   color: #8a5a00;
 }
 
@@ -3489,7 +3582,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
   margin-top: 4px;
   text-align: center;
   font-weight: 700;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   color: var(--ink-2);
 }
 
@@ -3527,7 +3620,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
   flex-direction: row;
   gap: 6px;
   padding: 4px 12px 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--pill);
 }
 
 .res-sheet.is-campaign :is(.stat-sub, .res-missions) { display: none; }
