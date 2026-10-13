@@ -146,13 +146,13 @@ players see the key line "Space: play the level · ← →: Endless · Esc: back
 
 **v1.4 Title** (docs/V1_4_PLAN.md): a top bar holds the Sun Rank badge (`gamify.ts rankBadge`; it
 opens the Profile once `featureUnlocked(save, 'profile')`, else it toasts `featureHint`), a gold
-"Reward" button while `claimables(save).daily` (it opens the Profile, where the streak is claimed)
+"Reward" button while `claimables(save).daily` (it claims the streak's reward: `claimDailyReward`, the reveal plays)
 and the Snow wallet (it counts up after a run). Endless, Daily, Missions and Wardrobe are gated by
 `featureUnlocked`: locked, they show a lock badge and a tap toasts `featureHint(f)`; while nothing
 is unlocked yet (and no stars) the locked buttons, the map and the top bar are hidden, so a first
-launch is Play (and Settings) only. A feature unlocked since this device last saw the Title gets
-`.is-new` (a NEW tag and a pulse) until opened, and a one-time "Unlocked: …" toast; `seen.ts`
-keeps those marks per device (the first read takes everything current as seen). Claim dots
+launch is Play (and Settings) only. A feature unlocked by progress gets `.is-new` (a NEW tag and a
+pulse) until opened (`featureIsNew`; opening it applies `markFeatureSeen` through `cb.updateSave`),
+and a one-time "Unlocked: …" toast. Claim dots
 (`claimDot`) go on the badge (globes + trophies) and on the Missions and Wardrobe discs.
 
 **v1.4 Results**: the XP meter (`xpMeter`) sits under the goal line (the score on endless runs) and
@@ -167,7 +167,8 @@ over its name) and the chapter's Snow Globe, gold with a check once all ten leve
 pops its globe and toasts. The Wardrobe shows the collection (owned / all, with a bar), each item's
 rarity (`labels.ts rarityOf`: star rewards legendary, other achievements and 500+ Snow epic, 150+
 rare) as a coloured rim and label, and NEW marks (with a dot on their tab) on wearable or buyable
-items this device hasn't shown yet; a tab's marks clear when it closes.
+items not seen there yet (`newItems`, taken on entry so they stay while browsing; a tapped item
+loses its mark, and leaving applies `markItemsSeen`).
 
 `ResultsView.campaign = { id, name, passed, stars, nextId: number | null, goalLine, introduces? }`
 turns the sheet into the compact level variant (it may take 82% of the screen, it has no postcard):

@@ -4,7 +4,7 @@
 // Rank badge (opens the Profile), the daily reward when one waits, and the Snow wallet (v1.4).
 // Progressive disclosure (v1.4): a feature still locked (meta/gamify featureUnlocked) shows a lock
 // and says how to unlock it; while nothing is unlocked yet the Title is Play (and Settings) only. A
-// feature unlocked since this device last saw the Title wears a NEW mark until opened. Only the controls take
+// feature unlocked by progress wears a NEW mark until opened (kept in the save). Only the controls take
 // pointer events: a press anywhere else reaches the canvas and starts an endless run (the challenge
 // while a challenge banner is up). Tray and mode buttons activate on click with < 8 px of travel,
 // and a sideways drag that starts on one is handed to the canvas.
@@ -19,12 +19,11 @@ import {
   nextRunEased,
   totalStars,
 } from '../../meta/progression.ts';
-import { claimables, featureHint, featureUnlocked, type Feature } from '../../meta/gamify.ts';
+import { claimables, featureHint, featureIsNew, featureUnlocked, markFeatureSeen, type Feature } from '../../meta/gamify.ts';
 import type { Save } from '../../meta/saveTypes.ts';
 import { logoLayers } from '../art.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
-import { claimDot, rankBadge } from '../gamify.ts';
-import { seenSet } from '../seen.ts';
+import { claimDailyReward, claimDot, rankBadge } from '../gamify.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
@@ -148,9 +147,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   );
 
   // --- Progressive disclosure ------------------------------------------------------------------
-  // A gated control: locked, it says how to unlock (featureHint) instead of opening; unlocked since
-  // this device last saw the Title, it wears a NEW mark until opened.
-  const seen = seenSet('features');
+  // A gated control: locked, it says how to unlock (featureHint) instead of opening; unlocked by
+  // progress and not opened since (meta/gamify featureIsNew, kept in the save), it wears a NEW mark.
   const gates: { f: Feature; el: HTMLButtonElement; name: string }[] = [];
   const isOpen = (save: Save, f: Feature): boolean => featureUnlocked(save, f);
   const deny = (text: string): void => {
@@ -160,7 +158,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const gated = (f: Feature, open: () => void) => (): void => {
     const save = ctx.save();
     if (!isOpen(save, f)) return deny(featureHint(f));
-    seen.see(f);
+    if (featureIsNew(save, f)) ctx.cb.updateSave((s) => markFeatureSeen(s, f));
     ctx.sound('tap');
     open();
   };
@@ -180,8 +178,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     },
     true,
   );
-  // The daily streak's reward, when one waits: it is claimed in the Profile.
-  const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', className: 'title-reward pe', ariaLabel: 'Daily reward ready', onPress: () => ctx.go('profile') });
+  // The daily streak's reward, when one waits: claimed right here (the reveal plays over the Title).
+  const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', className: 'title-reward pe', ariaLabel: 'Claim the daily reward', sound: null, onPress: () => void claimDailyReward(ctx) });
   const walletValue = h('span', { class: 'num' });
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), walletValue);
   const hud = h('div', { class: 'title-hud' }, badgeSlot, rewardBtn, h('i', { class: 'title-hud-gap' }), chipSnow);
@@ -359,10 +357,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   function renderGates(save: Save): void {
     const open = gates.map((g) => isOpen(save, g.f));
     const fresh = !open.some(Boolean) && !featureUnlocked(save, 'profile') && totalStars(save) === 0;
-    seen.init(gates.filter((_, i) => open[i]).map((g) => g.f));
     gates.forEach((g, i) => {
       const on = open[i] as boolean;
-      const isNew = on && seen.isNew(g.f);
+      const isNew = on && featureIsNew(save, g.f);
       g.el.classList.toggle('is-locked', !on);
       g.el.classList.toggle('is-new', isNew);
       hide(g.el, !on && fresh);

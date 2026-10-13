@@ -7,7 +7,8 @@
 // The grid is built once per slot tab; selecting, buying and equipping update the tile buttons in
 // place, so keyboard focus stays on the tile that was pressed.
 // v1.4: the collection count (owned of all), each item's rarity (labels.ts rarityOf) and a NEW mark
-// on items this device hasn't shown yet that the player can wear or buy (seen when the tab closes).
+// on items the player can wear or buy and hasn't seen here yet (meta/gamify newItems, kept in the
+// save). The marks are taken on entry and stay while browsing; leaving marks them all seen.
 
 import {
   COSMETICS,
@@ -20,13 +21,13 @@ import {
   type CosmeticSlot,
   type Equipped,
 } from '../../meta/content.ts';
+import { markItemsSeen, newItems } from '../../meta/gamify.ts';
 import { itemState, totalStars, type ItemState } from '../../meta/progression.ts';
 import { h, setChildren } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
 import { RARITY_LABEL, rarityOf } from '../labels.ts';
-import { seenSet } from '../seen.ts';
 import { button, menuHeader, progressBar, setDisabled, snowChip } from '../widgets.ts';
 
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
@@ -34,8 +35,6 @@ const PREVIEW_CSS = 168;
 const STATES: readonly ItemState[] = ['equipped', 'owned', 'buyable', 'expensive', 'locked'];
 
 const costOf = (c: Cosmetic): number => (c.unlock.kind === 'snow' ? c.unlock.cost : 0);
-/** Items that can be worn or bought: the ones a NEW mark points at. */
-const actionable = (state: ItemState): boolean => state === 'owned' || state === 'equipped' || state === 'buyable';
 
 /** The tile's status line. Unaffordable prices carry a lock glyph, not just a muted color. */
 function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (Node | string)[] } {
@@ -84,14 +83,10 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
   /** The slot the grid's tiles were built for. */
   let builtFor: CosmeticSlot | null = null;
   const tiles = new Map<string, Tile>();
-  const seen = seenSet('wardrobe');
-  /** Slots whose tab was shown this visit: their NEW marks clear when the tab (or screen) closes. */
-  const visited = new Set<CosmeticSlot>();
-  const seeVisited = (): void => {
-    const save = ctx.save();
-    seen.see(...COSMETICS.filter((c) => visited.has(c.slot) && actionable(itemState(save, c.id))).map((c) => c.id));
-    visited.clear();
-  };
+  /** Items wearing a NEW mark this visit (taken on entry; a tapped one loses it). */
+  let fresh = new Set<string>();
+  let visiting = false;
+  const isNew = (c: Cosmetic, state: ItemState): boolean => fresh.has(c.id) && state !== 'equipped' && state !== 'expensive';
 
   const wallet = snowChip('0');
   const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, 'aria-hidden': 'true' });
@@ -109,7 +104,6 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     b.addEventListener('click', () => {
       if (slot === s) return;
       ctx.sound('toggle');
-      seeVisited();
       slot = s;
       refresh();
     });
@@ -181,7 +175,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
 
   function select(c: Cosmetic): void {
     selected = { ...selected, [c.slot]: c.id };
-    seen.see(c.id);
+    fresh.delete(c.id);
     spot.classList.remove('is-hop');
     void spot.offsetWidth; // restart the hop
     spot.classList.add('is-hop');
@@ -233,10 +227,10 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       for (const s of STATES) btn.classList.toggle(`is-${s}`, s === state);
       btn.classList.toggle('is-selected', isSel);
       btn.setAttribute('aria-pressed', String(isSel));
-      const isNew = state !== 'equipped' && actionable(state) && seen.isNew(c.id);
-      btn.classList.toggle('is-new', isNew);
+      const neu = isNew(c, state);
+      btn.classList.toggle('is-new', neu);
       const r = rarityOf(c);
-      btn.setAttribute('aria-label', `${c.name}, ${r === 'common' ? '' : `${RARITY_LABEL[r]}, `}${spokenState(c, state, save.stats.wallet)}${isNew ? ', new' : ''}`);
+      btn.setAttribute('aria-label', `${c.name}, ${r === 'common' ? '' : `${RARITY_LABEL[r]}, `}${spokenState(c, state, save.stats.wallet)}${neu ? ', new' : ''}`);
       const s = statusContent(c, state);
       status.className = `tile-status${s.cls ? ` ${s.cls}` : ''}`;
       status.setAttribute('aria-hidden', 'true');
@@ -248,8 +242,6 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     const save = ctx.save();
     (wallet.querySelector('.num') as HTMLElement).textContent = String(save.stats.wallet);
     wallet.setAttribute('aria-label', `${save.stats.wallet} Snow`);
-    seen.init(COSMETICS.filter((c) => actionable(itemState(save, c.id))).map((c) => c.id));
-    visited.add(slot);
 
     const have = COSMETICS.filter((c) => { const st = itemState(save, c.id); return st === 'owned' || st === 'equipped'; }).length;
     owned.textContent = `${have}/${COSMETICS.length}`;
@@ -260,10 +252,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       const on = s === slot;
       b.setAttribute('aria-selected', String(on));
       b.tabIndex = on ? 0 : -1;
-      b.classList.toggle('has-new', cosmeticsForSlot(s).some((c) => {
-        const st = itemState(save, c.id);
-        return st !== 'equipped' && actionable(st) && seen.isNew(c.id);
-      }));
+      b.classList.toggle('has-new', cosmeticsForSlot(s).some((c) => isNew(c, itemState(save, c.id))));
     }
     grid.setAttribute('aria-labelledby', `tab-${slot}`);
 
@@ -302,11 +291,18 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       if (from === 'title' || from === 'profile') origin = from;
       slot = 'scarf';
       selected = { ...ctx.save().equipped };
+      fresh = new Set(newItems(ctx.save()));
+      visiting = true;
       body.scrollTop = 0;
       refresh();
     },
     refresh,
-    leave: seeVisited,
+    leave: () => {
+      if (!visiting) return;
+      visiting = false;
+      fresh.clear();
+      ctx.cb.updateSave(markItemsSeen);
+    },
     back: () => ctx.go(origin),
     initialFocus: () => tabButtons.get(slot) ?? null,
   };
