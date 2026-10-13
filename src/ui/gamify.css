@@ -435,6 +435,7 @@
 
 /* The rank road: the current rank and the next five with their rewards. */
 .pf-road {
+  container: road / inline-size;
   position: relative;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -482,13 +483,17 @@
   color: var(--accent-ink);
 }
 
-/* Names wrap ("Snow / Angel") rather than run into the next node's. */
+/* Names wrap at spaces ("Snow / Angel"); where six columns can't hold "Snowflake" they go (each
+   node's aria-label still names its rank, and the hero names the current one). */
 .pf-node small {
   max-width: 100%;
   font-size: 0.75rem;
   line-height: 1.15;
   color: var(--ink-2);
-  overflow-wrap: anywhere;
+}
+
+@container road (max-width: 25.99rem) {
+  .pf-node small { display: none; }
 }
 
 /* Trophies: ui.css badges, tinted by tier, with progress while locked. */
