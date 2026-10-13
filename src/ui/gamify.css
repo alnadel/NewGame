@@ -1,0 +1,592 @@
+/* v1.4 gamification widgets (src/ui/gamify.ts), the Profile and the Missions globe row. Owned by the
+   meta builder; the UX builder places the widgets and never styles their insides. Uses the ui.css
+   tokens. Reduced motion: ui.css drops every animation under .is-rm and the reveal skips straight to
+   the prize. */
+
+.sui {
+  --r-common: #2ec4b6;
+  --r-rare: #4d96ff;
+  --r-epic: #9b5de5;
+  --r-legendary: #ffb21d;
+}
+
+/* ===== Rank ring, badge and XP meter ===== */
+
+.rank-ring {
+  --d: 40px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--d);
+  height: var(--d);
+}
+
+.rank-ring svg {
+  position: absolute;
+  inset: 0;
+  rotate: -90deg;
+  fill: #fff;
+  stroke-width: 4.5;
+}
+
+.rank-ring circle + circle {
+  fill: none;
+  stroke: var(--gold);
+  stroke-linecap: round;
+  stroke-dasharray: var(--p, 0) 100;
+}
+
+.rank-ring circle:first-child { stroke: rgba(43, 33, 64, 0.12); }
+
+.rank-num {
+  position: relative;
+  font-size: calc(var(--d) * 0.4);
+  line-height: 1;
+}
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 14px 4px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+}
+
+.rank-badge:active { scale: 0.96; }
+
+.rank-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.rank-kicker {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.rank-name {
+  overflow: clip;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.xp-meter {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.xp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.xp-row .rank-text { flex: 1 1 auto; }
+
+.xp-gain {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: #8a5a00;
+}
+
+.xp-bar {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--paper-2);
+}
+
+.xp-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold), #ff9f43);
+}
+
+.xp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 8px;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.xp-pop {
+  position: absolute;
+  top: -12px;
+  right: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--gold);
+  font-weight: 900;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  opacity: 0;
+}
+
+.xp-meter.is-rankup { box-shadow: 0 0 0 3px var(--gold), var(--shadow-sm); }
+.is-rankup .xp-pop { opacity: 1; animation: pop-in 520ms var(--ease-back); }
+.is-rankup .rank-ring { animation: pulse 520ms var(--ease-back); }
+
+@keyframes pop-in { from { translate: 0 8px; scale: 0.6; opacity: 0; } }
+@keyframes pulse { 50% { scale: 1.22; } }
+
+/* ===== Claim dots ===== */
+
+:where(.sui .has-dot) { position: relative; }
+
+.sui .has-dot::after {
+  content: attr(data-dot);
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font: 900 0.6875rem/16px var(--font);
+  text-align: center;
+  pointer-events: none;
+  animation: pop-in 320ms var(--ease-back);
+}
+
+/* ===== Snow Globe art ===== */
+
+.globe-art { display: block; width: 100%; height: 100%; overflow: visible; }
+.globe-mini { display: block; width: 30px; height: 30px; }
+
+/* ===== Reward reveal ===== */
+
+.rv {
+  --tier: var(--r-common);
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 200ms;
+  cursor: pointer;
+}
+
+.rv.is-on { opacity: 1; }
+.rv.is-out { opacity: 0; }
+.rv[data-tier='rare'] { --tier: var(--r-rare); }
+.rv[data-tier='epic'] { --tier: var(--r-epic); }
+.rv:is([data-tier='legendary'], [data-tier='snow']) { --tier: var(--r-legendary); }
+
+.rv-scrim {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 42%, rgba(60, 54, 128, 0.93), rgba(23, 17, 36, 0.98));
+  backdrop-filter: blur(6px);
+}
+
+.rv-frame {
+  position: absolute;
+  left: var(--wl);
+  top: var(--wt);
+  width: var(--ww);
+  height: var(--wh);
+  display: grid;
+  place-items: center;
+  padding: calc(var(--in-top) + 16px) var(--pad-x-r) calc(var(--in-bottom) + 16px) var(--pad-x-l);
+}
+
+.rv-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(100%, 360px);
+  color: #fff;
+  text-align: center;
+}
+
+.rv-kicker {
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--gold);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rv-art {
+  position: relative;
+  width: min(64vw, 240px, calc(var(--ch) * 0.36));
+  aspect-ratio: 1;
+  margin: 6px 0;
+}
+
+.rv-art > * { position: absolute; }
+
+.rv-rays {
+  inset: -30%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--tier) 55%, transparent) 0 10deg, transparent 0 24deg);
+  mask: radial-gradient(circle, #000 20%, transparent 68%);
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.rv.is-open .rv-rays { opacity: 1; animation: spin 9s linear infinite; }
+
+@keyframes spin { to { rotate: 360deg; } }
+
+.rv-globe {
+  inset: 0;
+  transform-origin: 50% 90%;
+  opacity: 0;
+}
+
+.rv.is-shake .rv-globe {
+  opacity: 1;
+  animation: pop-in 300ms var(--ease-back), shake 1100ms ease-in-out 120ms;
+}
+
+.rv.is-burst .rv-globe {
+  opacity: 0;
+  scale: 1.35;
+  filter: brightness(2.2);
+  transition: 360ms var(--ease-out);
+}
+
+@keyframes shake {
+  10%, 34%, 58% { rotate: -10deg; }
+  22%, 46% { rotate: 9deg; }
+  70% { rotate: 12deg; translate: 0 -6px; }
+  82% { rotate: -8deg; translate: 0 -8px; scale: 1.06; }
+  92% { rotate: 4deg; scale: 1.1; }
+}
+
+/* Snow swirling in the glass while it shakes; it bursts outward when the globe opens. */
+.rv-flakes { inset: 14% 22% 36%; }
+
+.rv-flakes i {
+  --a: calc(var(--i) * 51deg);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgba(90, 184, 255, 0.7);
+  opacity: 0;
+}
+
+.rv.is-shake .rv-flakes i {
+  opacity: 1;
+  animation: swirl calc(700ms + var(--i) * 40ms) linear calc(var(--i) * -90ms) infinite;
+}
+
+.rv.is-burst .rv-flakes i {
+  opacity: 0;
+  transform: rotate(var(--a)) translateX(170px);
+  transition: 420ms var(--ease-out);
+}
+
+@keyframes swirl {
+  from { transform: rotate(var(--a)) translateX(calc(10px + var(--i) * 3.6px)) rotate(0deg) translateX(14px); }
+  to { transform: rotate(calc(var(--a) + 360deg)) translateX(calc(10px + var(--i) * 3.6px)) rotate(360deg) translateX(14px); }
+}
+
+.rv-prize {
+  inset: 14%;
+  display: grid;
+  place-items: center;
+  border-radius: 32%;
+  background: #fff;
+  box-shadow: 0 0 0 5px var(--tier), 0 0 44px 8px color-mix(in srgb, var(--tier) 70%, transparent);
+  opacity: 0;
+  scale: 0.3;
+}
+
+.rv.is-open .rv-prize {
+  opacity: 1;
+  scale: 1;
+  transition: opacity 160ms, scale 520ms var(--ease-back);
+}
+
+.rv-prize .swatch { width: 84%; height: 84%; }
+
+.rv-prize .num {
+  display: grid;
+  justify-items: center;
+  color: var(--accent-deep);
+  font-size: 2rem;
+}
+
+.rv-prize .ic { width: 64px; height: 64px; }
+
+.rv-name {
+  font-weight: 900;
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+.rv-sub { color: color-mix(in srgb, var(--tier) 55%, #fff); font-weight: 800; }
+.rv-count { color: rgba(255, 255, 255, 0.7); }
+.rv :is(.rv-name, .rv-sub, .rv-count) { min-height: 1.35em; }
+
+.sui .rv-next { min-width: 200px; margin-top: 6px; }
+
+.rv:not(.is-open) :is(.rv-name, .rv-sub, .rv-next) { opacity: 0; pointer-events: none; }
+.rv.is-open :is(.rv-name, .rv-sub, .rv-next) { transition: opacity 260ms 140ms; }
+
+/* ===== Daily streak card ===== */
+
+.streak-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.streak-day {
+  --ic: 22px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 7px 0 6px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.streak-day small { font-size: 0.6875rem; }
+.streak-day > svg { height: 26px; color: var(--accent-deep); }
+.streak-day.is-globe { background: var(--sky); }
+.streak-day.is-claimed { background: var(--accent-soft); color: var(--accent-ink); }
+
+.streak-day.is-today {
+  background: var(--gold-soft);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2.5px var(--gold);
+  animation: glow 1.6s ease-in-out infinite;
+}
+
+@keyframes glow { 50% { box-shadow: inset 0 0 0 2.5px var(--gold), 0 0 0 4px rgba(255, 194, 61, 0.35); } }
+
+.streak-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.streak-foot .card-note { flex: 1 1 auto; margin: 0; }
+.sui .streak-claim { flex: none; }
+
+/* ===== Profile ===== */
+
+.pf-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 14px;
+  background: linear-gradient(160deg, #fff 30%, var(--gold-soft));
+}
+
+.pf-hero .rank-ring { --d: 84px; grid-row: span 3; }
+.pf-hero .rank-name { font-size: 1.5rem; }
+
+.pf-globes {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-2);
+  background: linear-gradient(160deg, #fff 35%, var(--sky));
+}
+
+.pf-globes > svg { height: 64px; animation: bob 2.2s ease-in-out infinite; }
+.pf-globes strong { display: block; font-size: 1.125rem; font-weight: 900; color: var(--ink); }
+
+@keyframes bob { 50% { translate: 0 -4px; rotate: -3deg; } }
+
+/* The rank road: the current rank and the next five with their rewards. */
+.pf-road {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  text-align: center;
+}
+
+.pf-road::before {
+  content: '';
+  position: absolute;
+  inset: 18px 8% auto;
+  height: 4px;
+  background: var(--paper-2);
+}
+
+.pf-node {
+  --ic: 18px;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pf-node b {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px var(--paper-2);
+}
+
+.pf-node.is-now b { background: var(--gold); box-shadow: 0 0 0 4px var(--gold-soft); }
+.pf-node.is-globe b { box-shadow: inset 0 0 0 3px #9ad8ff; }
+
+.pf-node span {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--accent-ink);
+}
+
+.pf-node small {
+  max-width: 100%;
+  overflow: clip;
+  font-size: 0.75rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Trophies: ui.css badges, tinted by tier, with progress while locked. */
+.badge.is-on.is-bronze .badge-medal { background: radial-gradient(circle at 35% 30%, #fbe0c4, #e8a66a 60%); box-shadow: 0 3px 0 #b8743a; color: #6b3a0c; }
+.badge.is-on.is-silver .badge-medal { background: radial-gradient(circle at 35% 30%, #fff, #c7d1e2 60%); box-shadow: 0 3px 0 #8d9ab3; color: #3f4a61; }
+
+.pf-prog {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--ink-3);
+}
+
+.pf-prog .bar { flex: 1 1 auto; }
+
+.pf-new {
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.sui .pf-more { display: flex; margin: 10px auto 0; }
+
+/* Collection */
+.pf-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+
+.pf-swatches li {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.pf-swatches li:not([class]) { opacity: 0.35; filter: grayscale(1); }
+.pf-swatches li[class] { box-shadow: inset 0 0 0 2px var(--r, var(--r-common)); }
+.pf-swatches .is-rare { --r: var(--r-rare); }
+.pf-swatches .is-epic { --r: var(--r-epic); }
+.pf-swatches .is-legendary { --r: var(--r-legendary); }
+.pf-swatches .swatch { width: 88%; height: 88%; }
+
+.pf-row {
+  --ic: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-weight: 800;
+}
+
+.pf-row .ic { color: var(--gold-deep); }
+.pf-row .num { margin-left: auto; }
+
+.pf-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sui .pf-links .btn { margin: 0; }
+.pf-bests { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
+.pf-bests .jbest-val { font-size: 0.9375rem; }
+.scr-profile .jtotals { margin-top: 12px; }
+
+/* Missions: the progress to the next Snow Globe. */
+.mset {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 14px;
+  background: var(--sky);
+}
+
+.mset > svg { height: 40px; }
+.mset span { display: flex; gap: 5px; }
+
+.mset i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #9ad8ff;
+}
+
+.mset i.is-on { background: var(--accent); box-shadow: none; }

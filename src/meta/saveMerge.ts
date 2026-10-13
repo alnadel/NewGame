@@ -9,6 +9,8 @@
 // - owned cosmetics and achievements keep everything either side added (and drop what one removed);
 // - Daily tries and pars merge per date, the run history keeps both sides' new runs;
 // - Journey stars take the larger per level and the unlocked level the higher;
+// - XP and Snow Globes add both sides' deltas, the streak with the later claim wins, unlocked
+//   features and seen marks keep everything either side added;
 // - settings, outfit, the comfort rung and missions keep this instance's choice.
 //
 // Without a known common ancestor (the instances lost track of each other for longer than the
@@ -16,7 +18,7 @@
 // everything either side owns, every run either side recorded. That never loses one side's
 // progress to the other's, but runs both made meanwhile can count once.
 
-import type { CampaignState, DailyEntry, RunRecord, Save, SaveStats, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, GamifyState, RunRecord, Save, SaveStats, WeekState } from './saveTypes.ts';
 import { DAILY_TRIES } from './daily.ts';
 
 const ADDITIVE = [
@@ -158,6 +160,26 @@ function campaignBoth(l: CampaignState, r: CampaignState): CampaignState {
   };
 }
 
+const laterStreak = (l: GamifyState['streak'], r: GamifyState['streak']): GamifyState['streak'] =>
+  r.last > l.last || (r.last === l.last && r.days > l.days) ? r : l;
+
+/** Both sides' gamification; `a` null joins them (the larger counters, everything either holds). */
+function gamifyMerge(a: GamifyState | null, l: GamifyState, r: GamifyState): GamifyState {
+  const add = (k: 'xp' | 'globes' | 'opened'): number => (a ? Math.max(0, l[k] + r[k] - a[k]) : Math.max(l[k], r[k]));
+  const set = <T extends string>(k: 'features' | 'seenFeatures' | 'seenItems'): T[] => setMerge(a ? a[k] : [], l[k], r[k]) as T[];
+  return {
+    xp: add('xp'),
+    globes: add('globes'),
+    opened: add('opened'),
+    missionSet: a && l.missionSet === a.missionSet ? r.missionSet : l.missionSet,
+    streak: laterStreak(l.streak, r.streak),
+    features: set('features'),
+    seenFeatures: set('seenFeatures'),
+    seenItems: set('seenItems'),
+    seenTrophies: Math.max(l.seenTrophies, r.seenTrophies),
+  };
+}
+
 function joinSaves(local: Save, remote: Save): Save {
   const stats = { ...local.stats };
   for (const key of [...ADDITIVE, ...MAXIMA]) stats[key] = Math.max(local.stats[key], remote.stats[key]);
@@ -183,6 +205,7 @@ function joinSaves(local: Save, remote: Save): Save {
     history: historyJoin(local.history, remote.history),
     week: weekBoth(local.week, remote.week),
     campaign: campaignBoth(local.campaign, remote.campaign),
+    gamify: gamifyMerge(null, local.gamify, remote.gamify),
     lastPlay: local.lastPlay > remote.lastPlay ? local.lastPlay : remote.lastPlay,
     flags,
   };
@@ -196,7 +219,7 @@ function joinSaves(local: Save, remote: Save): Save {
 export function mergeSaves(base: Save | null, local: Save, remote: Save): Save {
   if (base === null) return joinSaves(local, remote);
   return {
-    v: 3,
+    v: 4,
     createdAt: three(base.createdAt, local.createdAt, remote.createdAt, (l, r) => Math.min(l, r)),
     settings: fields(base.settings, local.settings, remote.settings, keepLocal),
     stats: fields(base.stats, local.stats, remote.stats, (key, l, r, a) => {
@@ -217,6 +240,7 @@ export function mergeSaves(base: Save | null, local: Save, remote: Save): Save {
     history: three(base.history, local.history, remote.history, (l, r, a) => historyMerge(a, l, r)),
     week: three(base.week, local.week, remote.week, weekBoth),
     campaign: three(base.campaign, local.campaign, remote.campaign, campaignBoth),
+    gamify: three(base.gamify, local.gamify, remote.gamify, (l, r, a) => gamifyMerge(a, l, r)),
     lastPlay: three(base.lastPlay, local.lastPlay, remote.lastPlay, (l, r) => (l > r ? l : r)),
     flags: fields(base.flags, local.flags, remote.flags, (key, l, r) =>
       typeof l === 'boolean' ? ((l || r) as typeof l) : key === 'hintsShown' ? (Math.max(l as number, r as number) as typeof l) : l,

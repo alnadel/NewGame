@@ -1,6 +1,9 @@
-// Persistent save schema (v3: v2 of docs/V1_1_PLAN.md §5 CC-9 plus the Journey campaign of
-// docs/CAMPAIGN_PLAN.md §5). Owned by src/meta/save.ts; read by game/session and ui. An older build
-// reading a newer save sees 'future' and stays read-only.
+// Persistent save schema (v4: v2 of docs/V1_1_PLAN.md §5 CC-9, the Journey campaign of
+// docs/CAMPAIGN_PLAN.md §5 (v3) and the v1.4 gamification of docs/V1_4_PLAN.md). Owned by
+// src/meta/save.ts; read by game/session and ui. An older build reading a newer save sees 'future'
+// and stays read-only.
+
+import type { Feature } from './gamify.ts';
 
 export interface Settings {
   /** 0..1, default 0.8 */
@@ -84,7 +87,7 @@ export interface WeekState {
   start: string;
   /** Bit i: a run finished on start + i days. */
   days: number;
-  /** Paid rewards: bit 0 three days, bit 1 five, bit 2 seven. */
+  /** Retired in v1.4 (the Sunny Week no longer pays Snow): kept for older builds reading the save. */
   paid: number;
   /** Best Day reached per weekday (Monday first). */
   best: number[];
@@ -108,8 +111,41 @@ export interface CampaignState {
   lastLevel: number;
 }
 
+/** The 7-day daily reward calendar (meta/gamify.ts claimDaily). */
+export interface StreakState {
+  /** Local date of the last claim, or '' before the first. */
+  last: string;
+  /** Days claimed in a row (unbounded; the calendar shows ((days − 1) mod 7) + 1). */
+  days: number;
+  /** The longest run of days ever claimed. */
+  best: number;
+  /** This 7-day cycle's free missed day was used. */
+  freezeUsed: boolean;
+}
+
+/** v1.4 gamification (docs/V1_4_PLAN.md, meta/gamify.ts). */
+export interface GamifyState {
+  /** Lifetime XP (the Sun Rank). */
+  xp: number;
+  /** Unopened Snow Globes. */
+  globes: number;
+  /** Snow Globes opened so far (seeds the next pick). */
+  opened: number;
+  /** Missions finished toward the next Snow Globe (0..2; the third pays it). */
+  missionSet: number;
+  streak: StreakState;
+  /** Features unlocked by progress (sticky; the testing toggle opens the rest without storing them). */
+  features: Feature[];
+  /** Unlocked features whose button was seen since (no "NEW" ribbon). */
+  seenFeatures: Feature[];
+  /** Wardrobe items seen while owned or affordable (the rest show a "new" dot). */
+  seenItems: string[];
+  /** Achievements unlocked when the Profile was last opened. */
+  seenTrophies: number;
+}
+
 export interface Save {
-  v: 3;
+  v: 4;
   createdAt: number;
   settings: Settings;
   stats: SaveStats;
@@ -124,6 +160,7 @@ export interface Save {
   history: RunRecord[];
   week: WeekState;
   campaign: CampaignState;
+  gamify: GamifyState;
   /** Local date of the last finished run, or ''. */
   lastPlay: string;
   flags: {

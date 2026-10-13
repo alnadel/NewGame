@@ -64,12 +64,21 @@ export type CosmeticId =
   | 'hat-nightcap'
   | 'hat-starcrown'
   | 'nose-golden'
-  | 'shades-galaxy';
+  | 'shades-galaxy'
+  // v1.4 Snow Globe exclusives (meta/gamify.ts openGlobe).
+  | 'scarf-frost'
+  | 'scarf-candy'
+  | 'hat-snowcap'
+  | 'hat-mintcone'
+  | 'nose-mintcane'
+  | 'shades-sunset';
 
 export type CosmeticUnlock =
   | { kind: 'default' }
   | { kind: 'snow'; cost: number }
-  | { kind: 'achievement'; achievement: AchievementId };
+  | { kind: 'achievement'; achievement: AchievementId }
+  /** Found only in Snow Globes (v1.4). */
+  | { kind: 'globe' };
 
 /**
  * Scarf look. The renderer draws a knitted band around Nubs' neck with two tails.
@@ -150,8 +159,9 @@ export interface Cosmetic {
 const snow = (cost: number): CosmeticUnlock => ({ kind: 'snow', cost });
 const DEFAULT: CosmeticUnlock = { kind: 'default' };
 const byAchievement = (achievement: AchievementId): CosmeticUnlock => ({ kind: 'achievement', achievement });
+const GLOBE: CosmeticUnlock = { kind: 'globe' };
 
-/** All 29 cosmetics, grouped by slot in Wardrobe display order. */
+/** All 35 cosmetics, grouped by slot in Wardrobe display order. */
 export const COSMETICS: readonly Cosmetic[] = [
   // Scarves
   { id: 'scarf-red', slot: 'scarf', name: 'Red Scarf', unlock: DEFAULT,
@@ -171,6 +181,10 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'scarf', pattern: 'rainbow', main: '#2EC4B6', shade: '#1B9A8E', stripes: ['#2EC4B6', '#5AB8FF', '#9B5DE5', '#6BCB77'] } },
   { id: 'scarf-starry', slot: 'scarf', name: 'Starry Scarf', unlock: byAchievement('stars-25'),
     look: { slot: 'scarf', pattern: 'stripes', main: '#34306B', shade: '#24204F', stripes: ['#FFC23D'] } },
+  { id: 'scarf-frost', slot: 'scarf', name: 'Frost Scarf', unlock: GLOBE,
+    look: { slot: 'scarf', pattern: 'stripes', main: '#9AD8FF', shade: '#5AA8E0', stripes: ['#FFFFFF'] } },
+  { id: 'scarf-candy', slot: 'scarf', name: 'Candy Scarf', unlock: GLOBE,
+    look: { slot: 'scarf', pattern: 'plaid', main: '#FF8FA3', shade: '#E8475A', stripes: ['#FFFFFF', '#FFD93D'] } },
 
   // Hats
   { id: 'hat-none', slot: 'hat', name: 'No Hat', unlock: DEFAULT,
@@ -191,6 +205,10 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'hat', shape: 'beanie', main: '#34306B', shade: '#24204F', accent: '#FFC23D', detail: '#FFC23D' } },
   { id: 'hat-starcrown', slot: 'hat', name: 'Star Crown', unlock: byAchievement('stars-600'),
     look: { slot: 'hat', shape: 'crown', main: '#E8ECFF', shade: '#9AA6D8', accent: '#FFC23D', detail: '#5AB8FF' } },
+  { id: 'hat-snowcap', slot: 'hat', name: 'Snow Beanie', unlock: GLOBE,
+    look: { slot: 'hat', shape: 'beanie', main: '#E8ECFF', shade: '#9AA6D8', accent: '#5AB8FF', detail: '#5AB8FF' } },
+  { id: 'hat-mintcone', slot: 'hat', name: 'Mint Cone', unlock: GLOBE,
+    look: { slot: 'hat', shape: 'partyCone', main: '#2EC4B6', shade: '#1B9A8E', accent: '#FFC23D', detail: '#FFFFFF' } },
 
   // Noses
   { id: 'nose-carrot', slot: 'nose', name: 'Carrot', unlock: DEFAULT,
@@ -205,6 +223,8 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'nose', shape: 'carrot', main: '#CFEFFF', shade: '#9AD8FF', accent: '#FFFFFF', length: 1.1 } },
   { id: 'nose-golden', slot: 'nose', name: 'Golden Carrot', unlock: byAchievement('stars-150'),
     look: { slot: 'nose', shape: 'carrot', main: '#FFC23D', shade: '#D99A12', accent: '#FFF1C9', length: 1.05 } },
+  { id: 'nose-mintcane', slot: 'nose', name: 'Mint Cane', unlock: GLOBE,
+    look: { slot: 'nose', shape: 'candyCane', main: '#FFFFFF', shade: '#E4E9F2', accent: '#2EC4B6', length: 0.9 } },
 
   // Sun Shades (worn by the sun)
   { id: 'shades-classic', slot: 'shades', name: 'Classic Shades', unlock: DEFAULT,
@@ -219,6 +239,8 @@ export const COSMETICS: readonly Cosmetic[] = [
     look: { slot: 'shades', shape: 'heart', frame: '#E8475A', lens: '#FF8FA3', lens2: '#E8475A', shine: '#FFFFFF' } },
   { id: 'shades-galaxy', slot: 'shades', name: 'Galaxy Shades', unlock: byAchievement('stars-300'),
     look: { slot: 'shades', shape: 'round', frame: '#34306B', lens: '#5B4A86', lens2: '#9B5DE5', shine: '#FFF3C4' } },
+  { id: 'shades-sunset', slot: 'shades', name: 'Sunset Aviators', unlock: GLOBE,
+    look: { slot: 'shades', shape: 'aviator', frame: '#E8475A', lens: '#FFC23D', lens2: '#FF5D5D', shine: '#FFF3C4' } },
 ];
 
 const COSMETIC_BY_ID = new Map<string, Cosmetic>(COSMETICS.map((c) => [c.id, c]));

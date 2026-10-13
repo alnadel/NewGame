@@ -3,7 +3,7 @@ import { addDays } from '../../src/meta/daily.ts';
 import { emptyWeek } from '../../src/meta/save.ts';
 import { markSunnyDay, mondayOf, sunnyDays, weekFor } from '../../src/meta/week.ts';
 
-describe('Sunny Week dates', () => {
+describe('the week\'s days (Sunny Week trophy)', () => {
   it('finds the Monday of any date, across the DST weeks of 2026', () => {
     // EU summer time starts Sun 29 Mar, US Sun 8 Mar; EU ends Sun 25 Oct, US Sun 1 Nov.
     const cases: [string, string][] = [
@@ -23,19 +23,19 @@ describe('Sunny Week dates', () => {
   it('marks seven distinct days in a week whose Sunday changes the clocks', () => {
     const week = emptyWeek();
     for (let i = 0; i < 7; i++) markSunnyDay(week, addDays('2026-10-26', i), 1);
-    expect(week).toMatchObject({ start: '2026-10-26', days: 127, paid: 7 });
+    expect(week).toMatchObject({ start: '2026-10-26', days: 127, paid: 0 });
     expect(sunnyDays(week)).toBe(7);
   });
 });
 
 describe('markSunnyDay', () => {
-  it('pays 3, 5 and 7 sunny days once each, never twice for one date', () => {
+  it('counts each date once and pays no Snow (v1.4: the daily streak pays)', () => {
     const week = emptyWeek();
-    const paid: number[] = [];
     for (const date of ['2026-10-12', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18']) {
-      paid.push(...markSunnyDay(week, date, 2).paid.map((p) => p.snow));
+      expect(markSunnyDay(week, date, 2)).toBe(false);
     }
-    expect(paid).toEqual([30, 50, 80]);
+    expect(sunnyDays(week)).toBe(7);
+    expect(week.paid).toBe(0);
     expect(week.best).toEqual([2, 2, 2, 2, 2, 2, 2]);
   });
 
@@ -53,17 +53,17 @@ describe('markSunnyDay', () => {
     for (let i = 0; i < 5; i++) markSunnyDay(week, addDays('2026-03-23', i), 1);
     // Two weeks later (a skipped week costs nothing): the old week still closes sunny.
     const r = markSunnyDay(week, '2026-04-08', 1);
-    expect(r.closedSunny).toBe(true);
+    expect(r).toBe(true);
     expect(week).toEqual({ start: '2026-04-06', days: 0b100, paid: 0, best: [0, 0, 1, 0, 0, 0, 0] });
     for (let i = 0; i < 4; i++) markSunnyDay(week, addDays('2026-04-06', i), 1);
-    expect(markSunnyDay(week, '2026-04-13', 1).closedSunny).toBe(false);
+    expect(markSunnyDay(week, '2026-04-13', 1)).toBe(false);
   });
 
   it('leaves a newer week alone when the device clock goes back', () => {
     const week = emptyWeek();
     markSunnyDay(week, '2026-10-20', 2);
     const before = structuredClone(week);
-    expect(markSunnyDay(week, '2026-10-11', 4)).toEqual({ closedSunny: false, paid: [] });
+    expect(markSunnyDay(week, '2026-10-11', 4)).toBe(false);
     expect(week).toEqual(before);
   });
 

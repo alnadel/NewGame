@@ -98,7 +98,7 @@ function run(minutes: number, over: Partial<Stats> = {}, extra: Partial<RunResul
 }
 
 /**
- * A save that already played today (no Morning Snow), so a test sees only the rule it is about. `runs` past onboarding by default, so bests count.
+ * A save that already played today, so a test sees only the rule it is about. `runs` past onboarding by default, so bests count.
  */
 function quiet(runs = BEST_FROM_RUNS): Save {
   const s = defaults(1);
@@ -121,18 +121,18 @@ function history(n: number, m: number): Save['history'] {
 }
 
 describe('applyRunResult: stats, bests and wallet', () => {
-  it('pays run Snow, mission rewards and the day\'s first-run bonus into the wallet', () => {
+  it('pays run Snow and mission rewards into the wallet (no Morning Snow since v1.4)', () => {
     const { save, outcome } = applyRunResult(defaults(1), run(200, { snow: 23, flakes: 12 }), opts());
-    // reach-9am (10) + flakes-10 (10) complete; Morning Snow +15.
+    // reach-9am (10) + flakes-10 (10) complete; the daily streak replaced Morning Snow.
     expect(outcome.runSnow).toBe(23);
     expect(outcome.missionSnow).toBe(20);
-    expect(outcome.bonusSnow).toBe(15);
-    expect(outcome.snowEarned).toBe(58);
-    expect([outcome.walletBefore, outcome.walletAfter, save.stats.wallet, save.stats.lifetimeSnow]).toEqual([0, 58, 58, 58]);
+    expect(outcome.bonusSnow).toBe(0);
+    expect(outcome.snowEarned).toBe(43);
+    expect([outcome.walletBefore, outcome.walletAfter, save.stats.wallet, save.stats.lifetimeSnow]).toEqual([0, 43, 43, 43]);
     expect(save.stats.runs).toBe(1);
     expect(save.stats.flakes).toBe(12);
     expect(save.stats.bestSnowRun).toBe(23);
-    expect(outcome.toasts.map((t) => t.text)).toContain('Morning Snow +15');
+    expect(outcome.toasts.map((t) => t.text).some((t) => t.startsWith('Morning Snow'))).toBe(false);
   });
 
   it('never mutates its input', () => {
@@ -391,14 +391,13 @@ describe('comfort, history and pace', () => {
   });
 });
 
-describe('bonuses: Morning Snow, Welcome back, Sunny Week', () => {
-  it('pays Morning Snow once per date', () => {
+describe('bonuses: Welcome back, the week\'s days', () => {
+  it('pays no Morning Snow any more (v1.4: the daily streak pays) and records the date', () => {
     const s = defaults(1);
     const a = applyRunResult(s, run(10), opts());
-    const b = applyRunResult(a.save, run(10), opts());
-    expect([a.outcome.bonusSnow, b.outcome.bonusSnow]).toEqual([15, 0]);
-    expect(applyRunResult(b.save, run(10), opts({ today: addDays(TODAY, 1) })).outcome.bonusSnow).toBe(15);
-    expect(b.save.lastPlay).toBe(TODAY);
+    const b = applyRunResult(a.save, run(10), opts({ today: addDays(TODAY, 1) }));
+    expect([a.outcome.bonusSnow, b.outcome.bonusSnow]).toEqual([0, 0]);
+    expect(b.save.lastPlay).toBe(addDays(TODAY, 1));
   });
 
   it('doubles run Snow after 3 days away, the extra capped at +100', () => {
@@ -407,26 +406,26 @@ describe('bonuses: Morning Snow, Welcome back, Sunny Week', () => {
     expect(welcomeBackDue(s, TODAY)).toBe(true);
     expect(welcomeBackDue(s, addDays(TODAY, -1))).toBe(false);
     const small = applyRunResult(s, run(10, { snow: 40 }), opts()).outcome;
-    expect([small.runSnow, small.bonusSnow]).toEqual([80, 15]);
-    expect(small.toasts.map((t) => t.text).slice(0, 2)).toEqual(['Welcome back ×2', 'Morning Snow +15']);
+    expect([small.runSnow, small.bonusSnow]).toEqual([80, 0]);
+    expect(small.toasts.map((t) => t.text).slice(0, 1)).toEqual(['Welcome back ×2']);
     const big = applyRunResult(s, run(10, { snow: 250 }), opts()).outcome;
     expect(big.runSnow).toBe(350);
-    expect(big.snowEarned).toBe(365);
+    expect(big.snowEarned).toBe(350);
     s.lastPlay = addDays(TODAY, -2);
     expect(applyRunResult(s, run(10, { snow: 40 }), opts()).outcome.runSnow).toBe(40);
     expect(welcomeBackDue(defaults(1), TODAY)).toBe(false);
   });
 
-  it('pays the Sunny Week thresholds once and counts sunny weeks', () => {
+  it('marks the week\'s days without Snow and counts sunny weeks', () => {
     // 2026-10-12 is a Monday.
     let s = quiet();
     const chips: string[] = [];
     for (let i = 0; i < 7; i++) {
       const r = applyRunResult(s, run(10), opts({ today: addDays('2026-10-12', i) }));
-      chips.push(...r.outcome.toasts.map((t) => t.text).filter((t) => t.startsWith('Sunny Week')));
+      chips.push(...r.outcome.toasts.map((t) => t.text).filter((t) => t.startsWith('Sunny Week:')));
       s = r.save;
     }
-    expect(chips).toEqual(['Sunny Week: 3 days +30', 'Sunny Week: 5 days +50', 'Sunny Week: 7 days +80']);
+    expect(chips).toEqual([]);
     expect(s.week.days).toBe(127);
     expect(s.stats.sunnyWeeks).toBe(0);
     s = applyRunResult(s, run(10), opts({ today: '2026-10-19' })).save;
@@ -653,8 +652,8 @@ describe('achievements and cosmetic unlocks', () => {
     expect(sunny.outcome.cosmeticsUnlocked).toContain('scarf-aurora');
   });
 
-  it('announces the Daily unlock on run 3 and nudges when an item becomes affordable', () => {
-    let s = quiet(0);
+  it('announces the Daily unlock on run 16 and nudges when an item becomes affordable', () => {
+    let s = quiet(13);
     s = applyRunResult(s, run(5, { snow: 20 }), opts()).save;
     s = applyRunResult(s, run(5, { snow: 20 }), opts()).save;
     expect(isDailyUnlocked(s)).toBe(false);
@@ -672,14 +671,18 @@ describe('achievements and cosmetic unlocks', () => {
     expect(r.outcome.toasts.map((t) => t.text)).not.toContain('Daily Solstice unlocked!');
   });
 
-  it('unlocks the Daily on the 3rd completed run, whatever the runs reached', () => {
+  it('unlocks the Daily on the 16th completed run (or with Level 8 passed), whatever the runs reached', () => {
     let s = defaults(1);
+    s.stats.runs = 13;
     s = applyRunResult(s, run(900), opts()).save;
     s = applyRunResult(s, run(1500), opts()).save;
-    expect(s.stats.runs).toBe(2);
+    expect(s.stats.runs).toBe(15);
     expect(isDailyUnlocked(s)).toBe(false);
+    const passed = structuredClone(s);
+    passed.campaign.unlocked = 9;
+    expect(isDailyUnlocked(passed)).toBe(true);
     const third = applyRunResult(s, run(5), opts());
-    expect(third.save.stats.runs).toBe(3);
+    expect(third.save.stats.runs).toBe(16);
     expect(isDailyUnlocked(third.save)).toBe(true);
     expect(third.outcome.dailyUnlocked).toBe(true);
     expect(third.outcome.toasts.map((t) => t.text)).toContain('Daily Solstice unlocked!');
@@ -877,7 +880,10 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
     run(360, { flakes: 12, snow: 30, ...over }, { mode: 'campaign', level: { id, passed, stars: stars as 0 | 1 | 2 | 3, introduces: null } });
 
   it('pays the run Snow plus the first-pass bonus (id × 2), once', () => {
-    const first = applyRunResult(quiet(), level(6, true, 2), opts());
+    // Rank 2 just begun, so neither run reaches Rank 3 (whose Snow would join the bonus).
+    const base = quiet();
+    base.gamify.xp = 100;
+    const first = applyRunResult(base, level(6, true, 2), opts());
     expect(first.outcome.bonusSnow).toBe(12);
     expect(first.outcome.snowEarned).toBe(30 + 12 + first.outcome.missionSnow);
     expect(first.outcome.toasts.map((t) => t.text)).toContain('First pass +12');
@@ -923,7 +929,7 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
     expect(save.stats.easedBest).toBe(0);
     expect(outcome.newBest).toBe(false);
     expect(outcome.pace).toBeNull();
-    // It still counts as a run: missions progress, the lifetime counters and Morning Snow apply.
+    // It still counts as a run: missions progress and the lifetime counters apply.
     expect(save.stats.runs).toBe(11);
     expect(save.stats.flakes).toBe(12);
     expect(outcome.missions.some((m) => m.fraction > 0)).toBe(true);

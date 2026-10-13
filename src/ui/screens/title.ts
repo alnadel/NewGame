@@ -15,11 +15,9 @@ import {
   CAMPAIGN_STARS_MAX,
   continueLevel,
   dailyStatus,
-  isDailyUnlocked,
   nextGoal,
   nextRunEased,
   totalStars,
-  DAILY_UNLOCK_RUNS,
 } from '../../meta/progression.ts';
 import { claimables, featureHint, featureUnlocked, type Feature } from '../../meta/gamify.ts';
 import type { Save } from '../../meta/saveTypes.ts';
@@ -154,15 +152,14 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // this device last saw the Title, it wears a NEW mark until opened.
   const seen = seenSet('features');
   const gates: { f: Feature; el: HTMLButtonElement; name: string }[] = [];
-  // The Daily also waits for its own run count (meta/progression isDailyUnlocked).
-  const isOpen = (save: Save, f: Feature): boolean => featureUnlocked(save, f) && (f !== 'daily' || isDailyUnlocked(save));
+  const isOpen = (save: Save, f: Feature): boolean => featureUnlocked(save, f);
   const deny = (text: string): void => {
     ctx.sound('deny');
     ctx.toast(text, { icon: 'lock', tone: 'ink' });
   };
   const gated = (f: Feature, open: () => void) => (): void => {
     const save = ctx.save();
-    if (!isOpen(save, f)) return deny(featureUnlocked(save, f) ? `The Daily unlocks after ${DAILY_UNLOCK_RUNS} runs.` : featureHint(f));
+    if (!isOpen(save, f)) return deny(featureHint(f));
     seen.see(f);
     ctx.sound('tap');
     open();
@@ -190,11 +187,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const hud = h('div', { class: 'title-hud' }, badgeSlot, rewardBtn, h('i', { class: 'title-hud-gap' }), chipSnow);
 
   // --- Chips -------------------------------------------------------------------------------------
-  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Journal.
+  // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
   const bestDay = h('span', { class: 'day-badge' });
   const bestValue = h('span', { class: 'num' });
-  const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('journal'));
-  // The missions chip is read as one labeled image (its aria-label carries the full sentence).
+  const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('profile'));
+  // The other chips are read as one labeled image each (their aria-label carries the full sentence).
   const pips = h('span', { class: 'pips' });
   const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
   const chips = h('div', { class: 'chips' }, chipBest, chipMissions);
@@ -233,7 +230,6 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily', [dailyDot]);
   const trayFor: Partial<Record<ScreenId, HTMLElement>> = {
     profile: badge.el,
-    journal: chipBest,
     journey: mapBtn,
     daily: dailyBtn,
     missions: trayButton('Missions', 'missions', () => ctx.go('missions'), 'missions'),
@@ -308,7 +304,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const best = splitMinutes(shownBest);
     bestDay.textContent = `D${best.day}`;
     bestValue.textContent = formatTimeOfDay(best.minute);
-    chipBest.setAttribute('aria-label', `Journal, ${eased ? 'eased best' : 'best'} ${formatScore(shownBest)}`);
+    chipBest.setAttribute('aria-label', `Profile, ${eased ? 'eased best' : 'best'} ${formatScore(shownBest)}`);
 
     const missions = activeMissionViews(save);
     setChildren(pips, ...missions.map((m) => {

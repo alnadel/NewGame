@@ -128,7 +128,7 @@
 .sui .pe { pointer-events: auto; }
 
 /* Centered columns. */
-:is(.cell, .stat, .badge, .daily-hero, .stage, .lvl-tile, .tile, .tray-btn, .res-level, .title-top, .title-bottom, .toasts, .confirm, .wk-day, .empty) {
+:is(.cell, .stat, .badge, .daily-hero, .stage, .lvl-tile, .tile, .tray-btn, .res-level, .title-top, .title-bottom, .toasts, .confirm, .empty) {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2580,65 +2580,6 @@
 
 .mcard-bottom .bar { flex: 1 1 auto; }
 
-/* The Sunny Week: seven day stamps, Monday to Sunday. */
-.week-days {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.wk-day {
-  gap: 2px;
-  padding: 4px 0 6px;
-  border-radius: 12px;
-}
-
-.wk-day svg {
-  width: min(40px, 100%);
-  height: auto;
-  aspect-ratio: 1;
-}
-
-.wk-sun {
-  fill: none;
-  stroke: rgba(43, 33, 64, 0.18);
-  stroke-width: 1.8;
-  stroke-dasharray: 3 2.6;
-}
-
-.wk-rays {
-  stroke: #ffb42e;
-  stroke-width: 2.6;
-  stroke-linecap: round;
-}
-
-.wk-rays--dim { stroke: rgba(43, 33, 64, 0.1); }
-
-.wk-day:not(.is-sunny) .wk-rays--dim { stroke: none; }
-
-.wk-day.is-sunny .wk-sun {
-  fill: #ffd36b;
-  stroke: #ffb42e;
-  stroke-dasharray: none;
-}
-
-.wk-day.is-gold .wk-sun {
-  stroke: var(--gold-deep);
-  stroke-width: 2.6;
-  filter: drop-shadow(0 0 3px rgba(255, 194, 61, 0.9));
-}
-
-.wk-day.is-today {
-  background: var(--paper);
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-.wk-name {
-  font-weight: 800;
-  font-size: var(--fs-2xs);
-  color: var(--ink-2);
-}
-
 .mcard-prog {
   font-weight: 800;
   font-size: var(--fs-md);
@@ -3274,19 +3215,11 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
   .sui :focus-visible { outline-color: Highlight; }
 }
 
-/* ===== Journal: bests, the last 30 runs, totals ===== */
+/* ===== Records (the Profile, v1.4; the Journal until then): bests, the last 30 runs, totals ===== */
 
 .jbest-val {
   font-weight: 900;
   font-size: var(--fs-lg);
-  font-variant-numeric: tabular-nums;
-}
-
-/* The first runs' best (never counted: gentler rules), under the counted one. */
-.jbest-eased {
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3321,52 +3254,6 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
   background-color: var(--gold);
   box-shadow: 0 0 0 2px var(--gold-deep);
 }
-
-.javerage {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-  margin-top: 10px;
-  font-weight: 700;
-}
-
-.javerage strong { font-weight: 900; }
-
-.jdelta {
-  padding: 1px 8px;
-  border-radius: var(--pill);
-  background: var(--paper-2);
-  color: var(--ink-2);
-  font-weight: 800;
-  font-size: var(--fs-xs);
-}
-
-.jlegend {
-  display: flex;
-  gap: 14px;
-  margin-top: 8px;
-  color: var(--ink-2);
-  font-weight: 700;
-  font-size: var(--fs-xs);
-}
-
-.jkey::before {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 5px;
-  border-radius: 2px;
-  vertical-align: -1px;
-}
-
-.jkey--best::before {
-  background: var(--gold);
-  box-shadow: 0 0 0 1.5px var(--gold-deep);
-}
-
-.jkey--eased::before { background: #5ab8ff repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 5px); }
 
 .jtotals {
   display: grid;

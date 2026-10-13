@@ -1,24 +1,190 @@
-// v1.4 gamification widgets (docs/V1_4_PLAN.md). CONTRACT FILE: the signatures are fixed for the
-// v1.4 builders; the meta builder owns the bodies (V14-SHIM stubs until then). The UX builder
-// places these widgets (Title, Results, Journey); the meta builder makes them look and behave.
+// v1.4 gamification widgets (docs/V1_4_PLAN.md). CONTRACT FILE: the four first signatures are
+// fixed for the v1.4 builders; the rest is additive. The UX builder places these widgets (Title,
+// Results, Journey); this file makes them look (gamify.css) and behave:
+// - rankBadge: the Sun Rank in a progress ring; opens the Profile.
+// - xpMeter: the Results XP bar that fills by the run's XP and rolls over on a rank up.
+// - claimDot: the red dot with a count on a button.
+// - revealRewards: the reward overlay (a Snow Globe shakes, snow swirls, it opens on the prize).
+// - streakCard / claimDailyReward / openGlobes: the 7-day streak calendar and the claim flows.
 
-import type { GamifyOutcome, Reward } from '../meta/gamify.ts';
+import './gamify.css';
+import { getCosmetic } from '../meta/content.ts';
+import {
+  claimDaily,
+  featureHint,
+  featureUnlocked,
+  openGlobe,
+  rankForXp,
+  rankNeed,
+  rankReward,
+  rankStartXp,
+  rankTitle,
+  rankView,
+  rarity,
+  streakView,
+  type GamifyOutcome,
+  type Reward,
+} from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
-import { h } from './dom.ts';
+import { h, setChildren, setFlag, svgFromMarkup } from './dom.ts';
+import { icon } from './icons.ts';
 import type { UiContext } from './screen.ts';
+import { cosmeticSwatch } from './swatches.ts';
+import { isLegalTransition } from './transitions.ts';
+import type { ScreenId } from './types.ts';
+import { button, hide } from './widgets.ts';
+
+let globeIds = 0;
+
+/** The Snow Globe: a glass dome with Nubs in the snow, on a gold stand. */
+export function globeSvg(className = 'globe-art'): SVGSVGElement {
+  // Gradient ids are unique per copy: a hidden copy's gradient would blank the others.
+  const g = `gg${++globeIds}`;
+  return svgFromMarkup(`<svg class="${className}" viewBox="0 0 120 120" aria-hidden="true">
+<radialGradient id="${g}" cx=".38" cy=".3" r=".8"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#9ad8ff"/></radialGradient>
+<path d="M30 92h60l6 16H24Z" fill="#ffc23d"/><rect x="26" y="88" width="68" height="8" rx="4" fill="#d99a12"/>
+<circle cx="60" cy="52" r="42" fill="url(#${g})" stroke="#fff" stroke-width="3"/><path d="M22 66q38 14 76 0a42 42 0 0 1-76 0Z" fill="#fff"/>
+<g fill="#fff" stroke="#c9d8f0" stroke-width="1.5"><circle cx="60" cy="62" r="11"/><circle cx="60" cy="45" r="8"/></g>
+<path d="M51 52q9 4 18 0l1 4q-10 4-20 0Z" fill="#e8475a"/><path d="M60 46l7 2-7 1.6Z" fill="#ff8a2b"/>
+<path d="M57 43h.1M63 43h.1" stroke="#2b2b33" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M36 30a30 30 0 0 1 18-12" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none"/></svg>`);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rank badge and XP meter
+// ---------------------------------------------------------------------------------------------
+
+/** The rank number in a ring filled to `fraction` (stroke dashes over a 100-unit path). */
+export function rankRing(): { el: HTMLElement; set(level: number, fraction: number): void } {
+  const num = h('span', { class: 'rank-num num' });
+  const el = h(
+    'span',
+    { class: 'rank-ring', 'aria-hidden': 'true' },
+    svgFromMarkup('<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" pathLength="100"/><circle cx="20" cy="20" r="17" pathLength="100"/></svg>'),
+    num,
+  );
+  return {
+    el,
+    set(level, fraction) {
+      num.textContent = String(level);
+      el.style.setProperty('--p', String(Math.round(Math.max(0, Math.min(1, fraction)) * 100)));
+    },
+  };
+}
 
 /** The rank badge (level number in a progress ring, rank name). Tapping it opens the Profile. */
 export function rankBadge(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
-  const el = h('button', { type: 'button', class: 'rank-badge', 'aria-label': 'Profile' });
-  el.addEventListener('click', () => ctx.go('profile'));
-  return { el, update: () => {} };
+  const r = rankRing();
+  const name = h('span', { class: 'rank-name' });
+  const el = h('button', { type: 'button', class: 'rank-badge pe' }, r.el, h('span', { class: 'rank-text' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), name));
+  el.addEventListener('click', () => {
+    if (!featureUnlocked(ctx.save(), 'profile')) {
+      ctx.sound('deny');
+      ctx.toast(`Profile: ${featureHint('profile')}`, { icon: 'lock', tone: 'ink' });
+      return;
+    }
+    // From whichever screen shows the badge, when the Profile may open from there.
+    const from = (el.closest('.sui') as HTMLElement | null)?.dataset.screen as ScreenId | undefined;
+    if (from && from !== 'profile' && isLegalTransition(from, 'profile')) {
+      ctx.sound('tap');
+      ctx.go('profile');
+    }
+  });
+  const update = (save: Save): void => {
+    const v = rankView(save);
+    r.set(v.level, v.fraction);
+    name.textContent = v.title;
+    el.setAttribute('aria-label', `Sun Rank ${v.level}, ${v.title}: ${v.into} of ${v.need} XP. Profile`);
+  };
+  update(ctx.save());
+  return { el, update };
 }
 
-/** The Results XP meter: fills by the run's XP, rolls over on a rank up. V14-SHIM: empty. */
-export function xpMeter(ctx: UiContext): { el: HTMLElement; show(o: GamifyOutcome | undefined, save: Save): void } {
-  void ctx;
-  const el = h('div', { class: 'xp-meter' });
-  return { el, show: () => {} };
+const frame = (): Promise<number> => new Promise((done) => requestAnimationFrame(done));
+const wait = (ms: number): Promise<void> => new Promise((done) => window.setTimeout(done, ms));
+
+/**
+ * The Results XP meter: fills by the run's XP, rolls over on a rank up (the rankUp sound and a
+ * flash), ticking as it goes. `show` resolves once it has settled (at once under reduced motion).
+ */
+export function xpMeter(ctx: UiContext): { el: HTMLElement; show(o: GamifyOutcome | undefined, save?: Save): Promise<void> } {
+  const r = rankRing();
+  const title = h('span', { class: 'rank-name' });
+  const gain = h('span', { class: 'xp-gain num' });
+  const fill = h('i');
+  const count = h('span', { class: 'num' });
+  const next = h('span');
+  const el = h(
+    'div',
+    { class: 'xp-meter', role: 'group' },
+    h('div', { class: 'xp-row' }, r.el, h('span', { class: 'rank-text' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), title), gain,
+      h('span', { class: 'xp-pop', 'aria-hidden': 'true' }, 'Rank up!')),
+    h('span', { class: 'xp-bar', 'aria-hidden': 'true' }, fill),
+    h('div', { class: 'xp-foot' }, count, next),
+  );
+  let token = 0;
+  const paint = (xp: number): number => {
+    const level = rankForXp(xp);
+    const into = xp - rankStartXp(level);
+    const need = rankNeed(level);
+    const n = rankReward(level + 1);
+    r.set(level, into / need);
+    title.textContent = rankTitle(level);
+    fill.style.width = `${((100 * into) / need).toFixed(1)}%`;
+    count.textContent = `${Math.floor(into)} / ${need} XP`;
+    next.textContent = `Rank ${level + 1}: ${n.kind === 'globe' ? 'Snow Globe' : `+${n.amount} Snow`}`;
+    return level;
+  };
+  const rankUp = (): void => {
+    el.classList.remove('is-rankup');
+    void el.offsetWidth;
+    el.classList.add('is-rankup');
+    ctx.sound('rankUp');
+  };
+  return {
+    el,
+    async show(o) {
+      const my = ++token;
+      el.classList.remove('is-rankup');
+      hide(el, !o);
+      if (!o) return;
+      const end = o.xpBefore + o.xpGained;
+      const up = o.rankAfter > o.rankBefore;
+      gain.textContent = `+${o.xpGained} XP`;
+      el.setAttribute('aria-label', `Sun Rank ${rankForXp(end)}, ${rankTitle(rankForXp(end))}: plus ${o.xpGained} XP${up ? ', rank up' : ''}`);
+      if (ctx.reducedMotion() || o.xpGained <= 0) {
+        paint(end);
+        if (up) rankUp();
+        return;
+      }
+      // One segment per rank crossed: fill to the rank's end, roll over, fill on.
+      let level = paint(o.xpBefore);
+      for (let from = o.xpBefore; from < end; ) {
+        const to = Math.min(end, rankStartXp(level + 1));
+        const ms = 380 + (520 * (to - from)) / rankNeed(level);
+        const t0 = performance.now();
+        let tick = 0;
+        for (let t = 0; t < 1; ) {
+          await frame();
+          if (my !== token) return;
+          t = Math.min(1, (performance.now() - t0) / ms);
+          paint(Math.min(to - 0.001, from + (to - from) * (1 - (1 - t) ** 3)));
+          if (t - tick >= 0.16) {
+            tick = t;
+            ctx.sound('tick');
+          }
+        }
+        from = to;
+        if (to === rankStartXp(level + 1)) {
+          level = paint(to);
+          rankUp();
+          await wait(520);
+          if (my !== token) return;
+        }
+      }
+      paint(end);
+    },
+  };
 }
 
 /** Puts (n > 0) or clears a claim dot with the count on a button. */
@@ -27,12 +193,207 @@ export function claimDot(el: HTMLElement, n: number): void {
   el.classList.toggle('has-dot', n > 0);
 }
 
+// ---------------------------------------------------------------------------------------------
+// The reward reveal
+// ---------------------------------------------------------------------------------------------
+
+const RARITY = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' } as const;
+/** The shake and swirl, then the burst (ms). */
+const SHAKE_MS = 1100;
+const BURST_MS = 380;
+const FLAKES = 14;
+
+/** Reveals queue behind each other (a claim during the Results reveal waits its turn). */
+let queue: Promise<void> = Promise.resolve();
+
 /**
  * Shows the rewards one at a time in the reward reveal overlay (a Snow Globe shakes and opens),
- * resolving once the player has dismissed the last. V14-SHIM: resolves at once.
+ * resolving once the player has dismissed the last. A 'globe' reward opens its globes (meta
+ * openGlobe through cb.updateSave) one by one. A tap or a key skips the animation, the next moves on.
  */
 export function revealRewards(ctx: UiContext, rewards: readonly Reward[]): Promise<void> {
-  void ctx;
-  void rewards;
-  return Promise.resolve();
+  // One step per globe (each opened as it shows), one per other reward.
+  const steps = rewards.flatMap((r) => Array<Reward>(r.kind === 'globe' ? Math.min(r.amount, 20) : Math.min(r.amount, 1)).fill(r));
+  if (steps.length === 0) return Promise.resolve();
+  const run = queue.then(() => reveal(ctx, steps));
+  queue = run.catch(() => {});
+  return run;
+}
+
+/** Opens one waiting globe through the integrator; null when none is left. */
+function openOne(ctx: UiContext): Reward | null {
+  let got: Reward | null = null;
+  ctx.cb.updateSave((s) => {
+    const o = openGlobe(s);
+    got = o?.reward ?? null;
+    return o?.save ?? s;
+  });
+  return got;
+}
+
+/** `steps`: the rewards to show; a 'globe' step opens one globe. */
+function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
+  const root = (document.querySelector('.sui') as HTMLElement | null) ?? document.body;
+  const layer = root.querySelector<HTMLElement>('.screens');
+  const wasInert = layer?.hasAttribute('inert') ?? false;
+  const previous = document.activeElement as HTMLElement | null;
+
+  const kicker = h('p', { class: 'rv-kicker' });
+  const name = h('p', { class: 'rv-name' });
+  const sub = h('p', { class: 'rv-sub' });
+  const count = h('p', { class: 'rv-count' });
+  const prize = h('div', { class: 'rv-prize' });
+  const flakes = h('div', { class: 'rv-flakes', 'aria-hidden': 'true' });
+  for (let i = 0; i < FLAKES; i++) flakes.append(h('i', { style: `--i:${i}` }));
+  const next = h('button', { type: 'button', class: 'btn btn--primary btn--lg rv-next' });
+  const live = h('p', { class: 'sr-only', 'aria-live': 'assertive' });
+  const el = h(
+    'div',
+    { class: 'rv pe', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Reward' },
+    h('div', { class: 'rv-scrim' }),
+    h('div', { class: 'rv-frame' }, h('div', { class: 'rv-stage' }, kicker,
+      h('div', { class: 'rv-art' }, h('div', { class: 'rv-rays' }), h('div', { class: 'rv-globe' }, globeSvg()), flakes, prize),
+      name, sub, count, next, live)),
+  );
+  root.append(el);
+  if (layer) setFlag(layer, 'inert', true);
+
+  return new Promise<void>((resolve) => {
+    let i = -1;
+    let shaking = false;
+    let timer = 0;
+
+    const show = (): void => {
+      shaking = false;
+      window.clearTimeout(timer);
+      el.classList.remove('is-shake');
+      el.classList.add('is-open');
+      next.focus({ preventScroll: true });
+      ctx.sound('reward');
+    };
+
+    const land = (r: Reward): void => {
+      const item = r.cosmetic ? getCosmetic(r.cosmetic) : undefined;
+      el.dataset.tier = item ? rarity(item) : 'snow';
+      setChildren(prize, item ? cosmeticSwatch(item) : h('span', { class: 'num' }, icon('snow'), `+${r.amount}`));
+      name.textContent = item ? item.name : `${r.amount} Snow`;
+      sub.textContent = item ? `${RARITY[rarity(item)]} · new in your Wardrobe` : 'Added to your wallet';
+      live.textContent = `${kicker.textContent}: ${name.textContent}`;
+    };
+
+    const step = (): void => {
+      const s = steps[++i];
+      if (s === undefined) {
+        close();
+        return;
+      }
+      el.classList.remove('is-open', 'is-shake', 'is-burst');
+      count.textContent = steps.length > 1 ? `${i + 1} of ${steps.length}` : '';
+      kicker.textContent = s.title;
+      next.textContent = i + 1 < steps.length ? 'Next' : 'Collect';
+      const globe = s.kind === 'globe';
+      const got = globe ? openOne(ctx) : s;
+      if (!got) {
+        step();
+        return;
+      }
+      land(got);
+      if (!globe || ctx.reducedMotion()) {
+        if (globe) ctx.sound('open');
+        show();
+        return;
+      }
+      shaking = true;
+      void el.offsetWidth;
+      el.classList.add('is-shake');
+      timer = window.setTimeout(() => {
+        ctx.sound('open');
+        el.classList.add('is-burst');
+        timer = window.setTimeout(show, BURST_MS);
+      }, SHAKE_MS);
+    };
+
+    // A tap or Enter/Space/Escape: skip the animation to the prize, else move on.
+    const advance = (): void => (shaking ? show() : step());
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Tab' || ['Escape', 'Enter', ' '].includes(e.key)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.key !== 'Tab' && !e.repeat) advance();
+      }
+    };
+
+    const close = (): void => {
+      window.removeEventListener('keydown', onKey, true);
+      el.classList.add('is-out');
+      window.setTimeout(() => el.remove(), 200);
+      if (layer && !wasInert) setFlag(layer, 'inert', false);
+      previous?.focus({ preventScroll: true });
+      resolve();
+    };
+
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      advance();
+    });
+    window.addEventListener('keydown', onKey, true);
+    requestAnimationFrame(() => el.classList.add('is-on'));
+    step();
+  });
+}
+
+/** Opens every waiting Snow Globe in the reveal. */
+export function openGlobes(ctx: UiContext): Promise<void> {
+  return revealRewards(ctx, [{ kind: 'globe', amount: ctx.save().gamify.globes, title: 'Snow Globe' }]);
+}
+
+/** Claims today's streak reward (through cb.updateSave) and reveals it. Resolves at once when nothing is due. */
+export function claimDailyReward(ctx: UiContext): Promise<void> {
+  let rewards: Reward[] = [];
+  ctx.cb.updateSave((s) => {
+    const c = claimDaily(s, ctx.today());
+    rewards = c?.rewards ?? [];
+    return c?.save ?? s;
+  });
+  if (rewards.length > 0) ctx.sound('claim');
+  return revealRewards(ctx, rewards);
+}
+
+/** The 7-day streak calendar with today's Claim button (Missions, Profile; the Title may show it too). */
+export function streakCard(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
+  const days = h('ol', { class: 'streak-days' });
+  const countEl = h('span', { class: 'card-count' });
+  const note = h('p', { class: 'card-note' });
+  const claim = button(ctx, { label: 'Claim', icon: 'gift', variant: 'primary', className: 'streak-claim', sound: null, onPress: () => void claimDailyReward(ctx) });
+  const el = h('section', { class: 'card streak-card' }, h('h3', { class: 'card-title' }, 'Daily streak', countEl), days, h('div', { class: 'streak-foot' }, note, claim));
+  const update = (save: Save): void => {
+    const v = streakView(save, ctx.today());
+    countEl.textContent = v.count > 0 ? `${v.count} ${v.count === 1 ? 'day' : 'days'}` : '';
+    setChildren(
+      days,
+      ...v.days.map((d) => {
+        const globe = d.reward.kind === 'globe';
+        return h(
+          'li',
+          {
+            class: `streak-day is-${d.state}${globe ? ' is-globe' : ''}`,
+            'aria-label': `Day ${d.day}: ${globe ? 'a Snow Globe' : `${d.reward.amount} Snow`}${d.state === 'today' ? ', ready' : d.state === 'claimed' ? ', claimed' : ''}`,
+          },
+          h('small', { 'aria-hidden': 'true' }, `Day ${d.day}`),
+          globe ? globeSvg('globe-mini') : icon(d.state === 'claimed' ? 'check' : 'snow'),
+          h('span', { 'aria-hidden': 'true' }, globe ? 'Globe' : `+${d.reward.amount}`),
+        );
+      }),
+    );
+    hide(claim, !v.claimable);
+    note.textContent = !v.claimable
+      ? `Come back tomorrow for Day ${(v.day % 7) + 1}.${v.freezeUsed ? '' : ' Miss one day and a frozen day keeps the streak.'}`
+      : v.broken
+        ? 'A day was missed, so the streak starts again. Claim today to begin.'
+        : v.freezing
+          ? 'You missed a day: your free frozen day keeps the streak alive.'
+          : 'Today’s reward is ready. Day 7 holds a Snow Globe.';
+  };
+  update(ctx.save());
+  return { el, update };
 }
