@@ -14,6 +14,8 @@ import type { SimEvent } from '../../src/core/sim/events.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runBot } from '../../src/core/sim/headless.ts';
 import { step } from '../../src/core/sim/step.ts';
+import { hourGlyph } from '../../src/core/sim/nubs.ts';
+import { createBot } from '../../src/core/sim/bots.ts';
 import { NO_INPUT, type RunConfig, type SimState } from '../../src/core/sim/types.ts';
 import { TUNING } from '../../src/config/tuning.ts';
 import { trailX } from '../../src/core/trail.ts';
@@ -316,6 +318,30 @@ describe('sim rules', () => {
     expect(s.history[4 * 10 + 1]! - 200).toBeGreaterThanOrEqual(0);
     expect(s.history[4 * 10 + 1]! - 200).toBeLessThan(70 / 60);
     expect(s.history[4 * 10 + 2]).toBe(100);
+  });
+});
+
+describe('hour glyphs (V1_PLAN §5.5, recalibrated in fix round 2)', () => {
+  it('reads the share of the hour Nubs was lit: cool ≤ 15%, hot > 45% or Chill under 25', () => {
+    expect([hourGlyph(0, false), hourGlyph(0.15, false), hourGlyph(0.151, false), hourGlyph(0.45, false), hourGlyph(0.451, false)]).toEqual(['cool', 'cool', 'warm', 'warm', 'hot']);
+    expect(hourGlyph(0, true)).toBe('hot');
+  });
+
+  it('splits a good run mostly into cool and warm hours, not a wall of hot ones', () => {
+    // The reactive bot (median death on Day 3) on two seeds; the old 0.2 s / 1.0 s marks made 26%
+    // of its hours hot and 83% of the oracle's (QA fix round 2).
+    const n = { cool: 0, warm: 0, hot: 0, melt: 0 };
+    for (const seed of [1, 2]) {
+      const s = createRun(headlessConfig(seed, 3));
+      const bot = createBot('reactive');
+      for (let t = 0; t < 60 * 60 * 3 && s.phase !== 'dead'; t++) step(s, bot.next(s));
+      for (const day of s.hourGlyphs) for (const g of day) n[g]++;
+    }
+    const all = n.cool + n.warm + n.hot;
+    expect(all).toBeGreaterThan(24);
+    expect(n.hot / all).toBeLessThan(0.2);
+    expect(n.cool).toBeGreaterThan(0);
+    expect(n.warm).toBeGreaterThan(0);
   });
 });
 

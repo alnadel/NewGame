@@ -351,8 +351,8 @@ export function applyNight(s: SimState): void {
   s.lessonGrace = 0;
 }
 
-/** Glyph of a finished in-game hour from its lit seconds and the low-Chill flag. */
-export function hourGlyph(lit: number, hot: boolean): HourGlyph {
-  if (hot || lit > TUNING.glyph.warmMax) return 'hot';
-  return lit <= TUNING.glyph.coolMax ? 'cool' : 'warm';
+/** Glyph of a finished in-game hour from its lit share (0..1) and the low-Chill flag. */
+export function hourGlyph(litShare: number, hot: boolean): HourGlyph {
+  if (hot || litShare > TUNING.glyph.hotMin) return 'hot';
+  return litShare <= TUNING.glyph.coolMax ? 'cool' : 'warm';
 }

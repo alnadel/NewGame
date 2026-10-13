@@ -7,6 +7,7 @@
 
 import { TUNING } from '../../config/tuning.ts';
 import {
+  DT,
   dayStartTick,
   dayTicks,
   elevation,
@@ -59,7 +60,7 @@ export function syncTime(s: SimState): void {
 
 /** Closes the in-game hour that just ended and emits hourEnd. */
 function endHour(s: SimState, hour: number): void {
-  const glyph = hourGlyph(s.hourLit, s.hourHot);
+  const glyph = hourGlyph(s.hourLit / (hourTicks(s.day) * DT), s.hourHot);
   s.hourGlyphs[s.hourGlyphs.length - 1]?.push(glyph);
   s.events.push({ e: 'hourEnd', day: s.day, hour, glyph });
   s.hourLit = 0;

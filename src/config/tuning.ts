@@ -167,8 +167,15 @@ const tuning = {
     flowerSnow: 2,
   },
 
-  /** Hour glyph thresholds (V1_PLAN §5.5), lit seconds per in-game hour. */
-  glyph: { coolMax: 0.2, warmMax: 1.0, hoursPerDay: 12 },
+  /**
+   * Hour glyph thresholds (V1_PLAN §5.5 as recalibrated in fix round 2): the share of an in-game
+   * hour Nubs spent lit (∫f·dt over the hour's length). Cool ≤ 15%, hot > 45% (or Chill < 25 at any
+   * moment), warm between. The old 0.2 s / 1.0 s marks (5% / 24% of a Day-1 hour) made 83% of an
+   * oracle run's hours and 61-66% of a human-like player's hot: every shade hand-off crosses some
+   * sun, and Chill holds steady at about 35% lit (drain 55 against regen 30). Now, at profile 3 over
+   * 30 seeds (cool/warm/hot %): oracle 7/75/18, reactive 57/37/6, humanDial 19/62/20, novice 21/59/19.
+   */
+  glyph: { coolMax: 0.15, hotMin: 0.45, hoursPerDay: 12 },
 
   /** Trail (V1_PLAN §7.1). Control point i sits at y = cpY0 + cpSpacing·i. */
   trail: {

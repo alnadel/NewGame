@@ -461,13 +461,13 @@ Expected income is about 25-60 Snow per run early, so the first purchase comes i
 
 ## 9. Scoring display and sharing
 
-**Hour glyphs.** There is one glyph per in-game daylight hour, so 12 per day. Lit time is ∫f·dt within that hour, with glare counted double.
+**Hour glyphs.** There is one glyph per in-game daylight hour, so 12 per day. Lit time is ∫f·dt within that hour, with glare counted double, as a share of the hour (fix round 2; it was 0.2 s / 1.0 s of lit time, which marked most hours of even a near-perfect run hot).
 
 | Glyph | Code point | Meaning |
 |---|---|---|
-| Blue square | U+1F7E6 | Lit time ≤ 0.2 s |
-| Yellow square | U+1F7E8 | Lit time 0.2-1.0 s |
-| Fire | U+1F525 | Lit time > 1.0 s, or Chill < 25 at any moment in that hour |
+| Snowflake | U+2744 U+FE0F | Lit for ≤ 15% of the hour (cool) |
+| Yellow square | U+1F7E8 | Lit for 15-45% of the hour (warm) |
+| Fire | U+1F525 | Lit for > 45% of the hour, or Chill < 25 at any moment in that hour (hot) |
 | Droplet | U+1F4A7 | The hour Nubs melted |
 | Crescent moon | U+1F319 | Appended after each completed day |
 | Compass | U+1F9ED | Appended when the guide was set to "Always" |

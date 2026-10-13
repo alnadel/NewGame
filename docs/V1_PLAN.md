@@ -216,10 +216,10 @@ States are `idle`, `dragging`, `chasing`, `coasting`.
 
 ### 5.5 Run Snow and hour glyphs
 - **Run Snow** = Σ flake rewards + Σ crystal rewards + 2·flowers + 3·PHEWs.
-- **Hour glyphs:** per daylight in-game hour (12 per day), lit = ∫f·dt (glare counts double, since f already includes it).
-  - `cool` if lit ≤ 0.2 s.
-  - `warm` if lit is 0.2-1.0 s.
-  - `hot` if lit > 1.0 s or Chill < 25 at any moment in that hour.
+- **Hour glyphs:** per daylight in-game hour (12 per day), lit = ∫f·dt (glare counts double, since f already includes it), as a share of the hour's length (`TUNING.glyph`, recalibrated in v1.1 fix round 2 from 0.2 s / 1.0 s, which made 83% of an oracle run's hours hot).
+  - `cool` if lit ≤ 15% of the hour.
+  - `warm` if lit is 15-45% of the hour.
+  - `hot` if lit > 45% of the hour or Chill < 25 at any moment in that hour.
   - `melt` for the hour Nubs died in.
 - **Share glyphs:** cool = ❄️ (U+2744 U+FE0F), warm = 🟨, hot = 🔥, melt = 💧. Append 🌙 after each completed day.
 
