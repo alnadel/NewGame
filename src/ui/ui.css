@@ -141,7 +141,7 @@
 
 /* Discs and badges that center one icon or picture: --d is their size. */
 :is(.challenge-flag, .tray-disc, .tray-lock, .muted-ind, .pause-badge, .award-ic, .mrow-check, .set-ic, .daily-sun,
-  .badge-medal, .stage-spot, .tile-art, .toast-ic, .confirm-ic, .install-n, .install-ic, .chapter-biome, .lvl-concept, .road-art) {
+  .badge-medal, .stage-spot, .tile-art, .toast-ic, .confirm-ic, .install-n, .install-ic, .chapter-biome, .chapter-prize, .chapter-check, .lvl-concept, .road-art) {
   display: grid;
   place-items: center;
   flex: none;
@@ -3324,39 +3324,123 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 
 .journey-body { padding-top: 2px; }
 
-.chapter .card-title {
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.chapter > .bar { margin-bottom: 10px; }
-
 .chapter .bar i,
 .road .bar i { background: linear-gradient(90deg, var(--gold), #ffd96b); }
+
+/* A chapter card: a biome-coloured banner ("Chapter 4" over its name, the chapter's Snow Globe),
+   the stars with a bar, the ten tiles. White on the banners keeps 4.5:1. */
+.chapter {
+  --b1: #276b3d;
+  --b2: #348650;
+  padding: 0 0 14px;
+  overflow: hidden;
+}
+
+.chapter[data-biome='oldtown'] {
+  --b1: #94452a;
+  --b2: #b0582f;
+}
+
+.chapter-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  background: var(--gloss), linear-gradient(120deg, var(--b1), var(--b2));
+  color: #fff;
+}
+
+.chapter-head {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.chapter-kicker {
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+.chapter-name {
+  font-size: var(--fs-lg);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.chapter-biome,
+.chapter-prize {
+  --d: 36px;
+  --ic: 20px;
+  position: relative;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.chapter-prize { --ic: 22px; }
+
+.chapter-check {
+  --d: 18px;
+  --ic: 12px;
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.chapter-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.chapter-meta .bar { flex: 1; }
+
+.chapter-stars {
+  --ic: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.chapter-stars .ic { color: var(--gold-deep); }
+
+.chapter .lvl-grid { padding: 0 14px; }
+
+/* Complete (all ten passed): the globe is earned, gold with a check; perfect: a gold rim. */
+.chapter.is-complete .chapter-prize {
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--gold-deep);
+}
+
+.chapter:not(.is-complete) .chapter-check { display: none; }
+
+.chapter.is-perfect { box-shadow: inset 0 0 0 3px var(--gold), var(--shadow-sm); }
+
+.chapter.is-just-complete .chapter-prize { animation: unlock-pop 700ms var(--ease-back) 300ms both; }
 
 .chapter.is-locked {
   background: rgba(255, 255, 255, 0.55);
   box-shadow: none;
 }
 
-.chapter.is-locked .card-title { color: var(--ink-2); }
-
-.chapter.is-complete .card-count { color: #8a5a00; }
-
-.chapter-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.chapter-biome {
-  --d: 28px;
-  --ic: 18px;
-  border-radius: 50%;
+.chapter.is-locked .chapter-banner {
   background: var(--paper-2);
   color: var(--ink-2);
 }
+
+.chapter.is-locked :is(.chapter-biome, .chapter-prize) { background: rgba(43, 33, 64, 0.07); }
 
 /* 10 tiles in two rows of 5. At 320 px the column is 256 px wide: 5 × 48 px with 4 px gaps. */
 .lvl-grid {
@@ -3482,7 +3566,10 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 }
 
 @media (max-width: 359.98px) {
-  .chapter { padding: 12px; }
+  .chapter :is(.lvl-grid, .chapter-meta) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
 
   .lvl-grid { gap: 4px; }
 

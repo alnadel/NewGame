@@ -11,7 +11,7 @@ import { STARS_PER_LEVEL } from '../../meta/save.ts';
 import { biomeIcon, biomeName, conceptIcon } from '../concepts.ts';
 import { h } from '../dom.ts';
 import { icon } from '../icons.ts';
-import { chapterTitle, continueLabel, levelTileLabel, starsLabel } from '../labels.ts';
+import { continueLabel, levelTileLabel, starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { button, menuHeader, progressBar, setButtonLabel, starRoad } from '../widgets.ts';
 
@@ -33,6 +33,7 @@ interface ChapterView {
   el: HTMLElement;
   count: HTMLElement;
   bar: HTMLElement;
+  prize: HTMLElement;
 }
 
 export function createJourneyScreen(ctx: UiContext): Screen {
@@ -90,24 +91,30 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       grid.append(el);
       tiles.push({ level, el, stars });
     }
-    const count = h('span', { class: 'card-count' });
+    // The banner: biome mark, "Chapter 4" over its name, the stars and the chapter's Snow Globe
+    // (earned once all ten levels are passed).
+    const count = h('span', { class: 'chapter-count num' });
     const bar = progressBar(0);
+    const prize = h('span', { class: 'chapter-prize', role: 'img' }, icon('globe'), h('span', { class: 'chapter-check' }, icon('check')));
     const el = h(
       'section',
-      { class: 'card chapter', 'data-chapter': chapter.id },
+      { class: 'card chapter', 'data-chapter': chapter.id, 'data-biome': chapter.biome },
       h(
-        'h3',
-        { class: 'card-title' },
-        h('span', { class: 'chapter-name' },
-          h('span', { class: 'chapter-biome', title: biomeName(chapter.biome) }, icon(biomeIcon(chapter.biome))),
-          chapterTitle(chapter.id, chapter.name),
-          h('span', { class: 'sr-only' }, `, ${biomeName(chapter.biome)}`)),
-        count,
+        'header',
+        { class: 'chapter-banner' },
+        h('span', { class: 'chapter-biome', title: biomeName(chapter.biome) }, icon(biomeIcon(chapter.biome))),
+        h(
+          'h3',
+          { class: 'chapter-head' },
+          h('span', { class: 'chapter-kicker' }, `Chapter ${chapter.id}`, h('span', { class: 'sr-only' }, `, ${biomeName(chapter.biome)}: `)),
+          h('span', { class: 'chapter-name' }, chapter.name),
+        ),
+        prize,
       ),
-      bar,
+      h('div', { class: 'chapter-meta' }, h('span', { class: 'chapter-stars' }, icon('star'), count), bar),
       grid,
     );
-    chapters.push({ el, count, bar });
+    chapters.push({ el, count, bar, prize });
     body.append(el);
   }
 
@@ -135,11 +142,13 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     setButtonLabel(continueBtn, continueLabel(next));
     road.update(save);
     const perChapter = Array<number>(CHAPTERS.length).fill(0);
+    const passed = Array<number>(CHAPTERS.length).fill(0);
     for (const t of tiles) {
       const id = t.level.id;
       const stars = save.campaign.stars[id - 1] ?? 0;
       const playable = isLevelPlayable(save, id);
       perChapter[t.level.chapter - 1] = (perChapter[t.level.chapter - 1] ?? 0) + stars;
+      if (stars > 0) passed[t.level.chapter - 1] = (passed[t.level.chapter - 1] ?? 0) + 1;
       t.el.classList.toggle('is-locked', !playable);
       t.el.classList.toggle('is-done', stars > 0);
       t.el.classList.toggle('is-perfect', stars >= STARS_PER_LEVEL);
@@ -153,7 +162,12 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       c.count.textContent = `${n}/${CHAPTER_STARS}`;
       c.count.setAttribute('aria-label', starsLabel(n, CHAPTER_STARS));
       (c.bar.firstElementChild as HTMLElement).style.width = `${Math.round((n / CHAPTER_STARS) * 100)}%`;
-      c.el.classList.toggle('is-complete', n >= CHAPTER_STARS);
+      // Complete: all ten levels passed (the chapter's Snow Globe is earned); perfect: every star.
+      const complete = (passed[i] ?? 0) >= LEVELS_PER_CHAPTER;
+      c.el.classList.toggle('is-complete', complete);
+      c.el.classList.toggle('is-perfect', n >= CHAPTER_STARS);
+      c.prize.setAttribute('aria-label', complete ? 'Chapter complete: Snow Globe earned' : `Snow Globe for passing all ${LEVELS_PER_CHAPTER} levels`);
+      c.prize.title = c.prize.getAttribute('aria-label') ?? '';
       c.el.classList.toggle('is-locked', tiles[i * LEVELS_PER_CHAPTER]?.el.classList.contains('is-locked') === true);
     });
   }
@@ -172,6 +186,14 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       }
       if (t.level.id > before.unlocked && t.level.id <= c.unlocked) t.el.classList.add('is-unlocked');
     }
+    // A chapter completed since the last visit: its banner celebrates (the globe drops in).
+    const done = (stars: readonly number[], ch: number): boolean => stars.slice(ch * LEVELS_PER_CHAPTER, (ch + 1) * LEVELS_PER_CHAPTER).every((n) => n > 0);
+    chapters.forEach((v, ch) => {
+      if (!done(before.stars, ch) && done(c.stars, ch)) {
+        v.el.classList.add('is-just-complete');
+        ctx.toast(`Chapter ${ch + 1} complete!`, { icon: 'star', tone: 'gold' });
+      }
+    });
     if (fresh > 0 || c.unlocked > before.unlocked) timer = window.setTimeout(() => ctx.sound(fresh > 0 ? 'stamp' : 'unlock'), FRESH_MS);
   }
 
@@ -190,6 +212,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     },
     leave() {
       clearTimeout(timer);
+      for (const c of chapters) c.el.classList.remove('is-just-complete');
       for (const t of tiles) {
         t.el.classList.remove('is-unlocked');
         for (const s of t.stars) s.classList.remove('is-fresh');
