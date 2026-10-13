@@ -1,43 +1,30 @@
 // Headless balance simulation, acceptance check and career sim (V1_PLAN §13, V1_1_PLAN §6).
 //
-//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F]
-//                       [--check] [--margin PTS] [--workers W]
+//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
-//   node scripts/sim.ts --campaign [--level N] [--bot oracle|reactive|humanDial|all] [--workers W]
+//   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W]
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
-// per row, death-time quantiles, melted% (flakes melted ÷ (melted + collected)), first-night share,
-// median run length in real seconds, mean Snow, SWINGs per daylight minute and lit share (∫f dt ÷
-// daylight seconds), plus world stats (rescues per chunk, unresolved validator failures), generation
-// ms/chunk and sim µs/tick.
+// per row, death-time quantiles, melted%, first-night share, median run seconds, mean Snow, SWINGs
+// per daylight minute and lit share, plus world stats (rescues per chunk, unresolved validator
+// failures), generation ms/chunk and sim µs/tick.
 //
-// Rows. The V1_PLAN §13 rows run on the plan mix (profile 3 with the Day Plan on), plus idle p0 for
-// the first-run lesson's floor (CO4). --forecast F sets RunConfig.forecast on every task. --check
-// also runs idle, novice, reactive and oracle with each forecast forced (same seed count, same
-// worker pool) and checks them. ADVISORY rows run the perception-limited human model (humanDial,
-// A6) at comfort rungs R0-R4 and print PASS/MISS against the V1_1_PLAN §6 targets; they never fail
-// --check.
+// Rows: the V1_PLAN §13 rows on the plan mix, idle p0 for the lesson's floor (CO4); --check adds
+// idle/novice/reactive/oracle with each forecast forced. ADVISORY rows (humanDial at rungs R0-R4)
+// print PASS/MISS against V1_1_PLAN §6 and never fail --check. --check exits non-zero when a hard
+// target fails or passes by less than --margin points of seeds (default 3): a share must clear its
+// bar by the margin, a median window needs 50% + margin of the seeds on each side of each edge. The
+// oracle's 100% and the world targets (rescues per chunk ≤ 0.8, unresolved 0) have no margin.
 //
-// --check exits non-zero if a hard target fails, or passes by less than --margin percentage points
-// of seeds (default 3), so a target that only just passes fails CI before a small tuning change or a
-// different seed count tips it over:
-//   - share targets ("≥ 90% of seeds"): the share must clear the bar by the margin (≥ 93%);
-//   - median-window targets: at least 50% + margin of the seeds must die at or after the window's
-//     start, and 50% + margin at or before its end (the median sits inside with room to spare).
-// The oracle's 100% and the world targets (rescues per chunk ≤ 0.8, unresolved 0) have no margin.
+// --campaign plays the Journey (CAMPAIGN_PLAN §3): oracle, reactive and humanDial on every level
+// (humanDial --tries times, each with its own decision stream), each level's outcome, a per-chapter
+// pass/stars table and the gates (hard: oracle 200/200, reactive ≥ 95% of 1-100; advisory: humanDial
+// ≥ 75% of 1-40 and ≥ 90% of 1-10). Exit 1 on a hard miss.
 //
-// --campaign plays the Journey (CAMPAIGN_PLAN §3 "Fairness"): the oracle, reactive and humanDial
-// bots on all 200 levels (or --level N) at full speed, printing each level's outcome (pass, stars,
-// flakes, Snow, lowest Chill) per bot and the gates: hard, the oracle passes 200/200 and reactive
-// passes ≥ 90% of levels 1-100; advisory, humanDial passes ≥ 70% of levels 1-40. Exit 1 on a hard miss.
-//
-// --career N plays N careers of R runs (default 40) on the comfort ladder: run seed
-// hashString(`career-${c}-${r}`), run 0 at rung 0 (tutorial, lesson), then rungConfig(rung) with the
-// lesson until a lessonDone (the warm-up rules on the first run at R4 after R3), and
-// rung = comfortAfterRun(rung, minutes, previous run) after each run. --meta folds
-// every run through the meta layer's exported API (A14): beginRun before each run, applyRunResult
-// after it, swapMission on slots stale ≥ 5 runs, the cheapest affordable cosmetic bought after each
-// run, one Daily try per sim-day once the Daily is unlocked; `today` advances a day every 5 runs.
+// --career N plays N careers of R runs (default 40) on the comfort ladder (run seed
+// hashString(`career-${c}-${r}`), rungConfig/comfortAfterRun between runs). --meta folds every run
+// through the meta API (A14): beginRun, applyRunResult, stale missions swapped, the cheapest
+// affordable cosmetic bought, one Daily try per sim-day once unlocked; a sim-day is 5 runs.
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';

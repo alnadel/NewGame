@@ -89,38 +89,62 @@ function pickArc(score: Uint8Array | Float64Array, blur: number, penalty: number
   return best;
 }
 
+const RING = 8;
+/** The last RING guide snapshots (now, next, lit, Nubs lit or not), each with the tick it was computed on. */
+interface GuideRing {
+  readonly now: Uint8Array[];
+  readonly next: Uint8Array[];
+  readonly lit: Uint8Array[];
+  readonly nubsLit: Uint8Array;
+  readonly ticks: Float64Array;
+  head: number;
+  seen: number;
+}
+
+function guideRing(): GuideRing {
+  const rows = (): Uint8Array[] => Array.from({ length: RING }, () => new Uint8Array(BINS));
+  return { now: rows(), next: rows(), lit: rows(), nubsLit: new Uint8Array(RING), ticks: new Float64Array(RING).fill(-1), head: 0, seen: -1 };
+}
+
+/** Stores the guide when it has changed since the last call. */
+function remember(r: GuideRing, s: SimState): void {
+  if (s.guide.tick === r.seen) return;
+  const h = r.head;
+  r.seen = s.guide.tick;
+  (r.now[h] as Uint8Array).set(s.guide.now);
+  (r.next[h] as Uint8Array).set(s.guide.next);
+  (r.lit[h] as Uint8Array).set(s.guide.lit);
+  r.ticks[h] = s.guide.tick;
+  r.nubsLit[h] = s.nubs.f > 0 ? 1 : 0;
+  r.head = (h + 1) % RING;
+}
+
+/** The slot of the newest snapshot at least `lag` ticks old (what a late player has taken in), or −1. */
+function recall(r: GuideRing, tick: number, lag: number): number {
+  let pick = -1;
+  for (let i = 0; i < RING; i++) {
+    const t = r.ticks[i] as number;
+    if (t >= 0 && t <= tick - lag && (pick < 0 || t > (r.ticks[pick] as number))) pick = i;
+  }
+  return pick;
+}
+
 function noviceBot(): Bot {
   const cfg = TUNING.bots.novice;
   const f = frame();
-  // Ring of past guide.now masks with the sim tick they were computed on.
-  const SLOTS = 8;
-  const masks: Uint8Array[] = [];
-  const ticks = new Float64Array(SLOTS).fill(-1);
-  for (let i = 0; i < SLOTS; i++) masks.push(new Uint8Array(BINS));
-  let head = 0;
-  let seenGuide = -1;
+  const ring = guideRing();
   let used = -1;
   let target = -1;
   let started = false;
   return {
     kind: 'novice',
     next(s: SimState): InputFrame {
-      if (s.guide.tick !== seenGuide) {
-        seenGuide = s.guide.tick;
-        (masks[head] as Uint8Array).set(s.guide.now);
-        ticks[head] = s.guide.tick;
-        head = (head + 1) % SLOTS;
-      }
-      // Newest mask at least lagTicks old.
-      let pick = -1;
-      for (let i = 0; i < SLOTS; i++) {
-        const t = ticks[i] as number;
-        if (t >= 0 && t <= s.tick - cfg.lagTicks && (pick < 0 || t > (ticks[pick] as number))) pick = i;
-      }
+      remember(ring, s);
+      const pick = recall(ring, s.tick, cfg.lagTicks);
       if (target < 0) target = s.sun.theta;
-      if (pick >= 0 && ticks[pick] !== used) {
-        used = ticks[pick] as number;
-        const b = pickArc(masks[pick] as Uint8Array, cfg.blur, cfg.penalty, binOf(s.sun.theta));
+      if (pick >= 0 && ring.ticks[pick] !== used) {
+        used = ring.ticks[pick] as number;
+        const b = pickArc(ring.now[pick] as Uint8Array, cfg.blur, cfg.penalty, binOf(s.sun.theta));
         if (b >= 0) target = b;
       }
       const out = steer(f, s, target, cfg.rate, !started);
@@ -337,22 +361,9 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
   const cfg = TUNING.bots.human;
   const msTicks = (ms: number): number => Math.round((ms * TICK_HZ) / 1000);
   const f = frame();
-  // Ring of past guide snapshots (now, next, lit, and whether Nubs was lit) with their sim tick.
-  const SLOTS = 8;
-  const now: Uint8Array[] = [];
-  const next: Uint8Array[] = [];
-  const lit: Uint8Array[] = [];
-  for (let i = 0; i < SLOTS; i++) {
-    now.push(new Uint8Array(BINS));
-    next.push(new Uint8Array(BINS));
-    lit.push(new Uint8Array(BINS));
-  }
+  const ring = guideRing();
   const lasting = new Uint8Array(BINS);
   let useLasting = false;
-  const ticks = new Float64Array(SLOTS).fill(-1);
-  const nubsLit = new Uint8Array(SLOTS);
-  let head = 0;
-  let seenGuide = -1;
   let rng: Rng | null = null;
   let started = false;
   let lag = -1; // reaction lag (ticks) of the next decision; drawn when the bot starts looking
@@ -385,15 +396,7 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
     kind,
     next(s: SimState): InputFrame {
       if (!rng) rng = salt ? rngFor(s.cfg.seed, 'bot', kind, salt) : rngFor(s.cfg.seed, 'bot', kind);
-      if (s.guide.tick !== seenGuide) {
-        seenGuide = s.guide.tick;
-        (now[head] as Uint8Array).set(s.guide.now);
-        if (lastingShare > 0) (next[head] as Uint8Array).set(s.guide.next);
-        (lit[head] as Uint8Array).set(s.guide.lit);
-        ticks[head] = s.guide.tick;
-        nubsLit[head] = s.nubs.f > 0 ? 1 : 0;
-        head = (head + 1) % SLOTS;
-      }
+      remember(ring, s);
       f.dTheta = 0;
       f.down = false;
       f.downEdge = false;
@@ -417,19 +420,14 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
         lag = msTicks(rng.range(cfg.lagMinMs, cfg.lagMaxMs));
         if (lastingShare > 0) useLasting = rng.next() < lastingShare;
       }
-      // Newest snapshot at least `lag` ticks old: what the player has taken in by now.
-      let pick = -1;
-      for (let i = 0; i < SLOTS; i++) {
-        const t = ticks[i] as number;
-        if (t >= 0 && t <= s.tick - lag && (pick < 0 || t > (ticks[pick] as number))) pick = i;
-      }
+      const pick = recall(ring, s.tick, lag);
       if (pick < 0) return f;
       // The sun's own position is seen live; the shade state is stale.
       const theta = s.sun.theta;
       const mask =
-        useLasting && wideLasting(now[pick] as Uint8Array, next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (now[pick] as Uint8Array);
-      if (nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
-      const target = humanTarget(mask, lit[pick] as Uint8Array, theta);
+        useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
+      if (ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
+      const target = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
       const want = angleDiff(target, theta);
       if (target < 0 || Math.abs(want) < HUMAN_MIN_MOVE) return f;
       // Decide: over/undershoot and aim error, then a fresh lag for the next decision.

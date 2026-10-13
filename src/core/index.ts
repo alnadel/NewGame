@@ -57,7 +57,6 @@ export {
   nightTicks,
   noonBannerTick,
   noonPassedTick,
-  scoreLabel,
   scoreMinutes,
   tickAtMinute,
   timeAtY,

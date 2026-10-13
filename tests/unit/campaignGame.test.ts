@@ -77,9 +77,9 @@ describe('campaignConfig (§4)', () => {
 describe('the words', () => {
   it('intro card: level, name, the concept and the goal', () => {
     const c = introCard(levelDef(6)!);
-    // The catalog names the concept after its level, so the row reads "New concept" (no double title).
-    expect(c).toMatchObject({ kicker: 'LEVEL 6', title: 'Glass Garden', concept: 'glare', conceptName: 'New concept', goal: 'Reach the finish' });
-    expect(conceptLabel({ name: 'Elsewhere' }, 'glare')).toBe('Glass Garden');
+    // The concept has its own short name (v1.3), so the row names it.
+    expect(c).toMatchObject({ kicker: 'LEVEL 6', title: 'Glass Garden', concept: 'glare', conceptName: 'Glare', goal: 'Reach the finish' });
+    expect(conceptLabel({ name: 'Glare' }, 'glare')).toBe('New concept');
     expect(c.blurb).toContain('Gazing balls');
     const combo = introCard(levelDef(41)!);
     expect(combo.concept).toBeNull();
@@ -101,7 +101,7 @@ describe('the words', () => {
     expect(goalLine(finish, { flakes: 0, snow: 0 }, true)).toBe('Reached the finish');
     expect(missLine(flakes)).toBe('NOT ENOUGH FLAKES');
     expect(missLine(swing)).toBe('NOT ENOUGH SNOW');
-    expect(campaignShareText({ id: 12, name: levelDef(12)!.name, stars: 2, link: null })).toBe('SHADY Journey · Level 12 ★★☆ · Overcast');
+    expect(campaignShareText({ id: 12, name: levelDef(12)!.name, stars: 2, link: null })).toBe('SHADY Journey · Level 12 ★★☆ · Grey Day');
   });
   it('HUD goal pill: flakes/target, snow/target, or plain Snow', () => {
     expect(hudGoal(levelDef(2)!, { flakes: 3, snow: 7 })).toEqual({ value: 3, target: levelDef(2)!.goal.target, flakes: true });

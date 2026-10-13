@@ -118,9 +118,10 @@ const tuning = {
    * SWING: shade handed from one source (caster or cloud) to another by turning the sun ≥ minDeg,
    * with at most maxGapTicks lit ticks between them, confirmed once the new source has kept Nubs
    * fully shaded for confirmTicks. SWINGs within chainTicks of the last one chain (×2 … ×chainMax)
-   * and pay the chain in Snow.
+   * and pay the chain in Snow. minDeg 38 (45 in v1.1) puts a reactive player at 1-2 SWINGs a
+   * minute (it was 0.7) and the human model at about 2.
    */
-  swing: { minDeg: 40, maxGapTicks: 24, confirmTicks: 15, chainTicks: 180, chainMax: 5 },
+  swing: { minDeg: 38, maxGapTicks: 20, confirmTicks: 15, chainTicks: 180, chainMax: 5 },
 
   /**
    * First-run lesson: from `go` until the lesson is passed (a ≥ swingDeg turn after Nubs was lit,

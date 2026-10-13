@@ -7,10 +7,9 @@ import {
   rectPoly,
   segmentEnterConvex,
   segmentIntersectsConvex,
-  smoothstep,
   sweepConvex,
 } from '../../src/core/geom.ts';
-import { cosD, sinD } from '../../src/core/dmath.ts';
+import { cosD, sinD, smoothstep } from '../../src/core/dmath.ts';
 import { Rng } from '../../src/core/rng.ts';
 
 function randomConvex(r: Rng): Float64Array {

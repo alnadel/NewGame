@@ -157,7 +157,7 @@ export function effectiveDrain(s: SimState): number {
 
 /**
  * SWING (A3): full shade handed from one source to another (caster or cloud; one id space) by a
- * ≥ 45° turn of the sun with at most 20 lit ticks between the two, confirmed once the new source has
+ * ≥ 38° turn of the sun with at most 20 lit ticks between the two, confirmed once the new source has
  * kept Nubs fully shaded for 15 ticks (the event fires on that tick). `deg` is the turn between the
  * last shaded tick under the old source and the first under the new one. SWINGs within 180 ticks
  * chain (×2 … ×5) and pay the chain in Snow, never multiplied. Every full-shade tick re-anchors the
