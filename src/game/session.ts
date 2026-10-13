@@ -2202,34 +2202,11 @@ export class Session {
 
   /**
    * Test hook state() (CC-15): the sim at a glance plus the run's rules: profile, comfort rung (−1
-   * when not an endless ladder run), drain, noon cloud, today's forecast and biome, lesson on.
+   * when not an endless ladder run), drain, noon cloud, today's forecast and biome, lesson on;
+   * campaign: the level id (−1 none), its concepts, the progress to the finish (0..1) and the
+   * concept fields the renderer reads (eclipse, gust, lock, moonlit).
    */
-  testState(): {
-    phase: string;
-    day: number;
-    minutes: number;
-    chill: number;
-    snow: number;
-    theta: number;
-    f: number;
-    profile: number;
-    rung: number;
-    warmup: boolean;
-    drain: number;
-    noonCloud: number;
-    forecast: string;
-    biome: string;
-    lessonOn: boolean;
-    /** Campaign: the level id (−1 none), its concepts and the progress to the finish line (0..1). */
-    level: number;
-    mods: string[];
-    levelProgress: number;
-    /** The concept fields the renderer reads: eclipse darkness, the gust, the sun lock, moonlit. */
-    eclipse: number;
-    gust: number;
-    locked: boolean;
-    moonlit: boolean;
-  } {
+  testState() {
     const s = this.s;
     return {
       phase: s.phase,

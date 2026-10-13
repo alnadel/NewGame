@@ -134,7 +134,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     hint: () => session.hintState(),
     hud: () => {
       const h = session.renderer.scene.hud;
-      return { snow: h.builtSnow, left: h.leftShown, ruler: h.leftShown && h.rulerShown, rulerW: h.rulerShown ? h.rulerX1 - h.rulerX0 : 0, icon: h.iconS > 0 };
+      return { snow: h.key[0] as number, left: h.leftShown, ruler: h.leftShown && h.rulerShown, rulerW: h.rulerShown ? h.rulerX1 - h.rulerX0 : 0, icon: h.iconS > 0 };
     },
     setSnow: (n) => session.testSetSnow(n),
   };
