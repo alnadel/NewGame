@@ -49,8 +49,8 @@ import { DAILY_TRIES, dailyNumber, dailySeed, localDate } from '../meta/daily.ts
 import {
   applyRunResult,
   beginRun,
-  continueLevel,
   buyCosmetic,
+  continueLevel,
   debugRunOutcome,
   dailyStatus,
   dailyProgress,

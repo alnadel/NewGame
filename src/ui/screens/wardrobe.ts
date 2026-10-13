@@ -6,9 +6,10 @@
 //
 // The grid is built once per slot tab; selecting, buying and equipping update the tile buttons in
 // place, so keyboard focus stays on the tile that was pressed.
-// v1.4: the collection count (owned of all), each item's rarity (meta/gamify rarity, as in the globes) and a NEW mark
-// on items the player can wear or buy and hasn't seen here yet (meta/gamify newItems, kept in the
-// save). The marks are taken on entry and stay while browsing; leaving marks them all seen.
+// v1.4: the collection count (owned of all), each item's rarity (meta/gamify rarity, as the globes
+// weigh it) and a NEW mark on items the player can wear or buy and hasn't seen here yet (meta/gamify
+// newItems, kept in the save). The marks are taken on entry and stay while browsing; leaving marks
+// them all seen. Globe-only items say "Snow Globe" where others say what unlocks them.
 
 import {
   COSMETICS,
