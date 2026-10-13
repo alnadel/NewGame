@@ -161,6 +161,7 @@ test.describe('first-run lesson (A5)', () => {
 
 test.describe('wheel and keys (CC-6)', () => {
   test('a wheel event starts the run like a key; one notch then turns the sun 15°', async ({ page }) => {
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=42');
     const wheel = (): Promise<void> => page.evaluate(() => void window.dispatchEvent(new WheelEvent('wheel', { deltaY: 3, deltaMode: 1, cancelable: true })));
     await wheel();
@@ -176,6 +177,7 @@ test.describe('wheel and keys (CC-6)', () => {
 
   test('holding ArrowLeft for 1 s turns at least 250°', async ({ page, isMobile }) => {
     test.skip(isMobile, 'keyboard: the desktop project');
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=42');
     await page.keyboard.down('ArrowLeft');
     await waitForScreen(page, 'play');

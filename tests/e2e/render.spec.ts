@@ -184,6 +184,7 @@ test.describe('dial v2 (GR6)', () => {
   test('thick teal for lasting shade, no gauge at full Chill, amber below 50', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one DPR-2 run is enough');
     // Full Chill at the start: no gauge ring (and never the old blue one).
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=42&day=1&t=9:00&perf=0&plan=0');
     await page.mouse.click(195, 340);
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
@@ -438,6 +439,7 @@ test.describe('death beat (GR12)', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 
   test('the camera pushes in on the puddle and the world greys outside a ring of colour', async ({ page }, info) => {
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=42&day=1&t=13:00&perf=0&plan=0&profile=3');
     // Slow sim time: at 1 PM Nubs would melt on his own before the forced death (the beat runs on
     // real time).
