@@ -2165,12 +2165,18 @@ export class Session {
       case 'equip':
       case 'unlock':
       case 'stamp':
-      // V14-SHIM: the reward sounds borrow the buy chime until the audio has their own.
+        a.play('uiBuy');
+        break;
       case 'reward':
       case 'rankUp':
       case 'open':
       case 'claim':
-        a.play('uiBuy');
+        // The reward cues have their own sound and a haptic of the same name.
+        a.play(name);
+        this.d.haptics.play(name);
+        return;
+      case 'tick':
+        a.play('tick');
         break;
       case 'deny':
         a.play('uiError');

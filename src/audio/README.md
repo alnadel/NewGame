@@ -74,7 +74,7 @@ until a layer is first wanted. At 4× CPU throttle the first tap's `pointerdown`
 | `update(view, dtReal)` | Once per frame (every rAF, drawn or not) with **real** seconds. Drives every continuous layer, the concept cues and the heartbeat, and pumps the scheduler. Call it on every screen. |
 | `prewarm()` | Computes the noise tables ahead of the first gesture (call once the page is idle). Idempotent. |
 | `resetRun()` | New run: clears throttles, the heartbeat clock, slow-mo/duck timers, concept edges and any results melody. |
-| `play(name, params?)` | Fire any cue directly (it ducks the score like the event would). UI: `'uiTap'`, `'uiBuy'`, `'uiError'`, `'newBest'`. Tonal cues use the last view's day and the playing chapter's key unless `params.day`/`key` are given. |
+| `play(name, params?)` | Fire any cue directly (it ducks the score like the event would). UI: `'uiTap'`, `'uiBuy'`, `'uiError'`, `'newBest'`, and the v1.4 reward cues `'reward'` (a rolled bell sixth), `'rankUp'` (fanfare, octave chord, run up), `'open'` (a Snow Globe: shimmer, glassy pop, falling sparkles), `'claim'` (two-bell ka-ching) and `'tick'` (a dry click for count-ups); the session plays each with the haptic of the same name. Tonal cues use the last view's day and the playing chapter's key unless `params.day`/`key` are given. |
 | `playMelody(degrees, day)` | Results replay of `RunResult.melody` (≤ 32 pentatonic degrees) as 8th notes at 120 BPM over the pad, in `day`'s key. Returns its length in seconds (0 if audio isn't running). |
 | `stopMelody()` | Stops scheduling melody notes (also done by `resetRun`). |
 | `onHeartbeat` | Called on each heartbeat with `strong` (Chill < 10). Wire it to `haptics.play('heartbeat')`. Fires even when audio is locked or muted. |
@@ -206,6 +206,7 @@ energy share above 6 kHz. Before = v1.2, after = v1.3:
 | Level win ★★★ / ★ / miss (new) | – → −14.8 / −14.8 / −20.0 | – → −21.3 / −22.1 / −27.3 | 0 % |
 | Death | −12.5 → −13.1 | −19.3 → −20.3 | 0 % |
 | UI tap | −27.7 → −23.0 | −48.0 → −41.6 | 0 % |
+| v1.4 reward / rank up / globe open / claim / tick (loudest 100 ms RMS) | −13.8 / −13.5 / −14.7 / −19.7 / −26.3 | −24.2 / −23.3 / −24.5 / −28.8 / −48.0 | 0 % |
 | Melt | −27.1 → −27.4 | −43.3 → −44.0 | **68.5 → 1.1 %** |
 | Sizzle, f 1.5 in glare | −12.7 → −18.5 | **−18.6 → −25.0** (was the loudest sound in the game) | **45 → 20 %** |
 | Score, noon ×5 (×1) | −17.8 (−18.8) → −19.3 (−19.7) | −26.9 (−27.8) → −29.1 (−30.7) | 0 % |

@@ -24,7 +24,11 @@ export type HapticName =
   | 'day'
   | 'best'
   | 'ui'
-  | 'tick';
+  | 'tick'
+  | 'reward'
+  | 'rankUp'
+  | 'open'
+  | 'claim';
 
 /** A single pulse (ms) or an on/off/on... sequence (ms). */
 export type HapticPattern = number | readonly number[];
@@ -46,6 +50,11 @@ export const HAPTIC_PATTERNS: Readonly<Record<HapticName, HapticPattern>> = {
   best: [15, 40, 15, 40, 40],
   ui: 4,
   tick: 6,
+  // v1.4 rewards: a reward lands, a rank up, a Snow Globe opens (a shake, then the pop), a claim.
+  reward: [10, 30, 15],
+  rankUp: [15, 40, 15, 40, 30],
+  open: [6, 30, 6, 30, 6, 60, 35],
+  claim: [8, 30, 12],
 };
 
 export const HAPTIC_RULES = {
@@ -69,11 +78,15 @@ export const HAPTIC_RULES = {
  */
 const DEFER_RANK: Readonly<Partial<Record<HapticName, number>>> = {
   multUp: 1,
+  claim: 1,
   crystal: 2,
+  reward: 2,
   multMax: 3,
   phew: 4,
+  open: 4,
   day: 5,
   best: 6,
+  rankUp: 6,
   death: 7,
 };
 

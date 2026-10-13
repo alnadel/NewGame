@@ -61,7 +61,21 @@ describe('patterns', () => {
       best: [15, 40, 15, 40, 40],
       ui: 4,
       tick: 6,
+      reward: [10, 30, 15],
+      rankUp: [15, 40, 15, 40, 30],
+      open: [6, 30, 6, 30, 6, 60, 35],
+      claim: [8, 30, 12],
     });
+  });
+
+  it('defers the reward patterns inside the gap instead of dropping them', () => {
+    const t = setup();
+    t.h.play('ui');
+    t.at(10);
+    t.h.play('rankUp');
+    expect(t.patterns()).toEqual([4]);
+    t.at(40);
+    expect(t.patterns()).toEqual([4, [15, 40, 15, 40, 30]]);
   });
 });
 
