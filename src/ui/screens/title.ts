@@ -231,7 +231,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     return btn;
   };
   const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily', [dailyDot]);
-  const trayFor: Partial<Record<ScreenId, HTMLButtonElement>> = {
+  const trayFor: Partial<Record<ScreenId, HTMLElement>> = {
+    profile: badge.el,
     journal: chipBest,
     journey: mapBtn,
     daily: dailyBtn,
