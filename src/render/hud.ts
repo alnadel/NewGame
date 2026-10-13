@@ -481,6 +481,7 @@ function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill
 
 /** Transparent margin around the badge sprite (CSS px), so its antialiased edge isn't cut. */
 const BADGE_PAD = 2;
+const BADGE_FILL = ['', '#E9E4F2', '#FFD36B', '#FFC23D', '#FFAE2B', '#FF9F1C'];
 const MULT_TEXT = ['×0', '×1', '×2', '×3', '×4', '×5', '×6', '×7', '×8', '×9'];
 
 /** The multiplier badge sprite (pill + "×N"), drawn at the current device scale. */
@@ -494,8 +495,8 @@ function renderBadge(h: HudState, v: View, m: number): void {
   g.clearRect(0, 0, c.width, c.height);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const gold = m >= 2;
-  const max = m >= 5;
-  pill(g, BADGE_PAD, BADGE_PAD, h.badgeW, h.badgeH, gold ? (max ? '#FF9F1C' : '#FFC23D') : '#E9E4F2', false);
+  // Warmer with every level: pale gold at ×2 to deep orange at ×5.
+  pill(g, BADGE_PAD, BADGE_PAD, h.badgeW, h.badgeH, BADGE_FILL[Math.max(1, Math.min(5, m))] as string, false);
   g.fillStyle = gold ? '#2B2140' : '#5B5070';
   g.font = h.multFont;
   g.textAlign = 'center';
