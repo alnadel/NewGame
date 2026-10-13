@@ -166,7 +166,7 @@ export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boole
       const copyProgress = async (): Promise<boolean> => {
         const ok = await copyText(c.cb.exportBackup());
         if (ok) c.toast('Progress copied. Paste it in the new app.', { icon: 'check', tone: 'accent' });
-        else c.toast("Couldn't copy here. Use Settings → Backup in both places.", { icon: 'warn', tone: 'danger' });
+        else c.toast("Couldn't copy here. Use Settings → Progress in both places.", { icon: 'warn', tone: 'danger' });
         return ok;
       };
       const copyBtn = button(c, { label: 'Copy progress', icon: 'copy', className: 'install-copy', onPress: () => void copyProgress() });

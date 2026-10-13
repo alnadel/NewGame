@@ -17,12 +17,12 @@ import {
   type CosmeticSlot,
   type Equipped,
 } from '../../meta/content.ts';
-import { itemState, type ItemState } from '../../meta/progression.ts';
+import { itemState, totalStars, type ItemState } from '../../meta/progression.ts';
 import { h, setChildren } from '../dom.ts';
-import { icon } from '../icons.ts';
+import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
-import { button, menuHeader, setButtonLabel, setDisabled, snowChip } from '../widgets.ts';
+import { button, menuHeader, setDisabled, snowChip } from '../widgets.ts';
 
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
 const PREVIEW_CSS = 168;
@@ -230,42 +230,20 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     if (!c) return;
     const state = itemState(save, id);
     itemName.textContent = c.name;
-    action.className = 'btn btn--lg btn--block';
-    switch (state) {
-      case 'equipped':
-        setButtonLabel(action, 'Wearing');
-        action.classList.add('btn--plain');
-        setDisabled(action, true);
-        itemNote.textContent = slot === 'shades' ? 'The sun has them on.' : 'Nubs has it on.';
-        break;
-      case 'owned':
-        setButtonLabel(action, 'Wear it');
-        action.classList.add('btn--primary');
-        setDisabled(action, false);
-        itemNote.textContent = 'In your closet.';
-        break;
-      case 'buyable':
-        setButtonLabel(action, `Buy for ${costOf(c)} Snow`);
-        action.classList.add('btn--gold');
-        setDisabled(action, false);
-        itemNote.textContent = 'Trying it on. Like it?';
-        break;
-      case 'expensive':
-        setButtonLabel(action, `Need ${costOf(c) - save.stats.wallet} more Snow`);
-        action.classList.add('btn--plain');
-        setDisabled(action, true);
-        itemNote.textContent = 'Collect flakes and finish missions to earn Snow.';
-        break;
-      case 'locked': {
-        const a = c.unlock.kind === 'achievement' ? getAchievement(c.unlock.achievement) : undefined;
-        setButtonLabel(action, a ? `Earn “${a.name}”` : 'Locked');
-        action.classList.add('btn--plain');
-        setDisabled(action, true);
-        itemNote.textContent = a ? a.hint : 'Not available yet.';
-        break;
-      }
-    }
-    action.replaceChildren(icon(state === 'locked' ? 'lock' : state === 'equipped' ? 'check' : state === 'owned' ? 'wardrobe' : 'snow'), action.querySelector('.btn-label') ?? '');
+    const a = c.unlock.kind === 'achievement' ? getAchievement(c.unlock.achievement) : undefined;
+    // A Journey star reward says how far along the stars are.
+    const lockedNote = a ? `${a.hint}${a.stars !== undefined ? ` You have ${totalStars(save)}.` : ''}` : 'Not available yet.';
+    const [label, variant, note, iconName]: [string, string, string, IconName] = {
+      equipped: ['Wearing', 'plain', slot === 'shades' ? 'The sun has them on.' : 'Nubs has it on.', 'check'],
+      owned: ['Wear it', 'primary', 'In your closet.', 'wardrobe'],
+      buyable: [`Buy for ${costOf(c)} Snow`, 'gold', 'Trying it on. Like it?', 'snow'],
+      expensive: [`Need ${costOf(c) - save.stats.wallet} more Snow`, 'plain', 'Collect flakes and finish missions to earn Snow.', 'snow'],
+      locked: [a ? `Earn “${a.name}”` : 'Locked', 'plain', lockedNote, 'lock'],
+    }[state] as [string, string, string, IconName];
+    action.className = `btn btn--lg btn--block btn--${variant}`;
+    setDisabled(action, state !== 'owned' && state !== 'buyable');
+    action.replaceChildren(icon(iconName), h('span', { class: 'btn-label' }, label));
+    itemNote.textContent = note;
     drawPreview();
   }
 

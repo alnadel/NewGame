@@ -73,8 +73,9 @@ export interface ResultsView {
   /**
    * Journey runs (docs/CAMPAIGN_PLAN.md §5): the level, whether its goal was met, the stars earned
    * (0-3), the next level to play (null after the last), the goal line ("Reach the finish with 8
-   * flakes · 9 collected") and the concept the level introduced, if any. The sheet then shows the
-   * stars and the level name in place of the time, and Next level / Retry / Map instead of Home.
+   * flakes · 9 collected") and the concept the level introduced, if any (not shown: the level's
+   * intro card teaches it). The sheet then makes the stars its hero, shows the level name in place
+   * of the time and the next star reward, and offers Next level / Retry / Map instead of Home.
    */
   campaign?: ResultsCampaign;
 }
@@ -162,7 +163,7 @@ export interface UiCallbacks {
   buy(id: CosmeticId): boolean;
   /** Wardrobe equip of an owned item (then push the new save with ui.setSave). */
   equip(id: CosmeticId): void;
-  /** Settings > Backup: the current save as a backup code (meta/backup exportBackup). */
+  /** Settings > Progress: the current save as a backup code (meta/backup exportBackup). */
   exportBackup(): string;
   /** Settings > Restore: validate and apply a pasted code (meta/backup importBackup). */
   importBackup(code: string): ImportOutcome;
