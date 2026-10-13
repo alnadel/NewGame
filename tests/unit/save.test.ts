@@ -11,6 +11,7 @@ import {
   type SaveChangeSource,
 } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
+import { mergeSaves } from '../../src/meta/saveMerge.ts';
 import { createStorage, type StorageAdapter } from '../../src/platform/storage.ts';
 import { addDays } from '../../src/meta/daily.ts';
 
@@ -46,7 +47,7 @@ class FakeStorage implements Storage {
 describe('defaults', () => {
   it('builds a complete fresh save', () => {
     const s = defaults(NOW);
-    expect(s.v).toBe(2);
+    expect(s.v).toBe(3);
     expect(s.createdAt).toBe(NOW);
     expect(s.settings).toEqual({
       sfx: 0.8,
@@ -59,7 +60,9 @@ describe('defaults', () => {
       guide: 'auto',
       name: '',
       comfort: true,
+      unlockAll: false,
     });
+    expect(s.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
     expect(s.stats.runs).toBe(0);
     expect(s.stats.wallet).toBe(0);
     expect(s.stats).toMatchObject({ comfort: 0, playSeconds: 0, swings: 0, sunnyWeeks: 0, forecastNoons: 0 });
@@ -101,7 +104,7 @@ describe('migrate', () => {
   });
 
   it('flags saves from a newer version', () => {
-    const r = migrate('{"v":3,"stats":{"wallet":999}}', NOW);
+    const r = migrate('{"v":4,"stats":{"wallet":999}}', NOW);
     expect(r.status).toBe('future');
     expect(r.save.stats.wallet).toBe(0);
   });
@@ -273,10 +276,12 @@ describe('migrate', () => {
     const r = migrate(JSON.stringify(v1), NOW);
     expect(r.status).toBe('ok');
     const s = r.save;
-    expect(s.v).toBe(2);
+    expect(s.v).toBe(3);
     // A2: lifetime runs 10 → the standard rung.
     expect(s.stats.comfort).toBe(4);
-    expect(s.settings).toMatchObject({ music: 0.3, name: '', comfort: true });
+    expect(s.settings).toMatchObject({ music: 0.3, name: '', comfort: true, unlockAll: false });
+    // v2 → v3: a fresh Journey.
+    expect(s.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
     expect(s.equipped).toEqual({ scarf: 'scarf-mint', hat: 'hat-none', nose: 'nose-carrot', shades: 'shades-classic' });
     // play-daily (now an errand) is replaced; the other slots keep their progress.
     expect(s.missions.active.map((m) => m.id)).toEqual(['mult-3@2', 'flakes-10@2', 'survive-noon@2']);
@@ -288,7 +293,41 @@ describe('migrate', () => {
     expect([0, 1, 2, 3, 4, 5, 9].map((runs) => migrate({ v: 1, stats: { runs } }, NOW).save.stats.comfort)).toEqual([0, 1, 1, 2, 3, 4, 4]);
   });
 
-  it('round-trips a rich v2 save unchanged', () => {
+  it('migrates a v2 save to v3 with a fresh Journey and the testing toggle off', () => {
+    const v2 = { v: 2, createdAt: 5, settings: { comfort: false, unlockAll: true }, stats: { runs: 7, comfort: 3, wallet: 12 }, campaign: { stars: [3, 3], unlocked: 9 } };
+    const r = migrate(JSON.stringify(v2), NOW);
+    expect(r.status).toBe('ok');
+    expect(r.save.v).toBe(3);
+    expect(r.save.stats).toMatchObject({ runs: 7, comfort: 3, wallet: 12 });
+    expect(r.save.settings).toMatchObject({ comfort: false, unlockAll: false });
+    expect(r.save.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
+    // v1 → v2 → v3 chains.
+    const fromV1 = migrate({ v: 1, stats: { runs: 10 } }, NOW).save;
+    expect(fromV1.v).toBe(3);
+    expect(fromV1.stats.comfort).toBe(4);
+    expect(fromV1.campaign.unlocked).toBe(1);
+  });
+
+  it('clamps and repairs the Journey: stars 0..3, the unlocked level past every passed level', () => {
+    const stars = Array(200).fill(0);
+    stars[0] = 3;
+    stars[1] = 2;
+    stars[2] = 1;
+    const ok = migrate({ v: 3, campaign: { stars, unlocked: 4, lastLevel: 3 }, settings: { unlockAll: true } }, NOW).save;
+    expect(ok.campaign).toEqual({ stars, unlocked: 4, lastLevel: 3 });
+    expect(ok.settings.unlockAll).toBe(true);
+    const bad = migrate({ v: 3, campaign: { stars: [9, -1, 'x', 2.7], unlocked: 0, lastLevel: 999 } }, NOW).save.campaign;
+    expect(bad.stars).toHaveLength(200);
+    expect(bad.stars.slice(0, 5)).toEqual([3, 0, 0, 2, 0]);
+    // Level 4 is passed, so Level 5 is playable whatever `unlocked` said.
+    expect(bad.unlocked).toBe(5);
+    expect(bad.lastLevel).toBe(200);
+    expect(migrate({ v: 3, campaign: { stars: Array(200).fill(1), unlocked: 1 } }, NOW).save.campaign.unlocked).toBe(201);
+    expect(migrate({ v: 3, campaign: { unlocked: 700 } }, NOW).save.campaign.unlocked).toBe(201);
+    expect(migrate({ v: 3, campaign: 'nope' }, NOW).save.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
+  });
+
+  it('round-trips a rich v3 save unchanged', () => {
     const s = defaults(NOW);
     s.settings.name = 'Zoë';
     s.settings.comfort = false;
@@ -486,7 +525,7 @@ describe('SaveStore', () => {
   });
 
   it('never overwrites a future-version save', () => {
-    const raw = JSON.stringify({ v: 3, secret: true });
+    const raw = JSON.stringify({ v: 4, secret: true });
     storage.set(SAVE_KEY, raw);
     const store = new SaveStore(storage, { now: () => NOW });
     expect(store.status).toBe('future');
@@ -526,7 +565,7 @@ describe('SaveStore', () => {
   });
 
   it('cannot persist over a newer version\'s save', () => {
-    storage.set(SAVE_KEY, JSON.stringify({ v: 3, stats: { runs: 40 } }));
+    storage.set(SAVE_KEY, JSON.stringify({ v: 4, stats: { runs: 40 } }));
     const store = new SaveStore(storage, { now: () => NOW, changes: null });
     expect(store.canPersist).toBe(false);
     expect(new SaveStore(createStorage(new FakeStorage()), { now: () => NOW, changes: null }).canPersist).toBe(true);
@@ -692,7 +731,7 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
     const store = new SaveStore(createStorage(backing), { now: () => NOW, changes });
     let fired = 0;
     store.onExternalChange(() => fired++);
-    changes.storage(SAVE_KEY, JSON.stringify({ v: 3, stats: { runs: 99 } }));
+    changes.storage(SAVE_KEY, JSON.stringify({ v: 4, stats: { runs: 99 } }));
     changes.storage(SAVE_KEY, '{nope');
     expect(fired).toBe(0);
     expect(store.get().stats.runs).toBe(0);
@@ -703,5 +742,32 @@ describe('SaveStore across instances (tabs, the installed app)', () => {
     store.dispose();
     expect(changes.storageCbs).toHaveLength(0);
     expect(changes.visibleCbs).toHaveLength(0);
+  });
+});
+
+describe('Journey progress across instances', () => {
+  it('merges stars per level (the larger) and the unlocked level (the higher)', () => {
+    const base = defaults(NOW);
+    const local = structuredClone(base);
+    local.campaign.stars[0] = 3;
+    local.campaign.stars[1] = 1;
+    local.campaign.unlocked = 3;
+    local.campaign.lastLevel = 2;
+    const remote = structuredClone(base);
+    remote.campaign.stars[0] = 1;
+    remote.campaign.stars[1] = 2;
+    remote.campaign.stars[2] = 2;
+    remote.campaign.unlocked = 4;
+    remote.campaign.lastLevel = 3;
+    const m = migrate(mergeSaves(base, local, remote), NOW).save;
+    expect(m.campaign.stars.slice(0, 4)).toEqual([3, 2, 2, 0]);
+    expect(m.campaign.unlocked).toBe(4);
+    expect(m.campaign.lastLevel).toBe(2);
+    // One side untouched: the other's progress is adopted as it is.
+    expect(migrate(mergeSaves(base, base, remote), NOW).save.campaign).toEqual(remote.campaign);
+    // No common ancestor: joined the same way.
+    const j = migrate(mergeSaves(null, local, remote), NOW).save;
+    expect(j.campaign.stars.slice(0, 4)).toEqual([3, 2, 2, 0]);
+    expect(j.campaign.unlocked).toBe(4);
   });
 });

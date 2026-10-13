@@ -1,10 +1,10 @@
-// Save v2: defaults, validation/migration and a debounced persistent store (V1_PLAN §11.5,
-// V1_1_PLAN UM1).
+// Save v3: defaults, validation/migration and a debounced persistent store (V1_PLAN §11.5,
+// V1_1_PLAN UM1, CAMPAIGN_PLAN §5).
 //
 // Loading never throws and never trusts its input: every field is type-checked, clamped and filtered
 // against the content catalog. A save written by a newer build is left untouched on disk.
 
-import type { DailyEntry, ErrandState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, ErrandState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
 import type { StorageAdapter } from '../platform/storage.ts';
 import { onPageVisible } from '../platform/lifecycle.ts';
 import {
@@ -23,7 +23,7 @@ import {
 import { getErrand, parseMissionId, refillMissions } from './missions.ts';
 import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
-import { COMFORT_MAX } from '../core/index.ts';
+import { CAMPAIGN_LEVELS, COMFORT_MAX } from '../core/index.ts';
 import { mergeSaves } from './saveMerge.ts';
 
 export const SAVE_KEY = 'shady.save';
@@ -34,7 +34,7 @@ const FUTURE_SUFFIX = '.future';
 export const SAVE_BAK_KEY = `${SAVE_KEY}${BAK_SUFFIX}`;
 /** A save written by a newer build, copied aside and never overwritten. */
 export const SAVE_FUTURE_KEY = `${SAVE_KEY}${FUTURE_SUFFIX}`;
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 /** Daily entries kept (newest dates win). */
 export const DAILY_KEEP = 60;
 /** Snowbot pars kept (newest dates win). */
@@ -71,6 +71,7 @@ export function defaultSettings(): Settings {
     guide: 'auto',
     name: '',
     comfort: true,
+    unlockAll: false,
   };
 }
 
@@ -83,6 +84,16 @@ export function emptyWeek(): WeekState {
   return { start: '', days: 0, paid: 0, best: [0, 0, 0, 0, 0, 0, 0] };
 }
 
+/** Levels in the Journey (the campaign table's length). */
+export const CAMPAIGN_LEVEL_COUNT = CAMPAIGN_LEVELS.length;
+/** The most stars a level gives. */
+export const STARS_PER_LEVEL = 3;
+
+/** A fresh Journey: no stars, Level 1 playable, nothing played. */
+export function emptyCampaign(): CampaignState {
+  return { stars: Array<number>(CAMPAIGN_LEVEL_COUNT).fill(0), unlocked: 1, lastLevel: 0 };
+}
+
 /** The comfort rung a v1 save starts v1.1 on, from its lifetime runs (A2). */
 export function comfortFromRuns(runs: number): number {
   return runs <= 0 ? 0 : ([1, 1, 2, 3, 4][Math.min(runs, 5) - 1] as number);
@@ -93,7 +104,7 @@ export function defaults(now: number = Date.now()): Save {
   const missions = { cursor: 0, tier: 1, active: [] as MissionSlot[], deferred: [] as string[], errand: emptyErrand() };
   refillMissions(missions, 0);
   return {
-    v: 2,
+    v: 3,
     createdAt: now,
     settings: defaultSettings(),
     stats: {
@@ -123,6 +134,7 @@ export function defaults(now: number = Date.now()): Save {
     pars: {},
     history: [],
     week: emptyWeek(),
+    campaign: emptyCampaign(),
     lastPlay: '',
     flags: {
       hintsShown: 0,
@@ -185,6 +197,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     guide: pick(r.guide, ['auto', 'always', 'off'] as const, d.guide),
     name: typeof r.name === 'string' ? sanitizeName(r.name) : d.name,
     comfort: bool(r.comfort, d.comfort),
+    unlockAll: bool(r.unlockAll, d.unlockAll),
   };
 }
 
@@ -283,6 +296,23 @@ function sanitizeWeek(raw: unknown): WeekState {
   };
 }
 
+/**
+ * Journey progress: one star count per level (0..3), the highest playable level (at least one past
+ * the last passed level: a damaged `unlocked` never locks a passed level's successor) and the last
+ * level played.
+ */
+function sanitizeCampaign(raw: unknown): CampaignState {
+  const r = rec(raw);
+  const list = Array.isArray(r.stars) ? r.stars : [];
+  const stars = Array.from({ length: CAMPAIGN_LEVEL_COUNT }, (_, i) => int(list[i], 0, 0, STARS_PER_LEVEL));
+  let passed = 0;
+  stars.forEach((n, i) => {
+    if (n > 0) passed = i + 1;
+  });
+  const unlocked = Math.max(int(r.unlocked, 1, 1, CAMPAIGN_LEVEL_COUNT + 1), Math.min(CAMPAIGN_LEVEL_COUNT + 1, passed + 1));
+  return { stars, unlocked, lastLevel: int(r.lastLevel, 0, 0, CAMPAIGN_LEVEL_COUNT) };
+}
+
 /** Keeps the newest `keep` pars. Mutates and returns `pars`. */
 export function prunePars(pars: Record<string, number>, keep: number = PARS_KEEP): Record<string, number> {
   const dates = Object.keys(pars).sort();
@@ -333,7 +363,7 @@ export function recentBestAt(save: Pick<Save, 'history'>, rung: number, warmup =
   return best;
 }
 
-/** Validates a v2-shaped object into a well-formed Save. */
+/** Validates a v3-shaped object into a well-formed Save. */
 function sanitize(r: Rec, now: number): Save {
   const base = defaults(now);
   const stats = rec(r.stats);
@@ -363,7 +393,7 @@ function sanitize(r: Rec, now: number): Save {
   }
 
   return {
-    v: 2,
+    v: 3,
     createdAt: typeof r.createdAt === 'number' && r.createdAt > 0 && r.createdAt < 1e15 ? r.createdAt : now,
     settings: sanitizeSettings(r.settings),
     stats: {
@@ -394,6 +424,7 @@ function sanitize(r: Rec, now: number): Save {
     pars: sanitizePars(r.pars),
     history,
     week: sanitizeWeek(r.week),
+    campaign: sanitizeCampaign(r.campaign),
     lastPlay: typeof r.lastPlay === 'string' && isDateString(r.lastPlay) ? r.lastPlay : '',
     flags: {
       hintsShown: int(flags.hintsShown, 0, 0, BIG),
@@ -429,12 +460,14 @@ export interface MigrateResult {
  * then fills every field the old schema lacked with its default.
  * - v1 → v2: the comfort rung from lifetime runs (A2). Its 'play-daily' slots no longer parse (the
  *   Daily is an errand now), so sanitize deals replacements.
+ * - v2 → v3: a fresh Journey (no stars, Level 1 playable) and the testing toggle off.
  */
 const MIGRATIONS: readonly ((save: Rec) => Rec)[] = [
   (v1) => {
     const stats = rec(v1.stats);
     return { ...v1, v: 2, stats: { ...stats, comfort: comfortFromRuns(int(stats.runs, 0, 0, BIG)) } };
   },
+  (v2) => ({ ...v2, v: 3, campaign: emptyCampaign(), settings: { ...rec(v2.settings), unlockAll: false } }),
 ];
 
 /** Parses (if a string) and validates raw save data. Never throws. */

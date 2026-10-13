@@ -8,6 +8,7 @@
 // - bests and maxima take the larger, flags that only turn on are OR-ed;
 // - owned cosmetics and achievements keep everything either side added (and drop what one removed);
 // - Daily tries and pars merge per date, the run history keeps both sides' new runs;
+// - Journey stars take the larger per level and the unlocked level the higher;
 // - settings, outfit, the comfort rung and missions keep this instance's choice.
 //
 // Without a known common ancestor (the instances lost track of each other for longer than the
@@ -15,7 +16,7 @@
 // everything either side owns, every run either side recorded. That never loses one side's
 // progress to the other's, but runs both made meanwhile can count once.
 
-import type { DailyEntry, RunRecord, Save, SaveStats, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, RunRecord, Save, SaveStats, WeekState } from './saveTypes.ts';
 import { DAILY_TRIES } from './daily.ts';
 
 const ADDITIVE = [
@@ -147,6 +148,16 @@ function weekBoth(l: WeekState, r: WeekState): WeekState {
   return { start: l.start, days: l.days | r.days, paid: l.paid | r.paid, best: l.best.map((b, i) => Math.max(b, r.best[i] ?? 0)) };
 }
 
+/** Both sides' Journey progress: the larger star count per level, the higher unlocked level. */
+function campaignBoth(l: CampaignState, r: CampaignState): CampaignState {
+  const n = Math.max(l.stars.length, r.stars.length);
+  return {
+    stars: Array.from({ length: n }, (_, i) => Math.max(l.stars[i] ?? 0, r.stars[i] ?? 0)),
+    unlocked: Math.max(l.unlocked, r.unlocked),
+    lastLevel: l.lastLevel,
+  };
+}
+
 function joinSaves(local: Save, remote: Save): Save {
   const stats = { ...local.stats };
   for (const key of [...ADDITIVE, ...MAXIMA]) stats[key] = Math.max(local.stats[key], remote.stats[key]);
@@ -171,6 +182,7 @@ function joinSaves(local: Save, remote: Save): Save {
     pars: mapMerge(none, local.pars, remote.pars, (l, r) => Math.max(l, r)),
     history: historyJoin(local.history, remote.history),
     week: weekBoth(local.week, remote.week),
+    campaign: campaignBoth(local.campaign, remote.campaign),
     lastPlay: local.lastPlay > remote.lastPlay ? local.lastPlay : remote.lastPlay,
     flags,
   };
@@ -184,7 +196,7 @@ function joinSaves(local: Save, remote: Save): Save {
 export function mergeSaves(base: Save | null, local: Save, remote: Save): Save {
   if (base === null) return joinSaves(local, remote);
   return {
-    v: 2,
+    v: 3,
     createdAt: three(base.createdAt, local.createdAt, remote.createdAt, (l, r) => Math.min(l, r)),
     settings: fields(base.settings, local.settings, remote.settings, keepLocal),
     stats: fields(base.stats, local.stats, remote.stats, (key, l, r, a) => {
@@ -204,6 +216,7 @@ export function mergeSaves(base: Save | null, local: Save, remote: Save): Save {
     pars: mapMerge(base.pars, local.pars, remote.pars, (l, r) => Math.max(l, r)),
     history: three(base.history, local.history, remote.history, (l, r, a) => historyMerge(a, l, r)),
     week: three(base.week, local.week, remote.week, weekBoth),
+    campaign: three(base.campaign, local.campaign, remote.campaign, campaignBoth),
     lastPlay: three(base.lastPlay, local.lastPlay, remote.lastPlay, (l, r) => (l > r ? l : r)),
     flags: fields(base.flags, local.flags, remote.flags, (key, l, r) =>
       typeof l === 'boolean' ? ((l || r) as typeof l) : key === 'hintsShown' ? (Math.max(l as number, r as number) as typeof l) : l,

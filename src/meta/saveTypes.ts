@@ -1,5 +1,6 @@
-// Persistent save schema (v2, docs/V1_1_PLAN.md §5 CC-9 as amended). Owned by src/meta/save.ts;
-// read by game/session and ui. A v1.0 build reading a v2 save sees 'future' and stays read-only.
+// Persistent save schema (v3: v2 of docs/V1_1_PLAN.md §5 CC-9 plus the Journey campaign of
+// docs/CAMPAIGN_PLAN.md §5). Owned by src/meta/save.ts; read by game/session and ui. An older build
+// reading a newer save sees 'future' and stays read-only.
 
 export interface Settings {
   /** 0..1, default 0.8 */
@@ -17,6 +18,8 @@ export interface Settings {
   name: string;
   /** Adaptive comfort: endless runs climb or ease the comfort ladder (default on). */
   comfort: boolean;
+  /** Testing: every Journey level is playable (default off). */
+  unlockAll: boolean;
 }
 
 export interface SaveStats {
@@ -95,8 +98,18 @@ export interface DailyEntry {
   glyphs: string;
 }
 
+/** Journey campaign progress (docs/CAMPAIGN_PLAN.md §5). */
+export interface CampaignState {
+  /** Stars per level, index id − 1, 0..3 (0 = not passed); as long as the level table. */
+  stars: number[];
+  /** The highest playable level (1 on a fresh save; one past the last passed level). */
+  unlocked: number;
+  /** The last level played, 0 before any. */
+  lastLevel: number;
+}
+
 export interface Save {
-  v: 2;
+  v: 3;
   createdAt: number;
   settings: Settings;
   stats: SaveStats;
@@ -110,6 +123,7 @@ export interface Save {
   /** The last 30 finished non-debug endless runs, oldest first. */
   history: RunRecord[];
   week: WeekState;
+  campaign: CampaignState;
   /** Local date of the last finished run, or ''. */
   lastPlay: string;
   flags: {
