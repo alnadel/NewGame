@@ -451,7 +451,7 @@
 }
 
 .pf-node {
-  --ic: 18px;
+  --ic: 14px;
   position: relative;
   display: grid;
   justify-items: center;
@@ -476,18 +476,19 @@
   display: flex;
   align-items: center;
   height: 26px;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
   font-weight: 800;
   color: var(--accent-ink);
 }
 
+/* Names wrap ("Snow / Angel") rather than run into the next node's. */
 .pf-node small {
   max-width: 100%;
-  overflow: clip;
   font-size: 0.75rem;
+  line-height: 1.15;
   color: var(--ink-2);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 /* Trophies: ui.css badges, tinted by tier, with progress while locked. */
