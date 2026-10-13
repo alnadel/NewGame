@@ -212,7 +212,8 @@ let queue: Promise<void> = Promise.resolve();
  * openGlobe through cb.updateSave) one by one. A tap or a key skips the animation, the next moves on.
  */
 export function revealRewards(ctx: UiContext, rewards: readonly Reward[]): Promise<void> {
-  const steps = rewards.flatMap((r) => (r.kind === 'globe' ? Array<Reward | null>(Math.min(r.amount, 20)).fill(null) : r.amount > 0 ? [r] : []));
+  // One step per globe (each opened as it shows), one per other reward.
+  const steps = rewards.flatMap((r) => Array<Reward>(r.kind === 'globe' ? Math.min(r.amount, 20) : Math.min(r.amount, 1)).fill(r));
   if (steps.length === 0) return Promise.resolve();
   const run = queue.then(() => reveal(ctx, steps));
   queue = run.catch(() => {});
@@ -230,8 +231,8 @@ function openOne(ctx: UiContext): Reward | null {
   return got;
 }
 
-/** `steps`: a reward to show, or null for a globe to open. */
-function reveal(ctx: UiContext, steps: readonly (Reward | null)[]): Promise<void> {
+/** `steps`: the rewards to show; a 'globe' step opens one globe. */
+function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
   const root = (document.querySelector('.sui') as HTMLElement | null) ?? document.body;
   const layer = root.querySelector<HTMLElement>('.screens');
   const wasInert = layer?.hasAttribute('inert') ?? false;
@@ -288,16 +289,17 @@ function reveal(ctx: UiContext, steps: readonly (Reward | null)[]): Promise<void
       }
       el.classList.remove('is-open', 'is-shake', 'is-burst');
       count.textContent = steps.length > 1 ? `${i + 1} of ${steps.length}` : '';
-      kicker.textContent = s?.title ?? 'Snow Globe';
+      kicker.textContent = s.title;
       next.textContent = i + 1 < steps.length ? 'Next' : 'Collect';
-      const got = s ?? openOne(ctx);
+      const globe = s.kind === 'globe';
+      const got = globe ? openOne(ctx) : s;
       if (!got) {
         step();
         return;
       }
       land(got);
-      if (s || ctx.reducedMotion()) {
-        if (!s) ctx.sound('open');
+      if (!globe || ctx.reducedMotion()) {
+        if (globe) ctx.sound('open');
         show();
         return;
       }
