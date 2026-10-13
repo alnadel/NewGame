@@ -42,10 +42,19 @@ few seconds in the sun, Chill never low). Results name the next star you missed.
 fog, an eclipse, a moonlit night…); later levels combine them. Each chapter has its own colours, air particles and music. Passing a level unlocks the next and
 pays a first-pass bonus (twice the level number in Snow). Every star counts toward the **star
 rewards**: the Starry Scarf at 25 stars, then the Night Beanie (75), the Golden Carrot (150), the
-Galaxy Shades (300) and the Star Crown (600). Missions and achievements count as for any run; the
-Journal and bests stay endless-only. Results offer **Next level**, **Retry** and **Map**, and the
+Galaxy Shades (300) and the Star Crown (600). Missions and achievements count as for any run; bests
+stay endless-only. Results offer **Next level**, **Retry** and **Map**, and the
 map centers the level in play and pops the stars you just earned. For testing, Settings → Testing →
-**Unlock all levels (testing)** opens every tile, and `?level=N` opens a level directly.
+**Unlock all levels (testing)** opens every tile and every feature, and `?level=N` opens a level directly.
+
+### Progression
+
+Every run earns **XP** toward your **Sun Rank**; each rank pays Snow and every fifth a **Snow
+Globe**, a reward chest that opens on a cosmetic you don't own yet (Snow once you own them all).
+Globes also come from finishing a Journey chapter, all three missions, and day 7 of the **daily
+streak** (a 7-day calendar claimed from the Title; one missed day a week is forgiven). The
+**Profile** (tap the rank badge) shows the rank road, trophies with progress, your collection and
+your records.
 
 ### Menus
 
@@ -89,9 +98,9 @@ src/
   game/        session and run lifecycle, loop, input, camera, fx, governor, params, test hook
   render/      Canvas 2D: ground, shadows, casters, Nubs, HUD, Melt Map, postcard
   audio/       synthesized WebAudio
-  ui/          DOM screens (Title, Journey map, Results, Daily, Missions, Journal, Wardrobe, Settings)
-  meta/        save v3, progression (Journey and star rewards included), missions, Sunny Week,
-               Daily, share text, challenges
+  ui/          DOM screens (Title, Journey map, Results, Daily, Missions, Profile, Wardrobe, Settings)
+  meta/        save v4, progression (Journey and star rewards included), missions, Sun Rank, globes
+               and the daily streak (gamify.ts), Daily, share text, challenges
   platform/    storage, haptics, share, lifecycle, PWA, safe areas
 tests/         unit (Vitest), e2e (Playwright), golden hashes
 scripts/       sim.ts, golden.ts, gen-icons.ts, gen-og.ts, inline-build.mjs

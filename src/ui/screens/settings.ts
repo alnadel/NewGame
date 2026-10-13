@@ -88,7 +88,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   });
   const comfort = toggleSwitch(ctx, 'Adaptive comfort', (on) => change('comfort', on));
 
-  // Testing: every Journey level playable from the map (progress still counts as usual).
+  // Testing: every Journey level playable from the map and every feature open (progress still counts as usual).
   const unlockAll = toggleSwitch(ctx, 'Unlock all levels (testing)', (on) => change('unlockAll', on));
 
   // Accessibility
@@ -249,7 +249,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     ),
     section(
       'Testing',
-      row('map', 'Unlock all levels (testing)', 'Every Journey level opens from the map. Stars and unlocks still count as usual.', unlockAll.el),
+      row('map', 'Unlock all levels (testing)', 'Every Journey level opens from the map, and every feature (Endless, Daily, Missions, Wardrobe, Profile) is open. Stars and unlocks still count as usual.', unlockAll.el),
     ),
     appSection,
     progressSection,

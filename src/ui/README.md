@@ -6,8 +6,9 @@ renderer; the only DOM element during play is the pause button (plus a small mut
 
 ```
 src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab, the Journey map
-src/meta/      save v3, content catalog, progression (Journey levels and star rewards included),
-               missions, Sunny Week, daily, share text, challenge links, backup
+src/meta/      save v4, content catalog, progression (Journey levels and star rewards included),
+               missions, gamify (Sun Rank, globes, daily streak, unlocks), sunny days, daily,
+               share text, challenge links, backup
 src/platform/  storage, share, pwa, lifecycle, safeArea, native
 ```
 
@@ -52,10 +53,9 @@ into a screen only in keyboard mode, and a menu returns focus to the control tha
 
 ```
 boot -> title | play
-title -> play | daily | wardrobe | missions | settings | journal | journey | profile
-profile -> title | wardrobe | journey  (v1.4; the Wardrobe and the map return to it)
-daily -> play | title          wardrobe -> title | profile          missions -> title | journal
-journal -> title | missions    (Back returns to wherever the Journal was opened from)
+title -> play | daily | wardrobe | missions | settings | journey | profile
+profile -> title | missions | wardrobe | journey  (v1.4; Back returns where it opened from)
+daily -> play | title          wardrobe -> title | profile          missions -> title | profile
 journey -> play | title | profile  (a tile starts its level; Back returns where it opened from)
 settings -> title | pause      (Back returns to wherever Settings was opened from)
 play -> pause | dying | results | title
@@ -122,8 +122,7 @@ The sheet (v1.1): the big time with the Postcard pill (its thumbnail), the **Sun
 12 hour tiles per day, the last 4 or 2 on screens under 700 px, a "+N days" chip, the day's forecast
 emoji on Day Plan runs, a night pill after each completed day, ghost outlines after the melt; tiles
 pop in 35 ms apart), the typed death line, the tip and `outcome.pace`, the challenge verdict, the
-warm-up card, `outcome.toasts` as award chips (achievements, items, Morning Snow, Sunny Week, Welcome
-back), stat tiles with nothing to show left out (Snow always; SWINGs with the best chain),
+warm-up card, `outcome.toasts` as award chips (achievements, items, Welcome back, features unlocked), stat tiles with nothing to show left out (Snow always; SWINGs with the best chain),
 the missions with stamps and Swap on stale ones. Share is a labeled pill (accent
 after a new best, a challenge or a counted Daily try; "Send it back" after a won challenge). Retry
 arms 0.3 s after the sheet appears; a tap above the sheet also retries. The sheet grows with its
@@ -135,7 +134,7 @@ and the tiles stay where they are (fix round 2). The missions done this run pop 
 chip with the first stamp ("2 missions done +20"), so the reward shows wherever the rows sit.
 
 **Journey** (v1.2, docs/CAMPAIGN_PLAN.md §5; Journey-first since v1.3): the Title's bottom
-cluster is the chips (Best → Journal, mission pips), the **modes** row and the tray (Daily,
+cluster is the chips (Best → Profile, mission pips), the **modes** row and the tray (Daily,
 Missions, Wardrobe, Settings). The modes are the map button `.journey-pill` (the stars earned,
 "Map" before any; `openJourney()`), the primary **Play** `.play-pill` "Level N" (`continueLevel`,
 the highest unlocked level: `startRun('campaign', undefined, N)`; Space/Enter too) and **Endless**
@@ -193,15 +192,15 @@ in play, and the stars and unlocks earned since the last visit pop in (`.is-fres
 another, `.is-unlocked` tiles, with the stamp or unlock sound). `setSave` and the Settings toggle
 re-render the tiles in place (focus survives).
 
-**Journal** (v1.1): bests (endless and Daily), the last 30 endless runs as bars (height ∝ score,
-colour by the day reached, the best in gold, runs on eased rules hatched, an sr-only summary), the
-last-10 average and its change against the 10 before, and lifetime totals. Opened from the Title's
-Best chip ("Journal, best …") and the Missions header. Bests are kept per rules (fix round 2):
+**Records** (the Profile's, v1.4; the v1.1 Journal's until then): bests (endless and Daily), the
+last 30 endless runs as bars (height ∝ score, colour by the day reached, the best in gold, runs on
+eased rules hatched, an sr-only summary), the last-10 average and its change against the 10 before,
+and lifetime totals. The Title's Best chip ("Profile, best …") opens them. Bests are kept per rules (fix round 2):
 "Best run" is the standard-rules best (`stats.bestMinutes`: endless runs at R4, challenges); runs
 on eased rules (the first three, comfort rungs R1-R3, the warm-up; never the tutorial run, whose
 Chill floor no comfort rung can match) keep `stats.easedBest`,
 shown as "Eased: …" while it is ahead. The Title's Best chip shows the best of the rules the next
-run is played at (`nextRunEased`): the eased best with its day badge hatched ("Journal, eased best
+run is played at (`nextRunEased`): the eased best with its day badge hatched ("Profile, eased best
 …"), else the standard one (either falls back to the other while empty). Results: a best at eased
 rules is "New eased best" (`outcome.bestEased`); the pace line compares with runs at the same rules
 and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the accent.
@@ -264,9 +263,9 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
   - `beginRun(save) -> { save, dealt }` at every run start (completed missions are replaced here).
   - `applyRunResult(save, result, { today, dailyTry?, challengeTarget?, playSeconds?, rung? }) ->
     { save, outcome }` at run end: bests from lifetime run 3, the history and comfort rung (endless),
-    Morning Snow, Welcome back, Sunny Week, missions with staleness, achievements.
-    `outcome` adds `bonusSnow`, `pace`, `recentBestBefore`, `comfortAfter`. (Today's errand was
-    retired in v1.3; `save.missions.errand` stays empty so the save remains v3.)
+    Welcome back, sunny days, missions with staleness, achievements, and the v1.4 XP, rank,
+    globes and feature unlocks (`outcome.gamify`, gamify.ts awardRun). `outcome` adds `bonusSnow`,
+    `pace`, `recentBestBefore`, `comfortAfter`.
   - Journey runs (`result.mode === 'campaign'` with `result.level`): the wallet gets the run's Snow
     plus a first-pass bonus of `id × 2` (an award chip "First pass +24"), `campaign.stars[id-1]`
     keeps the best, a pass sets `unlocked = max(unlocked, id + 1)`, `lastLevel = id`; missions,
