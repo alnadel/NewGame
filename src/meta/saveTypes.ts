@@ -24,8 +24,9 @@ export interface SaveStats {
   /** The best run at standard rules: endless runs at rung 4 (not the warm-up) and challenges. */
   bestMinutes: number;
   /**
-   * The best endless run at eased rules: comfort rungs below standard, the warm-up run, and the
-   * first BEST_FROM_RUNS runs (progression.ts). Shown, marked eased, where those rules are played.
+   * The best endless run at eased rules: comfort rungs R1-R3, the warm-up run, and the first
+   * BEST_FROM_RUNS runs (progression.ts), never the tutorial run (its Chill floor). Shown, marked
+   * eased, where those rules are played.
    */
   easedBest: number;
   bestSnowRun: number;

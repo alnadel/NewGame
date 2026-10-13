@@ -135,7 +135,8 @@ colour by the day reached, the best in gold, runs on eased rules hatched, an sr-
 last-10 average and its change against the 10 before, and lifetime totals. Opened from the Title's
 Best chip ("Journal, best …") and the Missions header. Bests are kept per rules (fix round 2):
 "Best run" is the standard-rules best (`stats.bestMinutes`: endless runs at R4, challenges); runs
-on eased rules (the first three, comfort rungs below standard, the warm-up) keep `stats.easedBest`,
+on eased rules (the first three, comfort rungs R1-R3, the warm-up; never the tutorial run, whose
+Chill floor no comfort rung can match) keep `stats.easedBest`,
 shown as "Eased: …" while it is ahead. The Title's Best chip shows the best of the rules the next
 run is played at (`nextRunEased`): the eased best with its day badge hatched ("Journal, eased best
 …"), else the standard one (either falls back to the other while empty). Results: a best at eased

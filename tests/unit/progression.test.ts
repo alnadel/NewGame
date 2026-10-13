@@ -306,6 +306,8 @@ describe('comfort, history and pace', () => {
     // The warm-up is eased; a challenge is standard.
     expect(applyRunResult(r.save, run(1000), opts({ rung: 4, warmup: true })).save.stats).toMatchObject({ bestMinutes: 450, easedBest: 1000 });
     expect(applyRunResult(r.save, run(1000, {}, { mode: 'challenge' }), opts()).save.stats).toMatchObject({ bestMinutes: 1000, easedBest: 950 });
+    // The tutorial run (the lesson's Chill floor) never sets the eased best a comfort rung must beat.
+    expect(applyRunResult(defaults(1), run(1300), opts({ rung: 0 })).save.stats.easedBest).toBe(0);
   });
 
   it('knows whether the next endless run is eased (the Title shows that best)', () => {

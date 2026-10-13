@@ -256,13 +256,16 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
 
   // Bests, from lifetime run 3 on (Dailies keep their own per-date best): standard-rules runs
   // (challenges, endless at rung 4) set the best; endless runs at eased rules (comfort rungs below
-  // standard, the warm-up) set the eased best, and so do the first runs, which never count.
+  // standard, the warm-up) set the eased best, and so do the first runs, which never count. The
+  // tutorial run is left out: under the lesson's Chill floor Nubs can't melt, so its score would be
+  // a bar no comfort-rung run could reach (it shows in the Journal's bars).
   const bestEased = easedRun(r, options);
   const counts = r.mode !== 'daily' && runsBefore >= BEST_FROM_RUNS;
   const prevBestMinutes = bestEased ? s.easedBest : s.bestMinutes;
   const newBest = counts && prevBestMinutes > 0 && r.minutes > prevBestMinutes;
   if (counts && !bestEased && r.minutes > s.bestMinutes) s.bestMinutes = r.minutes;
-  if (r.mode === 'endless' && (bestEased || !counts) && r.minutes > s.easedBest) s.easedBest = r.minutes;
+  const tutorial = r.mode === 'endless' && options.rung === 0;
+  if (r.mode === 'endless' && !tutorial && (bestEased || !counts) && r.minutes > s.easedBest) s.easedBest = r.minutes;
 
   // Endless runs: the history and the comfort ladder (Daily and challenge runs never touch them).
   let pace: { text: string; down: boolean } | null = null;
