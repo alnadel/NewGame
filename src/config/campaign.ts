@@ -136,13 +136,13 @@ function curveDrain(id: number): number {
 
 /**
  * Level length (minutes) on the chapter curve: teaching levels end before noon (240 → 300 minutes
- * from dawn), their finales at noon; composed chapters grow 360 → 720 in 30-minute steps, their
+ * from dawn), their finales an hour later (noon from chapter 2); composed chapters grow 360 → 720 in 30-minute steps, their
  * first two levels a step shorter.
  */
 function curveLength(id: number): number {
   const c = chapterOf(id);
   const i = (id - 1) % LEVELS_PER_CHAPTER;
-  if (c <= 4) return i === 9 ? 360 : (TEACH_LENGTH[c - 1] as number);
+  if (c <= 4) return (TEACH_LENGTH[c - 1] as number) + (i === 9 ? 60 : 0);
   const len = 360 + 30 * Math.round((12 * (c - 5)) / 15);
   return i < 2 ? len - 30 : len;
 }

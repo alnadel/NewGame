@@ -172,10 +172,11 @@ describe('the level table', () => {
 
   it('shapes a sawtooth: teaching levels end before noon, finales are spikes, hard concepts pay for themselves', () => {
     const at = (id: number): LevelDef => levelDef(id) as LevelDef;
-    // Teaching levels (no time concept) end before noon; their chapter finales run to noon.
+    // Teaching levels (no time concept) end before noon; their chapter finales run an hour longer.
     for (const id of [1, 2, 3, 5, 9]) expect(at(id).lengthMinutes).toBe(240);
     for (const id of [12, 25, 35]) expect(at(id).lengthMinutes).toBe(300);
-    for (const id of [10, 20, 30]) expect(at(id).lengthMinutes).toBe(360);
+    expect(at(10).lengthMinutes).toBe(300);
+    for (const id of [20, 30]) expect(at(id).lengthMinutes).toBe(360);
     // On the curve (drain + the concepts' costs) a finale is a spike: above its chapter and the next start.
     const curve = (id: number): number => at(id).drain + at(id).concepts.reduce((a, c) => a + (CONCEPTS[c].level?.cost ?? 0), 0);
     for (const f of [10, 20, 30]) expect(curve(f)).toBeGreaterThan(Math.max(curve(f - 1), curve(f + 1)));

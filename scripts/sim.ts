@@ -40,10 +40,10 @@ import { BOT_KINDS, createBot, type BotKind } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import type { RunResult } from '../src/core/sim/events.ts';
 import { headlessConfig } from '../src/core/sim/headless.ts';
-import { campaignConfig } from '../src/core/level.ts';
+import { campaignConfig, levelProgress } from '../src/core/level.ts';
 import { buildRunResult } from '../src/core/sim/result.ts';
 import { step } from '../src/core/sim/step.ts';
-import type { RunConfig } from '../src/core/sim/types.ts';
+import type { RunConfig, SimState } from '../src/core/sim/types.ts';
 
 /** One row of the report: a bot on one kind of run. */
 interface Job {
@@ -119,40 +119,16 @@ function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false): 
   }
   // Bot decisions are timed and subtracted, so stepMs is the cost of step() alone.
   const stepMs = performance.now() - start - botMs;
+  const { flakes, flakesMelted, snow, swings, litTotal } = s.stats;
+  const out = { died: s.phase === 'dead', minutes: s.minutes, day: s.day, flakes, flakesMelted, snow, swings, swingSnow, ticks: s.tick, daylight, litTotal, lessonDone, stepMs, genMs };
+  return { out: { ...out, ...worldStats(s) }, result: buildRunResult(s) };
+}
+
+/** Chunks generated, rescues (total and the most in one chunk), parked clouds and unresolved failures of a run's world. */
+function worldStats(s: SimState): { chunks: number; rescues: number; maxRescues: number; parked: number; unresolved: number } {
   const w = s.world.stats;
-  let rescues = 0;
-  let maxRescues = 0;
-  let chunks = 0;
-  for (const r of w.rescuesPerChunk) {
-    if (r === undefined) continue;
-    chunks++;
-    rescues += r;
-    if (r > maxRescues) maxRescues = r;
-  }
-  return {
-    out: {
-      died: s.phase === 'dead',
-      minutes: s.minutes,
-      day: s.day,
-      flakes: s.stats.flakes,
-      flakesMelted: s.stats.flakesMelted,
-      snow: s.stats.snow,
-      swings: s.stats.swings,
-      swingSnow,
-      ticks: s.tick,
-      daylight,
-      litTotal: s.stats.litTotal,
-      lessonDone,
-      stepMs,
-      genMs,
-      chunks,
-      rescues,
-      maxRescues,
-      parked: w.parkedClouds,
-      unresolved: w.unresolved,
-    },
-    result: buildRunResult(s),
-  };
+  const per = w.rescuesPerChunk.filter((r): r is number => r !== undefined);
+  return { chunks: per.length, rescues: per.reduce((a, r) => a + r, 0), maxRescues: Math.max(0, ...per), parked: w.parkedClouds, unresolved: w.unresolved };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -169,7 +145,6 @@ interface LevelOut {
   minChill: number;
   /** Where the run ended: the level's progress 0..1 (1 at the finish line). */
   progress: number;
-  ticks: number;
   ms: number;
   rescues: number;
   chunks: number;
@@ -182,34 +157,12 @@ function playLevel(id: number, kind: BotKind, salt: number): LevelOut {
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
   const s = createRun(campaignConfig(id, { lesson: id === 1 }));
   const bot = createBot(kind, salt);
-  // A level is at most 1080 minutes (one and a half days): 6000 ticks is a safe ceiling.
-  const limit = 8000;
-  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < limit) step(s, bot.next(s));
-  const r = buildRunResult(s);
-  const w = s.world;
-  let rescues = 0;
-  let chunks = 0;
-  for (const n of w.stats.rescuesPerChunk) {
-    if (n === undefined) continue;
-    chunks++;
-    rescues += n;
-  }
-  return {
-    id,
-    bot: kind,
-    phase: s.phase,
-    passed: r.level?.passed ?? false,
-    stars: r.level?.stars ?? 0,
-    flakes: s.stats.flakes,
-    snow: s.stats.snow,
-    minChill: s.stats.minChill,
-    progress: Number.isFinite(w.finishY) ? Math.min(1, (s.nubs.y - w.startY) / (w.finishY - w.startY)) : 0,
-    ticks: s.tick,
-    ms: performance.now() - t0,
-    rescues,
-    chunks,
-    unresolved: w.stats.unresolved,
-  };
+  // A level is at most 1080 minutes (one and a half days, ~6000 ticks).
+  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) step(s, bot.next(s));
+  const r = buildRunResult(s).level;
+  const { flakes, snow, minChill } = s.stats;
+  const { rescues, chunks, unresolved } = worldStats(s);
+  return { id, bot: kind, phase: s.phase, passed: r?.passed ?? false, stars: r?.stars ?? 0, flakes, snow, minChill, progress: levelProgress(s), ms: performance.now() - t0, rescues, chunks, unresolved };
 }
 
 function jobConfig(j: Job, seed: number): RunConfig {

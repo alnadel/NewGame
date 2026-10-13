@@ -389,7 +389,7 @@ The contract (names and shapes) is `docs/CAMPAIGN_PLAN.md` §2-§3; everything i
 - **Curve.** `drain = (curve(id) − Σ cost) / drainMul`, clamped to 22-55 (effective ≤ 62). The
   curve is a sawtooth: teaching chapters 28 → 34 (finales +6), composed chapters from 32-39
   (chapter 5) to 41-48 (chapter 20), each finale 7 above its chapter's base. Lengths: teaching
-  levels 240 (chapter 1) / 300 minutes from dawn, their finales 360; composed chapters 360 → 720
+  levels 240 (chapter 1) / 300 minutes from dawn, their finales an hour longer; composed chapters 360 → 720
   with the first two levels of each 30 minutes shorter. Time concepts keep their own windows.
 - **Goals and stars.** Flake goal 55% of the flakes the level offers (`expectedFlakes`), Snow goal
   0.7 Snow per flake (min 5). `starsFor`: 1 for passing, +1 for flakes ≥ `stars.flakes` (65%, 80%

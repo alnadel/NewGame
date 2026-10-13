@@ -138,7 +138,7 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   hardy: concept('hardy', 'Hardy Flakes', 'Snow Pile', 'goal', 'These flakes never melt. Collect them all.', 'hardy', { meltBudget: Infinity, flakesPerCluster: 5 }, { goal: 'flakes', cost: -2 }),
   flurry: concept('flurry', 'Flurry', 'Snow Globe', 'goal', 'Flakes everywhere: big clusters, close together. Each one cools Nubs.', 'flurry', { flakesPerCluster: 7, clusterGap: 0.6 }, { cost: -4 }),
   heavy: concept('heavy', 'Heavy Sun', 'Slow Hands', 'dial', 'The sun is slow to follow and never coasts.', 'heavy', { sunFollow: 220, sunFriction: 0 }, { cost: 5 }),
-  slippery: concept('slippery', 'Slippery Sun', 'Ice Rink', 'dial', 'A flick coasts a long way. Catch it.', 'slippery', { sunFriction: SLIPPERY_FRICTION }, { cost: 5 }),
+  slippery: concept('slippery', 'Slippery Sun', 'Ice Rink', 'dial', 'A flick coasts a long way. Catch it.', 'slippery', { sunFriction: SLIPPERY_FRICTION }, { cost: 9 }),
   clockwork: concept('clockwork', 'Clockwork', 'Cuckoo', 'dial', 'The sun snaps to 30° steps when you let go.', 'clockwork', undefined, { cost: -1 }),
   gusts: concept('gusts', 'Gusts', 'Windy Day', 'dial', 'Every 8 s a gust of wind pushes the sun for 2 s.', 'gusts', undefined, { drainCap: 40, cost: 2 }),
   lock: concept('lock', 'Sun Lock', 'Stop and Go', 'dial', 'Every 7 s the sun locks for a moment. Plan ahead.', 'lock', undefined, { drainCap: 40, cost: 3 }),
