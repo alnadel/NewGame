@@ -46,9 +46,8 @@ import { featureLabel } from '../labels.ts';
 import { button, countUp, hide, progressBar, setButtonLabel, setDisabled, starRoad } from '../widgets.ts';
 
 const RETRY_ARM_MS = 300;
-/** The XP meter starts filling this long after an endless sheet appears, and takes about this long. */
+/** The XP meter starts filling this long after an endless sheet appears. */
 const XP_ENDLESS_MS = 500;
-const XP_FILL_MS = 900;
 const TYPE_CPS = 30;
 const STAMP_FIRST_MS = 650;
 const STAMP_GAP_MS = 300;
@@ -112,6 +111,8 @@ export interface ResultsScreen extends Screen {
 export function createResultsScreen(ctx: UiContext): ResultsScreen {
   let armed = false;
   let timers: number[] = [];
+  /** Counts renders (and leaves), so an XP fill or reveal that ends later doesn't act on another sheet. */
+  let renders = 0;
   let typing = 0;
   let stopCount = (): void => {};
 
@@ -119,6 +120,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     timers.push(window.setTimeout(fn, ms));
   };
   const stopAll = (): void => {
+    renders++; // a pending XP fill or reveal no longer belongs to the shown sheet
     for (const t of timers) clearTimeout(t);
     timers = [];
     clearInterval(typing);
@@ -413,8 +415,6 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     mapCatch.classList.toggle('is-armed', on);
   }
 
-  /** Counts renders, so a reveal that ends after the sheet was re-shown doesn't arm the new one. */
-  let renders = 0;
 
   function render(view: ResultsView): void {
     shown = view;
@@ -584,27 +584,26 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       stampAt += STAMP_GAP_MS;
     });
 
-    // The rewards sequence (v1.4): the stars land, the XP meter fills under them, then the run's
-    // rewards are revealed one at a time; the actions arm once that is over. With nothing to reveal
+    // The rewards sequence (v1.4): the stars land, the XP meter fills under them (awaited), then the
+    // run's rewards are revealed one at a time; the actions arm once that is over. With nothing to reveal
     // Retry (and Next level) arm after 0.3 s, as before: the sheet is readable before a stray tap
     // can fire it, and a quick retry stays quick.
     const g = outcome.gamify;
     const xpAt = reduced ? 0 : c ? STAR_FIRST_MS + (c.passed ? c.stars : 0) * STAR_GAP_MS + 120 : XP_ENDLESS_MS;
-    later(xpAt, () => xp.show(g, ctx.save()));
     const rewards = g?.rewards ?? [];
     const id = ++renders;
     setArmed(false);
     revealing = rewards.length > 0;
     if (!revealing) later(RETRY_ARM_MS, () => setArmed(true));
-    else {
-      later(reduced ? 0 : xpAt + XP_FILL_MS, () => {
-        void revealRewards(ctx, rewards).then(() => {
-          if (id !== renders) return;
-          revealing = false;
-          setArmed(true);
-        });
+    later(xpAt, () => {
+      void xp.show(g, ctx.save()).then(async () => {
+        if (!revealing || id !== renders) return;
+        await revealRewards(ctx, rewards);
+        if (id !== renders) return;
+        revealing = false;
+        setArmed(true);
       });
-    }
+    });
 
     scroll.scrollTo({ top: 0 });
     body.scrollTo({ top: 0 });

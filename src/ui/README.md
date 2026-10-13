@@ -156,7 +156,7 @@ and a one-time "Unlocked: …" toast. Claim dots
 (`claimDot`) go on the badge (globes + trophies) and on the Missions and Wardrobe discs.
 
 **v1.4 Results**: the XP meter (`xpMeter`) sits under the goal line (the score on endless runs) and
-fills once the stars have landed (0.5 s in on endless runs); then `revealRewards(ctx,
+fills once the stars have landed (0.5 s in on endless runs); when its `show` resolves `revealRewards(ctx,
 outcome.gamify.rewards)` runs, and Retry / Next level arm only when it resolves (Back, Enter and
 the map tap wait too). With nothing to reveal they arm after 0.3 s as before. Features the run
 unlocked join the award chips ("Unlocked: the Wardrobe").
