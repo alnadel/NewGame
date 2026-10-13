@@ -9,11 +9,16 @@
 // layout) — about once every 0.7 s of play. Each frame then blits that layer and draws the few
 // moving parts on top from small cached sprites: the flake icon (pops), the multiplier badge (pops,
 // shakes, glows at ×5), the elapsed part of the ruler and its progress head.
+//
+// Campaign variant (v1.2, CAMPAIGN_PLAN §4): the badge reads "L6", the ruler is the level's progress
+// bar (start → a checkered finish, teal, with the gate or eclipse marker at the midpoint), the Snow
+// pill counts "flakes/target" or "snow/target" for goal levels, the clock stays, and a wind glyph
+// rides the progress head during a gust.
 
 import { dayTicks, hudClock, minutesOfDay, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa, hex } from './color.ts';
-import { drawForecastGlyph } from './glyphs.ts';
+import { drawConceptGlyph, drawForecastGlyph, drawWindGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
@@ -38,10 +43,16 @@ export interface HudState {
   clockKey: number;
   clock: string;
   snowVal: number;
+  /** The goal pill's target (−1: plain Snow). */
+  snowTarget: number;
   snowText: string;
   dayVal: number;
   dayText: string;
   builtSnow: number;
+  builtTarget: number;
+  /** The campaign level the layer was built for (−1 none), with its markers. */
+  builtLevel: number;
+  builtMarks: number;
   builtDay: number;
   builtForecast: ForecastId | '';
   builtClock: number;
@@ -110,10 +121,14 @@ export function createHud(): HudState {
     clockKey: -1,
     clock: '',
     snowVal: -1,
+    snowTarget: -1,
     snowText: '0',
-    dayVal: -1,
+    dayVal: NaN,
     dayText: 'D1',
     builtSnow: NaN,
+    builtTarget: NaN,
+    builtLevel: NaN,
+    builtMarks: NaN,
     builtDay: NaN,
     builtForecast: '',
     builtClock: NaN,
@@ -247,6 +262,22 @@ function sized(c: Canvas2D | null, w: number, h: number): Canvas2D {
   return c;
 }
 
+/** The campaign row (renderer.ts CampaignView): the level, its progress, the goal pill and the gust. */
+export interface HudCampaign {
+  id: number;
+  /** 0..1 to the finish line. */
+  progress: number;
+  goalValue: number;
+  /** −1: the pill shows plain Snow. */
+  goalTarget: number;
+  goalFlakes: boolean;
+  /** Marker positions (0..1) on the progress bar, −1 none. */
+  markGate: number;
+  markEclipse: number;
+  /** The gust turning the sun now (−1 clockwise, +1 counter-clockwise, 0 none). */
+  gust: number;
+}
+
 export interface HudInput {
   s: SimState;
   /** Absolute target minutes (or −1): the recent best (gold flag), the challenge (teal flag) and the next milestone (a white tick). */
@@ -255,6 +286,7 @@ export interface HudInput {
   goalMinutes: number;
   alpha: number;
   time: number;
+  campaign: HudCampaign | null;
 }
 
 /**
@@ -264,16 +296,21 @@ export interface HudInput {
  */
 export function syncHud(h: HudState, v: View, inp: HudInput): void {
   const s = inp.s;
+  const c = inp.campaign;
 
   // Text that changes with the run (cached strings; no per-frame allocation).
-  if (s.stats.snow !== h.snowVal) {
-    if (h.snowVal >= 0 && s.stats.snow > h.snowVal) h.snowPop = 0.18;
-    h.snowVal = s.stats.snow;
-    h.snowText = String(Math.floor(s.stats.snow));
+  const target = c ? c.goalTarget : -1;
+  const snowNow = c && target >= 0 ? c.goalValue : s.stats.snow;
+  if (snowNow !== h.snowVal || target !== h.snowTarget) {
+    if (h.snowVal >= 0 && snowNow > h.snowVal && target === h.snowTarget) h.snowPop = 0.18;
+    h.snowVal = snowNow;
+    h.snowTarget = target;
+    h.snowText = target >= 0 ? `${Math.floor(snowNow)}/${target}` : String(Math.floor(snowNow));
   }
-  if (s.day !== h.dayVal) {
-    h.dayVal = s.day;
-    h.dayText = `D${s.day}`;
+  const dayKey = c ? -c.id : s.day;
+  if (dayKey !== h.dayVal) {
+    h.dayVal = dayKey;
+    h.dayText = c ? `L${c.id}` : `D${s.day}`;
   }
   const dl = dayTicks(s.day);
   const key = s.day * 1000 + Math.floor(minutesOfDay(s.day, s.dayTick) / 10);
@@ -284,9 +321,13 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   const night = s.dayTick >= dl ? 1 : 0;
   const passed = s.dayTick > dl * 0.6 ? 1 : 0;
 
+  const marks = c ? (c.markGate >= 0 ? 1 : 0) + (c.markEclipse >= 0 ? 2 : 0) : 0;
   if (
     h.layer === null ||
     h.builtSnow !== h.snowVal ||
+    h.builtTarget !== h.snowTarget ||
+    h.builtLevel !== (c ? c.id : -1) ||
+    h.builtMarks !== marks ||
     h.builtDay !== h.dayVal ||
     h.builtForecast !== s.params.forecast ||
     h.builtClock !== h.clockKey ||
@@ -350,20 +391,35 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.stroke();
   }
 
-  // Ruler: elapsed part and the progress head (a moon at night is part of the layer).
+  // Ruler: elapsed part and the progress head (a moon at night is part of the layer). On a campaign
+  // level the bar is the level's progress and the head always shows; a gust blows a wind glyph past it.
   if (h.leftShown && h.rulerShown) {
     const x0 = h.rulerX0;
     const x1 = h.rulerX1;
-    const frac = Math.min(1, s.dayTick / dl);
+    const c = inp.campaign;
+    const frac = c ? Math.min(1, Math.max(0, c.progress)) : Math.min(1, s.dayTick / dl);
     const px = x0 + (x1 - x0) * frac;
     const bar = h.bar as Canvas2D;
     const dpr = v.dpr;
     const sw = Math.min(bar.width, Math.max(0, Math.round((px - h.barX) * dpr)));
     if (sw > 0) g.drawImage(bar, 0, 0, sw, bar.height, h.barX, h.barY, sw / dpr, bar.height / dpr);
-    if (!night) {
+    if (!night || c) {
       const head = h.head as Canvas2D;
       const hw = head.width / dpr;
       g.drawImage(head, px - hw / 2, cy + 1 - hw / 2, hw, hw);
+    }
+    if (c && c.gust !== 0) {
+      const k = hudScale(v);
+      // The gust: a wind mark drifting past the head the way the sun is pushed (+1 CCW = leftward drag).
+      const dir = c.gust > 0 ? -1 : 1;
+      const drift = ((inp.time * 1.6) % 1) * 10 * k;
+      const wx = Math.min(x1 + 6 * k, Math.max(x0 - 6 * k, px + dir * (14 * k + drift)));
+      const wy = cy - 10 * k;
+      g.fillStyle = cssa(0xffffff, 0.92);
+      g.beginPath();
+      g.arc(wx, wy, 8.5 * k, 0, TAU);
+      g.fill();
+      drawWindGlyph(g, wx, wy, 13 * k, dir);
     }
     if (h.noonSparkle > 0) {
       const t = 1 - h.noonSparkle / 1.2;
@@ -404,12 +460,16 @@ function renderBadge(h: HudState, v: View, m: number): void {
 /** Rebuilds the row layer and the layout of the moving parts. */
 function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: number): void {
   const s = inp.s;
+  const c = inp.campaign;
   const dpr = v.dpr;
   const k = hudScale(v);
   const top = v.safe.top + 8;
   const cy = top + ROW_H / 2;
   h.cy = cy;
   h.builtSnow = h.snowVal;
+  h.builtTarget = h.snowTarget;
+  h.builtLevel = c ? c.id : -1;
+  h.builtMarks = c ? (c.markGate >= 0 ? 1 : 0) + (c.markEclipse >= 0 ? 2 : 0) : 0;
   h.builtDay = h.dayVal;
   h.builtForecast = s.params.forecast;
   h.builtClock = h.clockKey;
@@ -513,7 +573,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   pill(g, lx0, cy - panelH / 2, lx1 - lx0, panelH, cssa(0xffffff, 0.9), true);
   const dH = 22 * k;
   let cx = lx0 + 8 * k;
-  pill(g, cx, cy - dH / 2, dW, dH, '#2B2140', false);
+  pill(g, cx, cy - dH / 2, dW, dH, c ? '#13857C' : '#2B2140', false);
   g.fillStyle = '#FFF8EE';
   drawTabular(g, h, h.dayFont, h.dayText, cx + 6 * k, cy + 1);
   if (h.builtForecast !== 'clear') {
@@ -540,7 +600,111 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   const r1 = lx1 - 12 * k;
   if (r1 - r0 <= 24) return;
   h.rulerShown = true;
-  drawRulerStatic(g, h, s, r0, r1, cy, k, inp, passed === 1, night === 1, dpr);
+  if (c) drawProgressStatic(g, h, c, r0, r1, cy, k, dpr);
+  else drawRulerStatic(g, h, s, r0, r1, cy, k, inp, passed === 1, night === 1, dpr);
+}
+
+/**
+ * The campaign progress bar's still parts (teal track, the checkered finish, the gate or eclipse
+ * marker at the midpoint) into the layer, plus the bar and head sprites.
+ */
+function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCampaign, x0: number, x1: number, cy: number, k: number, dpr: number): void {
+  const hgt = 7 * k;
+  const y = cy - hgt / 2 + 1;
+  h.rulerX0 = x0;
+  h.rulerX1 = x1;
+  h.rulerY = y;
+  h.rulerH = hgt;
+  const grad = (gg: CanvasRenderingContext2D): CanvasGradient => {
+    const gr = gg.createLinearGradient(x0, 0, x1, 0);
+    gr.addColorStop(0, '#7FE3D9');
+    gr.addColorStop(0.5, '#2EC4B6');
+    gr.addColorStop(1, '#13857C');
+    return gr;
+  };
+  g.fillStyle = cssa(INK, 0.1);
+  roundRect(g, x0 - 1, y - 1, x1 - x0 + 2, hgt + 2, (hgt + 2) / 2);
+  g.fill();
+  g.globalAlpha = 0.35;
+  g.fillStyle = grad(g);
+  roundRect(g, x0, y, x1 - x0, hgt, hgt / 2);
+  g.fill();
+  g.globalAlpha = 1;
+
+  const bx = Math.floor((x0 - 1) * dpr) / dpr;
+  const byy = Math.floor((y - 2) * dpr) / dpr;
+  const bar = sized(h.bar, (x1 - bx + 1) * dpr, (hgt + 4) * dpr + 1);
+  h.bar = bar;
+  h.barX = bx;
+  h.barY = byy;
+  const bg = ctx2d(bar);
+  bg.setTransform(1, 0, 0, 1, 0, 0);
+  bg.clearRect(0, 0, bar.width, bar.height);
+  bg.setTransform(dpr, 0, 0, dpr, -bx * dpr, -byy * dpr);
+  bg.fillStyle = grad(bg);
+  roundRect(bg, x0, y, x1 - x0, hgt, hgt / 2);
+  bg.fill();
+
+  const hr = 5 * k;
+  const hs = Math.ceil((hr * 2 + 4) * dpr);
+  const head = sized(h.head, hs, hs);
+  h.head = head;
+  const hg = ctx2d(head);
+  hg.setTransform(1, 0, 0, 1, 0, 0);
+  hg.clearRect(0, 0, hs, hs);
+  hg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  hg.fillStyle = '#FFFFFF';
+  hg.strokeStyle = '#13857C';
+  hg.lineWidth = 2;
+  hg.beginPath();
+  hg.arc(hs / dpr / 2, hs / dpr / 2, hr, 0, TAU);
+  hg.fill();
+  hg.stroke();
+
+  // No noon boss on a level (the clock still says when it is).
+  h.noonX = (x0 + x1) / 2;
+  h.noonY = y - 6 * k;
+  h.noonR = 0;
+
+  // Markers on the bar: the gate arch, the eclipse disc.
+  const mark = (p: number, id: string): void => {
+    if (p < 0) return;
+    const mx = x0 + (x1 - x0) * p;
+    const my = y - 8 * k;
+    g.fillStyle = '#FFFFFF';
+    g.beginPath();
+    g.arc(mx, my, 7 * k, 0, TAU);
+    g.fill();
+    g.strokeStyle = cssa(INK, 0.25);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(mx, my + 7 * k);
+    g.lineTo(mx, y + hgt);
+    g.stroke();
+    drawConceptGlyph(g, id, mx, my, 10 * k);
+  };
+  mark(c.markGate, 'gate');
+  mark(c.markEclipse, 'eclipse');
+
+  // The finish: a small checkered flag on a pole at the bar's end.
+  const fx = x1;
+  const fy = y - 1;
+  g.strokeStyle = '#2B2140';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(fx, y + hgt + 1);
+  g.lineTo(fx, fy - 11 * k);
+  g.stroke();
+  const sq = 2.6 * k;
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      g.fillStyle = (row + col) % 2 === 0 ? '#2B2140' : '#FFFFFF';
+      g.fillRect(fx + 1 + col * sq, fy - 11 * k + row * sq, sq, sq);
+    }
+  }
+  g.strokeStyle = cssa(INK, 0.5);
+  g.lineWidth = 0.8;
+  g.strokeRect(fx + 1, fy - 11 * k, 3 * sq, 3 * sq);
 }
 
 /** The ruler keeps at least this width (CSS px) whenever the left panel shows. */

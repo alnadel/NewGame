@@ -9,7 +9,7 @@
 
 import { FORECASTS, type BiomeId, type ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import { drawBiomeGlyph } from './glyphs.ts';
+import { drawBiomeGlyph, drawConceptGlyph, drawGoalGlyph } from './glyphs.ts';
 import { roundRect } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -54,9 +54,30 @@ export interface Banners {
   dayFont: string;
   lineFont: string;
   nightFont: string;
+  /**
+   * The level intro card (CAMPAIGN_PLAN §4): seconds since it appeared (−1 none), seconds since it
+   * was dismissed (−1 while it holds), its words, and the blurb wrapped for the width it was laid
+   * out at (levelWrapW; rewrapped when that changes).
+   */
+  level: number;
+  levelOut: number;
+  levelKicker: string;
+  levelTitle: string;
+  levelConcept: string | null;
+  levelConceptName: string;
+  levelBlurb: string;
+  levelGoal: string;
+  levelBiome: BiomeId;
+  levelLines: string[];
+  levelWrapW: number;
+  levelTitleW: number;
+  kickerFont: string;
+  titleFont: string;
+  blurbFont: string;
+  tapFont: string;
 }
 
-export type StampKind = 'noon' | 'teal' | 'gold';
+export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss';
 
 /** Stamp timing (s): slam in, then fade out (the hold is per stamp). */
 export const STAMP_IN = 0.22;
@@ -66,7 +87,12 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [string, string, string]>>
   noon: ['#FFC23D', '#FF6A3D', '#2B2140'],
   teal: ['#2EC4B6', '#13857C', '#10302D'],
   gold: ['#FFE08A', '#D99A12', '#2B2140'],
+  // The finish line: a white plate with checkered bands; the miss a rose plate.
+  finish: ['#FFFFFF', '#2B2140', '#2B2140'],
+  miss: ['#FFB3C1', '#B8324F', '#3A1020'],
 };
+/** The level card's slide-out (s). */
+const LEVEL_OUT_S = 0.4;
 
 export function createBanners(): Banners {
   return {
@@ -97,7 +123,47 @@ export function createBanners(): Banners {
     dayFont: '',
     lineFont: '',
     nightFont: '',
+    level: -1,
+    levelOut: -1,
+    levelKicker: '',
+    levelTitle: '',
+    levelConcept: null,
+    levelConceptName: '',
+    levelBlurb: '',
+    levelGoal: '',
+    levelBiome: 'meadow',
+    levelLines: [],
+    levelWrapW: 0,
+    levelTitleW: 0,
+    kickerFont: '',
+    titleFont: '',
+    blurbFont: '',
+    tapFont: '',
   };
+}
+
+/**
+ * Shows the level's intro card: "LEVEL 6", its name, the concept it teaches (glyph, name, blurb)
+ * and the goal. It holds until dismissLevelCard (the first tap).
+ */
+export function showLevelCard(b: Banners, kicker: string, title: string, concept: string | null, conceptName: string, blurb: string, goal: string, biome: BiomeId): void {
+  b.level = 0;
+  b.levelOut = -1;
+  b.levelKicker = kicker;
+  b.levelTitle = title;
+  b.levelConcept = concept;
+  b.levelConceptName = conceptName;
+  b.levelBlurb = blurb;
+  b.levelGoal = goal;
+  b.levelBiome = biome;
+  b.levelLines.length = 0;
+  b.levelWrapW = 0;
+  b.levelTitleW = 0;
+}
+
+/** The run started: the level card slides out. */
+export function dismissLevelCard(b: Banners): void {
+  if (b.level >= 0 && b.levelOut < 0) b.levelOut = 0;
 }
 
 /** Shows a stamp (it replaces any stamp still on screen). */
@@ -116,6 +182,8 @@ export function resetBanners(b: Banners): void {
   b.goldPulse = 0;
   b.heat = 0;
   b.stamp = -1;
+  b.level = -1;
+  b.levelOut = -1;
 }
 
 /** The night card after surviving day `day`. */
@@ -141,6 +209,16 @@ export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
   if (b.night >= 0) b.night = b.night + dt > 2.4 ? -1 : b.night + dt;
   if (b.day >= 0) b.day = b.day + dt > DAY_S ? -1 : b.day + dt;
   if (b.stamp >= 0) b.stamp = b.stamp + dt > STAMP_IN + b.stampHold + STAMP_OUT ? -1 : b.stamp + dt;
+  if (b.level >= 0) {
+    b.level += dt;
+    if (b.levelOut >= 0) {
+      b.levelOut += dt;
+      if (b.levelOut > LEVEL_OUT_S) {
+        b.level = -1;
+        b.levelOut = -1;
+      }
+    }
+  }
   b.coolPulse = Math.max(0, b.coolPulse - dt);
   b.goldPulse = Math.max(0, b.goldPulse - dt);
   b.heat += ((lowChill ? 1 : 0) - b.heat) * Math.min(1, dt * 3);
@@ -159,9 +237,14 @@ function fonts(b: Banners, scale: number): void {
   b.dayFont = `italic 700 ${Math.round(34 * 1.25 * scale)}px ${SERIF}`;
   b.lineFont = `small-caps 700 ${Math.round(12 * scale)}px ${SANS}`;
   b.nightFont = `italic 700 ${Math.round(26 * scale)}px ${SERIF}`;
+  b.kickerFont = `small-caps 800 ${Math.round(13 * scale)}px ${SANS}`;
+  b.titleFont = `italic 700 ${Math.round(32 * scale)}px ${SERIF}`;
+  b.blurbFont = `500 ${Math.round(14 * scale)}px ${SANS}`;
+  b.tapFont = `small-caps 700 ${Math.round(11 * scale)}px ${SANS}`;
   b.stampW = 0;
   b.dayTitleW = 0;
   b.nightW = 0;
+  b.levelWrapW = 0;
 }
 
 /** Banners and cards, below the HUD band (`top` CSS px). */
@@ -187,7 +270,147 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
     dayCard(g, b, x, top + 74 * scale, scale, a, reducedMotion ? 0 : t);
   }
   if (b.stamp >= 0) drawStamp(g, b, cx, top + 40 * scale, scale, v.vw - 40, reducedMotion);
+  if (b.level >= 0) {
+    const t = b.level;
+    let x = cx;
+    let a = 1;
+    if (reducedMotion) {
+      a = Math.min(1, t / 0.3);
+      if (b.levelOut >= 0) a *= Math.max(0, 1 - b.levelOut / LEVEL_OUT_S);
+    } else if (b.levelOut >= 0) {
+      x = cx - v.vw * 0.9 * (b.levelOut / LEVEL_OUT_S) ** 2;
+    } else if (t < 0.5) {
+      x = cx + v.vw * 0.7 * (1 - easeOutBack(t / 0.5));
+    }
+    // Centred in the space between the HUD band and Nubs' dial (the ghost hand swipes below him).
+    levelCard(g, b, v, x, top, scale, a, t);
+  }
   g.globalAlpha = 1;
+}
+
+/** Greedy word wrap of `text` into lines no wider than maxW (g.font set by the caller). */
+function wrap(g: CanvasRenderingContext2D, text: string, maxW: number, out: string[]): void {
+  out.length = 0;
+  const words = text.split(' ');
+  let line = '';
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (line && g.measureText(next).width > maxW) {
+      out.push(line);
+      line = w;
+    } else {
+      line = next;
+    }
+  }
+  if (line) out.push(line);
+}
+
+/**
+ * The level intro card: kicker, serif name, a rule, the concept row (glyph + small-caps name), the
+ * blurb (wrapped, up to 3 lines), the goal line and a pulsing "tap to start".
+ */
+function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number, top: number, scale: number, a: number, t: number): void {
+  if (a <= 0) return;
+  const w = Math.min(v.vw - 32, 352 * scale);
+  const pad = 18 * scale;
+  const innerW = w - 2 * pad;
+  if (b.levelWrapW !== innerW) {
+    b.levelWrapW = innerW;
+    g.font = b.blurbFont;
+    wrap(g, b.levelBlurb, innerW, b.levelLines);
+    if (b.levelLines.length > 3) {
+      b.levelLines.length = 3;
+      b.levelLines[2] = `${(b.levelLines[2] as string).replace(/[ ,.;:!?]+$/, '')}…`;
+    }
+    g.font = b.titleFont;
+    b.levelTitleW = g.measureText(b.levelTitle).width;
+  }
+  const lineH = 18 * scale;
+  const hasConcept = b.levelConceptName !== '';
+  const blurbH = b.levelLines.length * lineH;
+  // The same run of increments as the layout below, plus the tap line and the bottom margin.
+  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + (22 + 12 + 14 + 14) * scale;
+  // The card sits between the HUD band and the dial: centred in that space, never over Nubs.
+  const dialTop = v.ny - 60 * v.S;
+  const y = Math.max(top + 8, Math.min((top + dialTop) / 2, dialTop - h / 2 - 8)) - h / 2;
+  const x0 = cx - w / 2;
+  g.globalAlpha = a;
+  g.fillStyle = 'rgba(43,33,64,0.18)';
+  roundRect(g, x0, y + 5, w, h, 16 * scale);
+  g.fill();
+  g.fillStyle = b.levelBiome === 'oldtown' ? 'rgba(255,241,230,0.97)' : 'rgba(255,248,238,0.97)';
+  roundRect(g, x0, y, w, h, 16 * scale);
+  g.fill();
+  // A thin teal band along the top edge (the campaign's colour).
+  g.save();
+  roundRect(g, x0, y, w, h, 16 * scale);
+  g.clip();
+  g.fillStyle = '#2EC4B6';
+  g.fillRect(x0, y, w, 5 * scale);
+  g.restore();
+  g.textBaseline = 'middle';
+  g.textAlign = 'center';
+  let ly = y + 14 * scale + 10 * scale;
+  g.fillStyle = '#13857C';
+  g.font = b.kickerFont;
+  g.fillText(b.levelKicker, cx, ly);
+  ly += 16 * scale + 10 * scale;
+  g.fillStyle = '#2B2140';
+  g.font = b.levelTitleW > innerW ? `italic 700 ${Math.round(32 * scale * (innerW / b.levelTitleW))}px ${SERIF}` : b.titleFont;
+  g.fillText(b.levelTitle, cx, ly);
+  ly += 22 * scale;
+  // Rule.
+  g.strokeStyle = 'rgba(43,33,64,0.14)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(x0 + pad, ly + 6 * scale);
+  g.lineTo(x0 + w - pad, ly + 6 * scale);
+  g.stroke();
+  ly += 18 * scale;
+  if (hasConcept) {
+    const glyph = 18 * scale;
+    g.font = b.lineFont;
+    const nameW = g.measureText(b.levelConceptName).width;
+    const rowW = (b.levelConcept ? glyph + 7 * scale : 0) + nameW;
+    let rx = cx - rowW / 2;
+    if (b.levelConcept) {
+      drawConceptGlyph(g, b.levelConcept, rx + glyph / 2, ly + 1, glyph);
+      rx += glyph + 7 * scale;
+    }
+    g.fillStyle = '#2B2140';
+    g.textAlign = 'left';
+    g.font = b.lineFont;
+    g.fillText(b.levelConceptName, rx, ly + 1);
+    g.textAlign = 'center';
+    ly += 26 * scale;
+  }
+  if (blurbH > 0) {
+    g.fillStyle = '#5B5070';
+    g.font = b.blurbFont;
+    for (const line of b.levelLines) {
+      g.fillText(line, cx, ly + lineH / 2);
+      ly += lineH;
+    }
+    ly += 8 * scale;
+  }
+  // The goal, as a small pill.
+  g.font = b.lineFont;
+  const gw = g.measureText(b.levelGoal).width + 34 * scale;
+  const gh = 22 * scale;
+  g.fillStyle = 'rgba(46,196,182,0.16)';
+  roundRect(g, cx - gw / 2, ly, gw, gh, gh / 2);
+  g.fill();
+  drawGoalGlyph(g, cx - gw / 2 + 12 * scale, ly + gh / 2, 11 * scale);
+  g.fillStyle = '#13857C';
+  g.textAlign = 'left';
+  g.fillText(b.levelGoal, cx - gw / 2 + 22 * scale, ly + gh / 2 + 0.5);
+  g.textAlign = 'center';
+  ly += gh + 12 * scale;
+  // "tap to start", breathing.
+  const pulse = b.levelOut >= 0 ? 0 : 0.55 + 0.45 * Math.sin(t * TAU * 0.9);
+  g.fillStyle = `rgba(107,90,122,${0.45 + 0.55 * pulse})`;
+  g.font = b.tapFont;
+  g.fillText('tap or drag to start', cx, ly + 6 * scale);
 }
 
 /** The stamp plate and text, fitted to `maxW` CSS px. */
@@ -243,6 +466,21 @@ function drawStamp(g: CanvasRenderingContext2D, b: Banners, cx: number, y: numbe
   g.lineWidth = 4;
   roundRect(g, -w / 2 + 2, -h / 2 + 2, w - 4, h - 4, 10 * scale);
   g.stroke();
+  if (b.stampKind === 'finish') {
+    // Checkered bands along the top and bottom edges: the finish flag.
+    const sq = Math.max(4, Math.round(7 * scale));
+    g.save();
+    roundRect(g, -w / 2 + 4, -h / 2 + 4, w - 8, h - 8, 8 * scale);
+    g.clip();
+    g.fillStyle = ink;
+    for (let row = 0; row < 2; row++) {
+      for (let x = -w / 2 + 4 + (row % 2) * sq; x < w / 2; x += sq * 2) {
+        g.fillRect(x, -h / 2 + 4 + row * sq, sq, sq);
+        g.fillRect(x + (row % 2 === 0 ? sq : -sq), h / 2 - 4 - (row + 1) * sq, sq, sq);
+      }
+    }
+    g.restore();
+  }
   g.fillStyle = ink;
   g.font = b.stampFont;
   g.textAlign = 'center';
