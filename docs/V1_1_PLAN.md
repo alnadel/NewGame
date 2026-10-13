@@ -97,7 +97,8 @@ All goals are measured with the seeded bots, the career sim, the perf harness an
    - Lazy UI screens (no gain).
 5. **Honest framing.**
    - Bests count from lifetime run 3 onward; the first runs' best is kept as an "eased best" (`stats.easedBest`, fix round 1) and shown, marked, while it is ahead.
-   - The gold ruler flag shows your recent best (best of the last 10 runs).
+   - Fix round 2: bests are kept per rules. `stats.bestMinutes` is the standard-rules best (endless at R4, challenges); every endless run on eased rules (the first runs, R1-R3, the warm-up) feeds `stats.easedBest` and celebrates as "New eased best". The Title shows the best of the next run's rules. The pace line, the gold ruler flag and the "PAST YOUR RECENT BEST" stamp compare a run only with runs at its own rules (`recentBestAt`, 3 runs needed for the flag, 5 for a pace line); "Below your usual" also needs the run before at the same rules and is set in plain ink. On the humanDial career model (20 × 25 runs) "Below your usual" fell from 44% of all runs (74% of R4 runs, 74% of first R4 runs after a promotion) to 6% (0% of R4 and first R4 runs).
+   - The gold ruler flag shows your recent best (best of the last 10 runs at the run's rules).
    - Rungs below R6 are visible in the Journal.
    - Adaptive comfort can be switched off in Settings.
 6. **Save v2.** An old v1.0 tab sees `future` and goes read-only instead of clobbering new fields.

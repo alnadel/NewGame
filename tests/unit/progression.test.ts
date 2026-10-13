@@ -7,6 +7,8 @@ import { addDays } from '../../src/meta/daily.ts';
 import {
   activeMissionViews,
   applyRunResult,
+  nextRunEased,
+  recentBestAt,
   warmupDue,
   beginRun,
   BEST_FROM_RUNS,
@@ -262,6 +264,74 @@ describe('comfort, history and pace', () => {
     s.history = [{ m: 5000, s: 0, r: 0, d: TODAY }, ...history(4, 100)];
     expect(applyRunResult(s, run(200), opts()).outcome.pace).toBe('Your best in 5 runs!');
     expect(applyRunResult(s, run(200, {}, { mode: 'challenge' }), opts()).outcome.pace).toBeNull();
+  });
+
+  it('compares pace only with runs at the same rules, never says "below" right after the ladder moved, and flags it', () => {
+    const at = (h: [number, number][], m: number, o: Partial<ApplyRunOptions> = {}) => {
+      const s = quiet();
+      s.history = h.map(([x, r]) => ({ m: x, s: 0, r, d: TODAY }));
+      const out = applyRunResult(s, run(m), opts(o)).outcome;
+      return [out.pace, out.paceDown];
+    };
+    // Nine R2 runs, then the first R4 run: nothing to compare it with yet (no "Below your usual").
+    const r2: [number, number][] = [100, 200, 300, 400, 500, 600, 700, 800, 900].map((x) => [x, 2]);
+    expect(at(r2, 150, { rung: 4 })).toEqual([null, false]);
+    // Five R4 runs among R2 ones: the R4 window only.
+    const mixed: [number, number][] = [[2000, 2], [300, 4], [2100, 2], [320, 4], [340, 4], [360, 4], [2200, 2]];
+    expect(at(mixed, 400, { rung: 4 })).toEqual(['Your best in 5 runs!', false]);
+    // Below the R4 median, but the run before was at R2: the first run after a change says nothing.
+    expect(at(mixed, 200, { rung: 4 })).toEqual([null, false]);
+    // …and with an R4 run before it, it says so, flagged as a down line.
+    expect(at([...mixed, [380, 4]], 200, { rung: 4 })).toEqual(['Below your usual (11:40 AM)', true]);
+    // The warm-up is rules of its own.
+    expect(at([[300, 4], [320, 4], [340, 4], [360, 4], [380, 4]], 900, { rung: 4, warmup: true })).toEqual([null, false]);
+  });
+
+  it('keeps two bests: standard rules (rung 4, challenges) and eased rules (comfort rungs, the warm-up)', () => {
+    let s = quiet();
+    s.stats.runs = 5;
+    // An R2 run sets the eased best (the first one is never "new"); the standard best is untouched.
+    let r = applyRunResult(s, run(900), opts({ rung: 2 }));
+    expect([r.save.stats.easedBest, r.save.stats.bestMinutes, r.outcome.newBest, r.outcome.bestEased]).toEqual([900, 0, false, true]);
+    s = r.save;
+    r = applyRunResult(s, run(950), opts({ rung: 3 }));
+    expect([r.save.stats.easedBest, r.outcome.newBest, r.outcome.bestEased, r.outcome.prevBestMinutes]).toEqual([950, true, true, 900]);
+    s = r.save;
+    // A standard run never competes with the eased best.
+    r = applyRunResult(s, run(400), opts({ rung: 4 }));
+    expect([r.save.stats.bestMinutes, r.save.stats.easedBest, r.outcome.newBest, r.outcome.bestEased]).toEqual([400, 950, false, false]);
+    s = r.save;
+    r = applyRunResult(s, run(450), opts({ rung: 4 }));
+    expect([r.save.stats.bestMinutes, r.outcome.newBest, r.outcome.prevBestMinutes]).toEqual([450, true, 400]);
+    // The warm-up is eased; a challenge is standard.
+    expect(applyRunResult(r.save, run(1000), opts({ rung: 4, warmup: true })).save.stats).toMatchObject({ bestMinutes: 450, easedBest: 1000 });
+    expect(applyRunResult(r.save, run(1000, {}, { mode: 'challenge' }), opts()).save.stats).toMatchObject({ bestMinutes: 1000, easedBest: 950 });
+  });
+
+  it('knows whether the next endless run is eased (the Title shows that best)', () => {
+    const s = quiet();
+    s.stats.runs = 0;
+    expect(nextRunEased(s)).toBe(true);
+    s.stats.runs = 6;
+    s.stats.comfort = 2;
+    expect(nextRunEased(s)).toBe(true);
+    s.stats.comfort = 4;
+    s.history = [{ m: 500, s: 0, r: 4, d: TODAY }];
+    expect(nextRunEased(s)).toBe(false);
+    s.history = [{ m: 500, s: 0, r: 3, d: TODAY }];
+    expect(nextRunEased(s)).toBe(true);
+    s.settings.comfort = false;
+    expect(nextRunEased(s)).toBe(false);
+  });
+
+  it('reads the recent best at one set of rules once 3 runs were played at them', () => {
+    const s = quiet();
+    s.history = [{ m: 2000, s: 0, r: 2, d: TODAY }, ...history(2, 300)];
+    expect(recentBestAt(s, 4)).toBe(0);
+    s.history.push({ m: 350, s: 0, r: 4, d: TODAY }, { m: 999, s: 0, r: 4, d: TODAY, w: 1 });
+    expect(recentBestAt(s, 4)).toBe(350);
+    expect(recentBestAt(s, 2)).toBe(0);
+    expect(recentBestAt(s, 4, true)).toBe(0);
   });
 
   it('reads the recent best from the last 10 runs, tutorial runs ignored', () => {

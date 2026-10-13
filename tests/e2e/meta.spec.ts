@@ -271,3 +271,56 @@ test('Missions reach the Journal and come back (UM10)', async ({ page }) => {
   await page.keyboard.press('Escape');
   await waitForScreen(page, 'missions');
 });
+
+test.describe('pace and bests by rules (fix round 2)', () => {
+  const r = (m: number, rung: number) => ({ m, s: 10, r: rung, d: '2026-10-01' });
+
+  test('"Below your usual" compares with standard runs only and reads in plain ink', async ({ page }) => {
+    await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 20, comfort: 4 }, history: [r(3000, 2), ...[600, 700, 800, 900, 1000, 1100].map((m) => r(m, 4))] });
+    await openGame(page);
+    await startRun(page);
+    await die(page);
+    const pace = page.locator('.res-pace');
+    await expect(pace).toHaveText(/^Below your usual \(/);
+    await expect(pace).toHaveClass(/is-down/);
+    // Plain ink (the --ink-2 token where the line sits), not the accent green of praise.
+    const [color, ink2, accent] = await pace.evaluate((el) => {
+      const probe = (v: string): string => {
+        const d = document.createElement('i');
+        d.style.color = `var(${v})`;
+        el.parentElement!.append(d);
+        const c = getComputedStyle(d).color;
+        d.remove();
+        return c;
+      };
+      return [getComputedStyle(el).color, probe('--ink-2'), probe('--accent-ink')];
+    });
+    expect(color).toBe(ink2);
+    expect(color).not.toBe(accent);
+  });
+
+  test('the first standard run after eased rungs gets no "Below your usual"', async ({ page }) => {
+    await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 20, comfort: 4 }, history: [600, 700, 800, 900, 1000, 1100].map((m) => r(m, 2)) });
+    await openGame(page);
+    await startRun(page);
+    await die(page);
+    await expect(page.locator('.res-pace')).toBeHidden();
+  });
+
+  test('the Title shows the best of the rules the next run is played at', async ({ browser }) => {
+    for (const [comfort, last, eased, day] of [
+      [2, 2, true, 'D2'],
+      [4, 4, false, 'D1'],
+    ] as const) {
+      const ctx = await browser.newContext();
+      const page = await ctx.newPage();
+      await seedSave(page, { v: 2, createdAt: 1, stats: { runs: 20, comfort, bestMinutes: 400, easedBest: 900 }, history: [r(500, last)] });
+      await openGame(page);
+      const chip = page.locator('.chips .chip').first();
+      await expect(chip).toContainText(day);
+      if (eased) await expect(chip).toHaveClass(/is-eased/);
+      else await expect(chip).not.toHaveClass(/is-eased/);
+      await ctx.close();
+    }
+  });
+});

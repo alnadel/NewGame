@@ -1723,6 +1723,12 @@
   font-size: 0.9375rem;
 }
 
+/* "Below your usual": a plain fact, not praise. */
+.res-pace.is-down {
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
 /* After the warm-up run: the challenge it was for. */
 .res-warmup {
   margin-top: 10px;

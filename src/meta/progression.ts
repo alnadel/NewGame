@@ -26,12 +26,12 @@ import {
   type ErrandView,
   type MissionView,
 } from './missions.ts';
-import { cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest } from './save.ts';
+import { cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest, sameRules } from './save.ts';
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
 import { markSunnyDay } from './week.ts';
 
-export { recentBest } from './save.ts';
+export { recentBest, recentBestAt } from './save.ts';
 
 /**
  * The Daily unlocks after this many completed lifetime runs (V1_PLAN §11.3), i.e. once onboarding
@@ -82,9 +82,15 @@ export interface ToastSpec {
 }
 
 export interface RunOutcome {
-  /** Beat a previous best (bests count from lifetime run BEST_FROM_RUNS on; never the first). */
+  /**
+   * Beat a previous best at the run's rules (bests count from lifetime run BEST_FROM_RUNS on; never
+   * the first): the standard best, or the eased best for a run at eased rules (`bestEased`).
+   */
   newBest: boolean;
+  /** The best newBest compares with: the eased best when the run was played at eased rules. */
   prevBestMinutes: number;
+  /** The run was played at eased rules (a comfort rung below standard, or the warm-up run). */
+  bestEased: boolean;
   /** Snow collected during the run, with the Welcome back ×2 extra. */
   runSnow: number;
   /** Snow paid by missions completed this run. */
@@ -104,11 +110,13 @@ export interface RunOutcome {
   dailyUnlocked: boolean;
   /** Award chips for the results screen, in display order. */
   toasts: ToastSpec[];
-  /** Endless runs: how this run compares with the recent ones (null when there's nothing to say). */
+  /** Endless runs: how this run compares with recent ones at its rules (null when there's nothing to say). */
   pace: string | null;
+  /** The pace line says the run was below the usual (shown in neutral ink, not as praise). */
+  paceDown: boolean;
   /** Today's errand after this run. */
   errand: ErrandView | null;
-  /** recentBest before this run (the gold ruler flag the run was played against). */
+  /** recentBest before this run (any rules: missions and the Title's milestones measure from it). */
   recentBestBefore: number;
   /** The comfort rung of the next endless run. */
   comfortAfter: number;
@@ -184,20 +192,43 @@ function sortedIds<T extends string>(catalog: readonly { id: T }[], owned: Itera
 }
 
 /**
- * How this endless run compares with the recent ones (tutorial runs left out): its best in the
- * last 10, better than most of them, or below their median; null otherwise or with under 5 runs.
+ * How this endless run (the last history entry) compares with the recent runs played at the same
+ * rules (its rung, the warm-up apart; tutorial runs never): its best in the last 10, better than
+ * most of them, or below their median; null otherwise or with under 5 such runs. "Below your usual"
+ * also needs the run before it at the same rules: the first run after the ladder moved is new
+ * ground, not a slump.
  */
-function paceLine(history: Save['history']): string | null {
-  const recent = history.filter((e) => e.r !== 0).slice(-PACE_WINDOW);
+function paceLine(history: Save['history']): { text: string; down: boolean } | null {
+  const last = history[history.length - 1];
+  if (!last || last.r === 0) return null;
+  const recent = history.filter((e) => sameRules(e, last)).slice(-PACE_WINDOW);
   if (recent.length < PACE_MIN_RUNS) return null;
-  const m = (recent[recent.length - 1] as Save['history'][number]).m;
+  const m = last.m;
   const others = recent.slice(0, -1).map((e) => e.m).sort((a, b) => a - b);
   const beaten = others.filter((o) => m > o).length;
-  if (beaten === others.length) return `Your best in ${recent.length} runs!`;
-  if (beaten >= 5) return `Better than ${beaten} of your last ${recent.length} runs`;
+  if (beaten === others.length) return { text: `Your best in ${recent.length} runs!`, down: false };
+  if (beaten >= 5) return { text: `Better than ${beaten} of your last ${recent.length} runs`, down: false };
+  const before = history[history.length - 2];
+  if (!before || !sameRules(before, last)) return null;
   const mid = others.length >> 1;
   const median = others.length % 2 ? (others[mid] as number) : Math.round(((others[mid - 1] as number) + (others[mid] as number)) / 2);
-  return m < median ? `Below your usual (${scoreText(median)})` : null;
+  return m < median ? { text: `Below your usual (${scoreText(median)})`, down: true } : null;
+}
+
+/** The run is played at eased rules: the tutorial and comfort rungs below standard, or the warm-up. */
+function easedRun(r: RunResult, options: ApplyRunOptions): boolean {
+  return r.mode === 'endless' && ((options.rung ?? COMFORT_MAX) < COMFORT_MAX || options.warmup === true);
+}
+
+/**
+ * The next endless run is played at eased rules (the session's ladder: the tutorial first, then the
+ * comfort rung, or the warm-up after the climb; standard with Adaptive comfort off). The Title shows
+ * the best of those rules.
+ */
+export function nextRunEased(save: Save): boolean {
+  if (save.stats.runs === 0) return true;
+  if (!save.settings.comfort) return false;
+  return Math.max(1, save.stats.comfort) < COMFORT_MAX || warmupDue(save);
 }
 
 /** Bits of the forecasts whose noon this run survived (FORECAST_IDS order; Clear never counts). */
@@ -223,16 +254,18 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   const recentBestBefore = recentBest(save);
   const rawSnow = Math.max(0, Math.floor(r.stats.snow));
 
-  // Bests: endless and challenge runs from lifetime run 3 on; Dailies keep their own per-date best.
-  const prevBestMinutes = s.bestMinutes;
-  const countsForBest = r.mode !== 'daily' && runsBefore >= BEST_FROM_RUNS;
-  const newBest = countsForBest && prevBestMinutes > 0 && r.minutes > prevBestMinutes;
-  if (countsForBest && r.minutes > prevBestMinutes) s.bestMinutes = r.minutes;
-  // The first runs' best is kept apart (an "eased best"), so a good early run isn't just lost.
-  if (r.mode === 'endless' && !countsForBest && r.minutes > s.easedBest) s.easedBest = r.minutes;
+  // Bests, from lifetime run 3 on (Dailies keep their own per-date best): standard-rules runs
+  // (challenges, endless at rung 4) set the best; endless runs at eased rules (comfort rungs below
+  // standard, the warm-up) set the eased best, and so do the first runs, which never count.
+  const bestEased = easedRun(r, options);
+  const counts = r.mode !== 'daily' && runsBefore >= BEST_FROM_RUNS;
+  const prevBestMinutes = bestEased ? s.easedBest : s.bestMinutes;
+  const newBest = counts && prevBestMinutes > 0 && r.minutes > prevBestMinutes;
+  if (counts && !bestEased && r.minutes > s.bestMinutes) s.bestMinutes = r.minutes;
+  if (r.mode === 'endless' && (bestEased || !counts) && r.minutes > s.easedBest) s.easedBest = r.minutes;
 
   // Endless runs: the history and the comfort ladder (Daily and challenge runs never touch them).
-  let pace: string | null = null;
+  let pace: { text: string; down: boolean } | null = null;
   if (r.mode === 'endless') {
     const last = save.history[save.history.length - 1];
     const rung = options.rung ?? COMFORT_MAX;
@@ -359,6 +392,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     outcome: {
       newBest,
       prevBestMinutes,
+      bestEased,
       runSnow,
       missionSnow,
       bonusSnow,
@@ -371,7 +405,8 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
       cosmeticsUnlocked,
       dailyUnlocked,
       toasts,
-      pace,
+      pace: pace?.text ?? null,
+      paceDown: pace?.down ?? false,
       errand: errandViewOf(errand, errandDone),
       recentBestBefore,
       comfortAfter: s.comfort,
@@ -388,6 +423,7 @@ export function debugRunOutcome(save: Save, result: RunResult): RunOutcome {
   return {
     newBest: false,
     prevBestMinutes: save.stats.bestMinutes,
+    bestEased: false,
     runSnow: Math.max(0, Math.floor(result.stats.snow)),
     missionSnow: 0,
     bonusSnow: 0,
@@ -401,6 +437,7 @@ export function debugRunOutcome(save: Save, result: RunResult): RunOutcome {
     dailyUnlocked: false,
     toasts: [],
     pace: null,
+    paceDown: false,
     errand: null,
     recentBestBefore: recentBest(save),
     comfortAfter: save.stats.comfort,

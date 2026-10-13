@@ -194,7 +194,7 @@ describe('Results labels (U3, U8, U17)', () => {
       death: { day: 2, tDay: 0, minutes: 1240, time: '2:40 PM', x: 0, y: 0, cause: 'plain', line: 'Melted by You at 2:40 PM.' },
       ...result,
     },
-    outcome: { newBest: false, prevBestMinutes: 0, runSnow: 0, missionSnow: 0, bonusSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [], pace: null, errand: null, recentBestBefore: 0, comfortAfter: 4 },
+    outcome: { newBest: false, prevBestMinutes: 0, bestEased: false, runSnow: 0, missionSnow: 0, bonusSnow: 0, snowEarned: 0, walletBefore: 0, walletAfter: 0, missions: [], missionsCompleted: [], achievementsUnlocked: [], cosmeticsUnlocked: [], dailyUnlocked: false, toasts: [], pace: null, paceDown: false, errand: null, recentBestBefore: 0, comfortAfter: 4 },
     ...over,
   });
   const saveWith = (tries: number): Save => {

@@ -134,7 +134,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const mapCatch = h('div', { class: 'res-map pe', 'aria-hidden': 'true' });
   mapCatch.addEventListener('pointerdown', retry);
 
-  const ribbon = h('div', { class: 'res-ribbon', 'aria-hidden': 'true' }, icon('trophy'), h('span', null, 'New best'));
+  const ribbonText = h('span', null, 'New best');
+  const ribbon = h('div', { class: 'res-ribbon', 'aria-hidden': 'true' }, icon('trophy'), ribbonText);
   const kicker = h('p', { class: 'kicker res-kicker' });
   const dayBadge = h('span', { class: 'res-day' });
   const clock = h('span', { class: 'res-clock' });
@@ -349,9 +350,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const { day, minute } = splitMinutes(result.minutes);
     dayBadge.textContent = `Day ${day}`;
     clock.textContent = formatTimeOfDay(minute);
-    // The ribbon is decorative; the heading carries "New best" for screen readers.
-    time.setAttribute('aria-label', `${outcome.newBest ? 'New best! ' : ''}Day ${day}, ${formatTimeOfDay(minute)}`);
+    // The ribbon is decorative; the heading carries "New best" for screen readers. A best at eased
+    // rules (a comfort rung, the warm-up) says so: it is not the standard best.
+    const bestWords = outcome.bestEased ? 'New eased best' : 'New best';
+    ribbonText.textContent = bestWords;
+    time.setAttribute('aria-label', `${outcome.newBest ? `${bestWords}! ` : ''}Day ${day}, ${formatTimeOfDay(minute)}`);
     ribbon.classList.toggle('is-on', outcome.newBest);
+    ribbon.classList.toggle('is-eased', outcome.newBest && outcome.bestEased);
 
     // Retry replays this run's kind; a Daily that can't count any more says so; after the warm-up
     // it starts the challenge.
@@ -361,6 +366,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     hide(tip, !view.tip);
     pace.textContent = outcome.pace ?? '';
     hide(pace, outcome.pace === null);
+    // Praise in the accent; "Below your usual" in plain ink.
+    pace.classList.toggle('is-down', outcome.paceDown);
     hide(warmup, !view.warmupFor);
     if (view.warmupFor) {
       warmup.replaceChildren('Now beat ', h('bdi', null, view.warmupFor.name || 'your friend'), `: ${formatScore(view.warmupFor.minutes)}`);

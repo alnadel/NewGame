@@ -53,7 +53,7 @@ import {
   equipCosmetic,
   isDailyUnlocked,
   nextMilestone,
-  recentBest,
+  recentBestAt,
   resetProgress,
   setDailyPar,
   shouldShowInstallSheet,
@@ -1759,7 +1759,8 @@ export class Session {
 
   /**
    * The HUD's gold flag (frozen for the run in progress, live on the Title and menus): the Daily's
-   * best on a Daily, else the recent best (the best of the last 10 runs) from lifetime run 3 on.
+   * best on a Daily, else from lifetime run 3 on the recent best at this run's rules (the best of
+   * the last 10 runs at its rung, once there are 3; challenges play the standard rules).
    */
   private livePb(): number {
     const save = this.d.store.get();
@@ -1767,8 +1768,14 @@ export class Session {
       const st = dailyStatus(save, this.dailyDate);
       return st.bestMinutes > 0 ? st.bestMinutes : -1;
     }
-    const recent = recentBest(save);
+    const recent = this.recentBestOf(this.s);
     return recent > 0 && save.stats.runs >= 3 ? recent : -1;
+  }
+
+  /** recentBestAt for the rules `run` is played at (its comfort rung and warm-up; else standard). */
+  private recentBestOf(run: SimState): number {
+    const rung = this.rungOf.get(run) ?? -1;
+    return recentBestAt(this.d.store.get(), rung >= 0 ? rung : COMFORT_MAX, this.warmups.has(run));
   }
 
   /** The HUD's white tick: the next milestone of endless runs. */
@@ -1779,19 +1786,20 @@ export class Session {
 
   /**
    * The run's stamp (GR8): a challenge stamps 'PASSED SAM!' when its target is reached; an endless
-   * run with three runs of history stamps 'PAST YOUR RECENT BEST' when it beats that, once.
+   * run with three runs of history at its rules stamps 'PAST YOUR RECENT BEST' when it beats that,
+   * once.
    */
   private armStamp(run: SimState): void {
     this.stampAt = -1;
-    const save = this.d.store.get();
     const c = this.runChallenge;
     if (run.cfg.mode === 'challenge' && c) {
       const name = c.n ?? '';
       this.stampAt = c.m;
       this.stampKind = 'teal';
       this.stampText = name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!';
-    } else if (run.cfg.mode === 'endless' && save.history.length >= 3) {
-      this.stampAt = recentBest(save) + 1;
+    } else if (run.cfg.mode === 'endless' && this.recentBestOf(run) > 0) {
+      // Against runs at the same rules only: a best set on an easier rung isn't this run's bar.
+      this.stampAt = this.recentBestOf(run) + 1;
       this.stampKind = 'gold';
       this.stampText = 'PAST YOUR RECENT BEST';
     }

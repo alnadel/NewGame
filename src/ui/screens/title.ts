@@ -10,6 +10,7 @@ import {
   errandView,
   isDailyUnlocked,
   nextGoal,
+  nextRunEased,
   DAILY_UNLOCK_RUNS,
 } from '../../meta/progression.ts';
 import { logoLayers } from '../art.ts';
@@ -301,8 +302,10 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const save = ctx.save();
     const s = save.stats;
 
-    // The first runs' best (gentler rules, never counted) shows as an eased best while it is ahead.
-    const eased = s.easedBest > s.bestMinutes;
+    // The best of the rules the next run is played at: the eased best (hatched) on a comfort rung
+    // or the warm-up, the standard best at standard rules; the other one when that is still empty.
+    const easedNext = nextRunEased(save);
+    const eased = s.easedBest > 0 && (easedNext || s.bestMinutes <= 0);
     const shownBest = eased ? s.easedBest : s.bestMinutes;
     hide(chipBest, s.runs < BEST_CHIP_RUNS || shownBest <= 0);
     chipBest.classList.toggle('is-eased', eased);

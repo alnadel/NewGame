@@ -314,6 +314,25 @@ export function recentBest(save: Pick<Save, 'history' | 'stats'>): number {
   return best;
 }
 
+/** Two endless runs were played at the same rules: the same rung, the warm-up run apart. */
+export function sameRules(a: Pick<RunRecord, 'r' | 'w'>, b: Pick<RunRecord, 'r' | 'w'>): boolean {
+  return a.r === b.r && (a.w ?? 0) === (b.w ?? 0);
+}
+
+/**
+ * The recent best at one set of rules (`rung`, `warmup`): the best of the last 10 endless runs played
+ * at them, or 0 with fewer than 3 such runs. The HUD's gold flag and the "PAST YOUR RECENT BEST"
+ * stamp use it, so a run is measured against runs played at its own rules (fix round 2).
+ */
+export function recentBestAt(save: Pick<Save, 'history'>, rung: number, warmup = false): number {
+  const rules = warmup ? { r: rung, w: 1 as const } : { r: rung };
+  const same = save.history.filter((e) => sameRules(e, rules));
+  if (same.length < 3) return 0;
+  let best = 0;
+  for (const e of same.slice(-10)) if (e.m > best) best = e.m;
+  return best;
+}
+
 /** Validates a v2-shaped object into a well-formed Save. */
 function sanitize(r: Rec, now: number): Save {
   const base = defaults(now);

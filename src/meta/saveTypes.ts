@@ -21,10 +21,11 @@ export interface Settings {
 
 export interface SaveStats {
   runs: number;
+  /** The best run at standard rules: endless runs at rung 4 (not the warm-up) and challenges. */
   bestMinutes: number;
   /**
-   * The best of the first BEST_FROM_RUNS endless runs (progression.ts), which never count as a best
-   * (their gentler rules): shown as an "eased best" while it beats bestMinutes.
+   * The best endless run at eased rules: comfort rungs below standard, the warm-up run, and the
+   * first BEST_FROM_RUNS runs (progression.ts). Shown, marked eased, where those rules are played.
    */
   easedBest: number;
   bestSnowRun: number;
