@@ -190,11 +190,11 @@ interface LevelOut {
 }
 
 /** A bot plays one campaign level to its finish line (or Nubs melts). */
-function playLevel(id: number, kind: BotKind): LevelOut {
+function playLevel(id: number, kind: BotKind, salt: number): LevelOut {
   const t0 = performance.now();
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
   const s = createRun(campaignConfig(id, { lesson: id === 1 }));
-  const bot = createBot(kind);
+  const bot = createBot(kind, salt);
   // A level is at most 1080 minutes (one and a half days): 6000 ticks is a safe ceiling.
   const limit = 8000;
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < limit) step(s, bot.next(s));
@@ -350,7 +350,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
 type WorkerMsg =
   | { kind: 'run'; task: Task; job: Job }
   | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean }
-  | { kind: 'level'; id: number; bot: BotKind };
+  | { kind: 'level'; id: number; bot: BotKind; salt: number };
 
 if (!isMainThread && workerData === 'sim') {
   parentPort?.on('message', (m: WorkerMsg) => {
@@ -358,7 +358,7 @@ if (!isMainThread && workerData === 'sim') {
       const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen);
       parentPort?.postMessage({ ...out, job: m.task.job, seed: m.task.seed });
     } else if (m.kind === 'level') {
-      parentPort?.postMessage(playLevel(m.id, m.bot));
+      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt));
     } else {
       void runCareer(m.c, m.runs, m.bot, m.days, m.meta).then((o) => parentPort?.postMessage(o));
     }
@@ -526,76 +526,71 @@ const CAMPAIGN_BOTS: readonly BotKind[] = ['oracle', 'reactive', 'humanDial'];
 async function campaignMain(workers: number): Promise<void> {
   const levelArg = arg('level', '');
   const botArg = arg('bot', 'all');
+  // --tries N: the human models play each level N times (another player's decisions each try).
+  const tries = Math.max(1, Number(arg('tries', '1')));
   const bots: BotKind[] = botArg === 'all' ? [...CAMPAIGN_BOTS] : (botArg.split(',') as BotKind[]);
   for (const b of bots) if (!BOT_KINDS.includes(b)) throw new Error(`unknown bot ${b}`);
   const ids = levelArg !== '' ? levelArg.split(',').map(Number) : Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1);
   for (const id of ids) if (!CAMPAIGN_LEVELS[id - 1]) throw new Error(`unknown level ${id}`);
   const msgs: WorkerMsg[] = [];
-  for (const id of ids) for (const bot of bots) msgs.push({ kind: 'level', id, bot });
+  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t });
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
-  const at = (id: number, bot: BotKind): LevelOut | undefined => outs.find((o) => o.id === id && o.bot === bot);
-  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}, ${workers} workers, ${wall.toFixed(1)} s\n`);
-  const cell = (o: LevelOut | undefined): string => {
+  const of = (bot: BotKind, lo = 1, hi = LEVEL_COUNT): LevelOut[] => outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
+  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}, ${workers} workers, ${wall.toFixed(1)} s\n`);
+  const cell = (rs: LevelOut[]): string => {
+    const o = rs[0];
     if (!o) return '-'.padEnd(22);
     const mark = o.passed ? `${'★'.repeat(o.stars)}${'☆'.repeat(3 - o.stars)}` : o.phase === 'won' ? 'goal✗' : `melt ${(100 * o.progress).toFixed(0)}%`;
-    return `${mark} f${o.flakes} s${o.snow} c${Math.max(0, o.minChill).toFixed(0)}`.padEnd(22);
+    const n = rs.length > 1 ? `${rs.filter((r) => r.passed).length}/${rs.length} ` : '';
+    return `${n}${mark} f${o.flakes} s${o.snow} c${Math.max(0, o.minChill).toFixed(0)}`.padEnd(22);
   };
   console.log(`${'lvl'.padEnd(4)} ${'name'.padEnd(18)} ${'start+len'.padEnd(9)} ${'goal'.padEnd(10)} ${'drain'.padEnd(5)} ${bots.map((b) => b.padEnd(22)).join(' ')} concepts`);
   for (const id of ids) {
     const l = CAMPAIGN_LEVELS[id - 1] as LevelDef;
     const goal = l.goal.kind === 'finish' ? 'finish' : `${l.goal.kind} ${l.goal.target}`;
     console.log(
-      `${String(id).padEnd(4)} ${l.name.padEnd(18)} ${`${l.startMinute}+${l.lengthMinutes}`.padEnd(9)} ${goal.padEnd(10)} ${String(l.drain).padEnd(5)} ${bots.map((b) => cell(at(id, b))).join(' ')} ${l.concepts.join(',')}`,
+      `${String(id).padEnd(4)} ${l.name.padEnd(18)} ${`${l.startMinute}+${l.lengthMinutes}`.padEnd(9)} ${goal.padEnd(10)} ${String(l.drain).padEnd(5)} ${bots.map((b) => cell(of(b, id, id))).join(' ')} ${l.concepts.join(',')}`,
     );
   }
-  // Summary per bot: pass rates by chapter block and stars.
+  const pct = (rs: LevelOut[]): number => (100 * rs.filter((o) => o.passed).length) / Math.max(1, rs.length);
+  const meanStars = (rs: LevelOut[]): number => rs.reduce((a, o) => a + o.stars, 0) / Math.max(1, rs.length);
   console.log('\nSummary:');
   for (const bot of bots) {
-    const rs = outs.filter((o) => o.bot === bot);
-    const passed = rs.filter((o) => o.passed).length;
-    const stars = rs.reduce((a, o) => a + o.stars, 0);
-    const three = rs.filter((o) => o.stars === 3).length;
-    const ms = rs.reduce((a, o) => a + o.ms, 0) / Math.max(1, rs.length);
+    const rs = of(bot);
     console.log(
-      `  ${bot.padEnd(9)} passed ${passed}/${rs.length} (${((100 * passed) / Math.max(1, rs.length)).toFixed(1)}%), stars ${stars}/${3 * rs.length}, 3-star ${three}, melted ${rs.filter((o) => o.phase === 'dead').length}, goal missed ${rs.filter((o) => o.phase === 'won' && !o.passed).length}, ${ms.toFixed(0)} ms/level`,
+      `  ${bot.padEnd(9)} passed ${pct(rs).toFixed(1)}% of ${rs.length}, stars ${meanStars(rs).toFixed(2)}/level (1-40: ${meanStars(of(bot, 1, 40)).toFixed(2)}), 3-star ${rs.filter((o) => o.stars === 3).length}, melted ${rs.filter((o) => o.phase === 'dead').length}, goal missed ${rs.filter((o) => o.phase === 'won' && !o.passed).length}, ${(rs.reduce((a, o) => a + o.ms, 0) / Math.max(1, rs.length)).toFixed(0)} ms/level`,
     );
   }
-  const worlds = new Map<number, LevelOut>();
-  for (const o of outs) {
-    const cur = worlds.get(o.id);
-    if (!cur || o.chunks > cur.chunks) worlds.set(o.id, o);
+  // Per chapter: pass % and mean stars for each bot (the chapter ramp).
+  console.log(`\n  ${'chapter'.padEnd(8)} ${bots.map((b) => `${b} pass ★`.padEnd(18)).join(' ')}`);
+  for (let c = 1; c <= LEVEL_COUNT / 10; c++) {
+    if (!ids.some((id) => Math.ceil(id / 10) === c)) continue;
+    console.log(`  ${String(c).padEnd(8)} ${bots.map((b) => `${pct(of(b, c * 10 - 9, c * 10)).toFixed(0)}% ${meanStars(of(b, c * 10 - 9, c * 10)).toFixed(2)}`.padEnd(18)).join(' ')}`);
   }
+  const worlds = new Map<number, LevelOut>();
+  for (const o of outs) if (!worlds.has(o.id) || o.chunks > (worlds.get(o.id) as LevelOut).chunks) worlds.set(o.id, o);
   const ws = [...worlds.values()];
   const chunks = ws.reduce((a, o) => a + o.chunks, 0);
   console.log(`  worlds: ${chunks} chunks, rescues/chunk ${(ws.reduce((a, o) => a + o.rescues, 0) / Math.max(1, chunks)).toFixed(3)}, unresolved ${ws.reduce((a, o) => a + o.unresolved, 0)}`);
 
   // Gates (CAMPAIGN_PLAN §3 "Fairness").
   const failures: string[] = [];
-  const gate = (hard: boolean, what: string, ok: boolean, got: string): void => {
+  const gate = (hard: boolean, what: string, bot: BotKind, hi: number, bar: number): void => {
+    if (!bots.includes(bot)) return;
+    const rs = of(bot, 1, hi);
+    const p = pct(rs);
+    const ok = rs.length > 0 && p >= 100 * bar;
     if (hard && !ok) failures.push(what);
-    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}`);
-  };
-  const share = (bot: BotKind, lo: number, hi: number): [number, number] => {
-    const rs = outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
-    return [rs.filter((o) => o.passed).length, rs.length];
+    const failed = [...new Set(rs.filter((o) => !o.passed).map((o) => o.id))];
+    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${p.toFixed(1)}% of ${rs.length}${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
   };
   console.log('\nGates:');
-  if (bots.includes('oracle')) {
-    const [p, n] = share('oracle', 1, LEVEL_COUNT);
-    const failed = outs.filter((o) => o.bot === 'oracle' && !o.passed).map((o) => o.id);
-    gate(true, 'oracle passes every level', p === n && n > 0, `${p}/${n}${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
-  }
-  if (bots.includes('reactive')) {
-    const [p, n] = share('reactive', 1, 100);
-    const failed = outs.filter((o) => o.bot === 'reactive' && o.id <= 100 && !o.passed).map((o) => o.id);
-    gate(true, 'reactive passes ≥ 90% of levels 1-100', n > 0 && p / n >= 0.9, `${p}/${n} (${((100 * p) / Math.max(1, n)).toFixed(1)}%)${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
-  }
-  if (bots.includes('humanDial')) {
-    const [p, n] = share('humanDial', 1, 40);
-    gate(false, 'humanDial passes ≥ 70% of levels 1-40 (advisory)', n > 0 && p / n >= 0.7, `${p}/${n} (${((100 * p) / Math.max(1, n)).toFixed(1)}%)`);
-  }
+  gate(true, 'oracle passes every level', 'oracle', LEVEL_COUNT, 1);
+  gate(true, 'reactive passes ≥ 95% of levels 1-100', 'reactive', 100, 0.95);
+  gate(false, 'humanDial passes ≥ 75% of levels 1-40 (advisory)', 'humanDial', 40, 0.75);
+  gate(false, 'humanDial passes ≥ 90% of levels 1-10 (advisory)', 'humanDial', 10, 0.9);
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
     process.exit(1);

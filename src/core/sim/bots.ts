@@ -333,7 +333,7 @@ function wideLasting(now: Uint8Array, next: Uint8Array, minArc: number, out: Uin
  * The human model; `lastingShare` is the share of decisions that read the lasting shade (0 for
  * 'human', so it draws exactly the v1.0 stream).
  */
-function humanBot(kind: 'human' | 'humanDial', lastingShare: number): Bot {
+function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: number): Bot {
   const cfg = TUNING.bots.human;
   const msTicks = (ms: number): number => Math.round((ms * TICK_HZ) / 1000);
   const f = frame();
@@ -384,7 +384,7 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number): Bot {
   return {
     kind,
     next(s: SimState): InputFrame {
-      if (!rng) rng = rngFor(s.cfg.seed, 'bot', kind);
+      if (!rng) rng = salt ? rngFor(s.cfg.seed, 'bot', kind, salt) : rngFor(s.cfg.seed, 'bot', kind);
       if (s.guide.tick !== seenGuide) {
         seenGuide = s.guide.tick;
         (now[head] as Uint8Array).set(s.guide.now);
@@ -445,7 +445,8 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number): Bot {
   };
 }
 
-export function createBot(kind: BotKind): Bot {
+/** `salt` (human models only) draws another player's decision stream on the same world; 0 is the default stream. */
+export function createBot(kind: BotKind, salt = 0): Bot {
   switch (kind) {
     case 'idle':
       return idleBot();
@@ -454,9 +455,9 @@ export function createBot(kind: BotKind): Bot {
     case 'reactive':
       return reactiveBot();
     case 'human':
-      return humanBot('human', 0);
+      return humanBot('human', 0, salt);
     case 'humanDial':
-      return humanBot('humanDial', TUNING.bots.human.lastingShare);
+      return humanBot('humanDial', TUNING.bots.human.lastingShare, salt);
     default:
       return oracleBot();
   }
