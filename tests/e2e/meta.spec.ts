@@ -202,7 +202,7 @@ for (const size of SIZES) {
     await openGame(page);
     await page.getByRole('button', { name: /^Profile, best/ }).click();
     await waitForScreen(page, 'profile');
-    await expect(page.locator('.pf-chart i')).toHaveCount(30);
+    await expect(page.locator('.scr-profile .jbar')).toHaveCount(30);
     await expect(page.locator('.scr-profile .sr-only', { hasText: /^Last 30 runs/ })).toHaveText(/^Last 30 runs\. Best: /);
     await noSidewaysScroll(page, 'Profile');
     await info.attach(`profile-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });

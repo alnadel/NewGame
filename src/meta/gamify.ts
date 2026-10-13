@@ -5,7 +5,7 @@
 // change the save return a new one and never mutate their input.
 
 import { chapterOf, FORECAST_IDS, LEVELS_PER_CHAPTER } from '../core/index.ts';
-import { ACHIEVEMENTS, COSMETICS, getCosmetic, type AchievementId, type Cosmetic, type CosmeticId } from './content.ts';
+import { COSMETICS, getAchievement, type AchievementId, type Cosmetic, type CosmeticId } from './content.ts';
 import { daysBetween, localDate } from './daily.ts';
 import type { GamifyState, Save } from './saveTypes.ts';
 
@@ -212,32 +212,29 @@ const bits = (n: number): number => {
 const passedIn = (save: Save, n: number): number => save.campaign.stars.slice(0, n).filter((x) => x > 0).length;
 const FORECASTER_MASK = (['breezy', 'overcast', 'heat', 'long'] as const).reduce((m, id) => m | (1 << FORECAST_IDS.indexOf(id)), 0);
 
+type Gauge = readonly [(s: Save) => number, number];
+const stat = (k: 'runs' | 'maxDay' | 'phews' | 'dailyDaysPlayed', target: number): Gauge => [(s) => s.stats[k], target];
+/** Counted trophies: what they measure and the goal (the star rewards count Journey stars). */
+const GAUGES: Readonly<Partial<Record<AchievementId, Gauge>>> = {
+  'first-light': stat('runs', 1),
+  'night-owl': [(s) => Number(s.stats.reachedNight), 1],
+  'high-noon': [(s) => Math.max(s.stats.bestMinutes, s.stats.easedBest), 1830],
+  solstice: stat('maxDay', 5),
+  'seventh-sun': stat('maxDay', 7),
+  'phew-nomenal': stat('phews', 25),
+  'daily-habit': stat('dailyDaysPlayed', 7),
+  'sunny-week': [(s) => bits(s.week.days), 7],
+  forecaster: [(s) => bits(s.stats.forecastNoons & FORECASTER_MASK), 4],
+  'journey-10': [(s) => passedIn(s, 10), 10],
+  'journey-100': [(s) => passedIn(s, 100), 100],
+  'three-star-20': [(s) => s.campaign.stars.filter((x) => x >= 3).length, 20],
+};
+
 /** How far the player is toward a trophy: `value` of `target` (full once unlocked; 0/1 for one-run feats). */
 export function trophyProgress(save: Save, id: AchievementId): { value: number; target: number } {
-  const st = save.stats;
-  const def = ACHIEVEMENTS.find((a) => a.id === id);
-  const stars = save.campaign.stars.reduce((n, x) => n + x, 0);
-  const of = (value: number, target: number): { value: number; target: number } => ({ value: Math.min(target, Math.max(0, value)), target });
-  let p: { value: number; target: number };
-  if (def?.stars !== undefined) p = of(stars, def.stars);
-  else {
-    switch (id) {
-      case 'first-light': p = of(st.runs, 1); break;
-      case 'night-owl': p = of(st.reachedNight ? 1 : 0, 1); break;
-      case 'high-noon': p = of(Math.max(st.bestMinutes, st.easedBest), 1830); break;
-      case 'solstice': p = of(st.maxDay, 5); break;
-      case 'seventh-sun': p = of(st.maxDay, 7); break;
-      case 'phew-nomenal': p = of(st.phews, 25); break;
-      case 'daily-habit': p = of(st.dailyDaysPlayed, 7); break;
-      case 'sunny-week': p = of(bits(save.week.days), 7); break;
-      case 'forecaster': p = of(bits(st.forecastNoons & FORECASTER_MASK), 4); break;
-      case 'journey-10': p = of(passedIn(save, 10), 10); break;
-      case 'journey-100': p = of(passedIn(save, 100), 100); break;
-      case 'three-star-20': p = of(save.campaign.stars.filter((x) => x >= 3).length, 20); break;
-      default: p = of(0, 1);
-    }
-  }
-  return save.unlocks.achievements.includes(id) ? { value: p.target, target: p.target } : p;
+  const goal = getAchievement(id)?.stars;
+  const [read, target] = goal !== undefined ? [(s: Save) => s.campaign.stars.reduce((n, x) => n + x, 0), goal] : (GAUGES[id] ?? [() => 0, 1]);
+  return { value: save.unlocks.achievements.includes(id) ? target : Math.min(target, Math.max(0, read(save))), target };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -575,7 +572,7 @@ export function awardRun(next: Save, input: RunAwardInput): { outcome: GamifyOut
     else if (r.kind === 'globe') g.globes += r.amount;
   }
   for (const id of input.trophies) {
-    const a = ACHIEVEMENTS.find((x) => x.id === id);
+    const a = getAchievement(id);
     if (a?.reward) rewards.push({ kind: 'cosmetic', amount: 1, cosmetic: a.reward, title: a.name });
   }
   const fresh = storeFeatures(next).filter((f) => !featureUnlocked(input.before, f));
@@ -629,9 +626,4 @@ export function upgradeToV4(save: Save): void {
   g.seenItems = [];
   g.seenItems = newItems(save);
   g.seenTrophies = save.unlocks.achievements.length;
-}
-
-/** The cosmetic a reward holds, if any. */
-export function rewardItem(r: Reward): Cosmetic | undefined {
-  return r.cosmetic ? getCosmetic(r.cosmetic) : undefined;
 }

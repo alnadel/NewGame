@@ -14,7 +14,7 @@ import { button, hide, menuHeader, progressBar } from '../widgets.ts';
 export function createMissionsScreen(ctx: UiContext): Screen {
   const streak = streakCard(ctx);
   const missionList = h('ul', { class: 'mission-list' });
-  const pips = h('span', { class: 'mset-pips', 'aria-hidden': 'true' });
+  const pips = h('span', { 'aria-hidden': 'true' });
   const setText = h('span', null);
   const set = h('p', { class: 'mset' }, globeSvg(), setText, pips);
 

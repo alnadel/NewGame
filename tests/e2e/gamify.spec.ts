@@ -97,12 +97,12 @@ test.describe('the Profile', () => {
       await openProfile(page);
       await expect(page.locator('.pf-hero .rank-name')).toHaveText('Flurry');
       await expect(page.locator('.pf-road li')).toHaveCount(6);
-      await expect(page.locator('.pf-trophies li')).toHaveCount(6);
-      await expect(page.locator('.pf-trophy.is-on')).toHaveCount(2);
+      await expect(page.locator('.scr-profile .badges li')).toHaveCount(6);
+      await expect(page.locator('.scr-profile .badge.is-on')).toHaveCount(2);
       await page.getByRole('button', { name: /^Show all/ }).click();
-      await expect(page.locator('.pf-trophies li')).toHaveCount(24);
+      await expect(page.locator('.scr-profile .badges li')).toHaveCount(24);
       await expect(page.locator('.pf-globes')).toBeVisible();
-      await expect(page.locator('.pf-chart i')).toHaveCount(6);
+      await expect(page.locator('.scr-profile .jbar')).toHaveCount(6);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
       expect(wide).toBe(true);
       await info.attach(`profile-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });

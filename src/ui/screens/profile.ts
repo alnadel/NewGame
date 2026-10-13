@@ -1,24 +1,13 @@
 // The Profile (v1.4, docs/V1_4_PLAN.md): the Sun Rank with the rank road and its rewards, waiting
 // Snow Globes, the daily streak, trophies with their progress, the collection and the records that
-// were the Journal (bests, the last 30 endless runs, lifetime totals). Opened from the rank badge
-// and from Missions; Back returns there. Opening it marks the trophies seen.
+// were the Journal (bests, the last 30 endless runs, lifetime totals; ui.css's Journal and badge
+// styles). Opened from the rank badge, the Title's best chip and Missions; Back returns there.
+// Opening it marks the trophies seen.
 
 import { formatScore } from '../../core/format.ts';
 import { ACHIEVEMENTS, COSMETICS, getCosmetic } from '../../meta/content.ts';
-import {
-  featureIsNew,
-  featureUnlocked,
-  markFeatureSeen,
-  markTrophiesSeen,
-  nextGlobeRank,
-  rankRoad,
-  rankView,
-  rarity,
-  trophyProgress,
-  trophyTier,
-} from '../../meta/gamify.ts';
+import { featureIsNew, featureUnlocked, markFeatureSeen, markTrophiesSeen, nextGlobeRank, rankRoad, rankView, rarity, trophyProgress, trophyTier } from '../../meta/gamify.ts';
 import { CAMPAIGN_STARS_MAX, totalStars } from '../../meta/progression.ts';
-import { scoreText } from '../../meta/share.ts';
 import { h, setChildren } from '../dom.ts';
 import { globeSvg, openGlobes, rankRing, streakCard } from '../gamify.ts';
 import { icon, type IconName } from '../icons.ts';
@@ -33,201 +22,165 @@ const MIN_BAR = 0.04;
 /** Trophies shown until "Show all": the unlocked ones first, then the closest to done. */
 const TROPHIES_SHOWN = 6;
 
-const card = (title: Node | string, ...children: (Node | null)[]): HTMLElement =>
-  h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title), ...children);
+const fill = (bar: HTMLElement, f: number): void => {
+  (bar.firstElementChild as HTMLElement).style.width = `${Math.round(Math.min(1, f) * 100)}%`;
+};
 
 export function createProfileScreen(ctx: UiContext): Screen {
   let origin: ScreenId = 'title';
   /** Trophies unlocked since the last visit, counted on entry (before they are marked seen). */
   let fresh = 0;
+  let showAll = false;
 
-  // --- Rank -------------------------------------------------------------------------------------
   const ring = rankRing();
-  ring.el.setAttribute('aria-hidden', 'true');
+  const kicker = h('span', { class: 'rank-kicker' });
   const rankName = h('span', { class: 'rank-name' });
-  const xpFill = h('i', { class: 'xp-fill' });
-  const xpCount = h('span', { class: 'xp-count num' });
-  const xpNext = h('span', { class: 'xp-next' });
-  const hero = h(
-    'section',
-    { class: 'card pf-hero' },
-    ring.el,
-    h('span', { class: 'rank-text' }, h('span', { class: 'rank-kicker' }), rankName),
-    h('span', { class: 'xp-bar', 'aria-hidden': 'true' }, xpFill),
-    h('span', { class: 'xp-foot' }, xpCount, xpNext),
-  );
-  const road = h('ol', { class: 'pf-road', 'aria-label': 'Next ranks and their rewards' });
+  const xpBar = progressBar(0, 'xp-bar');
+  const xpCount = h('span', { class: 'num' });
+  const xpNext = h('span', null);
+  const hero = h('section', { class: 'card pf-hero' }, ring.el, h('span', { class: 'rank-text' }, kicker, rankName), xpBar, h('span', { class: 'xp-foot' }, xpCount, xpNext));
+  const road = h('ol', { class: 'pf-road' });
 
-  // --- Waiting globes, streak -------------------------------------------------------------------
   const globeCount = h('strong', null);
-  const openBtn = button(ctx, { label: 'Open', icon: 'gift', variant: 'gold', className: 'pf-open', sound: null, onPress: () => void openGlobes(ctx) });
-  const globes = h('section', { class: 'card pf-globes' }, globeSvg(), h('div', null, globeCount, h('span', null, 'Each holds an item you don’t own yet.')), openBtn);
+  const globes = h('section', { class: 'card pf-globes' }, globeSvg(), h('div', null, globeCount, 'Each holds an item you don’t own yet.'),
+    button(ctx, { label: 'Open', icon: 'gift', variant: 'gold', className: 'pf-open', sound: null, onPress: () => void openGlobes(ctx) }));
   const streak = streakCard(ctx);
 
-  // --- Trophies -----------------------------------------------------------------------------------
-  const trophyCount = h('span', { class: 'card-count' });
+  const count = (): HTMLElement => h('span', { class: 'card-count' });
+  const trophyCount = count();
   const trophyNew = h('span', { class: 'pf-new' });
-  const trophies = h('ul', { class: 'pf-trophies' });
-  let showAll = false;
-  const moreBtn = button(ctx, { label: 'Show all', className: 'pf-more', onPress: () => {
+  const trophies = h('ul', { class: 'badges' });
+  const more = button(ctx, { label: '', className: 'pf-more', onPress: () => {
     showAll = !showAll;
     refresh();
   } });
 
-  // --- Collection -------------------------------------------------------------------------------
-  const collectionCount = h('span', { class: 'card-count' });
-  const collectionBar = progressBar(0, 'bar bar--lg');
+  const ownedCount = count();
+  const ownedBar = progressBar(0, 'bar bar--lg');
   const swatches = h('ul', { class: 'pf-swatches', 'aria-hidden': 'true' });
-  const wardrobeBtn = button(ctx, { label: 'Wardrobe', icon: 'wardrobe', onPress: () => ctx.go('wardrobe') });
   const starsCount = h('span', { class: 'num' });
   const starsBar = progressBar(0, 'bar bar--lg');
+  const wardrobeBtn = button(ctx, { label: 'Wardrobe', icon: 'wardrobe', onPress: () => ctx.go('wardrobe') });
   const journeyBtn = button(ctx, { label: 'Journey', icon: 'map', onPress: () => {
     ctx.go('journey');
     ctx.cb.openJourney();
   } });
 
-  // --- Records (the Journal) --------------------------------------------------------------------
-  const bests = h('div', { class: 'pf-bests' });
-  const chart = h('div', { class: 'pf-chart', 'aria-hidden': 'true' });
+  const bests = h('div', { class: 'cells pf-bests' });
+  const chart = h('div', { class: 'jchart', 'aria-hidden': 'true' });
   const chartSummary = h('p', { class: 'sr-only' });
-  const chartNote = h('p', { class: 'card-note' });
-  const totals = h('dl', { class: 'pf-totals' });
+  const totals = h('dl', { class: 'jtotals' });
 
+  const card = (title: string, right: Node | null, ...children: Node[]): HTMLElement =>
+    h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title, right), ...children);
   const body = h(
     'div',
     { class: 'menu-body' },
     hero,
-    card('Rank road', road, h('p', { class: 'card-note' }, 'Every run earns XP. Missions and trophies pay extra.')),
+    card('Rank road', null, road, h('p', { class: 'card-note' }, 'Every run earns XP. Missions and trophies pay extra.')),
     globes,
     streak.el,
-    card(h('span', null, 'Trophies', trophyNew), trophies, moreBtn),
-    card(h('span', null, 'Collection'), h('div', { class: 'pf-row' }, collectionBar, collectionCount), swatches,
-      h('div', { class: 'pf-row pf-stars' }, icon('star'), h('span', null, 'Journey stars'), starsCount), starsBar, h('div', { class: 'pf-links' }, wardrobeBtn, journeyBtn)),
-    card('Records', bests, chart, chartSummary, chartNote, totals),
+    card('Trophies', h('span', null, trophyNew, trophyCount), trophies, more),
+    card('Collection', ownedCount, ownedBar, swatches,
+      h('p', { class: 'pf-row' }, icon('star'), 'Journey stars', starsCount), starsBar, h('div', { class: 'pf-links' }, wardrobeBtn, journeyBtn)),
+    card('Records', null, bests, chart, chartSummary, totals),
   );
-  (trophies.parentElement?.querySelector('.card-title') as HTMLElement).append(trophyCount);
-  (swatches.parentElement?.querySelector('.card-title') as HTMLElement).append(collectionCount);
   const el = h('section', { class: 'scr scr-menu scr-profile', 'aria-label': 'Profile' }, h('div', { class: 'menu pe' }, menuHeader(ctx, 'Profile'), body));
-  const total = (iconName: IconName, label: string, value: string): HTMLElement =>
-    h('div', null, h('dt', null, icon(iconName), label), h('dd', null, value));
-  const best = (label: string, value: string): HTMLElement => h('div', { class: 'pf-best' }, h('b', null, value), h('span', null, label));
 
   function refresh(): void {
     const save = ctx.save();
     const st = save.stats;
     const v = rankView(save);
-
     ring.set(v.level, v.fraction);
-    (hero.querySelector('.rank-kicker') as HTMLElement).textContent = `Sun Rank ${v.level}`;
+    kicker.textContent = `Sun Rank ${v.level}`;
     rankName.textContent = v.title;
-    xpFill.style.width = `${(v.fraction * 100).toFixed(1)}%`;
+    fill(xpBar, v.fraction);
     xpCount.textContent = `${v.into} / ${v.need} XP`;
     xpNext.textContent = `Globe at Rank ${nextGlobeRank(save)}`;
-    hero.setAttribute('aria-label', `Sun Rank ${v.level}, ${v.title}. ${v.into} of ${v.need} XP to Rank ${v.level + 1}.`);
 
     setChildren(
       road,
       ...rankRoad(save).map((n) => {
         const globe = n.reward.kind === 'globe';
+        const what = globe ? 'a Snow Globe' : `${n.reward.amount} Snow`;
         return h(
           'li',
-          {
-            class: `pf-node${n.reached ? ' is-now' : ''}${globe ? ' is-globe' : ''}`,
-            'aria-label': `Rank ${n.level}, ${n.title}${n.reached ? ' (now)' : `: ${globe ? 'a Snow Globe' : `${n.reward.amount} Snow`}`}`,
-          },
-          h('span', { class: 'pf-node-n num' }, String(n.level)),
-          h('span', { class: 'pf-node-r' }, ...(n.reached ? [icon('check')] : globe ? [globeSvg('globe-mini')] : [icon('snow'), `+${n.reward.amount}`])),
-          h('span', { class: 'pf-node-t' }, n.title),
+          { class: `pf-node${n.reached ? ' is-now' : ''}${globe ? ' is-globe' : ''}`, 'aria-label': `Rank ${n.level}, ${n.title}${n.reached ? ', now' : `: ${what}`}` },
+          h('b', { class: 'num' }, String(n.level)),
+          h('span', null, ...(n.reached ? [icon('check')] : globe ? [globeSvg('globe-mini')] : [icon('snow'), `+${n.reward.amount}`])),
+          h('small', null, n.title),
         );
       }),
     );
 
     const g = save.gamify.globes;
     hide(globes, g === 0);
-    globeCount.textContent = g === 1 ? '1 Snow Globe to open' : `${g} Snow Globes to open`;
+    globeCount.textContent = `${g} Snow Globe${g === 1 ? '' : 's'} to open`;
     streak.update(save);
     hide(streak.el, st.runs === 0);
 
-    // Trophies: unlocked first (by tier), then the closest to done.
+    // Trophies: unlocked first, then the closest to done.
     const unlocked = new Set(save.unlocks.achievements);
     trophyCount.textContent = `${unlocked.size}/${ACHIEVEMENTS.length}`;
-    trophyNew.textContent = fresh > 0 ? `${fresh} new` : '';
+    trophyNew.textContent = `${fresh} new`;
     hide(trophyNew, fresh === 0);
     const rows = ACHIEVEMENTS.map((a) => ({ a, p: trophyProgress(save, a.id), on: unlocked.has(a.id) }));
     rows.sort((x, y) => Number(y.on) - Number(x.on) || (x.on ? 0 : y.p.value / y.p.target - x.p.value / x.p.target));
-    moreBtn.querySelector('.btn-label')!.textContent = showAll ? 'Show fewer' : `Show all ${ACHIEVEMENTS.length}`;
-    moreBtn.setAttribute('aria-expanded', String(showAll));
+    (more.firstElementChild as HTMLElement).textContent = showAll ? 'Show fewer' : `Show all ${rows.length}`;
     setChildren(
       trophies,
       ...rows.slice(0, showAll ? rows.length : TROPHIES_SHOWN).map(({ a, p, on }) => {
         const tier = trophyTier(a.id);
         const item = a.reward ? getCosmetic(a.reward)?.name : undefined;
-        const counted = p.target > 1;
+        // Counts read as numbers (High Noon's is a clock time: its bar says enough).
+        const n = p.target > 1 && !on && a.id !== 'high-noon' ? `${p.value}/${p.target}` : '';
         return h(
           'li',
-          {
-            class: `pf-trophy is-${tier}${on ? ' is-on' : ''}`,
-            'aria-label': `${on ? `${a.name}: ${a.description}` : `Locked: ${a.name}. ${a.hint}`} ${tier} trophy${counted && !on ? `, ${p.value} of ${p.target}` : ''}${item ? `. Reward: ${item}` : ''}.`,
-          },
-          h('span', { class: 'pf-medal', 'aria-hidden': 'true' }, icon(on ? (tier === 'gold' ? 'trophy' : 'medal') : 'lock')),
-          h('span', { class: 'pf-trophy-name', 'aria-hidden': 'true' }, a.name),
-          h('span', { class: 'pf-trophy-bar', 'aria-hidden': 'true' }, progressBar(p.value / p.target, 'bar'), counted && !on ? `${p.value}/${p.target}` : null),
-          h('span', { class: 'pf-trophy-desc', 'aria-hidden': 'true' }, on ? a.description : a.hint, item ? ` · ${item}` : ''),
+          { class: `badge is-${tier}${on ? ' is-on' : ''}`, 'aria-label': `${on ? `${a.name}: ${a.description}` : `Locked: ${a.name}. ${a.hint}`} ${tier} trophy${n ? `, ${n}` : ''}${item ? `. Reward: ${item}` : ''}.` },
+          h('span', { class: 'badge-medal', 'aria-hidden': 'true' }, icon(on ? 'medal' : 'lock')),
+          h('span', { class: 'badge-name', 'aria-hidden': 'true' }, a.name),
+          h('span', { class: 'badge-desc', 'aria-hidden': 'true' }, on ? a.description : a.hint),
+          on ? null : h('span', { class: 'pf-prog', 'aria-hidden': 'true' }, progressBar(p.value / p.target), n),
+          item ? h('span', { class: 'badge-reward', 'aria-hidden': 'true' }, icon('gift'), item) : null,
         );
       }),
     );
 
-    // Collection: every item, owned ones in their rarity's ring.
+    // Collection: every item, owned ones ringed in their rarity's colour.
     const owned = new Set(save.unlocks.cosmetics);
-    collectionCount.textContent = `${owned.size}/${COSMETICS.length}`;
-    (collectionBar.firstElementChild as HTMLElement).style.width = `${Math.round((owned.size / COSMETICS.length) * 100)}%`;
-    setChildren(
-      swatches,
-      ...COSMETICS.map((c) => {
-        const li = h('li', { class: `pf-swatch${owned.has(c.id) ? '' : ' is-missing'}` }, cosmeticSwatch(c));
-        if (owned.has(c.id)) li.style.setProperty('--r', `var(--r-${rarity(c)})`);
-        return li;
-      }),
-    );
+    ownedCount.textContent = `${owned.size}/${COSMETICS.length}`;
+    fill(ownedBar, owned.size / COSMETICS.length);
+    setChildren(swatches, ...COSMETICS.map((c) => h('li', { class: owned.has(c.id) ? `is-${rarity(c)}` : null }, cosmeticSwatch(c))));
     const stars = totalStars(save);
     starsCount.textContent = `${stars}/${CAMPAIGN_STARS_MAX}`;
-    (starsBar.firstElementChild as HTMLElement).style.width = `${Math.round((stars / CAMPAIGN_STARS_MAX) * 100)}%`;
+    fill(starsBar, stars / CAMPAIGN_STARS_MAX);
     hide(wardrobeBtn, !featureUnlocked(save, 'wardrobe'));
 
-    // Records.
-    const bestDaily = Object.values(save.daily).reduce((m, e) => Math.max(m, e.bestMinutes), 0);
+    // Records (the Journal's bests, chart and totals).
+    const daily = Object.values(save.daily).reduce((m, e) => Math.max(m, e.bestMinutes), 0);
+    const best = Math.max(st.bestMinutes, st.easedBest);
     setChildren(
       bests,
-      best('Best run', st.bestMinutes > 0 ? formatScore(st.bestMinutes) : st.easedBest > 0 ? formatScore(st.easedBest) : '–'),
-      best('Best Daily', bestDaily > 0 ? formatScore(bestDaily) : '–'),
-      best('Best streak', save.gamify.streak.best > 0 ? `${save.gamify.streak.best} d` : '–'),
+      ...([['Best run', best > 0 ? formatScore(best) : '–'], ['Best Daily', daily > 0 ? formatScore(daily) : '–'],
+        ['Best streak', `${save.gamify.streak.best} d`]] as const).map(([k, val]) => h('div', { class: 'cell' }, h('span', { class: 'kicker' }, k), h('span', { class: 'jbest-val' }, val))),
     );
     const c = journalChart(save.history);
     setChildren(
       chart,
       ...c.bars.map((b) => {
-        const bar = h('i', { class: `is-d${Math.min(4, b.day)}${b.best ? ' is-best' : ''}${b.eased ? ' is-eased' : ''}` });
+        const bar = h('i', { class: `jbar jbar--d${Math.min(4, b.day)}${b.best ? ' is-best' : ''}${b.eased ? ' is-eased' : ''}` });
         bar.style.height = `${Math.round(Math.max(MIN_BAR, b.height) * 100)}%`;
         return bar;
       }),
     );
     chartSummary.textContent = journalSummary(c);
     hide(chart, c.bars.length === 0);
-    chartNote.textContent =
-      c.average === null ? 'Your Endless runs show up here once you have played a few.' : `Your last ${c.bars.length} Endless runs. Last 10 average ${scoreText(c.average)}.`;
-    setChildren(
-      totals,
-      total('retry', 'Runs', String(st.runs)),
-      total('clock', 'Time played', playTime(st.playSeconds)),
-      total('moon', 'Days survived', String(st.daysSurvived)),
-      total('flake', 'Flakes', String(st.flakes)),
-      total('phew', 'PHEWs', String(st.phews)),
-      total('swing', 'SWINGs', String(st.swings)),
-      total('snow', 'Snow earned', String(st.lifetimeSnow)),
-      total('daily', 'Dailies played', String(st.dailyDaysPlayed)),
-      total('gift', 'Globes opened', String(save.gamify.opened)),
-      total('sun', 'Sunny weeks', String(st.sunnyWeeks)),
-    );
+    const rowsOf: [IconName, string, string | number][] = [
+      ['retry', 'Runs', st.runs], ['clock', 'Time played', playTime(st.playSeconds)], ['moon', 'Days survived', st.daysSurvived],
+      ['flake', 'Flakes', st.flakes], ['phew', 'PHEWs', st.phews], ['swing', 'SWINGs', st.swings], ['snow', 'Snow earned', st.lifetimeSnow],
+      ['daily', 'Dailies played', st.dailyDaysPlayed], ['gift', 'Globes opened', save.gamify.opened], ['sun', 'Sunny weeks', st.sunnyWeeks],
+    ];
+    setChildren(totals, ...rowsOf.flatMap(([i, k, val]) => [h('dt', null, icon(i), k), h('dd', null, String(val))]));
   }
 
   return {
