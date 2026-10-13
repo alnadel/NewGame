@@ -45,7 +45,7 @@ function steer(f: InputFrame, s: SimState, target: number, rate: number, first: 
   const cur = wrapDeg(s.sun.theta + s.sun.lag);
   const max = rate * DT;
   const d = angleDiff(target, cur);
-  f.dTheta = quantize(d > max ? max : d < -max ? -max : d);
+  f.dTheta = quantize(d > max ? max : d < -max ? -max : d) * (s.mods.has('dazzle') ? -1 : 1);
   f.down = true;
   f.downEdge = first;
   f.upEdge = false;
@@ -438,7 +438,7 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
       if (Math.abs(d) < 3) return f;
       moveTicks = Math.max(1, msTicks(cfg.moveBaseMs + cfg.moveMsPerDeg * Math.abs(d)));
       moveT = 0;
-      moveDist = d;
+      moveDist = s.mods.has('dazzle') ? -d : d; // the Mirror Sun turns against the drag
       sent = 0;
       return moveTick();
     },

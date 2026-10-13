@@ -120,7 +120,7 @@ const tuning = {
    * fully shaded for confirmTicks. SWINGs within chainTicks of the last one chain (×2 … ×chainMax)
    * and pay the chain in Snow.
    */
-  swing: { minDeg: 45, maxGapTicks: 20, confirmTicks: 15, chainTicks: 180, chainMax: 5 },
+  swing: { minDeg: 40, maxGapTicks: 24, confirmTicks: 15, chainTicks: 180, chainMax: 5 },
 
   /**
    * First-run lesson: from `go` until the lesson is passed (a ≥ swingDeg turn after Nubs was lit,

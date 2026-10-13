@@ -249,56 +249,31 @@ interface CareerOut {
   /** --meta only: achievements unlocked and cosmetics owned at the end. */
   achievements: string[];
   owned: number;
-  missing: string[];
 }
 
-/** The meta API the career harness folds runs through (A14), typed loosely: it may predate v1.1. */
-interface MetaApi {
-  defaults: (now?: number) => MetaSave;
-  beginRun?: (save: MetaSave) => { save: MetaSave };
-  applyRunResult: (save: MetaSave, result: RunResult, options: Record<string, unknown>) => { save: MetaSave; outcome: { missionsCompleted: unknown[] } };
-  swapMission?: (save: MetaSave, slotId: string) => MetaSave;
-  buyCosmetic: (save: MetaSave, id: string) => { ok: boolean; save?: MetaSave };
-  dailyTryStarted?: (save: MetaSave, date: string) => { save: MetaSave; tryNumber: number | null };
-  isDailyUnlocked?: (save: MetaSave) => boolean;
-  COSMETICS: readonly { id: string; unlock: { kind: string; cost?: number } }[];
-  ACHIEVEMENTS: readonly { id: string }[];
-}
+/** The meta API the career harness folds runs through (A14), loaded only for --meta. */
+type Meta = typeof import('../src/meta/save.ts') & typeof import('../src/meta/progression.ts') & typeof import('../src/meta/content.ts');
 
-interface MetaSave {
-  stats: { runs: number; wallet: number };
-  unlocks: { cosmetics: string[]; achievements: string[] };
-  missions: { active: { id: string; stale?: number; done: boolean }[] };
-}
-
-const META_NAMES = ['defaults', 'beginRun', 'applyRunResult', 'swapMission', 'buyCosmetic', 'dailyTryStarted', 'COSMETICS', 'ACHIEVEMENTS'];
-
-async function loadMeta(): Promise<{ api: MetaApi; missing: string[] }> {
-  const mods: Record<string, unknown>[] = [];
-  for (const m of ['save', 'progression', 'content']) mods.push((await import(`../src/meta/${m}.ts`)) as Record<string, unknown>);
-  const api: Record<string, unknown> = {};
-  for (const name of [...META_NAMES, 'isDailyUnlocked']) {
-    for (const mod of mods) if (name in mod) api[name] = mod[name];
-  }
-  return { api: api as unknown as MetaApi, missing: META_NAMES.filter((n) => !(n in api)) };
+async function loadMeta(): Promise<Meta> {
+  const [save, progression, content] = await Promise.all([import('../src/meta/save.ts'), import('../src/meta/progression.ts'), import('../src/meta/content.ts')]);
+  return { ...save, ...progression, ...content };
 }
 
 const CAREER_START = Date.UTC(2026, 10, 2);
 const dateOf = (dayIndex: number): string => new Date(CAREER_START + dayIndex * 86_400_000).toISOString().slice(0, 10);
 
 async function runCareer(c: number, runs: number, kind: BotKind, days: number, withMeta: boolean): Promise<CareerOut> {
-  const meta = withMeta ? await loadMeta() : null;
-  const api = meta?.api;
+  const api = withMeta ? await loadMeta() : null;
   let save = api ? api.defaults(CAREER_START) : null;
   let rung = 0;
   let prev: ComfortPrev | null = null;
   let prevRung = -1;
   let tutorialDone = false;
   let lastDaily = '';
-  const out: CareerOut = { runs: [], achievements: [], owned: 0, missing: meta?.missing ?? [] };
+  const out: CareerOut = { runs: [], achievements: [], owned: 0 };
   for (let r = 0; r < runs; r++) {
     const today = dateOf(Math.floor(r / 5));
-    if (api && save && api.beginRun) save = api.beginRun(save).save;
+    if (api && save) save = api.beginRun(save).save;
     const rc = rungConfig(rung, { tutorialDone, warmup: isWarmup(rung, prevRung) });
     const cfg: RunConfig = { ...headlessConfig(hashString(`career-${c}-${r}`), rc.profile, rc.drain, rc.noonCloud), tutorial: rc.tutorial, lesson: rc.lesson };
     const { out: o, result } = playRun(cfg, kind, days);
@@ -308,25 +283,20 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
       const applied = api.applyRunResult(save, result, { today, playSeconds: o.ticks / 60, rung, warmup: rc.warmup });
       save = applied.save;
       missionDone = applied.outcome.missionsCompleted.length > 0;
-      if (api.swapMission) for (const slot of save.missions.active) if (!slot.done && (slot.stale ?? 0) >= 5) save = api.swapMission(save, slot.id);
-      let cheapest: { id: string; cost: number } | null = null;
-      for (const item of api.COSMETICS) {
-        const cost = item.unlock.cost;
-        if (item.unlock.kind !== 'snow' || cost === undefined || cost > save.stats.wallet || save.unlocks.cosmetics.includes(item.id)) continue;
-        if (!cheapest || cost < cheapest.cost) cheapest = { id: item.id, cost };
-      }
-      if (cheapest) {
-        const bought = api.buyCosmetic(save, cheapest.id);
-        if (bought.ok && bought.save) save = bought.save;
-      }
-      const unlocked = api.isDailyUnlocked ? api.isDailyUnlocked(save) : save.stats.runs >= 3;
-      if (api.dailyTryStarted && unlocked && today !== lastDaily) {
+      for (const slot of save.missions.active) if (!slot.done && (slot.stale ?? 0) >= 5) save = api.swapMission(save, slot.id);
+      // The cheapest affordable Snow cosmetic not owned yet.
+      const owned = save.unlocks.cosmetics as readonly string[];
+      const wallet = save.stats.wallet;
+      const cost = (i: (typeof api.COSMETICS)[number]): number => (i.unlock.kind === 'snow' ? i.unlock.cost : Infinity);
+      const buy = api.COSMETICS.filter((i) => cost(i) <= wallet && !owned.includes(i.id)).sort((a, b) => cost(a) - cost(b))[0];
+      const bought = buy ? api.buyCosmetic(save, buy.id) : null;
+      if (bought?.ok && bought.save) save = bought.save;
+      if (api.isDailyUnlocked(save) && today !== lastDaily) {
         lastDaily = today;
         const tried = api.dailyTryStarted(save, today);
-        save = tried.save;
         const daily: RunConfig = { ...headlessConfig(hashString(`daily-${today}`), 3), mode: 'daily', dailyDate: today, plan: today >= PLAN_START_DATE };
         const d = playRun(daily, kind, days);
-        const dApplied = api.applyRunResult(save, d.result, { today, dailyTry: tried.tryNumber, playSeconds: d.out.ticks / 60 });
+        const dApplied = api.applyRunResult(tried.save, d.result, { today, dailyTry: tried.tryNumber, playSeconds: d.out.ticks / 60 });
         save = dApplied.save;
         if (dApplied.outcome.missionsCompleted.length > 0) missionDone = true;
       }
@@ -502,8 +472,6 @@ async function careerMain(workers: number, days: number): Promise<void> {
     console.log(`${sec >= 18 && death >= 240 ? 'PASS' : 'MISS'}  human runs 10-25: median run ${sec.toFixed(1)} s (≥ 18), median death ${formatScore(death)} (≥ Day 1 · 10:00 AM)`);
   }
   if (!withMeta) return;
-  const missing = out[0]?.missing ?? [];
-  if (missing.length) console.log(`\nmeta API missing (folded without it): ${missing.join(', ')}`);
   const withLate = out.filter((o) => o.runs.slice(30, 40).some((r) => r.missionDone)).length;
   const lastDone = out.map((o) => {
     let last = 0;
@@ -514,7 +482,7 @@ async function careerMain(workers: number, days: number): Promise<void> {
   });
   console.log(`\nmeta: careers with a mission completed in runs 31-40: ${((100 * withLate) / out.length).toFixed(0)}% (advisory ≥ 80%)`);
   console.log(`meta: median last mission completion: run ${median(lastDone)} (advisory ≥ 36)`);
-  const { api } = await loadMeta();
+  const api = await loadMeta();
   const catalog = api.COSMETICS.length;
   console.log(`meta: catalog owned ${((100 * out.reduce((a, o) => a + o.owned, 0)) / (out.length * catalog)).toFixed(1)}% of ${catalog} (mean over careers)`);
   console.log('meta: achievements unlocked (% of careers):');

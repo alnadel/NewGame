@@ -115,7 +115,6 @@ export {
 export type { ChunkLit, World, WorldStats } from './gen/world.ts';
 export {
   biomeAtY,
-  dayAtY,
   firstTownDay,
   paramsAt,
   planDay,

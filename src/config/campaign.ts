@@ -38,8 +38,11 @@ export interface LevelDef {
   readonly lengthMinutes: number;
   /** 'finish' target 0; 'flakes' N; 'snow' N. */
   readonly goal: { readonly kind: GoalKind; readonly target: number };
-  /** Star 2: flakes ≥; star 3: the lowest Chill of the run ≥ (star 1 is passing). */
-  readonly stars: { readonly flakes: number; readonly minChill: number };
+  /**
+   * Star 1 is passing; one star for flakes ≥ `flakes`, one for a cool run: at most `sunSec` seconds
+   * in the sun (∫f dt, RunStats.litTotal) with the lowest Chill never below `minChill`.
+   */
+  readonly stars: { readonly flakes: number; readonly minChill: number; readonly sunSec: number };
   /** Chill/s at f = 1 (the campaign ignores the comfort ladder). */
   readonly drain: number;
 }
@@ -108,6 +111,8 @@ export interface LevelStats {
   readonly flakes: number;
   readonly snow: number;
   readonly minChill: number;
+  /** Seconds in the sun (∫f dt); a missing value counts as 0. */
+  readonly litTotal?: number;
 }
 
 /** The chapter of level `id`. */
@@ -116,32 +121,37 @@ export function chapterOf(id: number): number {
 }
 
 /**
- * The level's drain on the chapter curve: 31 → 38 over levels 1-40 (level 1 is 35, with the lesson
- * floor on a first run; finales +2), then 40 → 55 over chapters 5-20 (±2 within a chapter,
- * finales at the chapter's top).
+ * The difficulty curve, in effective drain points (Chill/s at f = 1 on a level with no concept
+ * cost): a sawtooth that climbs through each chapter to its finale, the spike, and starts the next
+ * chapter below that spike. The teaching chapters (1-4) climb gently from 28 (finales +6); the
+ * composed ones from 32-39 (chapter 5) to 41-48 (chapter 20), finales 7 above the chapter's base.
  */
 function curveDrain(id: number): number {
   const c = chapterOf(id);
   const i = (id - 1) % LEVELS_PER_CHAPTER;
-  const finale = i === LEVELS_PER_CHAPTER - 1;
-  if (c <= 4) {
-    const d = 31 + Math.round((7 * (id - 1)) / 39);
-    return finale ? d + 2 : d;
-  }
-  const base = 40 + Math.round((15 * (c - 5)) / 15);
-  if (finale) return Math.min(55, base + 4);
-  return Math.min(55, base - 2 + Math.round((4 * i) / 8));
+  if (c <= 4) return 28 + 2 * (c - 1) + (i === 9 ? 6 : Math.floor(i / 3));
+  const base = 37 + Math.round(0.6 * (c - 5));
+  return i === 9 ? base + 7 : base - 5 + Math.round((7 * i) / 8);
 }
 
-/** The effective drain (level drain × the concepts' drainMul) never exceeds this. */
-const DRAIN_EFFECTIVE_MAX = 62;
-
-/** Level length (minutes) on the chapter curve: 360 through chapter 4, then 360 → 720 in 30-minute steps. */
+/**
+ * Level length (minutes) on the chapter curve: teaching levels end before noon (240 → 300 minutes
+ * from dawn), their finales at noon; composed chapters grow 360 → 720 in 30-minute steps, their
+ * first two levels a step shorter.
+ */
 function curveLength(id: number): number {
   const c = chapterOf(id);
-  if (c <= 4) return 360;
-  return 360 + 30 * Math.round((12 * (c - 5)) / 15);
+  const i = (id - 1) % LEVELS_PER_CHAPTER;
+  if (c <= 4) return i === 9 ? 360 : (TEACH_LENGTH[c - 1] as number);
+  const len = 360 + 30 * Math.round((12 * (c - 5)) / 15);
+  return i < 2 ? len - 30 : len;
 }
+
+const TEACH_LENGTH: readonly number[] = [240, 300, 300, 300];
+/** The level's drain stays in [DRAIN_MIN, DRAIN_MAX]; its effective drain (× drainMul) never exceeds DRAIN_EFFECTIVE_MAX. */
+const DRAIN_MIN = 22;
+const DRAIN_MAX = 55;
+const DRAIN_EFFECTIVE_MAX = 62;
 
 /** Expected flakes on the trail between startMinute and the finish (clusters every ~6.5 s of the day's clock). */
 function expectedFlakes(startMinute: number, lengthMinutes: number, concepts: readonly ConceptId[], biome: BiomeId, forecast: ForecastId): number {
@@ -164,18 +174,13 @@ function expectedFlakes(startMinute: number, lengthMinutes: number, concepts: re
   return total;
 }
 
-/** The biome a set of concepts requires (oldtown, market → Old Town; dazzle → Meadow), or null. */
+/** The biome a set of concepts requires (oldtown, market → Old Town), or null. */
 function requiredBiome(concepts: readonly ConceptId[]): BiomeId | null {
   for (const id of concepts) {
     const b = CONCEPTS[id].level?.biome;
     if (b) return b;
   }
   return null;
-}
-
-function conceptFits(id: ConceptId, biome: BiomeId): boolean {
-  const need = CONCEPTS[id].level?.biome;
-  return need === undefined || need === biome;
 }
 
 /** Concepts a composed level never draws from the general pool (they have their own chapters, or teach). */
@@ -187,26 +192,28 @@ function composeConcepts(id: number, seed: number, chapter: Chapter): ConceptId[
   const i = (id - 1) % LEVELS_PER_CHAPTER;
   const finale = i === LEVELS_PER_CHAPTER - 1;
   const n = finale ? 3 : i < 3 ? 2 : rng.next() < 0.45 ? 3 : 2;
-  const fits = (c: ConceptId): boolean => conceptFits(c, chapter.biome);
+  const fits = (c: ConceptId): boolean => (CONCEPTS[c].level?.biome ?? chapter.biome) === chapter.biome;
   const signature = chapter.concepts.filter(fits);
   const pool = CONCEPT_IDS.filter((c) => fits(c) && !COMPOSE_EXCLUDED.has(c));
   const chosen: ConceptId[] = [];
   const ok = (c: ConceptId): boolean => chosen.every((d) => conceptsCompatible(c, d));
   // The headline: a finale leads with the chapter's first concept; other levels draw one.
-  const first = finale ? (signature[0] as ConceptId) : rng.pick(signature);
-  chosen.push(first);
+  chosen.push(finale ? (signature[0] as ConceptId) : rng.pick(signature));
   while (chosen.length < n) {
     const fromSignature = finale || rng.next() < 0.5;
     const a = (fromSignature ? signature : pool).filter(ok);
-    const b = (fromSignature ? pool : signature).filter(ok);
-    const from = a.length > 0 ? a : b;
+    const from = a.length > 0 ? a : (fromSignature ? pool : signature).filter(ok);
     if (from.length === 0) break;
     chosen.push(rng.pick(from));
   }
   return chosen;
 }
 
-/** The definition of level `id` (1..200), pure in `id`. */
+/**
+ * The definition of level `id` (1..200), pure in `id`. Its drain is the curve less the concepts'
+ * costs (so a hard concept does not stack on the curve), over the concepts' drainMul, within the
+ * caps; goals and star 2 scale with the flakes the level offers.
+ */
 function makeLevel(id: number): LevelDef {
   const seed = hashString(`journey-${id}`);
   const chapter = CHAPTERS[chapterOf(id) - 1] as Chapter;
@@ -218,41 +225,38 @@ function makeLevel(id: number): LevelDef {
   let lengthMinutes = curveLength(id);
   let goal: GoalKind = 'finish';
   let drain = curveDrain(id);
-  let drainCap = Infinity;
+  let cap = DRAIN_EFFECTIVE_MAX;
   for (const c of concepts) {
     const lv = CONCEPTS[c].level;
     if (!lv) continue;
-    if (lv.forecast) forecast = lv.forecast;
-    if (lv.startMinute !== undefined) startMinute = lv.startMinute;
-    if (lv.lengthMinutes !== undefined) lengthMinutes = lv.lengthMinutes;
-    if (lv.goal) goal = lv.goal;
-    if (lv.drain !== undefined) drain = lv.drain;
-    if (lv.drainCap !== undefined) drainCap = Math.min(drainCap, lv.drainCap);
+    forecast = lv.forecast ?? forecast;
+    startMinute = lv.startMinute ?? startMinute;
+    lengthMinutes = lv.lengthMinutes ?? lengthMinutes;
+    goal = lv.goal ?? goal;
+    drain -= lv.cost ?? 0;
+    cap = Math.min(cap, lv.drainCap ?? cap);
   }
-  if (id === 1) drain = 35;
-  // Caps apply to the effective drain: 'thaw' on a hot chapter must not stack past what a shade
-  // player can survive, and 'lock'/'gusts' levels (not modelled by the validator) stay at ≤ 40.
   const mul = foldTuning(concepts)?.drainMul ?? 1;
-  drain = Math.min(drain, Math.floor(Math.min(drainCap, DRAIN_EFFECTIVE_MAX) / mul));
+  drain = Math.max(DRAIN_MIN, Math.min(DRAIN_MAX, Math.round(drain / mul), Math.floor(cap / mul)));
   if (!concepts.includes('marathon')) lengthMinutes = Math.min(lengthMinutes, 720 - startMinute);
   const p = dayParams(1, 3, dayPlan(biome, forecast), concepts);
   const flakes = expectedFlakes(startMinute, lengthMinutes, concepts, biome, forecast);
-  // Goals and star 2 scale with the flakes the level offers (expectedFlakes): a flake goal asks for
-  // 55% of them, star 2 for 60% (75% on a flake-goal level), a Snow goal for one Snow per flake
-  // (a kept multiplier, SWINGs, PHEWs and the gate all count).
+  // A flake goal asks for 55% of the flakes the level offers and the flake star for 80%; otherwise
+  // the star asks for 65%. A Snow goal asks for 0.7 Snow per flake offered (a kept multiplier,
+  // SWINGs, PHEWs and the gate all count). The cool-run star allows 22% of the level's daylight in
+  // the sun and a lowest Chill of 20% of the tank: a skilled player's shade, not a lucky one.
   let target = 0;
-  let starFlakes = Math.max(2, Math.round(0.6 * flakes));
+  let starFlakes = Math.max(2, Math.round(0.65 * flakes));
   if (goal === 'flakes') {
     target = Math.max(3, Math.round(0.55 * flakes));
-    starFlakes = Math.max(target + 1, Math.round(0.75 * flakes));
+    starFlakes = Math.max(target + 1, Math.round(0.8 * flakes));
   } else if (goal === 'snow') {
-    target = Math.max(8, Math.round(flakes * p.snowMult));
+    target = Math.max(5, Math.round(0.7 * flakes * p.snowMult));
   }
-  const name = introduces ? CONCEPTS[introduces].name : ((NAMES[chapter.id - 5] as readonly string[])[(id - 1) % LEVELS_PER_CHAPTER] as string);
   return Object.freeze({
     id,
     chapter: chapter.id,
-    name,
+    name: introduces ? CONCEPTS[introduces].title : ((NAMES[chapter.id - 5] as readonly string[])[(id - 1) % LEVELS_PER_CHAPTER] as string),
     seed,
     biome,
     forecast,
@@ -261,7 +265,7 @@ function makeLevel(id: number): LevelDef {
     startMinute,
     lengthMinutes,
     goal: Object.freeze({ kind: goal, target }),
-    stars: Object.freeze({ flakes: starFlakes, minChill: Math.round(0.35 * p.maxChill) }),
+    stars: Object.freeze({ flakes: starFlakes, minChill: Math.round(0.2 * p.maxChill), sunSec: Math.round((2.2 * lengthMinutes * p.dayLen) / 720) / 10 }),
     drain,
   });
 }
@@ -292,11 +296,11 @@ export function goalMet(level: LevelDef, stats: LevelStats): boolean {
 
 /**
  * Stars for a run that reached the finish line with these stats: 0 when the goal is not met, else
- * 1, +1 if flakes ≥ stars.flakes, +1 if the run's lowest Chill ≥ stars.minChill.
+ * 1, +1 if flakes ≥ stars.flakes, +1 for a cool run (lit ≤ stars.sunSec s and lowest Chill ≥ stars.minChill).
  */
 export function starsFor(level: LevelDef, stats: LevelStats): 0 | 1 | 2 | 3 {
   if (!goalMet(level, stats)) return 0;
   const two = stats.flakes >= level.stars.flakes;
-  const three = stats.minChill >= level.stars.minChill;
+  const three = stats.minChill >= level.stars.minChill && (stats.litTotal ?? 0) <= level.stars.sunSec;
   return two && three ? 3 : two || three ? 2 : 1;
 }

@@ -10,7 +10,7 @@ import { levelDef, type LevelDef } from '../../config/campaign.ts';
 import { foldTuning, type ConceptId } from '../../config/concepts.ts';
 import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
-import { dayStartTick, dayTicks, tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
+import { tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
 import type { RunConfig } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
@@ -111,14 +111,6 @@ export const ECLIPSE_FADE_TICKS = 30;
 /** True when absolute tick `tickAbs` is inside world `w`'s eclipse window. */
 export function eclipseAt(w: World, tickAbs: number): boolean {
   return w.eclipseTick >= 0 && tickAbs >= w.eclipseTick && tickAbs < w.eclipseTick + ECLIPSE_SEC * TICK_HZ;
-}
-
-/** Day and tick after dawn of a world's start (the run's first clock tick). */
-export function startDayTick(w: World): { day: number; dayTick: number } {
-  let day = 1;
-  while (dayStartTick(day + 1) <= w.startTick) day++;
-  const dayTick = Math.min(dayTicks(day) - 1, w.startTick - dayStartTick(day));
-  return { day, dayTick };
 }
 
 /** y up to which the world is placed and validated. */

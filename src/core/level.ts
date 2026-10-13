@@ -2,7 +2,6 @@
 // progress along the trail, and the outcome (goal, stars) of a run on it.
 
 import { goalMet, levelDef, starsFor, type LevelDef } from '../config/campaign.ts';
-import type { ConceptId } from '../config/concepts.ts';
 import { dayStartTick, dayTicks, tickAtMinute, TICK_HZ } from './clock.ts';
 import type { RunLevel } from './sim/events.ts';
 import type { RunConfig, SimState } from './sim/types.ts';
@@ -62,9 +61,4 @@ export function levelOutcome(level: LevelDef, s: SimState): RunLevel {
   const won = s.phase === 'won';
   const passed = won && goalMet(level, s.stats);
   return { id: level.id, passed, stars: passed ? starsFor(level, s.stats) : 0, introduces: level.introduces };
-}
-
-/** True when concept `id` is active in the run. */
-export function hasMod(s: SimState, id: ConceptId): boolean {
-  return s.mods.has(id);
 }
