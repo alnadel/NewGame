@@ -95,7 +95,7 @@ import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
 import { cueDuration } from '../ui/labels.ts';
-import type { ChallengeBanner, CueId, ImportOutcome, ResultsCampaign, ResultsView, RunKind, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
+import type { ChallengeBanner, CueId, ImportOutcome, ResultsCampaign, ResultsView, RunKind, RunStatusView, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
@@ -106,12 +106,16 @@ import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
-import { campaignConfig, FINISH_FREEZE_S, FINISH_SKIP_S, goalLine, hudGoal, introCard, missLine } from './campaign.ts';
+import { createMoments, type RunMoments } from './moments.ts';
+import { campaignConfig, FINISH_FREEZE_S, FINISH_SKIP_S, goalLine, goalText, hudGoal, introCard, missLine, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState } from './campaign.ts';
+import { formatScore } from '../core/format.ts';
 
 /** The sim's finish-line event (CAMPAIGN_PLAN §2). */
 type LevelWon = Extract<SimEvent, { e: 'levelWon' }>;
 
 const DYING_S = 1.1;
+/** A count-up's tick buzzes at most this often (ms). */
+const TICK_HAPTIC_MS = 90;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
 /**
@@ -224,6 +228,12 @@ export class Session {
   readonly input: Input;
   readonly clock = new FixedClock();
   readonly fx: Fx;
+  /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */
+  private readonly moments: RunMoments;
+  /** The campaign star bits last seen (a newly lit one chimes). */
+  private runStars = 0;
+  /** When the last count-up tick buzzed (uiSound 'tick'). */
+  private tickHapticAt = Number.NEGATIVE_INFINITY;
   readonly gov = new Governor();
   readonly cadence = new Cadence();
   private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false, settled: false };
@@ -409,6 +419,17 @@ export class Session {
     this.clock.fast = deps.params.fast;
     this.renderer = new Renderer(deps.canvas);
     this.fx = new Fx(this.renderer.scene, this.clock);
+    this.moments = createMoments(this.renderer.scene.banners, {
+      mission: () => {
+        this.d.audio.play('reward');
+        this.d.haptics.play('reward');
+      },
+      comeback: (x, y) => {
+        this.fx.comeback(x, y);
+        this.d.audio.play('comeback');
+        this.d.haptics.play('phew');
+      },
+    });
     const store = deps.store;
     const save = store.get();
     this.challenge = playableChallenge(challengeFromHash(location.hash));
@@ -488,6 +509,7 @@ export class Session {
           if (this.ui.current() === 'title') this.input.begin(e);
         },
         uiSound: (name) => this.uiSound(name),
+        runStatus: () => this.runStatus(),
         renderWardrobePreview: (canvas, equipped, subject) =>
           subject === 'sun' ? renderSunPreview(canvas, equippedLooks(equipped).shades) : renderWardrobePreview(canvas, equipped),
         updateSave: (change) => {
@@ -788,6 +810,7 @@ export class Session {
         if (s.phase === 'dead' || s.phase === 'won') break;
       }
       if (n > 0) takeSnap(s, this.curr);
+      this.moments.update(s);
     } else {
       // The death, the finish freeze and the Results keep game time flowing for the effects.
       const flowing = screen === 'dying' || screen === 'results' || (won && screen === 'play');
@@ -926,7 +949,7 @@ export class Session {
     const s = this.s;
     let c = r.campaign;
     if (!c) {
-      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0 };
+      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0, stars: 0, coolLeft: 1 };
       r.campaign = c;
     }
     const goal = hudGoal(level, s.stats);
@@ -938,6 +961,14 @@ export class Session {
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
     c.gust = s.sun.gust;
+    c.stars = starState(level, s.stats, s.phase === 'won');
+    c.coolLeft = 1 - Math.min(1, s.stats.litTotal / level.stars.sunSec);
+    // A star earned mid-run (the goal, the flakes) chimes; the finish has its own jingle.
+    if (c.stars & ~this.runStars & 3 && s.phase === 'day') {
+      this.d.audio.play('claim');
+      this.d.haptics.play('claim');
+    }
+    this.runStars = c.stars;
   }
 
   private renderScreen(id: ScreenId): RenderScreen {
@@ -1248,6 +1279,8 @@ export class Session {
     this.lifetimeRuns = save.stats.runs;
     this.warmup = run.cfg.mode === 'endless' && this.inWarmup() ? this.challenge : null;
     this.armStamp(run);
+    this.moments.begin(save, this.runLevel, !this.debugRuns);
+    this.runStars = 0;
     if (!this.debugRuns) {
       const begun = beginRun(save);
       if (begun.save !== save) {
@@ -1258,8 +1291,7 @@ export class Session {
     this.setGhost('off');
     // The level's intro card holds until the first tap (§4).
     if (card && this.runLevel && run.phase === 'hold') {
-      const card = introCard(this.runLevel);
-      showLevelCard(this.renderer.scene.banners, card.kicker, card.title, card.concept, card.conceptName, card.blurb, card.goal, this.runLevel.biome);
+      showLevelCard(this.renderer.scene.banners, introCard(this.runLevel), this.runLevel.biome);
     }
   }
 
@@ -1539,6 +1571,7 @@ export class Session {
   // -------------------------------------------------------------------------------------------
 
   private onTickEvent(ev: SimEvent): void {
+    this.moments.onEvent(ev, this.s);
     switch (ev.e) {
       case 'flake':
         if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
@@ -2158,6 +2191,34 @@ export class Session {
     this.input.invert = st.invert;
   }
 
+  /** The Pause card's view of the run in progress (UiCallbacks.runStatus; also the test hook's). */
+  runStatus(): RunStatusView | null {
+    if (!this.runActive) return null;
+    const s = this.s;
+    const now = formatScore(s.minutes);
+    const level = this.runLevel;
+    if (level) {
+      const bits = starState(level, s.stats, s.phase === 'won');
+      const labels = starRules(level);
+      const goal = hudGoal(level, s.stats);
+      const count = goal.target >= 0 ? `${goal.value}/${goal.target}` : `${Math.round(levelProgress(s) * 100)} %`;
+      return {
+        title: `Level ${level.id} · ${level.name}`,
+        goal: `${goalText(level)} · ${count}`,
+        now,
+        stars: [
+          { label: labels[0], state: bits & STAR_GOAL ? 'earned' : 'open' },
+          { label: labels[1], state: bits & STAR_FLAKES ? 'earned' : 'open' },
+          { label: labels[2], state: bits & STAR_COOL_LOST ? 'lost' : 'open' },
+        ],
+      };
+    }
+    const c = this.runChallenge;
+    const title = this.kind === 'daily' ? 'Daily Solstice' : this.kind === 'challenge' ? 'Challenge' : 'Endless';
+    const goal = c ? `Beat ${c.n ? `${c.n}: ` : ''}${formatScore(c.m)}` : this.runPb > 0 ? `Best: ${formatScore(this.runPb)}` : '';
+    return { title, goal, now, stars: [] };
+  }
+
   private uiSound(name: UiSoundName): void {
     const a = this.d.audio;
     switch (name) {
@@ -2165,13 +2226,26 @@ export class Session {
       case 'equip':
       case 'unlock':
       case 'stamp':
-      // V14-SHIM: the reward sounds borrow the buy chime until the audio has their own.
+        a.play('uiBuy');
+        break;
       case 'reward':
       case 'rankUp':
       case 'open':
       case 'claim':
-        a.play('uiBuy');
-        break;
+        // The reward cues have their own sound and a haptic of the same name.
+        a.play(name);
+        this.d.haptics.play(name);
+        return;
+      case 'tick': {
+        // Count-ups tick fast: the click every time, the haptic at most every TICK_HAPTIC_MS.
+        a.play('tick');
+        const t = performance.now();
+        if (t - this.tickHapticAt >= TICK_HAPTIC_MS) {
+          this.tickHapticAt = t;
+          this.d.haptics.play('tick');
+        }
+        return;
+      }
       case 'deny':
         a.play('uiError');
         break;

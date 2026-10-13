@@ -114,7 +114,7 @@ const CHECK_PARAMS: Partial<Record<SfxName, SfxParams>> = {
   levelWin: { level: 3 },
   swing: { level: 3 },
 };
-const LONG: readonly SfxName[] = ['newBest', 'noon', 'nightfall', 'levelWin', 'eclipse'];
+const LONG: readonly SfxName[] = ['newBest', 'noon', 'nightfall', 'levelWin', 'eclipse', 'rankUp', 'open'];
 
 interface Cue {
   at: number;

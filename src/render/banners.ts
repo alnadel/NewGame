@@ -69,6 +69,8 @@ export interface Banners {
   levelConceptName: string;
   levelBlurb: string;
   levelGoal: string;
+  /** The three star rules' short labels: the goal, the flakes, the cool run. */
+  levelStars: readonly string[];
   levelBiome: BiomeId;
   levelLines: string[];
   levelWrapW: number;
@@ -77,6 +79,28 @@ export interface Banners {
   titleFont: string;
   blurbFont: string;
   tapFont: string;
+  starFont: string;
+  /**
+   * In-run toasts under the HUD (v1.4): a mission done ("MISSION ✓ 2/3"), a level tip. They queue
+   * (at most TOAST_QUEUE) and wait while a card or stamp holds the top of the screen, so they never
+   * cover those, Nubs or his dial. toastT: seconds the first one has shown (−1 none showing).
+   */
+  toasts: Toast[];
+  toastT: number;
+  toastLines: string[];
+  toastWrapW: number;
+  toastFont: string;
+}
+
+export type ToastKind = 'mission' | 'tip';
+
+export interface Toast {
+  kind: ToastKind;
+  kicker: string;
+  text: string;
+  /** Glyph in the icon disc (drawGlyph id); null draws a check mark. */
+  glyph: string | null;
+  hold: number;
 }
 
 export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss';
@@ -136,6 +160,7 @@ export function createBanners(): Banners {
     levelConceptName: '',
     levelBlurb: '',
     levelGoal: '',
+    levelStars: [],
     levelBiome: 'meadow',
     levelLines: [],
     levelWrapW: 0,
@@ -144,27 +169,51 @@ export function createBanners(): Banners {
     titleFont: '',
     blurbFont: '',
     tapFont: '',
+    starFont: '',
+    toasts: [],
+    toastT: -1,
+    toastLines: [],
+    toastWrapW: 0,
+    toastFont: '',
   };
 }
 
+/** The intro card's words (game/campaign.ts introCard). */
+export interface LevelCardWords {
+  kicker: string;
+  title: string;
+  concept: string | null;
+  conceptName: string;
+  blurb: string;
+  goal: string;
+  /** The three star rules' short labels: "Finish", "6 flakes", "≤ 4 s in sun". */
+  stars: readonly string[];
+}
+
 /**
- * Shows the level's intro card: "LEVEL 6", its name, the concept it teaches (glyph, name, blurb)
- * and the goal. It holds until dismissLevelCard (the first tap).
+ * Shows the level's intro card: "LEVEL 6", its name, the concept it teaches (glyph, name, blurb),
+ * the goal and the three star rules. It holds until dismissLevelCard (the first tap).
  */
-export function showLevelCard(b: Banners, kicker: string, title: string, concept: string | null, conceptName: string, blurb: string, goal: string, biome: BiomeId): void {
+export function showLevelCard(b: Banners, w: LevelCardWords, biome: BiomeId): void {
   b.level = 0;
   b.levelOut = -1;
-  b.levelKicker = kicker;
-  b.levelTitle = title;
+  b.levelKicker = w.kicker;
+  b.levelTitle = w.title;
   // The Dazzle forecast keeps its sparkle; the concept with that id is Mirror Sun.
-  b.levelConcept = concept === 'dazzle' ? 'mirror' : concept;
-  b.levelConceptName = conceptName;
-  b.levelBlurb = blurb;
-  b.levelGoal = goal;
+  b.levelConcept = w.concept === 'dazzle' ? 'mirror' : w.concept;
+  b.levelConceptName = noLigatures(w.conceptName);
+  b.levelBlurb = w.blurb;
+  b.levelGoal = noLigatures(w.goal);
+  b.levelStars = w.stars;
   b.levelBiome = biome;
   b.levelLines.length = 0;
   b.levelWrapW = 0;
   b.levelTitleW = 0;
+}
+
+/** Small caps draw "fl" and "fi" as full-size ligatures ("SnowfLAkes"): a zero-width non-joiner keeps them apart. */
+function noLigatures(text: string): string {
+  return text.replace(/f([il])/g, 'f\u200c$1');
 }
 
 /** The run started: the level card slides out. */
@@ -182,7 +231,45 @@ export function showStamp(b: Banners, kind: StampKind, text: string, hold: numbe
   b.stampStars = -1;
 }
 
+/** Toasts waiting beyond this many are dropped (a burst of mission steps never backs up). */
+const TOAST_QUEUE = 4;
+const TOAST_IN = 0.25;
+const TOAST_OUT = 0.3;
+
+/** A tip on screen at least this long (s) steps aside for a mission. */
+const TIP_YIELD_S = 1.5;
+
+/**
+ * Queues an in-run toast (see Banners.toasts). A mission goes ahead of waiting tips (and a tip that
+ * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one, so tips never pile up.
+ */
+export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number): void {
+  const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold };
+  const q = b.toasts;
+  const first = b.toastT >= 0 ? 1 : 0;
+  if (kind === 'tip') {
+    for (let i = q.length - 1; i >= first; i--) if ((q[i] as Toast).kind === 'tip') q.splice(i, 1);
+    if (q.length < TOAST_QUEUE) q.push(t);
+    return;
+  }
+  let at = first;
+  while (at < q.length && (q[at] as Toast).kind === 'mission') at++;
+  if (q.length >= TOAST_QUEUE) q.pop();
+  q.splice(at, 0, t);
+  const shown = q[0] as Toast;
+  if (first === 1 && shown.kind === 'tip' && b.toastT > TOAST_IN + TIP_YIELD_S) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
+}
+
+/** The run ended: drop what waits (the Results take over); the toast on screen fades out. */
+export function endToasts(b: Banners): void {
+  b.toasts.length = Math.min(b.toasts.length, b.toastT >= 0 ? 1 : 0);
+  const shown = b.toasts[0];
+  if (shown) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
+}
+
 export function resetBanners(b: Banners): void {
+  b.toasts.length = 0;
+  b.toastT = -1;
   b.night = -1;
   b.day = -1;
   b.coolPulse = 0;
@@ -226,6 +313,17 @@ export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
       }
     }
   }
+  if (b.toastT >= 0) {
+    b.toastT += dt;
+    if (b.toastT > TOAST_IN + (b.toasts[0]?.hold ?? 0) + TOAST_OUT) {
+      b.toasts.shift();
+      b.toastT = -1;
+    }
+  }
+  if (b.toastT < 0 && b.toasts.length > 0 && b.stamp < 0 && b.day < 0 && b.level < 0 && b.night < 0) {
+    b.toastT = 0;
+    b.toastWrapW = 0;
+  }
   b.coolPulse = Math.max(0, b.coolPulse - dt);
   b.goldPulse = Math.max(0, b.goldPulse - dt);
   b.heat += ((lowChill ? 1 : 0) - b.heat) * Math.min(1, dt * 3);
@@ -248,6 +346,9 @@ function fonts(b: Banners, scale: number): void {
   b.titleFont = `italic 700 ${Math.round(32 * scale)}px ${SERIF}`;
   b.blurbFont = `500 ${Math.round(14 * scale)}px ${SANS}`;
   b.tapFont = `small-caps 700 ${Math.round(11 * scale)}px ${SANS}`;
+  b.starFont = `700 ${Math.round(12 * scale)}px ${SANS}`;
+  b.toastFont = `600 ${Math.round(13 * scale)}px ${SANS}`;
+  b.toastWrapW = 0;
   b.stampW = 0;
   b.dayTitleW = 0;
   b.nightW = 0;
@@ -277,6 +378,8 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
     dayCard(g, b, x, top + 74 * scale, scale, a, reducedMotion ? 0 : t);
   }
   if (b.stamp >= 0) drawStamp(g, b, cx, top + 40 * scale, scale, v.vw - 40, reducedMotion);
+  const toast = b.toastT >= 0 ? b.toasts[0] : undefined;
+  if (toast) drawToast(g, b, toast, v, cx, top, scale, reducedMotion);
   if (b.level >= 0) {
     const t = b.level;
     let x = cx;
@@ -291,6 +394,97 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
     }
     // Centred in the space between the HUD band and Nubs' dial (the ghost hand swipes below him).
     levelCard(g, b, v, x, top, scale, a, t);
+  }
+  g.globalAlpha = 1;
+}
+
+/** Toast looks: card, edge, icon disc and kicker ink. */
+const TOAST_LOOK: Readonly<Record<ToastKind, readonly [string, string, string, string]>> = {
+  mission: ['rgba(232,251,248,0.97)', '#2EC4B6', '#2EC4B6', '#13857C'],
+  tip: ['rgba(255,248,238,0.97)', '#FFC23D', '#FFFFFF', '#A86F0A'],
+};
+
+/**
+ * A toast card just under the HUD band, clear of the pause button's column: an icon disc (a check
+ * or the tip's glyph), a small-caps kicker and up to three lines of text. Drops in, holds, fades up.
+ */
+function drawToast(g: CanvasRenderingContext2D, b: Banners, t: Toast, v: View, cx: number, top: number, scale: number, reducedMotion: boolean): void {
+  const u = b.toastT;
+  const outT = u - TOAST_IN - t.hold;
+  let a = Math.min(1, u / TOAST_IN);
+  let dy = reducedMotion ? 0 : -14 * (1 - easeOutBack(Math.min(1, u / TOAST_IN)));
+  if (outT > 0) {
+    const k = Math.min(1, outT / TOAST_OUT);
+    a *= 1 - k;
+    if (!reducedMotion) dy -= 10 * k;
+  }
+  if (a <= 0.01) return;
+  const w = Math.min(v.vw - 112, 340 * scale);
+  const pad = 10 * scale;
+  const r = 14 * scale;
+  const textW = w - 2 * pad - 2 * r - 10 * scale;
+  if (b.toastWrapW !== textW) {
+    b.toastWrapW = textW;
+    g.font = b.toastFont;
+    wrap(g, t.text, textW, b.toastLines);
+    if (b.toastLines.length > 3) {
+      b.toastLines.length = 3;
+      b.toastLines[2] = `${(b.toastLines[2] as string).replace(/[ ,.;:!?]+$/, '')}…`;
+    }
+  }
+  const lineH = 17 * scale;
+  const h = Math.max(2 * r + 2 * pad, 2 * pad + 15 * scale + b.toastLines.length * lineH);
+  const x0 = cx - w / 2;
+  const y0 = top + 2 + dy;
+  const [card, edge, disc, ink] = TOAST_LOOK[t.kind];
+  g.globalAlpha = a;
+  g.fillStyle = 'rgba(43,33,64,0.18)';
+  roundRect(g, x0, y0 + 3, w, h, 14 * scale);
+  g.fill();
+  g.fillStyle = card;
+  roundRect(g, x0, y0, w, h, 14 * scale);
+  g.fill();
+  g.strokeStyle = edge;
+  g.lineWidth = 2;
+  roundRect(g, x0 + 1, y0 + 1, w - 2, h - 2, 13 * scale);
+  g.stroke();
+  // The icon disc: a white check on teal (a mission), or the tip's glyph on white.
+  const ix = x0 + pad + r;
+  const iy = y0 + h / 2;
+  g.fillStyle = disc;
+  g.beginPath();
+  g.arc(ix, iy, r, 0, TAU);
+  g.fill();
+  if (t.glyph) {
+    g.strokeStyle = edge;
+    g.lineWidth = 1.5;
+    g.stroke();
+    drawGlyph(g, t.glyph, ix, iy, 18 * scale);
+  } else {
+    g.strokeStyle = '#FFFFFF';
+    g.lineWidth = 3 * scale;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(ix - 6 * scale, iy + 0.5 * scale);
+    g.lineTo(ix - 1.5 * scale, iy + 5 * scale);
+    g.lineTo(ix + 6.5 * scale, iy - 4.5 * scale);
+    g.stroke();
+    g.lineCap = 'butt';
+  }
+  const tx = ix + r + 10 * scale;
+  let ty = y0 + pad + 7 * scale;
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  g.fillStyle = ink;
+  g.font = b.kickerFont;
+  g.fillText(t.kicker, tx, ty);
+  ty += 8 * scale + lineH / 2;
+  g.fillStyle = '#2B2140';
+  g.font = b.toastFont;
+  for (const line of b.toastLines) {
+    g.fillText(line, tx, ty);
+    ty += lineH;
   }
   g.globalAlpha = 1;
 }
@@ -336,7 +530,8 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
   const hasConcept = b.levelConceptName !== '';
   const blurbH = b.levelLines.length * lineH;
   // The same run of increments as the layout below, plus the tap line and the bottom margin.
-  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + (22 + 12 + 14 + 14) * scale;
+  const starsH = b.levelStars.length === 3 ? STAR_ROW_H * scale : 0;
+  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + (22 + 12 + 14 + 14) * scale + starsH;
   // The card sits between the HUD band and the dial: centred in that space, never over Nubs.
   const dialTop = v.ny - 60 * v.S;
   const y = Math.max(top + 8, Math.min((top + dialTop) / 2, dialTop - h / 2 - 8)) - h / 2;
@@ -413,11 +608,46 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
   g.fillText(b.levelGoal, cx - gw / 2 + 22 * scale, ly + gh / 2 + 0.5);
   g.textAlign = 'center';
   ly += gh + 12 * scale;
+  if (starsH > 0) {
+    starRules(g, b, x0 + pad, innerW, ly, scale);
+    ly += starsH;
+  }
   // "tap to start", breathing.
   const pulse = b.levelOut >= 0 ? 0 : 0.55 + 0.45 * Math.sin(t * TAU * 0.9);
   g.fillStyle = `rgba(107,90,122,${0.45 + 0.55 * pulse})`;
   g.font = b.tapFont;
   g.fillText('tap or drag to start', cx, ly + 6 * scale);
+}
+
+/** Height of the intro card's star-rules row (× the HUD scale). */
+const STAR_ROW_H = 50;
+/** The glyph beside each star rule: the goal, a flake, the sun (a cool run). */
+const STAR_GLYPHS = ['goal', 'frosty', 'clear'];
+
+/**
+ * The three star rules in three columns, each a gold star carrying the rule's glyph over its short
+ * label: "★ Finish", "★ 6 flakes", "★ ≤ 4 s in sun".
+ */
+function starRules(g: CanvasRenderingContext2D, b: Banners, x0: number, w: number, y: number, scale: number): void {
+  const colW = w / 3;
+  const r = 10 * scale;
+  g.fillStyle = 'rgba(255,194,61,0.12)';
+  roundRect(g, x0, y - 4 * scale, w, (STAR_ROW_H - 4) * scale, 12 * scale);
+  g.fill();
+  g.font = b.starFont;
+  g.textAlign = 'center';
+  for (let i = 0; i < 3; i++) {
+    const cx = x0 + colW * (i + 0.5);
+    const cy = y + r + 2 * scale;
+    star(g, cx - 7 * scale, cy, r, '#FFC23D', '#B87A0A');
+    g.fillStyle = '#FFFFFF';
+    g.beginPath();
+    g.arc(cx + 9 * scale, cy + 2 * scale, 8.5 * scale, 0, TAU);
+    g.fill();
+    drawGlyph(g, STAR_GLYPHS[i] as string, cx + 9 * scale, cy + 2 * scale, 12 * scale);
+    g.fillStyle = '#5B4A2A';
+    g.fillText(b.levelStars[i] as string, cx, y + 31 * scale);
+  }
 }
 
 /** The stamp plate and text, fitted to `maxW` CSS px. */
@@ -508,8 +738,8 @@ function drawStamp(g: CanvasRenderingContext2D, b: Banners, cx: number, y: numbe
   g.globalAlpha = 1;
 }
 
-/** A five-point star of outer radius r at (x, y). */
-function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
+/** A five-point star of outer radius r at (x, y), filled and outlined (also the HUD's pips). */
+export function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, line: string): void {
   g.beginPath();
   for (let i = 0; i < 10; i++) {
     const a = -Math.PI / 2 + (i * Math.PI) / 5;

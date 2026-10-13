@@ -50,6 +50,22 @@ export type UiSoundName =
   | 'claim'
   | 'tick';
 
+/**
+ * v1.4 (GAME): the run in progress for the Pause card, from UiCallbacks.runStatus(). A Journey level
+ * names its goal and its three star rules with what the run has done for each so far; an endless,
+ * Daily or challenge run names its target and the time reached.
+ */
+export interface RunStatusView {
+  /** "Level 6 · Glass Garden", "Endless", "Daily Solstice", "Challenge". */
+  title: string;
+  /** "Collect 4 flakes · 3/4", "Reach the finish · 62 %", "Beat Sam: Day 1 · 2:40 PM", "Best: Day 1 · 11:20 AM", or "". */
+  goal: string;
+  /** "Day 1 · 9:20 AM": the time reached (every mode). */
+  now: string;
+  /** A level's star rules in order (the goal, the flakes, the cool run); empty outside the Journey. */
+  stars: { label: string; state: 'earned' | 'open' | 'lost' }[];
+}
+
 /** Data for the Results sheet. */
 export interface ResultsView {
   result: RunResult;
@@ -175,6 +191,8 @@ export interface UiCallbacks {
   buy(id: CosmeticId): boolean;
   /** Wardrobe equip of an owned item (then push the new save with ui.setSave). */
   equip(id: CosmeticId): void;
+  /** v1.4 (GAME): the goal and the stars so far of the run in progress, for the Pause card (null without a run). */
+  runStatus?(): RunStatusView | null;
   /** Settings > Progress: the current save as a backup code (meta/backup exportBackup). */
   exportBackup(): string;
   /** Settings > Restore: validate and apply a pasted code (meta/backup importBackup). */

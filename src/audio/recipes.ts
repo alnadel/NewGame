@@ -192,6 +192,14 @@ export const RECIPES = {
     bellTone(v, t + 0.16, tonic5(p) * 2, 0.1, 0.9, 0.35);
   },
 
+  /** COMEBACK: a quick pluck climb up the scale landing on a bell fifth over the high tonic. */
+  comeback(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    seq(v, t, root, run([0, 2, 4, 5], 0.06), 'pluck', 0.09, 0.22);
+    seq(v, t + 0.26, root, [[0, 12], [0.03, 19]], 'bell', 0.06, 0.9, 1.3);
+  },
+
   /** Glare touch: a falling sawtooth buzz plus a band of noise at 1.2 kHz. */
   glare(g, t) {
     const v = g.voice('sfx', t);
@@ -345,6 +353,51 @@ export const RECIPES = {
     const v = g.voice('sfx', t);
     seq(v, t, tonic5(p), [[0, 7], [0.08, 12]], 'pluck', 0.08, 0.35, 1.3);
     bellTone(v, t + 0.12, tonic5(p) * semis(19), 0.025, 0.5, 0.15);
+  },
+
+  /** A reward lands (Snow, a cosmetic): a rolled bell sixth chord over a soft root, and a glint. */
+  reward(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    seq(v, t, root, [[0, 4], [0.05, 9], [0.1, 16]], 'bell', 0.06, 1.1, 1.4);
+    note(v, 'soft', t, root / 2, 0.05, 0.9);
+    bellTone(v, t + 0.16, root * semis(28), 0.018, 0.45, 0.12);
+  },
+
+  /** Rank up: the pluck fanfare over a bass root, a bell chord on the octave and a run to the top. */
+  rankUp(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    seq(v, t, root, FANFARE, 'pluck', 0.1, 0.4, 2.2);
+    note(v, 'soft', t, root / 2, 0.06, 1.6);
+    seq(v, t + 0.36, root, [[0, 12], [0.02, 16], [0.04, 19]], 'bell', 0.045, 1.4);
+    seq(v, t + 0.5, root, run([5, 7, 9], 0.06, 0), 'bell', 0.035, 0.6, 2);
+  },
+
+  /** A Snow Globe opens: a rising shimmer (the shake), a glassy pop, then sparkles falling in. */
+  open(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    whoosh(g, v, t, 0.45, 600, 4200, 2, 0.1, 0.2);
+    const tp = t + 0.32;
+    glide(v.tone('sine', 900, tp, 0.12, 0.002, 0.07).frequency, tp, 900, 1800, 0.05);
+    v.burst(g.white, tp, 0.05, 0.001, 0.03, v.filter('bandpass', 3000, 1.2));
+    seq(v, tp + 0.04, root, run([9, 7, 8, 5, 7], 0.05), 'bell', 0.06, 0.7, 2);
+    note(v, 'soft', tp, root / 2, 0.05, 1.2);
+  },
+
+  /** Claim: a quick bright two-bell "ka-ching" a fourth apart. */
+  claim(g, t, p) {
+    const v = g.voice('sfx', t);
+    seq(v, t, tonic5(p), [[0, 12], [0.06, 17]], 'bell', 0.06, 0.5, 1.6);
+    v.burst(g.white, t, 0.02, 0.0005, 0.01, v.filter('bandpass', 4000, 2));
+  },
+
+  /** Counter tick (XP and Snow count-ups): a tiny dry wooden click, quiet enough to repeat. */
+  tick(g, t) {
+    const v = g.voice('sfx', t);
+    v.tone('triangle', 1600, t, 0.09, 0.001, 0.018);
+    v.burst(g.white, t, 0.03, 0.0005, 0.004, v.filter('bandpass', 3500, 1.5));
   },
 
   /** Error: two soft low blips a semitone apart, "nuh-uh". */

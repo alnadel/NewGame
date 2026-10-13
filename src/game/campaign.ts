@@ -20,7 +20,7 @@ export function campaignConfig(level: LevelDef, reducedMotion: boolean, tutorial
   return levelConfig(level.id, base);
 }
 
-/** The intro card's lines: "LEVEL 6", "Glass Garden", and the concept line (icon id, name, blurb). */
+/** The intro card's lines: "LEVEL 6", "Glass Garden", the concept line (icon id, name, blurb), the goal and the star rules. */
 export interface IntroCard {
   kicker: string;
   title: string;
@@ -28,6 +28,8 @@ export interface IntroCard {
   conceptName: string;
   blurb: string;
   goal: string;
+  /** The three star rules: the goal ("Finish", "4 flakes", "20 Snow"), "6 flakes", "≤ 4 s in sun". */
+  stars: [string, string, string];
 }
 
 export function introCard(level: LevelDef): IntroCard {
@@ -39,7 +41,15 @@ export function introCard(level: LevelDef): IntroCard {
     conceptName: c ? conceptLabel(level, c.id) : conceptList(level),
     blurb: c?.blurb ?? '',
     goal: goalText(level),
+    stars: starRules(level),
   };
+}
+
+/** The star rules' short labels (CAMPAIGN_PLAN §3: pass, the flakes, a cool run). */
+export function starRules(level: LevelDef): [string, string, string] {
+  const g = level.goal;
+  const pass = g.kind === 'flakes' ? `${g.target} flakes` : g.kind === 'snow' ? `${g.target} Snow` : 'Finish';
+  return [pass, `${level.stars.flakes} flakes`, `≤ ${Math.ceil(level.stars.sunSec)} s in sun`];
 }
 
 /**
@@ -93,6 +103,28 @@ export function nextStarHint(level: LevelDef, stats: Pick<RunStats, 'flakes'> & 
 /** The short miss line stamped at the finish of a failed goal. */
 export function missLine(level: LevelDef): string {
   return level.goal.kind === 'snow' ? 'NOT ENOUGH SNOW' : 'NOT ENOUGH FLAKES';
+}
+
+/** Star bits of a run in progress (starState): the goal is met, the flakes star is earned, the cool run is lost. */
+export const STAR_GOAL = 1;
+export const STAR_FLAKES = 2;
+export const STAR_COOL_LOST = 4;
+
+/**
+ * The stars so far, as bits (the HUD's pips, the Pause card): the goal met (a flakes or Snow goal
+ * reached; a finish goal only at the line), the flakes star earned, and the cool run lost (Chill
+ * fell under stars.minChill or Nubs spent more than stars.sunSec in the sun). starsFor's rules.
+ */
+export function starState(level: LevelDef, stats: Pick<RunStats, 'flakes' | 'snow' | 'litTotal' | 'minChill'>, finished: boolean): number {
+  const goal = level.goal.kind === 'finish' ? finished : goalMetLive(level, stats);
+  const cool = stats.minChill >= level.stars.minChill && stats.litTotal <= level.stars.sunSec;
+  return (goal ? STAR_GOAL : 0) | (stats.flakes >= level.stars.flakes ? STAR_FLAKES : 0) | (cool ? 0 : STAR_COOL_LOST);
+}
+
+/** A flakes or Snow goal already reached in the run (a finish goal: false until the line). */
+export function goalMetLive(level: LevelDef, stats: Pick<RunStats, 'flakes' | 'snow'>): boolean {
+  const g = level.goal;
+  return g.kind === 'flakes' ? stats.flakes >= g.target : g.kind === 'snow' ? stats.snow >= g.target : false;
 }
 
 /** What the HUD's goal pill counts: flakes/target, snow/target, or plain Snow (−1 target). */

@@ -2,7 +2,8 @@
 // first tap starts it with the level's concept; a bot run reaches the Results with stars and Next
 // level starts the level after; a melted level retries without its card; the Eclipse level dims
 // the world; the unlock-all setting makes every Journey tile playable (loosely, while the Journey
-// screen is the UI batch's).
+// screen is the UI batch's). v1.4: a level's tip and star pips, the Pause card's run status, and an
+// endless run's mission toast.
 import { expect, test, type Page } from '@playwright/test';
 import { screen, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
@@ -169,5 +170,50 @@ test.describe('campaign levels', () => {
     const tiles = page.locator('.lvl-tile[data-level]');
     expect(await tiles.count()).toBe(200);
     expect(await page.locator('.lvl-tile.is-locked').count()).toBe(0);
+  });
+});
+
+test.describe('in-run moments (v1.4)', () => {
+  test('level 2: its tip, the goal star pip, and the Pause card status (goal and stars so far)', async ({ page }) => {
+    test.slow();
+    const errors = watchErrors(page);
+    await openLevel(page, 'level=2&test=1');
+    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
+    const v = page.viewportSize() ?? { width: 390, height: 844 };
+    await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.6));
+    // The tip for a level not yet passed, at go: a toast under the HUD.
+    await expect
+      .poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.toasts())).map((t) => `${t.kind}:${t.text}`).join('|'), { timeout: 15_000 })
+      .toMatch(/tip:Flakes melt in the sun/);
+    // The HUD's first pip lights when the flakes goal is met (bit 1).
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(2));
+    await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.hud())).stars & 1, { timeout: 90_000 }).toBe(1);
+    await page.keyboard.press('Escape');
+    await waitForScreen(page, 'pause');
+    const st = await page.evaluate(() => window.__SHADY_TEST__!.runStatus());
+    expect(st).not.toBeNull();
+    expect(st!.title).toBe('Level 2 · Flake Trail');
+    expect(st!.goal).toMatch(/^Collect \d+ flakes · \d+\/\d+$/);
+    expect(st!.now).toMatch(/^Day 1 · \d+:\d\d [AP]M$/);
+    expect(st!.stars.map((s) => s.label)).toEqual([expect.stringMatching(/^\d+ flakes$/), expect.stringMatching(/^\d+ flakes$/), expect.stringMatching(/^≤ \d+ s in sun$/)]);
+    expect(st!.stars[0]!.state).toBe('earned');
+    expect(errors).toEqual([]);
+  });
+
+  test('an endless run toasts a mission the moment it lands', async ({ page }) => {
+    test.slow();
+    const errors = watchErrors(page);
+    await page.goto('/?test=1&seed=42');
+    await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+    await waitForScreen(page, 'title');
+    // A fresh save deals "Reach 9:00 AM" first.
+    await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
+    await page.keyboard.press('ArrowRight');
+    await waitForScreen(page, 'play');
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(4));
+    await expect
+      .poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.toasts())).map((t) => `${t.kicker}:${t.text}`).join('|'), { timeout: 90_000 })
+      .toMatch(/MISSION ✓ 1\/3:Reach 9:00 AM · \+\d+ Snow/);
+    expect(errors).toEqual([]);
   });
 });
