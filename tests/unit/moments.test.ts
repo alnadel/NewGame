@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, levelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { LEVEL_TIPS, RunMoments } from '../../src/game/moments.ts';
+import { createMoments, LEVEL_TIPS } from '../../src/game/moments.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToasts, showToast, updateBanners } from '../../src/render/banners.ts';
 
@@ -91,7 +91,7 @@ describe('RunMoments', () => {
     ];
     const b = createBanners();
     const { log, sinks: k } = sinks();
-    const m = new RunMoments(b, k);
+    const m = createMoments(b, k);
     m.begin(save, null, true);
     const s = dayRun();
     s.tick = 100;
@@ -119,7 +119,7 @@ describe('RunMoments', () => {
   it('shows a level tip once per run, and none once the level is passed', () => {
     const save = defaults(0);
     const b = createBanners();
-    const m = new RunMoments(b, sinks().sinks);
+    const m = createMoments(b, sinks().sinks);
     const s = dayRun(3);
     m.begin(save, levelDef(3)!, true);
     const go: SimEvent = { e: 'go' };
@@ -137,7 +137,7 @@ describe('RunMoments', () => {
   it('COMEBACK: a slow burn under the PHEW line, then held shade; a PHEW on the way in takes its place', () => {
     const b = createBanners();
     const { log, sinks: k } = sinks();
-    const m = new RunMoments(b, k);
+    const m = createMoments(b, k);
     m.begin(defaults(0), null, false);
     const s = dayRun();
     const nb = s.nubs;

@@ -106,7 +106,7 @@ import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
-import { RunMoments } from './moments.ts';
+import { createMoments, type RunMoments } from './moments.ts';
 import { campaignConfig, FINISH_FREEZE_S, FINISH_SKIP_S, goalLine, goalText, hudGoal, introCard, missLine, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState } from './campaign.ts';
 import { formatScore } from '../core/format.ts';
 
@@ -419,7 +419,7 @@ export class Session {
     this.clock.fast = deps.params.fast;
     this.renderer = new Renderer(deps.canvas);
     this.fx = new Fx(this.renderer.scene, this.clock);
-    this.moments = new RunMoments(this.renderer.scene.banners, {
+    this.moments = createMoments(this.renderer.scene.banners, {
       mission: () => {
         this.d.audio.play('reward');
         this.d.haptics.play('reward');

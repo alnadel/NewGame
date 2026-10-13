@@ -57,140 +57,135 @@ interface Tracked {
   hit: boolean;
 }
 
-export class RunMoments {
-  private readonly banners: Banners;
-  private readonly sinks: MomentSinks;
-  private readonly tracked: Tracked[] = [];
-  private done = 0;
-  private total = 0;
-  private lastCheck = 0;
-  /** missionValue reads only `minutes` and `stats`: one reused probe instead of a RunResult per check. */
-  private readonly probe = { minutes: 0, stats: null as unknown as RunResult['stats'] };
-  private tips: readonly (readonly [TipOn, string])[] = [];
-  private tipsShown = 0;
-  private tipGlyph: string | null = null;
-  private level: LevelDef | null = null;
-  /** COMEBACK: armed by Chill under the PHEW line while lit; the tick shade was found (−1 none). */
-  private burn = false;
-  private spent = false;
-  private shadeAt = -1;
-
-  constructor(banners: Banners, sinks: MomentSinks) {
-    this.banners = banners;
-    this.sinks = sinks;
-  }
-
+export interface RunMoments {
   /**
    * A run begins. `scored`: the run will fold into the save (no debug params), so its mission steps
    * are real. Tips show on a Journey level from LEVEL_TIPS until it is passed.
    */
-  begin(save: Save, level: LevelDef | null, scored: boolean): void {
-    this.tracked.length = 0;
-    this.done = 0;
-    this.total = 0;
-    this.lastCheck = 0;
-    this.burn = false;
-    this.spent = false;
-    this.shadeAt = -1;
-    this.level = level;
-    this.tipsShown = 0;
-    this.tips = level && (save.campaign.stars[level.id - 1] ?? 0) === 0 ? (LEVEL_TIPS[level.id] ?? []) : [];
-    this.tipGlyph = level ? (level.concepts[0] ?? null) : null;
-    if (!scored) return;
-    for (const slot of save.missions.active) {
-      const parsed = parseMissionId(slot.id);
-      if (!parsed) continue;
-      this.total++;
-      if (slot.done) {
-        this.done++;
-        continue;
-      }
-      const target = missionTarget(parsed.def, parsed.tier);
-      this.tracked.push({ def: parsed.def, target, label: `${missionLabel(parsed.def, parsed.tier)} · +${missionReward(parsed.def, parsed.tier)} Snow`, hit: slot.progress >= target });
-    }
-  }
-
+  begin(save: Save, level: LevelDef | null, scored: boolean): void;
   /** One tick's event (Session.onTickEvent). */
-  onEvent(ev: SimEvent, s: SimState): void {
-    switch (ev.e) {
-      case 'death':
-      case 'levelWon':
-        endToasts(this.banners);
-        this.tracked.length = 0;
-        break;
-      case 'go':
-        this.tip('go');
-        break;
-      case 'flake':
-        this.tip('flake');
-        if (this.level && goalMetLive(this.level, s.stats)) this.tip('goal');
-        break;
-      case 'flakeMelt':
-        if (this.level && !goalMetLive(this.level, s.stats)) this.tip('melt');
-        break;
-      case 'cloudCapture':
-        this.tip('cloud');
-        break;
-      case 'phew':
-        // A PHEW already celebrates this dip.
-        this.burn = false;
-        this.spent = true;
-        break;
-      case 'shadeEnter':
-        if (this.burn) this.shadeAt = s.tick;
-        break;
-      case 'shadeExit':
-        this.shadeAt = -1;
-        break;
-      default:
-        break;
-    }
-  }
-
+  onEvent(ev: SimEvent, s: SimState): void;
   /** Once per stepped frame, after the ticks. */
-  update(s: SimState): void {
-    if (s.phase !== 'day') return;
-    if (this.level && this.tips.length > 0) {
-      const p = levelProgress(s);
-      if (p >= 0.25) this.tip('p25');
-      if (p >= 0.6) this.tip('p60');
-    }
-    const nb = s.nubs;
-    if (!s.lessonOn) {
-      // One COMEBACK per dip: after one, Chill climbs back over half before the next can arm.
-      const high = nb.chill > COMEBACK_REARM * nb.maxChill;
-      if (high) this.spent = false;
-      if (nb.f > 0 && nb.chill < s.params.phewT && !this.spent) this.burn = true;
-      else if (high && this.shadeAt < 0) this.burn = false;
-      if (this.burn && this.shadeAt >= 0 && s.tick - this.shadeAt >= COMEBACK_HOLD && nb.f === 0) {
-        this.burn = false;
-        this.spent = true;
-        this.shadeAt = -1;
-        this.sinks.comeback(nb.x, nb.y);
-      }
-    }
-    if (this.tracked.length === 0 || s.tick - this.lastCheck < MISSION_EVERY) return;
-    this.lastCheck = s.tick;
-    this.probe.minutes = s.minutes;
-    this.probe.stats = s.stats;
-    for (const m of this.tracked) {
-      if (m.hit || missionValue(m.def, this.probe as unknown as RunResult) < m.target) continue;
-      m.hit = true;
-      this.done++;
-      const all = this.done >= this.total;
-      showToast(this.banners, 'mission', `${all ? 'ALL MISSIONS' : 'MISSION'} ✓ ${this.done}/${this.total}`, m.label, null, MISSION_HOLD);
-      this.sinks.mission();
-    }
-  }
+  update(s: SimState): void;
+}
+
+/** The run's moments, toasting into `banners` (closures, so the minifier shortens the state). */
+export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments {
+  const tracked: Tracked[] = [];
+  let done = 0;
+  let total = 0;
+  let lastCheck = 0;
+  /** missionValue reads only `minutes` and `stats`: one reused probe instead of a RunResult per check. */
+  const probe = { minutes: 0, stats: null as unknown as RunResult['stats'] };
+  let tips: readonly (readonly [TipOn, string])[] = [];
+  let tipsShown = 0;
+  let tipGlyph: string | null = null;
+  let level: LevelDef | null = null;
+  /** COMEBACK: armed by Chill under the PHEW line while lit, spent until Chill climbs back; the tick shade was found (-1 none). */
+  let burn = false;
+  let spent = false;
+  let shadeAt = -1;
 
   /** Shows the level's tip for `on`, once per run. */
-  private tip(on: TipOn): void {
-    for (let i = 0; i < this.tips.length; i++) {
-      const bit = 1 << i;
-      const t = this.tips[i] as readonly [TipOn, string];
-      if (t[0] !== on || (this.tipsShown & bit) !== 0) continue;
-      this.tipsShown |= bit;
-      showToast(this.banners, 'tip', 'TIP', t[1], this.tipGlyph, TIP_HOLD);
+  const tip = (on: TipOn): void => {
+    for (let i = 0; i < tips.length; i++) {
+      const t = tips[i] as readonly [TipOn, string];
+      if (t[0] !== on || (tipsShown & (1 << i)) !== 0) continue;
+      tipsShown |= 1 << i;
+      showToast(banners, 'tip', 'TIP', t[1], tipGlyph, TIP_HOLD);
     }
-  }
+  };
+
+  return {
+    begin(save, lv, scored) {
+      tracked.length = 0;
+      done = total = lastCheck = tipsShown = 0;
+      burn = spent = false;
+      shadeAt = -1;
+      level = lv;
+      tips = lv && (save.campaign.stars[lv.id - 1] ?? 0) === 0 ? (LEVEL_TIPS[lv.id] ?? []) : [];
+      tipGlyph = lv ? (lv.concepts[0] ?? null) : null;
+      if (!scored) return;
+      for (const slot of save.missions.active) {
+        const parsed = parseMissionId(slot.id);
+        if (!parsed) continue;
+        total++;
+        if (slot.done) {
+          done++;
+          continue;
+        }
+        const { def, tier } = parsed;
+        const target = missionTarget(def, tier);
+        tracked.push({ def, target, label: `${missionLabel(def, tier)} · +${missionReward(def, tier)} Snow`, hit: slot.progress >= target });
+      }
+    },
+
+    onEvent(ev, s) {
+      switch (ev.e) {
+        case 'death':
+        case 'levelWon':
+          endToasts(banners);
+          tracked.length = 0;
+          break;
+        case 'go':
+        case 'cloudCapture':
+          tip(ev.e === 'go' ? 'go' : 'cloud');
+          break;
+        case 'flake':
+          tip('flake');
+          if (level && goalMetLive(level, s.stats)) tip('goal');
+          break;
+        case 'flakeMelt':
+          if (level && !goalMetLive(level, s.stats)) tip('melt');
+          break;
+        case 'phew':
+          // A PHEW already celebrates this dip.
+          burn = false;
+          spent = true;
+          break;
+        case 'shadeEnter':
+          if (burn) shadeAt = s.tick;
+          break;
+        case 'shadeExit':
+          shadeAt = -1;
+          break;
+        default:
+          break;
+      }
+    },
+
+    update(s) {
+      if (s.phase !== 'day') return;
+      if (tips.length > 0) {
+        const p = levelProgress(s);
+        if (p >= 0.25) tip('p25');
+        if (p >= 0.6) tip('p60');
+      }
+      const nb = s.nubs;
+      if (!s.lessonOn) {
+        // One COMEBACK per dip: after one, Chill climbs back over half before the next can arm.
+        const high = nb.chill > COMEBACK_REARM * nb.maxChill;
+        if (high) spent = false;
+        if (nb.f > 0 && nb.chill < s.params.phewT && !spent) burn = true;
+        else if (high && shadeAt < 0) burn = false;
+        if (burn && shadeAt >= 0 && s.tick - shadeAt >= COMEBACK_HOLD && nb.f === 0) {
+          burn = false;
+          spent = true;
+          shadeAt = -1;
+          sinks.comeback(nb.x, nb.y);
+        }
+      }
+      if (tracked.length === 0 || s.tick - lastCheck < MISSION_EVERY) return;
+      lastCheck = s.tick;
+      probe.minutes = s.minutes;
+      probe.stats = s.stats;
+      for (const m of tracked) {
+        if (m.hit || missionValue(m.def, probe as unknown as RunResult) < m.target) continue;
+        m.hit = true;
+        done++;
+        showToast(banners, 'mission', `${done >= total ? 'ALL MISSIONS' : 'MISSION'} ✓ ${done}/${total}`, m.label, null, MISSION_HOLD);
+        sinks.mission();
+      }
+    },
+  };
 }
