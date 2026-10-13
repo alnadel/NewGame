@@ -2,6 +2,7 @@
 // dayParams(): one day's knobs under a profile and its Day Plan entry (biome and forecast).
 // Pure data + arithmetic over the other config tables. All per-day difficulty knobs live here.
 
+import { foldTuning, type ConceptId } from './concepts.ts';
 import { FORECAST_IDS, FORECAST_TUNING, type ForecastId } from './forecasts.ts';
 import { TUNING } from './tuning.ts';
 
@@ -71,6 +72,32 @@ export interface DayParams {
   readonly drain: number;
   /** PHEW fires below this Chill. */
   readonly phewT: number;
+
+  // Concept tuning (config/concepts.ts), at their plain values when no concept is active.
+  /** Caster part heights × (catalog time). */
+  readonly heightScale: number;
+  /** Every cloud is a waiter (none overtakes). */
+  readonly waitersOnly: boolean;
+  /** Flake cluster spacing ×. */
+  readonly clusterGap: number;
+  /** Lit seconds until a flake or crystal melts (Infinity: never). */
+  readonly meltBudget: number;
+  /** Drain × on top of the run's drain (effectiveDrain). */
+  readonly drainMul: number;
+  /** Daylight regeneration at f = 0 (Chill/s). */
+  readonly regen: number;
+  /** Max Chill (Chill starts there). */
+  readonly maxChill: number;
+  /** Sun follow-rate cap (°/s; 0 = none beyond sunMaxRate). */
+  readonly sunFollow: number;
+  /** Coasting factor per tick (0 = the sun never coasts). */
+  readonly sunFriction: number;
+  /**
+   * Walk-speed multiplier: `v` already includes it. The global clock (core/clock.ts) maps time to
+   * y at ×1; a world scales that map by walkMul (core/gen/plan.ts worldYAtDayTick, worldTimeAtY), so the
+   * clock, the placer, the validator, the guide and the sim agree.
+   */
+  readonly walkMul: number;
 }
 
 export interface ProfileParams {
@@ -322,6 +349,15 @@ function skyOf(plan: DayPlan): SkyParams {
 }
 
 const cache = new Map<number, DayParams>();
+const modCache = new Map<string, DayParams>();
+
+/** Cloud spawn times: k × the row's count, evenly spaced over the row's first..last time (0 = none). */
+function cloudTimes(row: Row, k: number): readonly number[] {
+  const n = row.clouds.length;
+  if (k === 1) return Object.freeze(row.clouds.slice());
+  const m = Math.round(n * k);
+  return Object.freeze(m <= 0 ? [] : evenly(m, row.clouds[0] as number, row.clouds[n - 1] as number));
+}
 
 /**
  * Parameters for day `day` (1-based) under onboarding profile `profile` and Day Plan entry `plan`
@@ -330,41 +366,62 @@ const cache = new Map<number, DayParams>();
  * the same in every world. Gazing balls stand on Old Town days ≥ 2, the k-th such day using the
  * table row of day 2k (Old Town keeps its rhythm whichever biome Day 1 drew), unless the forecast
  * sets them (dazzle brings them to the Meadow, market clears them).
+ *
+ * `mods` (campaign concepts, CAMPAIGN_PLAN §3) apply their tunes on top of the forecast: spacing,
+ * latMax, heightScale, cloud count and radii, waiters, gazing balls, flakes per cluster and cluster
+ * spacing, melt budget, drain and regen multipliers, max Chill, the sun's follow cap and friction,
+ * the walk multiplier and the noon elevation. Without mods the result is the same object as before.
  */
-export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legacyPlan(day)): DayParams {
+export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legacyPlan(day), mods?: readonly ConceptId[]): DayParams {
   const d = Math.max(1, Math.floor(day));
   const key = ((d * 4 + profile) * 2 + (plan.biome === 'oldtown' ? 1 : 0)) * 8 + FIDX[plan.forecast];
-  const hit = cache.get(key);
+  const tune = mods && mods.length > 0 ? foldTuning(mods) : null;
+  const mkey = tune ? `${key}|${mods ? mods.join(',') : ''}` : '';
+  const hit = tune ? modCache.get(mkey) : cache.get(key);
   if (hit) return hit;
   const row = tableRow(d);
   const prof = PROFILES[profile] as ProfileParams;
   const ft = FORECAST_TUNING[plan.forecast];
-  const n = row.clouds.length;
-  const k = ft.clouds ?? 1;
+  const k = (ft.clouds ?? 1) * (tune?.cloudCount ?? 1);
   const balls = ballsOf(d, plan);
+  const sky = skyOf(plan);
+  const rxMul = tune?.cloudRx;
+  const walkMul = tune?.walkMul ?? 1;
+  const ballEvery = tune?.ballEvery;
   const params: DayParams = Object.freeze({
     day: d,
     biome: plan.biome,
     forecast: plan.forecast,
-    epsNoon: (d === 1 ? prof.day1EpsNoon : row.epsNoon) + (ft.epsNoon ?? 0),
-    v: row.v,
+    epsNoon: tune?.epsNoon ?? ((d === 1 ? prof.day1EpsNoon : row.epsNoon) + (ft.epsNoon ?? 0)),
+    v: tune ? row.v * walkMul : row.v,
     dayLen: row.dayLen,
     nightLen: nightLength(d),
-    spacing: row.spacing * (ft.spacing ?? 1),
+    spacing: row.spacing * (ft.spacing ?? 1) * (tune?.spacing ?? 1),
     waveA: row.waveA,
     waveB: row.waveB,
     latMin: row.latMin,
-    latMax: row.latMax + (ft.latMax ?? 0),
-    clouds: Object.freeze(k === 1 ? row.clouds.slice() : evenly(Math.round(n * k), row.clouds[0] as number, row.clouds[n - 1] as number)),
-    sky: skyOf(plan),
-    ballStart: balls[0],
-    ballEvery: balls[1],
-    flakesPerCluster: row.flakes + (ft.flakes ?? 0),
+    latMax: row.latMax + (ft.latMax ?? 0) + (tune?.latMax ?? 0),
+    clouds: cloudTimes(row, k),
+    sky: rxMul !== undefined ? Object.freeze({ ...sky, rxMin: sky.rxMin * rxMul, rxMax: sky.rxMax * rxMul }) : sky,
+    ballStart: ballEvery !== undefined ? ballEvery / 2 : balls[0],
+    ballEvery: ballEvery !== undefined ? ballEvery : balls[1],
+    flakesPerCluster: tune?.flakesPerCluster ?? row.flakes + (ft.flakes ?? 0),
     snowMult: ft.snow ?? 1,
     floor: row.floor,
     drain: prof.drain,
     phewT: prof.phewT,
+    heightScale: tune?.heightScale ?? 1,
+    waitersOnly: tune?.waitersOnly ?? false,
+    clusterGap: tune?.clusterGap ?? 1,
+    meltBudget: tune?.meltBudget ?? TUNING.pickups.meltBudget,
+    drainMul: tune?.drainMul ?? 1,
+    regen: TUNING.nubs.regen * (tune?.regenMul ?? 1),
+    maxChill: tune?.maxChill ?? TUNING.nubs.maxChill,
+    sunFollow: tune?.sunFollow ?? 0,
+    sunFriction: tune?.sunFriction ?? TUNING.sun.friction,
+    walkMul,
   });
-  cache.set(key, params);
+  if (tune) modCache.set(mkey, params);
+  else cache.set(key, params);
   return params;
 }
