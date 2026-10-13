@@ -211,3 +211,35 @@ test('Settings > Unlock all levels (testing) opens every feature for a new playe
   await waitForScreen(page, 'missions');
   await expect(page.locator('.scr-missions').getByRole('button', { name: 'Trophies' })).toBeVisible();
 });
+
+test('Results: the stars, then the XP meter settles, then the reveal, then the actions arm', async ({ page }) => {
+  // 5 XP short of Rank 5, whose reward is a Snow Globe.
+  await seedSave(page, v4({ xp: 695 }));
+  await openGame(page);
+  // Records, when the reveal appears, whether the meter had rolled over and finished filling.
+  await page.evaluate(() => {
+    const w = window as unknown as { revealSeen?: { rankup: boolean; count: string; retry: boolean } };
+    new MutationObserver((_, obs) => {
+      const rv = document.querySelector('.rv');
+      if (!rv) return;
+      const xp = document.querySelector('.scr-results .xp-meter') as HTMLElement;
+      const retry = document.querySelector('.scr-results .res-retry') as HTMLButtonElement;
+      w.revealSeen = { rankup: xp.classList.contains('is-rankup'), count: xp.querySelector('.xp-foot .num')?.textContent ?? '', retry: retry.getAttribute('aria-disabled') === 'true' || retry.disabled };
+      obs.disconnect();
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await startRun(page);
+  await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
+  await waitForScreen(page, 'results', 15_000);
+  const rv = page.locator('.rv');
+  await expect(rv.locator('.rv-kicker')).toHaveText('Rank 5!', { timeout: 10_000 });
+  const seen = await page.evaluate(() => (window as unknown as { revealSeen: { rankup: boolean; count: string; retry: boolean } }).revealSeen);
+  expect(seen.rankup).toBe(true);
+  expect(seen.retry).toBe(true);
+  const xp = (await stored(page)).gamify.xp as number;
+  expect(seen.count).toBe(`${xp - 700} / 300 XP`);
+  await rv.click();
+  await page.getByRole('button', { name: 'Collect' }).click();
+  await expect(rv).toHaveCount(0);
+  await expect(page.locator('.scr-results .res-retry')).toHaveClass(/is-ready/);
+});
