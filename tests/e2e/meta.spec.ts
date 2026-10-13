@@ -3,7 +3,7 @@
 // line, and layouts of the Title, Results and the Profile's records (the Journal until v1.4) at
 // phone and desktop sizes (no overlaps, no sideways scroll). Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { challengeCode, keepAlive, openGame, seedSave, waitForScreen } from './helpers.ts';
+import { challengeCode, keepAlive, OPEN_SAVE, openGame, seedSave, waitForScreen } from './helpers.ts';
 
 const SIZES = [
   { width: 360, height: 640 },
@@ -155,6 +155,7 @@ test.describe('the Sun Strip (UM8)', () => {
   });
 
   test('a run started on Day 3 labels its row Day 3', async ({ page }) => {
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=42&day=3&t=15:00');
     await startRun(page);
     await die(page);

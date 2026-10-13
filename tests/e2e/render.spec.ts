@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
-import { drag, keepAlive, openGame, pageDate, seedSave, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
@@ -73,6 +73,7 @@ test.describe('render cadence', () => {
   });
 
   test('settled Results draw at most 20 fps and leave the main thread free; the puddle ring still pulses', async ({ page }) => {
+    await seedSave(page, OPEN_SAVE);
     const errors = watchErrors(page);
     await openGame(page);
     await startPlay(page);
@@ -250,6 +251,7 @@ test.describe('draw-call budget', () => {
   // there; v1.1 adds about 85 decal blits, a contact-AO sprite per caster and the atmosphere layer.
   test('a full-quality play frame stays within its canvas-call budget', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one run is enough');
+    await seedSave(page, OPEN_SAVE);
     await page.addInitScript(() => {
       const c: Record<string, number> = { drawImage: 0, fill: 0, stroke: 0 };
       (window as unknown as { __calls: Record<string, number> }).__calls = c;
@@ -292,6 +294,7 @@ test.describe('forecast signatures', () => {
 
   test('each forecast grades the whole frame unmistakably, within three full-screen passes', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one run is enough');
+    await seedSave(page, OPEN_SAVE);
     /** Mean colour of the world below the HUD at Day 1 11:20 AM under a forced forecast (time frozen). */
     const frame = async (forecast: string): Promise<{ rgb: number[]; passes: number }> => {
       await openGame(page, `test=1&perf=0&seed=11&day=1&t=11:20&forecast=${forecast}`);
@@ -364,6 +367,7 @@ test.describe('Melt Map under the sheet (K10)', () => {
 
 test.describe('camera effects', () => {
   test('the death shake ends: the Title camera is back after Home', async ({ page }) => {
+    await seedSave(page, OPEN_SAVE);
     await openGame(page);
     const y0 = (await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen())).y;
     await startPlay(page);
@@ -496,6 +500,7 @@ test.describe('death beat (GR12)', () => {
   });
 
   test('seed 11: the Results carry a recap tip and the callouts keep apart', async ({ page }) => {
+    await seedSave(page, OPEN_SAVE);
     // At noon the recap always has a line (the noon one, unless an earlier rule fits).
     await openGame(page, 'test=1&seed=11&day=1&t=12:00&profile=3');
     // At noon on profile 3 a slow drag can outlast Nubs: the oracle keeps him alive until the forced melt.

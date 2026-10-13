@@ -2,11 +2,12 @@
 // control stay with it, Escape from a menu returns focus to the tray button that opened it, and
 // Enter on a Wardrobe tile keeps the focus on that tile.
 import { expect, test } from '@playwright/test';
-import { openGame, screen, seedSave, waitForScreen } from './helpers.ts';
+import { OPEN_SAVE, openGame, screen, seedSave, waitForScreen } from './helpers.ts';
 
 test.skip(({ isMobile }) => isMobile, 'keyboard: the desktop project');
 
 test('an arrow key on a focused tray button does not start a run', async ({ page }) => {
+  await seedSave(page, OPEN_SAVE);
   await openGame(page);
   const missions = page.locator('.tray button[aria-label="Missions"]');
   // Tab until the Missions tray button has focus.
@@ -30,6 +31,7 @@ test('an arrow key with nothing focused still starts a run', async ({ page }) =>
 });
 
 test('Escape from Missions returns focus to its tray button', async ({ page }) => {
+  await seedSave(page, OPEN_SAVE);
   await openGame(page);
   const missions = page.locator('.tray button[aria-label="Missions"]');
   await missions.focus();

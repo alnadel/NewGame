@@ -3,7 +3,7 @@
 // edge-ignore zone, the Back trap, and audio unlocking on the first gesture.
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { drag, openGame, screen, state, UNLOCKED_SAVE, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, OPEN_SAVE, openGame, screen, seedSave, state, UNLOCKED_SAVE, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
 
 const golden = JSON.parse(readFileSync(new URL('../golden/hashes.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 
@@ -30,6 +30,7 @@ test.describe('smoke', () => {
 
   test('a drag starts play, minutes advance, audio unlocks', async ({ page }) => {
     const errors = watchErrors(page);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page);
     const c = center(page);
     await drag(page, c.x, c.y, -60);
@@ -45,6 +46,7 @@ test.describe('smoke', () => {
   test('first run: the ghost hint keeps one way round and slows time until a swing finds shade', async ({ page }) => {
     const errors = watchErrors(page);
     // Fresh save: profile 0, the tutorial chunk, the first lesson.
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=5');
     const c = center(page);
     await page.mouse.click(c.x, c.y);
@@ -181,6 +183,7 @@ test.describe('smoke', () => {
   test('a sideways touch drag from a Title tray button hands off to the sun', async ({ page }, testInfo) => {
     test.skip(!testInfo.project.use.hasTouch, 'touch input only');
     const errors = watchErrors(page);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=4&profile=3');
     const box = await page.locator('.tray button[aria-label="Missions"]').boundingBox();
     expect(box).not.toBeNull();

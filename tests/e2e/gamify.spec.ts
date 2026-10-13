@@ -196,17 +196,17 @@ test('the daily streak: Day 7 claims a Snow Globe on Missions, once a day', asyn
 
 test('Settings > Unlock all levels (testing) opens every feature for a new player', async ({ page }) => {
   await openGame(page);
-  await page.locator('.tray button[aria-label="Missions"]').click();
-  await waitForScreen(page, 'missions');
-  // A new player has no Profile yet: no Trophies link.
-  await expect(page.locator('.scr-missions').getByRole('button', { name: 'Trophies' })).toBeHidden();
-  await page.keyboard.press('Escape');
-  await waitForScreen(page, 'title');
+  // A new player's Title is Play and Settings only (v1.4 progressive disclosure).
+  await expect(page.locator('.tray button[aria-label="Missions"]')).toBeHidden();
+  await expect(page.locator('.scr-title .endless-pill')).toBeHidden();
   await page.locator('.tray button[aria-label="Settings"]').click();
   await waitForScreen(page, 'settings');
   await page.locator('[role="switch"][aria-label="Unlock all levels (testing)"]').click();
   await page.keyboard.press('Escape');
   await waitForScreen(page, 'title');
+  await expect(page.locator('.scr-title .endless-pill')).toBeVisible();
+  await expect(page.locator('.scr-title .endless-pill')).not.toHaveClass(/is-locked/);
+  for (const name of ['Daily', 'Wardrobe']) await expect(page.locator(`.tray button[aria-label^="${name}"]`)).not.toHaveClass(/is-locked/);
   await page.locator('.tray button[aria-label="Missions"]').click();
   await waitForScreen(page, 'missions');
   await expect(page.locator('.scr-missions').getByRole('button', { name: 'Trophies' })).toBeVisible();

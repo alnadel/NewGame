@@ -96,6 +96,14 @@ export async function drag(page: Page, x: number, y: number, dx: number, steps =
   await page.mouse.up();
 }
 
+/**
+ * A new player who turned on Settings → Unlock all levels (testing), which opens every v1.4 feature:
+ * nothing played yet (the first endless run is still the tutorial rung with the lesson), but the
+ * Title shows Endless and the tray, and a press on its canvas starts the endless run as it did
+ * before the feature locks. Without it a fresh Title is Play only and the canvas plays Level 1.
+ */
+export const OPEN_SAVE = { v: 4, createdAt: 1, settings: { unlockAll: true } };
+
 /** A save that has unlocked the Daily (3 lifetime runs). */
 export const UNLOCKED_SAVE = JSON.stringify({ v: 1, createdAt: 1, stats: { runs: 3 } });
 

@@ -6,7 +6,7 @@
 // labels apart, a rich save's chips clear Nubs' halo, the challenge banner clears the chips, and
 // a toast clears the menu header. Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { challengeCode, drag, keepAlive, openGame, seedSave, waitForScreen } from './helpers.ts';
+import { challengeCode, drag, keepAlive, OPEN_SAVE, openGame, seedSave, waitForScreen } from './helpers.ts';
 
 const SIZES = [
   { width: 320, height: 568 },
@@ -58,6 +58,7 @@ async function expectInside(page: Page, loc: Locator, label: string): Promise<vo
 for (const size of SIZES) {
   test(`layout ${size.width}x${size.height} with a 47 px notch`, async ({ page }, info) => {
     await page.setViewportSize(size);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page);
     await simulateNotch(page);
     await page.waitForTimeout(200);
@@ -217,6 +218,7 @@ for (const pct of [150, 200]) {
         document.documentElement.style.fontSize = `${p}%`;
       });
     }, pct);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page);
     await page.waitForTimeout(300);
     const labels = page.locator('.tray-label');
@@ -329,6 +331,7 @@ for (const size of [
 ]) {
   test(`HUD ${size.width}x${size.height}: a forecast day with 3- and 4-digit Snow keeps the day ruler`, async ({ page }, info) => {
     await page.setViewportSize(size);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=7&forecast=breezy&perf=0');
     await keepAlive(page);
     await page.mouse.click(Math.round(size.width / 2), Math.round(size.height * 0.4));

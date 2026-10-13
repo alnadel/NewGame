@@ -2,7 +2,7 @@
 // but the Title does the screen's own back action and stays in the game; a modal closes first;
 // play pauses and pause stays paused; on the Title with nothing open, Back leaves the game.
 import { expect, test, type Page } from '@playwright/test';
-import { drag, screen, seedSave, UNLOCKED_SAVE, waitForScreen } from './helpers.ts';
+import { drag, OPEN_SAVE, screen, seedSave, UNLOCKED_SAVE, waitForScreen } from './helpers.ts';
 
 test.skip(({ isMobile }) => !isMobile, 'Android Back: the mobile project');
 
@@ -71,6 +71,7 @@ test('Back closes the reset confirmation first', async ({ page }) => {
 });
 
 test('Back on the Title leaves the game', async ({ page }) => {
+  await seedSave(page, OPEN_SAVE);
   await openFromBlank(page);
   // A trip through a menu leaves no stray history entry behind.
   await page.locator('.tray button[aria-label="Missions"]').click();

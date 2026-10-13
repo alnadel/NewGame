@@ -38,11 +38,42 @@ test('the Title plays the next level: its Play button and Space start Level 4', 
   expect((await state(page)).level).toBe(4);
 });
 
-test('a fresh save plays Level 1 first; Endless is one tap away', async ({ page }) => {
+// v1.4 (intentional): Endless opens after Level 3, so a fresh Title is Play only and a press on its
+// canvas plays Level 1 like the Play button; once Endless is open the canvas starts the endless run.
+test('a fresh save plays Level 1 first, from Play or the canvas; Endless opens after Level 3', async ({ page }) => {
   await openGame(page);
   await expect(page.locator('.scr-title .play-pill')).toHaveText('Level 1');
-  await expect(page.locator('.scr-title .journey-pill')).toHaveText('Map');
+  await expect(page.locator('.scr-title .journey-pill')).toBeHidden();
+  await expect(page.locator('.scr-title .endless-pill')).toBeHidden();
+  await expect(page.locator('.scr-title .title-keys')).toHaveText('Space or ← →: play the level · Esc: back');
+  const v = page.viewportSize() ?? { width: 390, height: 844 };
+  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+  await waitForScreen(page, 'play');
+  expect((await runCfg(page)).mode).toBe('campaign');
+  expect((await state(page)).level).toBe(1);
+});
+
+test('an arrow key on a fresh Title plays Level 1 too', async ({ page }) => {
+  await openGame(page);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('ArrowRight');
+  await waitForScreen(page, 'play');
+  expect((await runCfg(page)).mode).toBe('campaign');
+  expect((await state(page)).level).toBe(1);
+});
+
+test('past Level 3 Endless is one tap away, and the canvas starts it', async ({ page }) => {
+  await seedSave(page, journeySave());
+  await openGame(page);
+  await expect(page.locator('.scr-title .title-keys')).toHaveText('Space: play the level · ← →: Endless · Esc: back');
   await page.locator('.scr-title .endless-pill').click();
+  await waitForScreen(page, 'play');
+  expect((await runCfg(page)).mode).toBe('endless');
+  await page.reload();
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'title');
+  const v = page.viewportSize() ?? { width: 390, height: 844 };
+  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
   await waitForScreen(page, 'play');
   expect((await runCfg(page)).mode).toBe('endless');
 });

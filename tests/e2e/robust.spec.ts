@@ -1,7 +1,7 @@
 // The frame loop survives exceptions (frame-loop-dies-on-exception): one throwing frame is logged
 // and the game plays on; a frame that keeps throwing ends in a visible crash overlay with Reload.
 import { expect, test } from '@playwright/test';
-import { drag, openGame, state, waitForScreen } from './helpers.ts';
+import { drag, OPEN_SAVE, openGame, seedSave, state, waitForScreen } from './helpers.ts';
 
 async function startPlay(page: import('@playwright/test').Page): Promise<void> {
   const v = page.viewportSize()!;
@@ -14,6 +14,7 @@ test('one throwing frame is survived', async ({ page }) => {
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
+  await seedSave(page, OPEN_SAVE);
   await openGame(page);
   await startPlay(page);
   await page.waitForTimeout(300);

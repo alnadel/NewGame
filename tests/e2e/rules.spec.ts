@@ -2,7 +2,7 @@
 // and its cues, wheel and keyboard turns, and the Title's Day Plan chip.
 import { expect, test, type Page } from '@playwright/test';
 import { planDay } from '../../src/core/index.ts';
-import { keepAlive, openGame, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
+import { keepAlive, OPEN_SAVE, openGame, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
 /** Records every text the cue line shows (a MutationObserver installed before the page's scripts). */
 async function recordCues(page: Page): Promise<void> {
@@ -70,6 +70,7 @@ test.describe('first-run lesson (A5)', () => {
   test('a fresh first run cannot melt inside the lesson; the cues say keep shade, then drag, always the hint\'s way', async ({ page }) => {
     const errors = watchErrors(page);
     await recordCues(page);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=5');
     const v = page.viewportSize()!;
     await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
@@ -106,6 +107,7 @@ test.describe('first-run lesson (A5)', () => {
 
   test('a swing into shade passes it: the shade-found cue, normal time, and a floor that fades', async ({ page }) => {
     await recordCues(page);
+    await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=5');
     const v = page.viewportSize()!;
     const c = { x: Math.round(v.width / 2), y: Math.round(v.height * 0.4) };
