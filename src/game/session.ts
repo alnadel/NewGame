@@ -114,6 +114,8 @@ import { formatScore } from '../core/format.ts';
 type LevelWon = Extract<SimEvent, { e: 'levelWon' }>;
 
 const DYING_S = 1.1;
+/** A count-up's tick buzzes at most this often (ms). */
+const TICK_HAPTIC_MS = 90;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
 /**
@@ -230,6 +232,8 @@ export class Session {
   private readonly moments: RunMoments;
   /** The campaign star bits last seen (a newly lit one chimes). */
   private runStars = 0;
+  /** When the last count-up tick buzzed (uiSound 'tick'). */
+  private tickHapticAt = Number.NEGATIVE_INFINITY;
   readonly gov = new Governor();
   readonly cadence = new Cadence();
   private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false, settled: false };
@@ -2231,9 +2235,16 @@ export class Session {
         a.play(name);
         this.d.haptics.play(name);
         return;
-      case 'tick':
+      case 'tick': {
+        // Count-ups tick fast: the click every time, the haptic at most every TICK_HAPTIC_MS.
         a.play('tick');
-        break;
+        const t = performance.now();
+        if (t - this.tickHapticAt >= TICK_HAPTIC_MS) {
+          this.tickHapticAt = t;
+          this.d.haptics.play('tick');
+        }
+        return;
+      }
       case 'deny':
         a.play('uiError');
         break;
