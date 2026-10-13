@@ -94,8 +94,9 @@ test('the Wardrobe counts the collection and marks rarity', async ({ page }) => 
   await page.locator('.tray button[aria-label="Wardrobe"]').click();
   await waitForScreen(page, 'wardrobe');
   await expect(page.locator('.scr-wardrobe .collection .num')).toHaveText(/^\d+\/\d+$/);
-  await expect(page.locator('.scr-wardrobe [data-id="scarf-plaid"]')).toHaveAttribute('data-rarity', 'rare');
-  await expect(page.locator('.scr-wardrobe [data-id="scarf-plaid"]')).toHaveAttribute('aria-label', /Rare/);
+  // The rarity the Snow Globes use (meta/gamify rarity): 400 Snow is epic.
+  await expect(page.locator('.scr-wardrobe [data-id="scarf-rainbow"]')).toHaveAttribute('data-rarity', 'epic');
+  await expect(page.locator('.scr-wardrobe [data-id="scarf-rainbow"]')).toHaveAttribute('aria-label', /Epic/);
   await expect(page.locator('.scr-wardrobe .preview-name + .rarity')).toBeVisible();
   // A globe-only item says where it is found.
   const frost = page.locator('.scr-wardrobe [data-id="scarf-frost"]');

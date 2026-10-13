@@ -18,8 +18,7 @@ import {
   type RunStats,
 } from '../core/index.ts';
 import { challengeVerdict } from '../meta/challenge.ts';
-import { getAchievement, type Cosmetic } from '../meta/content.ts';
-import type { Feature } from '../meta/gamify.ts';
+import type { Feature, Rarity } from '../meta/gamify.ts';
 import { DAILY_TRIES, dailySeed } from '../meta/daily.ts';
 import { dailyStatus } from '../meta/progression.ts';
 import type { Save } from '../meta/saveTypes.ts';
@@ -342,17 +341,5 @@ export function featureLabel(f: Feature): string {
   return FEATURE_LABEL[f];
 }
 
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
-
+/** A cosmetic's rarity (meta/gamify.ts rarity) as a word. */
 export const RARITY_LABEL: Readonly<Record<Rarity, string>> = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
-
-/**
- * A cosmetic's rarity in the Wardrobe, from what it takes: Journey star rewards are legendary,
- * other achievements and pricey items (500+ Snow) epic, 150+ Snow rare, the rest common.
- */
-export function rarityOf(c: Cosmetic): Rarity {
-  const u = c.unlock;
-  if (u.kind === 'achievement') return getAchievement(u.achievement)?.stars !== undefined ? 'legendary' : 'epic';
-  if (u.kind !== 'snow') return 'common';
-  return u.cost >= 500 ? 'epic' : u.cost >= 150 ? 'rare' : 'common';
-}

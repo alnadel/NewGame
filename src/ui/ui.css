@@ -2790,7 +2790,7 @@
 .tile.is-bought .tile-art,
 .stage-spot.is-hop { animation: bought 600ms var(--ease-back); }
 
-/* Rarity (labels.ts rarityOf): a coloured rim on the tile and a label; common items stay plain. */
+/* Rarity (meta/gamify.ts rarity): a coloured rim on the tile and a label; common items stay plain. */
 .tile[data-rarity='rare'],
 .rarity[data-rarity='rare'] { --rar: #2559b8; }
 

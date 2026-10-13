@@ -17,10 +17,9 @@ import type { HourGlyph, RunResult } from '../../src/core/index.ts';
 import { defaults } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
-import { COSMETICS } from '../../src/meta/content.ts';
 import {
   featureLabel,
-  rarityOf,
+  RARITY_LABEL,
   campaignKicker,
   challengeGoalText,
   chapterTitle,
@@ -424,13 +423,8 @@ describe('Journey labels (CAMPAIGN_PLAN §5)', () => {
 });
 
 describe('v1.4 labels', () => {
-  it('rates every cosmetic: star rewards legendary, pricey or earned items epic, mid prices rare', () => {
-    const r = (id: string): string => rarityOf(COSMETICS.find((c) => c.id === id)!);
-    expect(r('scarf-red')).toBe('common');
-    expect(r('scarf-mint')).toBe('common');
-    expect(r('scarf-plaid')).toBe('rare');
-    expect(r('scarf-midnight')).toBe('epic');
-    expect(COSMETICS.filter((c) => rarityOf(c) === 'legendary').length).toBeGreaterThanOrEqual(5);
+  it('words every rarity (meta/gamify rarity rates the items)', () => {
+    expect(Object.values(RARITY_LABEL)).toEqual(['Common', 'Rare', 'Epic', 'Legendary']);
   });
 
   it('names features in a sentence', () => {

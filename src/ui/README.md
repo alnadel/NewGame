@@ -166,8 +166,8 @@ unlocked join the award chips ("Unlocked: the Wardrobe").
 over its name) and the chapter's Snow Globe, gold with a check once all ten levels are passed
 (`.is-complete`; a gold rim at 30 stars, `.is-perfect`); a chapter completed since the last visit
 pops its globe and toasts. The Wardrobe shows the collection (owned / all, with a bar), each item's
-rarity (`labels.ts rarityOf`: star rewards legendary, other achievements and 500+ Snow epic, 150+
-rare) as a coloured rim and label, and NEW marks (with a dot on their tab) on wearable or buyable
+rarity (meta/gamify.ts `rarity`, the one the Snow Globes weigh and the reveal names: by price, by
+the granting trophy's tier, or globe exclusive) as a coloured rim and label, and NEW marks (with a dot on their tab) on wearable or buyable
 items not seen there yet (`newItems`, taken on entry so they stay while browsing; a tapped item
 loses its mark, and leaving applies `markItemsSeen`).
 

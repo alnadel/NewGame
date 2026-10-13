@@ -6,7 +6,7 @@
 //
 // The grid is built once per slot tab; selecting, buying and equipping update the tile buttons in
 // place, so keyboard focus stays on the tile that was pressed.
-// v1.4: the collection count (owned of all), each item's rarity (labels.ts rarityOf) and a NEW mark
+// v1.4: the collection count (owned of all), each item's rarity (meta/gamify rarity, as in the globes) and a NEW mark
 // on items the player can wear or buy and hasn't seen here yet (meta/gamify newItems, kept in the
 // save). The marks are taken on entry and stay while browsing; leaving marks them all seen.
 
@@ -21,13 +21,13 @@ import {
   type CosmeticSlot,
   type Equipped,
 } from '../../meta/content.ts';
-import { markItemsSeen, newItems } from '../../meta/gamify.ts';
+import { markItemsSeen, newItems, rarity } from '../../meta/gamify.ts';
 import { itemState, totalStars, type ItemState } from '../../meta/progression.ts';
 import { h, setChildren } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
-import { RARITY_LABEL, rarityOf } from '../labels.ts';
+import { RARITY_LABEL } from '../labels.ts';
 import { button, menuHeader, progressBar, setDisabled, snowChip } from '../widgets.ts';
 
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
@@ -216,7 +216,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
           status,
           h('span', { class: 'new-tag', 'aria-hidden': 'true' }, 'New'),
         );
-        btn.dataset.rarity = rarityOf(c);
+        btn.dataset.rarity = rarity(c);
         btn.addEventListener('click', () => select(c));
         tiles.set(c.id, { c, btn, status });
         return h('li', null, btn);
@@ -237,7 +237,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       btn.setAttribute('aria-pressed', String(isSel));
       const neu = isNew(c, state);
       btn.classList.toggle('is-new', neu);
-      const r = rarityOf(c);
+      const r = rarity(c);
       btn.setAttribute('aria-label', `${c.name}, ${r === 'common' ? '' : `${RARITY_LABEL[r]}, `}${spokenState(c, state, save.stats.wallet)}${neu ? ', new' : ''}`);
       const s = statusContent(c, state);
       status.className = `tile-status${s.cls ? ` ${s.cls}` : ''}`;
@@ -273,7 +273,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     if (!c) return;
     const state = itemState(save, id);
     itemName.textContent = c.name;
-    const rar = rarityOf(c);
+    const rar = rarity(c);
     itemRarity.textContent = RARITY_LABEL[rar];
     itemRarity.dataset.rarity = rar;
     const a = c.unlock.kind === 'achievement' ? getAchievement(c.unlock.achievement) : undefined;

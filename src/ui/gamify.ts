@@ -28,6 +28,7 @@ import {
 import type { Save } from '../meta/saveTypes.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from './dom.ts';
 import { icon } from './icons.ts';
+import { RARITY_LABEL } from './labels.ts';
 import type { UiContext } from './screen.ts';
 import { cosmeticSwatch } from './swatches.ts';
 import { isLegalTransition } from './transitions.ts';
@@ -197,7 +198,6 @@ export function claimDot(el: HTMLElement, n: number): void {
 // The reward reveal
 // ---------------------------------------------------------------------------------------------
 
-const RARITY = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' } as const;
 /** The shake and swirl, then the burst (ms). */
 const SHAKE_MS = 1100;
 const BURST_MS = 380;
@@ -277,7 +277,7 @@ function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
       el.dataset.tier = item ? rarity(item) : 'snow';
       setChildren(prize, item ? cosmeticSwatch(item) : h('span', { class: 'num' }, icon('snow'), `+${r.amount}`));
       name.textContent = item ? item.name : `${r.amount} Snow`;
-      sub.textContent = item ? `${RARITY[rarity(item)]} · new in your Wardrobe` : 'Added to your wallet';
+      sub.textContent = item ? `${RARITY_LABEL[rarity(item)]} · new in your Wardrobe` : 'Added to your wallet';
       live.textContent = `${kicker.textContent}: ${name.textContent}`;
     };
 
