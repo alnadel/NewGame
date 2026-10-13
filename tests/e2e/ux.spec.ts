@@ -97,6 +97,13 @@ test('the Wardrobe counts the collection and marks rarity', async ({ page }) => 
   await expect(page.locator('.scr-wardrobe [data-id="scarf-plaid"]')).toHaveAttribute('data-rarity', 'rare');
   await expect(page.locator('.scr-wardrobe [data-id="scarf-plaid"]')).toHaveAttribute('aria-label', /Rare/);
   await expect(page.locator('.scr-wardrobe .preview-name + .rarity')).toBeVisible();
+  // A globe-only item says where it is found.
+  const frost = page.locator('.scr-wardrobe [data-id="scarf-frost"]');
+  await expect(frost.locator('.tile-status')).toHaveText('Snow Globe');
+  await expect(frost).toHaveAttribute('aria-label', /found in Snow Globes/);
+  await frost.click();
+  await expect(page.locator('.scr-wardrobe .stage .btn-label')).toHaveText('Snow Globe');
+  await expect(page.locator('.scr-wardrobe .preview-note')).toContainText('Snow Globes');
 });
 
 test('Settings: the restore box opens on demand', async ({ page }) => {

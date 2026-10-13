@@ -36,6 +36,12 @@ const STATES: readonly ItemState[] = ['equipped', 'owned', 'buyable', 'expensive
 
 const costOf = (c: Cosmetic): number => (c.unlock.kind === 'snow' ? c.unlock.cost : 0);
 
+/** What a locked item takes: its achievement, a Snow Globe, or nothing yet. */
+function lockName(c: Cosmetic): string {
+  if (c.unlock.kind === 'achievement') return getAchievement(c.unlock.achievement)?.name ?? 'Locked';
+  return c.unlock.kind === 'globe' ? 'Snow Globe' : 'Locked';
+}
+
 /** The tile's status line. Unaffordable prices carry a lock glyph, not just a muted color. */
 function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (Node | string)[] } {
   switch (state) {
@@ -48,7 +54,7 @@ function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (No
     case 'expensive':
       return { cls: 'is-cost is-short', nodes: [icon('lock'), String(costOf(c))] };
     case 'locked':
-      return { cls: 'is-locked', nodes: [icon('lock'), c.unlock.kind === 'achievement' ? (getAchievement(c.unlock.achievement)?.name ?? 'Locked') : 'Locked'] };
+      return { cls: 'is-locked', nodes: [icon(c.unlock.kind === 'globe' ? 'globe' : 'lock'), lockName(c)] };
   }
 }
 
@@ -60,7 +66,9 @@ function spokenState(c: Cosmetic, state: ItemState, wallet: number): string {
     case 'owned':
       return 'owned';
     case 'locked':
-      return c.unlock.kind === 'achievement' ? `locked until ${getAchievement(c.unlock.achievement)?.name ?? 'an achievement'}` : 'locked';
+      return c.unlock.kind === 'achievement'
+        ? `locked until ${getAchievement(c.unlock.achievement)?.name ?? 'an achievement'}`
+        : c.unlock.kind === 'globe' ? 'found in Snow Globes' : 'locked';
     case 'buyable':
       return `costs ${costOf(c)} Snow`;
     case 'expensive':
@@ -270,13 +278,16 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     itemRarity.dataset.rarity = rar;
     const a = c.unlock.kind === 'achievement' ? getAchievement(c.unlock.achievement) : undefined;
     // A Journey star reward says how far along the stars are.
-    const lockedNote = a ? `${a.hint}${a.stars !== undefined ? ` You have ${totalStars(save)}.` : ''}` : 'Not available yet.';
+    const globe = c.unlock.kind === 'globe';
+    const lockedNote = a
+      ? `${a.hint}${a.stars !== undefined ? ` You have ${totalStars(save)}.` : ''}`
+      : globe ? 'Found in Snow Globes: rank up, finish chapters, missions and streaks to earn them.' : 'Not available yet.';
     const [label, variant, note, iconName]: [string, string, string, IconName] = {
       equipped: ['Wearing', 'plain', slot === 'shades' ? 'The sun has them on.' : 'Nubs has it on.', 'check'],
       owned: ['Wear it', 'primary', 'In your closet.', 'wardrobe'],
       buyable: [`Buy for ${costOf(c)} Snow`, 'gold', 'Trying it on. Like it?', 'snow'],
       expensive: [`Need ${costOf(c) - save.stats.wallet} more Snow`, 'plain', 'Collect flakes and finish missions to earn Snow.', 'snow'],
-      locked: [a ? `Earn “${a.name}”` : 'Locked', 'plain', lockedNote, 'lock'],
+      locked: [a ? `Earn “${a.name}”` : globe ? 'Snow Globe' : 'Locked', 'plain', lockedNote, globe ? 'globe' : 'lock'],
     }[state] as [string, string, string, IconName];
     action.className = `btn btn--lg btn--block btn--${variant}`;
     setDisabled(action, state !== 'owned' && state !== 'buyable');
