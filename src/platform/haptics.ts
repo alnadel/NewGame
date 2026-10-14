@@ -28,7 +28,12 @@ export type HapticName =
   | 'reward'
   | 'rankUp'
   | 'open'
-  | 'claim';
+  | 'claim'
+  | 'bud'
+  | 'bloom'
+  | 'frost'
+  | 'snap'
+  | 'deep';
 
 /** A single pulse (ms) or an on/off/on... sequence (ms). */
 export type HapticPattern = number | readonly number[];
@@ -55,6 +60,12 @@ export const HAPTIC_PATTERNS: Readonly<Record<HapticName, HapticPattern>> = {
   rankUp: [15, 40, 15, 40, 30],
   open: [6, 30, 6, 30, 6, 60, 35],
   claim: [8, 30, 12],
+  // v1.5: a growing bud's tick, a bloom, the frost meter full, a Cold Snap, deep shade.
+  bud: 4,
+  bloom: [10, 30, 20],
+  frost: [6, 40, 6],
+  snap: [25, 40, 35],
+  deep: 8,
 };
 
 export const HAPTIC_RULES = {
@@ -70,6 +81,9 @@ export const HAPTIC_RULES = {
   shadeMinLit: 0.25,
   /** A SWING ticks at most this often (ms). */
   tickMinGapMs: 300,
+  /** A growing bud ticks at most this often (ms), deep shade buzzes at most this often (ms). */
+  budMinGapMs: 250,
+  deepMinGapMs: 2500,
 } as const;
 
 /**
@@ -79,6 +93,9 @@ export const HAPTIC_RULES = {
 const DEFER_RANK: Readonly<Partial<Record<HapticName, number>>> = {
   multUp: 1,
   claim: 1,
+  frost: 1,
+  bloom: 2,
+  snap: 4,
   crystal: 2,
   reward: 2,
   multMax: 3,
@@ -128,6 +145,16 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
       return 'day';
     case 'swing':
       return 'tick';
+    case 'budGrow':
+      return 'bud';
+    case 'bloom':
+      return 'bloom';
+    case 'frostReady':
+      return 'frost';
+    case 'snap':
+      return 'snap';
+    case 'deepEnter':
+      return 'deep';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
       // the rest have no haptic. 'best' and 'ui' are played by the UI directly.
@@ -199,8 +226,10 @@ export class WebVibrateHaptics implements Haptics {
   /** Start times of the most recent detent pulses (ring of detentPerSecond). */
   private readonly detentTimes = new Float64Array(HAPTIC_RULES.detentPerSecond).fill(Number.NEGATIVE_INFINITY);
   private detentHead = 0;
-  /** Start time of the last SWING tick (ms). */
+  /** Start time of the last SWING tick, bud tick and deep-shade buzz (ms). */
   private lastTick = Number.NEGATIVE_INFINITY;
+  private lastBud = Number.NEGATIVE_INFINITY;
+  private lastDeep = Number.NEGATIVE_INFINITY;
 
   constructor(opts: WebVibrateOptions = {}) {
     this.backend = opts.backend === undefined ? webVibrateBackend() : opts.backend;
@@ -268,6 +297,14 @@ export class WebVibrateHaptics implements Haptics {
         const now = this.now();
         if (now - this.lastTick < HAPTIC_RULES.tickMinGapMs) continue;
         this.lastTick = now;
+      } else if (name === 'bud') {
+        const now = this.now();
+        if (now - this.lastBud < HAPTIC_RULES.budMinGapMs) continue;
+        this.lastBud = now;
+      } else if (name === 'deep') {
+        const now = this.now();
+        if (now - this.lastDeep < HAPTIC_RULES.deepMinGapMs) continue;
+        this.lastDeep = now;
       }
       if (name) this.play(name);
     }

@@ -810,7 +810,7 @@ export class Renderer {
     if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
     drawHatPop(g, v, beat, inp.reducedMotion);
-    drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapId, inp.mech.snapFade);
+    drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapId, inp.mech.snapFade, ux, uy, snap.cot);
     drawAirParticles(g, sc.particles, v);
     if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {

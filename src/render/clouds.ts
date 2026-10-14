@@ -2,16 +2,19 @@
 // a light interior with a soft cooler rim, faded near Nubs (0.2 α within 70 u) and at the ends of
 // their life (cloudVisibility). Each cloud body is rendered once into a cached sprite.
 // v1.5: the Cold Snap's cloud (SimState.snapCloudId) is frosty: an icy body with a blue-white
-// underside and a rim of ice glints, kept readable over Nubs (it rides with him), fading out as
-// the snap runs down (snow falls from it: game/fx.ts).
+// underside and a rim of ice glints. It is drawn over its own shadow (SNAP_LIFT u up the screen)
+// rather than where a low sun puts its body, so it reads as a cloud riding over Nubs; it gathers in
+// 0.3 s and melts away over its last 0.8 s, and snow falls from it (game/fx.ts).
 
-import { cloudCenter, cloudVisibility, queryClouds, type Cloud, type World } from '../core/index.ts';
+import { cloudCenter, cloudOffset, cloudVisibility, queryClouds, type Cloud, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { OBLIQUE } from '../game/camera.ts';
 import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
 const PAD = 14;
+/** The snap cloud is drawn this far (u, on screen) above its shadow. */
+export const SNAP_LIFT = 70;
 
 interface CloudSprite {
   canvas: Canvas2D;
@@ -123,6 +126,9 @@ export function drawClouds(
   night: number,
   snapId = -1,
   snapFade = 0,
+  ux = 0,
+  uy = 0,
+  cot = 0,
 ): void {
   const n = queryClouds(world, tAbs, buf);
   if (n === 0) return;
@@ -130,8 +136,13 @@ export function drawClouds(
   for (let i = 0; i < n; i++) {
     const cl = buf[i] as Cloud;
     cloudCenter(cl, tAbs, c2);
-    const x = c2[0] as number;
-    const y = (c2[1] as number) + OBLIQUE * cl.z;
+    let x = c2[0] as number;
+    let y = (c2[1] as number) + OBLIQUE * cl.z;
+    if (cl.id === snapId) {
+      const r = cot > 0 ? cloudOffset(cl.z, cot) : 0;
+      x = (c2[0] as number) - ux * r;
+      y = (c2[1] as number) - uy * r + SNAP_LIFT;
+    }
     if (x + cl.rx + PAD < v.x0 || x - cl.rx - PAD > v.x1 || y + cl.ry + PAD < v.y0 || y - cl.ry - PAD > v.y1) continue;
     // The snap cloud gathers in 0.3 s (it is cast on the spot) and melts away over its last 0.8 s.
     const vis = cl.id === snapId ? Math.max(0, Math.min(1, (tAbs - cl.t0) / 0.3, (cl.t0 + cl.life - tAbs) / 0.8)) : cloudVisibility(cl, tAbs);
@@ -147,7 +158,7 @@ export function drawClouds(
     const near = Math.max(0, Math.min(1, (edge - 10) / 60));
     const frost = cl.id === snapId;
     const alpha = frost
-      ? Math.min(vis, snapFade) * (0.5 + 0.3 * near) * (1 - 0.4 * night)
+      ? Math.min(vis, snapFade) * (0.66 + 0.22 * near) * (1 - 0.4 * night)
       : vis * (0.2 + 0.42 * near) * (1 - 0.55 * night);
     if (alpha <= 0.005) continue;
     const s = spriteFor(cl, scale, frost);

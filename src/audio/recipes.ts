@@ -400,6 +400,58 @@ export const RECIPES = {
     v.burst(g.white, t, 0.03, 0.0005, 0.004, v.filter('bandpass', 3500, 1.5));
   },
 
+  // v1.5 core mechanics (docs/V1_5_PLAN.md): buds, Cold Snap, deep shade.
+
+  /** A bud growing in the light: a soft wooden tick whose pitch climbs the scale with its growth (degree 0..7). */
+  budGrow(g, t, p) {
+    const v = g.voice('sfx', t);
+    const f = degreeHz(p.day ?? 1, Math.max(0, Math.min(9, p.degree ?? 0)), 5, p.key ?? 0);
+    note(v, 'pluck', t, f, 0.05 * (p.gain ?? 1), 0.07);
+    v.burst(g.white, t, 0.018, 0.0005, 0.005, v.filter('bandpass', 2600, 1.5));
+  },
+
+  /** A bloom: a round "pop" sliding up, then a quick bell arpeggio opening out over a soft root. */
+  bloom(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    glide(v.tone('sine', 320, t, 0.11, 0.003, 0.09).frequency, t, 320, 880, 0.07);
+    v.burst(g.white, t, 0.03, 0.001, 0.02, v.filter('bandpass', 1800, 1.2));
+    seq(v, t + 0.07, root, run([0, 2, 4, 5, 7], 0.045), 'bell', 0.055, 0.7, 1.8);
+    note(v, 'soft', t + 0.05, root / 2, 0.045, 0.9);
+  },
+
+  /** The frost meter is full: a glassy shimmer, three high bells rolled up with a breath of ice. */
+  frostReady(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    seq(v, t, root, [[0, 12], [0.05, 19], [0.1, 24]], 'bell', 0.045, 0.8, 1.5);
+    v.burst(g.white, t, 0.015, 0.03, 0.25, v.filter('bandpass', 4200, 3));
+  },
+
+  /** Cold Snap: an icy crack and a falling whoosh, a low cold thump, then a bell cluster settling. */
+  snap(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    v.burst(g.white, t, 0.12, 0.001, 0.05, v.filter('bandpass', 3000, 1.6));
+    whoosh(g, v, t, 0.6, 500, 3600, 1.2, 0.13, 0.4);
+    glide(v.tone('sine', 140, t, 0.16, 0.005, 0.28).frequency, t, 140, 70, 0.25);
+    seq(v, t + 0.12, root, [[0, 7], [0.03, 12], [0.06, 16], [0.09, 19]], 'bell', 0.04, 1.2, 1.4);
+  },
+
+  /** The snap thins out: two quiet bells falling a fifth. */
+  snapEnd(g, t, p) {
+    seq(g.voice('sfx', t), t, tonic5(p), [[0, 7], [0.14, 0]], 'bell', 0.035, 0.6, 1.3);
+  },
+
+  /** Deep shade: a low soft "whoom" and a high bell, cool and quiet. */
+  deepEnter(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    const o = v.tone('sine', root / 4, t, 0.07, 0.04, 0.45);
+    glide(o.frequency, t, root / 4, root / 5, 0.4);
+    bellTone(v, t + 0.04, root * semis(19), 0.03, 0.7, 0.2);
+  },
+
   /** Error: two soft low blips a semitone apart, "nuh-uh". */
   uiError(g, t) {
     const v = g.voice('sfx', t);

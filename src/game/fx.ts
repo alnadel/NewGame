@@ -6,7 +6,7 @@
 // meter filling, the Cold Snap (COLD SNAP!, an ice ring, snow falling from its cloud) and deep
 // shade (DEEP, at most every DEEP_POP_GAP s).
 
-import { cloudCenter, dayParams, dayTicks, worldPlan, type Cloud, type SimEvent, type SimState } from '../core/index.ts';
+import { cloudCenter, cloudOffset, dayParams, dayTicks, worldPlan, type Cloud, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -46,6 +46,7 @@ import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { MechView, RenderScene } from '../render/renderer.ts';
 import { registerBloom, resetBlooms } from '../render/flora.ts';
+import { SNAP_LIFT } from '../render/clouds.ts';
 import { themeFor } from '../render/palette.ts';
 import { bossWeight } from '../render/sun.ts';
 import { addShake, addZoomPulse, holdZoom, OBLIQUE } from './camera.ts';
@@ -612,15 +613,18 @@ export class Fx {
       this.snowCloud = cl;
     }
     if (!cl) return;
+    // From the body as drawn: over its shadow, SNAP_LIFT up (render/clouds.ts).
     cloudCenter(cl, s.tAbs, this.c2);
-    const cx = this.c2[0] as number;
-    const cy = this.c2[1] as number;
+    const r = s.cot > 0 ? cloudOffset(cl.z, s.cot) : 0;
+    const cx = (this.c2[0] as number) - s.ux * r;
+    const cy = (this.c2[1] as number) - s.uy * r;
+    const z = SNAP_LIFT / OBLIQUE;
     this.snowAcc += dt * SNOWFALL_RATE * fade;
     while (this.snowAcc >= 1) {
       this.snowAcc -= 1;
       const a = rnd(0, Math.PI * 2);
-      const r = Math.sqrt(Math.random()) * 0.85;
-      spawn(this.sc.particles, P_SNOWFALL, cx + Math.cos(a) * cl.rx * r, cy + Math.sin(a) * cl.ry * r, cl.z, cl.vx, cl.vy, -cl.z / SNOWFALL_S, SNOWFALL_S + 0.35, rnd(1.8, 3), 0, 0xffffff);
+      const d = Math.sqrt(Math.random()) * 0.8;
+      spawn(this.sc.particles, P_SNOWFALL, cx + Math.cos(a) * cl.rx * d, cy + Math.sin(a) * cl.ry * d, z, cl.vx, cl.vy, -z / SNOWFALL_S, SNOWFALL_S + 0.35, rnd(1.8, 3), 0, 0xffffff);
     }
   }
 

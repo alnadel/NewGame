@@ -14,7 +14,6 @@
 
 import {
   cloudAlive,
-  cloudOffset,
   queryCasters,
   trailX,
   TUNING,
@@ -29,7 +28,6 @@ import {
 } from '../core/index.ts';
 import { CONCEPTS } from '../core/index.ts';
 import { makeCaster, makeDisc, makePrism } from '../core/gen/catalog.ts';
-import { addCloud } from '../core/gen/placer.ts';
 import { insertCaster, takeId } from '../core/gen/store.ts';
 import { rectPoly } from '../core/geom.ts';
 import type { CasterKind } from '../core/index.ts';
@@ -189,10 +187,32 @@ export class Mechanics {
         this.route({ e: 'frostReady' });
         return true;
       case 'snap': {
-        // A frosty cloud over Nubs, placed so its shadow lands on him (like the sim's).
-        const z = TUNING.shadow.cloudZ;
-        const off = snap.cot > 0 ? cloudOffset(z, snap.cot) : 0;
-        const cl = addCloud(s.world, 'waiter', s.tAbs, TUNING.frost.snapSec + 0.5, s.nubs.x + snap.ux * off, s.nubs.y + snap.uy * off, 0, s.phase === 'day' ? s.params.v : 0, 48);
+        // A frosty cloud riding with Nubs. It flies so low (z 1) that its shadow sits right under it
+        // wherever the sun points; the renderer draws the body over its shadow either way.
+        const rx = 48;
+        const ry = 32;
+        const lumps = new Float64Array(15);
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          lumps[3 * i] = Math.cos(a) * rx * 0.42;
+          lumps[3 * i + 1] = Math.sin(a) * ry * 0.4;
+          lumps[3 * i + 2] = ry * (0.5 + 0.04 * i);
+        }
+        const cl: Cloud = Object.freeze({
+          id: takeId(s.world),
+          kind: 'waiter',
+          t0: s.tAbs,
+          life: TUNING.frost.snapSec + 0.5,
+          x0: s.nubs.x,
+          y0: s.nubs.y,
+          vx: 0,
+          vy: s.phase === 'day' ? s.params.v : 0,
+          rx,
+          ry,
+          z: 1,
+          lumps,
+        });
+        s.world.clouds.push(cl);
         this.demoSnapId = cl.id;
         this.demoSnapT0 = time;
         this.demoFrostEnd = -1;
