@@ -178,7 +178,9 @@ export class Input {
     this.pressX = e.clientX;
     this.pressY = e.clientY;
     this.pressT = e.timeStamp;
-    this.gesture = 0;
+    // A press that began before a snap was allowed (the one that starts the run, the start beat) is
+    // a drag for good: late-delivered moves of the same stroke never snap.
+    this.gesture = this.host.canSnap?.() === true ? 0 : 1;
     this.onMeter = this.host.meterHit?.(e.clientX, e.clientY) === true;
     this.held = true;
     this.downEdge = true;

@@ -102,17 +102,19 @@ export function drawBud(g: CanvasRenderingContext2D, v: View, L: Light, b: Bud, 
   g.beginPath();
   g.arc(x + Math.cos(a) * R, y + Math.sin(a) * R, (3.4 + 1.2 * aim) * S, 0, TAU);
   g.fill();
-  g.stroke();
   // The growth ring: a faint track, gold filling clockwise from the top.
   g.lineWidth = Math.max(2, 3 * S);
   g.strokeStyle = cssa(0x2b2140, 0.18);
   g.beginPath();
   g.arc(x, y, RING_R * S, 0, TAU);
   g.stroke();
-  g.strokeStyle = css(GOLD);
-  g.beginPath();
-  g.arc(x, y, RING_R * S, -Math.PI / 2, -Math.PI / 2 + TAU * grow);
-  g.stroke();
+  // Strokes are the frame's scarcest call (render.spec budget): the gold only once it grows.
+  if (grow > 0) {
+    g.strokeStyle = css(GOLD);
+    g.beginPath();
+    g.arc(x, y, RING_R * S, -Math.PI / 2, -Math.PI / 2 + TAU * grow);
+    g.stroke();
+  }
   g.lineCap = 'butt';
   // The plant.
   const pal = L.pal;
