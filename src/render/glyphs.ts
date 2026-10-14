@@ -53,6 +53,11 @@ const GLYPHS: Readonly<Record<string, string>> = {
   sunset: 'C M-8-8h16v10.5h-16Z|F#FF9E6B M3.27 1.56L5.78 2.5L3.27 3.44M2.97 4.15L4.09 6.59L1.65 5.47M0.94 5.77L0 8.28L-0.94 5.77M-1.65 5.47L-4.09 6.59L-2.97 4.15M-3.27 3.44L-5.78 2.5L-3.27 1.56M-2.97 0.85L-4.09-1.59L-1.65-0.47M-0.94-0.77L0-3.28L0.94-0.77M1.65-0.47L4.09-1.59L2.97 0.85|F#FF9E6B O0 2.5 3.4|R|S#A0611A/1.4 M-7 3.5L7 3.5',
   moonlit: 'E#E8ECFF O0 0 5.5L7.2-1.6A4.6 4.6 0 0 0-2-1.6A4.6 4.6 0 0 0 7.2-1.6',
   marathon: 'S#8A5A3C/2.2 M-6 6C-6-2 6 6 6-6|F#FFFFFF M3.5-7.5h5v3.5h-5Z|S#2B2140/0.8 M3.5-7.5h5v3.5h-5Z',
+  // v1.5 mechanics: a sunflower (buds), a frosty cloud dropping a flake (Cold Snap), two shadows
+  // overlapping dark with a frost glint (deep shade).
+  sunflower: 'S#4E9A4A/1.5 M0 1L0 7|F#5FAE5A M0 5.2Q2.8 2.4 4.4 3.4Q2.4 5.6 0 5.2Z|F#FFC23D O3.3-1.5 1.7O2.3 0.8 1.7O0 1.8 1.7O-2.3 0.8 1.7O-3.3-1.5 1.7O-2.3-3.8 1.7O0-4.8 1.7O2.3-3.8 1.7|F#7A4E2A O0-1.5 2.1',
+  coldsnap: 'F#9FD3F5 O-2.6-2.4 2.4O0.4-3.6 3.2O3.4-2.2 2.3M-2.6-2.4h6v2.4h-6Z|S#4A9BD9/1.2 M0 1.6L0 6.8M-2.25 2.9L2.25 5.5M-2.25 5.5L2.25 2.9',
+  deep: 'F#8FA3BF O-2.2 0 4.4|F#8FA3BF O2.2 0 4.4|C O-2.2 0 4.4|F#1F2A66 O2.2 0 4.4|R|F#DDF4FF M0-2.2L0.55-0.55L2.2 0L0.55 0.55L0 2.2L-0.55 0.55L-2.2 0L-0.55-0.55Z',
   boss: 'F#FF6A3D M3.84-1.11L6.8 0L3.84 1.11M3.76 1.37L5.5 4L2.46 3.15M2.24 3.31L2.1 6.47L0.14 4M-0.14 4L-2.1 6.47L-2.24 3.31M-2.46 3.15L-5.5 4L-3.76 1.37M-3.84 1.11L-6.8 0L-3.84-1.11M-3.76-1.37L-5.5-4L-2.46-3.15M-2.24-3.31L-2.1-6.47L-0.14-4M0.14-4L2.1-6.47L2.24-3.31M2.46-3.15L5.5-4L3.76-1.37|F#FF6A3D O0 0 4|S#7A3B00/1.3 M-2.6-1.6L-0.8-0.6M2.6-1.6L0.8-0.6',
 };
 
@@ -118,6 +123,20 @@ export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], colo
 const parsed = new Map<string, ArtOp[]>();
 
 /**
+ * The glyph of an id this table doesn't have: the v1.5 mechanics' concepts are named by the core
+ * ('buds', 'bloom', 'snap', 'deep'…), so they are matched by what the id says; else the goal ring.
+ */
+function glyphSource(id: string): string {
+  const own = GLYPHS[id];
+  if (own) return own;
+  const k = id.toLowerCase();
+  if (k.includes('bud') || k.includes('bloom') || k.includes('sunflower')) return GLYPHS.sunflower as string;
+  if (k.includes('snap')) return GLYPHS.coldsnap as string;
+  if (k.includes('deep')) return GLYPHS.deep as string;
+  return GLYPHS.goal as string;
+}
+
+/**
  * Draws glyph `id` (a concept, forecast or biome id, 'clear', 'goal', 'lock' or 'gusts'; unknown ids
  * get the goal ring) `size` px wide centred on (x, y). `color` fills the padlock; `flip` mirrors it
  * (the wind blowing left).
@@ -125,7 +144,7 @@ const parsed = new Map<string, ArtOp[]>();
 export function drawGlyph(g: CanvasRenderingContext2D, id: string, x: number, y: number, size: number, color?: string, flip = false): void {
   let ops = parsed.get(id);
   if (!ops) {
-    ops = artOps(GLYPHS[id] ?? (GLYPHS.goal as string));
+    ops = artOps(glyphSource(id));
     parsed.set(id, ops);
   }
   const k = size / 14;

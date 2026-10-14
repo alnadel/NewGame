@@ -19,13 +19,19 @@
 //
 // The multiplier badge carries a charge bar along its bottom edge: the shade time toward the next
 // level (4 s a level), so the ×N visibly fills before it pops.
+//
+// v1.5 frost meter (Cold Snap): a round gauge in the world rect's bottom-right corner, clear of the
+// edge and home-bar zones, shown on runs that fill it. Its ring fills ice-blue around a snowflake;
+// full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
+// (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
 
+import type { MechView } from './renderer.ts';
 import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, TUNING, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { star } from './banners.ts';
 import { cssa, hex } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
-import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
+import { ctx2d, flake, makeCanvas, radialSprite, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -110,6 +116,14 @@ export interface HudState {
   badgeKey: number;
 
   widths: Map<string, WidthTable>;
+
+  /** v1.5 frost meter: shown last frame, its centre and radius (CSS px), the ready pop (s) and whether it was full. */
+  meterShown: boolean;
+  meterX: number;
+  meterY: number;
+  meterR: number;
+  meterPop: number;
+  meterFull: boolean;
 }
 
 export function createHud(): HudState {
@@ -167,6 +181,12 @@ export function createHud(): HudState {
     badge: null,
     badgeKey: -1,
     widths: new Map(),
+    meterShown: false,
+    meterX: 0,
+    meterY: 0,
+    meterR: 0,
+    meterPop: 0,
+    meterFull: false,
   };
 }
 
@@ -176,6 +196,7 @@ export function updateHud(h: HudState, dt: number): void {
   h.multShake = Math.max(0, h.multShake - dt);
   h.snowPop = Math.max(0, h.snowPop - dt);
   h.noonSparkle = Math.max(0, h.noonSparkle - dt);
+  h.meterPop = Math.max(0, h.meterPop - dt);
 }
 
 export function hudScale(v: View): number {
@@ -283,6 +304,9 @@ export interface HudInput {
   alpha: number;
   time: number;
   campaign: HudCampaign | null;
+  /** v1.5: the mechanics (the frost meter's fill and an active snap), null on the Title's prebuild. */
+  mech: MechView | null;
+  reducedMotion: boolean;
 }
 
 /**
@@ -361,7 +385,10 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
 export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
   const top = v.safe.top + 8;
   h.bottom = top + ROW_H + 8;
-  if (inp.alpha <= 0.01) return;
+  if (inp.alpha <= 0.01) {
+    h.meterShown = false;
+    return;
+  }
   const s = inp.s;
   syncHud(h, v, inp);
   const dl = dayTicks(s.day);
@@ -470,7 +497,81 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.stroke();
     }
   }
+  h.meterShown = inp.mech?.meter === true;
+  if (inp.mech?.meter) drawFrostMeter(g, h, v, inp, inp.mech);
   g.globalAlpha = 1;
+}
+
+/** The frost meter's radius and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px); a tap this far outside it still counts. */
+const METER_R = 24;
+const METER_SIDE = 24;
+const METER_BOTTOM = 34;
+const METER_SLOP = 10;
+let meterGlow: Canvas2D | null = null;
+
+/** (x, y) in CSS px is on the frost meter drawn full last frame (a tap there snaps). */
+export function hudMeterHit(h: HudState, x: number, y: number): boolean {
+  return h.meterShown && h.meterFull && Math.hypot(x - h.meterX, y - h.meterY) <= h.meterR + METER_SLOP;
+}
+
+/** The frost meter (see the header). */
+function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput, m: MechView): void {
+  const k = hudScale(v);
+  const r = METER_R * k;
+  const x = v.vx + v.vw - v.safe.right - METER_SIDE * k - r;
+  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - r;
+  h.meterX = x;
+  h.meterY = y;
+  h.meterR = r;
+  const frost = Math.max(0, Math.min(1, m.frost));
+  const snapping = m.snapLeft > 0;
+  const full = frost >= 0.999 && !snapping;
+  if (full && !h.meterFull) h.meterPop = 0.45;
+  h.meterFull = full;
+  const rm = inp.reducedMotion;
+  // Full: it breathes, and pops (1 → 1.25 → 1) when it fills.
+  const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
+  const R = r * (1 + 0.25 * Math.sin((Math.PI * h.meterPop) / 0.45) + (rm ? 0 : 0.04 * breathe));
+  if (full) {
+    meterGlow ??= radialSprite('90,184,255', 96, 0.7, 0.42, 0.3);
+    const gr = R * (2.1 + 0.25 * breathe);
+    g.globalAlpha = inp.alpha * (0.55 + 0.45 * breathe);
+    g.drawImage(meterGlow, x - gr, y - gr, gr * 2, gr * 2);
+    g.globalAlpha = inp.alpha;
+  }
+  // The plate, the track and the fill (the snap left, while one lasts).
+  g.fillStyle = full ? '#2B7FD0' : snapping ? '#5AB8FF' : cssa(0xffffff, 0.92);
+  g.beginPath();
+  g.arc(x, y, R, 0, TAU);
+  g.fill();
+  g.lineWidth = 5 * k;
+  g.strokeStyle = cssa(full ? 0xffffff : INK, 0.15);
+  g.beginPath();
+  g.arc(x, y, R - 5 * k, 0, TAU);
+  g.stroke();
+  g.lineCap = 'round';
+  g.strokeStyle = snapping || full ? '#FFFFFF' : '#5AB8FF';
+  g.beginPath();
+  g.arc(x, y, R - 5 * k, -Math.PI / 2, -Math.PI / 2 + TAU * (snapping ? m.snapLeft : frost));
+  g.stroke();
+  // The snowflake, pale until the meter is full.
+  g.globalAlpha = inp.alpha * (full || snapping ? 1 : 0.45 + 0.4 * frost);
+  g.drawImage(flake(), x - R / 2, y - R / 2, R, R);
+  g.globalAlpha = inp.alpha;
+  if (full) {
+    // "Swipe down": a white chevron bobbing down over the meter.
+    const cy = y - R - 14 * k + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
+    const w = 8 * k;
+    g.strokeStyle = '#2B7FD0';
+    g.lineWidth = 3.5 * k;
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(x - w, cy - w / 2);
+    g.lineTo(x, cy + w / 2);
+    g.lineTo(x + w, cy - w / 2);
+    g.stroke();
+  }
+  g.lineCap = 'butt';
 }
 
 /** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */

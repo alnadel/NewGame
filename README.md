@@ -27,10 +27,22 @@ works offline, and keeps the seams open for Capacitor shells.
 | Endless run (opens after Level 3) | tap Endless, or drag on the Title | ← or → on the Title |
 | Retry | tap Retry | Space or Enter |
 | Pause | the pause button | Esc or P |
+| Cold Snap (when the frost meter glows) | swipe down anywhere, or tap the meter | ↓ or S |
 
 Collect snowflakes for **Snow**, swing the shade from one shadow to the next for a **SWING**, and
 spend Snow in the **Wardrobe** (for Nubs, and Sun Shades for the sun). Progress stays on the device;
 Settings → Progress carries it elsewhere with a backup code.
+
+Three mechanics turn the one drag into decisions ([v1.5 plan](docs/V1_5_PLAN.md)):
+
+- **Sunflower buds**: a bud beside the trail wears a gold "light from here" mark. Shine the sun from
+  there (the gold arcs on the dial) until its ring fills and it blooms into a sunflower: shade for
+  the rest of the run, plus Snow. Where gold meets teal, one angle does both.
+- **Cold Snap**: full shade, flakes, SWINGs and blooms fill the frost meter (bottom right). When it
+  glows, swipe down (or tap it, or press ↓/S): a frosty cloud rides over Nubs for a few seconds,
+  full shade wherever the sun points. Save it for noon.
+- **Deep shade**: Nubs under two shadows at once (two casters, a caster and a cloud…). The dial's
+  ring turns indigo and Chill, the multiplier and the meter fill twice as fast.
 
 ### Journey
 

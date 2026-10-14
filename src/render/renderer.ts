@@ -6,13 +6,16 @@ import {
   dayTicks,
   nightTicks,
   PICKUP_ALIVE,
+  queryBuds,
   queryCasters,
   queryPickups,
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
   worldPlan,
+  type Bud,
   type Caster,
+  type Cloud,
   type Pickup,
   type RenderSnap,
   type SimState,
@@ -26,6 +29,7 @@ import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, 
 import { drawBanners, createBanners, updateBanners, type Banners } from './banners.ts';
 import { createLight, drawCaster, drawContactAO, drawWindowGlow, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
+import { drawBud } from './flora.ts';
 import { drawFriendPennant, drawFriendPuddle, friendSpot } from './friend.ts';
 import { cssa, hex } from './color.ts';
 import { radialSprite, type Canvas2D } from './sprites.ts';
@@ -170,6 +174,28 @@ export interface HintView {
 /** A campaign run as the renderer sees it (session fillCampaignView): the HUD's campaign row. */
 export type CampaignView = HudCampaign;
 
+/**
+ * v1.5 mechanics as the renderer sees them (session fillMech, which reads the sim and lets the test
+ * hook's demos stand in for it): the frost meter, deep shade, the Cold Snap's cloud and the dial's
+ * gold bud arcs.
+ */
+export interface MechView {
+  /** The frost meter shows on this run (it has the mechanic), and its fill 0..1 (1 = a snap is ready). */
+  meter: boolean;
+  frost: number;
+  /** Nubs is in deep shade now. */
+  deep: boolean;
+  /** The Cold Snap: the share left of the snap now (1 → 0; 0 none), and its cloud while it lives (drawn frosty, snowing). */
+  snapLeft: number;
+  snapCloud: Cloud | null;
+  /** Angles that grow a bud now (GuideState.bud), or null. */
+  bud: Uint8Array | null;
+}
+
+export function createMechView(): MechView {
+  return { meter: false, frost: 0, deep: false, snapLeft: 0, snapCloud: null, bud: null };
+}
+
 export interface RenderInput {
   s: SimState;
   snap: RenderSnap;
@@ -187,6 +213,8 @@ export interface RenderInput {
   challengeName: string;
   /** A campaign run (null otherwise). */
   campaign: CampaignView | null;
+  /** v1.5 mechanics (frost meter, deep shade, Cold Snap, bud arcs). */
+  mech: MechView;
   /** Game seconds since the death (after hit-stop), or −1. */
   dying: number;
   /** Real seconds since Results appeared, or −1. */
@@ -336,7 +364,17 @@ export function createScene(): RenderScene {
     friendWorld: null,
     passes: 0,
     haloIn: createHaloIn(),
-    hudIn: { s: null as unknown as SimState, pbMinutes: -1, challengeMinutes: -1, goalMinutes: -1, alpha: 1, time: 0, campaign: null },
+    hudIn: {
+      s: null as unknown as SimState,
+      pbMinutes: -1,
+      challengeMinutes: -1,
+      goalMinutes: -1,
+      alpha: 1,
+      time: 0,
+      campaign: null,
+      mech: null,
+      reducedMotion: false,
+    },
   };
 }
 
@@ -350,6 +388,8 @@ function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
   h.alpha = alpha;
   h.time = sc.worldTime;
   h.campaign = inp.campaign;
+  h.mech = inp.mech;
+  h.reducedMotion = inp.reducedMotion;
   return h;
 }
 
@@ -375,6 +415,7 @@ export function resizeScene(sc: RenderScene, cssW: number, cssH: number, dpr: nu
 }
 
 const casterBuf: Caster[] = [];
+const budBuf: Bud[] = [];
 const box = new Float64Array(4);
 
 /** Test/debug render switches (A/B checks). */
@@ -545,6 +586,7 @@ export class Renderer {
     L.nubsX = snap.nubsX;
     L.nubsY = snap.nubsY;
     L.time = time;
+    L.theta = theta;
 
     // Photosensitivity: ease the shadow layer down during very fast sweeps (> 300°/s).
     if (Number.isFinite(sc.lastTheta) && adt > 0) {
@@ -592,7 +634,7 @@ export class Renderer {
     // Nubs stands still through the start beat (the clock waits; the sun already moves).
     const walking = (s.phase === 'day' || s.phase === 'night') && s.ready === 0 && dying < 0;
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
-    updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta, walking && sunUp && s.nubs.f > 0 && inp.screen === 'play');
+    updateHalo(sc.halo, udt, inp.dragging, snap.chill, s.sun.dTheta, walking && sunUp && s.nubs.f > 0 && inp.screen === 'play', inp.mech.deep && walking);
     sc.relief = Math.max(0, sc.relief - adt);
     sc.sunWorried = Math.max(0, sc.sunWorried - adt);
     if (inp.screen === 'play' && walking) {
@@ -706,6 +748,12 @@ export class Renderer {
       g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
     }
+    // v1.5 closed buds, with the ground (they are short; a bloomed one is its sunflower caster).
+    const budN = s.world.buds ? queryBuds(s.world, v.y0 - 40, v.y1 + 40, budBuf) : 0;
+    for (let i = budN - 1; i >= 0; i--) {
+      const b = budBuf[i] as Bud;
+      if (b.state === 0 && b.x > v.x0 - 40 && b.x < v.x1 + 40) drawBud(g, v, L, b, night);
+    }
     if (sunUp) drawGlare(g, v, s.world, ux, uy, snap.cot, snap.eps, time);
     drawGroundParticles(g, sc.particles, v);
     drawRings(g, sc.rings, v);
@@ -719,6 +767,7 @@ export class Renderer {
     nubsBox(pose.x, pose.y, v.S, box);
     let nubsDrawn = false;
     let occluded = false;
+    // v1.5 buds (closed ones; a bloomed bud is its sunflower caster) join the depth sort.
     for (let i = n - 1; i >= 0; i--) {
       const c = casterBuf[i] as Caster;
       if (c.maxX < v.x0 - 40 || c.minX > v.x1 + 40) continue;
@@ -749,7 +798,7 @@ export class Renderer {
     if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
     drawHatPop(g, v, beat, inp.reducedMotion);
-    drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night);
+    drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapCloud, ux, uy, snap.cot);
     drawAirParticles(g, sc.particles, v);
     if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {
@@ -835,6 +884,8 @@ export class Renderer {
       hi.blind = s.mods.has('blind');
       hi.hideNext = fog;
       hi.locked = s.sun.locked;
+      hi.bud = inp.screen === 'title' ? null : inp.mech.bud;
+      hi.deep = inp.mech.deep;
       hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
       drawHalo(g, sc.halo, hi);
     }
@@ -868,6 +919,8 @@ export class Renderer {
     if (hudVisible) {
       const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : 1;
       drawHud(g, sc.hud, v, hudInput(sc, inp, a));
+    } else {
+      sc.hud.meterShown = false;
     }
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
     drawScreenParticles(g, sc.particles, v.dpr);

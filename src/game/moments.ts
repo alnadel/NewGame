@@ -2,16 +2,22 @@
 // lands ("MISSION ✓ 2/3"), the first Journey levels' contextual tips, and the COMEBACK, a slow
 // burn survived. Read-only on the save: mission progress is the save's active missions measured
 // against the live run (meta missionValue); the meta layer still decides everything at the end.
+//
+// v1.5: the level that teaches a mechanic (Sunflower buds, Cold Snap, deep shade: game/mechanics.ts
+// finds it by its concept) gets that mechanic's tips (MECH_TIPS) until it is passed, shown when the
+// moment comes (a bud ahead, the first bloom, the meter full, a snap, deep shade). A new player's
+// first endless and daily runs (fewer than NEW_PLAYER_RUNS) get the bud and deep-shade moment tips.
 
-import { levelProgress, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
+import { levelProgress, queryBuds, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { endToasts, showToast, type Banners } from '../render/banners.ts';
 import { goalMetLive } from './campaign.ts';
+import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
-export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal';
+export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -34,6 +40,35 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
     ['p60', 'No shade close by? Swing the sun to reach the next shadow.'],
   ],
 };
+
+/**
+ * v1.5: the tips of the level that teaches each mechanic. 'bud' shows when a closed bud comes into
+ * view ahead, 'bloom' on the first bloom, 'frost' when the meter is full, 'snap' on the first Cold
+ * Snap, 'deep' on the first deep shade.
+ */
+export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
+  bud: [
+    ['bud', 'A bud! Shine the sun from its gold mark to grow it. Gold on the dial grows it too.'],
+    ['bloom', 'Bloomed! The sunflower is shade for the rest of the run.'],
+    ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
+  ],
+  snap: [
+    ['go', 'Shade fills the frost meter, bottom right. Flakes and SWINGs fill it faster.'],
+    ['frost', 'Meter full! Swipe down, press ↓ or tap the meter for a Cold Snap.'],
+    ['snap', 'Cold Snap! Full shade wherever the sun points. Save the next one for noon.'],
+  ],
+  deep: [
+    ['go', 'Two shadows over Nubs at once is deep shade: Chill and the multiplier fill twice as fast.'],
+    ['deep', 'Deep shade! The dark ring means double cool. Hunt the overlaps.'],
+  ],
+};
+
+/** Tips for the mechanics' moments in a new player's endless and daily runs (the cue line says how to snap). */
+const FIRST_TIPS = [MECH_TIPS.bud[0], MECH_TIPS.deep[1]] as const;
+/** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
+const NEW_PLAYER_RUNS = 12;
+/** A bud this far ahead (u) counts as coming into view. */
+const BUD_AHEAD = 260;
 
 /** Mission progress is measured this often (ticks): ten times a second. */
 const MISSION_EVERY = 6;
@@ -77,7 +112,11 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let lastCheck = 0;
   /** missionValue reads only `minutes` and `stats`: one reused probe instead of a RunResult per check. */
   const probe = { minutes: 0, stats: null as unknown as RunResult['stats'] };
-  let tips: readonly (readonly [TipOn, string])[] = [];
+  let tips: (readonly [TipOn, string])[] = [];
+  /** Looks for a bud ahead (only while a tip waits for one). */
+  let budTip = false;
+  let budAt = -1e9;
+  const budBuf: Bud[] = [];
   let tipsShown = 0;
   let tipGlyph: string | null = null;
   let level: LevelDef | null = null;
@@ -103,8 +142,15 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       burn = spent = false;
       shadeAt = -1;
       level = lv;
-      tips = lv && (save.campaign.stars[lv.id - 1] ?? 0) === 0 ? (LEVEL_TIPS[lv.id] ?? []) : [];
-      tipGlyph = lv ? (lv.concepts[0] ?? null) : null;
+      tips.length = 0;
+      const fresh = lv !== null && (save.campaign.stars[lv.id - 1] ?? 0) === 0;
+      if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []));
+      const mech = fresh ? mechanicOf(lv.introduces) : null;
+      if (mech) tips.push(...MECH_TIPS[mech]);
+      else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...(FIRST_TIPS as readonly (readonly [TipOn, string])[]));
+      budTip = tips.some((t) => t[0] === 'bud');
+      budAt = -1e9;
+      tipGlyph = lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
       if (!scored) return;
       for (const slot of save.missions.active) {
         const parsed = parseMissionId(slot.id);
@@ -149,6 +195,18 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'shadeExit':
           shadeAt = -1;
           break;
+        case 'bloom':
+          tip('bloom');
+          break;
+        case 'frostReady':
+          tip('frost');
+          break;
+        case 'snap':
+          tip('snap');
+          break;
+        case 'deepEnter':
+          tip('deep');
+          break;
         default:
           break;
       }
@@ -160,6 +218,16 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         const p = levelProgress(s);
         if (p >= 0.25) tip('p25');
         if (p >= 0.6) tip('p60');
+        if (budTip && s.tick - budAt >= MISSION_EVERY && s.world.buds) {
+          budAt = s.tick;
+          const n = queryBuds(s.world, s.nubs.y + 20, s.nubs.y + BUD_AHEAD, budBuf);
+          for (let i = 0; i < n; i++) {
+            if ((budBuf[i] as Bud).state !== 0) continue;
+            budTip = false;
+            tip('bud');
+            break;
+          }
+        }
       }
       const nb = s.nubs;
       if (!s.lessonOn) {

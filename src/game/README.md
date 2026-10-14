@@ -238,6 +238,43 @@ See CAMPAIGN_PLAN §4 for the contract; the core names (`CONCEPTS`, `levelDef`, 
 - **Start**: GO! (`POP_GO`), a hop and a puff of snow when the start beat ends.
 - **SWING**: a 30 ms hit-stop and a teal ring off the dial, on top of the SWING! pop and swept arc.
 
+## v1.5 core mechanics (game side)
+
+See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it readable.
+
+- **Input** (`input.ts`): a Cold Snap is asked for by a quick swipe down anywhere (≥ 40 px or 5 % of
+  the viewport height, ≥ 2.2× more down than sideways, within 450 ms of the press; a press that first
+  moves 14 px sideways or upward is a drag for good, so drags and flicks never snap; a press that
+  snaps takes back the turn it made and releases at 0 °/s), by Down or S, or by a short tap on the
+  frost meter (`hudMeterHit`). `InputFrame.snap` is set on the next tick's first frame, only while
+  `canSnap()` (a run in play past its hold and start beat; never the Title, an intro card, a pause or
+  a menu). `Input.snaps` counts them (test hook `mech().snaps`).
+- **`mechanics.ts`**: fills the renderer's `MechView` every frame from the sim (read defensively):
+  the meter shows on a run once its frost first moves, deep shade, the snap's share left, the snap
+  cloud to draw (while it lives) and the dial's bud mask (`guide.bud`). `mechanicOf(concept)` finds
+  the mechanic a Journey concept teaches by its id, name or title. The test hook's demos `bud`,
+  `bloom`, `snapReady`, `snap` and `deep` stage a moment (a bud ahead, its sunflower, a full meter, a
+  low snap cloud over Nubs, deep shade) for visual review without changing a rule.
+- **Render**: `flora.ts` draws a closed bud (its ground marks with the ground: the gold ±faceTol arc
+  with a little sun, a fan of light and the growth ring; the plant in the depth sort) and the
+  `'sunflower'` caster kind (a stem with leaves and a head drawn as a disc facing the sun, its face
+  or its green back; it pops up on `bloom`). Unknown caster kinds draw their prisms, slabs and discs
+  plainly. The dial (`halo.ts`) has gold bud arcs just outside the ring and, in deep shade, an indigo
+  ring with three circling frost glints. The HUD's frost meter sits in the world rect's bottom-right
+  corner (fills ice-blue; full: a deep-blue plate, a glow, a breathing pulse and a bobbing "swipe
+  down" chevron; during a snap the ring drains white). The snap cloud (`clouds.ts`) is frosty, drawn
+  over its own shadow so it reads as riding over Nubs, gathers in 0.3 s and melts away at its end;
+  snow falls from it (`fx.ts`, `P_SNOWFALL`).
+- **Feedback** (`fx.ts`, audio, haptics): budGrow gold motes and a ring tick (sound: a tick climbing
+  the scale, ≤ 8/s), bloom (petals, BLOOM!, +Snow, a short hit-stop; a bell run), frostReady (a cool
+  ring; a glassy shimmer; the cue line "Frost full! Swipe ↓…" until the player has snapped twice in
+  the session), snap (COLD SNAP!, an ice ring and shards, a cool wash; a crack and whoosh that duck
+  the score), snapEnd, deepEnter (DEEP at most every 4 s; a low whoom ≤ 1 per 2.5 s).
+- **Tips** (`moments.ts`): the level that teaches a mechanic shows its `MECH_TIPS` at their moments
+  until passed; a new player's endless and daily runs get one tip per mechanic moment.
+- **Meta**: Results tiles for blooms, Cold Snaps and deep shade; missions `blooms-2`, `snaps-2`,
+  `deep-8`; trophies Green Thumb, Cold Front, Deep Diver.
+
 ## Test hook (`?test=1`)
 
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
@@ -252,7 +289,8 @@ outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locke
 `hudPb()`, `renderOptions({ mapOverlay, multiplyShadows, decor })`, `pixelAB(a, b)`,
 `mapProbe(mapT)` (whole device pixels of the world rect only), `mapCallouts()` (Melt Map callout
 boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`) and `bot(kind)`
-(a core bot plays; unlike `?bot=` the runs stay scored). `demo('noon')` is an alias of
+(a core bot plays; unlike `?bot=` the runs stay scored), and in v1.5 `mech()` (the MechView, the
+meter's centre and the snaps input asked for) and the demos above. `demo('noon')` is an alias of
 `'highnoon'`, and `demo('postcard')` shares without user activation (the download path).
 `forceDeath()` also ends the first-run lesson, whose Chill floor would keep Nubs alive. URL
 parameters are in V1_PLAN §14.

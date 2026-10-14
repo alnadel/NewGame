@@ -530,11 +530,11 @@ describe('missions', () => {
 
   it('repeats the pool as tier II with scaled goals and rewards', () => {
     // A strong player (recent best Day 3) completing every tier-I mission at once.
-    const all = run(1500, { flakes: 40, maxMult: 5, cloudRideBest: 30, phews: 4, crystals: 2, x5HoldBest: 20, gateNoon: true, ballsPassedClean: 9, swings: 6 });
+    const all = run(1500, { flakes: 40, maxMult: 5, cloudRideBest: 30, phews: 4, crystals: 2, x5HoldBest: 20, gateNoon: true, ballsPassedClean: 9, swings: 6, blooms: 4, snaps: 4, deepSeconds: 20 });
     let s = defaults(1);
     s.history = history(3, 1500);
-    for (let i = 0; i < 5; i++) s = play(s, all);
-    // 13 missions in the pool, 3 per lap: the cursor has wrapped once.
+    for (let i = 0; i < 6; i++) s = play(s, all);
+    // 16 missions in the pool (v1.5 added three), 3 per lap: the cursor has wrapped once.
     expect(s.missions.tier).toBe(2);
     expect(s.missions.active.map((m) => m.id)).toEqual(['survive-noon@2', 'mult-3@2', 'cloud-ride@2']);
     const views = activeMissionViews(s);
@@ -635,6 +635,11 @@ describe('achievements and cosmetic unlocks', () => {
     expect(got(run(10, { ballsPassedClean: 10 }))).toEqual(['glare-proof']);
     expect(got(run(10, { ballsPassedClean: 12, ballGlared: true }))).toEqual([]);
     expect(got(run(10, { flowers: 30 }))).toEqual(['night-gardener']);
+    // v1.5 one-run feats (results without the fields never count).
+    expect(got(run(10, { blooms: 4, snaps: 2, deepSeconds: 29.9 }))).toEqual([]);
+    expect(got(run(10, { blooms: 5 }))).toEqual(['green-thumb']);
+    expect(got(run(10, { snaps: 3 }))).toEqual(['cold-front']);
+    expect(got(run(10, { deepSeconds: 30 }))).toEqual(['deep-diver']);
     const cold = run(800);
     cold.hourGlyphs[0] = [...Array<HourGlyph>(9).fill('cool'), 'warm', 'hot', 'warm'];
     const r = applyRunResult(quiet(), cold, opts());

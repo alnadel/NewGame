@@ -22,6 +22,9 @@ export const THROTTLES = {
   melt: [0, 3],
   bell: [0, 12],
   gust: [1000, 1],
+  /** v1.5: a growing bud's tick, and deep shade's whoom (it comes and goes at shadow edges). */
+  bud: [90, 8],
+  deep: [2500, 1],
 } as const;
 
 /**
@@ -36,6 +39,7 @@ export const DUCKS: Readonly<Partial<Record<SfxName, readonly [number, number]>>
   levelWin: [0.4, 2.4],
   levelFail: [0.6, 1.4],
   newBest: [0.5, 2],
+  snap: [0.7, 0.8],
 };
 
 /** Shade re-entry only sighs with relief after at least this much time lit (GDD §11.4). */
@@ -56,6 +60,8 @@ export class SfxRouter {
   private readonly melts = new RateLimiter(THROTTLES.melt[0], THROTTLES.melt[1]);
   private readonly bells = new RateLimiter(THROTTLES.bell[0], THROTTLES.bell[1]);
   private readonly gusts = new RateLimiter(THROTTLES.gust[0], THROTTLES.gust[1]);
+  private readonly buds = new RateLimiter(THROTTLES.bud[0], THROTTLES.bud[1]);
+  private readonly deeps = new RateLimiter(THROTTLES.deep[0], THROTTLES.deep[1]);
   private readonly pulse = new Pulse();
   private readonly scene = createScene();
   private slowMo = 0;
@@ -113,7 +119,7 @@ export class SfxRouter {
 
   /** New run (start or retry): forget throttles, timers and per-run counters. */
   resetRun(): void {
-    for (const r of [this.detents, this.melts, this.bells, this.gusts]) r.reset();
+    for (const r of [this.detents, this.melts, this.bells, this.gusts, this.buds, this.deeps]) r.reset();
     this.pulse.reset();
     this.slowMo = 0;
     this.duckLeft = 0;
@@ -196,6 +202,22 @@ export class SfxRouter {
         return this.cue('death');
       case 'levelWon':
         return ev.passed ? this.cue('levelWin', { day, level: ev.stars }) : this.cue('levelFail', { day });
+      // v1.5 core mechanics.
+      case 'budGrow':
+        // The tick climbs the scale as the bud grows (a rising count-up to the bloom).
+        if (this.buds.tryAcquire(now)) this.cue('budGrow', { day, degree: Math.round(Math.max(0, Math.min(1, ev.grow)) * 7) });
+        return;
+      case 'bloom':
+        return this.cue('bloom', { day });
+      case 'frostReady':
+        return this.cue('frostReady', { day });
+      case 'snap':
+        return this.cue('snap', { day });
+      case 'snapEnd':
+        return this.cue('snapEnd', { day });
+      case 'deepEnter':
+        if (this.deeps.tryAcquire(now)) this.cue('deepEnter', { day });
+        return;
       case 'start':
       case 'go':
       case 'shadeExit':

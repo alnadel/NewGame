@@ -55,13 +55,13 @@ describe('skill gates and the deferred queue', () => {
     expect(s.active.map((m) => m.id)).toEqual(['reach-day-2', 'ice-crystal', 'two-phews']);
     for (const slot of s.active) slot.done = true;
     refillMissions(s, 400);
-    // reach-9am@2 (gate 900 − 330 = 570) waits too.
-    expect(s.deferred).toEqual(['gate-arch', 'clean-balls', 'reach-day-3', 'reach-9am@2']);
-    expect(s.active.map((m) => m.id)).toEqual(['hold-x5', 'swings-3', 'flakes-10@2']);
+    // reach-day-3 (1080) waits too; blooms-2 (v1.5, gate 0) follows swings-3.
+    expect(s.deferred).toEqual(['gate-arch', 'clean-balls', 'reach-day-3']);
+    expect(s.active.map((m) => m.id)).toEqual(['hold-x5', 'swings-3', 'blooms-2']);
     // The queue is re-checked first, in order, before the pool.
     for (const slot of s.active) slot.done = true;
     refillMissions(s, 800);
-    expect(s.active.map((m) => m.id)).toEqual(['gate-arch', 'clean-balls', 'reach-9am@2']);
+    expect(s.active.map((m) => m.id)).toEqual(['gate-arch', 'clean-balls', 'snaps-2']);
     expect(s.deferred).toEqual(['reach-day-3']);
   });
 
@@ -70,10 +70,10 @@ describe('skill gates and the deferred queue', () => {
     s.active = [{ id: 'flakes-10', progress: 0, done: false, stale: 0 }];
     s.deferred = ['reach-day-3'];
     refillMissions(s, 0);
-    // reach-day-3 is passed again but already queued; hold-x5, swings-3, reach-9am@2 and
-    // survive-noon@2 join the queue; flakes-10@2 is skipped while flakes-10 is active.
-    expect(s.active.map((m) => m.id)).toEqual(['flakes-10', 'mult-3@2', 'cloud-ride@2']);
-    expect(s.deferred).toEqual(['reach-day-3', 'hold-x5', 'swings-3', 'reach-9am@2', 'survive-noon@2']);
+    // reach-day-3 is passed again but already queued; hold-x5, swings-3, snaps-2, deep-8 (v1.5, gate
+    // 180), reach-9am@2 and survive-noon@2 join the queue; flakes-10@2 is skipped while flakes-10 is active.
+    expect(s.active.map((m) => m.id)).toEqual(['flakes-10', 'blooms-2', 'mult-3@2']);
+    expect(s.deferred).toEqual(['reach-day-3', 'hold-x5', 'swings-3', 'snaps-2', 'deep-8', 'reach-9am@2', 'survive-noon@2']);
   });
 
   it('never leaves a final slot gated above the recent best over a long career', () => {

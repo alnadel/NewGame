@@ -153,6 +153,10 @@ const ACHIEVEMENT_CHECKS: Readonly<Partial<Record<AchievementId, AchievementChec
   'journey-10': (s) => passedThrough(s.campaign, 10),
   'journey-100': (s) => passedThrough(s.campaign, 100),
   'three-star-20': (s) => s.campaign.stars.filter((n) => n >= STARS_PER_LEVEL).length >= 20,
+  // v1.5 mechanics (one-run feats; older results without the fields never count).
+  'green-thumb': (_s, r) => (r.stats.blooms ?? 0) >= 5,
+  'cold-front': (_s, r) => (r.stats.snaps ?? 0) >= 3,
+  'deep-diver': (_s, r) => (r.stats.deepSeconds ?? 0) >= 30,
 };
 
 // ---------------------------------------------------------------------------------------------

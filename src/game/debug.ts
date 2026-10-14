@@ -81,6 +81,12 @@ export interface ShadyTestHook {
   toasts(): { kind: string; kicker: string; text: string }[];
   /** Sets the run's Snow (layout checks with long numbers). */
   setSnow(n: number): void;
+  /**
+   * v1.5 mechanics as the renderer sees them (game/mechanics.ts): the frost meter (shown, fill, its
+   * centre in CSS px), deep shade, the snap left and its cloud, the dial's gold bins, the run's buds
+   * and Cold Snaps asked for by input so far.
+   */
+  mech(): { meter: boolean; frost: number; meterX: number; meterY: number; deep: boolean; snapLeft: number; snapId: number; budBins: number; buds: number; snaps: number };
 }
 
 declare global {
@@ -144,6 +150,24 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     runStatus: () => session.runStatus(),
     toasts: () => session.renderer.scene.banners.toasts.map((t) => ({ kind: t.kind, kicker: t.kicker.replace(/\u200c/g, ''), text: t.text })),
     setSnow: (n) => session.testSetSnow(n),
+    mech: () => {
+      const m = session.mech.view;
+      const h = session.renderer.scene.hud;
+      let budBins = 0;
+      if (m.bud) for (let b = 0; b < 360; b++) budBins += m.bud[b] ? 1 : 0;
+      return {
+        meter: h.meterShown,
+        frost: m.frost,
+        meterX: h.meterX,
+        meterY: h.meterY,
+        deep: m.deep,
+        snapLeft: m.snapLeft,
+        snapId: m.snapCloud?.id ?? -1,
+        budBins,
+        buds: session.state.world.buds?.length ?? 0,
+        snaps: session.input.snaps,
+      };
+    },
   };
   window.__SHADY_TEST__ = hook;
 }

@@ -65,6 +65,11 @@ describe('patterns', () => {
       rankUp: [15, 40, 15, 40, 30],
       open: [6, 30, 6, 30, 6, 60, 35],
       claim: [8, 30, 12],
+      bud: 4,
+      bloom: [10, 30, 20],
+      frost: [6, 40, 6],
+      snap: [25, 40, 35],
+      deep: 8,
     });
   });
 
@@ -101,6 +106,13 @@ describe('hapticForEvent', () => {
       [{ e: 'flower', x: 0, y: 0, snow: 2 }, null],
       [{ e: 'nightStart', day: 1 }, null],
       [{ e: 'hourEnd', day: 1, hour: 2, glyph: 'warm' }, null],
+      // v1.5
+      [{ e: 'budGrow', id: 1, x: 0, y: 0, grow: 0.4 }, 'bud'],
+      [{ e: 'bloom', id: 1, x: 0, y: 0, snow: 5 }, 'bloom'],
+      [{ e: 'frostReady' }, 'frost'],
+      [{ e: 'snap', x: 0, y: 0, cloudId: 9 }, 'snap'],
+      [{ e: 'snapEnd' }, null],
+      [{ e: 'deepEnter' }, 'deep'],
     ];
     for (const [ev, name] of cases) expect(hapticForEvent(ev)).toBe(name);
   });
@@ -120,6 +132,24 @@ describe('isDetentHapticStep (every 45°)', () => {
 });
 
 describe('WebVibrateHaptics gating', () => {
+  it('ticks a growing bud at most every 250 ms and deep shade every 2.5 s (v1.5)', () => {
+    const t = setup();
+    const bud: SimEvent = { e: 'budGrow', id: 1, x: 0, y: 0, grow: 0.2 };
+    t.h.onEvents([bud], 0);
+    t.at(100);
+    t.h.onEvents([bud], 0);
+    t.at(300);
+    t.h.onEvents([bud], 0);
+    expect(t.patterns()).toEqual([4, 4]);
+    t.at(1000);
+    t.h.onEvents([{ e: 'deepEnter' }], 0);
+    t.at(2000);
+    t.h.onEvents([{ e: 'deepEnter' }], 0);
+    t.at(3600);
+    t.h.onEvents([{ e: 'deepEnter' }], 0);
+    expect(t.patterns()).toEqual([4, 4, 8, 8]);
+  });
+
   it('plays named patterns, copying arrays', () => {
     const t = setup();
     t.h.play('crystal');

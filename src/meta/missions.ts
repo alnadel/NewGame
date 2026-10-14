@@ -103,6 +103,12 @@ export function missionLabel(def: MissionDef, tier: number): string {
       return `Pass ${t} gazing balls in one run with no glare contact`;
     case 'swings-3':
       return `Land ${t} SWINGs in one run`;
+    case 'blooms-2':
+      return `Bloom ${t} sunflowers in one run`;
+    case 'snaps-2':
+      return t === 1 ? 'Cast a Cold Snap' : `Cast ${t} Cold Snaps in one run`;
+    case 'deep-8':
+      return `Spend ${t}${NBSP}s in deep shade in one run`;
   }
 }
 
@@ -129,6 +135,13 @@ export function missionValue(def: MissionDef, result: RunResult): number {
       return s.ballGlared ? 0 : s.ballsPassedClean;
     case 'swings':
       return s.swings;
+    // v1.5 (absent in older results = 0).
+    case 'blooms':
+      return s.blooms ?? 0;
+    case 'snaps':
+      return s.snaps ?? 0;
+    case 'deepSeconds':
+      return s.deepSeconds ?? 0;
   }
 }
 
@@ -179,6 +192,12 @@ export function missionHint(def: MissionDef): string | null {
       return 'A SWING: turn the sun so Nubs steps from one shadow straight into another.';
     case 'cloud-ride':
       return "Keep the sun behind a cloud so its shadow rides along with Nubs.";
+    case 'blooms-2':
+      return 'Shine the sun from a bud’s gold mark (gold on the dial) until it blooms.';
+    case 'snaps-2':
+      return 'Shade fills the frost meter; when it glows, swipe down for a Cold Snap.';
+    case 'deep-8':
+      return 'Deep shade: Nubs under two shadows at once (the dial’s ring turns dark).';
     default:
       return null;
   }

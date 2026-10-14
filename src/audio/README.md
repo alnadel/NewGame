@@ -158,6 +158,11 @@ from 0 with the layer's fade; a layer unwanted for ≥ 1 s and five of its fade 
 | `swing` | Swoosh + a pluck climbing with `chain` | |
 | `levelWon` | `passed`: win jingle tiered by `stars` (★ fanfare, ★★ + chord, ★★★ + sparkle run); else a soft "aww" | Ducks to 40 % for 2.4 s (miss: 60 %, 1.4 s) |
 | `death` | Death slide-whistle + plop | Loops stop via `screen`/`phase` |
+| `budGrow` | A soft tick climbing the scale with the bud's growth | ≤ 8/s, ≥ 90 ms apart |
+| `bloom` | A round pop and a bell run opening out | |
+| `frostReady` | Three high bells rolled up, a breath of ice | |
+| `snap` / `snapEnd` | An icy crack, a falling whoosh, a cold thump and a bell cluster / two quiet bells falling | The snap ducks the score to 70 % for 0.8 s |
+| `deepEnter` | A low soft whoom and a high bell | ≤ 1 per 2.5 s |
 | `start`, `go`, `shadeExit`, `lowChill` | none | Carried by continuous layers |
 | `hourEnd`, `ballPassed`, `lessonDone` | none | Bookkeeping |
 

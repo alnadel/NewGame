@@ -10,6 +10,7 @@ import { OBLIQUE } from '../game/camera.ts';
 import { css, cssa, darken, hex, lighten, mix, type Rgb } from './color.ts';
 import { faceShade, tint, type Palette } from './palette.ts';
 import { radialSprite, type Canvas2D } from './sprites.ts';
+import { drawSunflower } from './flora.ts';
 
 const TAU = Math.PI * 2;
 
@@ -85,12 +86,14 @@ export interface Light {
   nubsY: number;
   /** Seconds, for the gazing-ball twinkle. */
   time: number;
+  /** The sun's azimuth θ (degrees; v1.5 buds and sunflowers face it). */
+  theta: number;
   /** Draw side faces (false on the Melt Map overview is still fine; kept for completeness). */
   sides: boolean;
 }
 
 export function createLight(pal: Palette): Light {
-  return { pal, ux: 1, uy: 0, sunUp: true, elev: 0, nubsX: 0, nubsY: 0, time: 0, sides: true };
+  return { pal, ux: 1, uy: 0, sunUp: true, elev: 0, nubsX: 0, nubsY: 0, time: 0, theta: 0, sides: true };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1096,9 +1099,15 @@ function drawTree(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster, oak
 
 /** Draws one caster with its full 3D treatment. */
 export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Caster): void {
-  if ((c.kind as string) === 'finish') {
+  const kind = c.kind as string;
+  if (kind === 'finish') {
     // The campaign's finish line (core kind 'finish', gate-arch geometry).
     drawFinishArch(g, v, L, c.parts, L.time);
+    return;
+  }
+  if (kind === 'sunflower') {
+    // v1.5: a bloomed bud (core kind 'sunflower': a stem prism and a disc head).
+    drawSunflower(g, v, L, c);
     return;
   }
   switch (c.kind) {
@@ -1142,9 +1151,16 @@ export function drawCaster(g: CanvasRenderingContext2D, v: View, L: Light, c: Ca
       drawPedestal(g, v, L, c);
       return;
     default: {
+      // A kind this build doesn't know: its blocks, plates and discs, plainly (never invisible).
       for (const part of c.parts as readonly Part[]) {
         if (part.t === 'prism') prism(g, v, L, part, MAT.stoneSide, MAT.stone);
         else if (part.t === 'slab') drawSlab(g, v, L, part, MAT.archSide, MAT.arch);
+        else {
+          g.fillStyle = css(tint(L.pal, MAT.canopy));
+          g.beginPath();
+          g.arc(px(v, part.cx), py(v, part.cy, part.z), part.r * v.S, 0, TAU);
+          g.fill();
+        }
       }
     }
   }

@@ -33,7 +33,11 @@ export type AchievementId =
   | 'stars-75'
   | 'stars-150'
   | 'stars-300'
-  | 'stars-600';
+  | 'stars-600'
+  // v1.5 mechanics (one-run feats).
+  | 'green-thumb'
+  | 'cold-front'
+  | 'deep-diver';
 
 export type CosmeticId =
   | 'scarf-red'
@@ -304,7 +308,11 @@ export type MissionId =
   | 'gate-arch'
   | 'clean-balls'
   | 'reach-day-3'
-  | 'swings-3';
+  | 'swings-3'
+  // v1.5 mechanics (appended, so saved pool cursors stay valid).
+  | 'blooms-2'
+  | 'snaps-2'
+  | 'deep-8';
 
 /**
  * How a mission measures a run and how its goal scales with the tier (V1_PLAN §11.1):
@@ -325,7 +333,10 @@ export type MissionMetric =
   | 'crystals'
   | 'gateNoon'
   | 'cleanBalls'
-  | 'swings';
+  | 'swings'
+  | 'blooms'
+  | 'snaps'
+  | 'deepSeconds';
 
 export interface MissionDef {
   id: MissionId;
@@ -363,6 +374,10 @@ export const MISSIONS: readonly MissionDef[] = [
   { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 4, reward: 30, gate: 390 },
   // Dealt once the recent best reaches 12:30 PM: a SWING needs a player who already chains shade.
   { id: 'swings-3', metric: 'swings', scale: 'count', base: 3, reward: 15, gate: 390 },
+  // v1.5 (docs/V1_5_PLAN.md): grow shade, spend the cold, hunt the overlaps.
+  { id: 'blooms-2', metric: 'blooms', scale: 'count', base: 2, reward: 20, gate: 0 },
+  { id: 'snaps-2', metric: 'snaps', scale: 'count', base: 2, reward: 20, gate: 180 },
+  { id: 'deep-8', metric: 'deepSeconds', scale: 'seconds', base: 8, reward: 25, gate: 180 },
 ];
 
 export const ACTIVE_MISSIONS = 3;
@@ -416,6 +431,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     [300, 'Milky Way', 'shades-galaxy'], [600, 'Every Star', 'hat-starcrown']] as const).map(([n, name, reward]): AchievementDef => ({
     id: `stars-${n}`, name, description: `Earn ${n} Journey stars.`, hint: `Earn ${n} Journey stars.`, reward, stars: n,
   })),
+  // v1.5 mechanics.
+  { id: 'green-thumb', name: 'Green Thumb', description: 'Bloom 5 sunflowers in one run.', hint: 'Grow your own shade. Five times.' },
+  { id: 'cold-front', name: 'Cold Front', description: 'Cast 3 Cold Snaps in one run.', hint: 'Call the cold down, again and again.' },
+  { id: 'deep-diver', name: 'Deep Diver', description: '30 s of deep shade in one run.', hint: 'Two shadows are better than one. For half a minute.' },
 ];
 
 const ACHIEVEMENT_BY_ID = new Map<string, AchievementDef>(ACHIEVEMENTS.map((a) => [a.id, a]));

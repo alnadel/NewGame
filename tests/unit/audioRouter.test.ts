@@ -230,6 +230,36 @@ describe('SfxRouter campaign', () => {
   });
 });
 
+describe('SfxRouter v1.5 mechanics', () => {
+  it('ticks a growing bud up the scale (≤ 8/s, ≥ 90 ms apart), then blooms', () => {
+    const t = setup();
+    t.stream(40, 30, (i) => ({ e: 'budGrow', id: 1, x: 0, y: 0, grow: i / 39 }));
+    const ticks = t.played.filter((p) => p.name === 'budGrow');
+    expect(ticks.length).toBeGreaterThanOrEqual(8);
+    expect(ticks.length).toBeLessThanOrEqual(10);
+    for (let i = 1; i < ticks.length; i++) {
+      expect((ticks[i] as Played).at - (ticks[i - 1] as Played).at).toBeGreaterThanOrEqual(90);
+      expect((ticks[i] as Played).params.degree as number).toBeGreaterThanOrEqual((ticks[i - 1] as Played).params.degree as number);
+    }
+    expect(ticks.at(-1)?.params.degree).toBe(7);
+    t.router.onEvents([{ e: 'bloom', id: 1, x: 0, y: 0, snow: 5 }], t.view);
+    expect(t.names().at(-1)).toBe('bloom');
+  });
+
+  it('plays the frost meter, the snap (ducking the score) and its end; deep shade at most every 2.5 s', () => {
+    const t = setup();
+    t.router.onEvents([{ e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 3 }], t.view);
+    expect(t.names()).toEqual(['frostReady', 'snap']);
+    expect(DUCKS.snap).toBeDefined();
+    t.router.onEvents([{ e: 'snapEnd' }, { e: 'deepEnter' }], t.view);
+    t.advance(1000);
+    t.router.onEvents([{ e: 'deepEnter' }], t.view);
+    t.advance(2000);
+    t.router.onEvents([{ e: 'deepEnter' }], t.view);
+    expect(t.names()).toEqual(['frostReady', 'snap', 'snapEnd', 'deepEnter', 'deepEnter']);
+  });
+});
+
 describe('SfxRouter heartbeat', () => {
   it('beats at once below 25 Chill, every 0.85 s, and tells the haptics hook', () => {
     const t = setup({ chill: 20 });
