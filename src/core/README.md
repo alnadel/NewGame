@@ -462,6 +462,15 @@ identity). Code: `sim/mechanics.ts` (buds, frost, snap), `computeCoverage`/`appl
   Garden, 8), `snap` (Cold Snap · Frost Cloud, 10, the chapter-1 finale); `TEACH_LEVELS` = 40;
   Wide Open, Crowded and Drought are no longer taught alone (they compose); composed levels 41-200
   are unchanged. See docs/CAMPAIGN_PLAN.md §7 for the numbers.
+- **Numbers** (`sim --check --seeds 40 --mech`, profile 3; per daylight minute | per day reached):
+  buds passed ~9-11 | 8-9 (one every 5.5-6.5 s); blooms: oracle 3.4 | 2.4, reactive 2.9 | 2.4,
+  novice 1.9 | 1.6 by accident, idle 0; Cold Snaps (= meters filled): oracle 0.68 | 0.48, reactive
+  0.47 | 0.39 (a good player snaps about once every two days, ~75 s of daylight; a Journey level
+  starts with half a meter); deep shade 7-16% of daylight. Survival: reactive Day 3 · 11:39 AM →
+  Day 4 · 10:12 AM using the mechanics (+633 min, p90 Day 4 → Day 6); novice 11:08 → 11:49 AM
+  (deep shade and stray blooms; its window still holds); idle unchanged; oracle ≥ Day 8 either way.
+  Sunflowers shade the center sample on ~2% of daylight (their worth is mostly Snow, frost and deep
+  shade). step() cost is unchanged within noise (~20-30 µs/tick under load).
 - **sim.** The §13 reactive rows run the bot dial-only (`reactive p3 dial`); `reactive p3` uses the
   mechanics and must outlive it by ≥ 180 minutes (hard). The mechanics table prints blooms, snaps,
   meters filled, buds passed per daylight minute and per day, and deep shade's share. `--mech` adds

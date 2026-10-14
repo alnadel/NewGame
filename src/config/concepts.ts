@@ -10,9 +10,9 @@ import type { ForecastId } from './forecasts.ts';
  * Every concept: the first forty in teaching order (level n teaches CONCEPT_IDS[n − 1], n ≤ 40).
  * v1.5 teaches the three core mechanics in chapter 1 (deep shade at 5, Sunflowers at 8, Cold Snap
  * at 10, the chapter's finale) and keeps every other teaching level where it was except Old Town
- * (11), Gates (13), Long Shadows (14) and Heat Wave (15) and 16-21 (one place later each); Wide
- * Open, Crowded and Drought, plain knob concepts, are no longer taught on a level of their own and
- * appear only in composed levels (41-200, unchanged).
+ * (11), Gates (13), Long Shadows (14), Heat Wave (15) and Mirror Sun … Lowland (16-21, three places
+ * later); Wide Open, Crowded and Drought, plain knob concepts, are no longer taught on a level of
+ * their own and appear only in composed levels (41-200, unchanged).
  */
 export const CONCEPT_IDS = Object.freeze([
   'drag', 'flakes', 'cloud', 'noon', 'deep', 'glare', 'swing', 'bloom', 'breezy', 'snap',

@@ -161,3 +161,49 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 Totals: oracle 200/200 (2.81 → 2.44 stars a level; 1-40 2.90 → 2.73); reactive 191 → 199/200, 99 → 100/100 on 1-100; humanDial 67 → 113/200, 26 → 35/40 on 1-40 (×8: 65% → 90%), 9 → 10/10 on 1-10 (×8: 79% → 100%), stars on 1-40 1.62 → 1.73 with three stars on 15 → 4 of levels 1-40 (oracle 36 → 30): the third star now takes skill. By position in a chapter (humanDial ×8): teaching levels 84-100% with the finale at 56%; composed chapters open at 60-70%, sit at ~45% and end at ~41%.
 
 Endless: SWING `minDeg` 45 → 38 takes reactive p3 from 0.7 to 1.45 SWINGs a minute (humanDial R4 2.2, SWING Snow 6% of run Snow). The humanDial R4 median (18.1 s at 40 seeds, 17.0 s at 120) proved insensitive to gentle levers (regen +10%: +0.5 s; R4 drain −5: +1.4 s; Day-1 spacing, wave, εnoon or the validator floor: within ±0.5 s of noise), so the standard rules are unchanged: the advisory still misses.
+
+## 7. v1.5 core mechanics in the Journey (numbers)
+
+v1.5 (docs/V1_5_PLAN.md) teaches its three mechanics in chapter 1, each with its own level and
+intro concept: **Deep Shade · Double Shade (5)**, **Sunflowers · Sun Garden (8)** and **Cold Snap ·
+Frost Cloud (10, the chapter finale; it starts with a full frost meter)**. Each mechanic is off on
+every level before its lesson and on from it (`mechanicsOf(id)`), so level 1 stays the pure drag
+lesson. Levels 1-4, 6, 7, 9, 12 and 22-40 keep their concepts; Old Town, Gates, Long Shadows and
+Heat Wave moved to 11, 13, 14 and 15, Mirror Sun … Lowland three places later (16-21). Wide Open,
+Crowded and Drought (plain knob concepts) lost their teaching levels and still compose; levels
+41-200 are exactly as before (composition draws from the v1.2 order). After the Cold Snap's level
+every level starts with the meter at half. The `snap` concept costs 3 drain points (its finale
+drains 31 instead of 34).
+
+`node scripts/sim.ts --campaign --bot all` (v1.4 → v1.5, pass % (mean stars); the last column is
+v1.5 with the oracle / reactive ignoring the mechanics, `--nomech`):
+
+| ch | oracle | reactive | humanDial | oracle / reactive, no mechanics |
+|---|---|---|---|---|
+| 1 | 100 (2.9) → 100 (2.9) | 100 (3.0) → 100 (3.0) | 100 (2.1) → 100 (2.1) | 100 (2.9) / 100 (3.0) |
+| 2 | 100 (2.7) → 100 (2.9) | 100 (2.9) → 100 (3.0) | 90 (1.9) → 100 (1.9) | 100 (2.8) / 100 (2.9) |
+| 3 | 100 (2.6) → 100 (2.6) | 100 (3.0) → 100 (2.8) | 80 (1.4) → 70 (1.2) | 100 (2.5) / 100 (2.9) |
+| 4 | 100 (2.7) → 100 (2.8) | 100 (2.9) → 100 (2.9) | 80 (1.5) → 90 (1.7) | 100 (2.7) / 100 (2.9) |
+| 5 | 100 (2.3) → 100 (2.1) | 100 (2.9) → 100 (2.9) | 90 (1.6) → 80 (1.4) | 100 (2.3) / 100 (2.9) |
+| 6 | 100 (2.8) → 100 (2.9) | 100 (2.8) → 100 (2.9) | 50 (1.2) → 50 (1.1) | 100 (2.8) / 100 (2.8) |
+| 7 | 100 (2.3) → 100 (2.2) | 100 (2.6) → 100 (2.5) | 70 (1.4) → 70 (1.4) | 100 (2.3) / 100 (2.6) |
+| 8 | 100 (2.9) → 100 (2.9) | 100 (3.0) → 100 (3.0) | 80 (1.7) → 90 (2.0) | 100 (2.9) / 100 (3.0) |
+| 9 | 100 (2.3) → 100 (2.4) | 100 (2.8) → 100 (2.7) | 60 (1.3) → 60 (1.3) | 100 (2.3) / 100 (2.7) |
+| 10 | 100 (2.6) → 100 (2.4) | 100 (2.7) → 100 (2.7) | 30 (0.5) → 30 (0.5) | 100 (2.5) / 100 (2.7) |
+| 11 | 100 (2.3) → 100 (2.1) | 100 (2.4) → 100 (2.4) | 40 (0.6) → 40 (0.6) | 100 (2.4) / 100 (2.4) |
+| 12 | 100 (2.0) → 100 (2.0) | 100 (2.6) → 100 (2.6) | 50 (1.1) → 50 (1.1) | 100 (2.0) / 100 (2.6) |
+| 13 | 100 (2.0) → 100 (1.8) | 100 (2.4) → 100 (2.2) | 40 (0.8) → 40 (0.8) | 100 (1.9) / 100 (2.4) |
+| 14 | 100 (2.8) → 100 (2.8) | 100 (2.9) → 100 (2.9) | 60 (1.3) → 80 (1.7) | 100 (2.8) / 100 (2.9) |
+| 15 | 100 (2.6) → 100 (2.5) | 100 (3.0) → 100 (3.0) | 20 (0.4) → 40 (0.8) | 100 (2.6) / 100 (3.0) |
+| 16 | 100 (2.2) → 100 (2.3) | 100 (2.6) → 100 (2.7) | 40 (0.8) → 40 (0.8) | 100 (2.2) / 100 (2.7) |
+| 17 | 100 (2.4) → 100 (2.4) | 100 (2.8) → 100 (2.8) | 60 (1.2) → 70 (1.4) | 100 (2.5) / 100 (2.8) |
+| 18 | 100 (2.6) → 100 (2.8) | 100 (2.8) → 100 (2.8) | 40 (0.9) → 50 (1.1) | 100 (2.7) / 100 (2.8) |
+| 19 | 100 (1.6) → 100 (1.9) | 100 (2.1) → 100 (2.2) | 40 (0.5) → 40 (0.5) | 100 (1.7) / 100 (2.2) |
+| 20 | 100 (2.2) → 100 (2.2) | 90 (2.1) → 90 (2.0) | 10 (0.2) → 20 (0.4) | 100 (2.2) / 90 (2.1) |
+
+Totals: oracle 200/200 (2.44 stars a level, 1-40 2.80; v1.4 2.44 / 2.73); reactive 199/200,
+100/100 on 1-100 (2.70); humanDial 121/200 (v1.4 113), 36/40 on 1-40, 10/10 on 1-10 (it now casts a
+ready snap when lit under 30 Chill). With the mechanics ignored the bots earn the same stars
+(oracle 2.45, reactive 2.71): every level already passes and the stars hinge on flakes and the cool
+run, so in the Journey the mechanics are depth rather than a crutch; their worth shows in Endless
+(src/core/README.md §15).
