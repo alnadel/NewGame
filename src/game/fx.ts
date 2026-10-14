@@ -6,7 +6,7 @@
 // meter filling, the Cold Snap (COLD SNAP!, an ice ring, snow falling from its cloud) and deep
 // shade (DEEP, at most every DEEP_POP_GAP s).
 
-import { cloudCenter, cloudOffset, dayParams, dayTicks, worldPlan, type Cloud, type SimEvent, type SimState } from '../core/index.ts';
+import { cloudCenter, cloudOffset, dayParams, dayTicks, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -26,14 +26,12 @@ import {
   P_LEAF,
   P_PETAL,
   P_PUFF,
-  P_PETAL_POP,
   P_SNOW,
   P_SNOWFALL,
   P_SPARKLE,
   P_STEAM,
   P_WISP,
   POP_BANG,
-  POP_BLOOM,
   POP_DEEP,
   POP_GO,
   POP_MULT,
@@ -45,6 +43,7 @@ import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
 import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { MechView, RenderScene } from '../render/renderer.ts';
+import type { Cloud } from '../core/index.ts';
 import { registerBloom, resetBlooms } from '../render/flora.ts';
 import { SNAP_LIFT } from '../render/clouds.ts';
 import { themeFor } from '../render/palette.ts';
@@ -60,9 +59,6 @@ const TEAL: number = 0x2ec4b6;
 const GOLD: number = 0xffd36b;
 const SUN_GOLD: number = 0xffc23d;
 const ICE: number = 0x5ab8ff;
-const ICE_PALE: number = 0xbfe6ff;
-const DEEP: number = 0x1f2a66;
-const SUNFLOWER: readonly number[] = [0xffc93c, 0xffd84a, 0xf2a516, 0xffe27a];
 /** A DEEP pop shows at most this often (s). */
 const DEEP_POP_GAP = 4;
 /** Snow falling from the Cold Snap's cloud: flakes per second, and how long one takes to land (s). */
@@ -106,7 +102,6 @@ export class Fx {
   /** v1.5: the mechanics as the renderer sees them (the session's MechView), the snow from the snap cloud, the last DEEP pop. */
   mech: MechView | null = null;
   private snowAcc = 0;
-  private snowCloud: Cloud | null = null;
   private deepT = -1e9;
   private readonly c2 = new Float64Array(2);
 
@@ -121,7 +116,6 @@ export class Fx {
     this.leafAcc = 0;
     this.glintAcc = 0;
     this.snowAcc = 0;
-    this.snowCloud = null;
     this.deepT = -1e9;
     resetBlooms();
   }
@@ -284,41 +278,28 @@ export class Fx {
           }
           break;
         case 'budGrow':
-          // Light is reaching a bud: a few gold motes rise off it and its ring ticks out.
-          for (let i = 0; i < 3; i++) {
-            spawn(sc.particles, P_SPARKLE, ev.x + rnd(-4, 4), ev.y + rnd(-3, 3), rnd(6, 14), rnd(-10, 10), rnd(-6, 6), rnd(25, 45), 0.5, 2.6, 1, SUN_GOLD);
-          }
+          // Light is reaching a bud: its ring ticks out, wider as it grows.
           addRing(sc.rings, ev.x, ev.y, 7, 10 + 6 * ev.grow, 0.3, 1.6, 0.6 + 0.3 * ev.grow, SUN_GOLD);
           break;
         case 'bloom':
           this.bloom(ev.x, ev.y, ev.snow);
           break;
         case 'frostReady':
+        case 'snapEnd':
           // The meter pops on its own (hud.ts); a cool pulse and a ring of frost around Nubs say why.
-          sc.banners.coolPulse = Math.max(sc.banners.coolPulse, 0.25);
-          addRing(sc.rings, nx, ny, 10, 46, 0.45, 2.2, 0.8, ICE_PALE);
-          for (let i = 0; i < 10; i++) {
-            const a = (i / 10) * Math.PI * 2;
-            spawn(sc.particles, P_SPARKLE, nx, ny, 10, Math.cos(a) * 70, Math.sin(a) * 70, rnd(10, 40), 0.5, 3.5, 1, ICE_PALE);
-          }
+          // The snap's end: a last soft ring of cold.
+          if (ev.e === 'frostReady') sc.banners.coolPulse = Math.max(sc.banners.coolPulse, 0.25);
+          addRing(sc.rings, nx, ny, 12, 50, 0.45, 2.2, 0.75, 0xbfe6ff);
           break;
         case 'snap':
           this.snap(nx, ny);
-          break;
-        case 'snapEnd':
-          // The snap cloud thins out: a last soft ring of cold.
-          addRing(sc.rings, nx, ny, 30, 56, 0.5, 2, 0.5, ICE_PALE);
           break;
         case 'deepEnter':
           // Deep shade: the ring sinks to indigo (halo.ts); DEEP and an inward ring, now and then.
           if (sc.worldTime - this.deepT >= DEEP_POP_GAP) {
             this.deepT = sc.worldTime;
             addPop(sc.pops, 'DEEP', POP_DEEP, -22, 230, 0.9);
-            addRing(sc.rings, nx, ny, 50, 30, 0.4, 3, 0.7, DEEP);
-            for (let i = 0; i < 6; i++) {
-              const a = rnd(0, Math.PI * 2);
-              spawn(sc.particles, P_SPARKLE, nx + Math.cos(a) * 38, ny + Math.sin(a) * 38, rnd(4, 12), -Math.cos(a) * 40, -Math.sin(a) * 40, 10, 0.5, 3, 1, 0xddf4ff);
-            }
+            addRing(sc.rings, nx, ny, 50, 30, 0.4, 3, 0.7, 0x1f2a66);
           }
           break;
         case 'death': {
@@ -343,28 +324,18 @@ export class Fx {
   }
 
   /**
-   * A bud blooms at (x, y) (v1.5): the sunflower pops up out of it (render/flora.ts), petals and gold
-   * sparkles burst, a gold ring spreads, its Snow pops over Nubs with BLOOM!, a short hit-stop.
+   * A bud blooms at (x, y) (v1.5): the sunflower pops up out of it (render/flora.ts), gold petals
+   * burst, a gold ring spreads, its Snow pops over Nubs with BLOOM!, a short hit-stop.
    */
   bloom(x: number, y: number, snow: number): void {
     const sc = this.sc;
     if (!this.reducedMotion) registerBloom(x, y, sc.worldTime);
-    for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * Math.PI * 2 + rnd(-0.15, 0.15);
-      const sp = rnd(30, 60);
-      spawn(sc.particles, P_PETAL_POP, x, y, rnd(40, 60), Math.cos(a) * sp, Math.sin(a) * sp, rnd(20, 50), rnd(1.1, 1.6), rnd(2.2, 3.2), 2, SUNFLOWER[i % SUNFLOWER.length] as number);
-    }
-    for (let i = 0; i < 10; i++) {
-      const a = rnd(0, Math.PI * 2);
-      spawn(sc.particles, P_SPARKLE, x, y, rnd(30, 60), Math.cos(a) * 80, Math.sin(a) * 80, rnd(10, 50), 0.6, 4, 1.5, SUN_GOLD);
-    }
+    this.burst(x, y, 40, 16, 70, SUN_GOLD);
     addRing(sc.rings, x, y, 6, 34, 0.5, 3, 0.9, SUN_GOLD);
     if (snow > 0) addPlus(sc.pops, snow);
-    addPop(sc.pops, 'BLOOM!', POP_BLOOM, 26, 250, 0.9);
-    sc.nubs.happy = Math.max(sc.nubs.happy, 0.7);
+    addPop(sc.pops, 'BLOOM!', POP_MULT, 26, 250, 0.9);
     hop(sc.nubs, 4);
     this.clock.addHitStop(0.04);
-    addZoomPulse(sc.cam, 0.025, 0.3);
   }
 
   /** A Cold Snap lands over Nubs (v1.5): COLD SNAP!, an ice ring and shards, a cool wash, a beat. */
@@ -373,18 +344,20 @@ export class Fx {
     addHeadline(sc.pops, 'COLD SNAP!', POP_SNAP, 1.1);
     sc.banners.coolPulse = 0.5;
     addRing(sc.rings, x, y, 6, 72, 0.55, 3.5, 0.95, ICE);
-    addRing(sc.rings, x, y, 4, 44, 0.4, 2, 0.8, 0xffffff);
-    for (let i = 0; i < 22; i++) {
-      const a = (i / 22) * Math.PI * 2 + rnd(-0.1, 0.1);
-      const sp = rnd(90, 160);
-      spawn(sc.particles, P_BURST, x, y, 2, Math.cos(a) * sp, Math.sin(a) * sp, 0, 0.6, 5, 2, ICE_PALE);
-    }
-    sc.nubs.happy = Math.max(sc.nubs.happy, 0.9);
-    sc.nubs.shiver = 0.25;
+    this.burst(x, y, 2, 22, 130, 0xbfe6ff);
+    sc.nubs.happy = 0.9;
     hop(sc.nubs, 6);
     this.clock.addHitStop(0.05);
     addZoomPulse(sc.cam, 0.04, 0.4);
-    addShake(sc.cam, 2, 0.12);
+  }
+
+  /** n sparkles bursting out of (x, y, z) at about `speed` u/s. */
+  private burst(x: number, y: number, z: number, n: number, speed: number, color: number): void {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rnd(-0.15, 0.15);
+      const sp = speed * rnd(0.7, 1.2);
+      spawn(this.sc.particles, P_SPARKLE, x, y, z, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 50), 0.6, 4.5, 1.5, color);
+    }
   }
 
   /**
@@ -492,7 +465,7 @@ export class Fx {
       this.breathAcc = 1;
     }
     const mech = this.mech;
-    if (mech && mech.snapId >= 0 && mech.snapFade > 0.05 && !this.reducedMotion) this.snowfall(dt, s, mech.snapId, mech.snapFade);
+    if (mech?.snapCloud && !this.reducedMotion) this.snowfall(dt, s, mech.snapCloud);
     else this.snowAcc = 0;
     if (daylight && nb.f === 0) {
       // Frost sparkles: 2 per second on the ground within 16 u, living 1.2 s (5 in deep shade).
@@ -599,27 +572,14 @@ export class Fx {
   }
 
   /** Snow falling from the Cold Snap's cloud body to the ground under it, riding along with it. */
-  private snowfall(dt: number, s: SimState, id: number, fade: number): void {
-    let cl = this.snowCloud;
-    if (!cl || cl.id !== id) {
-      cl = null;
-      const cs = s.world.clouds;
-      for (let i = cs.length - 1; i >= 0; i--) {
-        if ((cs[i] as Cloud).id === id) {
-          cl = cs[i] as Cloud;
-          break;
-        }
-      }
-      this.snowCloud = cl;
-    }
-    if (!cl) return;
+  private snowfall(dt: number, s: SimState, cl: Cloud): void {
     // From the body as drawn: over its shadow, SNAP_LIFT up (render/clouds.ts).
     cloudCenter(cl, s.tAbs, this.c2);
     const r = s.cot > 0 ? cloudOffset(cl.z, s.cot) : 0;
     const cx = (this.c2[0] as number) - s.ux * r;
     const cy = (this.c2[1] as number) - s.uy * r;
     const z = SNAP_LIFT / OBLIQUE;
-    this.snowAcc += dt * SNOWFALL_RATE * fade;
+    this.snowAcc += dt * SNOWFALL_RATE;
     while (this.snowAcc >= 1) {
       this.snowAcc -= 1;
       const a = rnd(0, Math.PI * 2);

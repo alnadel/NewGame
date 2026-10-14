@@ -68,31 +68,14 @@ function build(cl: Cloud, scale: number, frost: boolean): CloudSprite {
   lumpsPath(0, 4, 0);
   g.fill();
   // Bright body.
-  g.fillStyle = frost ? '#F2FAFF' : '#FFFFFF';
+  g.fillStyle = frost ? '#DDF1FF' : '#FFFFFF';
   lumpsPath(-1, -1, -1.5);
   g.fill();
   if (frost) {
-    // Ice glints along the top of the lumps.
+    // A glossy white highlight on each icy lump.
     g.fillStyle = '#FFFFFF';
-    g.strokeStyle = 'rgba(90,184,255,0.9)';
-    g.lineWidth = 1.2;
-    for (let i = 0; i + 2 < l.length; i += 3) {
-      const x = cx + (l[i] as number) - (l[i + 2] as number) * 0.3;
-      const y = cy - (l[i + 1] as number) - (l[i + 2] as number) * 0.55;
-      const r = 2.6;
-      g.beginPath();
-      g.moveTo(x, y - r);
-      g.lineTo(x + r * 0.3, y - r * 0.3);
-      g.lineTo(x + r, y);
-      g.lineTo(x + r * 0.3, y + r * 0.3);
-      g.lineTo(x, y + r);
-      g.lineTo(x - r * 0.3, y + r * 0.3);
-      g.lineTo(x - r, y);
-      g.lineTo(x - r * 0.3, y - r * 0.3);
-      g.closePath();
-      g.stroke();
-      g.fill();
-    }
+    lumpsPath(-3, -4, -0.32 * cl.ry);
+    g.fill();
   }
   return { canvas, scale, cx, cy };
 }
@@ -114,7 +97,7 @@ const c2 = new Float64Array(2);
 
 /**
  * Draws every visible cloud body. `nightDim` 0..1 darkens them at night. `snapId` is the Cold
- * Snap's cloud (−1 none), drawn frosty and faded by `snapFade` (0..1).
+ * Snap's cloud (null none) is drawn frosty over its shadow (u, cot: the sun now).
  */
 export function drawClouds(
   g: CanvasRenderingContext2D,
@@ -124,8 +107,7 @@ export function drawClouds(
   nubsSX: number,
   nubsSY: number,
   night: number,
-  snapId = -1,
-  snapFade = 0,
+  snapCloud: Cloud | null = null,
   ux = 0,
   uy = 0,
   cot = 0,
@@ -138,14 +120,15 @@ export function drawClouds(
     cloudCenter(cl, tAbs, c2);
     let x = c2[0] as number;
     let y = (c2[1] as number) + OBLIQUE * cl.z;
-    if (cl.id === snapId) {
+    const frost = cl === snapCloud;
+    if (frost) {
       const r = cot > 0 ? cloudOffset(cl.z, cot) : 0;
       x = (c2[0] as number) - ux * r;
       y = (c2[1] as number) - uy * r + SNAP_LIFT;
     }
     if (x + cl.rx + PAD < v.x0 || x - cl.rx - PAD > v.x1 || y + cl.ry + PAD < v.y0 || y - cl.ry - PAD > v.y1) continue;
     // The snap cloud gathers in 0.3 s (it is cast on the spot) and melts away over its last 0.8 s.
-    const vis = cl.id === snapId ? Math.max(0, Math.min(1, (tAbs - cl.t0) / 0.3, (cl.t0 + cl.life - tAbs) / 0.8)) : cloudVisibility(cl, tAbs);
+    const vis = frost ? Math.max(0, Math.min(1, (tAbs - cl.t0) / 0.3, (cl.t0 + cl.life - tAbs) / 0.8)) : cloudVisibility(cl, tAbs);
     if (vis <= 0) continue;
     const sx = v.ox + x * v.S;
     const sy = v.oy - y * v.S;
@@ -156,9 +139,8 @@ export function drawClouds(
     const rEff = (cl.rx * cl.ry) / Math.sqrt(((cl.ry * dx) / d) ** 2 + ((cl.rx * dy) / d) ** 2);
     const edge = d - rEff;
     const near = Math.max(0, Math.min(1, (edge - 10) / 60));
-    const frost = cl.id === snapId;
     const alpha = frost
-      ? Math.min(vis, snapFade) * (0.66 + 0.22 * near) * (1 - 0.4 * night)
+      ? vis * (0.78 + 0.15 * near) * (1 - 0.4 * night)
       : vis * (0.2 + 0.42 * near) * (1 - 0.55 * night);
     if (alpha <= 0.005) continue;
     const s = spriteFor(cl, scale, frost);

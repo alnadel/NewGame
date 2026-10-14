@@ -15,6 +15,7 @@ import {
   worldPlan,
   type Bud,
   type Caster,
+  type Cloud,
   type Pickup,
   type RenderSnap,
   type SimState,
@@ -28,7 +29,7 @@ import { createAtmosphere, createAtmosphereIn, drawAtmosphere, type Atmosphere, 
 import { drawBanners, createBanners, updateBanners, type Banners } from './banners.ts';
 import { createLight, drawCaster, drawContactAO, drawWindowGlow, type Light } from './casters.ts';
 import { drawClouds } from './clouds.ts';
-import { drawBudGround, drawBudPlant } from './flora.ts';
+import { drawBud } from './flora.ts';
 import { drawFriendPennant, drawFriendPuddle, friendSpot } from './friend.ts';
 import { cssa, hex } from './color.ts';
 import { radialSprite, type Canvas2D } from './sprites.ts';
@@ -184,16 +185,15 @@ export interface MechView {
   frost: number;
   /** Nubs is in deep shade now. */
   deep: boolean;
-  /** The Cold Snap: the share left of the snap now (1 → 0; 0 none), and the frosty cloud to draw (−1 none) with its fade (0..1). */
+  /** The Cold Snap: the share left of the snap now (1 → 0; 0 none), and its cloud while it lives (drawn frosty, snowing). */
   snapLeft: number;
-  snapId: number;
-  snapFade: number;
+  snapCloud: Cloud | null;
   /** Angles that grow a bud now (GuideState.bud), or null. */
   bud: Uint8Array | null;
 }
 
 export function createMechView(): MechView {
-  return { meter: false, frost: 0, deep: false, snapLeft: 0, snapId: -1, snapFade: 0, bud: null };
+  return { meter: false, frost: 0, deep: false, snapLeft: 0, snapCloud: null, bud: null };
 }
 
 export interface RenderInput {
@@ -372,9 +372,7 @@ export function createScene(): RenderScene {
       alpha: 1,
       time: 0,
       campaign: null,
-      meter: false,
-      frost: 0,
-      snapLeft: 0,
+      mech: null,
       reducedMotion: false,
     },
   };
@@ -390,10 +388,7 @@ function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
   h.alpha = alpha;
   h.time = sc.worldTime;
   h.campaign = inp.campaign;
-  const m = inp.mech;
-  h.meter = m.meter && inp.screen !== 'title';
-  h.frost = m.frost;
-  h.snapLeft = m.snapLeft;
+  h.mech = inp.mech;
   h.reducedMotion = inp.reducedMotion;
   return h;
 }
@@ -753,11 +748,11 @@ export class Renderer {
       g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
     }
-    // v1.5 buds: their marks on the ground (the plants join the depth sort below).
-    budN = s.world.buds ? queryBuds(s.world, v.y0 - 40, v.y1 + 40, budBuf) : 0;
-    for (let i = 0; i < budN; i++) {
+    // v1.5 closed buds, with the ground (they are short; a bloomed one is its sunflower caster).
+    const budN = s.world.buds ? queryBuds(s.world, v.y0 - 40, v.y1 + 40, budBuf) : 0;
+    for (let i = budN - 1; i >= 0; i--) {
       const b = budBuf[i] as Bud;
-      if (b.state === 0 && b.x > v.x0 - 40 && b.x < v.x1 + 40) drawBudGround(g, v, L, b, night);
+      if (b.state === 0 && b.x > v.x0 - 40 && b.x < v.x1 + 40) drawBud(g, v, L, b, night);
     }
     if (sunUp) drawGlare(g, v, s.world, ux, uy, snap.cot, snap.eps, time);
     drawGroundParticles(g, sc.particles, v);
@@ -773,16 +768,13 @@ export class Renderer {
     let nubsDrawn = false;
     let occluded = false;
     // v1.5 buds (closed ones; a bloomed bud is its sunflower caster) join the depth sort.
-    budI = budN - 1;
     for (let i = n - 1; i >= 0; i--) {
       const c = casterBuf[i] as Caster;
+      if (c.maxX < v.x0 - 40 || c.minX > v.x1 + 40) continue;
       if (!nubsDrawn && c.y < snap.nubsY) {
-        if (budI >= 0) drawBudsAbove(g, v, L, snap.nubsY, night);
         drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
         nubsDrawn = true;
       }
-      if (budI >= 0) drawBudsAbove(g, v, L, c.y, night);
-      if (c.maxX < v.x0 - 40 || c.minX > v.x1 + 40) continue;
       drawCaster(g, v, L, c);
       if (nubsDrawn && !occluded) {
         // Screen bounds of the caster (its top rises 0.25·maxZ; canopies spread wider).
@@ -793,24 +785,20 @@ export class Renderer {
         occluded = sx1 > (box[0] as number) && sx0 < (box[2] as number) && syBot > (box[1] as number) && syTop < (box[3] as number);
       }
     }
-    if (!nubsDrawn) {
-      if (budI >= 0) drawBudsAbove(g, v, L, snap.nubsY, night);
-      drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
-    } else if (occluded) {
+    if (!nubsDrawn) drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
+    else if (occluded) {
       // X-ray: Nubs stays readable through whatever stands in front of him.
       g.globalAlpha = 0.62;
       drawNubsSprite(g, sc.nubsSprite, pose.x, pose.y, v.dpr);
       g.globalAlpha = 1;
     }
 
-    if (budI >= 0) drawBudsAbove(g, v, L, -Infinity, night);
-
     // Market days string bunting over the street (the forecast's signature; no shadow).
     if (this.options.decor) drawBunting(g, v, s.world, 1 - 0.6 * night);
     if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') drawSizzle(g, pose, time, s.nubs.glare > 0);
     drawHatPop(g, v, beat, inp.reducedMotion);
-    drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapId, inp.mech.snapFade, ux, uy, snap.cot);
+    drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapCloud, ux, uy, snap.cot);
     drawAirParticles(g, sc.particles, v);
     if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {
@@ -937,20 +925,6 @@ export class Renderer {
     if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
     drawScreenParticles(g, sc.particles, v.dpr);
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-  }
-}
-
-/** The frame's buds (budBuf[0 .. budN)), drawn far to near down to budI. */
-let budN = 0;
-let budI = -1;
-
-/** Draws the frame's closed buds north of `minY` that are still waiting (far first). */
-function drawBudsAbove(g: CanvasRenderingContext2D, v: View, L: Light, minY: number, night: number): void {
-  for (; budI >= 0; budI--) {
-    const b = budBuf[budI] as Bud;
-    if (b.y <= minY) return;
-    if (b.state !== 0 || b.x < v.x0 - 24 || b.x > v.x1 + 24) continue;
-    drawBudPlant(g, v, L, b, night);
   }
 }
 

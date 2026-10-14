@@ -162,7 +162,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
         meterY: h.meterY,
         deep: m.deep,
         snapLeft: m.snapLeft,
-        snapId: m.snapId,
+        snapId: m.snapCloud?.id ?? -1,
         budBins,
         buds: session.state.world.buds?.length ?? 0,
         snaps: session.input.snaps,

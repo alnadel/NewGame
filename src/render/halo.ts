@@ -27,7 +27,6 @@ const AMBER = hex('#FFA53D');
 const INK = hex('#2B2140');
 const HOT = hex('#FF6A3D');
 const GOLD = hex('#FFC23D');
-const GOLD_DEEP = hex('#D98A00');
 const DEEP = hex('#1F2A66');
 const ICE = hex('#DDF4FF');
 
@@ -334,31 +333,16 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
 
   if (inp.sunUp && inp.bud !== null) {
     // Bud arcs: gold just outside the ring, a soft glow under a bright line.
-    let any = false;
-    const bud = inp.bud;
-    for (let b = 0; b < 360; b++) {
-      if (bud[b] !== 0) {
-        any = true;
-        break;
-      }
-    }
-    if (any) {
+    if (inp.bud.includes(1)) {
       const ba = Math.max(0.7, A) * inp.fade;
       g.lineCap = 'round';
+      g.beginPath();
+      arcRuns(g, inp.bud, cx, cy, R + 11, 0.5);
       g.lineWidth = 9;
       g.strokeStyle = cssa(GOLD, 0.28 * ba);
-      g.beginPath();
-      arcRuns(g, bud, cx, cy, R + 11, 0.5);
       g.stroke();
       g.lineWidth = 3.5;
       g.strokeStyle = cssa(GOLD, 0.95 * ba);
-      g.beginPath();
-      arcRuns(g, bud, cx, cy, R + 11, 0.5);
-      g.stroke();
-      g.lineWidth = 1;
-      g.strokeStyle = cssa(GOLD_DEEP, 0.9 * ba);
-      g.beginPath();
-      arcRuns(g, bud, cx, cy, R + 13, 0.5);
       g.stroke();
       g.lineCap = 'butt';
     }
@@ -367,25 +351,14 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   if (inp.sunUp && !inp.blind) drawHint(g, inp, A);
 
   if (deep > 0.01) {
-    // Three frost sparkles circling the deep ring (still under reduced motion).
-    const spin = inp.reducedMotion ? 0 : h.deepSpin;
+    // Three frost glints circling the deep ring, twinkling (still under reduced motion).
     g.fillStyle = cssa(ICE, 0.9 * deep);
     g.beginPath();
     for (let i = 0; i < 3; i++) {
-      const a = (spin + i / 3) * TAU;
-      const tw = inp.reducedMotion ? 1 : 0.6 + 0.4 * Math.sin(inp.time * 7 + i * 2.1);
-      const r = 3.2 * tw;
-      const x = cx + Math.cos(a) * R;
-      const y = cy + Math.sin(a) * R;
-      g.moveTo(x, y - r);
-      g.lineTo(x + r * 0.3, y - r * 0.3);
-      g.lineTo(x + r, y);
-      g.lineTo(x + r * 0.3, y + r * 0.3);
-      g.lineTo(x, y + r);
-      g.lineTo(x - r * 0.3, y + r * 0.3);
-      g.lineTo(x - r, y);
-      g.lineTo(x - r * 0.3, y - r * 0.3);
-      g.closePath();
+      const a = ((inp.reducedMotion ? 0 : h.deepSpin) + i / 3) * TAU;
+      const r = inp.reducedMotion ? 2.6 : 1.8 + Math.sin(inp.time * 7 + i * 2.1) + 1;
+      g.moveTo(cx + Math.cos(a) * R + r, cy + Math.sin(a) * R);
+      g.arc(cx + Math.cos(a) * R, cy + Math.sin(a) * R, r, 0, TAU);
     }
     g.fill();
   }

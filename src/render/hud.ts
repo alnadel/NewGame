@@ -25,10 +25,11 @@
 // full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
 // (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
 
+import type { MechView } from './renderer.ts';
 import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, TUNING, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { star } from './banners.ts';
-import { css, cssa, hex } from './color.ts';
+import { cssa, hex } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, radialSprite, roundRect, type Canvas2D } from './sprites.ts';
 
@@ -303,10 +304,8 @@ export interface HudInput {
   alpha: number;
   time: number;
   campaign: HudCampaign | null;
-  /** v1.5 frost meter: shown, its fill 0..1, the share of an active snap left (0 none). */
-  meter: boolean;
-  frost: number;
-  snapLeft: number;
+  /** v1.5: the mechanics (the frost meter's fill and an active snap), null on the Title's prebuild. */
+  mech: MechView | null;
   reducedMotion: boolean;
 }
 
@@ -498,57 +497,41 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.stroke();
     }
   }
-  h.meterShown = inp.meter;
-  if (inp.meter) drawFrostMeter(g, h, v, inp);
+  h.meterShown = inp.mech?.meter === true;
+  if (inp.mech?.meter) drawFrostMeter(g, h, v, inp, inp.mech);
   g.globalAlpha = 1;
 }
 
-const ICE = hex('#5AB8FF');
-const ICE_DEEP = hex('#2B7FD0');
-/** The meter's radius and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px). */
+/** The frost meter's radius and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px); a tap this far outside it still counts. */
 const METER_R = 24;
 const METER_SIDE = 24;
 const METER_BOTTOM = 34;
-/** A tap this far outside the meter still counts (CSS px). */
 const METER_SLOP = 10;
 let meterGlow: Canvas2D | null = null;
 
-/** Where the frost meter sits for view `v` (CSS px): fills h.meterX/Y/R. */
-export function placeMeter(h: HudState, v: View): void {
-  const k = hudScale(v);
-  const r = METER_R * k;
-  h.meterR = r;
-  h.meterX = v.vx + v.vw - v.safe.right - METER_SIDE - r;
-  h.meterY = v.vy + v.vh - v.safe.bottom - METER_BOTTOM - r;
-}
-
 /** (x, y) in CSS px is on the frost meter drawn full last frame (a tap there snaps). */
 export function hudMeterHit(h: HudState, x: number, y: number): boolean {
-  if (!h.meterShown || !h.meterFull) return false;
-  const dx = x - h.meterX;
-  const dy = y - h.meterY;
-  const r = h.meterR + METER_SLOP;
-  return dx * dx + dy * dy <= r * r;
+  return h.meterShown && h.meterFull && Math.hypot(x - h.meterX, y - h.meterY) <= h.meterR + METER_SLOP;
 }
 
 /** The frost meter (see the header). */
-function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
-  placeMeter(h, v);
+function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput, m: MechView): void {
   const k = hudScale(v);
-  const x = h.meterX;
-  const r = h.meterR;
-  const frost = Math.max(0, Math.min(1, inp.frost));
-  const snapping = inp.snapLeft > 0;
+  const r = METER_R * k;
+  const x = v.vx + v.vw - v.safe.right - METER_SIDE * k - r;
+  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - r;
+  h.meterX = x;
+  h.meterY = y;
+  h.meterR = r;
+  const frost = Math.max(0, Math.min(1, m.frost));
+  const snapping = m.snapLeft > 0;
   const full = frost >= 0.999 && !snapping;
   if (full && !h.meterFull) h.meterPop = 0.45;
   h.meterFull = full;
   const rm = inp.reducedMotion;
-  const breathe = full && !rm ? 0.5 + 0.5 * Math.sin(inp.time * TAU * 1.4) : full ? 1 : 0;
-  // The ready pop: 1 → 1.25 → 1.
-  const pop = h.meterPop > 0 ? 1 + 0.25 * Math.sin((Math.PI * (0.45 - h.meterPop)) / 0.45) : 1;
-  const sc = pop * (full && !rm ? 1 + 0.04 * breathe : 1);
-  const y = h.meterY;
-  const R = r * sc;
+  // Full: it breathes, and pops (1 → 1.25 → 1) when it fills.
+  const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
+  const R = r * (1 + 0.25 * Math.sin((Math.PI * h.meterPop) / 0.45) + (rm ? 0 : 0.04 * breathe));
   if (full) {
     meterGlow ??= radialSprite('90,184,255', 96, 0.7, 0.42, 0.3);
     const gr = R * (2.1 + 0.25 * breathe);
@@ -556,63 +539,39 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.drawImage(meterGlow, x - gr, y - gr, gr * 2, gr * 2);
     g.globalAlpha = inp.alpha;
   }
-  // The plate, its shadow, the track and the fill.
-  g.fillStyle = cssa(INK, 0.16);
-  g.beginPath();
-  g.arc(x, y + 2, R, 0, TAU);
-  g.fill();
-  g.fillStyle = full || snapping ? css(full ? ICE_DEEP : ICE) : cssa(0xffffff, 0.92);
+  // The plate, the track and the fill (the snap left, while one lasts).
+  g.fillStyle = full ? '#2B7FD0' : snapping ? '#5AB8FF' : cssa(0xffffff, 0.92);
   g.beginPath();
   g.arc(x, y, R, 0, TAU);
   g.fill();
-  const rr = R - 5 * k;
   g.lineWidth = 5 * k;
-  g.strokeStyle = full ? cssa(0xffffff, 0.25) : cssa(INK, snapping ? 0.18 : 0.1);
+  g.strokeStyle = cssa(full ? 0xffffff : INK, 0.15);
   g.beginPath();
-  g.arc(x, y, rr, 0, TAU);
+  g.arc(x, y, R - 5 * k, 0, TAU);
   g.stroke();
-  const fill = snapping ? inp.snapLeft : frost;
-  if (fill > 0.005) {
-    g.lineCap = 'round';
-    g.strokeStyle = snapping || full ? '#FFFFFF' : css(ICE);
-    g.beginPath();
-    g.arc(x, y, rr, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, fill));
-    g.stroke();
-    g.lineCap = 'butt';
-  }
-  // The snowflake: pale until the meter is full, spinning through a snap.
-  const fz = R * (full ? 1.15 : 1);
+  g.lineCap = 'round';
+  g.strokeStyle = snapping || full ? '#FFFFFF' : '#5AB8FF';
+  g.beginPath();
+  g.arc(x, y, R - 5 * k, -Math.PI / 2, -Math.PI / 2 + TAU * (snapping ? m.snapLeft : frost));
+  g.stroke();
+  // The snowflake, pale until the meter is full.
   g.globalAlpha = inp.alpha * (full || snapping ? 1 : 0.45 + 0.4 * frost);
-  if (snapping && !rm) {
-    const a = inp.time * 2.2;
-    const c = Math.cos(a) * v.dpr;
-    const sn = Math.sin(a) * v.dpr;
-    g.setTransform(c, sn, -sn, c, x * v.dpr, y * v.dpr);
-    g.drawImage(flake(), -fz / 2, -fz / 2, fz, fz);
-    g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-  } else {
-    g.drawImage(flake(), x - fz / 2, y - fz / 2, fz, fz);
-  }
+  g.drawImage(flake(), x - R / 2, y - R / 2, R, R);
   g.globalAlpha = inp.alpha;
   if (full) {
-    // "Swipe down": a chevron bobbing down over the meter.
-    const bob = rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k;
-    const cy = y - R - 14 * k + bob;
+    // "Swipe down": a white chevron bobbing down over the meter.
+    const cy = y - R - 14 * k + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
     const w = 8 * k;
-    g.strokeStyle = cssa(INK, 0.35);
-    g.lineWidth = 5.5 * k;
-    g.lineCap = 'round';
+    g.strokeStyle = '#2B7FD0';
+    g.lineWidth = 3.5 * k;
     g.lineJoin = 'round';
     g.beginPath();
-    g.moveTo(x - w, cy - w * 0.5);
-    g.lineTo(x, cy + w * 0.5);
-    g.lineTo(x + w, cy - w * 0.5);
+    g.moveTo(x - w, cy - w / 2);
+    g.lineTo(x, cy + w / 2);
+    g.lineTo(x + w, cy - w / 2);
     g.stroke();
-    g.strokeStyle = '#FFFFFF';
-    g.lineWidth = 3 * k;
-    g.stroke();
-    g.lineCap = 'butt';
   }
+  g.lineCap = 'butt';
 }
 
 /** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */

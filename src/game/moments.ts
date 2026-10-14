@@ -6,7 +6,7 @@
 // v1.5: the level that teaches a mechanic (Sunflower buds, Cold Snap, deep shade: game/mechanics.ts
 // finds it by its concept) gets that mechanic's tips (MECH_TIPS) until it is passed, shown when the
 // moment comes (a bud ahead, the first bloom, the meter full, a snap, deep shade). A new player's
-// first endless and daily runs (fewer than NEW_PLAYER_RUNS) get the moment tips of every mechanic.
+// first endless and daily runs (fewer than NEW_PLAYER_RUNS) get the bud and deep-shade moment tips.
 
 import { levelProgress, queryBuds, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
@@ -14,7 +14,7 @@ import type { MissionDef } from '../meta/content.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { endToasts, showToast, type Banners } from '../render/banners.ts';
 import { goalMetLive } from './campaign.ts';
-import { levelMechanic, type Mechanic } from './mechanics.ts';
+import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
 export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep';
@@ -63,12 +63,8 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
   ],
 };
 
-/** Tips for the mechanics' moments in a new player's endless and daily runs. */
-const FIRST_TIPS: readonly (readonly [TipOn, string])[] = [
-  ['bud', 'A bud! Shine the sun from its gold mark to grow shade.'],
-  ['frost', 'Frost meter full! Swipe down for a Cold Snap.'],
-  ['deep', 'Deep shade: two shadows at once cool Nubs twice as fast.'],
-];
+/** Tips for the mechanics' moments in a new player's endless and daily runs (the cue line says how to snap). */
+const FIRST_TIPS = [MECH_TIPS.bud[0], MECH_TIPS.deep[1]] as const;
 /** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
 const NEW_PLAYER_RUNS = 12;
 /** A bud this far ahead (u) counts as coming into view. */
@@ -149,9 +145,9 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       tips.length = 0;
       const fresh = lv !== null && (save.campaign.stars[lv.id - 1] ?? 0) === 0;
       if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []));
-      const mech = fresh ? levelMechanic(lv) : null;
+      const mech = fresh ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
-      else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...FIRST_TIPS);
+      else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...(FIRST_TIPS as readonly (readonly [TipOn, string])[]));
       budTip = tips.some((t) => t[0] === 'bud');
       budAt = -1e9;
       tipGlyph = lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;

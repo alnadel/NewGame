@@ -79,11 +79,8 @@ export const HAPTIC_RULES = {
   detentEveryDeg: 45,
   /** Shade re-entry only buzzes after at least this long lit (s), matching the "ahh". */
   shadeMinLit: 0.25,
-  /** A SWING ticks at most this often (ms). */
-  tickMinGapMs: 300,
-  /** A growing bud ticks at most this often (ms), deep shade buzzes at most this often (ms). */
-  budMinGapMs: 250,
-  deepMinGapMs: 2500,
+  /** A SWING ticks, a growing bud ticks (v1.5) and deep shade buzzes (v1.5) at most this often (ms). */
+  minGapMs: { tick: 300, bud: 250, deep: 2500 } as Readonly<Partial<Record<HapticName, number>>>,
 } as const;
 
 /**
@@ -226,10 +223,8 @@ export class WebVibrateHaptics implements Haptics {
   /** Start times of the most recent detent pulses (ring of detentPerSecond). */
   private readonly detentTimes = new Float64Array(HAPTIC_RULES.detentPerSecond).fill(Number.NEGATIVE_INFINITY);
   private detentHead = 0;
-  /** Start time of the last SWING tick, bud tick and deep-shade buzz (ms). */
-  private lastTick = Number.NEGATIVE_INFINITY;
-  private lastBud = Number.NEGATIVE_INFINITY;
-  private lastDeep = Number.NEGATIVE_INFINITY;
+  /** Start time of the last pattern of each name with its own minimum gap (ms). */
+  private readonly lastOf = new Map<HapticName, number>();
 
   constructor(opts: WebVibrateOptions = {}) {
     this.backend = opts.backend === undefined ? webVibrateBackend() : opts.backend;
@@ -293,18 +288,11 @@ export class WebVibrateHaptics implements Haptics {
         continue;
       }
       const name = hapticForEvent(ev);
-      if (name === 'tick') {
+      const gap = name ? HAPTIC_RULES.minGapMs[name] : undefined;
+      if (name && gap !== undefined) {
         const now = this.now();
-        if (now - this.lastTick < HAPTIC_RULES.tickMinGapMs) continue;
-        this.lastTick = now;
-      } else if (name === 'bud') {
-        const now = this.now();
-        if (now - this.lastBud < HAPTIC_RULES.budMinGapMs) continue;
-        this.lastBud = now;
-      } else if (name === 'deep') {
-        const now = this.now();
-        if (now - this.lastDeep < HAPTIC_RULES.deepMinGapMs) continue;
-        this.lastDeep = now;
+        if (now - (this.lastOf.get(name) ?? -Infinity) < gap) continue;
+        this.lastOf.set(name, now);
       }
       if (name) this.play(name);
     }

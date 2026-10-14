@@ -103,7 +103,7 @@ import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
-import { Mechanics } from './mechanics.ts';
+import { createMechanics } from './mechanics.ts';
 import { hudMeterHit } from '../render/hud.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
@@ -233,7 +233,7 @@ export class Session {
   readonly clock = new FixedClock();
   readonly fx: Fx;
   /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
-  readonly mech = new Mechanics();
+  readonly mech = createMechanics();
   /** Cold Snaps seen this session (the "swipe down" cue stops after two). */
   private snapsSeen = 0;
   /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */

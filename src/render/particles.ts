@@ -26,7 +26,6 @@ export const P_GLINT = 14; // a four-point glint on lit ground (Dazzle)
 export const P_GUST = 15; // screen space: a wind streak flying across during a gust (v1.2 Gusts)
 export const P_SNOW = 16; // screen space: a snowflake drifting down (a winter chapter's air)
 export const P_SNOWFALL = 17; // v1.5: a flake falling from the Cold Snap's cloud (world space)
-export const P_PETAL_POP = 18; // v1.5: a sunflower petal thrown out by a bloom (world space)
 
 const CAP = 400;
 
@@ -202,16 +201,7 @@ export function updateParticles(p: Particles, dt: number, nx: number, ny: number
           p.x[i] = p.x[i]! + 7 * Math.sin(life * 3.3 + i) * dt;
         }
         break;
-      case P_PETAL_POP:
-        // Thrown out, then fluttering down.
-        p.vz[i] = p.vz[i]! - 90 * dt;
-        if (p.z[i]! < 0) {
-          p.z[i] = 0;
-          p.vz[i] = 0;
-          p.vx[i] = 0;
-          p.vy[i] = 0;
-        }
-        break;
+
       case P_GUST:
         // A streak rides the gust straight across, swaying a little.
         p.vy[i] = 14 * Math.sin(life * 6 + i);
@@ -369,17 +359,7 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
         g.drawImage(fl, sx - size, sy - size, size * 2, size * 2);
         break;
       }
-      case P_PETAL_POP: {
-        g.globalAlpha = Math.min(1, life * 2);
-        g.fillStyle = cssa(p.color[i]!, 1);
-        g.setTransform(v.dpr, 0, 0, v.dpr, sx * v.dpr, sy * v.dpr);
-        g.rotate(p.rot[i]!);
-        g.beginPath();
-        g.ellipse(0, 0, size, size * 0.42, 0, 0, TAU);
-        g.fill();
-        g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-        break;
-      }
+
       case P_GLINT: {
         // Swells and fades once, turning a little: sunlight flashing off something polished.
         const pulse = Math.sin(Math.PI * t);
@@ -599,10 +579,9 @@ export const POP_MULT = 2;
 export const POP_BANG = 3;
 export const POP_SWING = 4;
 export const POP_GO = 5;
-/** v1.5: DEEP (deep shade), COLD SNAP!, BLOOM!. */
+/** v1.5: DEEP (deep shade) and COLD SNAP! (BLOOM! wears the multiplier's gold). */
 export const POP_DEEP = 6;
 export const POP_SNAP = 7;
-export const POP_BLOOM = 8;
 
 /** A +N pop absorbs a new +N within this long of its last change (s); a SWING pop, within 1 s of its first. */
 const PLUS_MERGE_S = 0.45;
@@ -783,22 +762,11 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
         stroke = '#FFFFFF';
         break;
       case POP_DEEP:
-        scale = popScale(t, 0.22, 1.25);
-        size = 18;
-        fill = '#DDF4FF';
-        stroke = '#1F2A66';
-        break;
       case POP_SNAP:
         scale = popScale(t, 0.25, 1.3);
-        size = 30;
-        fill = '#FFFFFF';
-        stroke = '#2B7FD0';
-        break;
-      case POP_BLOOM:
-        scale = popScale(t, 0.22, 1.3);
-        size = 22;
-        fill = '#FFD84A';
-        stroke = '#7A4E2A';
+        size = style === POP_SNAP ? 30 : 18;
+        fill = '#EAF7FF';
+        stroke = style === POP_SNAP ? '#2B6FC0' : '#1F2A66';
         break;
       default:
         scale = popScale(t, 0.2, 1.2);
