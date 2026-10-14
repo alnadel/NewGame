@@ -55,7 +55,14 @@ export type SimEvent =
   | { e: 'swing'; deg: number; chain: number; snow: number; x: number; y: number }
   | { e: 'lessonDone' }
   | { e: 'death'; info: DeathInfo }
-  | { e: 'levelWon'; passed: boolean; stars: 0 | 1 | 2 | 3; flakes: number; minChill: number };
+  | { e: 'levelWon'; passed: boolean; stars: 0 | 1 | 2 | 3; flakes: number; minChill: number }
+  // v1.5 core mechanics (docs/V1_5_PLAN.md)
+  | { e: 'budGrow'; id: number; x: number; y: number; grow: number }
+  | { e: 'bloom'; id: number; x: number; y: number; snow: number }
+  | { e: 'frostReady' }
+  | { e: 'snap'; x: number; y: number; cloudId: number }
+  | { e: 'snapEnd' }
+  | { e: 'deepEnter' };
 
 export type SimEventName = SimEvent['e'];
 
@@ -90,6 +97,10 @@ export interface RunStats {
   phewMinChill: number;
   /** Lowest Chill during daylight (the starting Chill when never lit; campaign star 3). */
   minChill: number;
+  /** v1.5: sunflowers bloomed, Cold Snaps cast, seconds in deep shade (absent = 0). */
+  blooms?: number;
+  snaps?: number;
+  deepSeconds?: number;
 }
 
 export type RunMode = 'endless' | 'daily' | 'challenge' | 'campaign';

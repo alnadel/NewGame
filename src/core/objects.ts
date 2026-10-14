@@ -131,3 +131,22 @@ export interface Pickup {
   /** 0 alive, 1 taken, 2 melted. */
   state: PickupState;
 }
+
+/**
+ * v1.5 Sunflower bud (docs/V1_5_PLAN.md). A bud beside the trail blooms into a tall sunflower (a
+ * shade caster) once the sun has shone on it from within ±TUNING.buds.faceTol of its `face`
+ * azimuth for TUNING.buds.growSec. Only step() writes `grow`, `state` and `casterId`.
+ */
+export interface Bud {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  /** The azimuth (degrees, like θ) the sun must shine from to grow it. */
+  readonly face: number;
+  /** Growth 0..1 (1 = blooming now). */
+  grow: number;
+  /** 0 bud, 1 bloomed. */
+  state: 0 | 1;
+  /** The sunflower caster once bloomed (world.byId), else −1. */
+  casterId: number;
+}

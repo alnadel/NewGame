@@ -142,6 +142,30 @@ const tuning = {
     snow: 3,
   },
 
+  /** v1.5 core mechanics (docs/V1_5_PLAN.md); the core builder tunes these. */
+  buds: {
+    /** The sun must shine from within ±faceTol° of a bud's face. */
+    faceTol: 20,
+    /** Seconds of facing light to bloom (growth decays at decay/s otherwise). */
+    growSec: 0.9,
+    decay: 0.5,
+    /** Snow for a bloom. */
+    snow: 5,
+  },
+  frost: {
+    /** Meter gained per second of full shade, per flake collected, per SWING (0..1 scale). */
+    perShadeSec: 0.02,
+    perFlake: 0.04,
+    perSwing: 0.1,
+    /** Cold Snap length (s). */
+    snapSec: 4,
+  },
+  deep: {
+    /** Chill regen and multiplier charge × this while in deep shade. */
+    regenMul: 2,
+    multMul: 2,
+  },
+
   /** Pickups (V1_PLAN §5.4). */
   pickups: {
     flakeSpacing: 24,

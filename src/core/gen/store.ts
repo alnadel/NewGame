@@ -7,7 +7,7 @@ import type { BiomeId, DayPlan, NoonCloud, ProfileId } from '../../config/days.t
 import type { ForecastId } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { type MaskScene, sceneAddBall, sceneAddCaster, sceneAddCloud, sceneBegin } from '../intervals.ts';
-import type { Caster, Cloud, GazingBall, Pickup } from '../objects.ts';
+import type { Bud, Caster, Cloud, GazingBall, Pickup } from '../objects.ts';
 import { casterReach, cloudAlive, distToCasterBounds, glareOffset, shadowLength, cloudOffset } from '../shadows.ts';
 import type { Trail } from '../trail.ts';
 import type { ValidationJob } from './validator.ts';
@@ -87,6 +87,8 @@ export interface World {
   readonly balls: GazingBall[];
   /** Pickups sorted by y (ties by id). */
   readonly pickups: Pickup[];
+  /** v1.5 Sunflower buds sorted by y (ties by id). */
+  readonly buds: Bud[];
   /** Largest caster height so far (for reach culling). */
   maxZ: number;
   nextId: number;
@@ -184,6 +186,20 @@ export function queryPickups(w: World, y0: number, y1: number, out: Pickup[]): n
     if (p.y > y1) break;
     if (n < out.length) out[n] = p;
     else out.push(p);
+    n++;
+  }
+  return n;
+}
+
+/** v1.5 Sunflower buds with y ∈ [y0, y1] in any state, sorted by y. */
+export function queryBuds(w: World, y0: number, y1: number, out: Bud[]): number {
+  const bs = w.buds;
+  let n = 0;
+  for (let i = lowerBound(bs, y0); i < bs.length; i++) {
+    const b = bs[i] as Bud;
+    if (b.y > y1) break;
+    if (n < out.length) out[n] = b;
+    else out.push(b);
     n++;
   }
   return n;

@@ -80,6 +80,7 @@ export type {
   GazingBall,
   Part,
   Pickup,
+  Bud,
   PickupKind,
   PickupState,
   PrismPart,
@@ -109,6 +110,7 @@ export {
   queryCasters,
   queryClouds,
   queryPickups,
+  queryBuds,
   validatedY,
 } from './gen/world.ts';
 export type { ChunkLit, World, WorldStats } from './gen/world.ts';

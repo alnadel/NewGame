@@ -22,6 +22,8 @@ export interface InputFrame {
   release: number;
   /** Keyboard: +1 = counter-clockwise (Left/A), −1 = clockwise (Right/D); ±2 the same, fine (Shift). */
   key: -2 | -1 | 0 | 1 | 2;
+  /** v1.5: a Cold Snap was asked for this tick (a swipe down, or the Down/S key). Absent = false. */
+  snap?: boolean;
 }
 
 /** A frame with no input. */
@@ -142,6 +144,10 @@ export interface NubsState {
   glare: number;
   /** Frost multiplier ×1..×5 and its timers (ticks). */
   mult: number;
+  /** v1.5 Cold Snap meter 0..1 (1 = ready: a snap input casts it). */
+  frost: number;
+  /** v1.5 Deep shade: the center sample is in two or more shadows this tick (and Nubs is fully shaded). */
+  deep: boolean;
   shadeTicks: number;
   litTicks: number;
   x5Ticks: number;
@@ -188,6 +194,8 @@ export interface GuideState {
   readonly glare: Uint8Array;
   /** Lit counts now, 0..10 per bin (f = lit / 5). */
   readonly lit: Uint8Array;
+  /** v1.5: 1 where the sun at b° grows a bud that is close enough to matter (gold arcs on the dial). */
+  readonly bud: Uint8Array;
   /** Sim tick of the last update (updates every 6 ticks on the absolute step grid). */
   tick: number;
   /** False at night (no sun): masks are all 0. */
@@ -242,6 +250,9 @@ export interface SimState {
   readonly theta0: number;
   readonly sun: SunState;
   readonly nubs: NubsState;
+  /** v1.5 Cold Snap: ticks left of the active snap (0 none) and its cloud's id (−1 none). */
+  snapTicks: number;
+  snapCloudId: number;
   readonly guide: GuideState;
   readonly world: World;
   readonly stats: RunStats;

@@ -20,7 +20,7 @@ import type { World } from './store.ts';
 import { beginValidation, stepValidation } from './validator.ts';
 
 export type { ChunkLit, World, WorldStats } from './store.ts';
-export { gatherScene, pruneWorld, queryBalls, queryCasters, queryClouds, queryPickups } from './store.ts';
+export { gatherScene, pruneWorld, queryBalls, queryCasters, queryClouds, queryBuds, queryPickups } from './store.ts';
 
 const CH = TUNING.world.chunkLen;
 /** Work units charged for placing one chunk (a validator step costs 1). */
@@ -75,6 +75,7 @@ export function createWorld(cfg: WorldConfig): World {
     clouds: [],
     balls: [],
     pickups: [],
+    buds: [],
     maxZ: 0,
     nextId: 1,
     startHutId: -1,
