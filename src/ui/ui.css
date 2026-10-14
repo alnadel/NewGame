@@ -1843,16 +1843,17 @@
 
 .stat--swing .stat-sub { color: var(--accent-ink); }
 
-/* Five tiles (with SWINGs): the wide row fits them all. */
+/* Five tiles (with SWINGs): the wide row fits them all; six (v1.5 blooms, snaps, deep shade) make two rows of three. */
 .res-stats[data-n='5'] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.res-stats[data-n='6'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 /* A narrow sheet: two tiles per row (16 px captions need the room). */
 @container sheet (max-width: 439.98px) {
   .res-stats,
-  .res-stats[data-n='5'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .res-stats:is([data-n='5'], [data-n='6']) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   /* An odd count: Snow, the first tile, spans the row. */
-  .res-stats:is([data-n='1'], [data-n='3'], [data-n='5']) .stat--snow { grid-column: 1 / -1; }
+  .res-stats:is([data-n='1'], [data-n='3'], [data-n='5'], [data-n='7']) .stat--snow { grid-column: 1 / -1; }
 }
 
 .res-missions {

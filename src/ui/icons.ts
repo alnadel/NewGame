@@ -83,7 +83,7 @@ const ICONS = {
   dome: `<path d="M4.4 15.6a7.6 7.6 0 1 1 15.2 0Z"/><path d="M3 19h18"/><path d="M12 4.6v3.4M12 15.6v-3"/>`,
   mirror: `<ellipse cx="12" cy="9.4" rx="5" ry="6.6" fill="currentColor" fill-opacity=".18"/><path d="M9.6 7.4l2.6-2.6M12 18v2"/><path d="M5 21h14M7 19.4 5 21l2 1.6M17 19.4l2 1.6-2 1.6"/>`,
   // v1.5 mechanics: a sunflower (buds), a cloud dropping a flake (Cold Snap), two shadows overlapping (deep shade).
-  sunflower: `<circle cx="12" cy="9" r="2.6" ${FILL}/><path d="M12 3.4a2.2 2.2 0 0 1 0 3M12 11.6a2.2 2.2 0 0 1 0 3M6.4 9a2.2 2.2 0 0 1 3 0M14.6 9a2.2 2.2 0 0 1 3 0M8 5a2.2 2.2 0 0 1 2.1 2.1M13.9 10.9A2.2 2.2 0 0 1 16 13M16 5a2.2 2.2 0 0 0-2.1 2.1M10.1 10.9A2.2 2.2 0 0 0 8 13"/><path d="M12 14.6v6.8M12 18.4c1.4-1.8 3.2-2.2 4.6-1.6-.6 1.6-2.6 2.4-4.6 1.6Z"/>`,
+  sunflower: `<circle cx="12" cy="8.6" r="2.7" ${FILL}/><path d="M12 2.3v2.1M12 12.8v1.6M5.7 8.6h2.1M16.2 8.6h2.1M7.5 4.1 9 5.6M15 11.6l1.3 1.3M16.5 4.1 15 5.6M9 11.6l-1.3 1.3"/><path d="M12 14.6v6.8M12 19.2c1.3-1.8 3-2.2 4.4-1.6-.6 1.6-2.5 2.4-4.4 1.6Z"/>`,
   coldsnap: `<path d="M6.6 12.6a3.2 3.2 0 0 1-.4-6.3 4.4 4.4 0 0 1 8.5-1.1 3.1 3.1 0 0 1 1.6 5.9"/><path d="M6.6 12.6h9.4"/><path d="M12 14.6v6.4M9.2 16.2l5.6 3.2M9.2 19.4l5.6-3.2"/>`,
   deep: `<circle cx="9" cy="12" r="5.8"/><circle cx="15" cy="12" r="5.8"/><path d="M12 7.2a5.8 5.8 0 0 1 0 9.6 5.8 5.8 0 0 1 0-9.6Z" ${FILL}/>`,
   // v1.4: the Snow Globe (rewards: chapters, ranks, the streak).

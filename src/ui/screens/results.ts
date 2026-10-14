@@ -522,6 +522,10 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       st.phews > 0 ? tile('phew', String(st.phews), st.phews === 1 ? 'PHEW' : 'PHEWs') : null,
       st.maxMult > 1 || st.x5HoldBest > 0 ? tile('bolt', mult.value, mult.caption) : null,
       st.swings > 0 ? tile('swing', String(st.swings), st.swings === 1 ? 'SWING' : 'SWINGs', 'stat--swing', `best ×${st.swingChainBest}`) : null,
+      // v1.5 mechanics (absent in older results = 0).
+      (st.blooms ?? 0) > 0 ? tile('sunflower', String(st.blooms), st.blooms === 1 ? 'bloom' : 'blooms', 'stat--bloom') : null,
+      (st.snaps ?? 0) > 0 ? tile('coldsnap', String(st.snaps), st.snaps === 1 ? 'Cold Snap' : 'Cold Snaps', 'stat--snap') : null,
+      (st.deepSeconds ?? 0) >= 1 ? tile('deep', `${Math.round(st.deepSeconds ?? 0)} s`, 'deep shade', 'stat--deep') : null,
     );
     stats.dataset.n = String(stats.childElementCount);
     stopCount = countUp(snowValue, 0, outcome.snowEarned, ctx, { format: (n) => `+${n}` });

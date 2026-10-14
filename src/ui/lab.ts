@@ -194,7 +194,7 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
       run = fakeRun(95, { flakes: 3, flakesMelted: 3, snow: 3 }, {}, 'Melted by You at 7:35 AM.');
       break;
     case 'level':
-      run = levelRun(6, true, 2, { flakes: 14, snow: 31, maxMult: 3, minChill: 12 }, 'Finished at 12:00 PM.');
+      run = levelRun(6, true, 2, { flakes: 14, snow: 31, maxMult: 3, minChill: 12, blooms: 2, snaps: 1 }, 'Finished at 12:00 PM.');
       break;
     case 'level-perfect':
       run = levelRun(38, true, 3, { flakes: 26, snow: 58, maxMult: 5, x5HoldBest: 4.2, swings: 2, swingChainBest: 2, minChill: 61 }, 'Finished at 12:00 PM.');
@@ -209,7 +209,7 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
       run = levelRun(12, false, 0, { flakes: 7, snow: 9, maxMult: 2, minChill: 0 }, 'Glared by the Fancy Gazing Ball at 9:15 AM.');
       break;
     default:
-      run = fakeRun(2095, { flakes: 48, flakesMelted: 6, snow: 112, phews: 3, maxMult: 5, x5HoldBest: 9.2, cloudRideBest: 4.1, swings: 5, swingChainBest: 3 }, {},
+      run = fakeRun(2095, { flakes: 48, flakesMelted: 6, snow: 112, phews: 3, maxMult: 5, x5HoldBest: 9.2, cloudRideBest: 4.1, swings: 5, swingChainBest: 3, blooms: 3, snaps: 2, deepSeconds: 14.2 }, {},
         'Melted by You at 10:55 AM, between the Mossy Oak and the Little Hut.');
       tip = 'Tip: a SWING hands Nubs to the next shadow before the old one ends.';
   }
