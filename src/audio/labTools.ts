@@ -113,6 +113,7 @@ const CHECK_PARAMS: Partial<Record<SfxName, SfxParams>> = {
   flower: { degree: 4 },
   levelWin: { level: 3 },
   swing: { level: 3 },
+  budGrow: { degree: 7 },
 };
 const LONG: readonly SfxName[] = ['newBest', 'noon', 'nightfall', 'levelWin', 'eclipse', 'rankUp', 'open'];
 
