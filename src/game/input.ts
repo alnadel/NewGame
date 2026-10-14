@@ -13,6 +13,12 @@
 // - Wheel (CC-6): each wheel event is one synthetic tap frame (catch and release at 0 °/s) turning
 //   −15°·sign(deltaY) per notch (line mode) or −0.35°·deltaY (pixel mode), at most ±45° per event,
 //   ignored while a pointer is down; on the Title it starts the run like a key.
+// - Cold Snap (v1.5): a quick swipe down anywhere (≥ SNAP_MIN_PX, at least SNAP_RATIO× more down than
+//   sideways, within SNAP_MS of the press, before the press moved SNAP_LOCK_PX sideways: a
+//   horizontal drag or flick never snaps), Down/S, or a tap on the frost meter (host.meterHit)
+//   sets InputFrame.snap on the next tick; only while host.canSnap() (a run in play, not the hold,
+//   the intro card or a menu). A swipe that snaps takes back the turn its press made and releases
+//   at 0 °/s, so it never coasts the sun.
 
 import type { InputFrame } from '../core/index.ts';
 
@@ -25,6 +31,16 @@ const VEL_STALE_MS = 50;
 const WHEEL_NOTCH = 15;
 const WHEEL_PX = 0.35;
 const WHEEL_MAX = 45;
+/** Cold Snap swipe: at least this far down (CSS px, or SNAP_MIN_VH of the viewport height if more), this
+ * many times more down than sideways, within this long of the press; a press that first moves this
+ * far sideways is a drag and never snaps. A meter tap: released within METER_TAP_MS, moved < METER_TAP_PX. */
+const SNAP_MIN_PX = 40;
+const SNAP_MIN_VH = 0.05;
+const SNAP_RATIO = 2.2;
+const SNAP_MS = 380;
+const SNAP_LOCK_PX = 14;
+const METER_TAP_MS = 350;
+const METER_TAP_PX = 12;
 
 const qTheta = (d: number): number => Math.round(d * 1024) / 1024;
 const qRelease = (w: number): number => Math.round(w * 64) / 64;
@@ -39,6 +55,10 @@ export interface InputHost {
   viewportWidth(): number;
   /** Bottom safe-area inset (CSS px). */
   safeBottom(): number;
+  /** v1.5: a Cold Snap may be asked for now (a run in play past its hold; no menu, card or pause). */
+  canSnap?(): boolean;
+  /** v1.5: (x, y) in CSS px is on the HUD's frost meter. */
+  meterHit?(x: number, y: number): boolean;
 }
 
 /** Interactive elements whose own keyboard handling wins over the game's rotation keys. */
@@ -52,7 +72,7 @@ export function isControl(target: EventTarget | null): boolean {
 }
 
 function newFrame(): InputFrame {
-  return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
+  return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0, snap: false };
 }
 
 export class Input {
@@ -77,11 +97,22 @@ export class Input {
   private readonly sA = new Float64Array(RING);
   private sN = 0;
   private sHead = 0;
+  /** The press: where and when it began (CSS px, ms), and its gesture so far (0 open, 1 drag, 2 snapped). */
+  private pressX = 0;
+  private pressY = 0;
+  private pressT = 0;
+  private gesture = 0;
+  /** The press began on the frost meter. */
+  private onMeter = false;
+  /** A Cold Snap waits for the next tick. */
+  private snapReq = false;
   private readonly frames: InputFrame[] = [];
   private readonly out: InputFrame[] = [];
   private readonly listeners: [EventTarget, string, EventListener, AddEventListenerOptions | boolean][] = [];
   /** Total presses accepted (debug/test). */
   presses = 0;
+  /** Cold Snaps asked for (debug/test). */
+  snaps = 0;
 
   constructor(host: InputHost) {
     this.host = host;
@@ -144,6 +175,11 @@ export class Input {
     if (this.upEdge && !this.downEdge) this.upFirst = true;
     this.active = e.pointerId;
     this.lastX = e.clientX;
+    this.pressX = e.clientX;
+    this.pressY = e.clientY;
+    this.pressT = e.timeStamp;
+    this.gesture = 0;
+    this.onMeter = this.host.meterHit?.(e.clientX, e.clientY) === true;
     this.held = true;
     this.downEdge = true;
     this.cum = 0;
@@ -163,6 +199,10 @@ export class Input {
 
   private onMove(e: PointerEvent): void {
     if (e.pointerId !== this.active || !this.held) return;
+    // A press that snapped no longer turns the sun.
+    if (this.gesture === 2) return;
+    if (this.gesture === 0) this.classify(e.clientX, e.clientY, e.timeStamp);
+    if (this.gesture === 2) return;
     const list = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null;
     if (list && list.length > 0) {
       for (const ce of list) this.moveTo(ce.clientX, ce.timeStamp);
@@ -182,12 +222,45 @@ export class Input {
     this.pushSample(t, this.cum);
   }
 
+  /**
+   * Sorts the press out while it is open: SNAP_LOCK_PX sideways makes it a drag for good; a quick,
+   * steep swipe down (see the header) snaps, taking back whatever turn the press had made so far.
+   */
+  private classify(x: number, y: number, t: number): void {
+    const dx = x - this.pressX;
+    const dy = y - this.pressY;
+    if (Math.abs(dx) >= SNAP_LOCK_PX || t - this.pressT > SNAP_MS || dy < -SNAP_LOCK_PX) {
+      this.gesture = 1;
+      return;
+    }
+    const min = Math.max(SNAP_MIN_PX, SNAP_MIN_VH * window.innerHeight);
+    if (dy >= min && dy >= SNAP_RATIO * Math.abs(dx) && this.requestSnap()) {
+      this.gesture = 2;
+      this.pending -= this.cum;
+      this.cum = 0;
+    }
+  }
+
+  /** Asks for a Cold Snap on the next tick (when the host allows one now). */
+  requestSnap(): boolean {
+    if (this.host.canSnap?.() !== true) return false;
+    this.snapReq = true;
+    this.snaps++;
+    return true;
+  }
+
   private onUp(e: PointerEvent, cancel: boolean): void {
     if (e.pointerId !== this.active || !this.held) return;
     this.held = false;
     this.active = -1;
     this.upEdge = true;
-    this.release = cancel ? 0 : qRelease(this.velocity(e.timeStamp));
+    const snapped = this.gesture === 2;
+    // A tap on the frost meter (short, nearly still) snaps.
+    if (!snapped && !cancel && this.onMeter && e.timeStamp - this.pressT <= METER_TAP_MS && Math.hypot(e.clientX - this.pressX, e.clientY - this.pressY) < METER_TAP_PX) {
+      this.requestSnap();
+    }
+    this.onMeter = false;
+    this.release = cancel || snapped ? 0 : qRelease(this.velocity(e.timeStamp));
   }
 
   /** Release angular velocity (°/s) from the requested-angle samples of the last 80 ms. */
@@ -210,6 +283,12 @@ export class Input {
   private onKey(e: KeyboardEvent, down: boolean): void {
     const k = e.key;
     this.shift = e.shiftKey;
+    if (k === 'ArrowDown' || k === 's' || k === 'S') {
+      // Cold Snap (v1.5): Down or S, once per press of the key.
+      if (!down || e.repeat || e.altKey || e.ctrlKey || e.metaKey || isControl(e.target) || !this.host.accepting()) return;
+      if (this.requestSnap()) e.preventDefault();
+      return;
+    }
     let left = false;
     let right = false;
     if (k === 'ArrowLeft' || k === 'a' || k === 'A') left = true;
@@ -267,6 +346,7 @@ export class Input {
     this.upEdge = false;
     this.upFirst = false;
     this.release = 0;
+    this.snapReq = false;
   }
 
   /** A synthetic tap (Space/Enter start or retry): downEdge + upEdge in one batch. */
@@ -300,7 +380,13 @@ export class Input {
       f.release = 0;
       f.key = key;
       f.down = this.held;
+      f.snap = false;
       this.out.push(f);
+    }
+    // A Cold Snap lands on the first tick of the batch.
+    if (this.snapReq) {
+      (this.frames[0] as InputFrame).snap = true;
+      this.snapReq = false;
     }
     const first = this.frames[0] as InputFrame;
     const last = this.frames[n - 1] as InputFrame;

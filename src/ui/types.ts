@@ -26,7 +26,7 @@ export type ScreenId =
  * - `drag`: "Drag ← to swing the sun" (or "Hold ←" for keyboard players) until replaced or cleared.
  * - `shade-found`: "Shade! Thick teal = safe" (1.4 s). `melting`: "Melting! Find thick teal" (1.6 s).
  */
-export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing';
+export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing' | 'snap-ready';
 
 export type RunKind = 'endless' | 'daily' | 'challenge' | 'campaign';
 

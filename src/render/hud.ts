@@ -19,13 +19,18 @@
 //
 // The multiplier badge carries a charge bar along its bottom edge: the shade time toward the next
 // level (4 s a level), so the ×N visibly fills before it pops.
+//
+// v1.5 frost meter (Cold Snap): a round gauge in the world rect's bottom-right corner, clear of the
+// edge and home-bar zones, shown on runs that fill it. Its ring fills ice-blue around a snowflake;
+// full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
+// (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
 
 import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, TUNING, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { star } from './banners.ts';
-import { cssa, hex } from './color.ts';
+import { css, cssa, hex } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
-import { ctx2d, flake, makeCanvas, roundRect, type Canvas2D } from './sprites.ts';
+import { ctx2d, flake, makeCanvas, radialSprite, roundRect, type Canvas2D } from './sprites.ts';
 
 const INK = hex('#2B2140');
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -110,6 +115,14 @@ export interface HudState {
   badgeKey: number;
 
   widths: Map<string, WidthTable>;
+
+  /** v1.5 frost meter: shown last frame, its centre and radius (CSS px), the ready pop (s) and whether it was full. */
+  meterShown: boolean;
+  meterX: number;
+  meterY: number;
+  meterR: number;
+  meterPop: number;
+  meterFull: boolean;
 }
 
 export function createHud(): HudState {
@@ -167,6 +180,12 @@ export function createHud(): HudState {
     badge: null,
     badgeKey: -1,
     widths: new Map(),
+    meterShown: false,
+    meterX: 0,
+    meterY: 0,
+    meterR: 0,
+    meterPop: 0,
+    meterFull: false,
   };
 }
 
@@ -176,6 +195,7 @@ export function updateHud(h: HudState, dt: number): void {
   h.multShake = Math.max(0, h.multShake - dt);
   h.snowPop = Math.max(0, h.snowPop - dt);
   h.noonSparkle = Math.max(0, h.noonSparkle - dt);
+  h.meterPop = Math.max(0, h.meterPop - dt);
 }
 
 export function hudScale(v: View): number {
@@ -283,6 +303,11 @@ export interface HudInput {
   alpha: number;
   time: number;
   campaign: HudCampaign | null;
+  /** v1.5 frost meter: shown, its fill 0..1, the share of an active snap left (0 none). */
+  meter: boolean;
+  frost: number;
+  snapLeft: number;
+  reducedMotion: boolean;
 }
 
 /**
@@ -361,7 +386,10 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
 export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
   const top = v.safe.top + 8;
   h.bottom = top + ROW_H + 8;
-  if (inp.alpha <= 0.01) return;
+  if (inp.alpha <= 0.01) {
+    h.meterShown = false;
+    return;
+  }
   const s = inp.s;
   syncHud(h, v, inp);
   const dl = dayTicks(s.day);
@@ -470,7 +498,121 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.stroke();
     }
   }
+  h.meterShown = inp.meter;
+  if (inp.meter) drawFrostMeter(g, h, v, inp);
   g.globalAlpha = 1;
+}
+
+const ICE = hex('#5AB8FF');
+const ICE_DEEP = hex('#2B7FD0');
+/** The meter's radius and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px). */
+const METER_R = 24;
+const METER_SIDE = 24;
+const METER_BOTTOM = 34;
+/** A tap this far outside the meter still counts (CSS px). */
+const METER_SLOP = 10;
+let meterGlow: Canvas2D | null = null;
+
+/** Where the frost meter sits for view `v` (CSS px): fills h.meterX/Y/R. */
+export function placeMeter(h: HudState, v: View): void {
+  const k = hudScale(v);
+  const r = METER_R * k;
+  h.meterR = r;
+  h.meterX = v.vx + v.vw - v.safe.right - METER_SIDE - r;
+  h.meterY = v.vy + v.vh - v.safe.bottom - METER_BOTTOM - r;
+}
+
+/** (x, y) in CSS px is on the frost meter drawn last frame. */
+export function hudMeterHit(h: HudState, x: number, y: number): boolean {
+  if (!h.meterShown) return false;
+  const dx = x - h.meterX;
+  const dy = y - h.meterY;
+  const r = h.meterR + METER_SLOP;
+  return dx * dx + dy * dy <= r * r;
+}
+
+/** The frost meter (see the header). */
+function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
+  placeMeter(h, v);
+  const k = hudScale(v);
+  const x = h.meterX;
+  const r = h.meterR;
+  const frost = Math.max(0, Math.min(1, inp.frost));
+  const snapping = inp.snapLeft > 0;
+  const full = frost >= 1 && !snapping;
+  if (full && !h.meterFull) h.meterPop = 0.45;
+  h.meterFull = full;
+  const rm = inp.reducedMotion;
+  const breathe = full && !rm ? 0.5 + 0.5 * Math.sin(inp.time * TAU * 1.4) : full ? 1 : 0;
+  // The ready pop: 1 → 1.25 → 1.
+  const pop = h.meterPop > 0 ? 1 + 0.25 * Math.sin((Math.PI * (0.45 - h.meterPop)) / 0.45) : 1;
+  const sc = pop * (full && !rm ? 1 + 0.04 * breathe : 1);
+  const y = h.meterY;
+  const R = r * sc;
+  if (full) {
+    meterGlow ??= radialSprite('90,184,255', 96, 0.7, 0.42, 0.3);
+    const gr = R * (2.1 + 0.25 * breathe);
+    g.globalAlpha = inp.alpha * (0.55 + 0.45 * breathe);
+    g.drawImage(meterGlow, x - gr, y - gr, gr * 2, gr * 2);
+    g.globalAlpha = inp.alpha;
+  }
+  // The plate, its shadow, the track and the fill.
+  g.fillStyle = cssa(INK, 0.16);
+  g.beginPath();
+  g.arc(x, y + 2, R, 0, TAU);
+  g.fill();
+  g.fillStyle = full || snapping ? css(full ? ICE_DEEP : ICE) : cssa(0xffffff, 0.92);
+  g.beginPath();
+  g.arc(x, y, R, 0, TAU);
+  g.fill();
+  const rr = R - 5 * k;
+  g.lineWidth = 5 * k;
+  g.strokeStyle = full ? cssa(0xffffff, 0.25) : cssa(INK, snapping ? 0.18 : 0.1);
+  g.beginPath();
+  g.arc(x, y, rr, 0, TAU);
+  g.stroke();
+  const fill = snapping ? inp.snapLeft : frost;
+  if (fill > 0.005) {
+    g.lineCap = 'round';
+    g.strokeStyle = snapping || full ? '#FFFFFF' : css(ICE);
+    g.beginPath();
+    g.arc(x, y, rr, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, fill));
+    g.stroke();
+    g.lineCap = 'butt';
+  }
+  // The snowflake: pale until the meter is full, spinning through a snap.
+  const fz = R * (full ? 1.15 : 1);
+  g.globalAlpha = inp.alpha * (full || snapping ? 1 : 0.45 + 0.4 * frost);
+  if (snapping && !rm) {
+    const a = inp.time * 2.2;
+    const c = Math.cos(a) * v.dpr;
+    const sn = Math.sin(a) * v.dpr;
+    g.setTransform(c, sn, -sn, c, x * v.dpr, y * v.dpr);
+    g.drawImage(flake(), -fz / 2, -fz / 2, fz, fz);
+    g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+  } else {
+    g.drawImage(flake(), x - fz / 2, y - fz / 2, fz, fz);
+  }
+  g.globalAlpha = inp.alpha;
+  if (full) {
+    // "Swipe down": a chevron bobbing down over the meter.
+    const bob = rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k;
+    const cy = y - R - 14 * k + bob;
+    const w = 8 * k;
+    g.strokeStyle = cssa(INK, 0.35);
+    g.lineWidth = 5.5 * k;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(x - w, cy - w * 0.5);
+    g.lineTo(x, cy + w * 0.5);
+    g.lineTo(x + w, cy - w * 0.5);
+    g.stroke();
+    g.strokeStyle = '#FFFFFF';
+    g.lineWidth = 3 * k;
+    g.stroke();
+    g.lineCap = 'butt';
+  }
 }
 
 /** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */

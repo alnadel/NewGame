@@ -10,6 +10,9 @@
 // pulsing below 25. In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
 // (V1_PLAN §6.2) the dial shows where to put the sun: the target arc pulses, dots mark the way
 // round, and a ghost sun glides from the sun pointer into the arc in step with the ghost thumb.
+// v1.5: gold arcs just outside the ring mark the angles that grow a Sunflower bud (GuideState.bud;
+// where gold meets teal, one angle does both), and deep shade darkens the ring to indigo with a
+// few frost sparkles circling it.
 
 import { ghostSwipe } from '../game/assist.ts';
 import { cssa, hex } from './color.ts';
@@ -23,6 +26,10 @@ const FROST = hex('#EAF6FF');
 const AMBER = hex('#FFA53D');
 const INK = hex('#2B2140');
 const HOT = hex('#FF6A3D');
+const GOLD = hex('#FFC23D');
+const GOLD_DEEP = hex('#D98A00');
+const DEEP = hex('#1F2A66');
+const ICE = hex('#DDF4FF');
 
 export interface HaloState {
   /** Eased overall alpha (1 active, 0.35 idle at full Chill). */
@@ -38,12 +45,15 @@ export interface HaloState {
   /** Danger (GR v1.3): eased 0..1 while Nubs stands in the sun, and its heartbeat phase (faster as Chill drops). */
   heat: number;
   beat: number;
+  /** v1.5 deep shade, eased 0..1, and the sparkles' orbit phase. */
+  deep: number;
+  deepSpin: number;
 }
 
 export const SWING_ARC_S = 0.3;
 
 export function createHalo(): HaloState {
-  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0, swingT: 0, swingDeg: 0, heat: 0, beat: 0 };
+  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0, swingT: 0, swingDeg: 0, heat: 0, beat: 0, deep: 0, deepSpin: 0 };
 }
 
 export interface HaloInput {
@@ -80,6 +90,9 @@ export interface HaloInput {
   /** Sun Lock: locked now, or about to lock (the padlock blinks in 0.6 s ahead). */
   locked: boolean;
   lockSoon: boolean;
+  /** v1.5: angles that grow a bud now (gold arcs), or null; Nubs in deep shade. */
+  bud: Uint8Array | null;
+  deep: boolean;
 }
 
 /** A dial input to refill every frame. */
@@ -88,14 +101,17 @@ export function createHaloIn(): HaloInput {
   return {
     cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
     hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
+    bud: null, deep: false,
   };
 }
 
 const swipe = new Float64Array(2);
 const split = createShadeSplit();
 
-export function updateHalo(h: HaloState, dt: number, dragging: boolean, chill: number, dTheta: number, lit: boolean): void {
-  const target = dragging || chill < 99 || lit ? 1 : 0.35;
+export function updateHalo(h: HaloState, dt: number, dragging: boolean, chill: number, dTheta: number, lit: boolean, deep = false): void {
+  const target = dragging || chill < 99 || lit || deep ? 1 : 0.35;
+  h.deep += ((deep ? 1 : 0) - h.deep) * Math.min(1, dt * (deep ? 8 : 4));
+  h.deepSpin = (h.deepSpin + dt * 0.35) % 1;
   // The sun on Nubs turns the ring hot at once and lets go a little slower; the heartbeat runs at
   // 1.2 Hz at full Chill and 3.4 Hz near empty.
   h.heat += ((lit ? 1 : 0) - h.heat) * Math.min(1, dt * (lit ? 14 : 5));
@@ -231,6 +247,16 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.stroke();
   }
 
+  const deep = h.deep * inp.fade;
+  if (deep > 0.01) {
+    // Deep shade: the ring sinks to indigo under the teal.
+    g.lineWidth = 11;
+    g.strokeStyle = cssa(DEEP, 0.38 * deep);
+    g.beginPath();
+    g.arc(cx, cy, R, 0, TAU);
+    g.stroke();
+  }
+
   if (inp.sunUp && !inp.blind) {
     // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
     const ga = inp.guideAlpha * A;
@@ -306,7 +332,63 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
 
+  if (inp.sunUp && inp.bud !== null) {
+    // Bud arcs: gold just outside the ring, a soft glow under a bright line.
+    let any = false;
+    const bud = inp.bud;
+    for (let b = 0; b < 360; b++) {
+      if (bud[b] !== 0) {
+        any = true;
+        break;
+      }
+    }
+    if (any) {
+      const ba = Math.max(0.7, A) * inp.fade;
+      g.lineCap = 'round';
+      g.lineWidth = 9;
+      g.strokeStyle = cssa(GOLD, 0.28 * ba);
+      g.beginPath();
+      arcRuns(g, bud, cx, cy, R + 11, 0.5);
+      g.stroke();
+      g.lineWidth = 3.5;
+      g.strokeStyle = cssa(GOLD, 0.95 * ba);
+      g.beginPath();
+      arcRuns(g, bud, cx, cy, R + 11, 0.5);
+      g.stroke();
+      g.lineWidth = 1;
+      g.strokeStyle = cssa(GOLD_DEEP, 0.9 * ba);
+      g.beginPath();
+      arcRuns(g, bud, cx, cy, R + 13, 0.5);
+      g.stroke();
+      g.lineCap = 'butt';
+    }
+  }
+
   if (inp.sunUp && !inp.blind) drawHint(g, inp, A);
+
+  if (deep > 0.01) {
+    // Three frost sparkles circling the deep ring (still under reduced motion).
+    const spin = inp.reducedMotion ? 0 : h.deepSpin;
+    g.fillStyle = cssa(ICE, 0.9 * deep);
+    g.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const a = (spin + i / 3) * TAU;
+      const tw = inp.reducedMotion ? 1 : 0.6 + 0.4 * Math.sin(inp.time * 7 + i * 2.1);
+      const r = 3.2 * tw;
+      const x = cx + Math.cos(a) * R;
+      const y = cy + Math.sin(a) * R;
+      g.moveTo(x, y - r);
+      g.lineTo(x + r * 0.3, y - r * 0.3);
+      g.lineTo(x + r, y);
+      g.lineTo(x + r * 0.3, y + r * 0.3);
+      g.lineTo(x, y + r);
+      g.lineTo(x - r * 0.3, y + r * 0.3);
+      g.lineTo(x - r, y);
+      g.lineTo(x - r * 0.3, y - r * 0.3);
+      g.closePath();
+    }
+    g.fill();
+  }
 
   // A SWING: the arc the sun swept to hand the shade over, flashing teal and fading out.
   if (h.swingT > 0 && h.swingDeg !== 0) {

@@ -197,6 +197,9 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
     case 'swing':
       // The first SWING ever: what just happened, so it can happen on purpose.
       return 'SWING! Straight into the next shade: +Snow';
+    case 'snap-ready':
+      // v1.5: the frost meter is full.
+      return keyboard ? 'Frost full! Press ↓ for a Cold Snap' : 'Frost full! Swipe ↓ for a Cold Snap';
   }
 }
 
@@ -210,6 +213,7 @@ export function cueDuration(id: CueId, dir: -1 | 1 | undefined): number | null {
     case 'melting':
       return dir === undefined ? 1600 : null;
     case 'swing':
+    case 'snap-ready':
       return 2400;
     case 'drag':
       return null;

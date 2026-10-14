@@ -25,6 +25,8 @@ export const P_LEAF = 13; // screen space: a leaf blown across a Breezy day
 export const P_GLINT = 14; // a four-point glint on lit ground (Dazzle)
 export const P_GUST = 15; // screen space: a wind streak flying across during a gust (v1.2 Gusts)
 export const P_SNOW = 16; // screen space: a snowflake drifting down (a winter chapter's air)
+export const P_SNOWFALL = 17; // v1.5: a flake falling from the Cold Snap's cloud (world space)
+export const P_PETAL_POP = 18; // v1.5: a sunflower petal thrown out by a bloom (world space)
 
 const CAP = 400;
 
@@ -189,6 +191,27 @@ export function updateParticles(p: Particles, dt: number, nx: number, ny: number
         p.vx[i] = 16 * Math.sin(life * 1.7 + i);
         if (p.y[i]! > screenH + 20) p.life[i] = 0;
         break;
+      case P_SNOWFALL:
+        // Sways as it falls; settles on the ground and melts away there.
+        if (p.z[i]! <= 0) {
+          p.z[i] = 0;
+          p.vz[i] = 0;
+          p.vx[i] = 0;
+          if (life > 0.35) p.life[i] = 0.35;
+        } else {
+          p.x[i] = p.x[i]! + 7 * Math.sin(life * 3.3 + i) * dt;
+        }
+        break;
+      case P_PETAL_POP:
+        // Thrown out, then fluttering down.
+        p.vz[i] = p.vz[i]! - 90 * dt;
+        if (p.z[i]! < 0) {
+          p.z[i] = 0;
+          p.vz[i] = 0;
+          p.vx[i] = 0;
+          p.vy[i] = 0;
+        }
+        break;
       case P_GUST:
         // A streak rides the gust straight across, swaying a little.
         p.vy[i] = 14 * Math.sin(life * 6 + i);
@@ -339,6 +362,22 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
       case P_SPARKLE: {
         g.globalAlpha = (1 - t) * 0.95;
         g.drawImage(sp, sx - size, sy - size, size * 2, size * 2);
+        break;
+      }
+      case P_SNOWFALL: {
+        g.globalAlpha = Math.min(1, life * 3, t * 8) * 0.95;
+        g.drawImage(fl, sx - size, sy - size, size * 2, size * 2);
+        break;
+      }
+      case P_PETAL_POP: {
+        g.globalAlpha = Math.min(1, life * 2);
+        g.fillStyle = cssa(p.color[i]!, 1);
+        g.setTransform(v.dpr, 0, 0, v.dpr, sx * v.dpr, sy * v.dpr);
+        g.rotate(p.rot[i]!);
+        g.beginPath();
+        g.ellipse(0, 0, size, size * 0.42, 0, 0, TAU);
+        g.fill();
+        g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
         break;
       }
       case P_GLINT: {
@@ -560,6 +599,10 @@ export const POP_MULT = 2;
 export const POP_BANG = 3;
 export const POP_SWING = 4;
 export const POP_GO = 5;
+/** v1.5: DEEP (deep shade), COLD SNAP!, BLOOM!. */
+export const POP_DEEP = 6;
+export const POP_SNAP = 7;
+export const POP_BLOOM = 8;
 
 /** A +N pop absorbs a new +N within this long of its last change (s); a SWING pop, within 1 s of its first. */
 const PLUS_MERGE_S = 0.45;
@@ -653,7 +696,7 @@ export function addHeadline(p: Pops, text: string, style: number, dur: number, m
   for (let i = 0; i < POP_CAP; i++) {
     const s = p.style[i];
     if (p.dur[i]! <= 0) continue;
-    if (s === POP_PHEW || s === POP_SWING) {
+    if (s === POP_PHEW || s === POP_SWING || s === POP_SNAP) {
       taken |= 1 << Math.round((p.z[i]! - HEADLINE_Z) / HEADLINE_ROW_Z);
       continue;
     }
@@ -711,7 +754,7 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     if (dur <= 0) continue;
     const t = p.t[i]!;
     const style = p.style[i]!;
-    const rise = style === POP_PHEW || style === POP_SWING ? 10 : 20;
+    const rise = style === POP_PHEW || style === POP_SWING || style === POP_SNAP ? 10 : 20;
     const sx = v.ox + (nx + p.dx[i]!) * v.S;
     const sy = v.oy - (ny + OBLIQUE * p.z[i]!) * v.S - rise * Math.min(1, t / 0.55) * v.S * 0.9;
     let scale: number;
@@ -738,6 +781,24 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
         size = 26;
         fill = '#FF5D5D';
         stroke = '#FFFFFF';
+        break;
+      case POP_DEEP:
+        scale = popScale(t, 0.22, 1.25);
+        size = 18;
+        fill = '#DDF4FF';
+        stroke = '#1F2A66';
+        break;
+      case POP_SNAP:
+        scale = popScale(t, 0.25, 1.3);
+        size = 30;
+        fill = '#FFFFFF';
+        stroke = '#2B7FD0';
+        break;
+      case POP_BLOOM:
+        scale = popScale(t, 0.22, 1.3);
+        size = 22;
+        fill = '#FFD84A';
+        stroke = '#7A4E2A';
         break;
       default:
         scale = popScale(t, 0.2, 1.2);

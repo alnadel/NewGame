@@ -103,6 +103,8 @@ import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
+import { Mechanics } from './mechanics.ts';
+import { hudMeterHit } from '../render/hud.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
@@ -230,6 +232,10 @@ export class Session {
   readonly input: Input;
   readonly clock = new FixedClock();
   readonly fx: Fx;
+  /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
+  readonly mech = new Mechanics();
+  /** Cold Snaps seen this session (the "swipe down" cue stops after two). */
+  private snapsSeen = 0;
   /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */
   private readonly moments: RunMoments;
   /** The campaign star bits last seen (a newly lit one chimes). */
@@ -542,7 +548,17 @@ export class Session {
       onPress: () => this.onPress(),
       viewportWidth: () => this.renderer.scene.view.vw,
       safeBottom: () => this.renderer.scene.view.safe.bottom,
+      // v1.5 Cold Snap: only while a run plays past its start (never on the Title, the intro card,
+      // a pause or a menu), and the meter only where it is drawn.
+      canSnap: () => this.ui.current() === 'play' && !this.paused && this.runActive && this.s.phase === 'day' && this.s.ready === 0,
+      meterHit: (x, y) => hudMeterHit(this.renderer.scene.hud, x, y),
     });
+    this.mech.route = (ev) => {
+      const list = [ev];
+      this.fx.onEvents(list, this.s);
+      this.d.audio.onEvents(list, this.audioView);
+      this.d.haptics.onEvents(list, 0);
+    };
     this.applySettings(save.settings);
     this.runRm = this.reducedMotion();
     this.s = this.createTitleRun();
@@ -574,6 +590,7 @@ export class Session {
       goalMinutes: -1,
       challengeName: '',
       campaign: null,
+      mech: this.mech.view,
       dying: -1,
       mapT: -1,
       sheetTop: null,
@@ -878,6 +895,7 @@ export class Session {
     r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
     r.challengeName = this.runChallenge?.n ?? '';
     this.fillCampaignView();
+    this.fx.mech = this.mech.fill(this.s, this.time);
     r.dying = this.deathAt >= 0 ? Math.max(0, this.dyingGame) : -1;
     r.mapT = this.resultsAt >= 0 && screenNow === 'results' ? this.time - this.resultsAt : -1;
     r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
@@ -1244,6 +1262,7 @@ export class Session {
     this.resetSnaps();
     this.resetRender();
     this.fx.resetRun();
+    this.mech.reset();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     const botKind = this.params.bot ?? this.testBot;
@@ -1604,6 +1623,13 @@ export class Session {
           this.d.store.flush();
         }
         this.cue('shade-found');
+        break;
+      case 'frostReady':
+        // v1.5: the meter is full; until the player has snapped twice this session, say how.
+        if (this.snapsSeen < 2) this.cue('snap-ready');
+        break;
+      case 'snap':
+        this.snapsSeen++;
         break;
       case 'swing':
         // The first SWING of a lifetime explains itself once (nothing else in the game names it).
@@ -2109,7 +2135,7 @@ export class Session {
       this.ui.showCue(null);
       return;
     }
-    const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : id === 'melting' ? 8 : 16;
+    const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : id === 'melting' ? 8 : id === 'swing' ? 16 : 32;
     if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
     this.cues |= bit;
     this.cueShown = { id, dir };
@@ -2502,10 +2528,13 @@ export class Session {
 
   /**
    * Test hook: replays a moment through fx and audio only (the sim is untouched): phew, mult, mult5,
-   * noon (= highnoon), dawn, night, cloud, glare, flake, best, passed, swing, postcard.
+   * noon (= highnoon), dawn, night, cloud, glare, flake, best, passed, swing, postcard; v1.5 bud,
+   * bloom, snapReady, snap and deep stage their objects in the run's world (game/mechanics.ts).
    */
   demo(name: string): void {
     const s = this.s;
+    // v1.5: bud, bloom, snapReady, snap, deep (game/mechanics.ts).
+    if (this.mech.demo(name, s, this.snap, this.time)) return;
     let ev: SimEvent | null = null;
     switch (name) {
       case 'phew':
