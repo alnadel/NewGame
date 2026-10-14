@@ -48,24 +48,15 @@ const CONCEPT_ICONS: Readonly<Partial<Record<ConceptId | (string & {}), IconName
   moonlit: 'moon',
   marathon: 'road',
   boss: 'dome',
-  // v1.5 core mechanics (placeholder icons from the core builder; the GAME builder owns these).
-  deep: 'snow',
-  bloom: 'sun',
-  snap: 'flakes',
+  // v1.5 core mechanics.
+  deep: 'deep',
+  bloom: 'sunflower',
+  snap: 'coldsnap',
 };
 
-/**
- * The icon of a concept (a flag for an id this build doesn't know). The v1.5 mechanics' concepts
- * (named by the core) are found by what their id says: buds and blooms, Cold Snap, deep shade.
- */
+/** The icon of a concept (a flag for an id this build doesn't know). */
 export function conceptIcon(id: string): IconName {
-  const own = (CONCEPT_ICONS as Partial<Record<string, IconName>>)[id];
-  if (own) return own;
-  const k = id.toLowerCase();
-  if (k.includes('bud') || k.includes('bloom') || k.includes('sunflower')) return 'sunflower';
-  if (k.includes('snap')) return 'coldsnap';
-  if (k.includes('deep')) return 'deep';
-  return 'flag';
+  return (CONCEPT_ICONS as Partial<Record<string, IconName>>)[id] ?? 'flag';
 }
 
 const BIOME_ICONS: Readonly<Record<BiomeId, IconName>> = { meadow: 'tree', oldtown: 'town' };

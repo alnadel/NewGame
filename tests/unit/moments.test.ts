@@ -153,6 +153,8 @@ describe('RunMoments', () => {
     b.toasts.length = 0;
     const e = dayRun();
     m.begin(save, null, true);
+    // The world now has generated buds (sorted by y): keep only this one in view.
+    e.world.buds.length = 0;
     e.world.buds.push({ id: 999, x: e.nubs.x + 40, y: e.nubs.y + 120, face: 90, grow: 0, state: 0, casterId: -1 });
     e.tick = 50;
     m.update(e);
