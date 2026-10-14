@@ -73,14 +73,14 @@ describe('cosmetics catalog', () => {
 });
 
 describe('missions and achievements', () => {
-  it('has the 13-mission pool in the polish-wave order, swings-3 at play-daily\'s index', () => {
+  it('has the 16-mission pool in the polish-wave order, swings-3 at play-daily\'s index, v1.5\'s three appended', () => {
     expect(MISSIONS.map((m) => m.id)).toEqual([
       'reach-9am', 'flakes-10', 'survive-noon', 'mult-3', 'cloud-ride', 'reach-day-2', 'ice-crystal',
-      'two-phews', 'gate-arch', 'clean-balls', 'reach-day-3', 'hold-x5', 'swings-3',
+      'two-phews', 'gate-arch', 'clean-balls', 'reach-day-3', 'hold-x5', 'swings-3', 'blooms-2', 'snaps-2', 'deep-8',
     ]);
-    expect(MISSIONS.map((m) => m.reward)).toEqual([10, 10, 20, 15, 20, 30, 20, 25, 30, 30, 50, 30, 15]);
+    expect(MISSIONS.map((m) => m.reward)).toEqual([10, 10, 20, 15, 20, 30, 20, 25, 30, 30, 50, 30, 15, 20, 20, 25]);
     // swings-3 waits for a recent best of 12:30 PM (fix round 1: nothing taught SWINGs before then).
-    expect(MISSIONS.map((m) => m.gate)).toEqual([0, 0, 0, 0, 0, 390, 0, 0, 720, 720, 1080, 390, 390]);
+    expect(MISSIONS.map((m) => m.gate)).toEqual([0, 0, 0, 0, 0, 390, 0, 0, 720, 720, 1080, 390, 390, 0, 180, 180]);
     expect(MISSIONS.map((m) => missionLabel(m, 1))).toEqual([
       'Reach 9:00 AM',
       'Collect 10 flakes in one run',
@@ -95,6 +95,9 @@ describe('missions and achievements', () => {
       'Reach Day 3',
       'Reach a ×4 multiplier',
       'Land 3 SWINGs in one run',
+      'Bloom 2 sunflowers in one run',
+      'Cast 2 Cold Snaps in one run',
+      'Spend 8\u00a0s in deep shade in one run',
     ]);
   });
 
@@ -114,6 +117,9 @@ describe('missions and achievements', () => {
       // ×4 at tier II clamps to the ×5 cap.
       'Reach a ×5 multiplier',
       'Land 6 SWINGs in one run',
+      'Bloom 4 sunflowers in one run',
+      'Cast 4 Cold Snaps in one run',
+      'Spend 16\u00a0s in deep shade in one run',
     ]);
   });
 
@@ -148,11 +154,12 @@ describe('missions and achievements', () => {
     expect(parseMissionId('bogus')).toBeNull();
   });
 
-  it('has 24 achievements with riddles (16, the three Journey ones and the five star rewards)', () => {
+  it('has 27 achievements with riddles (16, the three Journey ones, the five star rewards, v1.5\'s three)', () => {
     expect(ACHIEVEMENTS.map((a) => a.name)).toEqual([
       'First Light', 'Night Owl', 'High Noon', 'Solstice', 'Seventh Sun', 'Phew-nomenal', 'Cloud Rider', 'Daily Habit',
       'Sundancer', 'Rematch', 'Sunny Week', 'Close Shave', 'Glare-Proof', 'Ice Cold', 'Night Gardener', 'Forecaster',
       'First Steps', 'Halfway There', 'Starry Road', 'Stargazer', 'Night Sky', 'Constellation', 'Milky Way', 'Every Star',
+      'Green Thumb', 'Cold Front', 'Deep Diver',
     ]);
     for (const a of ACHIEVEMENTS) expect(a.hint.length).toBeGreaterThan(10);
   });
