@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, levelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { createMoments, LEVEL_TIPS } from '../../src/game/moments.ts';
+import { createMoments, LEVEL_TIPS, MECH_TIPS } from '../../src/game/moments.ts';
+import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToasts, showToast, updateBanners } from '../../src/render/banners.ts';
 
@@ -132,6 +133,38 @@ describe('RunMoments', () => {
     m.begin(save, levelDef(3)!, true);
     m.onEvent(go, s);
     expect(b.toasts).toHaveLength(0);
+  });
+
+  it('v1.5: a level teaching a mechanic shows its tips at their moments; a new player gets the moment tips in endless', () => {
+    const save = defaults(0);
+    const b = createBanners();
+    const m = createMoments(b, sinks().sinks);
+    const s = dayRun(12);
+    // Found by the concept's id (the core names it); a stand-in level teaching Cold Snap.
+    m.begin(save, { ...levelDef(12)!, introduces: 'snap' as never }, true);
+    const seen: string[] = [];
+    for (const ev of [{ e: 'go' }, { e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 1 }] as SimEvent[]) {
+      m.onEvent(ev, s);
+      seen.push(...b.toasts.map((t) => t.text));
+      b.toasts.length = 0;
+    }
+    expect(seen).toEqual(MECH_TIPS.snap.map((t) => t[1]));
+    // Endless, a new player: a bud coming into view ahead.
+    b.toasts.length = 0;
+    const e = dayRun();
+    m.begin(save, null, true);
+    e.world.buds.push({ id: 999, x: e.nubs.x + 40, y: e.nubs.y + 120, face: 90, grow: 0, state: 0, casterId: -1 });
+    e.tick = 50;
+    m.update(e);
+    expect(b.toasts).toHaveLength(1);
+    expect(b.toasts[0]!.text).toMatch(/^A bud!/);
+    // A seasoned player gets none.
+    save.stats.runs = 50;
+    b.toasts.length = 0;
+    m.begin(save, null, true);
+    m.onEvent({ e: 'deepEnter' }, e);
+    expect(b.toasts).toHaveLength(0);
+    expect(mechanicOf('frosty')).toBeNull();
   });
 
   it('COMEBACK: a slow burn under the PHEW line, then held shade; a PHEW on the way in takes its place', () => {

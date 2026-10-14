@@ -6,7 +6,8 @@ import type { BiomeId, ConceptId } from '../core/index.ts';
 import type { IconName } from './icons.ts';
 import { BIOME_NAMES } from './labels.ts';
 
-const CONCEPT_ICONS: Readonly<Record<ConceptId, IconName>> = {
+// Partial: concepts the core adds later fall back by name (conceptIcon) instead of failing the build.
+const CONCEPT_ICONS: Readonly<Partial<Record<ConceptId | (string & {}), IconName>>> = {
   drag: 'drag',
   flakes: 'flake',
   cloud: 'cloud',
@@ -49,9 +50,18 @@ const CONCEPT_ICONS: Readonly<Record<ConceptId, IconName>> = {
   boss: 'dome',
 };
 
-/** The icon of a concept (a flag for an id this build doesn't know). */
+/**
+ * The icon of a concept (a flag for an id this build doesn't know). The v1.5 mechanics' concepts
+ * (named by the core) are found by what their id says: buds and blooms, Cold Snap, deep shade.
+ */
 export function conceptIcon(id: string): IconName {
-  return (CONCEPT_ICONS as Partial<Record<string, IconName>>)[id] ?? 'flag';
+  const own = (CONCEPT_ICONS as Partial<Record<string, IconName>>)[id];
+  if (own) return own;
+  const k = id.toLowerCase();
+  if (k.includes('bud') || k.includes('bloom') || k.includes('sunflower')) return 'sunflower';
+  if (k.includes('snap')) return 'coldsnap';
+  if (k.includes('deep')) return 'deep';
+  return 'flag';
 }
 
 const BIOME_ICONS: Readonly<Record<BiomeId, IconName>> = { meadow: 'tree', oldtown: 'town' };
