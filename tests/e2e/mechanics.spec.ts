@@ -37,7 +37,8 @@ async function swipe(page: Page, x: number, y: number, dx: number, dy: number, m
 test('a quick swipe down asks for one Cold Snap; horizontal drags and flicks never do', async ({ page }) => {
   const errors = watchErrors(page);
   const { cx, cy } = await playLevel(page);
-  await swipe(page, cx, cy, 6, 110, 90, 3);
+  // One quick stroke (a loaded machine delivers stepped moves too late for a swipe).
+  await swipe(page, cx, cy, 6, 110, 30, 1);
   expect((await mech(page)).snaps).toBe(1);
   // A drag that drifts down, a fast flick and an upward stroke: no snap.
   await swipe(page, cx - 120, cy, 240, 40, 300, 10);

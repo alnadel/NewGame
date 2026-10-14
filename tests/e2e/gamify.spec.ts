@@ -100,7 +100,8 @@ test.describe('the Profile', () => {
       await expect(page.locator('.scr-profile .badges li')).toHaveCount(6);
       await expect(page.locator('.scr-profile .badge.is-on')).toHaveCount(2);
       await page.getByRole('button', { name: /^Show all/ }).click();
-      await expect(page.locator('.scr-profile .badges li')).toHaveCount(24);
+      // 27 trophies (v1.5 added Green Thumb, Cold Front and Deep Diver).
+      await expect(page.locator('.scr-profile .badges li')).toHaveCount(27);
       await expect(page.locator('.pf-globes')).toBeVisible();
       await expect(page.locator('.scr-profile .jbar')).toHaveCount(6);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
