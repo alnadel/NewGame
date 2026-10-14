@@ -82,7 +82,15 @@ describe('Sunflower buds', () => {
         expect(Number.isInteger(b.face) && b.face >= 0 && b.face < 360).toBe(true);
         expect(Math.abs(angleDiff(b.face, w.theta0))).toBeGreaterThanOrEqual(B.faceTol + B.avoidTheta0 - 0.5);
         expect(Math.abs(b.x - trailX(w.trail, b.y))).toBeGreaterThanOrEqual(B.latMin - 1e-9);
+        expect(Math.abs(b.x - trailX(w.trail, b.y))).toBeLessThanOrEqual(B.latMax + 8 * TUNING.world.pushStep + 1e-9);
         expect([b.grow, b.state, b.casterId]).toEqual([0, 0, -1]);
+        // The face throws the bloom's shadow back across the trail before the bud (± aimJitter).
+        let near = Infinity;
+        for (let back = B.aimBackMin; back <= B.aimBackMax; back += 2) {
+          const toBud = (Math.atan2(back, b.x - trailX(w.trail, b.y - back)) * 180) / Math.PI;
+          near = Math.min(near, Math.abs(angleDiff(b.face, toBud)));
+        }
+        expect(near).toBeLessThanOrEqual(B.aimJitter + 1);
       }
       // Generated ids never move: casters are numbered exactly as without buds.
       const plain = createWorld({ seed, profile: 3, tutorial: false, mechanics: { buds: false } });
@@ -96,13 +104,13 @@ describe('Sunflower buds', () => {
     }
   }, 30_000);
 
-  it('come about once every 4-7 s of daylight walking (more on later days), none in the tutorial chunk', () => {
+  it('come about once every 3-5 s of daylight walking (more on later days), none in the tutorial chunk', () => {
     const w = createWorld({ seed: 9, profile: 3, tutorial: false });
     ensureGenerated(w, 20000);
     const day1 = w.buds.filter((b) => b.y < 50 * 70);
-    // Day 1: 50 s at 70 u/s, the window t/Dl ∈ [0.06, 0.94]: ~44 s / 5.5 s ≈ 8 buds (some spots are taken).
-    expect(day1.length).toBeGreaterThanOrEqual(5);
-    expect(day1.length).toBeLessThanOrEqual(11);
+    // Day 1: 50 s at 70 u/s, the window t/Dl ∈ [0.06, 0.94]: ~44 s / 4 s ≈ 11 buds (some spots are taken).
+    expect(day1.length).toBeGreaterThanOrEqual(7);
+    expect(day1.length).toBeLessThanOrEqual(15);
     const tut = createWorld({ seed: 9, profile: 0, tutorial: true });
     ensureGenerated(tut, 3000);
     expect(tut.buds.every((b) => b.y >= TUNING.world.chunkLen)).toBe(true);

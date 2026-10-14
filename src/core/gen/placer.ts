@@ -453,14 +453,25 @@ function placeBuds(w: World, k: number): void {
     const y = gapNear(w, w.budY, B.gapSeek * p.v);
     const side: -1 | 1 = rng.chance(0.5) ? 1 : -1;
     const lat = rng.range(B.latMin, B.latMax);
-    const face = Math.round(wrapDeg(w.theta0 + avoid + rng.next() * (360 - 2 * avoid)));
+    const aimBack = rng.range(B.aimBackMin, B.aimBackMax);
+    const jitter = rng.range(-B.aimJitter, B.aimJitter);
     const more = Math.min(B.maxMore, 1 + B.perDay * (day - 1));
     w.budY += (rng.range(B.gapMin, B.gapMax) * p.v) / more;
     if (w.tutorial && y < CH) continue;
-    // Never θ0 (± faceTol + avoidTheta0): an idle sun can't grow a bud.
-    if (Math.abs(angleDiff(face, w.theta0)) < avoid) continue;
-    const x = budSpot(w, y, side, lat);
-    if (x !== null) insertBud(w, { id: BUD_ID_BASE + w.budCount++, x, y, face: face === 360 ? 0 : face, grow: 0, state: 0, casterId: -1 });
+    // Legible planning: the sun that grows the bud stands across the trail from it, so the bloom's
+    // shadow falls back across the trail Nubs is about to walk (aimBack u before the bud). Never
+    // θ0 (± faceTol + avoidTheta0: an idle sun can't grow a bud): then the other side of the trail.
+    const yT = y - aimBack;
+    const tx = trailX(w.trail, yT);
+    for (let k = 0; k < 2; k++) {
+      const x = budSpot(w, y, (k === 0 ? side : -side) as -1 | 1, lat, false);
+      if (x === null) continue;
+      let face = Math.round(wrapDeg(atan2D(y - yT, x - tx) + jitter));
+      if (face === 360) face = 0;
+      if (Math.abs(angleDiff(face, w.theta0)) < avoid) continue;
+      insertBud(w, { id: BUD_ID_BASE + w.budCount++, x, y, face, grow: 0, state: 0, casterId: -1 });
+      break;
+    }
   }
 }
 
@@ -493,13 +504,13 @@ function gapNear(w: World, y0: number, reach: number): number {
 }
 
 /**
- * x of a free bud spot at y: lat u from the centerline on `side`, then the other side, each pushed
+ * x of a free bud spot at y: lat u from the centerline on `side` (then the other side when `both`), pushed
  * outward 4 u at a time (≤ 8 times) until it clears the trail and every generated caster's solid
  * footprint (a bud may stand under a canopy). Null when there is none.
  */
-function budSpot(w: World, y: number, side: -1 | 1, lat: number): number | null {
+function budSpot(w: World, y: number, side: -1 | 1, lat: number, both = true): number | null {
   const tx = trailX(w.trail, y);
-  for (let s = 0; s < 2; s++) {
+  for (let s = 0; s < (both ? 2 : 1); s++) {
     const sd = s === 0 ? side : -side;
     for (let push = 0; push <= 8; push++) {
       const x = tx + sd * (lat + push * WT.pushStep);

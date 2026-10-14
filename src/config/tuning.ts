@@ -148,24 +148,31 @@ const tuning = {
    * of y: +1/growSec per second, else −decay per second; at 1 it blooms into a sunflower (+snow).
    * Placement: one bud every U(gapMin, gapMax) s of walking while t/Dl ∈ [tMin, tMax], the gap
    * divided by min(maxMore, 1 + perDay·(day − 1)), each moved into the nearby gap between casters;
-   * lat u from the centerline; faces at least
-   * faceTol + avoidTheta0 from θ0 (an idle sun never grows one).
+   * lat u from the centerline; aimed (aimBack/aimJitter below) and never within faceTol +
+   * avoidTheta0 of θ0 (an idle sun never grows one).
    */
   buds: {
     faceTol: 15,
     growSec: 0.8,
     decay: 0.8,
     snow: 5,
-    reachAhead: 300,
+    reachAhead: 360,
     reachBehind: 30,
-    gapMin: 4,
-    gapMax: 7,
+    gapMin: 3,
+    gapMax: 5,
     perDay: 0.08,
     maxMore: 1.5,
     tMin: 0.06,
     tMax: 0.94,
-    latMin: 26,
-    latMax: 54,
+    latMin: 25,
+    latMax: 42,
+    /**
+     * A bud faces the sun azimuth that throws its bloom's shadow back across the trail aimBack u
+     * (U(min, max)) before it, ± aimJitter°: "light it from there, its shadow falls here".
+     */
+    aimBackMin: 0,
+    aimBackMax: 120,
+    aimJitter: 20,
     avoidTheta0: 15,
     /** A bud moves up to gapSeek s of walking from its cursor spot into the widest gap between casters. */
     gapSeek: 0.6,
@@ -397,7 +404,7 @@ const tuning = {
      * Chill ≥ budChill), and snaps
      * when lit with Chill < snapChill and no safe bin within ±snapNearDeg (or Chill < snapLast).
      */
-    reactive: { lagTicks: 0, rate: 200, blur: 4, penalty: 0.5, nextWeight: 1, nowWeight: 2, budWeight: 1, budChill: 90, snapChill: 40, snapNearDeg: 45, snapLast: 25 },
+    reactive: { lagTicks: 0, rate: 200, blur: 4, penalty: 0.5, nextWeight: 1, nowWeight: 2, budWeight: 1.5, budChill: 55, snapChill: 40, snapNearDeg: 45, snapLast: 25 },
     /**
      * v1.5 mechanics: the oracle plans with the run's sunflowers and snap cloud (stepLitLive), adds
      * up to budBonus (Chill units, fading to 0 budReachDeg away from the nearest gold bin) while the
@@ -405,7 +412,7 @@ const tuning = {
      * a flake-goal level), and snaps when its best slack falls below snapSlack, or when lit with
      * Chill below snapChill (campaign: whenever its next step is lit, for the cool-run star).
      */
-    oracle: { rate: 240, horizonSteps: 40, planBins: 18, slackCap: 30, penalty: 0.02, margin: 1, budBonus: 6, budSlack: 12, budReachDeg: 90, budSpare: 0.9, snapSlack: 6, snapChill: 50 },
+    oracle: { rate: 240, horizonSteps: 40, planBins: 18, slackCap: 30, penalty: 0.02, margin: 1, budBonus: 6, budSlack: 12, budReachDeg: 90, budSpare: 0.6, snapSlack: 6, snapChill: 50 },
     /**
      * Seeded human model (tooling only, never an acceptance gate): reaction lag U(lagMin, lagMax)
      * per decision, aim error N(0, aimSigma)° plus a ±N(0, gainSigma) over/undershoot, min-jerk
