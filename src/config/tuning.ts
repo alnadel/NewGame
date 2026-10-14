@@ -147,7 +147,8 @@ const tuning = {
    * ±faceTol° of its face (whole degrees) and it stands within [Nubs − reachBehind, Nubs + reachAhead]
    * of y: +1/growSec per second, else −decay per second; at 1 it blooms into a sunflower (+snow).
    * Placement: one bud every U(gapMin, gapMax) s of walking while t/Dl ∈ [tMin, tMax], the gap
-   * divided by min(maxMore, 1 + perDay·(day − 1)); lat u from the centerline; faces at least
+   * divided by min(maxMore, 1 + perDay·(day − 1)), each moved into the nearby gap between casters;
+   * lat u from the centerline; faces at least
    * faceTol + avoidTheta0 from θ0 (an idle sun never grows one).
    */
   buds: {
@@ -166,6 +167,8 @@ const tuning = {
     latMin: 26,
     latMax: 54,
     avoidTheta0: 15,
+    /** A bud moves up to gapSeek s of walking from its cursor spot into the widest gap between casters. */
+    gapSeek: 0.6,
     /** The first bud comes this many seconds of walking after the run's start (then the window rules). */
     startDelay: 2,
     /** A growing bud emits budGrow every eventTicks ticks (feedback only). */
@@ -179,9 +182,9 @@ const tuning = {
    */
   frost: {
     perShadeSec: 0.004,
-    perFlake: 0.015,
-    perSwing: 0.06,
-    perBloom: 0.15,
+    perFlake: 0.012,
+    perSwing: 0.05,
+    perBloom: 0.12,
     snapSec: 3,
     /**
      * Journey levels are short (17-50 s): after the Cold Snap's teaching level (which starts full)

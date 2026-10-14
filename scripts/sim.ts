@@ -9,9 +9,12 @@
 // per daylight minute and lit share, plus world stats (rescues per chunk, unresolved validator
 // failures), generation ms/chunk and sim µs/tick.
 //
-// --mech (v1.5) adds reactive and oracle rows that ignore the core mechanics and prints the
-// mechanics table: blooms, snaps, frost meters filled, deep shade and buds passed per daylight
-// minute and per day, and how much longer the bots live using them.
+// v1.5 core mechanics: the V1_PLAN §13 reactive target is defined for the bot that reads guide.now
+// and guide.next, so its rows (plan mix and forced forecasts) run the reactive bot dial-only
+// (createBot(…, mechanics false), "reactive p3 dial"); a "reactive p3" row plays the same bot using
+// the mechanics (gold arcs, Cold Snaps) and must outlive the dial-only row by ≥ 180 minutes (hard).
+// The mechanics table prints blooms, snaps, frost meters filled, deep shade and buds passed per
+// daylight minute and per day. --mech adds an oracle row that ignores the mechanics.
 //
 // Rows: the V1_PLAN §13 rows on the plan mix, idle p0 for the lesson's floor (CO4); --check adds
 // idle/novice/reactive/oracle with each forecast forced. ADVISORY rows (humanDial at rungs R0-R4)
@@ -377,7 +380,7 @@ function mechTable(rows: { j: Job; rs: RunOut[] }[], days: number): void {
 
 function jobName(j: Job): string {
   const extra = [j.drain !== undefined ? `@${j.drain}` : '', j.noonCloud !== undefined ? ` nc${j.noonCloud}` : '', j.forecast ? ` ${j.forecast}` : ''].join('');
-  const nm = j.noMech ? ' no mech' : '';
+  const nm = j.noMech ? (j.bot === 'reactive' ? ' dial' : ' no mech') : '';
   return j.rung !== undefined ? `${j.bot} R${j.rung} (p${j.profile}${extra})${nm}` : `${j.bot} p${j.profile}${extra}${nm}`;
 }
 
@@ -575,10 +578,11 @@ async function main(): Promise<void> {
     { bot: 'idle', profile: 0 },
     { bot: 'novice', profile: 3 },
     { bot: 'novice', profile: 0 },
-    { bot: 'reactive', profile: 3 },
+    { bot: 'reactive', profile: 3, noMech: true },
     { bot: 'oracle', profile: 3 },
+    { bot: 'reactive', profile: 3 },
   ].map((j) => withFc(j as Job));
-  if (mechRows) base.push(...[{ bot: 'reactive', profile: 3, noMech: true } as Job, { bot: 'oracle', profile: 3, noMech: true } as Job].map(withFc));
+  if (mechRows) base.push(withFc({ bot: 'oracle', profile: 3, noMech: true }));
   let advisory: Job[] = rungJobs('humanDial').map(withFc);
   if (botArg !== 'all') {
     base = base.filter((j) => j.bot === botArg);
@@ -592,7 +596,7 @@ async function main(): Promise<void> {
   // A16: --check also loops over every forecast (idle, novice, reactive, oracle at profile 3).
   const forecastJobs: Job[] =
     check && !fc && botArg === 'all' && profileArg === ''
-      ? FORECAST_IDS.flatMap((forecast) => (['idle', 'novice', 'reactive', 'oracle'] as BotKind[]).map((bot) => ({ bot, profile: 3 as ProfileId, forecast })))
+      ? FORECAST_IDS.flatMap((forecast) => (['idle', 'novice', 'reactive', 'oracle'] as BotKind[]).map((bot) => ({ bot, profile: 3 as ProfileId, forecast, ...(bot === 'reactive' ? { noMech: true } : {}) })))
       : [];
   const jobs = [...base, ...advisory, ...forecastJobs];
 
@@ -645,7 +649,7 @@ async function main(): Promise<void> {
     advisory.forEach((_, i) => rowLine(base.length + i));
   }
 
-  if (mechRows) mechTable(base.map((j, ji) => ({ j, rs: of(ji) })), days);
+  mechTable(base.map((j, ji) => ({ j, rs: of(ji) })), days);
 
   // World stats per world kind (profile, noon cloud, forecast); only the hard rows' kinds are checked.
   console.log('\nWorld (validator):');
@@ -751,7 +755,7 @@ async function main(): Promise<void> {
       report(early === 0, `${label}idle p0 (lesson) never melts in its first 25 s of daylight`, `${early} of ${idle0.length} did`);
     }
     const rea = at('reactive', 3);
-    if (rea.length) window(`${label}reactive p3 median death in [Day 2 noon, Day 4 noon]`, rea, 1080, 2520);
+    if (rea.length) window(`${label}reactive p3 dial median death in [Day 2 noon, Day 4 noon]`, rea, 1080, 2520);
     const ora = at('oracle', 3);
     if (ora.length) {
       const ok = ora.filter((r) => !r.died && r.day >= 8).length / ora.length;
@@ -759,6 +763,14 @@ async function main(): Promise<void> {
     }
   };
   gates('', (bot, profile) => of(base.findIndex((j) => j.bot === bot && j.profile === profile)), fc !== undefined);
+  // v1.5: the mechanics must pay: the reactive bot using them outlives itself dial-only by ≥ 180 minutes.
+  const dialJi = base.findIndex((j) => j.bot === 'reactive' && j.profile === 3 && j.noMech);
+  const mechJi = base.findIndex((j) => j.bot === 'reactive' && j.profile === 3 && !j.noMech);
+  if (dialJi >= 0 && mechJi >= 0) {
+    const a = median(deathMinutes(of(dialJi)));
+    const b = median(deathMinutes(of(mechJi)));
+    report(b - a >= 180, 'reactive p3 using the v1.5 mechanics outlives reactive p3 dial by ≥ 180 minutes (median)', `${clockOf(b, days)} vs ${clockOf(a, days)} (+${b === Infinity ? '∞' : (b - a).toFixed(0)} min)`);
+  }
   for (const f of forecastJobs.length ? FORECAST_IDS : []) {
     gates(`[${f}] `, (bot, profile) => of(jobs.findIndex((j) => j.forecast === f && j.bot === bot && j.profile === profile && j.rung === undefined)), true);
   }

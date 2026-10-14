@@ -49,6 +49,14 @@ their teaching level don't have them, so level 1 stays the pure basic lesson.
   `snap {x,y,cloudId}`, `snapEnd`, `deepEnter`.
 - `RunStats.blooms`, `.snaps`, `.deepSeconds` (optional in the type; core always fills them).
 - `TUNING.buds`, `TUNING.frost`, `TUNING.deep` (starting values; CORE tunes them).
+- Added by CORE (additive, src/core/README.md §15): `World.mech: Mechanics {buds, snap, deep}` and
+  `mechanicsOf(levelId)` (Journey: deep shade from level 5, Sunflowers 8, Cold Snap 10; all on
+  elsewhere), `RunConfig.mechanics?` and `RunConfig.startFrost?` (debug), `debugBloom(s, id?)`;
+  concepts `deep`, `bloom`, `snap` (`TEACH_LEVELS` 40, `teachLevel(id)`, `MECHANIC_CONCEPTS`);
+  `CloudKind` `'snap'` (the snap cloud: z 0, rides with Nubs for `SNAP_TICKS`); the `'sunflower'`
+  caster (parts `[prism stem, disc head]`, `SUNFLOWER`), id `RUNTIME_ID_BASE + (bud.id −
+  BUD_ID_BASE)` in `bud.casterId`; `SNAP_ID_BASE`; `budFacing(b, θ)`; `NubsState.deepTick`;
+  `createBot(kind, salt, mechanics = true)`.
 
 ## 4. Ownership
 

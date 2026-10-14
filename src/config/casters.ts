@@ -67,7 +67,7 @@ export const STALL = Object.freeze({ post: 4, postH: 40, roofW: 48, roofD: 34, z
  * height stemH) and the flower head, a disc of radius headR at height headZ. Heights × the world's
  * heightScale. Only blooms make them (never the generator), so the validator ignores them.
  */
-export const SUNFLOWER = Object.freeze({ stem: 6, stemH: 92, headR: 30, headZ: 96 });
+export const SUNFLOWER = Object.freeze({ stem: 8, stemH: 78, headR: 40, headZ: 82 });
 
 /** Gazing ball mirror height above the ground (its pedestal is BLOCKS.pedestal). */
 export const BALL_Z = 40;

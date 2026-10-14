@@ -362,6 +362,8 @@ function minJerk(x: number): number {
 // otherwise the least-lit angle; both pay 0.35 per degree of turning.
 const HUMAN_MIN_ARC = 6;
 const HUMAN_TURN_COST = 0.35;
+/** humanDial casts a ready Cold Snap when lit with Chill below this (v1.5). */
+const HUMAN_SNAP_CHILL = 30;
 /** Corrections smaller than this are not worth a drag (°). */
 const HUMAN_MIN_MOVE = 4;
 
@@ -457,55 +459,63 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
     return f;
   }
 
+  // v1.5: humanDial snaps in a panic (the meter glows on the HUD): lit with Chill under HUMAN_SNAP_CHILL.
+  const snaps = kind === 'humanDial';
   return {
     kind,
     next(s: SimState): InputFrame {
-      if (!rng) rng = salt ? rngFor(s.cfg.seed, 'bot', kind, salt) : rngFor(s.cfg.seed, 'bot', kind);
-      remember(ring, s);
-      f.dTheta = 0;
-      f.down = false;
-      f.downEdge = false;
-      f.upEdge = false;
-      f.release = 0;
-      f.key = 0;
-      if (!started) {
-        // A tap starts the run (catch + release at 0°/s), like the idle bot.
-        started = true;
-        f.downEdge = true;
-        f.upEdge = true;
-        return f;
-      }
-      if (moveTicks > 0) return moveTick();
-      if (cooldown > 0) {
-        cooldown--;
-        return f;
-      }
-      if (s.phase !== 'day' || !s.sunUp) return f;
-      if (lag < 0) {
-        lag = msTicks(rng.range(cfg.lagMinMs, cfg.lagMaxMs));
-        if (lastingShare > 0) useLasting = rng.next() < lastingShare;
-      }
-      const pick = recall(ring, s.tick, lag);
-      if (pick < 0) return f;
-      // The sun's own position is seen live; the shade state is stale.
-      const theta = s.sun.theta;
-      const mask =
-        useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
-      if (ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
-      const target = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
-      const want = angleDiff(target, theta);
-      if (target < 0 || Math.abs(want) < HUMAN_MIN_MOVE) return f;
-      // Decide: over/undershoot and aim error, then a fresh lag for the next decision.
-      const d = want * (1 + cfg.gainSigma * gaussian(rng)) + cfg.aimSigmaDeg * gaussian(rng);
-      lag = -1;
-      if (Math.abs(d) < 3) return f;
-      moveTicks = Math.max(1, msTicks(cfg.moveBaseMs + cfg.moveMsPerDeg * Math.abs(d)));
-      moveT = 0;
-      moveDist = s.mods.has('dazzle') ? -d : d; // the Mirror Sun turns against the drag
-      sent = 0;
-      return moveTick();
+      const out = decide(s);
+      out.snap = snaps && snapReady(s) && s.nubs.f > 0 && s.nubs.chill < HUMAN_SNAP_CHILL;
+      return out;
     },
   };
+
+  function decide(s: SimState): InputFrame {
+    if (!rng) rng = salt ? rngFor(s.cfg.seed, 'bot', kind, salt) : rngFor(s.cfg.seed, 'bot', kind);
+    remember(ring, s);
+    f.dTheta = 0;
+    f.down = false;
+    f.downEdge = false;
+    f.upEdge = false;
+    f.release = 0;
+    f.key = 0;
+    if (!started) {
+      // A tap starts the run (catch + release at 0°/s), like the idle bot.
+      started = true;
+      f.downEdge = true;
+      f.upEdge = true;
+      return f;
+    }
+    if (moveTicks > 0) return moveTick();
+    if (cooldown > 0) {
+      cooldown--;
+      return f;
+    }
+    if (s.phase !== 'day' || !s.sunUp) return f;
+    if (lag < 0) {
+      lag = msTicks(rng.range(cfg.lagMinMs, cfg.lagMaxMs));
+      if (lastingShare > 0) useLasting = rng.next() < lastingShare;
+    }
+    const pick = recall(ring, s.tick, lag);
+    if (pick < 0) return f;
+    // The sun's own position is seen live; the shade state is stale.
+    const theta = s.sun.theta;
+    const mask =
+      useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
+    if (ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
+    const target = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
+    const want = angleDiff(target, theta);
+    if (target < 0 || Math.abs(want) < HUMAN_MIN_MOVE) return f;
+    // Decide: over/undershoot and aim error, then a fresh lag for the next decision.
+    const d = want * (1 + cfg.gainSigma * gaussian(rng)) + cfg.aimSigmaDeg * gaussian(rng);
+    lag = -1;
+    if (Math.abs(d) < 3) return f;
+    moveTicks = Math.max(1, msTicks(cfg.moveBaseMs + cfg.moveMsPerDeg * Math.abs(d)));
+    moveT = 0;
+    moveDist = s.mods.has('dazzle') ? -d : d; // the Mirror Sun turns against the drag
+    sent = 0;
+    return moveTick();
+  }
 }
 
 /**

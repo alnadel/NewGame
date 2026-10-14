@@ -175,8 +175,10 @@ describe('death cause over real runs', () => {
     const back = TUNING.death.cloudLookbackTicks;
     const causes: Record<string, number> = {};
     let cloudDeaths = 0;
+    // The v1.5 mechanics stay off: this checks the death line's rule on the v1.4 run set, whose seed 3
+    // melts by a cloud (deep shade saves it).
     for (let seed = 1; seed <= 20; seed++) {
-      const s = createRun({ ...headlessConfig(seed, 3), plan: false });
+      const s = createRun({ ...headlessConfig(seed, 3), plan: false, mechanics: { buds: false, snap: false, deep: false } });
       const bot = createBot('novice');
       // θ after every tick of the clock (start-beat ticks don't advance it, like the sim's ring).
       const theta: number[] = [];

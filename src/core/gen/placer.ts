@@ -450,7 +450,7 @@ function placeBuds(w: World, k: number): void {
       continue;
     }
     if (w.budY >= y1) break;
-    const y = w.budY;
+    const y = gapNear(w, w.budY, B.gapSeek * p.v);
     const side: -1 | 1 = rng.chance(0.5) ? 1 : -1;
     const lat = rng.range(B.latMin, B.latMax);
     const face = Math.round(wrapDeg(w.theta0 + avoid + rng.next() * (360 - 2 * avoid)));
@@ -462,6 +462,34 @@ function placeBuds(w: World, k: number): void {
     const x = budSpot(w, y, side, lat);
     if (x !== null) insertBud(w, { id: BUD_ID_BASE + w.budCount++, x, y, face: face === 360 ? 0 : face, grow: 0, state: 0, casterId: -1 });
   }
+}
+
+/**
+ * The y within ±reach of y0 (20 u steps) farthest from every generated caster's center: buds stand
+ * in the gaps between casters, where a sunflower's shade is worth the most.
+ */
+function gapNear(w: World, y0: number, reach: number): number {
+  const cs = w.casters;
+  let best = y0;
+  let bestD = -1;
+  const n = Math.floor(reach / 20);
+  for (let k = -n; k <= n; k++) {
+    const y = y0 + k * 20;
+    let d = Infinity;
+    for (let i = lowerBound(cs, y - 200); i < cs.length; i++) {
+      const c = cs[i] as Caster;
+      if (c.y > y + 200) break;
+      if (c.id >= RUNTIME_ID_BASE) continue;
+      const dy = Math.abs(c.y - y);
+      if (dy < d) d = dy;
+    }
+    // Ties keep the cursor's own spot (k = 0 is tried in order, nearer first wins).
+    if (d > bestD + 1e-9 || (Math.abs(d - bestD) <= 1e-9 && Math.abs(k * 20) < Math.abs(best - y0))) {
+      bestD = d;
+      best = y;
+    }
+  }
+  return best;
 }
 
 /**

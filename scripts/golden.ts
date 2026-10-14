@@ -53,6 +53,9 @@ export function scriptedInput(i: number): InputFrame {
     // Catch the coasting sun and let go again (a tap).
     f.downEdge = true;
     f.upEdge = true;
+  } else if (c === 190 && i % 1200 < 240) {
+    // v1.5: a Cold Snap request (the scripted run starts with a full meter).
+    f.snap = true;
   } else if (c >= 200 && c < 230 && i % 1000 < 500) {
     const k = i % 2000 < 1000 ? 1 : -1;
     f.key = c < 218 ? k : k > 0 ? 2 : -2;
@@ -61,11 +64,12 @@ export function scriptedInput(i: number): InputFrame {
 }
 
 /**
- * Hash checkpoints of the scripted run (seed 1, profile 0 with the tutorial chunk) every 60 ticks
- * until Nubs melts (an unsteered sun does not last three minutes), then the final state.
+ * Hash checkpoints of the scripted run (seed 1, profile 0 with the tutorial chunk, the frost meter
+ * full so its snap requests cast) every 60 ticks until Nubs melts (an unsteered sun does not last
+ * three minutes), then the final state.
  */
 export function scriptedHashes(): string[] {
-  const s = createRun(headlessConfig(1, 0));
+  const s = createRun({ ...headlessConfig(1, 0), startFrost: 1 });
   const out: string[] = [];
   for (let i = 0; i < SCRIPT_TICKS && s.phase !== 'dead'; i++) {
     step(s, scriptedInput(i));
@@ -158,6 +162,13 @@ export function campaignHashes(): Record<string, string> {
   return out;
 }
 
+/** v1.5: digest of the buds of a profile-3 world through 11 chunks (id, x, y, face). */
+export function budDigest(seed: number): string {
+  const w = createWorld({ seed, profile: 3, tutorial: false });
+  ensureGenerated(w, 11 * CH);
+  return fnv(w.buds.flatMap((b) => [b.id, b.x, b.y, b.face]));
+}
+
 export function goldenValues(): Record<string, unknown> {
   return {
     scripted: scriptedHashes(),
@@ -166,6 +177,7 @@ export function goldenValues(): Record<string, unknown> {
     chunks: { 1: chunkDigests(1), 2: chunkDigests(2), 3: chunkDigests(3) },
     // Plan-off profile-3 worlds (v1.0 links and Dailies before PLAN_START_DATE) are the v1.0 worlds.
     chunksPlanOff: { 1: chunkDigests(1, false), 2: chunkDigests(2, false), 3: chunkDigests(3, false) },
+    buds: { 1: budDigest(1), 2: budDigest(2), 3: budDigest(3) },
     forecasts: forecastHashes(),
     rungs: rungHashes(),
     campaign: campaignHashes(),

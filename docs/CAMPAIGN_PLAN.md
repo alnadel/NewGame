@@ -56,7 +56,7 @@ export const CHAPTERS: readonly { id: number; name: string; biome: BiomeId }[]; 
 interface Concept { id: ConceptId; name: string /* short concept name: "Glare" */; title: string /* its teaching level: "Glass Garden" */; blurb: string; icon: string /* glyphs.ts id */; kind: 'teach'|'world'|'sun'|'dial'|'chill'|'sky'|'goal'; tune?: Partial<DayTuning>; level?: { biome?; forecast?; startMinute?; lengthMinutes?; goal?; drainCap?; cost? } }
 ```
 
-Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, cloudCount, cloudRx, clusterGap, drainMul, regenMul, walkMul), add (latMax) or override (the rest). `cost` is what the concept is worth in drain points (calibrated with `sim --campaign --tries` on the human model): the builder takes it off the level's drain, so a hard concept does not stack on the curve. Behaviour concepts are listed with their rule. v1.3 reworked the overlapping pairs: `dazzle` (was the `glare` balls under another name) is now the Mirror Sun, `thaw` (was a drain multiplier, like `ration`) now slows healing, `fleet` (was "more clouds", like `breezy`) is open country where clouds are the shade, `eclipse` now brings the sun back on the far side.
+Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapter 1; Wide Open, Crowded and Drought compose only). `tune` fields multiply (spacing, heightScale, cloudCount, cloudRx, clusterGap, drainMul, regenMul, walkMul), add (latMax) or override (the rest). `cost` is what the concept is worth in drain points (calibrated with `sim --campaign --tries` on the human model): the builder takes it off the level's drain, so a hard concept does not stack on the curve. Behaviour concepts are listed with their rule. v1.3 reworked the overlapping pairs: `dazzle` (was the `glare` balls under another name) is now the Mirror Sun, `thaw` (was a drain multiplier, like `ration`) now slows healing, `fleet` (was "more clouds", like `breezy`) is open country where clouds are the shade, `eclipse` now brings the sun back on the far side.
 
 | # | id | name · title | kind | rule (cost) |
 |---|---|---|---|---|
@@ -64,23 +64,23 @@ Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, clou
 | 2 | `flakes` | Snowflakes · Flake Trail | goal | flake goal; clusters of 4 (3) |
 | 3 | `cloud` | Clouds · Umbrella | sky | waiters only (−2) |
 | 4 | `noon` | Noon · High Noon | sun | 10:30 AM + 180 min, εnoon 48 (0) |
-| 5 | `oldtown` | Old Town · Cobblestones | world | biome oldtown (−5) |
+| 5 | `deep` | Deep Shade · Double Shade | teach | two or more shadows over Nubs' center while fully shaded: Chill, multiplier and frost ×2 (v1.5; on from level 5) (0) |
 | 6 | `glare` | Glare · Glass Garden | world | gazing balls every 12 s (5) |
 | 7 | `swing` | SWING · Hand-off | goal | Snow goal (SWINGs count) (−4) |
-| 8 | `gate` | Gates · The Gate | world | arch at the midpoint, +10 Snow fully shaded (3) |
+| 8 | `bloom` | Sunflowers · Sun Garden | teach | buds bloom into sunflowers when the sun shines from their face (v1.5; on from level 8) (0) |
 | 9 | `breezy` | Breeze · Kite Weather | sky | forecast breezy (−1) |
-| 10 | `long` | Long Shadows · Autumn Light | sky | forecast long (8) |
-| 11 | `heat` | Heat Wave · Hot Spell | sky | forecast heat (4) |
+| 10 | `snap` | Cold Snap · Frost Cloud | teach | the frost meter and the Cold Snap (v1.5; on from level 10; that level starts with a full meter, later levels at half) (3) |
+| 11 | `oldtown` | Old Town · Cobblestones | world | biome oldtown (−5) |
 | 12 | `overcast` | Overcast · Grey Day | sky | forecast overcast (−6) |
-| 13 | `dazzle` | Mirror Sun · Looking Glass | dial | every turn of the input is reversed (5) |
-| 14 | `market` | Market Day · Stall Street | sky | forecast market, Old Town (2) |
-| 15 | `sprint` | Sprint · Hurry Up | world | walk ×1.35 (13) |
-| 16 | `stroll` | Stroll · Dawdle | world | walk ×0.75, drain ×1.25 (−12) |
-| 17 | `giants` | Giants · Tall Timber | world | heights ×1.6 (−4) |
-| 18 | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11) |
-| 19 | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7) |
-| 20 | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7) |
-| 21 | `drought` | Drought · Cloudless | sky | no clouds (12) |
+| 13 | `gate` | Gates · The Gate | world | arch at the midpoint, +10 Snow fully shaded (3) |
+| 14 | `long` | Long Shadows · Autumn Light | sky | forecast long (8) |
+| 15 | `heat` | Heat Wave · Hot Spell | sky | forecast heat (4) |
+| 16 | `dazzle` | Mirror Sun · Looking Glass | dial | every turn of the input is reversed (5) |
+| 17 | `market` | Market Day · Stall Street | sky | forecast market, Old Town (2) |
+| 18 | `sprint` | Sprint · Hurry Up | world | walk ×1.35 (13) |
+| 19 | `stroll` | Stroll · Dawdle | world | walk ×0.75, drain ×1.25 (−12) |
+| 20 | `giants` | Giants · Tall Timber | world | heights ×1.6 (−4) |
+| 21 | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11) |
 | 22 | `fleet` | Cloud Fleet · Cloud Hopping | sky | clouds ×3, spacing ×1.6 (5) |
 | 23 | `thaw` | Sunburn · Thin Ice | chill | regen ×0.45 (13) |
 | 24 | `frosty` | Frost · Frosty | chill | regen ×2.5 (−12) |
@@ -100,6 +100,9 @@ Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, clou
 | 38 | `moonlit` | Moon Sun · Moonlit | sun | εnoon 30, drain ×0.7, night palette (5) |
 | 39 | `marathon` | Marathon · The Long Walk | sun | 1080 min across a night (9) |
 | 40 | `boss` | Heat Dome · Into the Dome | sun | εnoon 80, 9 AM + 360 min (12) |
+| – | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7); not taught on a level of its own since v1.5 (composed levels only) |
+| – | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7); not taught on a level of its own since v1.5 (composed levels only) |
+| – | `drought` | Drought · Cloudless | sky | no clouds (12); not taught on a level of its own since v1.5 (composed levels only) |
 
 **The curve (v1.3).** `drain = (curve(id) − Σ cost) / drainMul`, clamped to 22-55 (effective ≤ 62, ≤ the concepts' `drainCap`). `curve` is a sawtooth in effective drain points: the teaching chapters climb 28 → 34 by chapter (+1 every three levels, finales +6); composed chapters run from base − 5 up to base + 2 with the finale at base + 7, base = 37 + 0.6·(chapter − 5) (37 → 46). Lengths: teaching levels end before noon (240 minutes from dawn in chapter 1, 300 after), their finales an hour longer (300 in chapter 1, then noon); composed chapters grow 360 → 720 by chapter, their first two levels 30 minutes shorter. Time concepts keep their own windows. Levels 41-200 compose 2-3 concepts (never two of a kind except `world`, never a conflicting pair), the chapter's headline first; finales take three, led by the chapter's first concept.
 

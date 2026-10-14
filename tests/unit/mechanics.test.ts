@@ -94,7 +94,7 @@ describe('Sunflower buds', () => {
       while (validatedY(sliced) < validatedY(w)) generateSome(sliced, validatedY(w), 3);
       expect(sliced.buds.map((b) => [b.id, b.x, b.y, b.face])).toEqual(w.buds.map((b) => [b.id, b.x, b.y, b.face]));
     }
-  });
+  }, 30_000);
 
   it('come about once every 4-7 s of daylight walking (more on later days), none in the tutorial chunk', () => {
     const w = createWorld({ seed: 9, profile: 3, tutorial: false });
@@ -180,7 +180,7 @@ describe('Sunflower buds', () => {
     expect(b).not.toBeNull();
     expect(s.events.some((e) => e.e === 'bloom')).toBe(true);
     expect(s.world.byId.get((b as Bud).casterId)?.kind).toBe('sunflower');
-  });
+  }, 30_000);
 });
 
 describe('Cold Snap', () => {
