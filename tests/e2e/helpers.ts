@@ -216,6 +216,25 @@ declare global {
       runStatus(): { title: string; goal: string; now: string; stars: { label: string; state: 'earned' | 'open' | 'lost' }[] } | null;
       toasts(): { kind: string; kicker: string; text: string }[];
       setSnow(n: number): void;
+      mech(): ShadyMech;
     };
   }
+}
+
+/** v1.5 mechanics as the renderer sees them (the test hook's mech()). */
+export interface ShadyMech {
+  meter: boolean;
+  frost: number;
+  meterX: number;
+  meterY: number;
+  deep: boolean;
+  snapLeft: number;
+  snapId: number;
+  budBins: number;
+  buds: number;
+  snaps: number;
+}
+
+export async function mech(page: Page): Promise<ShadyMech> {
+  return page.evaluate(() => window.__SHADY_TEST__!.mech());
 }
