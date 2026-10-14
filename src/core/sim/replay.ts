@@ -17,7 +17,9 @@ export function createReplay(cfg: RunConfig): Replay {
 
 /** Appends a copy of the frame that was just fed to step(). */
 export function recordFrame(r: Replay, f: InputFrame): void {
-  r.frames.push({ dTheta: f.dTheta, down: f.down, downEdge: f.downEdge, upEdge: f.upEdge, release: f.release, key: f.key });
+  const c: InputFrame = { dTheta: f.dTheta, down: f.down, downEdge: f.downEdge, upEdge: f.upEdge, release: f.release, key: f.key };
+  if (f.snap) c.snap = true;
+  r.frames.push(c);
 }
 
 /** Re-runs a recording from scratch. `onStep` sees the state after every tick. */

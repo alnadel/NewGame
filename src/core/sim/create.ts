@@ -34,7 +34,16 @@ function freshStats(day: number, chill: number): RunStats {
     swingChainBest: 0,
     phewMinChill: 100,
     minChill: chill,
+    blooms: 0,
+    snaps: 0,
+    deepSeconds: 0,
   };
+}
+
+/** The frost meter at the start: full on the Cold Snap's teaching level, half on later levels, else empty. */
+function startFrost(w: World): number {
+  if (!w.level) return 0;
+  return w.level.introduces === 'snap' ? 1 : TUNING.frost.campaignStart;
 }
 
 /** The start day and tick of a run (cfg.startDay/startT are debug hooks). */
@@ -124,8 +133,9 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
       f: 0,
       glare: 0,
       mult: 1,
-      frost: 0,
+      frost: world.mech.snap ? Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world))) : 0,
       deep: false,
+      deepTick: -1e9,
       shadeTicks: 0,
       litTicks: 0,
       x5Ticks: 0,

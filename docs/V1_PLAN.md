@@ -495,12 +495,20 @@ Use the first cause that matches. {time} is the death clock, `h:mm AM/PM`.
 | novice (200 ms perception lag, 180°/s, reads `guide.now`), profile 3 | Median death between Day 1 10:00 AM and Day 1 3:00 PM |
 | novice, profile 0 | Reaches the first night on ≥ 75% of seeds |
 | reactive (no lag, 200°/s, reads `guide.now` and `guide.next`), profile 3 | Median death between Day 2 noon and Day 4 noon |
+| reactive using the v1.5 mechanics (gold arcs, Cold Snaps), profile 3 | Median death ≥ 180 minutes later than the row above (v1.5) |
 | oracle (follows the validator DP), profile 3 | Reaches Day 8 on 100% of seeds |
 | world | Mean rescues per chunk ≤ 1.0; `unresolved` = 0 |
 
 **Advisory onboarding rows** (printed as PASS/MISS; they never fail `--check`). The `human` bot is a seeded model of a new player (250-350 ms reaction lag, aim noise, over/undershoot, minimum-jerk drags); v1.1 runs these rows per comfort rung with its perception-limited `humanDial` variant (`V1_1_PLAN.md` §0 A6, targets in its §6).
 
 Each sim row also reports `melted%` (flakes melted ÷ all flakes resolved), the first-night share and the median run length in seconds. Current numbers are in `src/core/README.md` §11.
+
+**v1.5 (docs/V1_5_PLAN.md):** the reactive window row runs the bot exactly as defined here, reading
+`guide.now` and `guide.next` only ("reactive p3 dial" in `sim`; `createBot('reactive', 0, false)`),
+on the plan mix and on every forced forecast. The same bot using the core mechanics plays a second
+row that must outlive it by at least 180 minutes (median): a Cold Snap is close to an extra life, so
+no useful snap fits the old window on the forecasts that already sat near its end (overcast, long).
+Decision accepted by the coordinator.
 
 Tune `src/config/days.ts`/`tuning.ts` until these pass. **Never weaken a target to make it pass**; report it instead.
 

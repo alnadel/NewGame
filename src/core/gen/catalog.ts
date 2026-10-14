@@ -1,6 +1,6 @@
 // Caster kinds → shadow parts (GDD §2.7 tables, V1_PLAN §7.2-§7.3). Generation-time only (allocates).
 
-import { ARCH, BLOCKS, GATE_ARCH, OAK, STALL, TREE, type CasterKind, type TreeSpec } from '../../config/casters.ts';
+import { ARCH, BLOCKS, GATE_ARCH, OAK, STALL, SUNFLOWER, TREE, type CasterKind, type TreeSpec } from '../../config/casters.ts';
 import type { BiomeId } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { ROT15_COS, ROT15_SIN } from '../dmath.ts';
@@ -39,7 +39,7 @@ export function makeDisc(cx: number, cy: number, r: number, z: number): DiscPart
 
 /** True for kinds that get a random 15° rotation (everything rectangular). */
 export function isRotatable(kind: CasterKind): boolean {
-  return kind !== 'tree' && kind !== 'oak' && kind !== 'rock' && kind !== 'pedestal';
+  return kind !== 'tree' && kind !== 'oak' && kind !== 'rock' && kind !== 'pedestal' && kind !== 'sunflower';
 }
 
 function treeParts(spec: TreeSpec, x: number, y: number, k: number): Part[] {
@@ -104,6 +104,8 @@ export function buildParts(kind: CasterKind, x: number, y: number, rotIdx: numbe
       return gateArchParts(x, y);
     case 'stall':
       return stallParts(x, y, c, s, scale);
+    case 'sunflower':
+      return sunflowerParts(x, y, scale);
     case 'rock': {
       return [makePrism(rectPoly(x, y, TUNING.rescue.w, TUNING.rescue.d, 1, 0), h)];
     }
@@ -112,6 +114,11 @@ export function buildParts(kind: CasterKind, x: number, y: number, rotIdx: numbe
       return [makePrism(rectPoly(x, y, b.w, b.d, c, s), (h > 0 ? h : b.h) * scale)];
     }
   }
+}
+
+/** v1.5 sunflower at (x, y): a thin square stem prism and the flower head disc high up (heights × k). */
+export function sunflowerParts(x: number, y: number, k = 1): Part[] {
+  return [makePrism(rectPoly(x, y, SUNFLOWER.stem, SUNFLOWER.stem, 1, 0), SUNFLOWER.stemH * k), makeDisc(x, y, SUNFLOWER.headR, SUNFLOWER.headZ * k)];
 }
 
 /** Gate arch straddling the trail at (trailX, y): posts at ±34, lintel 82×14 (unrotated). */

@@ -11,11 +11,11 @@ import { casterClearance } from '../../src/core/gen/placer.ts';
 import { createWorld, ensureGenerated, generateSome, type World } from '../../src/core/gen/world.ts';
 import { convexDistance } from '../../src/core/geom.ts';
 import { trailX } from '../../src/core/trail.ts';
-import { chunkDigests } from '../../scripts/golden.ts';
+import { budDigest, chunkDigests } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
-) as { chunks: Record<string, string[]>; chunksPlanOff: Record<string, string[]> };
+) as { chunks: Record<string, string[]>; chunksPlanOff: Record<string, string[]>; buds: Record<string, string> };
 
 function fingerprint(w: World): string {
   const cs = w.casters.map((c) => `${c.id}:${c.kind}:${c.x}:${c.y}:${c.rot}:${c.name}:${c.rescue}`).join('|');
@@ -121,6 +121,7 @@ describe('world generation', () => {
     for (const seed of [1, 2, 3]) {
       expect(chunkDigests(seed)).toEqual(golden.chunks[String(seed)]);
       expect(chunkDigests(seed, false)).toEqual(golden.chunksPlanOff[String(seed)]);
+      expect(budDigest(seed)).toBe(golden.buds[String(seed)]);
     }
   });
 });

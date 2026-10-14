@@ -10,6 +10,7 @@ import { gatherScene } from '../gen/store.ts';
 import { eclipseAt } from '../gen/world.ts';
 import { BINS, createMaskScene, litMask } from '../intervals.ts';
 import { trailX } from '../trail.ts';
+import { updateBudGuide } from './mechanics.ts';
 import type { SimState } from './types.ts';
 
 const scene = createMaskScene();
@@ -22,6 +23,7 @@ export function updateGuide(s: SimState): void {
   const g = s.guide;
   g.tick = s.tick;
   g.sunUp = s.sunUp;
+  updateBudGuide(s);
   if (!s.sunUp) {
     g.now.fill(0);
     g.next.fill(0);

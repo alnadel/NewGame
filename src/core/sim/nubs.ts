@@ -21,6 +21,7 @@ import {
   shadowLength,
 } from '../shadows.ts';
 import type { HourGlyph } from './events.ts';
+import { addFrost } from './mechanics.ts';
 import type { SimState } from './types.ts';
 
 const N = TUNING.nubs;
@@ -28,6 +29,8 @@ const M = TUNING.mult;
 const P = TUNING.phew;
 const SW = TUNING.swing;
 const L = TUNING.lesson;
+const DEEP = TUNING.deep;
+const FROST = TUNING.frost;
 const MAX_R = TUNING.world.maxCasterRadius;
 /** Max distance of a coverage sample from Nubs' center. */
 const SAMPLE_R = N.sampleOffset * 1.5;
@@ -40,7 +43,8 @@ const candBalls: GazingBall[] = [];
 
 /**
  * Computes the per-sample lit weights w, f, the glare count, the caster shading the center sample,
- * the cloud fully covering Nubs, and the glaring ball, at Nubs' current position.
+ * the cloud fully covering Nubs (never the Cold Snap's), the glaring ball and deep shade (v1.5:
+ * fully shaded with two or more casters or clouds over the center sample), at Nubs' position.
  */
 export function computeCoverage(s: SimState): void {
   const nb = s.nubs;
@@ -48,6 +52,7 @@ export function computeCoverage(s: SimState): void {
   nb.shaderId = -1;
   nb.cloudId = -1;
   nb.glareBallId = -1;
+  nb.deep = false;
   if (!s.sunUp || s.eclipseOn) {
     nb.w.fill(0);
     nb.f = 0;
@@ -71,9 +76,10 @@ export function computeCoverage(s: SimState): void {
   }
 
   let ncl = 0;
-  const R = cloudOffset(TUNING.shadow.cloudZ, cot);
+  const R0 = cloudOffset(TUNING.shadow.cloudZ, cot);
   for (const cl of w.clouds) {
     if (!cloudAlive(cl, s.tAbs) || ncl >= cloudHits.length) continue;
+    const R = cl.z === TUNING.shadow.cloudZ ? R0 : cloudOffset(cl.z, cot);
     const dt = s.tAbs - cl.t0;
     const dx = cl.x0 + cl.vx * dt - x;
     const dy = cl.y0 + cl.vy * dt - y;
@@ -100,6 +106,8 @@ export function computeCoverage(s: SimState): void {
   let sum = 0;
   let glare = 0;
   let bestShaderD = Infinity;
+  /** Shadow sources (casters and clouds) over the center sample. */
+  let centerSources = 0;
   for (let k = 0; k < SAMPLES; k++) {
     const px = x + (SAMPLE_DX[k] as number);
     const py = y + (SAMPLE_DY[k] as number);
@@ -109,6 +117,7 @@ export function computeCoverage(s: SimState): void {
       if (!casterShades(c, px, py, ux, uy, cot)) continue;
       shaded = true;
       if (k !== 0) break;
+      centerSources++;
       // Center sample: remember the nearest caster providing its shade (death line, Melt Map).
       const d = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
       if (d < bestShaderD) {
@@ -120,6 +129,7 @@ export function computeCoverage(s: SimState): void {
       if (cloudShades(candClouds[i] as Cloud, s.tAbs, px, py, ux, uy, cot)) {
         shaded = true;
         cloudHits[i] = (cloudHits[i] as number) + 1;
+        if (k === 0) centerSources++;
       }
     }
     let inG = false;
@@ -138,9 +148,11 @@ export function computeCoverage(s: SimState): void {
   }
   nb.f = sum / SAMPLES;
   nb.glare = glare;
+  nb.deep = sum === 0 && centerSources >= 2 && w.mech.deep;
   for (let i = 0; i < ncl; i++) {
-    if (cloudHits[i] === SAMPLES) {
-      nb.cloudId = (candClouds[i] as Cloud).id;
+    const cl = candClouds[i] as Cloud;
+    if (cloudHits[i] === SAMPLES && cl.kind !== 'snap') {
+      nb.cloudId = cl.id;
       break;
     }
   }
@@ -165,6 +177,12 @@ export function effectiveDrain(s: SimState): number {
  */
 function updateSwing(s: SimState): void {
   const nb = s.nubs;
+  if (s.snapTicks > 0) {
+    // A Cold Snap shades every angle: no hand-off can be told from it.
+    nb.swSrc = -1;
+    nb.swPend = -1;
+    return;
+  }
   const src = nb.f === 0 ? (nb.cloudId >= 0 ? nb.cloudId : nb.shaderId) : -1;
   if (src < 0) {
     nb.swPend = -1;
@@ -196,6 +214,7 @@ function updateSwing(s: SimState): void {
   st.snow += chain;
   if (chain > st.swingChainBest) st.swingChainBest = chain;
   s.events.push({ e: 'swing', deg: nb.swPendDeg, chain, snow: chain, x: nb.x, y: nb.y });
+  addFrost(s, FROST.perSwing);
 }
 
 /**
@@ -245,7 +264,9 @@ export function applyDaylight(s: SimState): void {
   const wasLit = nb.litSince >= 0;
   const prevChill = nb.chill;
 
-  let c = nb.chill + (-effectiveDrain(s) * f + s.params.regen * Math.max(0, 1 - f)) * DT;
+  const deep = nb.deep;
+  const regen = deep ? s.params.regen * DEEP.regenMul : s.params.regen;
+  let c = nb.chill + (-effectiveDrain(s) * f + regen * Math.max(0, 1 - f)) * DT;
   if (c > nb.maxChill) c = nb.maxChill;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
   if (s.lessonOn || s.lessonGrace > 0) {
@@ -281,8 +302,9 @@ export function applyDaylight(s: SimState): void {
   // Frost multiplier.
   if (!lit) {
     nb.litTicks = 0;
+    addFrost(s, FROST.perShadeSec * DT * (deep ? DEEP.frostMul : 1));
     if (nb.mult < M.max) {
-      nb.shadeTicks++;
+      nb.shadeTicks += deep ? DEEP.multMul : 1;
       if (nb.shadeTicks >= M.stepTicks) {
         nb.shadeTicks = 0;
         nb.mult++;
@@ -331,6 +353,13 @@ export function applyDaylight(s: SimState): void {
   }
   nb.rideId = nb.cloudId;
   if (nb.rideTicks * DT > st.cloudRideBest) st.cloudRideBest = nb.rideTicks * DT;
+
+  // Deep shade: deepEnter on entry after reenterTicks out of it; seconds in it.
+  if (deep) {
+    if (s.tick - nb.deepTick > DEEP.reenterTicks) s.events.push({ e: 'deepEnter' });
+    nb.deepTick = s.tick;
+    st.deepSeconds = (st.deepSeconds ?? 0) + DT;
+  }
 
   s.hourLit += f * DT;
   st.litTotal += f * DT;

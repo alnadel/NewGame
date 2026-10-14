@@ -48,6 +48,10 @@ const CONCEPT_ICONS: Readonly<Partial<Record<ConceptId | (string & {}), IconName
   moonlit: 'moon',
   marathon: 'road',
   boss: 'dome',
+  // v1.5 core mechanics (placeholder icons from the core builder; the GAME builder owns these).
+  deep: 'snow',
+  bloom: 'sun',
+  snap: 'flakes',
 };
 
 /**

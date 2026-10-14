@@ -6,13 +6,30 @@
 import type { BiomeId } from './days.ts';
 import type { ForecastId } from './forecasts.ts';
 
-/** Every concept in teaching order (level 1 … 40). */
+/**
+ * Every concept: the first forty in teaching order (level n teaches CONCEPT_IDS[n − 1], n ≤ 40).
+ * v1.5 teaches the three core mechanics in chapter 1 (deep shade at 5, Sunflowers at 8, Cold Snap
+ * at 10, the chapter's finale) and keeps every other teaching level where it was except Old Town
+ * (11), Gates (13), Long Shadows (14), Heat Wave (15) and Mirror Sun … Lowland (16-21, three places
+ * later); Wide Open, Crowded and Drought, plain knob concepts, are no longer taught on a level of
+ * their own and appear only in composed levels (41-200, unchanged).
+ */
 export const CONCEPT_IDS = Object.freeze([
-  'drag', 'flakes', 'cloud', 'noon', 'oldtown', 'glare', 'swing', 'gate', 'breezy', 'long',
-  'heat', 'overcast', 'dazzle', 'market', 'sprint', 'stroll', 'giants', 'lowland', 'sparse', 'dense',
-  'drought', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
+  'drag', 'flakes', 'cloud', 'noon', 'deep', 'glare', 'swing', 'bloom', 'breezy', 'snap',
+  'oldtown', 'overcast', 'gate', 'long', 'heat', 'dazzle', 'market', 'sprint', 'stroll', 'giants',
+  'lowland', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
   'clockwork', 'gusts', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'moonlit', 'marathon', 'boss',
+  'sparse', 'dense', 'drought',
 ] as const);
+
+/** Levels 1..TEACH_LEVELS each teach the next concept of CONCEPT_IDS. */
+export const TEACH_LEVELS = 40;
+
+/**
+ * The v1.5 core mechanics, each taught by its own concept level: off on every level before it, on
+ * from it on (and always on outside the Journey). See mechanicsOf() in campaign.ts.
+ */
+export const MECHANIC_CONCEPTS = Object.freeze({ deep: 'deep', buds: 'bloom', snap: 'snap' } as const);
 
 export type ConceptId = (typeof CONCEPT_IDS)[number];
 
@@ -109,6 +126,9 @@ const concept = (id: ConceptId, name: string, title: string, kind: ConceptKind, 
 const SLIPPERY_FRICTION = 0.994183647521183;
 
 export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
+  deep: concept('deep', 'Deep Shade', 'Double Shade', 'teach', 'Where two shadows overlap the shade runs deep: Chill, the multiplier and the frost meter fill twice as fast.', 'deep'),
+  bloom: concept('bloom', 'Sunflowers', 'Sun Garden', 'teach', 'Buds face the sun. Shine from their side (gold on the dial) and they bloom into tall sunflowers: new shade.', 'bloom'),
+  snap: concept('snap', 'Cold Snap', 'Frost Cloud', 'teach', 'Shade, flakes and SWINGs fill the frost meter. Full? Swipe down: a frosty cloud rides over Nubs.', 'snap', undefined, { cost: 3 }),
   drag: concept('drag', 'Sun Drag', 'First Shade', 'teach', 'Drag anywhere: you are the sun. Every shadow swings with you.', 'drag', { cloudCount: 0 }),
   flakes: concept('flakes', 'Snowflakes', 'Flake Trail', 'goal', 'Collect the flakes before the sun melts them. Shade keeps them whole.', 'flake', { flakesPerCluster: 4 }, { goal: 'flakes', cost: 3 }),
   cloud: concept('cloud', 'Clouds', 'Umbrella', 'sky', 'Clouds are moving shade. Ride one while it lasts.', 'cloud', { waitersOnly: true }, { cost: -2 }),

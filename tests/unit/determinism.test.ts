@@ -105,6 +105,7 @@ describe('determinism', () => {
     expect(frames.some((f) => f.upEdge && f.release > 100)).toBe(true);
     expect(frames.some((f) => f.downEdge && f.upEdge)).toBe(true);
     for (const key of [1, -1, 2, -2]) expect(frames.some((f) => f.key === key)).toBe(true);
+    expect(frames.some((f) => f.snap === true)).toBe(true);
     expect(frames.every((f) => f.dTheta * 1024 === Math.round(f.dTheta * 1024))).toBe(true);
   });
 });

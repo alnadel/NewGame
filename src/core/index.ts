@@ -18,7 +18,7 @@ export {
 export type { BiomeId, ComfortPrev, ComfortRung, DayParams, DayPlan, NoonCloud, ProfileId, ProfileParams, RungConfig, SkyParams } from '../config/days.ts';
 export { FORECAST_IDS, FORECAST_TUNING, FORECASTS, forecastFits, PLAN_START_DATE } from '../config/forecasts.ts';
 export type { ForecastId, ForecastInfo, ForecastTuning } from '../config/forecasts.ts';
-export { BALL_Z, CASTER_KINDS } from '../config/casters.ts';
+export { BALL_Z, CASTER_KINDS, SUNFLOWER } from '../config/casters.ts';
 export type { CasterKind } from '../config/casters.ts';
 export {
   buildCampaign,
@@ -35,9 +35,14 @@ export {
   LEVEL_COUNT,
   levelDef,
   LEVELS_PER_CHAPTER,
+  ALL_MECHANICS,
+  MECHANIC_CONCEPTS,
+  mechanicsOf,
   starsFor,
+  TEACH_LEVELS,
+  teachLevel,
 } from '../config/campaign.ts';
-export type { Chapter, Concept, ConceptId, ConceptKind, ConceptLevel, DayTuning, GoalKind, LevelDef, LevelStats } from '../config/campaign.ts';
+export type { Chapter, Concept, ConceptId, ConceptKind, ConceptLevel, DayTuning, GoalKind, LevelDef, LevelStats, Mechanics } from '../config/campaign.ts';
 
 // Clock and formatting
 export {
@@ -71,7 +76,7 @@ export { angleDiff, atan2D, cosD, sinD, smoothstep, tanD, wrapDeg } from './dmat
 export { Rng, hashString, rngFor, splitmix32, xmur3 } from './rng.ts';
 
 // World objects, geometry and shadows
-export { PICKUP_ALIVE, PICKUP_MELTED, PICKUP_TAKEN } from './objects.ts';
+export { BUD_ID_BASE, PICKUP_ALIVE, PICKUP_MELTED, PICKUP_TAKEN, RUNTIME_ID_BASE, SNAP_ID_BASE } from './objects.ts';
 export type {
   Caster,
   Cloud,
@@ -149,6 +154,7 @@ export type {
 } from './sim/events.ts';
 export { sunMaxRate } from './sim/sun.ts';
 export { effectiveDrain } from './sim/nubs.ts';
+export { budFacing, debugBloom, SNAP_TICKS } from './sim/mechanics.ts';
 export { createSnap, lerpSnap, takeSnap } from './sim/snapshot.ts';
 export type { RenderSnap } from './sim/snapshot.ts';
 export { historyAt, historyLength } from './sim/history.ts';

@@ -412,3 +412,69 @@ The contract (names and shapes) is `docs/CAMPAIGN_PLAN.md` §2-§3; everything i
   level, a per-chapter pass/stars table and the gates (hard: oracle 200/200, reactive ≥ 95% of
   1-100; advisory: humanDial ≥ 75% of 1-40 and ≥ 90% of 1-10). `--tries N` replays the human
   models with N decision streams (`createBot(kind, salt)`).
+
+## 15. v1.5 core mechanics (docs/V1_5_PLAN.md)
+
+Three mechanics, on in every endless/daily/challenge run (`World.mech`, all true) and in the Journey
+from the level that teaches each (`mechanicsOf(levelId)`: deep shade 5, Sunflowers 8, Cold Snap 10;
+off before). `RunConfig.mechanics?: Partial<Mechanics>` overrides them (debug, part of the world's
+identity). Code: `sim/mechanics.ts` (buds, frost, snap), `computeCoverage`/`applyDaylight` (deep).
+
+- **Sunflower buds.** `World.buds` (y-sorted, ids from `BUD_ID_BASE`), `queryBuds`. The generator
+  places one every U(3, 5) s of daylight walking (÷ up to 1.5 on later days), moved ≤ 0.6 s into
+  the nearest gap between casters, 25-42 u from the centerline, **facing the azimuth that throws
+  its bloom's shadow back across the trail 0-120 u before it** (± 20°; "light it from there, its
+  shadow falls here"), never within faceTol + 15° of θ0 (then the other side of the trail; an idle
+  sun never grows one); never in the tutorial's chunk 0; on
+  its own stream, two chunks behind the caster placement, so no generated id, name or caster moves.
+  A bud within [Nubs − 30, Nubs + 360] of y grows while the sun shines from within ±15° of `face`
+  (`budFacing(b, θ)`) at 1/0.8 s and fades at 0.8/s; at 1 it blooms (+5 Snow, +frost): a caster of
+  kind **`'sunflower'`** joins `world.casters`/`byId` for the rest of the run (`bud.casterId` =
+  `RUNTIME_ID_BASE + (bud.id − BUD_ID_BASE)`), parts = `[prism stem 8×8 h 44, disc head r 56 at z
+  48]` (`SUNFLOWER`, heights × `world.heightScale`): a low, wide head whose shadow lies within
+  ~50 u + 48·cot ε of the stem, so it covers the trail beside it over a broad range of θ. `guide.bud[b] = 1` for b within ±faceTol of
+  an unbloomed bud in reach (gold arcs), refreshed with the other masks; 0 at night.
+- **Frost meter and the Cold Snap.** `nubs.frost` 0..1 fills per second of full daylight shade
+  (0.004, ×4 in deep shade), per flake or crystal (0.012), per SWING (0.05) and per bloom (0.12),
+  never while a snap is on; `frostReady` fires when it fills. `InputFrame.snap` with a full meter in
+  daylight casts a snap: a `Cloud` of kind **`'snap'`** (id `SNAP_ID_BASE + n`, **z 0** so its
+  shadow lies right under it at any θ, rx 64, ry 42) that starts on Nubs and rides the trail's chord
+  with him for `SNAP_TICKS` (3 s); `s.snapTicks` counts down, `s.snapCloudId` names it (−1 none),
+  the meter empties. It never counts as a cloud ride or a SWING source, and the death line never
+  blames it. Journey levels start at 0.5 (1.0 on the Cold Snap's own level); endless at 0.
+- **Deep shade.** `nubs.deep`: fully shaded with two or more sources (casters or clouds, the snap's
+  included) over the center sample. Chill regen ×2, multiplier charge ×2, frost ×4; `deepEnter`
+  after ≥ 1 s out of it; `stats.deepSeconds`.
+- **Events** `budGrow {id,x,y,grow}` (every 6 ticks per growing bud), `bloom {id,x,y,snow}`,
+  `frostReady`, `snap {x,y,cloudId}`, `snapEnd`, `deepEnter`. **Stats** `blooms`, `snaps`,
+  `deepSeconds` (always filled). `hashState` covers frost, deep, the snap, the stats and the buds
+  within 600 u ahead; replays record `snap`.
+- **The world stays a pure function of its config.** Run-made objects (ids ≥ `RUNTIME_ID_BASE`)
+  are skipped by the validator (`gatherScene(…, live = false)`), its lit cache and caster spacing,
+  so worlds, rescues and goldens of the generator are unchanged by play. The oracle plans with them
+  (`stepLitLive`).
+- **Debug/screenshot hooks.** `RunConfig.startFrost` (1 = a snap ready at once), `debugBloom(s,
+  id?)` (blooms that bud, or the nearest unbloomed one ahead, now; the `bloom` event sits in
+  `s.events` until the next step), `RunConfig.mechanics`.
+- **Bots.** `createBot(kind, salt, mechanics = true)`: reactive adds gold bins that are safe now
+  (any gold while Chill ≥ 55) and snaps when lit and low with no safe angle within 45°; the oracle
+  plans with sunflowers and the snap, takes free gold (or any while Chill ≥ 60% off flake goals)
+  and snaps when squeezed (campaign: whenever its next step is lit); humanDial snaps when lit under
+  30 Chill. Idle, novice and `human` never use them.
+- **Journey.** Concepts `deep` (Deep Shade · Double Shade, level 5), `bloom` (Sunflowers · Sun
+  Garden, 8), `snap` (Cold Snap · Frost Cloud, 10, the chapter-1 finale); `TEACH_LEVELS` = 40;
+  Wide Open, Crowded and Drought are no longer taught alone (they compose); composed levels 41-200
+  are unchanged. See docs/CAMPAIGN_PLAN.md §7 for the numbers.
+- **Numbers** (`sim --check --seeds 40 --mech`, profile 3; per daylight minute | per day reached):
+  buds passed ~13-16 | 11-12 (one every ~4 s); blooms: oracle 6.4 | 4.5, reactive 2.9 | 2.4, novice
+  0.5 | 0.4 by accident, idle 0; Cold Snaps (= meters filled): oracle 0.96 | 0.68, reactive 0.45 |
+  0.37 (a good player snaps about once every one to two days; a Journey level starts with half a
+  meter); deep shade 9-18% of daylight. Sunflowers shade Nubs (alone or in a deep overlap) on 9.5%
+  of the oracle's daylight and 5.5% of the reactive bot's (2.1% / 2.8% before their faces were aimed
+  and their heads made low and wide). Survival: reactive Day 3 · 11:39 AM (dial) → Day 4 · 9:48 AM
+  using the mechanics (+609 min, p90 Day 4 → Day 6); novice 11:08 → 11:34 AM; idle unchanged;
+  oracle ≥ Day 8 either way. step() cost is unchanged within noise.
+- **sim.** The §13 reactive rows run the bot dial-only (`reactive p3 dial`); `reactive p3` uses the
+  mechanics and must outlive it by ≥ 180 minutes (hard). The mechanics table prints blooms, snaps,
+  meters filled, buds passed per daylight minute and per day, and deep shade's share. `--mech` adds
+  an oracle row without them; `--campaign --nomech` plays the Journey with the bots ignoring them.

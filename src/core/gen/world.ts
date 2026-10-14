@@ -6,7 +6,7 @@
 // never changes, so chunk content is a pure function of the WorldConfig, k and the prior chunks:
 // generating in idle frames, inside step(), in one go or in many slices yields the same world.
 
-import { levelDef, type LevelDef } from '../../config/campaign.ts';
+import { ALL_MECHANICS, levelDef, mechanicsOf, type LevelDef, type Mechanics } from '../../config/campaign.ts';
 import { foldTuning, type ConceptId } from '../../config/concepts.ts';
 import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
@@ -31,7 +31,16 @@ const PLACE_COST = 8;
  * level (`level`) also fixes `mods` and `biome` (createRun derives them; createWorld reads the
  * level for its start, finish, gate and eclipse geometry and the validator's drain).
  */
-export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast' | 'mods' | 'biome' | 'level'>;
+export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast' | 'mods' | 'biome' | 'level' | 'mechanics'>;
+
+/** The v1.5 mechanics of a world: the level's (mechanicsOf), else all on; RunConfig.mechanics overrides either. */
+function worldMechanics(cfg: WorldConfig, level: LevelDef | null): Mechanics {
+  const base = mechanicsOf(level ? level.id : null);
+  const o = cfg.mechanics;
+  if (!o) return base;
+  const m = { buds: o.buds ?? base.buds, snap: o.snap ?? base.snap, deep: o.deep ?? base.deep };
+  return m.buds && m.snap && m.deep ? ALL_MECHANICS : Object.freeze(m);
+}
 
 const NO_MODS: readonly ConceptId[] = Object.freeze([]);
 
@@ -76,6 +85,7 @@ export function createWorld(cfg: WorldConfig): World {
     balls: [],
     pickups: [],
     buds: [],
+    mech: worldMechanics(cfg, level),
     maxZ: 0,
     nextId: 1,
     startHutId: -1,
@@ -88,6 +98,8 @@ export function createWorld(cfg: WorldConfig): World {
     cursorSide: 1,
     flakeY: 0,
     rescueSide: 1,
+    budY: 0,
+    budCount: 0,
     nextStep: 0,
     carryN: 0,
     carryC: new Float64Array(360 * (TUNING.validator.prefixSteps + 1)),
@@ -98,6 +110,7 @@ export function createWorld(cfg: WorldConfig): World {
     stats: { chunksPlaced: 0, chunksValidated: 0, rescues: 0, rescuesPerChunk: [], parkedClouds: 0, unresolved: 0, dropped: 0, work: 0 },
   };
   placeStart(w);
+  w.budY = w.startY + TUNING.buds.startDelay * paramsAt(w, 1).v;
   // At the start only θ0 is reachable: the run begins with the sun pointing at the start hut.
   w.carryC.fill(-1e9);
   w.carryC[binOf(w.theta0)] = paramsAt(w, 1).maxChill;

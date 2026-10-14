@@ -15,11 +15,12 @@ export type CasterKind =
   | 'wall'
   | 'pedestal'
   | 'rock'
-  | 'finish';
+  | 'finish'
+  | 'sunflower';
 
 /** Every kind in a fixed order (index used by hashes and debug tooling). */
 export const CASTER_KINDS: readonly CasterKind[] = Object.freeze([
-  'hut', 'tree', 'oak', 'cottage', 'stone', 'hedge', 'house', 'arch', 'stall', 'column', 'wall', 'pedestal', 'rock', 'finish',
+  'hut', 'tree', 'oak', 'cottage', 'stone', 'hedge', 'house', 'arch', 'stall', 'column', 'wall', 'pedestal', 'rock', 'finish', 'sunflower',
 ] as CasterKind[]);
 
 /** A solid block on the ground: footprint w × d, height h. */
@@ -60,6 +61,13 @@ export const GATE_ARCH = Object.freeze({ post: 14, postH: 90, postX: 34, lintelW
 
 /** Stall: four thin posts under the roof corners, plus a roof slab. */
 export const STALL = Object.freeze({ post: 4, postH: 40, roofW: 48, roofD: 34, z0: 40, z1: 46 });
+
+/**
+ * v1.5 sunflower (a bloomed bud, docs/V1_5_PLAN.md §2A): a thin square stem prism (stem × stem,
+ * height stemH) and the flower head, a disc of radius headR at height headZ. Heights × the world's
+ * heightScale. Only blooms make them (never the generator), so the validator ignores them.
+ */
+export const SUNFLOWER = Object.freeze({ stem: 8, stemH: 44, headR: 56, headZ: 48 });
 
 /** Gazing ball mirror height above the ground (its pedestal is BLOCKS.pedestal). */
 export const BALL_Z = 40;
@@ -134,4 +142,5 @@ export const NAME_NOUNS: Readonly<Record<CasterKind, readonly string[]>> = Objec
   pedestal: Object.freeze(['Gazing Ball']),
   rock: Object.freeze(['Shade Rock']),
   finish: Object.freeze(['Finish Line']),
+  sunflower: Object.freeze(['Sunflower']),
 });

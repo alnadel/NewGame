@@ -56,7 +56,7 @@ export const CHAPTERS: readonly { id: number; name: string; biome: BiomeId }[]; 
 interface Concept { id: ConceptId; name: string /* short concept name: "Glare" */; title: string /* its teaching level: "Glass Garden" */; blurb: string; icon: string /* glyphs.ts id */; kind: 'teach'|'world'|'sun'|'dial'|'chill'|'sky'|'goal'; tune?: Partial<DayTuning>; level?: { biome?; forecast?; startMinute?; lengthMinutes?; goal?; drainCap?; cost? } }
 ```
 
-Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, cloudCount, cloudRx, clusterGap, drainMul, regenMul, walkMul), add (latMax) or override (the rest). `cost` is what the concept is worth in drain points (calibrated with `sim --campaign --tries` on the human model): the builder takes it off the level's drain, so a hard concept does not stack on the curve. Behaviour concepts are listed with their rule. v1.3 reworked the overlapping pairs: `dazzle` (was the `glare` balls under another name) is now the Mirror Sun, `thaw` (was a drain multiplier, like `ration`) now slows healing, `fleet` (was "more clouds", like `breezy`) is open country where clouds are the shade, `eclipse` now brings the sun back on the far side.
+Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapter 1; Wide Open, Crowded and Drought compose only). `tune` fields multiply (spacing, heightScale, cloudCount, cloudRx, clusterGap, drainMul, regenMul, walkMul), add (latMax) or override (the rest). `cost` is what the concept is worth in drain points (calibrated with `sim --campaign --tries` on the human model): the builder takes it off the level's drain, so a hard concept does not stack on the curve. Behaviour concepts are listed with their rule. v1.3 reworked the overlapping pairs: `dazzle` (was the `glare` balls under another name) is now the Mirror Sun, `thaw` (was a drain multiplier, like `ration`) now slows healing, `fleet` (was "more clouds", like `breezy`) is open country where clouds are the shade, `eclipse` now brings the sun back on the far side.
 
 | # | id | name · title | kind | rule (cost) |
 |---|---|---|---|---|
@@ -64,23 +64,23 @@ Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, clou
 | 2 | `flakes` | Snowflakes · Flake Trail | goal | flake goal; clusters of 4 (3) |
 | 3 | `cloud` | Clouds · Umbrella | sky | waiters only (−2) |
 | 4 | `noon` | Noon · High Noon | sun | 10:30 AM + 180 min, εnoon 48 (0) |
-| 5 | `oldtown` | Old Town · Cobblestones | world | biome oldtown (−5) |
+| 5 | `deep` | Deep Shade · Double Shade | teach | two or more shadows over Nubs' center while fully shaded: Chill, multiplier and frost ×2 (v1.5; on from level 5) (0) |
 | 6 | `glare` | Glare · Glass Garden | world | gazing balls every 12 s (5) |
 | 7 | `swing` | SWING · Hand-off | goal | Snow goal (SWINGs count) (−4) |
-| 8 | `gate` | Gates · The Gate | world | arch at the midpoint, +10 Snow fully shaded (3) |
+| 8 | `bloom` | Sunflowers · Sun Garden | teach | buds bloom into sunflowers when the sun shines from their face (v1.5; on from level 8) (0) |
 | 9 | `breezy` | Breeze · Kite Weather | sky | forecast breezy (−1) |
-| 10 | `long` | Long Shadows · Autumn Light | sky | forecast long (8) |
-| 11 | `heat` | Heat Wave · Hot Spell | sky | forecast heat (4) |
+| 10 | `snap` | Cold Snap · Frost Cloud | teach | the frost meter and the Cold Snap (v1.5; on from level 10; that level starts with a full meter, later levels at half) (3) |
+| 11 | `oldtown` | Old Town · Cobblestones | world | biome oldtown (−5) |
 | 12 | `overcast` | Overcast · Grey Day | sky | forecast overcast (−6) |
-| 13 | `dazzle` | Mirror Sun · Looking Glass | dial | every turn of the input is reversed (5) |
-| 14 | `market` | Market Day · Stall Street | sky | forecast market, Old Town (2) |
-| 15 | `sprint` | Sprint · Hurry Up | world | walk ×1.35 (13) |
-| 16 | `stroll` | Stroll · Dawdle | world | walk ×0.75, drain ×1.25 (−12) |
-| 17 | `giants` | Giants · Tall Timber | world | heights ×1.6 (−4) |
-| 18 | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11) |
-| 19 | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7) |
-| 20 | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7) |
-| 21 | `drought` | Drought · Cloudless | sky | no clouds (12) |
+| 13 | `gate` | Gates · The Gate | world | arch at the midpoint, +10 Snow fully shaded (3) |
+| 14 | `long` | Long Shadows · Autumn Light | sky | forecast long (8) |
+| 15 | `heat` | Heat Wave · Hot Spell | sky | forecast heat (4) |
+| 16 | `dazzle` | Mirror Sun · Looking Glass | dial | every turn of the input is reversed (5) |
+| 17 | `market` | Market Day · Stall Street | sky | forecast market, Old Town (2) |
+| 18 | `sprint` | Sprint · Hurry Up | world | walk ×1.35 (13) |
+| 19 | `stroll` | Stroll · Dawdle | world | walk ×0.75, drain ×1.25 (−12) |
+| 20 | `giants` | Giants · Tall Timber | world | heights ×1.6 (−4) |
+| 21 | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11) |
 | 22 | `fleet` | Cloud Fleet · Cloud Hopping | sky | clouds ×3, spacing ×1.6 (5) |
 | 23 | `thaw` | Sunburn · Thin Ice | chill | regen ×0.45 (13) |
 | 24 | `frosty` | Frost · Frosty | chill | regen ×2.5 (−12) |
@@ -100,6 +100,9 @@ Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, clou
 | 38 | `moonlit` | Moon Sun · Moonlit | sun | εnoon 30, drain ×0.7, night palette (5) |
 | 39 | `marathon` | Marathon · The Long Walk | sun | 1080 min across a night (9) |
 | 40 | `boss` | Heat Dome · Into the Dome | sun | εnoon 80, 9 AM + 360 min (12) |
+| – | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7); not taught on a level of its own since v1.5 (composed levels only) |
+| – | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7); not taught on a level of its own since v1.5 (composed levels only) |
+| – | `drought` | Drought · Cloudless | sky | no clouds (12); not taught on a level of its own since v1.5 (composed levels only) |
 
 **The curve (v1.3).** `drain = (curve(id) − Σ cost) / drainMul`, clamped to 22-55 (effective ≤ 62, ≤ the concepts' `drainCap`). `curve` is a sawtooth in effective drain points: the teaching chapters climb 28 → 34 by chapter (+1 every three levels, finales +6); composed chapters run from base − 5 up to base + 2 with the finale at base + 7, base = 37 + 0.6·(chapter − 5) (37 → 46). Lengths: teaching levels end before noon (240 minutes from dawn in chapter 1, 300 after), their finales an hour longer (300 in chapter 1, then noon); composed chapters grow 360 → 720 by chapter, their first two levels 30 minutes shorter. Time concepts keep their own windows. Levels 41-200 compose 2-3 concepts (never two of a kind except `world`, never a conflicting pair), the chapter's headline first; finales take three, led by the chapter's first concept.
 
@@ -158,3 +161,48 @@ Teaching order = level 1..40. `tune` fields multiply (spacing, heightScale, clou
 Totals: oracle 200/200 (2.81 → 2.44 stars a level; 1-40 2.90 → 2.73); reactive 191 → 199/200, 99 → 100/100 on 1-100; humanDial 67 → 113/200, 26 → 35/40 on 1-40 (×8: 65% → 90%), 9 → 10/10 on 1-10 (×8: 79% → 100%), stars on 1-40 1.62 → 1.73 with three stars on 15 → 4 of levels 1-40 (oracle 36 → 30): the third star now takes skill. By position in a chapter (humanDial ×8): teaching levels 84-100% with the finale at 56%; composed chapters open at 60-70%, sit at ~45% and end at ~41%.
 
 Endless: SWING `minDeg` 45 → 38 takes reactive p3 from 0.7 to 1.45 SWINGs a minute (humanDial R4 2.2, SWING Snow 6% of run Snow). The humanDial R4 median (18.1 s at 40 seeds, 17.0 s at 120) proved insensitive to gentle levers (regen +10%: +0.5 s; R4 drain −5: +1.4 s; Day-1 spacing, wave, εnoon or the validator floor: within ±0.5 s of noise), so the standard rules are unchanged: the advisory still misses.
+
+## 7. v1.5 core mechanics in the Journey (numbers)
+
+v1.5 (docs/V1_5_PLAN.md) teaches its three mechanics in chapter 1, each with its own level and
+intro concept: **Deep Shade · Double Shade (5)**, **Sunflowers · Sun Garden (8)** and **Cold Snap ·
+Frost Cloud (10, the chapter finale; it starts with a full frost meter)**. Each mechanic is off on
+every level before its lesson and on from it (`mechanicsOf(id)`), so level 1 stays the pure drag
+lesson. Levels 1-4, 6, 7, 9, 12 and 22-40 keep their concepts; Old Town, Gates, Long Shadows and
+Heat Wave moved to 11, 13, 14 and 15, Mirror Sun … Lowland three places later (16-21). Wide Open,
+Crowded and Drought (plain knob concepts) lost their teaching levels and still compose; levels
+41-200 are exactly as before (composition draws from the v1.2 order). After the Cold Snap's level
+every level starts with the meter at half. The `snap` concept costs 3 drain points (its finale
+drains 31 instead of 34).
+
+`node scripts/sim.ts --campaign --bot all` (v1.4 → v1.5, pass % (mean stars); the last column is
+v1.5 with the oracle / reactive ignoring the mechanics, `--nomech`):
+
+| ch | oracle | reactive | humanDial | oracle / reactive, no mechanics |
+|---|---|---|---|---|
+| 1 | 100 (2.9) → 100 (2.9) | 100 (3.0) → 100 (3.0) | 100 (2.1) → 100 (2.1) | 100 (2.9) / 100 (3.0) |
+| 2 | 100 (2.7) → 100 (2.9) | 100 (2.9) → 100 (3.0) | 90 (1.9) → 100 (1.9) | 100 (2.8) / 100 (2.9) |
+| 3 | 100 (2.6) → 100 (2.7) | 100 (3.0) → 100 (3.0) | 80 (1.4) → 80 (1.4) | 100 (2.5) / 100 (2.9) |
+| 4 | 100 (2.7) → 100 (2.7) | 100 (2.9) → 100 (2.9) | 80 (1.5) → 80 (1.6) | 100 (2.7) / 100 (2.9) |
+| 5 | 100 (2.3) → 100 (2.3) | 100 (2.9) → 100 (2.8) | 90 (1.6) → 90 (1.5) | 100 (2.3) / 100 (2.9) |
+| 6 | 100 (2.8) → 100 (2.8) | 100 (2.8) → 100 (2.8) | 50 (1.2) → 60 (1.3) | 100 (2.8) / 100 (2.8) |
+| 7 | 100 (2.3) → 100 (2.5) | 100 (2.6) → 100 (2.6) | 70 (1.4) → 80 (1.4) | 100 (2.3) / 100 (2.6) |
+| 8 | 100 (2.9) → 100 (3.0) | 100 (3.0) → 100 (3.0) | 80 (1.7) → 80 (1.8) | 100 (2.9) / 100 (3.0) |
+| 9 | 100 (2.3) → 100 (2.5) | 100 (2.8) → 100 (2.9) | 60 (1.3) → 60 (1.3) | 100 (2.3) / 100 (2.8) |
+| 10 | 100 (2.6) → 100 (2.8) | 100 (2.7) → 100 (2.8) | 30 (0.5) → 30 (0.5) | 100 (2.7) / 100 (2.6) |
+| 11 | 100 (2.3) → 100 (2.4) | 100 (2.4) → 100 (2.5) | 40 (0.6) → 60 (0.9) | 100 (2.3) / 100 (2.4) |
+| 12 | 100 (2.0) → 100 (2.2) | 100 (2.6) → 100 (2.6) | 50 (1.1) → 50 (1.1) | 100 (2.0) / 100 (2.6) |
+| 13 | 100 (2.0) → 100 (2.0) | 100 (2.4) → 100 (2.3) | 40 (0.8) → 50 (0.9) | 100 (2.0) / 100 (2.4) |
+| 14 | 100 (2.8) → 100 (2.7) | 100 (2.9) → 100 (2.9) | 60 (1.3) → 80 (1.7) | 100 (2.8) / 100 (2.9) |
+| 15 | 100 (2.6) → 100 (2.7) | 100 (3.0) → 100 (2.9) | 20 (0.4) → 40 (0.7) | 100 (2.6) / 100 (3.0) |
+| 16 | 100 (2.2) → 100 (2.9) | 100 (2.6) → 100 (2.8) | 40 (0.8) → 40 (0.8) | 100 (2.2) / 100 (2.7) |
+| 17 | 100 (2.4) → 100 (2.5) | 100 (2.8) → 100 (2.9) | 60 (1.2) → 80 (1.5) | 100 (2.4) / 100 (2.8) |
+| 18 | 100 (2.6) → 100 (2.7) | 100 (2.8) → 100 (2.9) | 40 (0.9) → 30 (0.8) | 100 (2.6) / 100 (2.8) |
+| 19 | 100 (1.6) → 100 (1.8) | 100 (2.1) → 100 (2.3) | 40 (0.5) → 40 (0.5) | 100 (1.6) / 100 (2.1) |
+| 20 | 100 (2.2) → 100 (2.1) | 90 (2.1) → 80 (1.9) | 10 (0.2) → 20 (0.4) | 100 (2.2) / 90 (2.1) |
+
+Totals: oracle 200/200 (2.56 stars a level, 1-40 2.80; v1.4 2.44 / 2.73); reactive 198/200,
+100/100 on 1-100 (2.74); humanDial 125/200 (v1.4 113), 36/40 on 1-40, 10/10 on 1-10 (it now casts a
+ready snap when lit under 30 Chill). With the mechanics ignored (`--nomech`) the oracle earns 2.44
+stars a level and the reactive bot 2.71: blooming the buds ahead (their shadows fall on the coming
+trail) and snapping buy cool runs and flakes.

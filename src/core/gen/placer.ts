@@ -20,14 +20,14 @@ import { FORECAST_TUNING } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { cloudOffset } from '../shadows.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ, type YTime } from '../clock.ts';
-import { atan2D, cosD, sinD, tanD } from '../dmath.ts';
+import { angleDiff, atan2D, cosD, sinD, tanD, wrapDeg } from '../dmath.ts';
 import { convexDistance, rectPoly } from '../geom.ts';
-import { PICKUP_ALIVE, type Caster, type Cloud, type CloudKind, type Part, type PickupKind } from '../objects.ts';
+import { BUD_ID_BASE, PICKUP_ALIVE, RUNTIME_ID_BASE, type Caster, type Cloud, type CloudKind, type Part, type PickupKind } from '../objects.ts';
 import { rngFor } from '../rng.ts';
 import { distPolyToTrail, trailX } from '../trail.ts';
 import { buildParts, gateArchParts, isRotatable, makeCaster, solidHull } from './catalog.ts';
 import { biomeAtY, firstTownDay, paramsAt, worldDayAtY, worldDayStartY, worldPlan, worldTimeAtY, worldYAtDayTick, worldYAtTime } from './plan.ts';
-import { insertBall, insertCaster, insertPickup, lowerBound, takeId, type World } from './store.ts';
+import { insertBall, insertBud, insertCaster, insertPickup, lowerBound, takeId, type World } from './store.ts';
 
 const WT = TUNING.world;
 const CH = WT.chunkLen;
@@ -76,12 +76,13 @@ function overlapOf(c: Caster): Float64Array {
   return p;
 }
 
-/** True when `poly` keeps the overlap margin from every caster near y. */
+/** True when `poly` keeps the overlap margin from every generated caster near y (a run's sunflowers don't count). */
 function clearOfCasters(w: World, poly: Float64Array, y: number): boolean {
   const cs = w.casters;
   for (let i = lowerBound(cs, y - 160); i < cs.length; i++) {
     const c = cs[i] as Caster;
     if (c.y > y + 160) break;
+    if (c.id >= RUNTIME_ID_BASE) continue;
     const o = overlapOf(c);
     if (convexDistance(poly, poly.length / 2, o, o.length / 2) < WT.overlapMargin) return false;
   }
@@ -250,7 +251,7 @@ function addPickup(w: World, kind: PickupKind, y: number): void {
 }
 
 /** Render-only cloud lumps (dx, dy, r) from their own stream, so they never shift gameplay draws. */
-function cloudLumps(seed: number, id: number, rx: number, ry: number): Float64Array {
+export function cloudLumps(seed: number, id: number, rx: number, ry: number): Float64Array {
   const r = rngFor(seed, 'lumps', id);
   const n = r.int(TUNING.cloud.lumpsMin, TUNING.cloud.lumpsMax);
   const out = new Float64Array(n * 3);
@@ -414,7 +415,122 @@ export function placeChunk(w: World, k: number): void {
   if (w.finishY >= y0 && w.finishY < y1) placeLandmark(w, 'finish', w.finishY, k);
   if (!(w.tutorial && k === 0)) placeCasters(w, k, y1);
   if (k >= 0 && !(w.tutorial && k === 0)) placeFlakes(w, k, y1);
+  // Buds trail two chunks behind: by now the casters and rescue rocks around them stand.
+  if (k >= 2) placeBuds(w, k - 2);
   w.stats.chunksPlaced++;
+}
+
+/** Bud footprint used for spacing (u, a square). */
+const BUD_SIZE = 10;
+
+/**
+ * v1.5 Sunflower buds of chunk k (World.mech.buds; never in the tutorial's authored chunk): one every
+ * U(gapMin, gapMax) s of walking while t/Dl ∈ [tMin, tMax], more on later days (the gap ÷ min(maxMore,
+ * 1 + perDay·(day − 1))), lat u from the centerline on a random side (pushed out until clear of the
+ * trail and of every caster), facing a whole-degree azimuth at least faceTol + avoidTheta0 from θ0.
+ * The bud cursor carries across chunks; every value is drawn from the chunk's own stream.
+ */
+function placeBuds(w: World, k: number): void {
+  if (!w.mech.buds) return;
+  const B = TUNING.buds;
+  const rng = rngFor(w.seed, 'buds', k);
+  const y1 = (k + 1) * CH;
+  const avoid = B.faceTol + B.avoidTheta0;
+  for (let guard = 0; guard < 64; guard++) {
+    worldTimeAtY(w, w.budY, yt);
+    const day = yt.day;
+    const p = paramsAt(w, day);
+    const dl = dayTicks(day);
+    if (yt.night || yt.dayTick > B.tMax * dl) {
+      w.budY = worldYAtDayTick(w, day + 1, B.tMin * dayTicks(day + 1)) + rng.range(0, 2) * paramsAt(w, day + 1).v;
+      continue;
+    }
+    if (yt.dayTick < B.tMin * dl) {
+      w.budY = worldYAtDayTick(w, day, B.tMin * dl) + rng.range(0, 2) * p.v;
+      continue;
+    }
+    if (w.budY >= y1) break;
+    const y = gapNear(w, w.budY, B.gapSeek * p.v);
+    const side: -1 | 1 = rng.chance(0.5) ? 1 : -1;
+    const lat = rng.range(B.latMin, B.latMax);
+    const aimBack = rng.range(B.aimBackMin, B.aimBackMax);
+    const jitter = rng.range(-B.aimJitter, B.aimJitter);
+    const more = Math.min(B.maxMore, 1 + B.perDay * (day - 1));
+    w.budY += (rng.range(B.gapMin, B.gapMax) * p.v) / more;
+    if (w.tutorial && y < CH) continue;
+    // Legible planning: the sun that grows the bud stands across the trail from it, so the bloom's
+    // shadow falls back across the trail Nubs is about to walk (aimBack u before the bud). Never
+    // θ0 (± faceTol + avoidTheta0: an idle sun can't grow a bud): then the other side of the trail.
+    const yT = y - aimBack;
+    const tx = trailX(w.trail, yT);
+    for (let k = 0; k < 2; k++) {
+      const x = budSpot(w, y, (k === 0 ? side : -side) as -1 | 1, lat, false);
+      if (x === null) continue;
+      let face = Math.round(wrapDeg(atan2D(y - yT, x - tx) + jitter));
+      if (face === 360) face = 0;
+      if (Math.abs(angleDiff(face, w.theta0)) < avoid) continue;
+      insertBud(w, { id: BUD_ID_BASE + w.budCount++, x, y, face, grow: 0, state: 0, casterId: -1 });
+      break;
+    }
+  }
+}
+
+/**
+ * The y within ±reach of y0 (20 u steps) farthest from every generated caster's center: buds stand
+ * in the gaps between casters, where a sunflower's shade is worth the most.
+ */
+function gapNear(w: World, y0: number, reach: number): number {
+  const cs = w.casters;
+  let best = y0;
+  let bestD = -1;
+  const n = Math.floor(reach / 20);
+  for (let k = -n; k <= n; k++) {
+    const y = y0 + k * 20;
+    let d = Infinity;
+    for (let i = lowerBound(cs, y - 200); i < cs.length; i++) {
+      const c = cs[i] as Caster;
+      if (c.y > y + 200) break;
+      if (c.id >= RUNTIME_ID_BASE) continue;
+      const dy = Math.abs(c.y - y);
+      if (dy < d) d = dy;
+    }
+    // Ties keep the cursor's own spot (k = 0 is tried in order, nearer first wins).
+    if (d > bestD + 1e-9 || (Math.abs(d - bestD) <= 1e-9 && Math.abs(k * 20) < Math.abs(best - y0))) {
+      bestD = d;
+      best = y;
+    }
+  }
+  return best;
+}
+
+/**
+ * x of a free bud spot at y: lat u from the centerline on `side` (then the other side when `both`), pushed
+ * outward 4 u at a time (≤ 8 times) until it clears the trail and every generated caster's solid
+ * footprint (a bud may stand under a canopy). Null when there is none.
+ */
+function budSpot(w: World, y: number, side: -1 | 1, lat: number, both = true): number | null {
+  const tx = trailX(w.trail, y);
+  for (let s = 0; s < (both ? 2 : 1); s++) {
+    const sd = s === 0 ? side : -side;
+    for (let push = 0; push <= 8; push++) {
+      const x = tx + sd * (lat + push * WT.pushStep);
+      const poly = rectPoly(x, y, BUD_SIZE, BUD_SIZE, 1, 0);
+      if (clearOfTrail(w, poly) && clearOfHulls(w, poly, y)) return x;
+    }
+  }
+  return null;
+}
+
+/** True when `poly` keeps the overlap margin from the solid footprint of every generated caster near y. */
+function clearOfHulls(w: World, poly: Float64Array, y: number): boolean {
+  const cs = w.casters;
+  for (let i = lowerBound(cs, y - 160); i < cs.length; i++) {
+    const c = cs[i] as Caster;
+    if (c.y > y + 160) break;
+    if (c.id >= RUNTIME_ID_BASE) continue;
+    if (convexDistance(poly, poly.length / 2, c.hull, c.hullN) < WT.overlapMargin) return false;
+  }
+  return true;
 }
 
 /**

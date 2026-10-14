@@ -22,10 +22,14 @@ import { trailX } from '../../src/core/trail.ts';
 
 const TAP = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, key: 0 as const };
 
-/** A run whose world is emptied (and frozen: no further generation), so Nubs is in full sun. */
+/**
+ * A run whose world is emptied (and frozen: no further generation), so Nubs is in full sun. Deep
+ * shade is off unless cfg turns it on (shade() overlaps its rocks, so Nubs would be in deep shade).
+ */
 function lab(cfg: Partial<RunConfig> = {}): SimState {
-  const s = createRun({ ...headlessConfig(1), plan: false, ...cfg });
+  const s = createRun({ ...headlessConfig(1), plan: false, mechanics: { deep: false }, ...cfg });
   const w = s.world;
+  w.buds.length = 0;
   w.casters.length = 0;
   w.byId.clear();
   w.clouds.length = 0;
