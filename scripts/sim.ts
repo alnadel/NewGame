@@ -1,13 +1,17 @@
 // Headless balance simulation, acceptance check and career sim (V1_PLAN §13, V1_1_PLAN §6).
 //
-//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W]
+//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W] [--mech]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
-//   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W]
+//   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
 // per row, death-time quantiles, melted%, first-night share, median run seconds, mean Snow, SWINGs
 // per daylight minute and lit share, plus world stats (rescues per chunk, unresolved validator
 // failures), generation ms/chunk and sim µs/tick.
+//
+// --mech (v1.5) adds reactive and oracle rows that ignore the core mechanics and prints the
+// mechanics table: blooms, snaps, frost meters filled, deep shade and buds passed per daylight
+// minute and per day, and how much longer the bots live using them.
 //
 // Rows: the V1_PLAN §13 rows on the plan mix, idle p0 for the lesson's floor (CO4); --check adds
 // idle/novice/reactive/oracle with each forecast forced. ADVISORY rows (humanDial at rungs R0-R4)
@@ -19,7 +23,8 @@
 // --campaign plays the Journey (CAMPAIGN_PLAN §3): oracle, reactive and humanDial on every level
 // (humanDial --tries times, each with its own decision stream), each level's outcome, a per-chapter
 // pass/stars table and the gates (hard: oracle 200/200, reactive ≥ 95% of 1-100; advisory: humanDial
-// ≥ 75% of 1-40 and ≥ 90% of 1-10). Exit 1 on a hard miss.
+// ≥ 75% of 1-40 and ≥ 90% of 1-10). Exit 1 on a hard miss. --nomech: the bots ignore the v1.5 core
+// mechanics (to measure what using them is worth).
 //
 // --career N plays N careers of R runs (default 40) on the comfort ladder (run seed
 // hashString(`career-${c}-${r}`), rungConfig/comfortAfterRun between runs). --meta folds every run
@@ -36,6 +41,7 @@ import { dayStartTick, dayStartY } from '../src/core/clock.ts';
 import { formatScore } from '../src/core/format.ts';
 import { ensureGenerated } from '../src/core/gen/world.ts';
 import { hashString } from '../src/core/rng.ts';
+import { BUD_ID_BASE } from '../src/core/objects.ts';
 import { BOT_KINDS, createBot, type BotKind } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import type { RunResult } from '../src/core/sim/events.ts';
@@ -55,6 +61,8 @@ interface Job {
   forecast?: ForecastId;
   /** Advisory comfort-rung row (PASS/MISS only, never fails --check). */
   rung?: number;
+  /** v1.5 --mech: the bot ignores the core mechanics (no gold, no snaps). */
+  noMech?: boolean;
 }
 
 interface Task {
@@ -88,10 +96,16 @@ interface RunOut {
   maxRescues: number;
   parked: number;
   unresolved: number;
+  /** v1.5: blooms, snaps, frost meters filled, seconds of deep shade, buds Nubs walked past. */
+  blooms: number;
+  snaps: number;
+  frostReady: number;
+  deepSec: number;
+  budsPassed: number;
 }
 
 /** A bot plays one run to death or the dawn of Day `days`. */
-function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false): { out: Omit<RunOut, 'job' | 'seed'>; result: RunResult } {
+function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false, mech = true): { out: Omit<RunOut, 'job' | 'seed'>; result: RunResult } {
   let genMs = 0;
   const s = createRun(cfg);
   if (timeGen) {
@@ -99,12 +113,14 @@ function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false): 
     ensureGenerated(s.world, dayStartY(days) + 2000);
     genMs = performance.now() - g0;
   }
-  const bot = createBot(kind);
+  const bot = createBot(kind, 0, mech);
   const endTick = dayStartTick(days);
   let botMs = 0;
   let daylight = 0;
   let swingSnow = 0;
   let lessonDone = false;
+  let frostReady = 0;
+  let budPassed = -1;
   const start = performance.now();
   while (s.phase !== 'dead' && s.tickAbs < endTick) {
     const b0 = performance.now();
@@ -115,12 +131,21 @@ function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false): 
     for (const e of s.events) {
       if (e.e === 'swing') swingSnow += e.snow;
       else if (e.e === 'lessonDone') lessonDone = true;
+      else if (e.e === 'frostReady') frostReady++;
+    }
+    if (s.tick % 30 === 0) {
+      // Buds are y-sorted with rising ids: the last one at or behind Nubs counts every bud passed.
+      for (const b of s.world.buds) {
+        if (b.y > s.nubs.y) break;
+        if (b.id - BUD_ID_BASE > budPassed) budPassed = b.id - BUD_ID_BASE;
+      }
     }
   }
   // Bot decisions are timed and subtracted, so stepMs is the cost of step() alone.
   const stepMs = performance.now() - start - botMs;
   const { flakes, flakesMelted, snow, swings, litTotal } = s.stats;
-  const out = { died: s.phase === 'dead', minutes: s.minutes, day: s.day, flakes, flakesMelted, snow, swings, swingSnow, ticks: s.tick, daylight, litTotal, lessonDone, stepMs, genMs };
+  const mechOut = { blooms: s.stats.blooms ?? 0, snaps: s.stats.snaps ?? 0, frostReady, deepSec: s.stats.deepSeconds ?? 0, budsPassed: budPassed + 1 };
+  const out = { died: s.phase === 'dead', minutes: s.minutes, day: s.day, flakes, flakesMelted, snow, swings, swingSnow, ticks: s.tick, daylight, litTotal, lessonDone, stepMs, genMs, ...mechOut };
   return { out: { ...out, ...worldStats(s) }, result: buildRunResult(s) };
 }
 
@@ -152,11 +177,11 @@ interface LevelOut {
 }
 
 /** A bot plays one campaign level to its finish line (or Nubs melts). */
-function playLevel(id: number, kind: BotKind, salt: number): LevelOut {
+function playLevel(id: number, kind: BotKind, salt: number, mech = true): LevelOut {
   const t0 = performance.now();
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
   const s = createRun(campaignConfig(id, { lesson: id === 1 }));
-  const bot = createBot(kind, salt);
+  const bot = createBot(kind, salt, mech);
   // A level is at most 1080 minutes (one and a half days, ~6000 ticks).
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) step(s, bot.next(s));
   const r = buildRunResult(s).level;
@@ -260,15 +285,15 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
 type WorkerMsg =
   | { kind: 'run'; task: Task; job: Job }
   | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean }
-  | { kind: 'level'; id: number; bot: BotKind; salt: number };
+  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean };
 
 if (!isMainThread && workerData === 'sim') {
   parentPort?.on('message', (m: WorkerMsg) => {
     if (m.kind === 'run') {
-      const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen);
+      const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen, !m.job.noMech);
       parentPort?.postMessage({ ...out, job: m.task.job, seed: m.task.seed });
     } else if (m.kind === 'level') {
-      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt));
+      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech));
     } else {
       void runCareer(m.c, m.runs, m.bot, m.days, m.meta).then((o) => parentPort?.postMessage(o));
     }
@@ -330,9 +355,30 @@ function clockOf(m: number, days: number): string {
   return m === Infinity ? `≥ Day ${days}` : formatScore(m);
 }
 
+/**
+ * v1.5 mechanics table (--mech): per row, per daylight minute and per day reached, blooms, snaps,
+ * frost meters filled and buds passed, deep shade's share of daylight, and the median death against
+ * the same bot's no-mechanics row.
+ */
+function mechTable(rows: { j: Job; rs: RunOut[] }[], days: number): void {
+  console.log('\nCore mechanics (v1.5): per daylight minute | per day reached');
+  console.log(`${'row'.padEnd(30)} ${'blooms'.padEnd(12)} ${'snaps'.padEnd(12)} ${'frost full'.padEnd(12)} ${'buds passed'.padEnd(12)} deep%  median death (vs no mech)`);
+  for (const { j, rs } of rows) {
+    const min = sum(rs, (r) => r.daylight) / 3600;
+    const dayCount = sum(rs, (r) => r.day - 1 + (r.died ? r.minutes % 720 : 720) / 720);
+    const per = (f: (r: RunOut) => number): string => `${(sum(rs, f) / Math.max(1e-9, min)).toFixed(2)} | ${(sum(rs, f) / Math.max(1e-9, dayCount)).toFixed(2)}`.padEnd(12);
+    const twin = rows.find((o) => o.j.bot === j.bot && o.j.profile === j.profile && !o.j.noMech !== !j.noMech && o.j.rung === j.rung && o.j.forecast === j.forecast);
+    const vs = twin && !j.noMech ? ` (no mech ${clockOf(median(deathMinutes(twin.rs)), days)})` : '';
+    console.log(
+      `${jobName(j).padEnd(30)} ${per((r) => r.blooms)} ${per((r) => r.snaps)} ${per((r) => r.frostReady)} ${per((r) => r.budsPassed)} ${`${((100 * sum(rs, (r) => r.deepSec)) / Math.max(1e-9, min * 60)).toFixed(1)}`.padStart(5)}  ${clockOf(median(deathMinutes(rs)), days)}${vs}`,
+    );
+  }
+}
+
 function jobName(j: Job): string {
   const extra = [j.drain !== undefined ? `@${j.drain}` : '', j.noonCloud !== undefined ? ` nc${j.noonCloud}` : '', j.forecast ? ` ${j.forecast}` : ''].join('');
-  return j.rung !== undefined ? `${j.bot} R${j.rung} (p${j.profile}${extra})` : `${j.bot} p${j.profile}${extra}`;
+  const nm = j.noMech ? ' no mech' : '';
+  return j.rung !== undefined ? `${j.bot} R${j.rung} (p${j.profile}${extra})${nm}` : `${j.bot} p${j.profile}${extra}${nm}`;
 }
 
 /** Comfort-rung rows for the human model (R0 with the lesson; R1-R4 after it). */
@@ -441,12 +487,13 @@ async function campaignMain(workers: number): Promise<void> {
   const ids = levelArg !== '' ? levelArg.split(',').map(Number) : Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1);
   for (const id of ids) if (!CAMPAIGN_LEVELS[id - 1]) throw new Error(`unknown level ${id}`);
   const msgs: WorkerMsg[] = [];
-  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t });
+  const mech = !process.argv.includes('--nomech');
+  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t, mech });
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
   const of = (bot: BotKind, lo = 1, hi = LEVEL_COUNT): LevelOut[] => outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
-  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}, ${workers} workers, ${wall.toFixed(1)} s\n`);
+  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}${mech ? '' : ', bots ignore the v1.5 mechanics'}, ${workers} workers, ${wall.toFixed(1)} s\n`);
   const cell = (rs: LevelOut[]): string => {
     const o = rs[0];
     if (!o) return '-'.padEnd(22);
@@ -516,6 +563,7 @@ async function main(): Promise<void> {
   const profileArg = arg('profile', '');
   const forced = arg('forecast', '') as ForecastId | '';
   const check = process.argv.includes('--check');
+  const mechRows = process.argv.includes('--mech');
   const margin = Number(arg('margin', '3'));
   if (botArg !== 'all' && !BOT_KINDS.includes(botArg as BotKind)) throw new Error(`unknown bot ${botArg}`);
   if (forced && !FORECAST_IDS.includes(forced)) throw new Error(`unknown forecast ${forced}`);
@@ -530,6 +578,7 @@ async function main(): Promise<void> {
     { bot: 'reactive', profile: 3 },
     { bot: 'oracle', profile: 3 },
   ].map((j) => withFc(j as Job));
+  if (mechRows) base.push(...[{ bot: 'reactive', profile: 3, noMech: true } as Job, { bot: 'oracle', profile: 3, noMech: true } as Job].map(withFc));
   let advisory: Job[] = rungJobs('humanDial').map(withFc);
   if (botArg !== 'all') {
     base = base.filter((j) => j.bot === botArg);
@@ -595,6 +644,8 @@ async function main(): Promise<void> {
     console.log('ADVISORY (perception-limited human model on the comfort rungs):');
     advisory.forEach((_, i) => rowLine(base.length + i));
   }
+
+  if (mechRows) mechTable(base.map((j, ji) => ({ j, rs: of(ji) })), days);
 
   // World stats per world kind (profile, noon cloud, forecast); only the hard rows' kinds are checked.
   console.log('\nWorld (validator):');

@@ -30,6 +30,7 @@ import { deathCause } from './deathcause.ts';
 import { guideDue, updateGuide } from './guide.ts';
 import { pushHistory } from './history.ts';
 import { applyDaylight, applyNight, computeCoverage, hourGlyph } from './nubs.ts';
+import { updateBuds, updateSnap } from './mechanics.ts';
 import { updatePickups } from './pickups.ts';
 import { updateSun } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
@@ -236,10 +237,12 @@ export function step(s: SimState, input: InputFrame): void {
   if (s.tick % TICK_HZ === 0) pruneWorld(s.world, s.nubs.y - W.pruneBehind, s.tAbs - 2);
 
   syncEclipse(s);
+  updateSnap(s, inp);
   computeCoverage(s);
   if (daylight) applyDaylight(s);
   else applyNight(s);
   updatePickups(s, daylight);
+  updateBuds(s);
   passObjects(s, prevY);
   pushHistory(s);
   pushRecent(s);

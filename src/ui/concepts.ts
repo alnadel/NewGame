@@ -47,6 +47,10 @@ const CONCEPT_ICONS: Readonly<Record<ConceptId, IconName>> = {
   moonlit: 'moon',
   marathon: 'road',
   boss: 'dome',
+  // v1.5 core mechanics (placeholder icons from the core builder; the GAME builder owns these).
+  deep: 'snow',
+  bloom: 'sun',
+  snap: 'flakes',
 };
 
 /** The icon of a concept (a flag for an id this build doesn't know). */

@@ -16,6 +16,7 @@ import {
   inGlare,
   shadowLength,
 } from '../shadows.ts';
+import { addFrost } from './mechanics.ts';
 import type { SimState } from './types.ts';
 
 const P = TUNING.pickups;
@@ -92,12 +93,14 @@ function collect(s: SimState, p: Pickup): void {
     nb.chill = Math.min(nb.maxChill, nb.chill + P.flakeChill);
     s.events.push({ e: 'flake', mult: nb.mult, degree: (s.flakesToday + nb.mult) % 10, x: p.x, y: p.y, snow });
     s.flakesToday++;
+    addFrost(s, TUNING.frost.perFlake);
   } else if (p.kind === 'crystal') {
     const snow = Math.round(P.crystalSnowMult * nb.mult * s.params.snowMult);
     st.crystals++;
     st.snow += snow;
     nb.chill = Math.min(nb.maxChill, nb.chill + P.crystalChill);
     s.events.push({ e: 'crystal', mult: nb.mult, x: p.x, y: p.y, snow });
+    addFrost(s, TUNING.frost.perFlake);
   } else {
     st.flowers++;
     st.snow += P.flowerSnow;

@@ -56,7 +56,7 @@ function cloudCause(s: SimState): boolean {
   const theta = recent(s, back + 1, 0);
   const reach = Math.min(180, D.cloudTurnRate * D.cloudTurnSec);
   for (const cl of s.world.clouds as readonly Cloud[]) {
-    if (!cloudAlive(cl, tAbs)) continue;
+    if (!cloudAlive(cl, tAbs) || cl.kind === 'snap') continue;
     const ddt = tAbs - cl.t0;
     const cx = cl.x0 + cl.vx * ddt;
     const cy = cl.y0 + cl.vy * ddt;

@@ -1,13 +1,13 @@
 // World storage: y-sorted object lists, id lookup, range queries and pruning.
 // Generation (placer/validator) inserts; the sim and renderer only read (pickups excepted).
 
-import type { LevelDef } from '../../config/campaign.ts';
+import type { LevelDef, Mechanics } from '../../config/campaign.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { BiomeId, DayPlan, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { type MaskScene, sceneAddBall, sceneAddCaster, sceneAddCloud, sceneBegin } from '../intervals.ts';
-import type { Bud, Caster, Cloud, GazingBall, Pickup } from '../objects.ts';
+import { RUNTIME_ID_BASE, type Bud, type Caster, type Cloud, type GazingBall, type Pickup } from '../objects.ts';
 import { casterReach, cloudAlive, distToCasterBounds, glareOffset, shadowLength, cloudOffset } from '../shadows.ts';
 import type { Trail } from '../trail.ts';
 import type { ValidationJob } from './validator.ts';
@@ -89,6 +89,11 @@ export interface World {
   readonly pickups: Pickup[];
   /** v1.5 Sunflower buds sorted by y (ties by id). */
   readonly buds: Bud[];
+  /**
+   * v1.5 core mechanics this world plays with (campaign: from the level that teaches each; else
+   * all on, or RunConfig.mechanics). Buds are only generated when `buds` is on.
+   */
+  readonly mech: Mechanics;
   /** Largest caster height so far (for reach culling). */
   maxZ: number;
   nextId: number;
@@ -107,6 +112,9 @@ export interface World {
   cursorSide: -1 | 1;
   flakeY: number;
   rescueSide: -1 | 1;
+  /** v1.5 bud placement: the next bud's y and the buds placed so far (bud ids are BUD_ID_BASE + n). */
+  budY: number;
+  budCount: number;
   /**
    * Validator carry: the next unvalidated step, how many already-validated steps the next job
    * re-runs (carryN), and the DP rows and lit counts of those steps plus the entry step before them
@@ -157,6 +165,15 @@ export function insertPickup(w: World, p: Pickup): void {
 
 export function insertBall(w: World, b: GazingBall): void {
   insertSorted(w.balls, b);
+}
+
+export function insertBud(w: World, b: Bud): void {
+  insertSorted(w.buds, b);
+}
+
+/** True for the objects a run makes (blooms' sunflowers, the Cold Snap's cloud): the validator ignores them. */
+export function isRuntimeId(id: number): boolean {
+  return id >= RUNTIME_ID_BASE;
 }
 
 /**
@@ -234,6 +251,8 @@ export function queryClouds(w: World, tAbs: number, out: Cloud[]): number {
 /**
  * Gathers every occluder that could affect points within `margin` of (px, py) at absolute time
  * tAbs and elevation eps (cot = 1/tan ε) into `scene`. Clouds are stored at their tAbs position.
+ * `live` false (the validator and its lit cache) leaves out what the run made (sunflowers, the snap
+ * cloud), so the world stays a pure function of its config.
  */
 export function gatherScene(
   w: World,
@@ -244,6 +263,7 @@ export function gatherScene(
   tAbs: number,
   eps: number,
   cot: number,
+  live = true,
 ): void {
   sceneBegin(scene, eps, cot);
   if (!scene.sunUp) return;
@@ -252,17 +272,20 @@ export function gatherScene(
   for (let i = lowerBound(cs, py - reach - MAX_R); i < cs.length; i++) {
     const c = cs[i] as Caster;
     if (c.y > py + reach + MAX_R) break;
+    if (!live && c.id >= RUNTIME_ID_BASE) continue;
     if (distToCasterBounds(c, px, py) <= casterReach(c, cot) + margin) sceneAddCaster(scene, c);
   }
-  const R = cloudOffset(TUNING.shadow.cloudZ, cot);
+  const R0 = cloudOffset(TUNING.shadow.cloudZ, cot);
   for (const cl of w.clouds) {
     if (!cloudAlive(cl, tAbs)) continue;
+    if (!live && cl.id >= RUNTIME_ID_BASE) continue;
+    const R = cl.z === TUNING.shadow.cloudZ ? R0 : cloudOffset(cl.z, cot);
     const dt = tAbs - cl.t0;
     const cx = cl.x0 + cl.vx * dt;
     const cy = cl.y0 + cl.vy * dt;
     const d = Math.sqrt((cx - px) * (cx - px) + (cy - py) * (cy - py));
     // p can be shaded only if |d − R| ≤ the cloud's radius.
-    if (Math.abs(d - R) <= cl.rx + margin) sceneAddCloud(scene, cx, cy, cl.rx, cl.ry, cl.id);
+    if (Math.abs(d - R) <= cl.rx + margin) sceneAddCloud(scene, cx, cy, cl.rx, cl.ry, cl.id, R);
   }
   if (scene.glareOn) {
     const g = glareOffset(cot);
@@ -297,6 +320,10 @@ export function pruneWorld(w: World, cutoff: number, tAbs: number): void {
   k = 0;
   while (k < bs.length && (bs[k] as GazingBall).y < cutoff - TUNING.glare.cap - TUNING.glare.radius) k++;
   if (k > 0) bs.splice(0, k);
+  const bd = w.buds;
+  k = 0;
+  while (k < bd.length && (bd[k] as Bud).y < cutoff) k++;
+  if (k > 0) bd.splice(0, k);
   for (let i = w.clouds.length - 1; i >= 0; i--) {
     const cl = w.clouds[i] as Cloud;
     if (cl.t0 + cl.life < tAbs) w.clouds.splice(i, 1);

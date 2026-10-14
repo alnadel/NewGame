@@ -142,28 +142,65 @@ const tuning = {
     snow: 3,
   },
 
-  /** v1.5 core mechanics (docs/V1_5_PLAN.md); the core builder tunes these. */
+  /**
+   * v1.5 Sunflower buds (docs/V1_5_PLAN.md §2A). A bud grows while the sun shines from within
+   * ±faceTol° of its face (whole degrees) and it stands within [Nubs − reachBehind, Nubs + reachAhead]
+   * of y: +1/growSec per second, else −decay per second; at 1 it blooms into a sunflower (+snow).
+   * Placement: one bud every U(gapMin, gapMax) s of walking while t/Dl ∈ [tMin, tMax], the gap
+   * divided by min(maxMore, 1 + perDay·(day − 1)); lat u from the centerline; faces at least
+   * faceTol + avoidTheta0 from θ0 (an idle sun never grows one).
+   */
   buds: {
-    /** The sun must shine from within ±faceTol° of a bud's face. */
-    faceTol: 20,
-    /** Seconds of facing light to bloom (growth decays at decay/s otherwise). */
-    growSec: 0.9,
-    decay: 0.5,
-    /** Snow for a bloom. */
+    faceTol: 15,
+    growSec: 0.8,
+    decay: 0.8,
     snow: 5,
+    reachAhead: 300,
+    reachBehind: 30,
+    gapMin: 4,
+    gapMax: 7,
+    perDay: 0.08,
+    maxMore: 1.5,
+    tMin: 0.06,
+    tMax: 0.94,
+    latMin: 26,
+    latMax: 54,
+    avoidTheta0: 15,
+    /** The first bud comes this many seconds of walking after the run's start (then the window rules). */
+    startDelay: 2,
+    /** A growing bud emits budGrow every eventTicks ticks (feedback only). */
+    eventTicks: 6,
   },
+  /**
+   * v1.5 Cold Snap (§2B). The frost meter (0..1) fills perShadeSec per second of full daylight
+   * shade (× deep.frostMul in deep shade), perFlake per flake or crystal, perSwing per SWING and
+   * perBloom per bloom; never while a snap is on. Full: a snap input casts a frosty cloud (z 0, so
+   * its shadow lies right under it whatever θ is) that rides over Nubs for snapSec.
+   */
   frost: {
-    /** Meter gained per second of full shade, per flake collected, per SWING (0..1 scale). */
-    perShadeSec: 0.02,
-    perFlake: 0.04,
-    perSwing: 0.1,
-    /** Cold Snap length (s). */
-    snapSec: 4,
+    perShadeSec: 0.004,
+    perFlake: 0.015,
+    perSwing: 0.06,
+    perBloom: 0.15,
+    snapSec: 3,
+    /**
+     * Journey levels are short (17-50 s): after the Cold Snap's teaching level (which starts full)
+     * each level starts with the meter at campaignStart.
+     */
+    campaignStart: 0.5,
+    /** The snap cloud's radii (ry = rx · cloud.ryRatio). */
+    snapRx: 64,
   },
+  /**
+   * v1.5 Deep shade (§2C): fully shaded with two or more sources (casters or clouds) over the
+   * center sample. Chill regen, multiplier charge and frost charge × these. deepEnter fires on entry
+   * after at least reenterTicks out of deep shade.
+   */
   deep: {
-    /** Chill regen and multiplier charge × this while in deep shade. */
     regenMul: 2,
     multMul: 2,
+    frostMul: 4,
+    reenterTicks: 60,
   },
 
   /** Pickups (V1_PLAN §5.4). */
@@ -352,8 +389,20 @@ const tuning = {
   /** Headless bots (V1_PLAN §13). Turn rates in °/s. */
   bots: {
     novice: { lagTicks: 12, rate: 180, blur: 6, penalty: 0.2 },
-    reactive: { lagTicks: 0, rate: 200, blur: 4, penalty: 0.5, nextWeight: 1, nowWeight: 2 },
-    oracle: { rate: 240, horizonSteps: 40, planBins: 18, slackCap: 30, penalty: 0.02, margin: 1 },
+    /**
+     * v1.5 mechanics: the reactive bot adds budWeight on gold bins that are safe now (anywhere while
+     * Chill ≥ budChill), and snaps
+     * when lit with Chill < snapChill and no safe bin within ±snapNearDeg (or Chill < snapLast).
+     */
+    reactive: { lagTicks: 0, rate: 200, blur: 4, penalty: 0.5, nextWeight: 1, nowWeight: 2, budWeight: 1, budChill: 90, snapChill: 40, snapNearDeg: 45, snapLast: 25 },
+    /**
+     * v1.5 mechanics: the oracle plans with the run's sunflowers and snap cloud (stepLitLive), adds
+     * up to budBonus (Chill units, fading to 0 budReachDeg away from the nearest gold bin) while the
+     * slack is ≥ budSlack and the bin is shaded next step (or Chill ≥ budSpare of the tank, never on
+     * a flake-goal level), and snaps when its best slack falls below snapSlack, or when lit with
+     * Chill below snapChill (campaign: whenever its next step is lit, for the cool-run star).
+     */
+    oracle: { rate: 240, horizonSteps: 40, planBins: 18, slackCap: 30, penalty: 0.02, margin: 1, budBonus: 6, budSlack: 12, budReachDeg: 90, budSpare: 0.9, snapSlack: 6, snapChill: 50 },
     /**
      * Seeded human model (tooling only, never an acceptance gate): reaction lag U(lagMin, lagMax)
      * per decision, aim error N(0, aimSigma)° plus a ±N(0, gainSigma) over/undershoot, min-jerk

@@ -80,7 +80,8 @@ export interface Caster {
   readonly chunk: number;
 }
 
-export type CloudKind = 'overtaker' | 'waiter' | 'parked';
+/** 'snap': the v1.5 Cold Snap cloud (z 0: its shadow lies right under it whatever θ is). */
+export type CloudKind = 'overtaker' | 'waiter' | 'parked' | 'snap';
 
 /** A cloud at altitude z. Its position is analytic in absolute time (s since Day 1 dawn). */
 export interface Cloud {
@@ -131,6 +132,17 @@ export interface Pickup {
   /** 0 alive, 1 taken, 2 melted. */
   state: PickupState;
 }
+
+/**
+ * v1.5 id spaces. Generated objects take ids from World.nextId; buds count from BUD_ID_BASE, and the
+ * objects a run makes (a bloom's sunflower: RUNTIME_ID_BASE + its bud's index; a Cold Snap's cloud:
+ * SNAP_ID_BASE + the run's snap count) sit above RUNTIME_ID_BASE, so they never shift a generated
+ * id or name, and the validator can tell them apart (it ignores them: worlds stay a pure function of
+ * their config).
+ */
+export const BUD_ID_BASE = 0x20000000;
+export const RUNTIME_ID_BASE = 0x40000000;
+export const SNAP_ID_BASE = 0x60000000;
 
 /**
  * v1.5 Sunflower bud (docs/V1_5_PLAN.md). A bud beside the trail blooms into a tall sunflower (a

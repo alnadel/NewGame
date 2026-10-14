@@ -1,17 +1,20 @@
 // State hash for determinism tests and golden files (archive/TECH_SPEC §2.5, archive/CRITIQUE #17).
 //
-// Only tick-determined state is hashed: the clock, Nubs, the sun, Snow and pickup counters, plus
-// the casters and pickups less than HASH_AHEAD in front of Nubs (sorted by id). Generation progress
+// Only tick-determined state is hashed: the clock, Nubs, the sun, Snow and pickup counters, the v1.5
+// mechanics (frost, deep shade, the snap, blooms), plus the casters (sunflowers included), pickups
+// and buds less than HASH_AHEAD in front of Nubs (sorted by id). Generation progress
 // is excluded on purpose: how far idle-time generation ran depends on frame timing, and objects are
 // only created far enough ahead that they can't affect play yet.
 
 import { CASTER_KINDS } from '../../config/casters.ts';
 import { TUNING } from '../../config/tuning.ts';
-import type { Caster, Pickup } from '../objects.ts';
+import type { Bud, Caster, Pickup } from '../objects.ts';
 import type { SimState } from './types.ts';
 
 /** Casters and pickups up to this far ahead of Nubs are hashed (well inside the validated horizon). */
 export const HASH_AHEAD = TUNING.world.hardAhead - 600;
+/** Buds up to this far ahead of Nubs are hashed (past their reach; inside any run's generated world). */
+const BUD_HASH_AHEAD = 600;
 
 const PHASES = ['hold', 'day', 'night', 'dead', 'won'];
 const MODES = ['idle', 'dragging', 'chasing', 'coasting'];
@@ -67,6 +70,14 @@ export function hashState(s: SimState): string {
     st.phews,
     st.maxMult,
     st.swings,
+    // v1.5 core mechanics.
+    nb.frost,
+    nb.deep ? 1 : 0,
+    s.snapTicks,
+    s.snapCloudId,
+    st.blooms ?? 0,
+    st.snaps ?? 0,
+    st.deepSeconds ?? 0,
   ]) {
     feed(v);
   }
@@ -94,6 +105,19 @@ export function hashState(s: SimState): string {
     feed(p.id);
     feed(p.state);
     feed(p.melt);
+  }
+  // Buds (generated sorted by y with rising ids, so world order is id order) up to BUD_HASH_AHEAD:
+  // only buds within reach can change, and a Title run built with less lookahead has fewer beyond.
+  const bs = s.world.buds;
+  const budLimit = nb.y + BUD_HASH_AHEAD;
+  for (let i = 0; i < bs.length; i++) {
+    const b = bs[i] as Bud;
+    if (b.y >= budLimit) break;
+    feed(b.id);
+    feed(b.x);
+    feed(b.face);
+    feed(b.grow);
+    feed(b.state);
   }
   return hex(laneA) + hex(laneB);
 }

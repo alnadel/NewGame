@@ -9,13 +9,13 @@ import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, elevation, TICK_HZ } from '../clock.ts';
 import { SUN_COS, SUN_SIN, tanD } from '../dmath.ts';
 import { BINS, binOf, countPrism, createMaskScene, litMask, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
-import type { Caster, Cloud, PrismPart } from '../objects.ts';
+import { RUNTIME_ID_BASE, type Caster, type Cloud, type PrismPart } from '../objects.ts';
 import { cloudOffset, distToCasterBounds, shadowLength } from '../shadows.ts';
 import { trailX } from '../trail.ts';
 import { rockHeight } from './catalog.ts';
 import { paramsAt, worldYAtTick } from './plan.ts';
 import { addCloud, commitRescue, findSpot, type Spot } from './placer.ts';
-import { gatherScene, type ChunkLit, type World } from './store.ts';
+import { gatherScene, lowerBound, type ChunkLit, type World } from './store.ts';
 
 const STEP = TUNING.validator.stepTicks;
 const TURN = TUNING.validator.turnBins;
@@ -183,7 +183,7 @@ function computeLit(w: World, job: ValidationJob, s: number): void {
   }
   const x = job.sx[s] as number;
   const y = job.sy[s] as number;
-  gatherScene(w, scene, x, y, SAMPLE_MARGIN, job.sT[s] as number, job.sEps[s] as number, job.sCot[s] as number);
+  gatherScene(w, scene, x, y, SAMPLE_MARGIN, job.sT[s] as number, job.sEps[s] as number, job.sCot[s] as number, false);
   litMask(scene, x, y, true, out, null);
 }
 
@@ -485,6 +485,52 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
 }
 
 const stepScene = createMaskScene();
+const MAX_R = TUNING.world.maxCasterRadius;
+
+/**
+ * Like stepLit, but with what the run made (v1.5 sunflowers and the Cold Snap's cloud) counted: the
+ * row is recomputed live (clouds as circles of ry) when such an object can reach the step, else it
+ * is the validator's cached row. The oracle plans with it. Returns true when it recomputed.
+ */
+export function stepLitLive(w: World, j: number, out: Uint8Array): boolean {
+  const tick = j * STEP;
+  const day = dayAtTick(tick);
+  const eps = elevation(paramsAt(w, day), (tick - dayStartTick(day)) / TICK_HZ);
+  if (eps <= 0) {
+    out.fill(0);
+    return false;
+  }
+  const y = worldYAtTick(w, tick);
+  const x = trailX(w.trail, y);
+  const cot = 1 / tanD(eps);
+  const t = tick / TICK_HZ;
+  let live = false;
+  for (const cl of w.clouds) {
+    if (cl.id >= RUNTIME_ID_BASE && t >= cl.t0 && t <= cl.t0 + cl.life) {
+      live = true;
+      break;
+    }
+  }
+  if (!live) {
+    const reach = shadowLength(w.maxZ, cot) + SAMPLE_MARGIN;
+    const cs = w.casters;
+    for (let i = lowerBound(cs, y - reach - MAX_R); i < cs.length; i++) {
+      const c = cs[i] as Caster;
+      if (c.y > y + reach + MAX_R) break;
+      if (c.id >= RUNTIME_ID_BASE && distToCasterBounds(c, x, y) <= shadowLength(c.maxZ, cot) + SAMPLE_MARGIN) {
+        live = true;
+        break;
+      }
+    }
+  }
+  if (!live) {
+    stepLit(w, j, out);
+    return false;
+  }
+  gatherScene(w, stepScene, x, y, SAMPLE_MARGIN, t, eps, cot, true);
+  litMask(stepScene, x, y, true, out, null);
+  return true;
+}
 
 /**
  * Validator lit counts (0..10 per bin) for global step j (absolute tick 6·j), copied into out.
@@ -509,6 +555,6 @@ export function stepLit(w: World, j: number, out: Uint8Array): void {
   }
   const y = worldYAtTick(w, tick);
   const x = trailX(w.trail, y);
-  gatherScene(w, stepScene, x, y, SAMPLE_MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps));
+  gatherScene(w, stepScene, x, y, SAMPLE_MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps), false);
   litMask(stepScene, x, y, true, out, null);
 }

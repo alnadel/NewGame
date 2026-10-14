@@ -5,14 +5,14 @@
 // level id (seed = hashString(`journey-${id}`); composition draws from rngFor(seed, 'campaign', id)),
 // so buildCampaign() is deterministic and the table is data.
 
-import { CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, type ConceptId } from './concepts.ts';
+import { CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, MECHANIC_CONCEPTS, TEACH_LEVELS, type ConceptId } from './concepts.ts';
 import { dayParams, dayPlan, type BiomeId } from './days.ts';
 import type { ForecastId } from './forecasts.ts';
 import { hashString, rngFor } from './rng.ts';
 import { TUNING } from './tuning.ts';
 
 export type { Concept, ConceptId, ConceptKind, ConceptLevel, DayTuning } from './concepts.ts';
-export { CONCEPT_CONFLICTS, CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning } from './concepts.ts';
+export { CONCEPT_CONFLICTS, CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, MECHANIC_CONCEPTS, TEACH_LEVELS } from './concepts.ts';
 
 export type GoalKind = 'finish' | 'flakes' | 'snow';
 
@@ -184,7 +184,54 @@ function requiredBiome(concepts: readonly ConceptId[]): BiomeId | null {
 }
 
 /** Concepts a composed level never draws from the general pool (they have their own chapters, or teach). */
-const COMPOSE_EXCLUDED: ReadonlySet<ConceptId> = new Set<ConceptId>(['drag', 'boss', 'marathon']);
+const COMPOSE_EXCLUDED: ReadonlySet<ConceptId> = new Set<ConceptId>(['drag', 'boss', 'marathon', 'deep', 'bloom', 'snap']);
+
+/**
+ * The order composed levels draw their pool in: v1.2's teaching order, so the v1.5 reordering of
+ * CONCEPT_IDS left every composed level (41-200) exactly as it was.
+ */
+const COMPOSE_ORDER: readonly ConceptId[] = Object.freeze([
+  'drag', 'flakes', 'cloud', 'noon', 'oldtown', 'glare', 'swing', 'gate', 'breezy', 'long',
+  'heat', 'overcast', 'dazzle', 'market', 'sprint', 'stroll', 'giants', 'lowland', 'sparse', 'dense',
+  'drought', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
+  'clockwork', 'gusts', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'moonlit', 'marathon', 'boss',
+] as ConceptId[]);
+
+/** Which v1.5 core mechanics a run has (docs/V1_5_PLAN.md §2): Sunflower buds, the Cold Snap, deep shade. */
+export interface Mechanics {
+  readonly buds: boolean;
+  readonly snap: boolean;
+  readonly deep: boolean;
+}
+
+export const ALL_MECHANICS: Mechanics = Object.freeze({ buds: true, snap: true, deep: true });
+
+/** The level that teaches a concept (its index in the teaching order + 1), or 0 when none does. */
+export function teachLevel(id: ConceptId): number {
+  const i = CONCEPT_IDS.indexOf(id as (typeof CONCEPT_IDS)[number]);
+  return i >= 0 && i < TEACH_LEVELS ? i + 1 : 0;
+}
+
+const mechanicsMemo: Mechanics[] = [];
+
+/**
+ * The mechanics of a campaign level: each is on from the level that teaches it (deep shade 5,
+ * Sunflowers 8, Cold Snap 10) and off before it, so level 1 stays the pure lesson. Null (not a
+ * campaign run): all on.
+ */
+export function mechanicsOf(levelId: number | null): Mechanics {
+  if (levelId === null) return ALL_MECHANICS;
+  let m = mechanicsMemo[levelId];
+  if (!m) {
+    m = Object.freeze({
+      buds: levelId >= teachLevel(MECHANIC_CONCEPTS.buds),
+      snap: levelId >= teachLevel(MECHANIC_CONCEPTS.snap),
+      deep: levelId >= teachLevel(MECHANIC_CONCEPTS.deep),
+    });
+    mechanicsMemo[levelId] = m;
+  }
+  return m;
+}
 
 /** Draws the concepts of composed level `id` (41-200): the chapter's headline first, two or three in all. */
 function composeConcepts(id: number, seed: number, chapter: Chapter): ConceptId[] {
@@ -194,7 +241,7 @@ function composeConcepts(id: number, seed: number, chapter: Chapter): ConceptId[
   const n = finale ? 3 : i < 3 ? 2 : rng.next() < 0.45 ? 3 : 2;
   const fits = (c: ConceptId): boolean => (CONCEPTS[c].level?.biome ?? chapter.biome) === chapter.biome;
   const signature = chapter.concepts.filter(fits);
-  const pool = CONCEPT_IDS.filter((c) => fits(c) && !COMPOSE_EXCLUDED.has(c));
+  const pool = COMPOSE_ORDER.filter((c) => fits(c) && !COMPOSE_EXCLUDED.has(c));
   const chosen: ConceptId[] = [];
   const ok = (c: ConceptId): boolean => chosen.every((d) => conceptsCompatible(c, d));
   // The headline: a finale leads with the chapter's first concept; other levels draw one.
@@ -217,7 +264,7 @@ function composeConcepts(id: number, seed: number, chapter: Chapter): ConceptId[
 function makeLevel(id: number): LevelDef {
   const seed = hashString(`journey-${id}`);
   const chapter = CHAPTERS[chapterOf(id) - 1] as Chapter;
-  const introduces: ConceptId | null = id <= CONCEPT_IDS.length ? (CONCEPT_IDS[id - 1] as ConceptId) : null;
+  const introduces: ConceptId | null = id <= TEACH_LEVELS ? (CONCEPT_IDS[id - 1] as ConceptId) : null;
   const concepts: readonly ConceptId[] = introduces ? [introduces] : composeConcepts(id, seed, chapter);
   const biome = requiredBiome(concepts) ?? chapter.biome;
   let forecast: ForecastId = 'clear';

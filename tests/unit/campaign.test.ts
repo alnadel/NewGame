@@ -11,7 +11,10 @@ import {
   goalMet,
   LEVEL_COUNT,
   levelDef,
+  mechanicsOf,
   starsFor,
+  TEACH_LEVELS,
+  teachLevel,
   type ConceptId,
   type LevelDef,
 } from '../../src/config/campaign.ts';
@@ -133,8 +136,9 @@ describe('the level table', () => {
     expect(levelDef(42)).toBe(CAMPAIGN_LEVELS[41]);
   });
 
-  it('levels 1-40 introduce the forty concepts in catalog order, alone; later levels introduce nothing', () => {
-    expect(CONCEPT_IDS).toHaveLength(40);
+  it('levels 1-40 introduce the first forty concepts in catalog order, alone; later levels introduce nothing', () => {
+    expect(TEACH_LEVELS).toBe(40);
+    expect(CONCEPT_IDS).toHaveLength(43);
     expect(Object.keys(CONCEPTS).sort()).toEqual([...CONCEPT_IDS].sort());
     for (let id = 1; id <= 40; id++) {
       const l = levelDef(id) as LevelDef;
@@ -145,8 +149,36 @@ describe('the level table', () => {
       expect(l.name).toBe(c.title);
       expect(c.name).not.toBe(c.title);
     }
-    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(40);
+    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(43);
     for (let id = 41; id <= 200; id++) expect((levelDef(id) as LevelDef).introduces).toBeNull();
+    // v1.5: the core mechanics are taught in chapter 1; Wide Open, Crowded and Drought only compose.
+    expect([teachLevel('deep'), teachLevel('bloom'), teachLevel('snap')]).toEqual([5, 8, 10]);
+    for (const c of ['sparse', 'dense', 'drought'] as const) {
+      expect(teachLevel(c)).toBe(0);
+      expect(CAMPAIGN_LEVELS.some((l) => l.concepts.includes(c))).toBe(true);
+    }
+    // No composed level carries a mechanic concept: the mechanics are simply on after their lesson.
+    for (const l of CAMPAIGN_LEVELS) if (l.id > 40) for (const c of ['deep', 'bloom', 'snap'] as const) expect(l.concepts).not.toContain(c);
+  });
+
+  it('turns each core mechanic on from the level that teaches it (all on outside the Journey)', () => {
+    expect(mechanicsOf(null)).toEqual({ buds: true, snap: true, deep: true });
+    expect(mechanicsOf(1)).toEqual({ buds: false, snap: false, deep: false });
+    expect(mechanicsOf(4)).toEqual({ buds: false, snap: false, deep: false });
+    expect(mechanicsOf(5)).toEqual({ buds: false, snap: false, deep: true });
+    expect(mechanicsOf(8)).toEqual({ buds: true, snap: false, deep: true });
+    expect(mechanicsOf(10)).toEqual({ buds: true, snap: true, deep: true });
+    expect(mechanicsOf(200)).toEqual({ buds: true, snap: true, deep: true });
+    // Worlds follow: no buds before level 8, buds from it; the snap level starts with a full meter.
+    const w4 = createWorld(campaignConfig(4));
+    ensureGenerated(w4, w4.finishY);
+    expect(w4.buds).toHaveLength(0);
+    const w8 = createWorld(campaignConfig(8));
+    ensureGenerated(w8, w8.finishY + 1000);
+    expect(w8.buds.filter((b) => b.y > w8.startY && b.y < w8.finishY).length).toBeGreaterThanOrEqual(2);
+    expect(createRun(campaignConfig(10)).nubs.frost).toBe(1);
+    expect(createRun(campaignConfig(9)).nubs.frost).toBe(0);
+    expect(createRun(campaignConfig(11)).nubs.frost).toBe(0.5);
   });
 
   it('follows the plan rows: level 1, 2, 4, 25, 37, 39 and 40', () => {
@@ -159,9 +191,9 @@ describe('the level table', () => {
     expect(dayParams(1, 3, dayPlan('meadow', 'clear'), l2.concepts).flakesPerCluster).toBe(4);
     const l4 = levelDef(4) as LevelDef;
     expect([l4.startMinute, l4.lengthMinutes]).toEqual([270, 180]);
-    expect((levelDef(5) as LevelDef).biome).toBe('oldtown');
+    expect((levelDef(teachLevel('oldtown')) as LevelDef).biome).toBe('oldtown');
     expect((levelDef(7) as LevelDef).goal.kind).toBe('snow');
-    expect((levelDef(14) as LevelDef).forecast).toBe('market');
+    expect((levelDef(teachLevel('market')) as LevelDef).forecast).toBe('market');
     expect((levelDef(25) as LevelDef).stars.minChill).toBe(10);
     expect([(levelDef(37) as LevelDef).startMinute, (levelDef(37) as LevelDef).lengthMinutes]).toEqual([540, 180]);
     expect((levelDef(39) as LevelDef).lengthMinutes).toBe(1080);
@@ -181,8 +213,8 @@ describe('the level table', () => {
     const curve = (id: number): number => at(id).drain + at(id).concepts.reduce((a, c) => a + (CONCEPTS[c].level?.cost ?? 0), 0);
     for (const f of [10, 20, 30]) expect(curve(f)).toBeGreaterThan(Math.max(curve(f - 1), curve(f + 1)));
     expect(curve(31)).toBeGreaterThan(curve(11));
-    // A costly concept lowers the drain: Lowland (18) drains less than Giants (17).
-    expect(at(18).drain).toBeLessThan(at(17).drain);
+    // A costly concept lowers the drain: Lowland drains less than Giants.
+    expect(at(teachLevel('lowland')).drain).toBeLessThan(at(teachLevel('giants')).drain);
     // Composed chapters: the first two levels are a step shorter than the rest.
     expect(at(101).lengthMinutes).toBe(at(105).lengthMinutes - 30);
   });
@@ -392,7 +424,7 @@ describe('campaign runs', () => {
   });
 
   it('sprint scales the world by walkMul: Nubs covers 1.35× the ground per tick and the clock is unchanged', () => {
-    const s = started(15);
+    const s = started(teachLevel('sprint'));
     expect(s.world.walkMul).toBe(1.35);
     for (let i = 0; i < 120; i++) step(s, NO_INPUT);
     expect(s.nubs.y).toBeCloseTo(yAtDayTick(1, s.dayTick) * 1.35, 9);
@@ -404,24 +436,26 @@ describe('campaign runs', () => {
   });
 
   it('giants scale caster heights ×1.6 (rescue rocks and the start hut shade excepted)', () => {
-    const g = createWorld(campaignConfig(17));
+    const g = createWorld(campaignConfig(teachLevel('giants')));
     ensureGenerated(g, 2000);
     const trees = g.casters.filter((c) => c.kind === 'tree');
     expect(trees.length).toBeGreaterThan(0);
     for (const t of trees) expect(t.maxZ).toBeCloseTo(75 * 1.6, 9);
-    const low = createWorld(campaignConfig(18));
+    const low = createWorld(campaignConfig(teachLevel('lowland')));
     ensureGenerated(low, 2000);
     for (const c of low.casters) if (c.kind === 'house') expect(c.maxZ).toBeCloseTo(110 * 0.6, 9);
   });
 
   it('the gate concept puts a gate arch at the midpoint and pays +10 Snow when passed fully shaded', () => {
-    const w = createWorld(campaignConfig(8));
-    const mid = yAtDayTick(1, tickAtMinute(120));
+    const id = teachLevel('gate');
+    const lv = levelDef(id) as LevelDef;
+    const w = createWorld(campaignConfig(id));
+    const mid = yAtDayTick(1, tickAtMinute(lv.startMinute + lv.lengthMinutes / 2));
     ensureGenerated(w, mid + 1000);
     const gate = w.casters.find((c) => c.gate);
     expect(gate).toBeDefined();
     expect(Math.abs((gate?.y ?? 0) - mid)).toBeLessThanOrEqual(120);
-    const { s, events } = play(8, 'oracle');
+    const { s, events } = play(id, 'oracle');
     expect(s.phase).toBe('won');
     const g = events.filter((e) => e.e === 'gateArch');
     expect(g.length).toBeGreaterThanOrEqual(1);

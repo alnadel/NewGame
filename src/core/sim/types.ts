@@ -1,7 +1,7 @@
 // Simulation state and its inputs (V1_PLAN §3.1). Everything here is advanced only by step(); the
 // renderer and session read it and never write it.
 
-import type { LevelDef } from '../../config/campaign.ts';
+import type { LevelDef, Mechanics } from '../../config/campaign.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { BiomeId, DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
@@ -92,6 +92,14 @@ export interface RunConfig {
   mods?: readonly ConceptId[];
   /** Forced Day-1 biome (alternating from there, every day clear unless `forecast` fits); part of the world's identity. */
   biome?: BiomeId;
+  /**
+   * v1.5 debug and tooling: turn core mechanics on or off (World.mech; unset keys keep the run's
+   * default: all on, or a campaign level's). Part of the world's identity (buds are only generated
+   * with `buds` on).
+   */
+  mechanics?: Partial<Mechanics>;
+  /** v1.5 debug: the frost meter at the start (0..1; 1 = a Cold Snap ready). Default 0 (1 on the Cold Snap's teaching level). */
+  startFrost?: number;
 }
 
 /**
@@ -148,6 +156,8 @@ export interface NubsState {
   frost: number;
   /** v1.5 Deep shade: the center sample is in two or more shadows this tick (and Nubs is fully shaded). */
   deep: boolean;
+  /** v1.5: the last tick Nubs was in deep shade (deepEnter needs TUNING.deep.reenterTicks out of it). */
+  deepTick: number;
   shadeTicks: number;
   litTicks: number;
   x5Ticks: number;

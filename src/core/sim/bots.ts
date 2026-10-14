@@ -18,7 +18,7 @@ import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, DT, elevation, TICK_HZ } from '../clock.ts';
 import { angleDiff, wrapDeg } from '../dmath.ts';
 import { paramsAt } from '../gen/plan.ts';
-import { chillDeltaTable, slidingMaxCircular, stepLit } from '../gen/validator.ts';
+import { chillDeltaTable, slidingMaxCircular, stepLit, stepLitLive } from '../gen/validator.ts';
 import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { effectiveDrain } from './nubs.ts';
@@ -154,7 +154,12 @@ function noviceBot(): Bot {
   };
 }
 
-function reactiveBot(): Bot {
+/** True when a Cold Snap can be cast this tick (the meter is full, none is on, the sun is up). */
+function snapReady(s: SimState): boolean {
+  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0;
+}
+
+function reactiveBot(mech: boolean): Bot {
   const cfg = TUNING.bots.reactive;
   const f = frame();
   const score = new Float64Array(BINS);
@@ -165,17 +170,56 @@ function reactiveBot(): Bot {
     kind: 'reactive',
     next(s: SimState): InputFrame {
       if (target < 0) target = s.sun.theta;
-      if (s.guide.tick !== seenGuide) {
-        seenGuide = s.guide.tick;
-        for (let b = 0; b < BINS; b++) score[b] = cfg.nowWeight * (s.guide.now[b] as number) + cfg.nextWeight * (s.guide.next[b] as number);
+      const g = s.guide;
+      if (g.tick !== seenGuide) {
+        seenGuide = g.tick;
+        // v1.5: gold (bud) bins count where they are also safe now (the angle that does both), and
+        // anywhere while Chill is nearly full (a moment in the sun to plant shade for later).
+        const spare = s.nubs.chill >= cfg.budChill;
+        for (let b = 0; b < BINS; b++) {
+          const now = g.now[b] as number;
+          const gold = mech && g.bud[b] === 1 && (now === 1 || spare) ? cfg.budWeight : 0;
+          score[b] = cfg.nowWeight * now + cfg.nextWeight * (g.next[b] as number) + gold;
+        }
         const b = pickArc(score, cfg.blur, cfg.penalty, binOf(s.sun.theta));
         if (b >= 0) target = b;
       }
       const out = steer(f, s, target, cfg.rate, !started);
       started = true;
+      // v1.5 Cold Snap: lit and low, with no safe angle close by (or nearly melted).
+      out.snap = mech && snapReady(s) && s.nubs.f > 0 && (s.nubs.chill < cfg.snapLast || (s.nubs.chill < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
       return out;
     },
   };
+}
+
+/** True when some bin within ±deg of θ is set in `mask`. */
+function safeNear(mask: Uint8Array, theta: number, deg: number): boolean {
+  const b0 = binOf(theta);
+  for (let k = -deg; k <= deg; k++) if (mask[(b0 + k + BINS) % BINS] === 1) return true;
+  return false;
+}
+
+/** out[b] = circular distance (bins) from b to the nearest set bin of `mask` (BINS when none is set). */
+function distToSet(mask: Uint8Array, out: Float64Array): boolean {
+  let any = false;
+  for (let b = 0; b < BINS; b++) {
+    out[b] = mask[b] === 1 ? 0 : BINS;
+    if (mask[b] === 1) any = true;
+  }
+  if (!any) return false;
+  // Two sweeps each way around the circle settle every distance.
+  for (let pass = 0; pass < 2; pass++) {
+    for (let b = 0; b < BINS; b++) {
+      const p = out[(b + BINS - 1) % BINS] as number;
+      if (p + 1 < (out[b] as number)) out[b] = p + 1;
+    }
+    for (let b = BINS - 1; b >= 0; b--) {
+      const n = out[(b + 1) % BINS] as number;
+      if (n + 1 < (out[b] as number)) out[b] = n + 1;
+    }
+  }
+  return true;
 }
 
 const INF = 1e9;
@@ -188,8 +232,10 @@ const STEP = TUNING.validator.stepTicks;
  */
 const ORACLE_CAMPAIGN = Object.freeze({ margin: 12, shadeWeight: 0.6 });
 
-function oracleBot(): Bot {
+function oracleBot(mech: boolean): Bot {
   const cfg = TUNING.bots.oracle;
+  const gold = new Float64Array(BINS);
+  let snapNext = false;
   const H = cfg.horizonSteps;
   const f = frame();
   const lits = new Uint8Array((H + 3) * BINS);
@@ -217,7 +263,8 @@ function oracleBot(): Bot {
     const lock = s.mods.has('lock');
     for (let h = 0; h < H + 3; h++) {
       const j = j0 - 1 + h;
-      stepLit(s.world, j, row);
+      if (mech) stepLitLive(s.world, j, row);
+      else stepLit(s.world, j, row);
       lits.set(row, h * BINS);
       const tick = j * STEP;
       const d = dayAtTick(tick);
@@ -248,23 +295,39 @@ function oracleBot(): Bot {
       slidingMaxCircular(tmp, locked[i + 2] === 1 ? 0 : cfg.planBins, win);
       for (let b = 0; b < BINS; b++) need[o + b] = -(win[b] as number);
     }
-    // Choose the next step's bin within actual reach: most slack (capped), least turning.
+    // Choose the next step's bin within actual reach: most slack (capped), least turning; v1.5:
+    // plus a bonus toward gold (bud) bins while the slack is comfortable.
     const b0 = binOf(wrapDeg(s.sun.theta + s.sun.lag));
     const c = s.nubs.chill;
+    const buds = mech && distToSet(s.guide.bud, gold);
+    const flakeGoal = s.level?.goal.kind === 'flakes';
     let best = b0;
     let bestV = -Infinity;
+    let bestSlack = 0;
     for (let k = -reach; k <= reach; k++) {
       const b = (b0 + k + BINS) % BINS;
       let next = c + (delta[litH(1, b)] as number);
       if (next > maxC) next = maxC;
       const slack = next - (need[BINS + b] as number);
-      const v = (slack > cfg.slackCap ? cfg.slackCap : slack) - cfg.penalty * Math.abs(k) - shadeW * (lits[2 * BINS + b] as number);
+      let v = (slack > cfg.slackCap ? cfg.slackCap : slack) - cfg.penalty * Math.abs(k) - shadeW * (lits[2 * BINS + b] as number);
+      // Gold that is shaded next step is free; gold in the sun only while Chill is nearly full (never
+      // on a flake-goal level: lit flakes melt).
+      if (buds && slack >= cfg.budSlack && ((lits[2 * BINS + b] as number) === 0 || (c >= cfg.budSpare * maxC && !flakeGoal))) {
+        const d = gold[b] as number;
+        if (d < cfg.budReachDeg) v += cfg.budBonus * (1 - d / cfg.budReachDeg);
+      }
       if (v > bestV) {
         bestV = v;
         best = b;
+        bestSlack = slack;
       }
     }
     target = best;
+    // v1.5 Cold Snap: when the plan is squeezed, or lit and low (campaign: whenever the next step is lit).
+    if (mech && snapReady(s)) {
+      const litNext = (lits[2 * BINS + best] as number) > 0;
+      snapNext = bestSlack < cfg.snapSlack || (litNext && (campaign || (s.nubs.f > 0 && c < cfg.snapChill)));
+    }
   }
 
   return {
@@ -275,6 +338,8 @@ function oracleBot(): Bot {
       if ((s.tickAbs + 1) % STEP === 0 && s.phase !== 'hold') plan(s);
       const out = steer(f, s, target, cfg.rate, !started);
       started = true;
+      out.snap = snapNext && snapReady(s);
+      snapNext = false;
       return out;
     },
   };
@@ -443,20 +508,25 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
   };
 }
 
-/** `salt` (human models only) draws another player's decision stream on the same world; 0 is the default stream. */
-export function createBot(kind: BotKind, salt = 0): Bot {
+/**
+ * `salt` (human models only) draws another player's decision stream on the same world; 0 is the
+ * default stream. `mechanics` false makes the reactive and oracle bots ignore the v1.5 mechanics
+ * (no gold, no snaps; the oracle plans without sunflowers) for with/without measurements; idle,
+ * novice and the human models never use them.
+ */
+export function createBot(kind: BotKind, salt = 0, mechanics = true): Bot {
   switch (kind) {
     case 'idle':
       return idleBot();
     case 'novice':
       return noviceBot();
     case 'reactive':
-      return reactiveBot();
+      return reactiveBot(mechanics);
     case 'human':
       return humanBot('human', 0, salt);
     case 'humanDial':
       return humanBot('humanDial', TUNING.bots.human.lastingShare, salt);
     default:
-      return oracleBot();
+      return oracleBot(mechanics);
   }
 }

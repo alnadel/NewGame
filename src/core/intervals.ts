@@ -302,10 +302,10 @@ export interface MaskScene {
   /** Candidate casters (only the first nCasters entries are valid). */
   casters: Caster[];
   nCasters: number;
-  /** Cloud shadows as (cx, cy, rx, ry, id) at the scene time; nClouds entries. */
+  /** Cloud shadows as (cx, cy, rx, ry, id, R) at the scene time, R its shadow offset; nClouds entries. */
   clouds: Float64Array;
   nClouds: number;
-  /** Shadow offset R of every cloud at this elevation. */
+  /** Shadow offset R of a cloud at the standard altitude at this elevation (sceneAddCloud's default). */
   cloudR: number;
   /** Gazing balls as (x, y, id); nBalls entries. */
   balls: Float64Array;
@@ -321,7 +321,7 @@ export function createMaskScene(): MaskScene {
     glareOn: false,
     casters: [],
     nCasters: 0,
-    clouds: new Float64Array(5 * 32),
+    clouds: new Float64Array(CLOUD_STRIDE * 32),
     nClouds: 0,
     cloudR: 0,
     balls: new Float64Array(3 * 32),
@@ -348,18 +348,23 @@ export function sceneAddCaster(scene: MaskScene, c: Caster): void {
   scene.nCasters++;
 }
 
-export function sceneAddCloud(scene: MaskScene, cx: number, cy: number, rx: number, ry: number, id: number): void {
-  if ((scene.nClouds + 1) * 5 > scene.clouds.length) {
+/** Floats per cloud in MaskScene.clouds. */
+const CLOUD_STRIDE = 6;
+
+/** Adds a cloud shadow; R is its offset (default: the standard altitude's; 0 for the v1.5 snap cloud). */
+export function sceneAddCloud(scene: MaskScene, cx: number, cy: number, rx: number, ry: number, id: number, R: number = scene.cloudR): void {
+  if ((scene.nClouds + 1) * CLOUD_STRIDE > scene.clouds.length) {
     const grown = new Float64Array(scene.clouds.length * 2);
     grown.set(scene.clouds);
     scene.clouds = grown;
   }
-  const o = scene.nClouds * 5;
+  const o = scene.nClouds * CLOUD_STRIDE;
   scene.clouds[o] = cx;
   scene.clouds[o + 1] = cy;
   scene.clouds[o + 2] = rx;
   scene.clouds[o + 3] = ry;
   scene.clouds[o + 4] = id;
+  scene.clouds[o + 5] = R;
   scene.nClouds++;
 }
 
@@ -385,10 +390,10 @@ export function shadeMask(scene: MaskScene, px: number, py: number, cloudsAsCirc
   if (!scene.sunUp) return;
   const cot = scene.cot;
   for (let i = 0; i < scene.nCasters; i++) markCaster(out, scene.casters[i] as Caster, px, py, cot);
-  const R = scene.cloudR;
   const cl = scene.clouds;
   for (let i = 0; i < scene.nClouds; i++) {
-    const o = i * 5;
+    const o = i * CLOUD_STRIDE;
+    const R = cl[o + 5] as number;
     if (cloudsAsCircles) markCircle(out, px, py, R, cl[o] as number, cl[o + 1] as number, cl[o + 3] as number);
     else markEllipse(out, px, py, R, cl[o] as number, cl[o + 1] as number, cl[o + 2] as number, cl[o + 3] as number);
   }
