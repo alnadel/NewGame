@@ -298,7 +298,7 @@ export class Fx {
           // Deep shade: the ring sinks to indigo (halo.ts); DEEP and an inward ring, now and then.
           if (sc.worldTime - this.deepT >= DEEP_POP_GAP) {
             this.deepT = sc.worldTime;
-            addPop(sc.pops, 'DEEP', POP_DEEP, -22, 230, 0.9);
+            addHeadline(sc.pops, 'DEEP', POP_DEEP, 0.9);
             addRing(sc.rings, nx, ny, 50, 30, 0.4, 3, 0.7, 0x1f2a66);
           }
           break;
@@ -333,7 +333,8 @@ export class Fx {
     this.burst(x, y, 40, 16, 70, SUN_GOLD);
     addRing(sc.rings, x, y, 6, 34, 0.5, 3, 0.9, SUN_GOLD);
     if (snow > 0) addPlus(sc.pops, snow);
-    addPop(sc.pops, 'BLOOM!', POP_MULT, 26, 250, 0.9);
+    // Through the headline rows, so it never lands on a DEEP, PHEW or SWING! of the same moment.
+    addHeadline(sc.pops, 'BLOOM!', POP_MULT, 0.9);
     hop(sc.nubs, 4);
     this.clock.addHitStop(0.04);
   }

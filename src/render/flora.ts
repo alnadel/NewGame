@@ -187,7 +187,9 @@ export function drawSunflower(g: CanvasRenderingContext2D, v: View, L: Light, c:
   const e = (8 + 52 * L.elev) * DEG;
   const ch = L.sunUp ? Math.cos(e) : 0.6;
   const sh = L.sunUp ? Math.sin(e) : 0.8;
-  const r = (head ? head.r : Math.max(6, (c.maxX - c.minX) / 2)) * S * (0.25 + 0.75 * Math.min(1, k)) * v.dpr;
+  // The petals' tips sit at 1.72 head units (m + len/2 unfolded): scaled so the open flower is a
+  // little wider than the head disc that casts its shadow (the full 1.72 swamped Nubs).
+  const r = ((head ? head.r : Math.max(6, (c.maxX - c.minX) / 2)) / 1.35) * S * (0.25 + 0.75 * Math.min(1, k)) * v.dpr;
   const facing = sh - HEAD_K * L.uy * ch >= 0;
   g.setTransform(-L.uy * r, -L.ux * r, -sh * L.ux * r, (sh * L.uy - HEAD_K * ch) * r, hx * v.dpr, top * v.dpr);
   const len = 0.55 + 0.75 * unfold;
