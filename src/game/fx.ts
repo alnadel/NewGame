@@ -348,7 +348,7 @@ export class Fx {
    */
   bloom(x: number, y: number, snow: number): void {
     const sc = this.sc;
-    registerBloom(x, y, sc.worldTime);
+    if (!this.reducedMotion) registerBloom(x, y, sc.worldTime);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + rnd(-0.15, 0.15);
       const sp = rnd(30, 60);

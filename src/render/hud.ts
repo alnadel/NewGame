@@ -522,9 +522,9 @@ export function placeMeter(h: HudState, v: View): void {
   h.meterY = v.vy + v.vh - v.safe.bottom - METER_BOTTOM - r;
 }
 
-/** (x, y) in CSS px is on the frost meter drawn last frame. */
+/** (x, y) in CSS px is on the frost meter drawn full last frame (a tap there snaps). */
 export function hudMeterHit(h: HudState, x: number, y: number): boolean {
-  if (!h.meterShown) return false;
+  if (!h.meterShown || !h.meterFull) return false;
   const dx = x - h.meterX;
   const dy = y - h.meterY;
   const r = h.meterR + METER_SLOP;
@@ -539,7 +539,7 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const r = h.meterR;
   const frost = Math.max(0, Math.min(1, inp.frost));
   const snapping = inp.snapLeft > 0;
-  const full = frost >= 1 && !snapping;
+  const full = frost >= 0.999 && !snapping;
   if (full && !h.meterFull) h.meterPop = 0.45;
   h.meterFull = full;
   const rm = inp.reducedMotion;
