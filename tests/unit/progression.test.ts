@@ -480,7 +480,7 @@ describe('missions', () => {
     expect(save.missions.active.map((m) => m.id)).toEqual(['reach-9am', 'flakes-10', 'survive-noon']);
     const started = beginRun(save);
     expect(started.save.missions.active.map((m) => m.id)).toEqual(['mult-3', 'flakes-10', 'cloud-ride']);
-    expect(started.dealt.map((m) => m.label)).toEqual(['Reach a ×3 multiplier', "Ride a cloud's shadow for 3 s straight"]);
+    expect(started.dealt.map((m) => m.label)).toEqual(['Reach a ×4 multiplier', "Ride a cloud's shadow for 3 s straight"]);
     expect(started.save.missions.cursor).toBe(5);
     // Nothing to replace: the same object comes back.
     expect(beginRun(started.save).save).toBe(started.save);
@@ -511,7 +511,7 @@ describe('missions', () => {
     expect(applyRunResult(s, run(10, { swings: 3 }), opts()).save.missions.active[0]?.done).toBe(true);
   });
 
-  it("measures 'Reach a ×4 multiplier' (hold-x5) by the best multiplier", () => {
+  it("measures 'Reach a ×5 multiplier' (hold-x5, v1.6 T8) by the best multiplier", () => {
     const s = defaults(1);
     s.missions.active[0] = { id: 'hold-x5', progress: 0, done: false, stale: 0 };
     s.missions.active[1] = { id: 'hold-x5@2', progress: 0, done: false, stale: 0 };
@@ -521,11 +521,13 @@ describe('missions', () => {
       { id: 'hold-x5@2', progress: 3, done: false, stale: 0 },
     ]);
     expect(activeMissionViews(three).slice(0, 2).map((v) => [v.label, v.progressText])).toEqual([
-      ['Reach a ×4 multiplier', '×3/×4'],
+      ['Reach a ×5 multiplier', '×3/×5'],
       ['Reach a ×5 multiplier', '×3/×5'],
     ]);
     const four = applyRunResult(three, run(10, { maxMult: 4 }), opts()).save;
-    expect(four.missions.active.slice(0, 2).map((m) => m.done)).toEqual([true, false]);
+    expect(four.missions.active.slice(0, 2).map((m) => m.done)).toEqual([false, false]);
+    const five = applyRunResult(four, run(10, { maxMult: 5 }), opts()).save;
+    expect(five.missions.active.slice(0, 2).map((m) => m.done)).toEqual([true, true]);
   });
 
   it('repeats the pool as tier II with scaled goals and rewards', () => {

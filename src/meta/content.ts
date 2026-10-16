@@ -356,14 +356,15 @@ export interface MissionDef {
 /**
  * The ordered pool (V1_PLAN §11.1). Three are active; completed ones are replaced from here, and a
  * mission above the player's recent best waits in the deferred queue (missions.ts). hold-x5 keeps
- * its id (saves persist it) but is "Reach a ×4 multiplier"; swings-3 took play-daily's index, so
- * saved cursors stay valid.
+ * its id (saves persist it) but is "Reach a ×5 multiplier" (and mult-3 "Reach a ×4 multiplier", v1.6
+ * T8); swings-3 took play-daily's index, so saved cursors stay valid.
  */
 export const MISSIONS: readonly MissionDef[] = [
   { id: 'reach-9am', metric: 'minutes', scale: 'reach', base: 180, reward: 10, gate: 0 },
   { id: 'flakes-10', metric: 'flakes', scale: 'count', base: 10, reward: 10, gate: 0 },
   { id: 'survive-noon', metric: 'minutes', scale: 'reach', base: 390, reward: 20, gate: 0 },
-  { id: 'mult-3', metric: 'maxMult', scale: 'mult', base: 3, reward: 15, gate: 0 },
+  // v1.6 (T8): the Flow Ring takes good players high, so 'mult-3' asks for ×4 and 'hold-x5' for ×5.
+  { id: 'mult-3', metric: 'maxMult', scale: 'mult', base: 4, reward: 15, gate: 0 },
   { id: 'cloud-ride', metric: 'cloudRide', scale: 'seconds', base: 3, reward: 20, gate: 0 },
   { id: 'reach-day-2', metric: 'minutes', scale: 'reach', base: 720, reward: 30, gate: 390 },
   { id: 'ice-crystal', metric: 'crystals', scale: 'count', base: 1, reward: 20, gate: 0 },
@@ -371,7 +372,7 @@ export const MISSIONS: readonly MissionDef[] = [
   { id: 'gate-arch', metric: 'gateNoon', scale: 'flag', base: 1, reward: 30, gate: 720 },
   { id: 'clean-balls', metric: 'cleanBalls', scale: 'count', base: 2, reward: 30, gate: 720 },
   { id: 'reach-day-3', metric: 'minutes', scale: 'reach', base: 1440, reward: 50, gate: 1080 },
-  { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 4, reward: 30, gate: 390 },
+  { id: 'hold-x5', metric: 'maxMult', scale: 'mult', base: 5, reward: 30, gate: 390 },
   // Dealt once the recent best reaches 12:30 PM: a SWING needs a player who already chains shade.
   { id: 'swings-3', metric: 'swings', scale: 'count', base: 3, reward: 15, gate: 390 },
   // v1.5 (docs/V1_5_PLAN.md): grow shade, spend the cold, hunt the overlaps.
