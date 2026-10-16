@@ -71,10 +71,10 @@ export function addFrostH(s: SimState, source: FrostSource, amountH: number): vo
     const a = Math.min(amountH, GARDEN.bankCapH - s.snapBankH);
     if (a <= 0) return;
     s.snapBankH += a;
-    st.frostEarnedH = (st.frostEarnedH ?? 0) + a;
+    st.frostEarnedH = (st.frostEarnedH as number) + a;
     return;
   }
-  st.frostEarnedH = (st.frostEarnedH ?? 0) + amountH;
+  st.frostEarnedH = (st.frostEarnedH as number) + amountH;
   creditFrostH(s, source, amountH);
 }
 
@@ -89,7 +89,7 @@ function creditFrostH(s: SimState, source: FrostSource, amountH: number): void {
   if (v > BANK.capH) {
     const lostH = v - BANK.capH;
     v = BANK.capH;
-    s.stats.frostSpilledH = (s.stats.frostSpilledH ?? 0) + lostH;
+    s.stats.frostSpilledH = (s.stats.frostSpilledH as number) + lostH;
     s.events.push({ e: 'frostSpill', lostH });
   }
   nb.frostH = v;
@@ -140,7 +140,7 @@ export function bloom(s: SimState, b: Bud): void {
 function gardenBloom(s: SimState, casterId: number): void {
   if (s.snapBlooms < s.snapBloomIds.length) s.snapBloomIds[s.snapBlooms] = casterId;
   s.snapBlooms++;
-  s.stats.gardenBlooms = (s.stats.gardenBlooms ?? 0) + 1;
+  s.stats.gardenBlooms = (s.stats.gardenBlooms as number) + 1;
   const room = dayTicks(s.day) - s.dayTick - s.snapTicks;
   const ext = Math.min(GARDEN.extendTicks, GARDEN.extendCapTicks - s.snapExt, room);
   if (ext <= 0) return;
@@ -319,7 +319,7 @@ export function castSnap(s: SimState): boolean {
     const m = nb.mult;
     const refundH = BANK.cashPerLevelH * (m - 1);
     if (m > 1) {
-      st.multDowns = (st.multDowns ?? 0) + 1;
+      st.multDowns = (st.multDowns as number) + 1;
       s.events.push({ e: 'multDown', from: m, to: 1, cause: 'snap' });
     }
     nb.mult = 1;
@@ -327,7 +327,7 @@ export function castSnap(s: SimState): boolean {
     nb.shadeTicks = 0;
     s.events.push({ e: 'snapCash', level: m, refundH });
     if (refundH > 0) {
-      st.snapCashH = (st.snapCashH ?? 0) + refundH;
+      st.snapCashH = (st.snapCashH as number) + refundH;
       creditFrostH(s, 'cash', refundH);
     }
   } else {

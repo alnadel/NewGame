@@ -281,7 +281,7 @@ function ringAdd(s: SimState, units: number, reason: 'shade' | 'trick' | 'phew')
       const from = nb.mult;
       nb.mult--;
       c = Math.floor((3 * (RING.need[nb.mult - 1] as number)) / 4);
-      s.stats.multDowns = (s.stats.multDowns ?? 0) + 1;
+      s.stats.multDowns = (s.stats.multDowns as number) + 1;
       s.events.push({ e: 'multDown', from, to: nb.mult, cause: 'bleed' });
     } else {
       c = 0;
@@ -307,7 +307,7 @@ function ringAdd(s: SimState, units: number, reason: 'shade' | 'trick' | 'phew')
  */
 export function ringTrick(s: SimState, kind: Extract<SimEvent, { e: 'ringTrick' }>['kind'], units: number): void {
   if (!s.world.v16.ring) return;
-  s.stats.ringTricks = (s.stats.ringTricks ?? 0) + 1;
+  s.stats.ringTricks = (s.stats.ringTricks as number) + 1;
   s.events.push({ e: 'ringTrick', kind, units });
   ringAdd(s, units, 'trick');
 }
@@ -450,8 +450,8 @@ export function applyDaylight(s: SimState): void {
   }
   nb.x5Ticks = nb.mult === M.max ? nb.x5Ticks + 1 : 0;
   if (nb.x5Ticks * DT > st.x5HoldBest) st.x5HoldBest = nb.x5Ticks * DT;
-  st.multTicks = (st.multTicks ?? 0) + nb.mult;
-  if (nb.mult === M.max) st.x5Ticks = (st.x5Ticks ?? 0) + 1;
+  st.multTicks = (st.multTicks as number) + nb.mult;
+  if (nb.mult === M.max) st.x5Ticks = (st.x5Ticks as number) + 1;
 
   // Glare touch and the death line's memory of who shaded Nubs.
   if (nb.glareBallId >= 0) {
@@ -557,9 +557,9 @@ function land(s: SimState): void {
   const chain = paused <= SW.chainTicks ? Math.min(SW.chainMax, nb.swChain + 1) : 1;
   nb.swChain = chain;
   nb.swLastTick = s.tick;
-  st.snapLands = (st.snapLands ?? 0) + 1;
+  st.snapLands = (st.snapLands as number) + 1;
   if (own) {
-    st.snapLandsOwn = (st.snapLandsOwn ?? 0) + 1;
+    st.snapLandsOwn = (st.snapLandsOwn as number) + 1;
     st.swings++;
     st.snow += chain;
     if (chain > st.swingChainBest) st.swingChainBest = chain;
@@ -583,6 +583,7 @@ export function debugRing(s: SimState, level: number, charge: number): void {
   const nb = s.nubs;
   nb.mult = Math.max(1, Math.min(M.max, Math.round(level)));
   nb.ringCharge = Math.max(0, Math.round(charge));
+  nb.shadeTicks = nb.mult < M.max ? Math.min(M.stepTicks, Math.floor((nb.ringCharge * M.stepTicks) / (RING.need[nb.mult - 1] as number))) : 0;
 }
 
 /** Night tick: Chill refills at +30/s; the multiplier is frozen. */

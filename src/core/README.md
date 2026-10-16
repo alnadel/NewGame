@@ -588,7 +588,7 @@ meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `si
   only. Nightfall or a new snap cancels it.
 - **Hash**: `hashState` reads ringCharge, litStartMult, streak, swFresh(N), frostH, swingFrostTick,
   snapBankH, snapExt, snapBlooms, the landing fields and the ring/bank stats.
-- **Bots** (`sim/bots/econ.ts`, constants `ECON_BOTS`; idle, novice and the human models unchanged):
+- **Bots** (`sim/bots/econ.ts`, its constants at the top; idle, novice and the human models unchanged):
   reactive with mechanics — ring: +0.5 on now-safe bins whose nearest center shader is not an end of
   the last SWING while Chill ≥ 60; policies `plain` (v1.5 gold), `chase` (every gold bin worth 3.5,
   above a safe bin's 3, while Chill ≥ 45 and outside 9:20 AM-2:40 PM; `econChasing` is exported for
@@ -599,8 +599,8 @@ meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `si
   past the end — agrees, +8 where this snap's own sunflower shades the landing spot). Oracle: under a
   Garden snap the bud bonus reaches 180°, and in the snap's last 36 ticks (guide.land) and the 40
   ticks after it (guide.now) a landing pull of up to 12 Chill; overflow snap at frostH ≥ 190 when lit;
-  with flares on it keeps a charge for a kept flare of d ≥ 8 within 30 s while holding fewer than two
-  and spends one when lit in its rise or hold (inert until CORE-2's flares land).
+  with flares on, holding two charges, it keeps one for a kept flare of d ≥ 8 and casts it when lit
+  in the flare's rise or hold (inert until CORE-2's flares land).
 - **sim** (`scripts/sim16/econ.ts`): `--check` adds the economy table (mean multiplier, x5 share,
   level changes a minute, trick share of ring income, full-bank share, meters a day from income,
   snaps a day, blooms per snap, own-landing share, lit ticks in the 40 after snapEnd, 11 AM-1 PM
