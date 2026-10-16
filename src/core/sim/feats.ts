@@ -37,15 +37,6 @@ export function snapshotFeats(s: SimState): void {
   for (let i = 0; i < lv.feats.length && i < 2; i++) before[i] = featValue((lv.feats[i] as FeatSpec).kind, s.stats);
 }
 
-/** The run's starting frost in hundredths (create.ts's rule, with the Bank's starting values). */
-function startFrostH(s: SimState): number {
-  const c = s.cfg;
-  if (c.startFrost !== undefined) return 100 * c.startFrost;
-  const B = TUNING.bank;
-  if (s.level) return s.level.introduces === 'snap' ? B.teachStartH : B.campaignStartH;
-  return c.lesson ? 0 : B.runStartH;
-}
-
 /** True when the Cold Snap's cloud is the only source of shade over Nubs' center sample this tick. */
 function snapAlone(s: SimState): boolean {
   const nb = s.nubs;
@@ -94,7 +85,8 @@ export function updateFeats(s: SimState): void {
     if (nb.deep) st.deepTicks = (st.deepTicks ?? 0) + 1;
     if (snapAlone(s)) {
       st.snapSavedTicks = (st.snapSavedTicks ?? 0) + 1;
-      if ((st.snaps ?? 0) > Math.floor(startFrostH(s) / TUNING.bank.costH)) st.earnedSnapSavedTicks = (st.earnedSnapSavedTicks ?? 0) + 1;
+      // Earned: a snap beyond the charges the run started with (the meter actually played, Bank or v1.5).
+      if ((st.snaps ?? 0) > Math.floor(s.startFrostH / TUNING.bank.costH)) st.earnedSnapSavedTicks = (st.earnedSnapSavedTicks ?? 0) + 1;
     }
     if (nb.cloudId >= 0 && nb.rideTicks === RIDE_TICKS) st.cloudsRidden = (st.cloudsRidden ?? 0) + 1;
     for (const e of s.events) {

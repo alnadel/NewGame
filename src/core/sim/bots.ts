@@ -64,6 +64,8 @@ export interface BotHookCtx {
   readonly kind: BotKind;
   readonly mech: boolean;
   readonly opts: Readonly<BotOptions>;
+  /** The human models' decision stream (createBot's salt; 0 the default). */
+  readonly salt: number;
 }
 
 export interface Bot {
@@ -580,7 +582,7 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
  * rule, preAim and the Feat-seeking oracle (unset: today's bots).
  */
 export function createBot(kind: BotKind, salt = 0, mechanics = true, opts: BotOptions = {}): Bot {
-  const ctx: BotHookCtx = { kind, mech: mechanics, opts };
+  const ctx: BotHookCtx = { kind, mech: mechanics, opts, salt };
   switch (kind) {
     case 'idle':
       return idleBot();

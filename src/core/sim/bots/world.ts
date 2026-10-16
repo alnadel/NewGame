@@ -193,13 +193,15 @@ const FOCUS_TICKS = 30;
 
 /**
  * humanFeat, each decision: the aim target (`target` is humanDial's pick, −1 while it would not
- * move). In FEAT_FOCUS of the half-second windows (a coin from the run's seed and the window: its
- * own stream, independent of humanDial's) it aims for the level's first unmet Dare instead
- * (bots/dares.ts), when the dial shows one; its lag and aim error still apply.
+ * move). In FEAT_FOCUS of the half-second windows (a coin from the run's seed, the window and the
+ * player's salt: its own stream, independent of humanDial's, and another player's on another salt)
+ * it aims for the level's first unmet Dare instead (bots/dares.ts), when the dial shows one; its
+ * lag and aim error still apply.
  */
 export function worldHumanTarget(ctx: BotHookCtx, s: SimState, target: number): number {
   if (!s.level) return target;
-  const coin = (splitmix32((s.cfg.seed ^ Math.imul(Math.floor(s.tick / FOCUS_TICKS) + 1, 0x9e3779b1)) >>> 0) >>> 0) / 4294967296;
+  const key = (s.cfg.seed ^ Math.imul(Math.floor(s.tick / FOCUS_TICKS) + 1, 0x9e3779b1) ^ Math.imul(ctx.salt, 0x85ebca6b)) >>> 0;
+  const coin = (splitmix32(key) >>> 0) / 4294967296;
   if (coin >= FEAT_FOCUS) return target;
   const t = ctx.opts.dares ? ctx.opts.dares.target(s, s.sun.theta) : -1;
   return t >= 0 ? t : target;

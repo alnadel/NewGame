@@ -5,7 +5,8 @@
 //   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
 //   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] and [--on …] (the
 //   shipped rules are V16_SHIP: the Frost Bank off) on any of the above;
-//   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions and --bake.
+//   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions and --bake;
+//   [--waive bank,flareKeep]: hard rows an integrator decision waived (they print WAIVED).
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
 // per row, death-time quantiles, melted%, first-night share, median run seconds, mean Snow, SWINGs
@@ -63,7 +64,7 @@ import { buildRunResult } from '../src/core/sim/result.ts';
 import { step } from '../src/core/sim/step.ts';
 import { V16_RULES, type RunConfig, type SimState, type V16Rules } from '../src/core/sim/types.ts';
 import { ECON } from './sim16/econ.ts';
-import type { Sim16Collector, Sim16Ctx, Sim16Job, Sim16Module, Sim16Row } from './sim16/registry.ts';
+import { WAIVERS, type Sim16Collector, type Sim16Ctx, type Sim16Job, type Sim16Module, type Sim16Row } from './sim16/registry.ts';
 import { WORLD } from './sim16/world.ts';
 
 /** The v1.6 report modules (scripts/sim16/registry.ts). */
@@ -479,10 +480,23 @@ async function runRows(jobs: readonly Job[], seeds: number, days: number, worker
   return jobs.map((j, ji) => rowOf(j, results.filter((r) => r.job === ji)));
 }
 
+/** --waive key,…: hard rows waived by an integrator decision (sim16/registry.ts WAIVERS). */
+function waiveArg(): ReadonlySet<string> {
+  const raw = arg('waive', '');
+  const out = new Set<string>();
+  for (const k of raw === '' ? [] : raw.split(',')) {
+    if (!(WAIVERS as readonly string[]).includes(k)) throw new Error(`unknown waiver ${k} (one of ${WAIVERS.join(', ')})`);
+    out.add(k);
+  }
+  return out;
+}
+
 /** The v1.6 context handed to the report modules (failures land in `failures`). */
 function sim16Ctx(o: { seeds: number; days: number; workers: number; check: boolean; margin: number; off: Partial<V16Rules>; policy: BotPolicy | null }, failures: string[]): Sim16Ctx {
+  const waivers = waiveArg();
   return {
     ...o,
+    waived: (key) => waivers.has(key),
     hours: process.argv.includes('--hours'),
     run: (jobs) => runRows(jobs.map((j) => withOff(j, o.off)), o.seeds, o.days, o.workers),
     fail: (what) => {

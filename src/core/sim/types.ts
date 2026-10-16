@@ -2,6 +2,7 @@
 // renderer and session read it and never write it.
 
 import type { LevelDef, Mechanics } from '../../config/campaign.ts';
+import { TUNING } from '../../config/tuning.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { BiomeId, DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
@@ -64,7 +65,7 @@ export const V16_ALL: V16Rules = Object.freeze({ ring: true, bank: true, garden:
  * (25) the dial-only bot still filled 0.23 meters a day from income (gate ≤ 0.15) and naive greed
  * outlived plain play by +1336 min (gate ≤ 0), so the v1.5 meter plays instead. Every other rule is on.
  */
-export const V16_SHIP: V16Rules = Object.freeze({ ring: true, bank: false, garden: true, brittle: true, flares: true, noonHeat: true });
+export const V16_SHIP: V16Rules = Object.freeze({ ring: true, bank: TUNING.bank.ships, garden: true, brittle: true, flares: true, noonHeat: true });
 /** Every v1.6 rule off: plays like v1.5. */
 export const V16_NONE: V16Rules = Object.freeze({ ring: false, bank: false, garden: false, brittle: false, flares: false, noonHeat: false });
 /** The names of the v1.6 rules, in V16Rules order (`sim --off`). */
@@ -346,6 +347,8 @@ export interface SimState {
   // v1.6 Frost Bank and Garden (docs/V1_6_PLAN.md §2.2, §2.4; CORE-1).
   /** Frost income banked during the snap (hundredths), paid when it ends (at most TUNING.garden.bankCapH). */
   snapBankH: number;
+  /** The meter at the run's start in hundredths (the Bank's frostH, or 100 × the v1.5 meter): snaps beyond it are earned. */
+  readonly startFrostH: number;
   /** Ticks this snap was extended by blooms (≤ TUNING.garden.extendCapTicks), and the blooms under it. */
   snapExt: number;
   snapBlooms: number;

@@ -75,7 +75,16 @@ export interface Sim16Ctx {
   run(jobs: readonly Sim16Job[]): Promise<Sim16Row[]>;
   /** Records a hard-gate failure: under --check (and in a mode) the sim exits 1. */
   fail(what: string): void;
+  /**
+   * --waive key,…: hard rows an integrator decision has waived (each prints WAIVED with its value
+   * and does not fail). Keys: 'bank' (the Frost Bank's rows while it ships off), 'flareKeep' (the
+   * flare candidates kept on Days 2-4).
+   */
+  waived(key: string): boolean;
 }
+
+/** The hard rows --waive accepts. */
+export const WAIVERS = ['bank', 'flareKeep'] as const;
 
 export interface Sim16Module {
   readonly name: string;

@@ -1,6 +1,7 @@
 // The Journey campaign (CAMPAIGN_PLAN §2-§3): the level table, the concept catalog and its tunes,
 // the finish line, goals and stars, and the behaviour concepts in the sim.
 import { describe, expect, it } from 'vitest';
+import { LEVEL_BAKE } from '../../src/config/levelBake.gen.ts';
 import {
   buildCampaign,
   CAMPAIGN_LEVELS,
@@ -245,7 +246,8 @@ describe('the level table', () => {
         expect(l.concepts).toHaveLength(4);
         expect(l.concepts[3]).toBe('flare');
         expect(l.flares.length).toBeGreaterThanOrEqual(1);
-        expect(l.feats.map((f) => f.kind)).toContain('parry');
+        // Its parry Dare, wherever a fixed angle parries a kept flare (the bake's stillFlares).
+        if ((LEVEL_BAKE[id]?.stillFlares ?? 0) > 0) expect(l.feats.map((f) => f.kind)).toContain('parry');
         expect(l.concepts[0]).toBe(ch.concepts[0]);
       }
       // Forecast concepts only where they fit; 'oldtown'/'market' force Old Town, 'dazzle' the Meadow.

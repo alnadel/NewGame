@@ -32,6 +32,7 @@ function collector(): Sim16Collector {
   let trickUnits = 0;
   let shadeUnits = 0;
   let fullTicks = 0;
+  let frostFills = 0;
   let day1Mult = 0;
   let day1Ticks = 0;
   let watch = 0;
@@ -57,6 +58,7 @@ function collector(): Sim16Collector {
         if (e.e === 'multUp' || e.e === 'multDown') levelChanges++;
         else if (e.e === 'ringTrick') trickUnits += e.units;
         else if (e.e === 'frostGain') gainH[e.source] = (gainH[e.source] ?? 0) + e.amountH;
+        else if (e.e === 'frostReady') frostFills++;
         else if (e.e === 'snapEnd') {
           watch = AFTER_SNAP;
           snapEnds++;
@@ -120,6 +122,7 @@ function collector(): Sim16Collector {
       out.shadeUnits = shadeUnits;
       out.ringTricks = st.ringTricks ?? 0;
       out.fullTicks = fullTicks;
+      out.frostFills = frostFills;
       out.day1Mult = day1Mult;
       out.day1Ticks = day1Ticks;
       out.frostEarnedH = st.frostEarnedH ?? 0;
@@ -157,6 +160,8 @@ const meanMult = (row: Sim16Row): number => per(total(row, 'multTicks'), dayligh
 const x5Share = (row: Sim16Row): number => per(total(row, 'x5Ticks'), daylight(row));
 const fullShare = (row: Sim16Row): number => per(total(row, 'fullTicks'), daylight(row));
 const metersPerDay = (row: Sim16Row): number => per(total(row, 'frostEarnedH') / BANK.costH, daysPlayed(row));
+/** Meters filled a day (frostReady events: the v1.5 meter reaching full, or the Bank crossing a charge). */
+const fillsPerDay = (row: Sim16Row): number => per(total(row, 'frostFills'), daysPlayed(row));
 const snapsPerDay = (row: Sim16Row): number => per(total(row, 'snaps'), daysPlayed(row));
 const changesPerMin = (row: Sim16Row): number => per(total(row, 'levelChanges'), daylight(row) / 3600);
 const trickShare = (row: Sim16Row): number => per(total(row, 'trickUnits'), total(row, 'trickUnits') + total(row, 'shadeUnits'));
@@ -198,12 +203,14 @@ function table(rows: readonly Sim16Row[], days: number): void {
   }
 }
 
-type Line = (ok: boolean, hard: boolean, what: string, got: string) => void;
+type Line = (ok: boolean, hard: boolean, what: string, got: string, waiver?: string) => void;
 
 function liner(ctx: Sim16Ctx): Line {
-  return (ok, hard, what, got) => {
-    if (hard && !ok) ctx.fail(what);
-    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}`);
+  return (ok, hard, what, got, waiver) => {
+    const waived = !ok && hard && waiver !== undefined && ctx.waived(waiver);
+    if (hard && !ok && !waived) ctx.fail(what);
+    const note = !ok && hard && waiver !== undefined && !waived ? ` (an integrator waiver is --waive ${waiver})` : '';
+    console.log(`  ${ok ? 'PASS' : waived ? 'WAIVED' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}${note}`);
   };
 }
 
@@ -238,9 +245,12 @@ function report(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void {
     const spd = snapsPerDay(rea);
     line(spd >= 0.5 && spd <= 0.9, false, 'reactive p3 0.5-0.9 snaps a day', f2(spd));
   } else if (rea) {
-    console.log(`  n/a   the Frost Bank's gates (Bank off: the v1.5 meter; reactive p3 sits on a full meter ${pct(fullShare(rea))} of daylight, ${f2(snapsPerDay(rea))} snaps a day)`);
+    // Bank off (V16_SHIP, §11): diagnosis #4's rows measure the v1.5 meter; they fail unless waived.
+    line(fullShare(rea) <= 0.1, ctx.check, 'reactive p3 sits on a full meter ≤ 10% of daylight (Bank off: the v1.5 meter)', pct(fullShare(rea)), 'bank');
+    line(snapsPerDay(rea) >= 0.5 && snapsPerDay(rea) <= 0.9, false, 'reactive p3 0.5-0.9 snaps a day', f2(snapsPerDay(rea)));
   }
   if (dial && on('bank')) line(metersPerDay(dial) <= 0.15, ctx.check, 'reactive p3 dial (dial-only) fills ≤ 0.15 meters a day from income', f2(metersPerDay(dial)));
+  else if (dial) line(fillsPerDay(dial) <= 0.15, ctx.check, 'reactive p3 dial (dial-only) fills ≤ 0.15 meters a day (Bank off: the v1.5 meter fills passively)', f2(fillsPerDay(dial)), 'bank');
   if (ora && on('ring')) line(meanMult(ora) >= 1.5, false, 'oracle p3 mean multiplier ≥ x1.5', `x${f2(meanMult(ora))}`);
   const r2 = hd(2);
   if (r2 && on('ring')) {
@@ -311,8 +321,10 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full bank ≤ 10% of daylight', pct(fullShare(plain)));
     line(metersPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day from income', f2(metersPerDay(dial)));
   } else {
-    // The Frost Bank ships off (V16_SHIP): its own rows measure a bank that is not there.
-    console.log(`  n/a   the Frost Bank's rows (Bank off: the v1.5 meter; reactive plain sits on a full meter ${pct(fullShare(plain))} of daylight; --on bank measures the Bank)`);
+    // The Frost Bank ships off (V16_SHIP, §11): diagnosis #4 stays open; the rows measure the v1.5
+    // meter and fail unless an integrator waives them (--waive bank; --on bank measures the Bank).
+    line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full meter ≤ 10% of daylight (Bank off: the v1.5 meter)', pct(fullShare(plain)), 'bank');
+    line(fillsPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day (Bank off: the v1.5 meter fills passively)', f2(fillsPerDay(dial)), 'bank');
   }
   const spd = snapsPerDay(plain);
   line(spd >= 0.5 && spd <= 0.9, false, 'reactive plain 0.5-0.9 snaps a day', f2(spd));

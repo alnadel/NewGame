@@ -65,6 +65,8 @@ export interface LevelBake {
   readonly swings: number;
   /** The longest stretch (ticks) a turn-limited path stays fully shaded (what the ring Dare needs). */
   readonly shadeRun: number;
+  /** Kept flares a single fixed angle parries (shaded on ≥ 6 of the 7 hold steps): what the parry Dare is sized from. */
+  readonly stillFlares: number;
   /** The level's flares after the keep test (the kept ones; the boss's HP is their count). */
   readonly flares: readonly LevelFlare[];
 }
@@ -457,6 +459,13 @@ export function isBossFinale(id: number): boolean {
   return id > TEACH_LEVELS && id % LEVELS_PER_CHAPTER === 0;
 }
 
+/** A boss finale's three flare phases: shares of the level [from, to] and the lift d (°). */
+export const BOSS_PHASES: readonly (readonly [number, number, number])[] = [
+  [0.2, 0.4, 10],
+  [0.5, 0.68, 13],
+  [0.76, 0.92, 16],
+];
+
 /**
  * The flares a level asks for before the bake decides them: the Solar Flare's level gets 3 at 0.30,
  * 0.55 and 0.80 of the level (d 10); a boss finale min(8, floor(level seconds / 3.2)) in three phases
@@ -474,13 +483,8 @@ export function nominalFlares(id: number, startMinute: number, lengthMinutes: nu
   if (!isBossFinale(id)) return Object.freeze(out);
   const sec = (lengthMinutes / 720) * 50;
   const n = Math.min(8, Math.floor(sec / 3.2));
-  const phases: readonly (readonly [number, number, number])[] = [
-    [0.2, 0.4, 10],
-    [0.5, 0.68, 13],
-    [0.76, 0.92, 16],
-  ];
   for (let k = 0; k < 3; k++) {
-    const [a, b, d] = phases[k] as [number, number, number];
+    const [a, b, d] = BOSS_PHASES[k] as [number, number, number];
     const m = Math.floor((n + k) / 3);
     for (let i = 0; i < m; i++) at(a + ((b - a) * (i + 0.5)) / m, d);
   }
@@ -495,7 +499,7 @@ export function levelBakeKey(seed: number, concepts: readonly ConceptId[], drain
 }
 
 /** Bump when the generator changes what a level offers (every bake entry goes stale). */
-export const BAKE_VERSION = 1;
+export const BAKE_VERSION = 2;
 
 const NO_FLARES: readonly LevelFlare[] = Object.freeze([]);
 const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
@@ -551,13 +555,18 @@ function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], ke
     case 'flakes':
       return bake === null || bake.flakes >= FLAKES_OFFER_MIN;
     case 'snapSave':
-      // A snap earned on the level: its gold must be able to fill the bank from the level's start
-      // (SNAP_BLOOM_SHARE of the buds blooming).
-      return m.snap && (bake === null || SNAP_BLOOM_SHARE * bake.buds * TUNING.bank.bloomH >= TUNING.bank.costH - TUNING.bank.campaignStartH);
+      // A snap earned on the level: its gold (SNAP_BLOOM_SHARE of the buds blooming) must fill the
+      // meter that ships from the level's start: the Bank's bloom income, or the v1.5 meter's
+      // (blooms, and its passive shade income over half the level).
+      if (!m.snap) return false;
+      if (bake === null) return true;
+      if (TUNING.bank.ships) return SNAP_BLOOM_SHARE * bake.buds * TUNING.bank.bloomH >= TUNING.bank.costH - TUNING.bank.campaignStartH;
+      return SNAP_BLOOM_SHARE * bake.buds * TUNING.frost.perBloom + 0.5 * sec * TUNING.frost.perShadeSec >= 1 - TUNING.frost.campaignStart;
     case 'brittle':
       return m.brittle && (bake === null || bake.glass > 0);
     case 'parry':
-      return keptFlares > 0;
+      // Flares a fixed angle parries (the bake's stillFlares): the Dare asks only for what a reader of the telegraph can meet.
+      return bake === null ? keptFlares > 0 : bake.stillFlares > 0;
     case 'clean':
       return bake === null || bake.balls > 0;
     case 'still':
@@ -607,7 +616,7 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
     case 'snapSave':
       return 60;
     case 'parry':
-      return Math.max(1, Math.ceil(0.75 * keptFlares));
+      return Math.max(1, Math.ceil(0.75 * (bake ? bake.stillFlares : keptFlares)));
     case 'brittle':
       return Math.max(1, Math.ceil(0.6 * (bake ? bake.glass : 1)));
     case 'flakes':

@@ -510,6 +510,7 @@ const keepLit = new Uint8Array(KEEP_ROWS * BINS);
 const keepScene = createMaskScene();
 const keepG = new Float64Array(BINS);
 const keepWin = new Float64Array(BINS);
+const keepS = new Uint8Array(BINS);
 const keepCand: { -readonly [K in keyof Flare]: Flare[K] } = { id: 0, day: 0, d: 0, warnTick: 0, riseTick: 0, holdTick: 0, fallTick: 0, endTick: 0, state: FLARE_PENDING };
 /** Eclipse window length (ticks; gen/world.ts ECLIPSE_SEC, not imported to keep the module graph acyclic). */
 const ECLIPSE_TICKS = 6 * TICK_HZ;
@@ -555,6 +556,9 @@ function ownLast(job: ValidationJob): number {
   return (job.j0 + job.n - 1) * STEP;
 }
 
+/** The farthest a flare may move from where it was drawn (ticks): the largest keep-test shift. */
+const SHIFT_MAX = Math.max(...FLARE_TRIES.map(Math.abs));
+
 /**
  * The index of the next pending flare this job decides, or −1: the first pending flare whose
  * window ends within the job's own steps (one that runs past them waits for the next job, whose
@@ -569,6 +573,12 @@ function findFlareTest(w: World, job: ValidationJob): number {
     if (f.state !== FLARE_PENDING) continue;
     if (f.endTick > T1) return -1;
     if (f.riseTick - STEP < A) {
+      // Moved into the range at most as far as a keep-test shift would move it; farther, it is
+      // dropped where it stands (never pushed toward the finish line).
+      if (A + STEP - f.riseTick > SHIFT_MAX) {
+        f.state = FLARE_DROPPED;
+        continue;
+      }
       shiftFlare(f, A + STEP - f.riseTick);
       i = resortFlare(w, i) - 1;
       continue;
@@ -592,11 +602,28 @@ function lockTouches(w: World, a: number, b: number): boolean {
   return false;
 }
 
+/** True when an Endless flare's rise (absolute tick, day start t0, day length dl ticks) lies in one of TUNING.flare.windows (edges on the step grid, as drawn). */
+function inRiseWindow(rise: number, t0: number, dl: number): boolean {
+  for (const win of FL.windows) {
+    const lo = STEP * Math.round(((win[0] as number) * dl) / STEP);
+    const hi = STEP * Math.round(((win[1] as number) * dl) / STEP);
+    if (rise - t0 >= lo && rise - t0 <= hi) return true;
+  }
+  return false;
+}
+
+/** Ticks a Journey flare must end before Nubs reaches the finish line (its countdown and flash resolve in the level). */
+const FINISH_MARGIN = Math.round(FL.finishMarginSec * TICK_HZ);
+/** On a teaching level, ticks between a flare's end and the next one's warning (a beat to read the parry). */
+const TEACH_GAP = Math.round(FL.teachGapSec * TICK_HZ);
+
 /**
  * Whether candidate c of flare index i may stand there: inside the job's range (re-run prefix and
- * own steps), in daylight and clear of noon,
- * clear of its neighbours (Endless: rises TUNING.flare.gapSec apart; Journey: a warning may start
- * during the previous flare's fall, never sooner), of the eclipse window and of lock windows.
+ * own steps), in daylight and clear of noon; an Endless rise inside its window of
+ * TUNING.flare.windows, a Journey flare ended FINISH_MARGIN before the finish line; clear of its
+ * neighbours (Endless: rises TUNING.flare.gapSec apart; a boss: a warning may start during the
+ * previous flare's fall, never sooner; a teaching level: TEACH_GAP after the previous one's end),
+ * of the eclipse window and of lock windows.
  */
 function candidateFits(w: World, job: ValidationJob, i: number, c: Flare): boolean {
   if (c.riseTick - STEP < rangeFirst(job) || c.endTick > ownLast(job)) return false;
@@ -606,18 +633,21 @@ function candidateFits(w: World, job: ValidationJob, i: number, c: Flare): boole
   if (c.warnTick < t0 || c.endTick > t0 + dl) return false;
   // Endless flares avoid noon (the Noon Heat window 11 AM-1 PM, [5/12, 7/12) of the day); a boss's middle phase may not.
   if (!w.level && 12 * (c.endTick - t0) > 5 * dl && 12 * (c.riseTick - t0) < 7 * dl) return false;
+  if (!w.level && !inRiseWindow(c.riseTick, t0, dl)) return false;
+  if (w.level && worldYAtTick(w, c.endTick + FINISH_MARGIN) >= w.finishY) return false;
   const fl = w.flares;
   const gap = Math.round(FL.gapSec * TICK_HZ);
+  const teach = w.level !== null && w.level.introduces !== null;
   for (let k = i - 1; k >= 0; k--) {
     const p = fl[k] as Flare;
     if (p.state === FLARE_DROPPED) continue;
-    if (w.level ? c.warnTick < p.fallTick : c.riseTick - p.riseTick < gap) return false;
+    if (w.level ? c.warnTick < (teach ? p.endTick + TEACH_GAP : p.fallTick) : c.riseTick - p.riseTick < gap) return false;
     break;
   }
   for (let k = i + 1; k < fl.length; k++) {
     const q = fl[k] as Flare;
     if (q.state === FLARE_DROPPED) continue;
-    if (w.level ? q.warnTick < c.fallTick : q.riseTick - c.riseTick < gap) return false;
+    if (w.level ? q.warnTick < (teach ? c.endTick + TEACH_GAP : c.fallTick) : q.riseTick - c.riseTick < gap) return false;
     break;
   }
   if (w.eclipseTick >= 0 && c.warnTick < w.eclipseTick + ECLIPSE_TICKS && c.endTick > w.eclipseTick) return false;
@@ -644,21 +674,28 @@ function keepRow(w: World, c: Flare | null, tick: number, out: Uint8Array): void
 /**
  * The keep test's verdict over a candidate's rows (keepRows: the lifted rows from the step before
  * the hold to the step after it, then the hold's first step without the flare): the most shaded
- * hold steps a turn-limited path gets (a), the share of the bins safe without the flare that stay
- * safe with it (b), and whether the flare is kept.
+ * hold steps a turn-limited path gets (a), the most a single fixed angle gets (`still`, the parry
+ * the telegraph can name), the share of the bins safe without the flare that stay safe with it
+ * (b), and whether the flare is kept.
  */
-export function keepVerdict(rows: Uint8Array): { parry: number; moved: number; kept: boolean } {
+export function keepVerdict(rows: Uint8Array): { parry: number; still: number; moved: number; kept: boolean } {
   keepG.fill(0);
+  keepS.fill(0);
   for (let r = 1; r <= HOLD_STEPS; r++) {
     slidingMaxCircular(keepG, TURN, keepWin);
     const a = (r - 1) * BINS;
     for (let b = 0; b < BINS; b++) {
       const lh = Math.max(rows[a + b] as number, rows[a + BINS + b] as number, rows[a + 2 * BINS + b] as number);
       keepG[b] = (keepWin[b] as number) + (lh === 0 ? 1 : 0);
+      if (lh === 0) keepS[b] = (keepS[b] as number) + 1;
     }
   }
   let parry = 0;
-  for (let b = 0; b < BINS; b++) if ((keepG[b] as number) > parry) parry = keepG[b] as number;
+  let still = 0;
+  for (let b = 0; b < BINS; b++) {
+    if ((keepG[b] as number) > parry) parry = keepG[b] as number;
+    if ((keepS[b] as number) > still) still = keepS[b] as number;
+  }
   const base = (KEEP_ROWS - 1) * BINS;
   let safe0 = 0;
   let stay = 0;
@@ -669,8 +706,8 @@ export function keepVerdict(rows: Uint8Array): { parry: number; moved: number; k
   }
   // Nothing safe without the flare: whatever shade the flare offers is new, so it moved.
   const moved = safe0 > 0 ? stay / safe0 : 0;
-  const kept = parry >= Math.ceil(FL.keepShadedShare * HOLD_STEPS - 1e-9) && moved < FL.keepMovedShare;
-  return { parry, moved, kept };
+  const kept = parry >= Math.ceil(FL.keepShadedShare * HOLD_STEPS - 1e-9) && still >= Math.ceil(FL.keepStillShare * HOLD_STEPS - 1e-9) && moved < FL.keepMovedShare;
+  return { parry, still, moved, kept };
 }
 
 /** Every keep-test row of flare f where it stands, into `out` (KEEP_ROWS × 360; tests and tools). */

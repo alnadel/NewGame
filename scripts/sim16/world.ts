@@ -131,9 +131,11 @@ export const WORLD: Sim16Module = {
   name: 'world',
   collector,
   async report(ctx: Sim16Ctx, rows: readonly Sim16Row[]): Promise<void> {
-    const gate = (hard: boolean, ok: boolean, what: string, got: string): void => {
-      if (hard && !ok) ctx.fail(what);
-      console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}`);
+    const gate = (hard: boolean, ok: boolean, what: string, got: string, waiver?: string): void => {
+      const waived = !ok && hard && waiver !== undefined && ctx.waived(waiver);
+      if (hard && !ok && !waived) ctx.fail(what);
+      const note = !ok && hard && waiver !== undefined && !waived ? ` (an integrator waiver is --waive ${waiver})` : '';
+      console.log(`  ${ok ? 'PASS' : waived ? 'WAIVED' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}${note}`);
     };
     console.log('\nWorld v1.6 (Heat Flares, Noon Heat, glass): per row');
     console.log(`${'row'.padEnd(30)} flares/run  parried  (snap)   glass/min D1 | D2+   glass flakes saved  plain flakes saved  deaths 11-1`);
@@ -156,7 +158,7 @@ export const WORLD: Sim16Module = {
       gate(true, ctx.check ? meet === 0 || total(oracle.runs, 'fParry') >= 0.7 * meet : true, 'oracle p3 parries ≥ 70% of the kept flares it meets', pct(total(oracle.runs, 'fParry'), meet));
       const k = total(oracle.runs, 'fKept24');
       const c = total(oracle.runs, 'fCand24');
-      gate(true, c === 0 || k >= 0.85 * c, 'flare candidates kept on Days 2-4 ≥ 85% (oracle p3 worlds)', `${pct(k, c)} of ${c}; Days 5+ ${pct(total(oracle.runs, 'fKept5'), total(oracle.runs, 'fCand5'))}`);
+      gate(true, c === 0 || k >= 0.85 * c, 'flare candidates kept on Days 2-4 ≥ 85% (oracle p3 worlds)', `${pct(k, c)} of ${c}; Days 5+ ${pct(total(oracle.runs, 'fKept5'), total(oracle.runs, 'fCand5'))}`, 'flareKeep');
       const gs = total(oracle.runs, 'gTaken') + total(oracle.runs, 'gMelted');
       if (gs > 0) gate(false, total(oracle.runs, 'gTaken') >= 0.85 * gs, 'oracle saves ≥ 85% of glass flakes (advisory)', pct(total(oracle.runs, 'gTaken'), gs));
     }

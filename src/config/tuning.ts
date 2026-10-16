@@ -245,6 +245,11 @@ const tuning = {
    * teaching level); lesson runs start at 0.
    */
   bank: {
+    /**
+     * Whether the Frost Bank ships (core V16_SHIP.bank reads it; the Journey's snapSave Dare is
+     * sized from the meter that ships). Off since the v1.6 calibration (core README §16.3).
+     */
+    ships: false,
     capH: 200,
     costH: 100,
     bloomH: 25,
@@ -297,9 +302,15 @@ const tuning = {
    * v1.6 Heat Flares (§2.5; CORE-2). Shape in ticks (warning, rise with a 3x² − 2x³ smoothstep,
    * hold, fall); rise windows as shares of the day (t/Dl), gapSec apart; ε_world clamped to
    * εnoon − epsMargin (Endless) or journeyEpsCap (Journey). Keep test: a parry path shaded on
-   * keepShadedShare of the hold steps, and fewer than keepMovedShare of the safe bins stay safe;
-   * otherwise shifted by shiftsSec, then dropped. A parry is ≤ parryMaxLit lit hold ticks (+snow
-   * Snow); during the rise and hold buds grow × budMul and flakes melt × meltMul.
+   * keepShadedShare of the hold steps (1: every step, so a kept flare is parried under the sim's
+   * parryMaxLit rule), a fixed angle on keepStillShare of them (0: not asked), and fewer than
+   * keepMovedShare of the safe bins stay safe; otherwise shifted by shiftsSec, then dropped.
+   * shiftsSec runs to ±5 s, past the plan's ±1 s (a deviation awaiting the integrator; core README
+   * §16.3), but an Endless rise never leaves its window of `windows`, so the list amounts to
+   * "anywhere in the window, nearest the drawn rise first". A Journey flare ends finishMarginSec
+   * before the finish line; on a teaching level the next warning waits teachGapSec after a flare's
+   * end. A parry is ≤ parryMaxLit lit hold ticks (+snow Snow); during the rise and hold buds grow ×
+   * budMul and flakes melt × meltMul.
    */
   flare: {
     warnTicks: 120,
@@ -315,8 +326,11 @@ const tuning = {
     epsMargin: 2,
     journeyEpsCap: 78,
     parryMaxLit: 4,
-    keepShadedShare: 0.85,
+    keepShadedShare: 1,
+    keepStillShare: 0,
     keepMovedShare: 0.5,
+    finishMarginSec: 1,
+    teachGapSec: 1.5,
     shiftsSec: [0.5, -0.5, 1, -1, 1.5, -1.5, 2, -2, 2.5, -2.5, 3, -3, 3.5, -3.5, 4, -4, 4.5, -4.5, 5, -5],
     snow: 5,
     budMul: 3,

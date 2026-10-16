@@ -519,7 +519,9 @@ export function dareTarget(s: SimState, theta: number): number {
       mask = g.flake;
       break;
     case 'parry':
+      // Aim at the telegraphed angle during the warning, then hold it through the rise and hold.
       if (s.flarePhase === 1) mask = g.flare;
+      else if ((s.flarePhase === 2 || s.flarePhase === 3) && parryFor === s && parryFlare === s.flareId) return parryBin;
       break;
     case 'swings': {
       // Any lasting shade at least a SWING's turn away.
@@ -549,8 +551,18 @@ export function dareTarget(s: SimState, theta: number): number {
       best = b;
     }
   }
+  if (kinds[0] === 'parry' && best >= 0) {
+    parryFor = s;
+    parryFlare = s.flareId;
+    parryBin = best;
+  }
   return best;
 }
+
+/** humanFeat's parry aim: the angle it picked from the warning's telegraph, held through that flare. */
+let parryFor: SimState | null = null;
+let parryFlare = -1;
+let parryBin = -1;
 
 /**
  * The Dare terms as one value, for `BotOptions.dares`: the oracle plays the level's verb goal (and,

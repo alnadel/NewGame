@@ -1,6 +1,7 @@
 // v1.6 Dares and the soft-fail (docs/V1_6_PLAN.md §2.6; CORE-2): what each Dare counts, the `feat`
 // and `featMet` events, star 2, the relaxed goal after two misses, and the Dare table's shape.
 import { describe, expect, it } from 'vitest';
+import { LEVEL_BAKE } from '../../src/config/levelBake.gen.ts';
 import {
   CAMPAIGN_LEVELS,
   DARE_OF,
@@ -60,7 +61,8 @@ describe('Dares (§2.6)', () => {
       expect(l.feats.length, `level ${l.id}`).toBeGreaterThanOrEqual(1);
       expect(l.feats.length, `level ${l.id}`).toBeLessThanOrEqual(2);
       for (const f of l.feats) expect(f.target, `level ${l.id} ${f.kind}`).toBeGreaterThanOrEqual(1);
-      if (isBossFinale(l.id)) expect(l.feats.map((f) => f.kind), `level ${l.id}`).toContain('parry');
+      // A boss finale dares a parry wherever a fixed angle parries one of its flares (the bake's stillFlares).
+      if (isBossFinale(l.id) && (LEVEL_BAKE[l.id]?.stillFlares ?? 0) > 0) expect(l.feats.map((f) => f.kind), `level ${l.id}`).toContain('parry');
     }
     // A teaching level's Dare is its concept's when the level offers it, else a core verb; the verb
     // teaching levels dare their own verb.

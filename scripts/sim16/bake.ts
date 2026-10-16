@@ -14,16 +14,16 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bakeRunEntry, CAMPAIGN_LEVELS, levelBakeKey, levelDef, nominalFlares, type LevelBake, type LevelDef, type LevelFlare } from '../../src/config/campaign.ts';
+import { BOSS_PHASES, bakeRunEntry, CAMPAIGN_LEVELS, isBossFinale, levelBakeKey, levelDef, nominalFlares, type LevelBake, type LevelDef, type LevelFlare } from '../../src/config/campaign.ts';
 import { TUNING } from '../../src/config/tuning.ts';
 import { dayAtTick, dayStartTick, dayTicks, tickAtMinute, TICK_HZ } from '../../src/core/clock.ts';
 import { tanD } from '../../src/core/dmath.ts';
 import { paramsAt, worldElevation, worldYAtTick } from '../../src/core/gen/plan.ts';
-import { chillDeltaTable, slidingMaxCircular, stepLit, validatorDrain } from '../../src/core/gen/validator.ts';
+import { chillDeltaTable, keepRows, keepVerdict, slidingMaxCircular, stepLit, validatorDrain } from '../../src/core/gen/validator.ts';
 import { createWorld, ensureGenerated, type World } from '../../src/core/gen/world.ts';
 import { gatherScene } from '../../src/core/gen/store.ts';
 import { BINS, binOf, createMaskScene, glareMask, markCaster, markEllipse, SAMPLE_DX, SAMPLE_DY, SAMPLES, sceneAddBall, sceneBegin } from '../../src/core/intervals.ts';
-import { FLARE_KEPT, SNAP_ID_BASE, type Caster, type GazingBall } from '../../src/core/objects.ts';
+import { FLARE_KEPT, SNAP_ID_BASE, type Caster, type Flare, type GazingBall } from '../../src/core/objects.ts';
 import { glareOffset } from '../../src/core/shadows.ts';
 import { campaignConfig } from '../../src/core/level.ts';
 import { sunGustAt, sunLockedAt } from '../../src/core/sim/sun.ts';
@@ -316,31 +316,137 @@ function windowsOf(w: World, l: LevelDef): { windows: number; holdable: number }
   return { windows: n, holdable: h };
 }
 
+/** Hold steps a single fixed angle must shade (3-step rule) for a flare to count as statically parryable: 6 of 7. */
+const STILL_STEPS = Math.ceil(0.85 * Math.round(TUNING.flare.holdTicks / STEP) - 1e-9);
+/**
+ * How far (s, nearest first) the bake moves a nominal flare in data looking for a place it is kept:
+ * in 0.5 s steps on a boss finale, in 0.1 s steps (the validator's grid) on the teaching level, whose
+ * three flares and their beats must fit together.
+ */
+const BAKE_SHIFT_SEC = 6;
+function shiftsOf(stepTicks: number): readonly number[] {
+  const out = [0];
+  for (let k = 1; k * stepTicks <= BAKE_SHIFT_SEC * TICK_HZ; k++) out.push(k * stepTicks, -k * stepTicks);
+  return out;
+}
+const BOSS_SHIFTS = shiftsOf(TICK_HZ / 2);
+const TEACH_SHIFTS = shiftsOf(STEP);
+
+/** True when a fixed angle shades the kept flare f on ≥ STILL_STEPS of its hold steps (the parry a telegraph can name). */
+export function stillParryable(w: World, f: Flare): boolean {
+  return keepVerdict(keepRows(w, f)).still >= STILL_STEPS;
+}
+
+/**
+ * Where nominal flare i of level l may be kept (absolute ticks of its rise): a boss finale's flare
+ * inside its phase (BOSS_PHASES, as shares of the level), the Solar Flare's within BAKE_SHIFT_SEC of
+ * its nominal rise.
+ */
+function riseBounds(l: LevelDef, f: LevelFlare): readonly [number, number] {
+  const t = tickAtMinute(f.minute);
+  if (!isBossFinale(l.id)) return [t - BAKE_SHIFT_SEC * TICK_HZ, t + BAKE_SHIFT_SEC * TICK_HZ];
+  const frac = (f.minute - l.startMinute) / l.lengthMinutes;
+  for (const [a, b] of BOSS_PHASES) {
+    if (frac >= a && frac <= b) return [tickAtMinute(l.startMinute + a * l.lengthMinutes), tickAtMinute(l.startMinute + b * l.lengthMinutes)];
+  }
+  return [t, t];
+}
+
+/**
+ * Pass 1 of a flare level's bake (§2.5: "shifts each flare by ±0.5 s in data until it passes the
+ * keep test"): decides its nominal flares one at a time, in order. Each is tried where it stands,
+ * then moved in data by ±0.5 s steps (BAKE_SHIFTS, nearest first) inside riseBounds; a candidate is
+ * taken when the validator keeps it exactly there (its keep test and every candidateFits rule: the
+ * finish margin, the spacing, the eclipse and lock windows), and on the teaching level only where a
+ * fixed angle parries it (stillParryable). A flare no candidate fits is dropped.
+ * The world of each candidate holds the flares decided so far, so the result is a fixed point: the
+ * level built with the baked flares keeps every one of them where it stands.
+ */
+function bakeFlares(l: LevelDef, nominal: readonly LevelFlare[]): { flares: LevelFlare[]; dropped: number } {
+  const teach = l.introduces !== null;
+  /** True when the level built with `list` keeps every flare exactly where the data puts it (and, teaching, a fixed angle parries each). */
+  const fits = (list: readonly LevelFlare[]): boolean => {
+    const w = levelWorld(Object.freeze({ ...l, flares: list }));
+    return w.flares.every((f, i) => {
+      // Kept exactly there (the validator's own shifts would move it into another job, whose test can differ).
+      if (f.state !== FLARE_KEPT || f.riseTick !== STEP * Math.round(tickAtMinute((list[i] as LevelFlare).minute) / STEP)) return false;
+      return !teach || stillParryable(w, f);
+    });
+  };
+  const byMinute = (a: LevelFlare, b: LevelFlare): number => a.minute - b.minute;
+  let decided: LevelFlare[] = [];
+  const missed: LevelFlare[] = [];
+  for (const nf of nominal) {
+    const [lo, hi] = riseBounds(l, nf);
+    const t0 = tickAtMinute(nf.minute);
+    let found: LevelFlare | null = null;
+    for (const off of teach ? TEACH_SHIFTS : BOSS_SHIFTS) {
+      if (t0 + off < lo || t0 + off > hi) continue;
+      const cand = Object.freeze({ minute: minuteOfTick(t0 + off), d: nf.d });
+      if (!fits([...decided, cand])) continue;
+      found = cand;
+      break;
+    }
+    if (found) decided.push(found);
+    else missed.push(nf);
+  }
+  // A boss finale's HP: a flare its phase could not hold is tried anywhere in the three phases
+  // (nearest its nominal rise first, the lift of the phase it lands in), e.g. away from the high noon
+  // sun of a Heat Dome, where no shadow moves.
+  let dropped = 0;
+  if (isBossFinale(l.id)) {
+    for (const nf of missed) {
+      const t0 = tickAtMinute(nf.minute);
+      const cands: { t: number; d: number }[] = [];
+      for (const [a, b, d] of BOSS_PHASES) {
+        const lo = tickAtMinute(l.startMinute + a * l.lengthMinutes);
+        const hi = tickAtMinute(l.startMinute + b * l.lengthMinutes);
+        for (let t = lo; t <= hi; t += TICK_HZ / 2) cands.push({ t, d });
+      }
+      cands.sort((x, y) => Math.abs(x.t - t0) - Math.abs(y.t - t0) || x.t - y.t);
+      let found: LevelFlare | null = null;
+      for (const c of cands) {
+        const cand = Object.freeze({ minute: minuteOfTick(c.t), d: c.d });
+        if (decided.some((x) => Math.abs(tickAtMinute(x.minute) - c.t) < TICK_HZ)) continue;
+        const list = [...decided, cand].sort(byMinute);
+        if (!fits(list)) continue;
+        found = cand;
+        decided = list;
+        break;
+      }
+      if (!found) dropped++;
+    }
+  } else {
+    dropped = missed.length;
+  }
+  if (process.env.BAKE_DEBUG) console.log(`L${l.id}: ${decided.map((f) => Math.round(tickAtMinute(f.minute))).join(' ')} (dropped ${dropped})`);
+  return { flares: decided, dropped };
+}
+
 /** The bake of one level (pure in the level's definition and the generator). */
 export function bakeLevel(id: number): LevelBake & { rescuesFlares: number; dropped: number } {
   const l = levelDef(id) as LevelDef;
   const nom = nominalLevel(l);
   const key = levelBakeKey(l.seed, l.concepts, l.drain, l.startMinute, l.lengthMinutes, l.biome, l.forecast, nom.flares);
-  // Pass 1: the validator decides the nominal flares.
+  // Pass 1: the nominal flares, decided one by one (bakeFlares).
   let flares: readonly LevelFlare[] = [];
   let dropped = 0;
   let rescuesFlares = 0;
   if (nom.flares.length > 0) {
-    const w1 = levelWorld(nom);
-    const kept: LevelFlare[] = [];
-    for (const f of w1.flares) {
-      if (f.state === FLARE_KEPT) kept.push(Object.freeze({ minute: minuteOfTick(f.riseTick), d: f.d }));
-      else dropped++;
-    }
-    flares = Object.freeze(kept);
+    const b = bakeFlares(l, nom.flares);
+    flares = Object.freeze(b.flares);
+    dropped = b.dropped;
+    const w1 = levelWorld(Object.freeze({ ...l, flares }));
     const w0 = levelWorld(Object.freeze({ ...l, flares: [] }));
     rescuesFlares = w1.stats.rescues - w0.stats.rescues;
   }
   // Pass 2: the offers of the world as it will be played (with the baked flares).
   const w = levelWorld(Object.freeze({ ...l, flares }));
+  let stillFlares = 0;
   for (const f of w.flares) {
     const back = STEP * Math.round(tickAtMinute(minuteOfTick(f.riseTick)) / STEP);
     if (back !== f.riseTick || f.state !== FLARE_KEPT) throw new Error(`level ${id}: baked flare ${f.id} does not reproduce (rise ${f.riseTick}, state ${f.state})`);
+    if (stillParryable(w, f)) stillFlares++;
   }
   const inLevel = (y: number): boolean => y >= w.startY && y <= w.finishY;
   const buds = w.buds.filter((b) => inLevel(b.y)).length;
@@ -352,14 +458,14 @@ export function bakeLevel(id: number): LevelBake & { rescuesFlares: number; drop
   const flakes = w.pickups.filter((p) => p.kind === 'flake' && !p.brittle && inLevel(p.y)).length;
   const { deep, rideBest, rides, swings, shadeRun } = offersOf(w);
   const { windows, holdable: hold } = windowsOf(w, l);
-  return { key, buds, balls, glass, windows, holdable: hold, flakes, deep, rideBest, rides, swings, shadeRun, flares, rescuesFlares, dropped };
+  return { key, buds, balls, glass, windows, holdable: hold, flakes, deep, rideBest, rides, swings, shadeRun, flares, stillFlares, rescuesFlares, dropped };
 }
 
 /** levelBake.gen.ts's text for these entries. */
 export function bakeFileText(entries: readonly (readonly [number, LevelBake])[]): string {
   const lines = entries.map(([id, b]) => {
     const fl = b.flares.map((f) => `{ minute: ${f.minute}, d: ${f.d} }`).join(', ');
-    return `  ${id}: { key: '${b.key}', buds: ${b.buds}, balls: ${b.balls}, glass: ${b.glass}, windows: ${b.windows}, holdable: ${b.holdable}, flakes: ${b.flakes}, deep: ${b.deep}, rideBest: ${b.rideBest}, rides: ${b.rides}, swings: ${b.swings}, shadeRun: ${b.shadeRun}, flares: [${fl}] },`;
+    return `  ${id}: { key: '${b.key}', buds: ${b.buds}, balls: ${b.balls}, glass: ${b.glass}, windows: ${b.windows}, holdable: ${b.holdable}, flakes: ${b.flakes}, deep: ${b.deep}, rideBest: ${b.rideBest}, rides: ${b.rides}, swings: ${b.swings}, shadeRun: ${b.shadeRun}, flares: [${fl}], stillFlares: ${b.stillFlares} },`;
   });
   const run = entries.map(([id, b]) => bakeRunEntry(levelDef(id) as LevelDef, b)).join(';');
   return `// GENERATED by \`node scripts/sim.ts --bake\` (docs/V1_6_PLAN.md §2.5, §2.6). Do not edit by hand.
@@ -393,7 +499,7 @@ export async function bakeMain(ctx: Sim16Ctx): Promise<void> {
     const { rescuesFlares, dropped, ...entry } = b;
     entries.push([l.id, entry]);
     if (l.flares.length > 0 || entry.flares.length > 0 || dropped > 0) {
-      console.log(`  L${l.id} ${l.name.padEnd(18)} flares kept ${entry.flares.length}, dropped ${dropped}, rescues for them ${rescuesFlares >= 0 ? '+' : ''}${rescuesFlares}`);
+      console.log(`  L${l.id} ${l.name.padEnd(18)} flares kept ${entry.flares.length} (a fixed angle parries ${entry.stillFlares}), dropped ${dropped}, rescues for them ${rescuesFlares >= 0 ? '+' : ''}${rescuesFlares}`);
       if (l.id % 10 === 0 && l.id > 40) worst = Math.max(worst, rescuesFlares);
     }
   }

@@ -146,32 +146,70 @@ function flakeGuide(s: SimState): void {
   for (let b = 0; b < BINS; b++) if (tmp[b] === 1) g.flake[b] = 0;
 }
 
+/** Hold ticks guide.flare intersects: every validator step of the hold, and its last tick. */
+const FLARE_HOLD_STEPS = Math.ceil(TUNING.flare.holdTicks / TUNING.validator.stepTicks);
+const flareFirst = new Uint8Array(BINS);
+/** guide.flare's cache: the flare (−1: none) and the world and bloom count it was computed with. */
+let flareFor = -1;
+let flareBlooms = -1;
+let flareWorld: object | null = null;
+
+/** Full-shade bins (strict) at Nubs' scheduled place and the world's elevation at absolute tick t, into `out`; false at night. */
+function shadeAtTick(s: SimState, t: number, out: Uint8Array): boolean {
+  const w = s.world;
+  const eps = worldElevation(w, t);
+  if (eps <= 0) return false;
+  const y = worldYAtTick(w, t);
+  const x = trailX(w.trail, y);
+  gatherScene(w, scene, x, y, MARGIN, t / TICK_HZ, eps, 1 / tanD(eps));
+  litMask(scene, x, y, false, litNext, null);
+  for (let b = 0; b < BINS; b++) out[b] = litNext[b] === 0 ? 1 : 0;
+  return true;
+}
+
 /**
- * guide.flare (§2.5): during a flare's warning, the bins of full shade at Nubs' scheduled position,
- * the lifted elevation and the clouds of the flare's first hold tick; guide.flareTicks counts the
- * ticks to its rise. Otherwise all 0 and −1.
+ * guide.flare (§2.5): during a flare's warning, the angles that parry it: the bins of full shade at
+ * Nubs' scheduled position, the lifted elevation and the clouds of every step of the hold (a fixed
+ * angle there stays shaded through it), or, when no fixed angle holds, those of its first hold tick;
+ * guide.flareTicks counts the ticks to its rise. Otherwise all 0 and −1. The hold is fixed for the
+ * warning, so the mask is computed once per flare and again only when a sunflower blooms or a snap
+ * is up.
  */
 function flareGuide(s: SimState): void {
   const g = s.guide;
   if (s.flarePhase !== 1) {
     g.flare.fill(0);
     g.flareTicks = -1;
+    flareFor = -1;
     return;
   }
   const w = s.world;
   const f = w.flares[s.flareIdx] as Flare;
   g.flareTicks = s.flareTicks;
-  const t = f.holdTick;
-  const y = worldYAtTick(w, t);
-  const x = trailX(w.trail, y);
-  const eps = worldElevation(w, t);
-  if (eps <= 0) {
+  const blooms = s.stats.blooms ?? 0;
+  // A snap cloud re-aims as it goes (its path at the hold can change), so no cache while one is up.
+  if (f.id === flareFor && blooms === flareBlooms && s.snapCloudId < 0 && w === flareWorld) return;
+  flareFor = s.snapCloudId < 0 ? f.id : -1;
+  flareBlooms = blooms;
+  flareWorld = w;
+  if (!shadeAtTick(s, f.holdTick, flareFirst)) {
     g.flare.fill(0);
     return;
   }
-  gatherScene(w, scene, x, y, MARGIN, t / TICK_HZ, eps, 1 / tanD(eps));
-  litMask(scene, x, y, false, litNext, null);
-  for (let b = 0; b < BINS; b++) g.flare[b] = litNext[b] === 0 ? 1 : 0;
+  g.flare.set(flareFirst);
+  let any = false;
+  for (let k = 1; k <= FLARE_HOLD_STEPS; k++) {
+    const t = k < FLARE_HOLD_STEPS ? f.holdTick + k * TUNING.validator.stepTicks : f.fallTick - 1;
+    if (!shadeAtTick(s, t, tmp)) break;
+    any = false;
+    for (let b = 0; b < BINS; b++) {
+      const v = (g.flare[b] as number) & (tmp[b] as number);
+      g.flare[b] = v;
+      if (v === 1) any = true;
+    }
+    if (!any) break;
+  }
+  if (!any) g.flare.set(flareFirst);
 }
 
 /** True on ticks where the guide refreshes (absolute 0.1 s grid). */
