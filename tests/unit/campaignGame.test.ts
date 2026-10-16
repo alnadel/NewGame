@@ -116,10 +116,10 @@ describe('the words', () => {
     expect(campaignShareText({ id: 12, name: levelDef(12)!.name, stars: 2, link: null })).toBe('SHADY Journey · Level 12 ★★☆ · Grey Day');
   });
   it('HUD goal pill: flakes/target, snow/target, or plain Snow', () => {
-    expect(hudGoal(levelDef(2)!, { flakes: 3, snow: 7 })).toEqual({ value: 3, target: levelDef(2)!.goal.target, flakes: true });
-    expect(hudGoal(levelDef(7)!, { flakes: 3, snow: 7.9 })).toEqual({ value: 7, target: levelDef(7)!.goal.target, flakes: false });
-    expect(hudGoal(levelDef(1)!, { flakes: 3, snow: 7 })).toEqual({ value: 7, target: -1, flakes: false });
-    expect(hudGoal(null, { flakes: 3, snow: 7 })).toEqual({ value: 7, target: -1, flakes: false });
+    expect(hudGoal(levelDef(2)!, { flakes: 3, snow: 7 })).toMatchObject({ value: 3, target: levelDef(2)!.goal.target, flakes: true, glyph: null });
+    expect(hudGoal(levelDef(7)!, { flakes: 3, snow: 7.9 })).toMatchObject({ value: 7, target: levelDef(7)!.goal.target, flakes: false });
+    expect(hudGoal(levelDef(1)!, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });
+    expect(hudGoal(null, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });
   });
 });
 

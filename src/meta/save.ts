@@ -226,7 +226,7 @@ function sanitizeDaily(raw: unknown): Record<string, DailyEntry> {
 
 /**
  * Progress of an undone 'hold-x5' slot from a save written before the polish wave. The mission was
- * "Hold ×5 for 8 s" (progress = seconds held at ×5) and is now "Reach a ×4 multiplier" (progress =
+ * "Hold ×5 for 8 s" (progress = seconds held at ×5) and is now "Reach a ×5 multiplier" (progress =
  * the best multiplier level). Any held seconds mean ×5 was reached, so they become level 5; zero
  * stays zero. Saves carrying `flags.missionsV2` already use the new unit and are left alone.
  */
@@ -306,8 +306,16 @@ function sanitizeCampaign(raw: unknown): CampaignState {
     if (n > 0) passed = i + 1;
   });
   const unlocked = Math.max(int(r.unlocked, 1, 1, CAMPAIGN_LEVEL_COUNT + 1), Math.min(CAMPAIGN_LEVEL_COUNT + 1, passed + 1));
-  return { stars, unlocked, lastLevel: int(r.lastLevel, 0, 0, CAMPAIGN_LEVEL_COUNT) };
+  const out: CampaignState = { stars, unlocked, lastLevel: int(r.lastLevel, 0, 0, CAMPAIGN_LEVEL_COUNT) };
+  // v1.6 soft-fail: goal misses per level, kept only while some level has one.
+  const ml: unknown[] = Array.isArray(r.misses) ? r.misses : [];
+  const misses = Array.from({ length: CAMPAIGN_LEVEL_COUNT }, (_, i) => int(ml[i], 0, 0, MAX_MISSES));
+  if (misses.some((n) => n > 0)) out.misses = misses;
+  return out;
 }
+
+/** A level's goal misses stop counting here (two relax its goal). */
+export const MAX_MISSES = 9;
 
 /** The v1.4 gamification: counters clamped, unknown features and items dropped, a damaged streak date cleared. */
 function sanitizeGamify(raw: unknown, achievements: number): GamifyState {

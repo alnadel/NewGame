@@ -25,6 +25,8 @@ export const THROTTLES = {
   /** v1.5: a growing bud's tick, and deep shade's whoom (it comes and goes at shadow edges). */
   bud: [90, 8],
   deep: [2500, 1],
+  /** v1.6: ring tricks (a streak can land them close together). */
+  trick: [150, 4],
 } as const;
 
 /**
@@ -62,6 +64,7 @@ export class SfxRouter {
   private readonly gusts = new RateLimiter(THROTTLES.gust[0], THROTTLES.gust[1]);
   private readonly buds = new RateLimiter(THROTTLES.bud[0], THROTTLES.bud[1]);
   private readonly deeps = new RateLimiter(THROTTLES.deep[0], THROTTLES.deep[1]);
+  private readonly tricks = new RateLimiter(THROTTLES.trick[0], THROTTLES.trick[1]);
   private readonly pulse = new Pulse();
   private readonly scene = createScene();
   private slowMo = 0;
@@ -119,7 +122,7 @@ export class SfxRouter {
 
   /** New run (start or retry): forget throttles, timers and per-run counters. */
   resetRun(): void {
-    for (const r of [this.detents, this.melts, this.bells, this.gusts, this.buds, this.deeps]) r.reset();
+    for (const r of [this.detents, this.melts, this.bells, this.gusts, this.buds, this.deeps, this.tricks]) r.reset();
     this.pulse.reset();
     this.slowMo = 0;
     this.duckLeft = 0;
@@ -218,6 +221,32 @@ export class SfxRouter {
       case 'deepEnter':
         if (this.deeps.tryAcquire(now)) this.cue('deepEnter', { day });
         return;
+      // v1.6: the ring, the bank, the garden, glass, flares (gains ride on their own cue: a bloom, a parry).
+      case 'multDown':
+        if (ev.cause === 'bleed' && ev.from >= 5) this.cue('multReset');
+        return;
+      case 'ringTrick':
+        // A pluck high on the bud tick's ladder; the cash-in pours with the meter's shimmer; a spill tumbles down.
+        if (this.tricks.tryAcquire(now)) this.cue('budGrow', { day, degree: 8 });
+        return;
+      case 'snapCash':
+        if (ev.refundH > 0) this.cue('frostReady', { day });
+        return;
+      case 'frostSpill':
+        return this.cue('snapEnd', { day });
+      case 'snapExtend':
+        return this.cue('budGrow', { day, degree: 9 });
+      case 'snapLand':
+        return this.cue('swing', { day, level: ev.chain });
+      case 'clusterSaved':
+        if (ev.brittle) this.cue('crystal', { day });
+        return;
+      case 'flareWarn':
+        return this.cue('flareWarn', { day });
+      case 'flareParry':
+        return this.cue('parry', { day });
+      case 'flareMiss':
+        return this.cue('glare');
       case 'start':
       case 'go':
       case 'shadeExit':

@@ -85,7 +85,7 @@ describe('missions and achievements', () => {
       'Reach 9:00 AM',
       'Collect 10 flakes in one run',
       'Survive a noon (reach 12:30 PM)',
-      'Reach a ×3 multiplier',
+      'Reach a ×4 multiplier',
       "Ride a cloud's shadow for 3 s straight",
       'Reach Day 2',
       'Collect an Ice Crystal',
@@ -93,7 +93,7 @@ describe('missions and achievements', () => {
       'Walk under a gate arch between 11 AM and 1 PM',
       'Pass 2 gazing balls in one run with no glare contact',
       'Reach Day 3',
-      'Reach a ×4 multiplier',
+      'Reach a ×5 multiplier',
       'Land 3 SWINGs in one run',
       'Bloom 2 sunflowers in one run',
       'Cast 2 Cold Snaps in one run',
@@ -126,8 +126,10 @@ describe('missions and achievements', () => {
   it('scales goals by tier', () => {
     const byId = (id: string) => MISSIONS.find((m) => m.id === id)!;
     expect(missionTarget(byId('flakes-10'), 3)).toBe(30);
+    // v1.6 T8: 'mult-3' asks for ×4, 'hold-x5' for ×5 (both capped at ×5).
+    expect(missionTarget(byId('mult-3'), 1)).toBe(4);
     expect(missionTarget(byId('mult-3'), 2)).toBe(5);
-    expect(missionTarget(byId('hold-x5'), 1)).toBe(4);
+    expect(missionTarget(byId('hold-x5'), 1)).toBe(5);
     expect(missionTarget(byId('hold-x5'), 2)).toBe(5);
     expect(missionTarget(byId('clean-balls'), 1)).toBe(2);
     expect(missionTarget(byId('clean-balls'), 2)).toBe(4);
@@ -136,9 +138,9 @@ describe('missions and achievements', () => {
     expect(missionLabel(byId('ice-crystal'), 2)).toBe('Collect 2 Ice Crystals in one run');
     expect(missionLabel(byId('two-phews'), 3)).toBe('6 PHEWs in one run');
     expect(missionProgressText(byId('cloud-ride'), 1, 2.47, false)).toBe('2.4/3 s');
-    expect(missionProgressText(byId('hold-x5'), 1, 3, false)).toBe('×3/×4');
+    expect(missionProgressText(byId('hold-x5'), 1, 3, false)).toBe('×3/×5');
     expect(missionProgressText(byId('hold-x5'), 2, 1, false)).toBe('×1/×5');
-    expect(missionProgressText(byId('mult-3'), 1, 2, false)).toBe('×2/×3');
+    expect(missionProgressText(byId('mult-3'), 1, 2, false)).toBe('×2/×4');
     expect(missionProgressText(byId('reach-day-2'), 1, 500, false)).toBe('Day 1 · 2:20 PM');
     expect(missionProgressText(byId('reach-9am'), 1, 170, false)).toBe('8:50 AM');
     expect(missionProgressText(byId('reach-9am'), 1, 0, false)).toBe('–');

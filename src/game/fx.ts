@@ -5,8 +5,12 @@
 // v1.5: a bud's growth sparkles, the bloom (the sunflower pops up: render/flora.ts), the frost
 // meter filling, the Cold Snap (COLD SNAP!, an ice ring, snow falling from its cloud) and deep
 // shade (DEEP, at most every DEEP_POP_GAP s).
+// v1.6: the ring's tricks flash it (the run's first pops "+RING") and losing ×5 shakes the badge;
+// frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap"), a spill shakes the meter, a
+// cash-in pours from the badge into it; LANDING!, GLASS SAVED!, the PARRY! stamp, a flare's miss,
+// a Dare met (DARE ✓); the Day card names the day's Noon Heat when it rises.
 
-import { cloudCenter, cloudOffset, dayParams, dayTicks, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
+import { cloudCenter, cloudOffset, dayParams, dayTicks, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -37,9 +41,11 @@ import {
   POP_MULT,
   POP_PHEW,
   POP_SNAP,
+  POP_SWING,
   spawn,
 } from '../render/particles.ts';
 import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
+import { POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
 import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { MechView, RenderScene } from '../render/renderer.ts';
@@ -103,6 +109,9 @@ export class Fx {
   mech: MechView | null = null;
   private snowAcc = 0;
   private deepT = -1e9;
+  /** v1.6: the run's first ring trick and first frost gain were shown. */
+  private trickSeen = false;
+  private gainSeen = false;
   private readonly c2 = new Float64Array(2);
 
   constructor(scene: RenderScene, clock: FixedClock) {
@@ -117,6 +126,7 @@ export class Fx {
     this.glintAcc = 0;
     this.snowAcc = 0;
     this.deepT = -1e9;
+    this.trickSeen = this.gainSeen = false;
     resetBlooms();
   }
 
@@ -242,7 +252,10 @@ export class Fx {
         case 'dawn': {
           const plan = worldPlan(s.world, ev.day);
           const eps = (s.params.day === ev.day ? s.params : dayParams(ev.day, s.cfg.profile)).epsNoon;
-          showDayCard(sc.banners, ev.day, plan.biome, plan.forecast, eps);
+          // v1.6 Noon Heat: the card says so on the day it rises (a demo's stands in for the sim's).
+          const heatOf = (d: number): number => (d < 1 ? 1 : noonHeatAt(s.world, d, dayTicks(d) >> 1));
+          const heat = Math.max(heatOf(ev.day), this.mech?.noonHeat ?? 1);
+          showDayCard(sc.banners, ev.day, plan.biome, plan.forecast, eps, heat > heatOf(ev.day - 1) ? heat : 1);
           this.petals(30);
           // Two little hops 0.4 s apart: a new day.
           hop(sc.nubs, 4, 0.06, 4);
@@ -302,6 +315,63 @@ export class Fx {
             addRing(sc.rings, nx, ny, 50, 30, 0.4, 3, 0.7, 0x1f2a66);
           }
           break;
+        // v1.6 (docs/V1_6_PLAN.md §2).
+        case 'multDown':
+          // Only losing ×5 to the sun shows; lower steps are silent (a snap's drop is its pour).
+          if (ev.cause === 'bleed' && ev.from >= 5) {
+            sc.hud.multShake = 0.25;
+            addRing(sc.rings, nx, ny, 36, 52, 0.3, 2.5, 0.8, HOT);
+          }
+          break;
+        case 'ringTrick':
+          sc.hud.ringFlash = RING_FLASH_S;
+          // The run's first trick says what charged.
+          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -18, 200, 0.8);
+          this.trickSeen = true;
+          break;
+        case 'frostGain':
+          if (ev.source !== 'cash') this.gain(ev.amountH);
+          break;
+        case 'frostSpill':
+          sc.hud.spill = SPILL_S;
+          break;
+        case 'snapCash':
+          if (ev.refundH > 0) {
+            sc.hud.pour = POUR_S;
+            this.gain(ev.refundH);
+          }
+          break;
+        case 'snapExtend':
+          addRing(sc.rings, nx, ny, 10, 60, 0.4, 2.5, 0.8, ICE);
+          break;
+        case 'snapLand':
+          // The hand-off out of the frost: LANDING!, a ring (gold into its own sunflower), a beat.
+          addHeadline(sc.pops, 'LANDING!', POP_SWING, 1);
+          addRing(sc.rings, nx, ny, 40, 60, 0.35, 3, 0.85, ev.own ? SUN_GOLD : TEAL);
+          if (ev.own) this.burst(ev.x, ev.y, 30, 12, 60, SUN_GOLD);
+          hop(sc.nubs, 5);
+          this.clock.addHitStop(0.03);
+          break;
+        case 'clusterSaved':
+          if (ev.brittle) {
+            addHeadline(sc.pops, 'GLASS SAVED!', POP_DEEP, 0.9);
+            this.burst(ev.x, ev.y, 10, 14, 70, 0xffffff);
+          }
+          break;
+        case 'flareParry':
+          this.stamp('frost', 'PARRY!', 0.6);
+          addPlus(sc.pops, ev.snow);
+          addRing(sc.rings, nx, ny, 8, 64, 0.5, 3.5, 0.95, ICE);
+          sc.nubs.happy = 0.9;
+          hop(sc.nubs, 6);
+          break;
+        case 'flareMiss':
+          addRing(sc.rings, nx, ny, 36, 56, 0.35, 3, 0.8, HOT);
+          sc.nubs.shiver = 0.2;
+          break;
+        case 'featMet':
+          addHeadline(sc.pops, 'DARE ✓', POP_MULT, 1);
+          break;
         case 'death': {
           this.clock.addHitStop(0.08);
           this.clock.slowMo(0.3, 0.58);
@@ -337,6 +407,12 @@ export class Fx {
     addHeadline(sc.pops, 'BLOOM!', POP_MULT, 0.9);
     hop(sc.nubs, 4);
     this.clock.addHitStop(0.04);
+  }
+
+  /** v1.6: frost gained (hundredths) pops beside Nubs in frost blue; the run's first says "snap". */
+  private gain(h: number): void {
+    addPop(this.sc.pops, this.gainSeen ? snapsText(h) : `${snapsText(h)} snap`, POP_DEEP, 20, 120, 0.9);
+    this.gainSeen = true;
   }
 
   /** A Cold Snap lands over Nubs (v1.5): COLD SNAP!, an ice ring and shards, a cool wash, a beat. */

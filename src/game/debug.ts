@@ -86,7 +86,34 @@ export interface ShadyTestHook {
    * centre in CSS px), deep shade, the snap left and its cloud, the dial's gold bins, the run's buds
    * and Cold Snaps asked for by input so far.
    */
-  mech(): { meter: boolean; frost: number; meterX: number; meterY: number; deep: boolean; snapLeft: number; snapId: number; budBins: number; buds: number; snaps: number };
+  mech(): {
+    meter: boolean;
+    frost: number;
+    meterX: number;
+    meterY: number;
+    deep: boolean;
+    snapLeft: number;
+    snapId: number;
+    budBins: number;
+    buds: number;
+    snaps: number;
+    /** v1.6: the meter's pips and banked chip, the ring (on, fill, bleeding), the dial layers' bins, the flare, Noon Heat, the badge's centre (CSS px). */
+    pips: number;
+    bankH: number;
+    ring: boolean;
+    ringFill: number;
+    bleed: boolean;
+    deepBins: number;
+    glassBins: number;
+    landBins: number;
+    flareBins: number;
+    flarePhase: number;
+    flareLeft: number;
+    flareOut: number[];
+    noonHeat: number;
+    badgeX: number;
+    badgeY: number;
+  };
 }
 
 declare global {
@@ -153,8 +180,8 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     mech: () => {
       const m = session.mech.view;
       const h = session.renderer.scene.hud;
-      let budBins = 0;
-      if (m.bud) for (let b = 0; b < 360; b++) budBins += m.bud[b] ? 1 : 0;
+      const bins = (a: Uint8Array | null): number => (a ? a.reduce((n, x) => n + (x ? 1 : 0), 0) : 0);
+      const budBins = bins(m.bud);
       return {
         meter: h.meterShown,
         frost: m.frost,
@@ -166,6 +193,21 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
         budBins,
         buds: session.state.world.buds?.length ?? 0,
         snaps: session.input.snaps,
+        pips: m.pips,
+        bankH: m.bankH,
+        ring: m.ring,
+        ringFill: m.ringFill,
+        bleed: m.bleed,
+        deepBins: bins(m.deepBand),
+        glassBins: bins(m.glass),
+        landBins: bins(m.land),
+        flareBins: bins(m.flare),
+        flarePhase: m.flarePhase,
+        flareLeft: m.flareLeft,
+        flareOut: Array.from(m.flareOut.values()),
+        noonHeat: m.noonHeat,
+        badgeX: h.badgeX,
+        badgeY: h.cy,
       };
     },
   };

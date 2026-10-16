@@ -109,6 +109,11 @@ export interface CampaignState {
   unlocked: number;
   /** The last level played, 0 before any. */
   lastLevel: number;
+  /**
+   * v1.6 soft-fail (docs/V1_6_PLAN.md §2.6): goal misses per level (index id − 1; a run reached the
+   * finish with its goal unmet). Two relax the level's goal to the finish. Absent until the first miss.
+   */
+  misses?: number[];
 }
 
 /** The 7-day daily reward calendar (meta/gamify.ts claimDaily). */

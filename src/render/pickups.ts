@@ -1,6 +1,8 @@
 // Pickups and glare spots (GDD §10): spinning snowflakes with a cool glow that shrink and drip as
 // they melt, the hexagonal ice crystal, night frost flowers that bloom as Nubs approaches, and the
 // gazing-ball glare spot (hot radial disc, rotating hatched ring, faint line back to its ball).
+// v1.6 glass (brittle) flakes melt in 0.8 lit seconds: they sit in a pale faceted diamond with a
+// white rim.
 
 import {
   BALL_Z,
@@ -21,10 +23,12 @@ import { ctx2d, flake, makeCanvas, radialSprite, type Canvas2D } from './sprites
 
 const TAU = Math.PI * 2;
 const MELT = TUNING.pickups.meltBudget;
+const GLASS_MELT = TUNING.brittle.meltBudget;
 
 const buf: Pickup[] = [];
 
-export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, time: number, nubsY: number, night: number): void {
+/** `glassCluster`: a demo's cluster drawn as glass (−1 none). */
+export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, time: number, nubsY: number, night: number, glassCluster = -1): void {
   const n = queryPickups(world, v.y0 - 20, v.y1 + 20, buf);
   if (n === 0) return;
   const glow = radialSprite('154,216,255', 64, 0.8, 0.35, 0.35);
@@ -37,7 +41,8 @@ export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, 
       drawFlower(g, v, p, sx, nubsY, time, night);
       continue;
     }
-    const melt = Math.min(1, p.melt / MELT);
+    const glass = p.brittle === true || (glassCluster >= 0 && (p.cluster === glassCluster || p.id === glassCluster));
+    const melt = Math.min(1, p.melt / (glass ? GLASS_MELT : MELT));
     const shrink = 1 - 0.6 * melt;
     const bob = Math.sin(time * 3 + p.id) * 1.5;
     const gy = v.oy - p.y * v.S;
@@ -52,6 +57,21 @@ export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, 
       drawCrystal(g, v, sx, sy, time + p.id, shrink);
     } else {
       const r = 7 * v.S * shrink;
+      if (glass) {
+        // Glass: a pale faceted diamond round the flake.
+        const d = r * 1.55;
+        g.fillStyle = 'rgba(214,240,255,0.55)';
+        g.strokeStyle = 'rgba(255,255,255,0.95)';
+        g.lineWidth = Math.max(1, 0.9 * v.S);
+        g.beginPath();
+        g.moveTo(sx, sy - d);
+        g.lineTo(sx + d * 0.8, sy);
+        g.lineTo(sx, sy + d);
+        g.lineTo(sx - d * 0.8, sy);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
       g.setTransform(v.dpr, 0, 0, v.dpr, sx * v.dpr, sy * v.dpr);
       g.rotate(time * 1.2 + p.id);
       g.drawImage(fl, -r, -r, r * 2, r * 2);

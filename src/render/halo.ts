@@ -13,8 +13,15 @@
 // v1.5: gold arcs just outside the ring mark the angles that grow a Sunflower bud (GuideState.bud;
 // where gold meets teal, one angle does both), and deep shade darkens the ring to indigo with a
 // few frost sparkles circling it.
+// v1.6 layers (docs/V1_6_PLAN.md §4, drawn only when their mask has something): a darker teal band
+// inside the lasting teal where shade is deep (runs ≥ 3° wide); a thin frost-white arc outside the
+// ring with a glint running along it where the sun saves a glass flake; during a snap a frost band
+// says "covered", the teal on it is the shade Nubs will land in when it ends, and the dashed arcs
+// hide; during a Heat Flare's warning an orange rim counts down to the rise and frost-rimmed teal
+// marks the shade that holds through it (the glass arc hides).
 
 import { ghostSwipe } from '../game/assist.ts';
+import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
 
@@ -29,6 +36,11 @@ const HOT = hex('#FF6A3D');
 const GOLD = hex('#FFC23D');
 const DEEP = hex('#1F2A66');
 const ICE = hex('#DDF4FF');
+const DEEP_TEAL = hex('#0B5F5A');
+const ICE_LINE = hex('#7FC4F0');
+const FLARE = hex('#FF6A3D');
+const DASH = [4, 5];
+const NO_DASH: number[] = [];
 
 export interface HaloState {
   /** Eased overall alpha (1 active, 0.35 idle at full Chill). */
@@ -92,6 +104,8 @@ export interface HaloInput {
   /** v1.5: angles that grow a bud now (gold arcs), or null; Nubs in deep shade. */
   bud: Uint8Array | null;
   deep: boolean;
+  /** v1.6 layers (the MechView's deepBand, glass, land, flare and the flare's phase), null on the Title. */
+  mech: MechView | null;
 }
 
 /** A dial input to refill every frame. */
@@ -100,7 +114,7 @@ export function createHaloIn(): HaloInput {
   return {
     cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
     hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
-    bud: null, deep: false,
+    bud: null, deep: false, mech: null,
   };
 }
 
@@ -259,15 +273,40 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   if (inp.sunUp && !inp.blind) {
     // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
     const ga = inp.guideAlpha * A;
-    if (ga > 0.01) {
+    const land = inp.mech?.land;
+    if (ga > 0.01 && land) {
+      // v1.6 landing: a frost band says "covered"; the teal on it is the shade at the snap's end.
+      g.lineWidth = 12;
+      g.strokeStyle = cssa(ICE, 0.7 * ga);
+      g.beginPath();
+      g.arc(cx, cy, R, 0, TAU);
+      g.stroke();
+      g.lineWidth = 2;
+      g.strokeStyle = cssa(ICE_LINE, 0.9 * ga);
+      g.beginPath();
+      g.arc(cx, cy, R - 6, 0, TAU);
+      g.stroke();
+      g.lineWidth = 6;
+      g.lineCap = 'round';
+      g.strokeStyle = cssa(TEAL, 0.95 * ga);
+      g.beginPath();
+      arcRuns(g, land, cx, cy, R, 1);
+      g.stroke();
+      g.lineCap = 'butt';
+      g.lineWidth = 2;
+      g.strokeStyle = cssa(ICE_LINE, 0.9 * ga);
+      g.beginPath();
+      g.arc(cx, cy, R + 6, 0, TAU);
+      g.stroke();
+    } else if (ga > 0.01) {
       const kind = splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split);
-      g.setLineDash([4, 5]);
+      g.setLineDash(DASH);
       g.lineWidth = 2;
       g.strokeStyle = cssa(TEAL, 0.35 * ga);
       g.beginPath();
       arcRuns(g, split.coming, cx, cy, R + 6, 0);
       g.stroke();
-      g.setLineDash([]);
+      g.setLineDash(NO_DASH);
       if (kind === 'fallback') {
         g.lineWidth = 5;
         g.lineCap = 'round';
@@ -292,6 +331,21 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
         g.strokeStyle = cssa(0xffffff, 0.85 * ga);
         g.beginPath();
         arcRuns(g, split.lasting, cx, cy, R - 4.5, 1);
+        g.stroke();
+      }
+      const deepBand = inp.mech?.deepBand;
+      if (deepBand && kind !== 'none') {
+        // v1.6 deep shade: a darker band inside the teal, only where it is at least 3° wide.
+        g.lineWidth = 3.5;
+        g.lineCap = 'round';
+        g.strokeStyle = cssa(DEEP_TEAL, 0.95 * ga);
+        g.beginPath();
+        const n = runs(deepBand);
+        for (let i = 0; i < n; i++) {
+          const a0 = (runBuf[2 * i] as number) + 1;
+          const a1 = (runBuf[2 * i + 1] as number) - 1;
+          if (a1 - a0 >= 1) arcPath(g, cx, cy, R, a0, a1);
+        }
         g.stroke();
       }
       g.lineCap = 'butt';
@@ -347,6 +401,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineCap = 'butt';
     }
   }
+
+  if (inp.sunUp && inp.mech) drawV16(g, inp, inp.mech, A, h);
 
   if (inp.sunUp && !inp.blind) drawHint(g, inp, A);
 
@@ -480,6 +536,68 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     drawGlyph(g, 'lock', lx, ly, 15, '#FFFFFF');
     g.globalAlpha = 1;
   }
+}
+
+/**
+ * The v1.6 rims outside the ring (see the header): a flare's countdown and its shade (they take the
+ * glass arc's place), else the glass arc and its glint.
+ */
+function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: number, h: HaloState): void {
+  const { cx, cy, R } = inp;
+  const f = Math.max(0.7, A) * inp.fade;
+  g.lineCap = 'round';
+  const ph = m.flarePhase;
+  if (ph === 1) {
+    if (m.flare && !inp.blind && runs(m.flare) > 0) {
+      g.beginPath();
+      arcRuns(g, m.flare, cx, cy, R + 17, 0.5);
+      g.lineWidth = 7;
+      g.strokeStyle = cssa(0xffffff, 0.95 * f);
+      g.stroke();
+      g.lineWidth = 3.5;
+      g.strokeStyle = cssa(TEAL, f);
+      g.stroke();
+    }
+    g.lineWidth = 2;
+    g.strokeStyle = cssa(FLARE, 0.2 * f);
+    g.beginPath();
+    g.arc(cx, cy, R + 25, 0, TAU);
+    g.stroke();
+    g.lineWidth = 3.5;
+    g.strokeStyle = cssa(FLARE, 0.95 * f);
+    g.beginPath();
+    g.arc(cx, cy, R + 25, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.005, m.flareLeft));
+    g.stroke();
+  } else if (m.glass && !inp.blind) {
+    const n = runs(m.glass);
+    if (n > 0) {
+      g.beginPath();
+      arcRuns(g, m.glass, cx, cy, R + 17, 0.5);
+      g.lineWidth = 6.5;
+      g.strokeStyle = cssa(INK, 0.35 * f);
+      g.stroke();
+      g.lineWidth = 3;
+      g.strokeStyle = cssa(0xffffff, f);
+      g.stroke();
+      // A glint running along each arc (resting at its middle under reduced motion).
+      const u = inp.reducedMotion ? 0.5 : (h.deepSpin * 3) % 1;
+      g.fillStyle = cssa(0xffffff, f);
+      g.strokeStyle = cssa(INK, 0.4 * f);
+      g.lineWidth = 1;
+      g.beginPath();
+      for (let i = 0; i < n; i++) {
+        const b0 = runBuf[2 * i] as number;
+        const a = -(b0 + ((runBuf[2 * i + 1] as number) - b0) * u) * DEG;
+        const x = cx + Math.cos(a) * (R + 17);
+        const y = cy + Math.sin(a) * (R + 17);
+        g.moveTo(x + 3.5, y);
+        g.arc(x, y, 3.5, 0, TAU);
+      }
+      g.stroke();
+      g.fill();
+    }
+  }
+  g.lineCap = 'butt';
 }
 
 /** The little sun on the ring at θ (rays, disc, an inward notch). `ghost` draws a pale copy. */

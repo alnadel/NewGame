@@ -95,7 +95,7 @@ export function missionLabel(def: MissionDef, tier: number): string {
     case 'ice-crystal':
       return t === 1 ? 'Collect an Ice Crystal' : `Collect ${t} Ice Crystals in one run`;
     case 'hold-x5':
-      // The id predates the "Reach ×4" goal; saves keep it (see save.ts for the progress migration).
+      // The id predates the "Reach ×5" goal; saves keep it (see save.ts for the progress migration).
       return `Reach a ×${t} multiplier`;
     case 'gate-arch':
       return 'Walk under a gate arch between 11 AM and 1 PM';

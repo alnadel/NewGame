@@ -6,7 +6,7 @@ import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, isWarmup, MINUTES_PER_DAY, 
 import type { CampaignState, DailyEntry, Save } from './saveTypes.ts';
 import { ACHIEVEMENTS, COSMETICS, getAchievement, getCosmetic, type AchievementId, type Cosmetic, type CosmeticId } from './content.ts';
 import { missionTarget, missionValue, missionView, parseMissionId, refillMissions, swapSlot, type MissionView } from './missions.ts';
-import { CAMPAIGN_LEVEL_COUNT, cloneSave, defaults, HISTORY_KEEP, pruneDaily, prunePars, recentBest, sameRules, STARS_PER_LEVEL } from './save.ts';
+import { CAMPAIGN_LEVEL_COUNT, cloneSave, defaults, HISTORY_KEEP, MAX_MISSES, pruneDaily, prunePars, recentBest, sameRules, STARS_PER_LEVEL } from './save.ts';
 import { DAILY_TRIES, dailyNumber, daysBetween } from './daily.ts';
 import { dayStripLines, scoreText } from './share.ts';
 import { markSunnyDay } from './week.ts';
@@ -128,6 +128,8 @@ export interface ApplyRunOptions {
   rung?: number;
   /** Endless runs: the rung-4 run was the warm-up after the climb (days.ts STANDARD_WARMUP). */
   warmup?: boolean;
+  /** v1.6 soft-fail: a Journey run reached the finish with its goal missed (counts in campaign.misses). */
+  goalMiss?: boolean;
 }
 
 type AchievementCheck = (save: Save, run: RunResult, options: ApplyRunOptions) => boolean;
@@ -398,6 +400,10 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
       c.stars[i] = Math.max(before, stars);
       if (lv.passed) c.unlocked = Math.min(CAMPAIGN_LEVEL_COUNT + 1, Math.max(c.unlocked, lv.id + 1));
       c.lastLevel = lv.id;
+      if (options.goalMiss && !lv.passed) {
+        const m = (c.misses = c.misses ? c.misses.slice() : Array<number>(CAMPAIGN_LEVEL_COUNT).fill(0));
+        m[i] = Math.min(MAX_MISSES, (m[i] ?? 0) + 1);
+      }
     }
     if (inRange && lv.passed && before === 0) {
       firstPass = true;

@@ -32,6 +32,7 @@ import {
   worldPlan,
   type Bot,
   type BotKind,
+  type FeatKind,
   type LevelDef,
   type ParJob,
   type RenderSnap,
@@ -111,7 +112,27 @@ import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
 import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
 import { createMoments, type RunMoments } from './moments.ts';
-import { campaignConfig, FINISH_FREEZE_S, FINISH_SKIP_S, goalLine, goalText, hudGoal, introCard, missLine, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState } from './campaign.ts';
+import {
+  campaignConfig,
+  countText,
+  dareText,
+  featInSeconds,
+  featLive,
+  FINISH_FREEZE_S,
+  FINISH_SKIP_S,
+  goalLine,
+  goalText,
+  hudGoal,
+  introCard,
+  missLine,
+  SOFT_FAIL_MISSES,
+  STAR_COOL_LOST,
+  STAR_FLAKES,
+  STAR_GOAL,
+  starRules,
+  starState,
+  type HudGoal,
+} from './campaign.ts';
 import { formatScore } from '../core/format.ts';
 
 /** The sim's finish-line event (CAMPAIGN_PLAN §2). */
@@ -240,6 +261,9 @@ export class Session {
   private readonly moments: RunMoments;
   /** The campaign star bits last seen (a newly lit one chimes). */
   private runStars = 0;
+  /** v1.6: the run's Dare counts from the sim's `feat` events, and the HUD goal pill's reused count. */
+  private readonly featSeen = new Map<FeatKind, number>();
+  private readonly hudGoalOut: HudGoal = { value: 0, target: -1, flakes: false, glyph: null, sec: false };
   /** When the last count-up tick buzzed (uiSound 'tick'). */
   private tickHapticAt = Number.NEGATIVE_INFINITY;
   readonly gov = new Governor();
@@ -969,19 +993,22 @@ export class Session {
     const s = this.s;
     let c = r.campaign;
     if (!c) {
-      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0, stars: 0, coolLeft: 1 };
+      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0, stars: 0, coolLeft: 1, goalGlyph: null, goalSec: false };
       r.campaign = c;
     }
-    const goal = hudGoal(level, s.stats);
+    const relaxed = this.relaxed();
+    const goal = hudGoal(level, s.stats, this.hudGoalOut, relaxed, this.featSeen);
     c.id = level.id;
     c.progress = levelProgress(s);
     c.goalValue = goal.value;
     c.goalTarget = goal.target;
     c.goalFlakes = goal.flakes;
+    c.goalGlyph = goal.glyph;
+    c.goalSec = goal.sec;
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
     c.gust = s.sun.gust;
-    c.stars = starState(level, s.stats, s.phase === 'won');
+    c.stars = starState(level, s.stats, s.phase === 'won', relaxed, this.featSeen);
     c.coolLeft = 1 - Math.min(1, s.stats.litTotal / level.stars.sunSec);
     // A star earned mid-run (the goal, the flakes) chimes; the finish has its own jingle.
     if (c.stars & ~this.runStars & 3 && s.phase === 'day') {
@@ -989,6 +1016,16 @@ export class Session {
       this.d.haptics.play('claim');
     }
     this.runStars = c.stars;
+  }
+
+  /** The run's goal is relaxed to the finish (the soft-fail). */
+  private relaxed(): boolean {
+    return this.s.cfg.relaxedGoal === true;
+  }
+
+  /** Goal misses recorded on level `id` (the soft-fail's count). */
+  private misses(id: number): number {
+    return this.d.store.get().campaign.misses?.[id - 1] ?? 0;
   }
 
   private renderScreen(id: ScreenId): RenderScreen {
@@ -1107,7 +1144,7 @@ export class Session {
     if (def) {
       // A campaign level (CAMPAIGN_PLAN §4): the level's own rules, never the comfort ladder.
       this.cfgLevel = def;
-      cfg = campaignConfig(def, rm, save.flags.tutorialDone);
+      cfg = campaignConfig(def, rm, save.flags.tutorialDone, (save.campaign.misses?.[def.id - 1] ?? 0) >= SOFT_FAIL_MISSES);
       this.kind = 'campaign';
     } else if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
@@ -1263,6 +1300,7 @@ export class Session {
     this.resetRender();
     this.fx.resetRun();
     this.mech.reset();
+    this.featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     const botKind = this.params.bot ?? this.testBot;
@@ -1300,7 +1338,7 @@ export class Session {
     this.lifetimeRuns = save.stats.runs;
     this.warmup = run.cfg.mode === 'endless' && this.inWarmup() ? this.challenge : null;
     this.armStamp(run);
-    this.moments.begin(save, this.runLevel, !this.debugRuns);
+    this.moments.begin(save, this.runLevel, !this.debugRuns, run.cfg.relaxedGoal === true);
     this.runStars = 0;
     if (!this.debugRuns) {
       const begun = beginRun(save);
@@ -1312,7 +1350,7 @@ export class Session {
     this.setGhost('off');
     // The level's intro card holds until the first tap (§4).
     if (card && this.runLevel && run.phase === 'hold') {
-      showLevelCard(this.renderer.scene.banners, introCard(this.runLevel), this.runLevel.biome);
+      showLevelCard(this.renderer.scene.banners, introCard(this.runLevel, run.cfg.relaxedGoal === true), this.runLevel.biome);
     }
   }
 
@@ -1601,7 +1639,11 @@ export class Session {
 
   private onTickEvent(ev: SimEvent): void {
     this.moments.onEvent(ev, this.s);
+    this.mech.onEvent(ev);
     switch (ev.e) {
+      case 'feat':
+        this.featSeen.set(ev.kind, ev.value);
+        break;
       case 'flake':
         if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
         break;
@@ -1712,6 +1754,8 @@ export class Session {
     if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
     if (this.runRung >= 0) options.rung = this.runRung;
     if (this.runWarmup) options.warmup = true;
+    // v1.6 soft-fail: a level's finish reached with its goal missed counts toward relaxing it.
+    if (this.won && !this.won.passed && result.level) options.goalMiss = true;
     const { save: next, outcome } = applyRunResult(save, result, options);
     this.d.store.set(next);
     this.d.store.flush();
@@ -1817,7 +1861,7 @@ export class Session {
       passed,
       stars: won?.stars ?? 0,
       nextId: next ? next.id : null,
-      goalLine: goalLine(level, result.stats, passed),
+      goalLine: goalLine(level, result.stats, passed, this.relaxed(), this.featSeen, this.misses(level.id)),
     };
     if (level.introduces) {
       // The sheet reads "New: {name} {blurb}"; a concept named after its level keeps just the blurb.
@@ -2234,13 +2278,17 @@ export class Session {
     const now = formatScore(s.minutes);
     const level = this.runLevel;
     if (level) {
-      const bits = starState(level, s.stats, s.phase === 'won');
-      const labels = starRules(level);
-      const goal = hudGoal(level, s.stats);
-      const count = goal.target >= 0 ? `${goal.value}/${goal.target}` : `${Math.round(levelProgress(s) * 100)} %`;
+      const relaxed = this.relaxed();
+      const seen = this.featSeen;
+      const bits = starState(level, s.stats, s.phase === 'won', relaxed, seen);
+      const labels = starRules(level, relaxed);
+      // The goal's own count (a finish goal: the progress); an open Dare's count (a finale's names both).
+      const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
+      const f = level.feats[0];
+      if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareText(level) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       return {
         title: `Level ${level.id} · ${level.name}`,
-        goal: `${goalText(level)} · ${count}`,
+        goal: `${goalText(level, relaxed)} · ${goal.target >= 0 ? countText(goal.value, goal.target, goal.sec) : `${Math.round(levelProgress(s) * 100)} %`}`,
         now,
         stars: [
           { label: labels[0], state: bits & STAR_GOAL ? 'earned' : 'open' },
@@ -2580,6 +2628,17 @@ export class Session {
       case 'finish':
         this.fx.finish(true, 'FINISH', 2, s.nubs.x, s.nubs.y);
         return;
+      case 'dare':
+      case 'dares': {
+        // v1.6 Dares on the level being played (render and UI only): one Dare (Bloom 2, one
+        // bloomed so far) or a finale's two.
+        const lv = this.runLevel;
+        if (!lv) return;
+        this.runLevel = { ...lv, feats: name === 'dare' ? [{ kind: 'blooms', target: 2 }] : [{ kind: 'blooms', target: 2 }, { kind: 'parry', target: 3 }] };
+        this.featSeen.set('blooms', 1);
+        if (s.phase === 'hold') showLevelCard(this.renderer.scene.banners, introCard(this.runLevel, this.relaxed()), lv.biome);
+        return;
+      }
       case 'swing':
         // The audio layer ignores SWING: fx only.
         this.fx.onEvents([{ e: 'swing', deg: 75, chain: 2, snow: 2, x: s.nubs.x, y: s.nubs.y }], s);

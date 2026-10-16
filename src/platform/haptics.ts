@@ -152,6 +152,21 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
       return 'snap';
     case 'deepEnter':
       return 'deep';
+    // v1.6: losing ×5 and a missed flare sting like glare, a trick ticks (throttled), a cash-in and a
+    // flare's warning chime like the frost meter, a landing blooms, glass saved and a parry ring like crystal.
+    case 'multDown':
+    case 'flareMiss':
+      return ev.e === 'flareMiss' || (ev.cause === 'bleed' && ev.from >= 5) ? 'glare' : null;
+    case 'ringTrick':
+      return 'tick';
+    case 'snapCash':
+    case 'flareWarn':
+      return 'frost';
+    case 'snapLand':
+      return 'bloom';
+    case 'clusterSaved':
+    case 'flareParry':
+      return 'crystal';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
       // the rest have no haptic. 'best' and 'ui' are played by the UI directly.

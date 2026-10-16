@@ -150,14 +150,16 @@ function weekBoth(l: WeekState, r: WeekState): WeekState {
   return { start: l.start, days: l.days | r.days, paid: l.paid | r.paid, best: l.best.map((b, i) => Math.max(b, r.best[i] ?? 0)) };
 }
 
-/** Both sides' Journey progress: the larger star count per level, the higher unlocked level. */
+/** Both sides' Journey progress: the larger star count per level, the higher unlocked level, the more goal misses (v1.6). */
 function campaignBoth(l: CampaignState, r: CampaignState): CampaignState {
   const n = Math.max(l.stars.length, r.stars.length);
-  return {
+  const out: CampaignState = {
     stars: Array.from({ length: n }, (_, i) => Math.max(l.stars[i] ?? 0, r.stars[i] ?? 0)),
     unlocked: Math.max(l.unlocked, r.unlocked),
     lastLevel: l.lastLevel,
   };
+  if (l.misses || r.misses) out.misses = Array.from({ length: Math.max(l.misses?.length ?? 0, r.misses?.length ?? 0) }, (_, i) => Math.max(l.misses?.[i] ?? 0, r.misses?.[i] ?? 0));
+  return out;
 }
 
 const laterStreak = (l: GamifyState['streak'], r: GamifyState['streak']): GamifyState['streak'] =>
