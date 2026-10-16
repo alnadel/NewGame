@@ -292,7 +292,8 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   const wall = (performance.now() - t0) / 1000;
   const rule = (k: keyof V16Rules): boolean => ctx.off[k] ?? V16_SHIP[k];
   const offNames = V16_RULES.filter((k) => !rule(k));
-  console.log(`SHADY sim --decisions: ${ctx.seeds} seeds, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s${offNames.length ? `, v1.6 off: ${offNames.join(', ')}` : ''}\n`);
+  const onNames = V16_RULES.filter((k) => rule(k) && !V16_SHIP[k]);
+  console.log(`SHADY sim --decisions: ${ctx.seeds} seeds, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s${offNames.length ? `, v1.6 off: ${offNames.join(', ')}` : ''}${onNames.length ? `, switched on: ${onNames.join(', ')}` : ''}\n`);
   console.log(`${'row'.padEnd(30)} ${'mean'.padEnd(17)} ${'median'.padEnd(17)} p90`);
   for (const r of rows) console.log(`${r.name.padEnd(30)} ${clock(meanMinutes(r), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.5), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.9), ctx.days)}`);
   console.log('');
