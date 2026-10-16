@@ -108,6 +108,11 @@ export function dareText(level: LevelDef): string {
   return level.feats.map((f) => featLabel(f, level)).join(' or ');
 }
 
+/** Every Dare with its live count: "10 flakes 7/10 · or Parry 4 2/4" (a finale's two), "Bloom 2 1/2" (one). */
+export function dareProgressText(level: LevelDef, stats: Stats, seen: FeatSeen = NONE): string {
+  return level.feats.map((f) => `${featLabel(f, level)} ${countText(featLive(f.kind, stats, seen), f.target, featInSeconds(f.kind))}`).join(' · or ');
+}
+
 /** A Dare's live count: the core's featValue, or the sim's last `feat` event for it if that ran ahead. */
 export function featLive(kind: FeatKind, stats: Stats, seen: FeatSeen = NONE): number {
   return Math.max(featValue(kind, stats as LevelStats), seen.get(kind) ?? 0);
@@ -245,7 +250,7 @@ export function nextStarHint(level: LevelDef, stats: Stats, seen: FeatSeen = NON
   if (f) {
     if (!dareMet(level, stats, seen)) {
       const sec = featInSeconds(f.kind);
-      return ` · Next ★: ${dareText(level)}${level.feats.length > 1 ? '' : ` (${countText(featLive(f.kind, stats, seen), f.target, sec)})`}`;
+      return ` · Next ★: ${level.feats.length > 1 ? dareProgressText(level, stats, seen) : `${dareText(level)} (${countText(featLive(f.kind, stats, seen), f.target, sec)})`}`;
     }
   } else if (stats.flakes < st.flakes) return ` · Next ★: ${st.flakes} flakes`;
   if (stats.litTotal === undefined || stats.minChill === undefined) return '';

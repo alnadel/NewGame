@@ -76,6 +76,8 @@ export interface HudState {
   /** The goal pill's target (−1: plain Snow). */
   snowTarget: number;
   snowText: string;
+  /** snowText in whole seconds for a seconds goal (the tight-row fallback; else snowText). */
+  snowShort: string;
   dayVal: number;
   dayText: string;
   /** The row layer's inputs (snow, goal, level and its markers, day, forecast, clock, flags, view) when built, and now. */
@@ -161,6 +163,7 @@ export function createHud(): HudState {
     snowVal: -1,
     snowTarget: -1,
     snowText: '0',
+    snowShort: '0',
     dayVal: NaN,
     dayText: 'D1',
     key: new Float64Array(KEYS).fill(NaN),
@@ -363,6 +366,7 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
     h.snowVal = snowNow;
     h.snowTarget = target;
     h.snowText = target < 0 ? String(Math.floor(snowNow)) : sec ? `${target < 600 ? (snowNow / 10).toFixed(1) : snowNow}/${target < 600 ? (target / 60).toFixed(1) : Math.round(target / 60)}s` : `${Math.floor(snowNow)}/${target}`;
+    h.snowShort = sec && target < 600 ? `${Math.floor(snowNow / 10)}/${Math.round(target / 60)}s` : h.snowText;
   }
   const dayKey = c ? -c.id : s.day;
   if (dayKey !== h.dayVal) {
@@ -455,7 +459,8 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     const t = 1 - h.multPop / 0.3;
     bs = 1 + 0.4 * Math.sin(Math.PI * Math.min(1, t * 1.3)) * Math.exp(-t * 2);
   }
-  const shake = h.multShake > 0 ? Math.sin(h.multShake * 90) * 4 * (h.multShake / 0.2) : 0;
+  // Under reduced motion the badge never shakes (the hot ring is the cue).
+  const shake = h.multShake > 0 && !inp.reducedMotion ? Math.sin(h.multShake * 90) * 4 * (h.multShake / 0.2) : 0;
   const bx = h.badgeX + shake;
   const bw = h.badgeW * bs;
   const bh = h.badgeH * bs;
@@ -473,10 +478,12 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.strokeStyle = cssa(INK, 0.16);
     roundRect(g, bx - rw / 2, cy - rh / 2, rw, rh, rh / 2);
     g.stroke();
+    // A trick flashes the charge it has (thicker and brighter), never a full ring: full reads "about to level up".
     g.lineWidth = (2.5 + 2.5 * fl) * k;
     g.strokeStyle = fl > 0 ? '#13C4B0' : mech.bleed ? '#FF6A3D' : m >= 5 ? '#E8A21F' : '#2EC4B6';
-    ringDash(g, bx, cy, rw, rh, fl > 0 ? 1 : mech.ringFill);
-    if (fl > 0 || mech.ringFill > 0) g.stroke();
+    const fill = fl > 0 ? Math.max(0.04, mech.ringFill) : mech.ringFill;
+    ringDash(g, bx, cy, rw, rh, fill);
+    if (fill > 0) g.stroke();
     g.setLineDash(noDash);
     g.lineDashOffset = 0;
   } else if (m >= 5) {
@@ -527,6 +534,15 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       const head = h.head as Canvas2D;
       const hw = head.width / dpr;
       g.drawImage(head, px - hw / 2, cy + 1 - hw / 2, hw, hw);
+      // v1.6 Noon Heat: the head covers the hot band from 11 to 1, so while it bites the head glows hot.
+      const m = inp.mech;
+      if (!c && m && m.noonHeat > 1 && 12 * s.dayTick >= 5 * dl && 12 * s.dayTick < 7 * dl) {
+        g.strokeStyle = cssa(0xff3d2b, 0.9);
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(px, cy + 1, hw / 2 + 1.5, 0, TAU);
+        g.stroke();
+      }
     }
     if (c && c.gust !== 0) {
       const k = hudScale(v);
@@ -772,7 +788,8 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   // it keeps at least RULER_MIN px: the forecast glyph rides on the D-badge (no width of its own),
   // the clock reserves the widest clock of a day, and when the row is still tight the clock font
   // shrinks a little (to 90 %), then the Snow pill drops its flake icon and the clock may shrink to 70 %.
-  const snowW = tabularWidth(g, h, h.snowFont, h.snowText);
+  let snowText = h.snowText;
+  let snowW = tabularWidth(g, h, h.snowFont, snowText);
   // The badge is sized for one digit ("×5"), as the multiplier never exceeds 5.
   const multW = tabularWidth(g, h, h.multFont, '×5');
   const iconS = 18 * k;
@@ -788,8 +805,8 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   let icon = true;
   let clockFont = h.clockFont;
   // A level shows its three star pips where an endless run shows the clock (the score).
-  const pipsW = 3 * PIP_STEP * k;
-  let clockW = c ? pipsW : widestClock(g, h, clockFont);
+  let pipStep = PIP_STEP;
+  let clockW = c ? 3 * pipStep * k : widestClock(g, h, clockFont);
   const fit = (fMin: number): void => {
     for (let f = 0.95; !c && f >= fMin - 0.001 && rulerOf(rightOf(icon), clockW) < RULER_MIN; f -= 0.05) {
       clockFont = `800 ${Math.round(19 * k * f)}px ${FONT}`;
@@ -803,6 +820,15 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     if (!c) clockW = widestClock(g, h, clockFont);
     fit(0.7);
   }
+  // A level keeps its progress bar too: a seconds goal drops its tenths, then the star pips close up.
+  if (c && rulerOf(rightOf(icon), clockW) < RULER_MIN && h.snowShort !== snowText) {
+    snowText = h.snowShort;
+    snowW = tabularWidth(g, h, h.snowFont, snowText);
+  }
+  if (c && rulerOf(rightOf(icon), clockW) < RULER_MIN) {
+    pipStep = PIP_STEP_TIGHT;
+    clockW = 3 * pipStep * k;
+  }
 
   // --- Right: Snow + multiplier ---------------------------------------------------------------
   const rightW = rightOf(icon);
@@ -815,7 +841,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   if (icon) x += iconS + 6 * k;
   // A met goal turns its count teal ("4/4").
   g.fillStyle = c && h.snowTarget >= 0 && c.goalValue >= h.snowTarget ? '#13857C' : '#2B5A8A';
-  drawTabular(g, h, h.snowFont, h.snowText, x, cy + 1);
+  drawTabular(g, h, h.snowFont, snowText, x, cy + 1);
   x += snowW + 8 * k;
   h.badgeX = x + badgeW / 2;
   h.badgeW = badgeW;
@@ -851,7 +877,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   cx += dW + 7 * k;
   if (c) {
     // Gold: earned; white: still to play for; grey: the cool run lost.
-    h.pipStep = PIP_STEP * k;
+    h.pipStep = pipStep * k;
     h.pipX = cx + h.pipStep / 2;
     for (let i = 0; i < 3; i++) {
       const on = i === 0 ? c.stars & 1 : i === 1 ? c.stars & 2 : 0;
@@ -985,12 +1011,20 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
 function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null, level: boolean, x0: number, x1: number, y: number, k: number): void {
   const w = s.world;
   const dl = dayTicks(s.day);
+  let left = 0;
   for (let i = 0; m && i < w.flares.length; i++) {
     const f = w.flares[i] as Flare;
     const p = level ? (worldYAtTick(w, f.riseTick) - w.startY) / (w.finishY - w.startY) : (f.riseTick - dayStartTick(s.day)) / dl;
     if (f.state !== FLARE_KEPT || p < 0 || p > 1) continue;
     const x = x0 + (x1 - x0) * p;
     const out = m.flareOut.get(f.id) ?? 0;
+    if (level) {
+      // A level's bar can be short (48 px) with up to 8 flares: a 2 px tick each, coloured by outcome.
+      if (out === 0) left++;
+      g.fillStyle = out === 0 ? '#FF6A3D' : out === 1 ? '#13857C' : '#B5ABC4';
+      g.fillRect(x - k, y - 7 * k, 2 * k, 7 * k);
+      continue;
+    }
     g.strokeStyle = cssa(INK, 0.3);
     g.lineWidth = 1;
     g.beginPath();
@@ -1005,10 +1039,28 @@ function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null
     g.fill();
     g.stroke();
   }
+  if (level && left > 0) {
+    // The flares still to come (a boss finale's HP): a hot disc with the count at the bar's start.
+    const hx = x0 + 2 * k;
+    const hy = y - 8 * k;
+    g.fillStyle = '#FF6A3D';
+    g.strokeStyle = '#FFFFFF';
+    g.lineWidth = 1.5 * k;
+    g.beginPath();
+    g.arc(hx, hy, 6.5 * k, 0, TAU);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#FFFFFF';
+    g.font = `800 ${Math.round(10 * k)}px ${FONT}`;
+    g.textAlign = 'center';
+    g.fillText(String(left), hx, hy + 0.5 * k);
+    g.textAlign = 'left';
+  }
 }
 
-/** Spacing of the campaign star pips (× the HUD scale). */
+/** Spacing of the campaign star pips (× the HUD scale), and in a tight row. */
 const PIP_STEP = 19;
+const PIP_STEP_TIGHT = 15;
 
 /** The ruler keeps at least this width (CSS px) whenever the left panel shows. */
 const RULER_MIN = 48;

@@ -115,7 +115,7 @@ import { createMoments, type RunMoments } from './moments.ts';
 import {
   campaignConfig,
   countText,
-  dareText,
+  dareProgressText,
   featInSeconds,
   featLive,
   FINISH_FREEZE_S,
@@ -1673,6 +1673,8 @@ export class Session {
         break;
       case 'snap':
         this.snapsSeen++;
+        // The "Frost full! Swipe ↓" line has done its job: clear it so it never covers the snap.
+        if (this.cueShown?.id === 'snap-ready') this.cue(null);
         break;
       case 'swing':
         // The first SWING of a lifetime explains itself once (nothing else in the game names it).
@@ -2286,7 +2288,7 @@ export class Session {
       // The goal's own count (a finish goal: the progress); an open Dare's count (a finale's names both).
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
       const f = level.feats[0];
-      if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareText(level) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
+      if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       return {
         title: `Level ${level.id} · ${level.name}`,
         goal: `${goalText(level, relaxed)} · ${goal.target >= 0 ? countText(goal.value, goal.target, goal.sec) : `${Math.round(levelProgress(s) * 100)} %`}`,

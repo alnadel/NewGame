@@ -48,6 +48,9 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
   ],
 };
 
+/** The Heat Flare tip (three lines at 360 px): the real cue, the orange rim, and where to go. */
+const FLARE_TIP = 'Heat Flare! Before the orange rim runs out, swing to the frost-rimmed teal.';
+
 /**
  * v1.5: the tips of the level that teaches each mechanic. 'bud' shows when a closed bud comes into
  * view ahead, 'bloom' on the first bloom, 'frost' when the meter is full, 'snap' on the first Cold
@@ -70,22 +73,27 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
     ['deep', 'Deep shade! The dark band on the teal means double cool. Hunt the overlaps.'],
   ],
   glass: [['glass', 'Glass flakes melt fast. The white arc saves them, if you can spare the sun.']],
-  flare: [['warn', 'A Heat Flare! When the orange rim runs out, shadows snap shorter: slide to the frost-rimmed shade first.']],
+  // The Solar Flare's level says it at go, before its first 1.2 s warning (too short to read a tip in).
+  flare: [['go', FLARE_TIP]],
 };
 
 /** The soft-fail's tip at go (a level whose goal was missed twice). */
 export const SOFT_FAIL_TIP = 'Goal eased: just reach the finish. The Dare still earns its star.';
 
-/** Tips for the mechanics' moments in a new player's endless and daily runs (the cue line says how to snap). */
-const FIRST_TIPS = [
-  MECH_TIPS.bud[0],
-  MECH_TIPS.deep[1],
-  ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.'],
-  MECH_TIPS.snap[2],
-  MECH_TIPS.snap[3],
-  MECH_TIPS.glass[0],
-  MECH_TIPS.flare[0],
-] as const;
+/**
+ * Tips for the mechanics' moments in a new player's endless and daily runs (the cue line says how to
+ * snap), each with its mechanic's glyph for the toast's icon disc (outside a level there is no
+ * concept glyph to show).
+ */
+const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
+  [...(MECH_TIPS.bud[0] as readonly [TipOn, string]), 'sunflower'],
+  [...(MECH_TIPS.deep[1] as readonly [TipOn, string]), 'deep'],
+  ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.', 'ring'],
+  [...(MECH_TIPS.snap[2] as readonly [TipOn, string]), 'coldsnap'],
+  [...(MECH_TIPS.snap[3] as readonly [TipOn, string]), 'coldsnap'],
+  [...(MECH_TIPS.glass[0] as readonly [TipOn, string]), 'brittle'],
+  ['warn', FLARE_TIP, 'flare'],
+];
 /** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
 const NEW_PLAYER_RUNS = 12;
 /** A bud this far ahead (u) counts as coming into view. */
@@ -133,7 +141,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let lastCheck = 0;
   /** missionValue reads only `minutes` and `stats`: one reused probe instead of a RunResult per check. */
   const probe = { minutes: 0, stats: null as unknown as RunResult['stats'] };
-  let tips: (readonly [TipOn, string])[] = [];
+  let tips: (readonly [TipOn, string, string?])[] = [];
   /** Looks for a bud ahead (only while a tip waits for one); v1.6: for a bud in reach under a snap, a glass window. */
   let budTip = false;
   let snapBudTip = false;
@@ -152,10 +160,10 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   /** Shows the level's tip for `on`, once per run. */
   const tip = (on: TipOn): void => {
     for (let i = 0; i < tips.length; i++) {
-      const t = tips[i] as readonly [TipOn, string];
+      const t = tips[i] as readonly [TipOn, string, string?];
       if (t[0] !== on || (tipsShown & (1 << i)) !== 0) continue;
       tipsShown |= 1 << i;
-      showToast(banners, 'tip', 'TIP', t[1], tipGlyph, TIP_HOLD);
+      showToast(banners, 'tip', 'TIP', t[1], t[2] ?? tipGlyph, TIP_HOLD);
     }
   };
 
@@ -171,7 +179,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []));
       const mech = fresh ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
-      else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...(FIRST_TIPS as readonly (readonly [TipOn, string])[]));
+      else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...FIRST_TIPS);
       // Last, so it takes the place of the level's own 'go' tip.
       if (relaxed) tips.push(['go', SOFT_FAIL_TIP]);
       budTip = tips.some((t) => t[0] === 'bud');

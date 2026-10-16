@@ -274,11 +274,19 @@ describe('v1.6 events: audio, haptics, tips', () => {
     m.update(s);
     expect(texts()).toEqual([MECH_TIPS.glass[0]![1]]);
     s.guide.flake[40] = 0;
-    // A level teaching flares: the first warning.
+    // A level teaching flares: at go, before the first (1.2 s) warning; a new player's endless run
+    // on the first warning, with the flare glyph (an endless tip names its mechanic's glyph).
     b.toasts.length = 0;
     m.begin(defaults(0), { ...levelDef(12)!, introduces: 'flare' as never }, true);
     m.onEvent({ e: 'flareWarn', id: 1, ticks: 72, d: 10 }, s);
+    expect(texts()).toEqual([]);
+    m.onEvent({ e: 'go' }, s);
     expect(texts()).toEqual([MECH_TIPS.flare[0]![1]]);
+    b.toasts.length = 0;
+    m.begin(defaults(0), null, true);
+    m.onEvent({ e: 'flareWarn', id: 1, ticks: 120, d: 10 }, endless());
+    expect(texts()).toEqual([MECH_TIPS.flare[0]![1]]);
+    expect(b.toasts[0]?.glyph).toBe('flare');
     // A new player's endless run: the ring's first drop from ×3 or more (not a snap's cash-in).
     b.toasts.length = 0;
     const e = endless();

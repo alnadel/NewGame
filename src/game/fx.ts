@@ -326,7 +326,8 @@ export class Fx {
         case 'ringTrick':
           sc.hud.ringFlash = RING_FLASH_S;
           // The run's first trick says what charged.
-          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -18, 200, 0.8);
+          // Left of and above the Snow pop (+5 of a bloom or a parry, at the same moment) so the two never read as one.
+          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -44, 230, 0.8);
           this.trickSeen = true;
           break;
         case 'frostGain':

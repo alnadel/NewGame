@@ -171,7 +171,7 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   moonlit: concept('moonlit', 'Moon Sun', 'Moonlit', 'sun', 'A night walk under a moon sun. Low light, gentle drain.', 'moon', { epsNoon: 30, drainMul: 0.7 }, { cost: 5 }),
   marathon: concept('marathon', 'Marathon', 'The Long Walk', 'sun', 'A day and a half. Chill refills through the night.', 'marathon', undefined, { lengthMinutes: 1080, cost: 9 }),
   brittle: concept('brittle', 'Glass Flakes', 'Sugar Glass', 'goal', 'Glass flakes melt fast. The white arc saves them, if you can spare the sun.', 'glass', { clusterGap: 0.6 }, { cost: 3 }),
-  flare: concept('flare', 'Solar Flare', 'Sunspots', 'sky', 'When the sun swells, slide to the frost-rimmed shade before the flash.', 'flare', undefined, { cost: 4 }),
+  flare: concept('flare', 'Solar Flare', 'Sunspots', 'sky', 'Before the orange rim runs out, move the sun to the frost-rimmed teal.', 'flare', undefined, { cost: 4 }),
   boss: concept('boss', 'Heat Dome', 'Into the Dome', 'sun', 'The sun stands almost overhead. Shade is scarce.', 'boss', { epsNoon: 80 }, { startMinute: 180, lengthMinutes: 360, cost: 12 }),
 } satisfies Record<ConceptId, Concept>);
 

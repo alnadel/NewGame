@@ -273,74 +273,92 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   if (inp.sunUp && !inp.blind) {
     // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
     const ga = inp.guideAlpha * A;
+    // The v1.6 rule layers (landing, deep band) read a rule, not the teal guide: like the other v1.6
+    // rims they stay at max(0.7, A) when Guide Auto has faded the teal away.
+    const va = Math.max(0.7, A) * inp.fade;
     const land = inp.mech?.land;
-    if (ga > 0.01 && land) {
+    if (land) {
       // v1.6 landing: a frost band says "covered"; the teal on it is the shade at the snap's end.
+      const la = Math.max(ga, va);
       g.lineWidth = 12;
-      g.strokeStyle = cssa(ICE, 0.7 * ga);
+      g.strokeStyle = cssa(ICE, 0.7 * la);
       g.beginPath();
       g.arc(cx, cy, R, 0, TAU);
       g.stroke();
       g.lineWidth = 2;
-      g.strokeStyle = cssa(ICE_LINE, 0.9 * ga);
+      g.strokeStyle = cssa(ICE_LINE, 0.9 * la);
       g.beginPath();
       g.arc(cx, cy, R - 6, 0, TAU);
       g.stroke();
       g.lineWidth = 6;
       g.lineCap = 'round';
-      g.strokeStyle = cssa(TEAL, 0.95 * ga);
+      g.strokeStyle = cssa(TEAL, 0.95 * la);
       g.beginPath();
       arcRuns(g, land, cx, cy, R, 1);
       g.stroke();
       g.lineCap = 'butt';
       g.lineWidth = 2;
-      g.strokeStyle = cssa(ICE_LINE, 0.9 * ga);
+      g.strokeStyle = cssa(ICE_LINE, 0.9 * la);
       g.beginPath();
       g.arc(cx, cy, R + 6, 0, TAU);
       g.stroke();
-    } else if (ga > 0.01) {
-      const kind = splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split);
-      g.setLineDash(DASH);
-      g.lineWidth = 2;
-      g.strokeStyle = cssa(TEAL, 0.35 * ga);
-      g.beginPath();
-      arcRuns(g, split.coming, cx, cy, R + 6, 0);
-      g.stroke();
-      g.setLineDash(NO_DASH);
-      if (kind === 'fallback') {
-        g.lineWidth = 5;
-        g.lineCap = 'round';
-        g.strokeStyle = cssa(TEAL, 0.75 * ga);
+    } else {
+      const kind = ga > 0.01 ? splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split) : 'none';
+      if (ga > 0.01) {
+        g.setLineDash(DASH);
+        g.lineWidth = 2;
+        g.strokeStyle = cssa(TEAL, 0.35 * ga);
         g.beginPath();
-        arcRuns(g, inp.now, cx, cy, R, 0.5);
+        arcRuns(g, split.coming, cx, cy, R + 6, 0);
         g.stroke();
-      } else if (kind === 'lasting') {
-        g.lineWidth = 3;
-        g.strokeStyle = cssa(TEAL, 0.45 * ga);
-        g.beginPath();
-        arcRuns(g, split.ending, cx, cy, R, 0);
-        g.stroke();
-        g.lineWidth = 8;
-        g.lineCap = 'round';
-        g.strokeStyle = cssa(TEAL, 0.95 * ga);
-        g.beginPath();
-        arcRuns(g, split.lasting, cx, cy, R, 1);
-        g.stroke();
-        // The white inner edge: "go here".
-        g.lineWidth = 1;
-        g.strokeStyle = cssa(0xffffff, 0.85 * ga);
-        g.beginPath();
-        arcRuns(g, split.lasting, cx, cy, R - 4.5, 1);
-        g.stroke();
+        g.setLineDash(NO_DASH);
+        if (kind === 'fallback') {
+          g.lineWidth = 5;
+          g.lineCap = 'round';
+          g.strokeStyle = cssa(TEAL, 0.75 * ga);
+          g.beginPath();
+          arcRuns(g, inp.now, cx, cy, R, 0.5);
+          g.stroke();
+        } else if (kind === 'lasting') {
+          g.lineWidth = 3;
+          g.strokeStyle = cssa(TEAL, 0.45 * ga);
+          g.beginPath();
+          arcRuns(g, split.ending, cx, cy, R, 0);
+          g.stroke();
+          g.lineWidth = 8;
+          g.lineCap = 'round';
+          g.strokeStyle = cssa(TEAL, 0.95 * ga);
+          g.beginPath();
+          arcRuns(g, split.lasting, cx, cy, R, 1);
+          g.stroke();
+          // The white inner edge: "go here".
+          g.lineWidth = 1;
+          g.strokeStyle = cssa(0xffffff, 0.85 * ga);
+          g.beginPath();
+          arcRuns(g, split.lasting, cx, cy, R - 4.5, 1);
+          g.stroke();
+        }
       }
       const deepBand = inp.mech?.deepBand;
-      if (deepBand && kind !== 'none') {
-        // v1.6 deep shade: a darker band inside the teal, only where it is at least 3° wide.
-        g.lineWidth = 3.5;
-        g.lineCap = 'round';
-        g.strokeStyle = cssa(DEEP_TEAL, 0.95 * ga);
-        g.beginPath();
+      if (deepBand) {
+        // v1.6 deep shade: a darker band inside the teal, only where it is at least 3° wide; with the
+        // teal faded (Guide Auto) it keeps its own thin teal track, so the deep goal stays readable.
         const n = runs(deepBand);
+        g.lineCap = 'round';
+        if (kind === 'none') {
+          g.lineWidth = 7;
+          g.strokeStyle = cssa(TEAL, 0.55 * va);
+          g.beginPath();
+          for (let i = 0; i < n; i++) {
+            const a0 = (runBuf[2 * i] as number) + 1;
+            const a1 = (runBuf[2 * i + 1] as number) - 1;
+            if (a1 - a0 >= 1) arcPath(g, cx, cy, R, a0, a1);
+          }
+          g.stroke();
+        }
+        g.lineWidth = 3.5;
+        g.strokeStyle = cssa(DEEP_TEAL, 0.95 * Math.max(ga, va));
+        g.beginPath();
         for (let i = 0; i < n; i++) {
           const a0 = (runBuf[2 * i] as number) + 1;
           const a1 = (runBuf[2 * i + 1] as number) - 1;
@@ -538,6 +556,10 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 }
 
+/** The glass arc's rim (px outside R, clear of the bud glow at R + 11) and the narrowest run it draws (°). */
+const GLASS_R = 21;
+const GLASS_MIN_DEG = 4;
+
 /**
  * The v1.6 rims outside the ring (see the header): a flare's countdown and its shade (they take the
  * glass arc's place), else the glass arc and its glint.
@@ -548,7 +570,10 @@ function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: nu
   g.lineCap = 'round';
   const ph = m.flarePhase;
   if (ph === 1) {
-    if (m.flare && !inp.blind && runs(m.flare) > 0) {
+    // The flare's shade arc names the angles that parry it; when every angle does (a snap covers the
+    // hold) there is no decision to draw, and the landing's teal leads (§4 priority): rim only.
+    const n = m.flare && !inp.blind ? runs(m.flare) : 0;
+    if (m.flare && n > 0 && !(n === 1 && (runBuf[1] as number) - (runBuf[0] as number) >= 360)) {
       g.beginPath();
       arcRuns(g, m.flare, cx, cy, R + 17, 0.5);
       g.lineWidth = 7;
@@ -570,29 +595,41 @@ function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: nu
     g.stroke();
   } else if (m.glass && !inp.blind) {
     const n = runs(m.glass);
-    if (n > 0) {
-      g.beginPath();
-      arcRuns(g, m.glass, cx, cy, R + 17, 0.5);
+    // A thin frost-white arc on its own rim (R + GLASS_R, clear of the gold bud glow), without the
+    // slivers under GLASS_MIN_DEG, and one glint: on the run nearest the sun pointer.
+    let near = -1;
+    let nearD = Infinity;
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const b0 = runBuf[2 * i] as number;
+      const b1 = runBuf[2 * i + 1] as number;
+      if (b1 - b0 < GLASS_MIN_DEG) continue;
+      arcPath(g, cx, cy, R + GLASS_R, b0 + 0.5, b1 - 0.5);
+      const mid = (b0 + b1) / 2;
+      const d = Math.abs(((((mid - inp.theta) % 360) + 540) % 360) - 180);
+      if (d < nearD) {
+        nearD = d;
+        near = i;
+      }
+    }
+    if (near >= 0) {
       g.lineWidth = 6.5;
       g.strokeStyle = cssa(INK, 0.35 * f);
       g.stroke();
       g.lineWidth = 3;
       g.strokeStyle = cssa(0xffffff, f);
       g.stroke();
-      // A glint running along each arc (resting at its middle under reduced motion).
+      // The glint runs along that arc (resting at its middle under reduced motion).
       const u = inp.reducedMotion ? 0.5 : (h.deepSpin * 3) % 1;
+      const b0 = runBuf[2 * near] as number;
+      const a = -(b0 + ((runBuf[2 * near + 1] as number) - b0) * u) * DEG;
+      const x = cx + Math.cos(a) * (R + GLASS_R);
+      const y = cy + Math.sin(a) * (R + GLASS_R);
       g.fillStyle = cssa(0xffffff, f);
       g.strokeStyle = cssa(INK, 0.4 * f);
       g.lineWidth = 1;
       g.beginPath();
-      for (let i = 0; i < n; i++) {
-        const b0 = runBuf[2 * i] as number;
-        const a = -(b0 + ((runBuf[2 * i + 1] as number) - b0) * u) * DEG;
-        const x = cx + Math.cos(a) * (R + 17);
-        const y = cy + Math.sin(a) * (R + 17);
-        g.moveTo(x + 3.5, y);
-        g.arc(x, y, 3.5, 0, TAU);
-      }
+      g.arc(x, y, 3.5, 0, TAU);
       g.stroke();
       g.fill();
     }
