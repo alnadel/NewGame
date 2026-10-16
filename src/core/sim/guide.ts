@@ -12,8 +12,8 @@ import { tanD } from '../dmath.ts';
 import { liftElevation, worldElevation, worldYAtDayTick, worldYAtTick } from '../gen/plan.ts';
 import { gatherScene, lowerBound } from '../gen/store.ts';
 import { eclipseAt } from '../gen/world.ts';
-import { BINS, createMaskScene, glareMask, litMask, markCaster, markEllipse, shadeMask } from '../intervals.ts';
-import { PICKUP_ALIVE, SNAP_ID_BASE, type Caster, type Flare, type Pickup } from '../objects.ts';
+import { BINS, createMaskScene, glareMask, litMask, shadeMask } from '../intervals.ts';
+import { PICKUP_ALIVE, SNAP_ID_BASE, type Flare, type Pickup } from '../objects.ts';
 import { trailX } from '../trail.ts';
 import { updateBudGuide, updateLandGuide } from './mechanics.ts';
 import type { SimState } from './types.ts';
@@ -25,10 +25,10 @@ const tmp = new Uint8Array(BINS);
 const sources = new Uint8Array(BINS);
 const MARGIN = TUNING.nubs.sampleOffset + 1;
 const AHEAD = Math.round(TUNING.guide.aheadSec * TICK_HZ);
+/** guide.deep's own refresh (ticks): every other guide refresh. */
+const DEEP_EVERY = 2 * TUNING.guide.everyTicks;
 const P = TUNING.pickups;
 const COLLECT = TUNING.nubs.collectRadius;
-/** Floats per cloud in MaskScene.clouds (intervals.ts). */
-const CLOUD_STRIDE = 6;
 
 /** Recomputes the guide masks at the current state. */
 export function updateGuide(s: SimState): void {
@@ -58,9 +58,28 @@ export function updateGuide(s: SimState): void {
     g.deep.fill(0);
   } else {
     gatherScene(s.world, scene, nb.x, nb.y, MARGIN, s.tAbs, s.eps, s.cot);
-    litMask(scene, nb.x, nb.y, false, g.lit, g.glare);
-    for (let b = 0; b < BINS; b++) g.now[b] = g.lit[b] === 0 ? 1 : 0;
-    deepGuide(s);
+    // guide.deep (§2.6): the sources over the center sample are counted in litMask's own pass, on
+    // every other refresh (DEEP_EVERY ticks: a dial layer and a Dare hint); between, the last deep
+    // mask is kept where guide.now still holds.
+    const deepOn = s.world.mech.deep;
+    const count = deepOn && s.tickAbs % DEEP_EVERY === 0;
+    litMask(scene, nb.x, nb.y, false, g.lit, g.glare, count ? sources : null, s.world.v16.garden ? SNAP_ID_BASE : Infinity);
+    if (count) {
+      for (let b = 0; b < BINS; b++) {
+        const now = g.lit[b] === 0 ? 1 : 0;
+        g.now[b] = now;
+        g.deep[b] = now === 1 && (sources[b] as number) >= 2 ? 1 : 0;
+      }
+    } else if (deepOn) {
+      for (let b = 0; b < BINS; b++) {
+        const now = g.lit[b] === 0 ? 1 : 0;
+        g.now[b] = now;
+        g.deep[b] = (g.deep[b] as number) & now;
+      }
+    } else {
+      for (let b = 0; b < BINS; b++) g.now[b] = g.lit[b] === 0 ? 1 : 0;
+      g.deep.fill(0);
+    }
   }
   flakeGuide(s);
   flareGuide(s);
@@ -87,35 +106,11 @@ function nextGuide(s: SimState): void {
   for (let b = 0; b < BINS; b++) g.next[b] = litNext[b] === 0 ? 1 : 0;
 }
 
-/**
+/*
  * guide.deep (§2.6): bins of guide.now where two or more sources (casters, this run's sunflowers,
- * clouds; never the Cold Snap's cloud) are over the center sample. Reads the scene updateGuide just
- * gathered at Nubs. All 0 without the deep-shade mechanic.
+ * clouds; never the Cold Snap's cloud with the Garden on, T3, as computeCoverage) are over the center
+ * sample; counted by litMask in updateGuide. All 0 without the deep-shade mechanic.
  */
-function deepGuide(s: SimState): void {
-  const g = s.guide;
-  g.deep.fill(0);
-  if (!s.world.mech.deep) return;
-  const x = s.nubs.x;
-  const y = s.nubs.y;
-  sources.fill(0);
-  for (let i = 0; i < scene.nCasters; i++) {
-    tmp.fill(0);
-    markCaster(tmp, scene.casters[i] as Caster, x, y, scene.cot);
-    for (let b = 0; b < BINS; b++) sources[b] = (sources[b] as number) + (tmp[b] as number);
-  }
-  const cl = scene.clouds;
-  // T3 (with the Garden, as computeCoverage): the Cold Snap's cloud is not a deep-shade source.
-  const snapNotDeep = s.world.v16.garden;
-  for (let i = 0; i < scene.nClouds; i++) {
-    const o = i * CLOUD_STRIDE;
-    if (snapNotDeep && (cl[o + 4] as number) >= SNAP_ID_BASE) continue;
-    tmp.fill(0);
-    markEllipse(tmp, x, y, cl[o + 5] as number, cl[o] as number, cl[o + 1] as number, cl[o + 2] as number, cl[o + 3] as number);
-    for (let b = 0; b < BINS; b++) sources[b] = (sources[b] as number) + (tmp[b] as number);
-  }
-  for (let b = 0; b < BINS; b++) if (g.now[b] === 1 && (sources[b] as number) >= 2) g.deep[b] = 1;
-}
 
 /**
  * The nearest alive glass flake ahead of Nubs in its melt window (14 u < dy ≤ meltAheadSec of

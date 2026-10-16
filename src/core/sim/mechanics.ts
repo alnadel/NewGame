@@ -243,6 +243,10 @@ export function updateBudGuide(s: SimState): void {
 
 const landScene = createMaskScene();
 const landLit = new Uint8Array(BINS);
+/** guide.land's cache: the end tick it shows (−1: none) and the bloom count and world it was computed with. */
+let landFor = -1;
+let landBlooms = -1;
+let landWorld: object | null = null;
 const LAND_MARGIN = TUNING.nubs.sampleOffset + 1;
 
 /**
@@ -253,12 +257,23 @@ const LAND_MARGIN = TUNING.nubs.sampleOffset + 1;
  */
 export function updateLandGuide(s: SimState): void {
   const g = s.guide.land;
-  g.fill(0);
   const w = s.world;
-  if (!w.v16.garden || s.snapTicks <= 0 || !s.sunUp) return;
+  if (!w.v16.garden || s.snapTicks <= 0 || !s.sunUp) {
+    g.fill(0);
+    landFor = -1;
+    return;
+  }
   const t = s.dayTick + s.snapTicks;
-  if (t >= dayTicks(s.day)) return;
   const tickAbs = dayStartTick(s.day) + t;
+  // The snap's end tick only moves when a bloom extends it, and the scene then is fixed but for this
+  // run's sunflowers: computed once per (end tick, blooms).
+  const blooms = s.stats.blooms ?? 0;
+  if (tickAbs === landFor && blooms === landBlooms && w === landWorld) return;
+  landFor = tickAbs;
+  landBlooms = blooms;
+  landWorld = w;
+  g.fill(0);
+  if (t >= dayTicks(s.day)) return;
   const eps = worldElevation(w, tickAbs);
   if (eps <= 0) return;
   const y = worldYAtDayTick(w, s.day, t);

@@ -208,15 +208,25 @@ export function noonHeatAt(w: World, day: number, dayTick: number): number {
   if (!w.v16.noonHeat || w.level !== null) return 1;
   // Exact in the validator: its DP charges a whole step (t − 6, t] at the heat of its end tick t, so
   // the window's edges sit on the step grid (absolute ticks) and a tick is heated when the step that
-  // holds it ends inside them.
-  const t0 = dayStartTick(day);
-  const dl = dayTicks(day);
-  const a = NOON_STEP * Math.round((t0 + (5 * dl) / 12) / NOON_STEP);
-  const b = NOON_STEP * Math.round((t0 + (7 * dl) / 12) / NOON_STEP);
-  const end = NOON_STEP * Math.ceil((t0 + dayTick) / NOON_STEP);
-  if (end < a || end >= b) return 1;
+  // holds it ends inside them. The edges are memoised for the last day asked (the sim asks every tick).
+  if (day !== noonDay) {
+    const t0 = dayStartTick(day);
+    const dl = dayTicks(day);
+    noonDay = day;
+    noonT0 = t0;
+    noonA = NOON_STEP * Math.round((t0 + (5 * dl) / 12) / NOON_STEP);
+    noonB = NOON_STEP * Math.round((t0 + (7 * dl) / 12) / NOON_STEP);
+  }
+  const end = NOON_STEP * Math.ceil((noonT0 + dayTick) / NOON_STEP);
+  if (end < noonA || end >= noonB) return 1;
   return paramsAt(w, day).noonHeat;
 }
+
+/** noonHeatAt's memo: the day and its start tick and Noon Heat window edges (absolute ticks, pure in the day). */
+let noonDay = -1;
+let noonT0 = 0;
+let noonA = 0;
+let noonB = 0;
 
 /** Fills `out` with the kept flares whose window [warnTick, endTick) overlaps [fromTick, toTick) (sorted by rise); returns the count. */
 export function keptFlares(w: World, fromTick: number, toTick: number, out: Flare[]): number {

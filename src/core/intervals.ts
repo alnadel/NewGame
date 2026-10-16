@@ -412,13 +412,161 @@ export function glareMask(scene: MaskScene, px: number, py: number, out: Uint8Ar
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Source counts (v1.6 guide.deep): how many casters and clouds shade a point at each θ, gathered in
+// the same pass that builds its shade mask. Each source stamps the bins it covers (a Uint16 stamp per
+// source, so a caster's overlapping parts count once and no per-source clear is needed); a bin
+// counts a source the first time that source's stamp reaches it.
+
+const stamps = new Uint16Array(BINS);
+let stamp = 0;
+
+/** A fresh stamp for the next source. */
+function nextStamp(): void {
+  stamp++;
+  if (stamp === 65536) {
+    stamps.fill(0);
+    stamp = 1;
+  }
+}
+
+/**
+ * Bin idx is covered by the current source: shade it, and count the source there once. Counts stop
+ * at 2 (all guide.deep asks), so a bin two sources already cover is never tested again.
+ */
+function hit(shade: Uint8Array, count: Uint8Array, idx: number): void {
+  if (stamps[idx] === stamp) return;
+  stamps[idx] = stamp;
+  shade[idx] = 1;
+  if ((count[idx] as number) < 2) count[idx] = (count[idx] as number) + 1;
+}
+
+/** hit() for every bin whose center lies in [a0, a1] (all bins when it spans the circle). */
+function hitRange(shade: Uint8Array, count: Uint8Array, a0: number, a1: number): void {
+  let b0 = Math.ceil(a0);
+  let b1 = Math.floor(a1);
+  if (b1 < b0) return;
+  if (b1 - b0 >= BINS - 1) {
+    b0 = 0;
+    b1 = BINS - 1;
+  }
+  let idx = b0 % BINS;
+  if (idx < 0) idx += BINS;
+  for (let k = b0; k <= b1; k++) {
+    hit(shade, count, idx);
+    idx++;
+    if (idx === BINS) idx = 0;
+  }
+}
+
+/** countPart: markPart's rule, counting through hit(). */
+function hitPart(shade: Uint8Array, count: Uint8Array, part: Part, px: number, py: number, cot: number): void {
+  if (part.t === 'prism') {
+    const l = shadowLength(part.h, cot);
+    if (distToPartBounds(part, px, py) > l) return;
+    if (pointInConvex(px, py, part.pts, part.n)) hitRange(shade, count, 0, BINS - 1);
+    else if (convexDiskInterval(px, py, part.pts, part.n, l) === 2) hitRange(shade, count, ivA0, ivA1);
+    return;
+  }
+  if (part.t === 'slab') {
+    const r1 = shadowLength(part.z1, cot);
+    if (distToPartBounds(part, px, py) > r1) return;
+    const r0 = shadowLength(part.z0, cot);
+    let b0 = 0;
+    let b1 = BINS - 1;
+    if (!pointInConvex(px, py, part.pts, part.n)) {
+      if (convexDiskInterval(px, py, part.pts, part.n, r1) !== 2) return;
+      b0 = Math.ceil(ivA0);
+      b1 = Math.floor(ivA1);
+      if (b1 - b0 >= BINS) b1 = b0 + BINS - 1;
+    }
+    let idx = b0 % BINS;
+    if (idx < 0) idx += BINS;
+    for (let k = b0; k <= b1; k++) {
+      if (stamps[idx] !== stamp && (count[idx] as number) < 2) {
+        const ux = SUN_COS[idx] as number;
+        const uy = SUN_SIN[idx] as number;
+        if (segmentIntersectsConvex(px + ux * r0, py + uy * r0, px + ux * r1, py + uy * r1, part.pts, part.n)) hit(shade, count, idx);
+      }
+      idx++;
+      if (idx === BINS) idx = 0;
+    }
+    return;
+  }
+  const r = shadowLength(part.z, cot);
+  if (distToPartBounds(part, px, py) > r) return;
+  const k = circleInterval(px, py, r, part.cx, part.cy, part.r);
+  if (k === 1) hitRange(shade, count, 0, BINS - 1);
+  else if (k === 2) hitRange(shade, count, ivA0, ivA1);
+}
+
+/** markEllipse's rule (or markCircle's of radius ry when `asCircle`), counting through hit(). */
+function hitCloud(shade: Uint8Array, count: Uint8Array, px: number, py: number, R: number, cx: number, cy: number, rx: number, ry: number, asCircle: boolean): void {
+  if (asCircle) {
+    const k = circleInterval(px, py, R, cx, cy, ry);
+    if (k === 1) hitRange(shade, count, 0, BINS - 1);
+    else if (k === 2) hitRange(shade, count, ivA0, ivA1);
+    return;
+  }
+  const k = circleInterval(px, py, R, cx, cy, rx > ry ? rx : ry);
+  if (k === 0) return;
+  let b0 = 0;
+  let b1 = BINS - 1;
+  if (k === 2) {
+    b0 = Math.ceil(ivA0);
+    b1 = Math.floor(ivA1);
+  }
+  let idx = b0 % BINS;
+  if (idx < 0) idx += BINS;
+  const irx = 1 / rx;
+  const iry = 1 / ry;
+  for (let b = b0; b <= b1; b++) {
+    if ((count[idx] as number) < 2) {
+      const ex = (px + (SUN_COS[idx] as number) * R - cx) * irx;
+      const ey = (py + (SUN_SIN[idx] as number) * R - cy) * iry;
+      if (ex * ex + ey * ey <= 1) hit(shade, count, idx);
+    }
+    idx++;
+    if (idx === BINS) idx = 0;
+  }
+}
+
+/**
+ * shadeMask of point p, and in `count` the number of sources over p at each θ, up to 2 (casters, and
+ * clouds whose id is below `countBelowId`: a cloud at or above it still shades but is not counted).
+ */
+export function shadeMaskCount(scene: MaskScene, px: number, py: number, cloudsAsCircles: boolean, out: Uint8Array, count: Uint8Array, countBelowId: number): void {
+  out.fill(0);
+  count.fill(0);
+  if (!scene.sunUp) return;
+  const cot = scene.cot;
+  for (let i = 0; i < scene.nCasters; i++) {
+    nextStamp();
+    const parts = (scene.casters[i] as Caster).parts;
+    for (let j = 0; j < parts.length; j++) hitPart(out, count, parts[j] as Part, px, py, cot);
+  }
+  const cl = scene.clouds;
+  for (let i = 0; i < scene.nClouds; i++) {
+    const o = i * CLOUD_STRIDE;
+    const R = cl[o + 5] as number;
+    if ((cl[o + 4] as number) >= countBelowId) {
+      if (cloudsAsCircles) markCircle(out, px, py, R, cl[o] as number, cl[o + 1] as number, cl[o + 3] as number);
+      else markEllipse(out, px, py, R, cl[o] as number, cl[o + 1] as number, cl[o + 2] as number, cl[o + 3] as number);
+      continue;
+    }
+    nextStamp();
+    hitCloud(out, count, px, py, R, cl[o] as number, cl[o + 1] as number, cl[o + 2] as number, cl[o + 3] as number, cloudsAsCircles);
+  }
+}
+
 const sShade = new Uint8Array(BINS);
 const sGlare = new Uint8Array(BINS);
 
 /**
  * Lit-weight mask for Nubs centered at (cx, cy): outLit[b] = Σ over the 5 samples of the lit
  * weight (0 shaded, 1 lit, 2 in glare), so 0..10 and f = outLit[b] / 5. Also ORs every sample's
- * glare into outGlare when given.
+ * glare into outGlare when given, and counts the sources over the center sample into centerCount
+ * when given (clouds with an id ≥ countBelowId shade but are not counted).
  */
 export function litMask(
   scene: MaskScene,
@@ -427,8 +575,11 @@ export function litMask(
   cloudsAsCircles: boolean,
   outLit: Uint8Array,
   outGlare: Uint8Array | null,
+  centerCount: Uint8Array | null = null,
+  countBelowId = Infinity,
 ): void {
   if (outGlare) outGlare.fill(0);
+  if (centerCount) centerCount.fill(0);
   if (!scene.sunUp) {
     outLit.fill(0);
     return;
@@ -438,7 +589,9 @@ export function litMask(
   for (let s = 0; s < SAMPLES; s++) {
     const px = cx + (SAMPLE_DX[s] as number);
     const py = cy + (SAMPLE_DY[s] as number);
-    shadeMask(scene, px, py, cloudsAsCircles, sShade);
+    // The center sample can also count its sources (shadeMaskCount: guide.deep), in the same pass.
+    if (s === 0 && centerCount) shadeMaskCount(scene, px, py, cloudsAsCircles, sShade, centerCount, countBelowId);
+    else shadeMask(scene, px, py, cloudsAsCircles, sShade);
     if (!glare) {
       for (let b = 0; b < BINS; b++) outLit[b] = (outLit[b] as number) - (sShade[b] as number);
       continue;
