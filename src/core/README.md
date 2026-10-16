@@ -523,3 +523,88 @@ ruleset 15, `RULES16_DATE`, challenge `r`, dual hashing or `--rules`.
 GAME builds against the debug hooks: `startFrost` and `debugRing` for the ring and pips,
 `brittleShare: 1` for the glass arc, `startFrost: 1` for guide.land, `debugFlare` for the flare
 telegraph (each layer lights up once its owner fills the body).
+
+### 16.1 Economy (CORE-1: §2.1 Flow Ring, §2.2 Frost Bank, §2.4 Frost Garden and Landing, T2-T5)
+
+Every rule keys off `World.v16` (`ring`, `bank`, `garden`); with all three off the v1.5 multiplier,
+meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `sim/mechanics.ts`
+(bank, cash-in, garden, re-aim, guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts`
+(start frost), `sim/bots/econ.ts`, `scripts/sim16/econ.ts`; values in `TUNING.ring/.bank/.garden`.
+
+- **Flow Ring** (daylight only). `nubs.mult` 1..5 is the level of `nubs.ringCharge` (integer units).
+  A full-shade tick (snap cover included) adds `shadeUnits` 5 (×`deepMul` 2 in deep shade); the
+  first `freeLitTicks` 6 lit ticks of a stretch are free, then each lit tick bleeds
+  `bleedK[m−1]·Σw` (Σw = the 5 sample weights, glare 2), except on the tick after a bud grew
+  (`nubs.budGrewTick`). At `need[m−1]` (900/1200/1800/2400) the level rises (`multUp {level,
+  reason}`, remainder kept; x5 keeps at most 2400); below 0 it drops one level to ¾ of the new
+  level's need (`multDown {from, to, cause: 'bleed'}`); x1 floors at 0. `multReset` is never
+  emitted with the ring on. `nubs.shadeTicks` mirrors the progress to the next level in v1.5 units
+  (`floor(charge · mult.stepTicks / need)`) for the old HUD bar.
+- **Tricks** (`ringTrick {kind, units}`, `stats.ringTricks`): +`trick` 600 for a fresh SWING, a
+  bloom, an own landing (and CORE-2's saved glass cluster and flare parry: call
+  `ringTrick(s, kind, units)` from nubs.ts); +`streakTrick` 300 for every 3rd flake or crystal in a
+  row (`nubs.streak`, reset by any `flakeMelt`).
+- **Fresh SWING**: its new source is neither end of a SWING confirmed in the last `freshTicks` 180
+  (`isFreshSource`; `nubs.swFresh` keeps the last 8 endpoints as (id, tick); `nubs.swPendFrom` is the
+  source a pending hand-off leaves). A non-fresh SWING still chains and pays Snow.
+- **PHEW** sets `mult = max(mult, nubs.litStartMult)` (the level at the stretch's first lit tick;
+  `multUp {reason: 'phew'}`), never above it. **Snow (T2)**: flakes pay `round(min(m, 3)·snowMult)`,
+  crystals 5× that; the `flake`/`crystal` events still carry the true `mult`.
+- **Frost Bank.** `nubs.frostH` 0..200 integer hundredths is the meter; `nubs.frost = frostH / 100`
+  (0..2) mirrors it, so `frost ≥ 1` still means "a snap is ready". Income only from
+  `addFrostH(s, source, h)` (mechanics.ts; CORE-2 calls it for 'cluster' and 'parry'): bloom
+  `bloomH`, a fresh SWING `swingH` at most once per `swingEveryTicks` (`nubs.swingFrostTick`), an
+  own landing `landH`. No shade, deep, flake, crystal or PHEW income. Each landing on the meter emits
+  `frostGain {source, amountH, charges}`; `frostReady {charges}` on crossing 100 and 200; above
+  `capH` the rest is lost (`frostSpill {lostH}`). Under a snap income goes to `s.snapBankH` (at most
+  `garden.bankCapH` 30 per snap) and lands at snapEnd as `frostGain {source: 'garden'}`.
+  Stats: `frostEarnedH` (income, banked included), `frostSpilledH`, `snapCashH`.
+- **castSnap** needs `frostH ≥ costH` and subtracts it, then cashes the ring in: `frostH +=
+  cashPerLevelH·(m − 1)`, the ring back to x1 at 0 (`multDown {cause: 'snap'}` when m > 1, then
+  `snapCash {level, refundH}` and `frostGain {source: 'cash'}`). Charges carry through night and dawn.
+- **Start frost** (`createRun`): Endless/Daily/challenge `runStartH`, lesson runs 0, Journey
+  `campaignStartH` 50, the Cold Snap's own level `teachStartH` 100; `RunConfig.startFrost` (charges
+  0..2) overrides. `runStartH` is **0**: measured, the starting charge alone added +683 min (mean,
+  80 seeds) to the reactive bot, over the plan's 120-minute bar (§2.2).
+- **Frost Garden** (while `s.snapTicks > 0`): buds within [y − 30, y + `reach` 420] grow ×`growMul`
+  2 (guide.bud uses the same reach; a flare's rise and hold use `TUNING.flare.budMul` instead when
+  larger, never the product, once CORE-2's `s.flarePhase` runs). A bloom under the snap adds
+  `extendTicks` 30 to it (`snapExtend {ticks}`, at most `extendCapTicks` 60 per snap, never past the
+  day's last daylight tick), records the sunflower in `s.snapBloomIds` (`s.snapBlooms`,
+  `stats.gardenBlooms`). **T5**: the snap cloud starts aimed at Nubs' scheduled position
+  `reaimTicks` 30 ahead and is re-aimed every 30 ticks of its age and on every extension, in place
+  (same object, id and t0; `x0/y0/vx/vy/life` change, so the path is continuous); with the Garden
+  off it is the v1.5 frozen one-chord cloud. **T3**: the snap cloud is not a deep-shade source.
+- **guide.land** (`updateLandGuide`, called from `updateGuide`): during a Garden snap, 1 where θ = b°
+  fully shades Nubs (5 samples, no glare) at the snap's end tick (`dayTick + snapTicks`): his
+  scheduled position, the elevation (`worldElevation`) and the clouds then; the snap cloud is dead on
+  that tick, so it never counts; this run's sunflowers do. All 0 otherwise.
+- **Landing** (`updateLanding`, after updateSwing): a Garden snap that bloomed arms it at snapEnd
+  (`s.landTicks` = `landWindowTicks` 20); a hold must start inside the window (Nubs fully shaded by
+  any source but the snap, `s.landHold`, `s.landSrc`) and last `landHoldTicks` 15: `snapLand {chain,
+  own, x, y}`, `stats.snapLands`. Own (a sunflower of this snap shaded the center sample during the
+  hold): a fresh SWING (chain + 1 with the chain timer paused across the snap, Snow = chain,
+  `stats.swings`, +`landH` frost, a 'land' trick, `stats.snapLandsOwn`); any other shade: chain + 1
+  only. Nightfall or a new snap cancels it.
+- **Hash**: `hashState` reads ringCharge, litStartMult, streak, swFresh(N), frostH, swingFrostTick,
+  snapBankH, snapExt, snapBlooms, the landing fields and the ring/bank stats.
+- **Bots** (`sim/bots/econ.ts`, constants `ECON_BOTS`; idle, novice and the human models unchanged):
+  reactive with mechanics — ring: +0.5 on now-safe bins whose nearest center shader is not an end of
+  the last SWING while Chill ≥ 60; policies `plain` (v1.5 gold), `chase` (every gold bin worth 3.5,
+  above a safe bin's 3, while Chill ≥ 45 and outside 9:20 AM-2:40 PM; `econChasing` is exported for
+  CORE-2's glass term), `naive` (that greed at every hour and any Chill), `safe` (no gold term);
+  snaps `panic` (v1.5) or `plan` (lit, x3+, Chill < 50, no now ∪ next bin within ±45°, else panic);
+  bank: spends an overflow charge at frostH ≥ 190 when lit with Chill < 70; Garden: gold only under
+  the snap, then in its last 36 ticks guide.land bins (up to 15° deep, +10 where guide.next — already
+  past the end — agrees, +8 where this snap's own sunflower shades the landing spot). Oracle: under a
+  Garden snap the bud bonus reaches 180°, and in the snap's last 36 ticks (guide.land) and the 40
+  ticks after it (guide.now) a landing pull of up to 12 Chill; overflow snap at frostH ≥ 190 when lit;
+  with flares on it keeps a charge for a kept flare of d ≥ 8 within 30 s while holding fewer than two
+  and spends one when lit in its rise or hold (inert until CORE-2's flares land).
+- **sim** (`scripts/sim16/econ.ts`): `--check` adds the economy table (mean multiplier, x5 share,
+  level changes a minute, trick share of ring income, full-bank share, meters a day from income,
+  snaps a day, blooms per snap, own-landing share, lit ticks in the 40 after snapEnd, 11 AM-1 PM
+  under a snap, priced moments) and frost income by source, with the §2.1/§2.2/§2.4 gates (hard:
+  reactive x5 ≤ 20% and mean x2.8-3.8, full bank ≤ 10%, dial-only ≤ 0.15 meters a day).
+  `--decisions [--seeds 80]` plays reactive plain/chase/naive/safe, plain with plan snaps, dial-only,
+  humanDial R2-R4 and plain with every v1.6 rule off, and checks §2.2's gates.
