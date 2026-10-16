@@ -98,6 +98,18 @@ export interface DayParams {
    * clock, the placer, the validator, the guide and the sim agree.
    */
   readonly walkMul: number;
+
+  // v1.6 (docs/V1_6_PLAN.md §2.5; CORE-2 owns the values and their readers).
+  /**
+   * Noon Heat: the drain × this between 11:00 AM and 1:00 PM (Endless and Daily; the Journey reads
+   * it as 1 through noonHeatAt). 1 on Day 1, 1.15 on Days 2-3, 1.25 from Day 4 (profile 3; profiles
+   * 0-2 one day later).
+   */
+  readonly noonHeat: number;
+  /** Heat Flares drawn for the day (profile 3: 0, 1, then 2 from Day 3; profiles 0-2: 1 from Day 3). */
+  readonly flareCount: number;
+  /** A flare's elevation lift d (°): 10 on Days 2-3, 8 from Day 4 (0 when the day has none). */
+  readonly flareD: number;
 }
 
 export interface ProfileParams {
@@ -274,6 +286,18 @@ function rampRow(day: number): Row {
   };
 }
 
+/** v1.6 Noon Heat of day d (profile 3; profiles 0-2 take each step one day later). */
+function noonHeatOf(d: number, profile: ProfileId): number {
+  const k = profile === 3 ? d : d - 1;
+  return k >= 4 ? 1.25 : k >= 2 ? 1.15 : 1;
+}
+
+/** v1.6 Heat Flares of day d: how many, and their lift (°). */
+function flareCountOf(d: number, profile: ProfileId): number {
+  if (profile === 3) return d >= 3 ? 2 : d === 2 ? 1 : 0;
+  return d >= 3 ? 1 : 0;
+}
+
 /** Night length (s): 8 s through Day 6, then 0.5 s shorter per day (min 5 s). */
 export function nightLength(day: number): number {
   return day <= 6 ? 8 : Math.max(5, 8 - 0.5 * (day - 6));
@@ -414,6 +438,9 @@ export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legac
     sunFollow: tune?.sunFollow ?? 0,
     sunFriction: tune?.sunFriction ?? TUNING.sun.friction,
     walkMul,
+    noonHeat: noonHeatOf(d, profile),
+    flareCount: flareCountOf(d, profile),
+    flareD: flareCountOf(d, profile) === 0 ? 0 : d >= 4 ? 8 : 10,
   });
   if (tune) modCache.set(mkey, params);
   else cache.set(key, params);

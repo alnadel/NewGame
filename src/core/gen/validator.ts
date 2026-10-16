@@ -118,6 +118,25 @@ export function validatorDrain(w: World): number {
   return w.validatorDrain * paramsAt(w, 1).drainMul;
 }
 
+/**
+ * v1.6 Noon Heat (docs/V1_6_PLAN.md §2.5; CORE-2): the DP's Chill-delta table for the slot at
+ * (day, dayTick), chillDeltaTable(validatorDrain(w) · noonHeatAt(…), regen), cached per (day, in
+ * window). Contract stub: the plain table stepValidation uses today.
+ */
+export function deltaForSlot(w: World, _day: number, _dayTick: number): Float64Array {
+  return chillDeltaTable(validatorDrain(w), paramsAt(w, 1).regen);
+}
+
+/**
+ * v1.6 (§2.3): a finished job's rows for the glass pass (CORE-2): lit counts (slots × 360), the DP
+ * Chill rows `c` (slots × 360; slot 0 is the entry carry), the slot count and slot 0's absolute
+ * tick (slot s is at slot0Tick + s · stepTicks). Reads the job's buffers; valid until the next job
+ * of the world starts (it reuses them).
+ */
+export function jobRows(job: ValidationJob): { lit: Uint8Array; c: Float64Array; slots: number; slot0Tick: number } {
+  return { lit: job.lit, c: job.c, slots: job.pre + job.n + 2, slot0Tick: (job.j0 - 1 - job.pre) * STEP };
+}
+
 /** Fills a step's geometry: Nubs' position, time, elevation (0 at night). */
 function stepGeometry(w: World, j: number, job: ValidationJob, s: number): void {
   const tick = j * STEP;

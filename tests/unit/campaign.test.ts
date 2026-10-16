@@ -162,13 +162,14 @@ describe('the level table', () => {
   });
 
   it('turns each core mechanic on from the level that teaches it (all on outside the Journey)', () => {
-    expect(mechanicsOf(null)).toEqual({ buds: true, snap: true, deep: true });
-    expect(mechanicsOf(1)).toEqual({ buds: false, snap: false, deep: false });
-    expect(mechanicsOf(4)).toEqual({ buds: false, snap: false, deep: false });
-    expect(mechanicsOf(5)).toEqual({ buds: false, snap: false, deep: true });
-    expect(mechanicsOf(8)).toEqual({ buds: true, snap: false, deep: true });
-    expect(mechanicsOf(10)).toEqual({ buds: true, snap: true, deep: true });
-    expect(mechanicsOf(200)).toEqual({ buds: true, snap: true, deep: true });
+    // v1.6 contract: glass (brittle) is on outside the Journey and off on every level until its concept lands.
+    expect(mechanicsOf(null)).toEqual({ buds: true, snap: true, deep: true, brittle: true });
+    expect(mechanicsOf(1)).toEqual({ buds: false, snap: false, deep: false, brittle: false });
+    expect(mechanicsOf(4)).toEqual({ buds: false, snap: false, deep: false, brittle: false });
+    expect(mechanicsOf(5)).toEqual({ buds: false, snap: false, deep: true, brittle: false });
+    expect(mechanicsOf(8)).toEqual({ buds: true, snap: false, deep: true, brittle: false });
+    expect(mechanicsOf(10)).toEqual({ buds: true, snap: true, deep: true, brittle: false });
+    expect(mechanicsOf(200)).toEqual({ buds: true, snap: true, deep: true, brittle: false });
     // Worlds follow: no buds before level 8, buds from it; the snap level starts with a full meter.
     const w4 = createWorld(campaignConfig(4));
     ensureGenerated(w4, w4.finishY);

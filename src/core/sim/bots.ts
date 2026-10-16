@@ -13,6 +13,12 @@
 // - humanDial: the same player reading the v1.1 dial, perception-limited (A6): on half of its
 //   decisions (a seeded coin per decision) it takes the lasting shade (now ∧ next of its stale view,
 //   arcs ≥ 20° only) as the target, else the plain `now` arcs. The sim's advisory and career rows use it.
+// - humanFeat (v1.6, docs/V1_6_PLAN.md §2.6): humanDial plus a seeded focus on the level's Dare, on
+//   its own decision stream. Until CORE-2 fills worldHumanTarget it is the humanDial model on that stream.
+//
+// v1.6 hooks: the reactive and oracle bots call the economy terms in bots/econ.ts (CORE-1) and the
+// world terms in bots/world.ts (CORE-2) at fixed points, with the bot's BotOptions; the contract
+// stubs return their input unchanged.
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, DT, elevation, TICK_HZ } from '../clock.ts';
@@ -21,12 +27,37 @@ import { paramsAt } from '../gen/plan.ts';
 import { chillDeltaTable, slidingMaxCircular, stepLit, stepLitLive } from '../gen/validator.ts';
 import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
+import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
+import { worldHumanTarget, worldOracleBonus, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
 
-export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial';
-export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial'] as BotKind[]);
+export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat';
+export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat'] as BotKind[]);
+
+/** v1.6 reactive-bot policies (docs/V1_6_PLAN.md §2.2): today's play, timed greed, greed all day, never gold. */
+export type BotPolicy = 'plain' | 'chase' | 'naive' | 'safe';
+export const BOT_POLICIES: readonly BotPolicy[] = Object.freeze(['plain', 'chase', 'naive', 'safe'] as BotPolicy[]);
+
+/** v1.6 bot options (`sim --decisions`, `--policy`); unset = today's behaviour. */
+export interface BotOptions {
+  /** Reactive (mechanics on): what it chases (default 'plain'). CORE-1. */
+  policy?: BotPolicy;
+  /** Reactive: when it snaps ('panic', the v1.5 rule, by default; 'plan' snaps at a gap's mouth). CORE-1. */
+  snap?: 'panic' | 'plan';
+  /** Reactive (mechanics on): slide to guide.flare in a warning's last 18 ticks. CORE-2. */
+  preAim?: boolean;
+  /** Oracle: weights for the level's Dare (the Feat-seeking oracle). CORE-2. */
+  feats?: boolean;
+}
+
+/** What a v1.6 hook (bots/econ.ts, bots/world.ts) knows about the bot calling it. */
+export interface BotHookCtx {
+  readonly kind: BotKind;
+  readonly mech: boolean;
+  readonly opts: Readonly<BotOptions>;
+}
 
 export interface Bot {
   readonly kind: BotKind;
@@ -159,7 +190,8 @@ function snapReady(s: SimState): boolean {
   return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0;
 }
 
-function reactiveBot(mech: boolean): Bot {
+function reactiveBot(ctx: BotHookCtx): Bot {
+  const mech = ctx.mech;
   const cfg = TUNING.bots.reactive;
   const f = frame();
   const score = new Float64Array(BINS);
@@ -181,13 +213,17 @@ function reactiveBot(mech: boolean): Bot {
           const gold = mech && g.bud[b] === 1 && (now === 1 || spare) ? cfg.budWeight : 0;
           score[b] = cfg.nowWeight * now + cfg.nextWeight * (g.next[b] as number) + gold;
         }
+        econReactiveScore(ctx, s, score);
+        worldReactiveScore(ctx, s, score);
         const b = pickArc(score, cfg.blur, cfg.penalty, binOf(s.sun.theta));
         if (b >= 0) target = b;
       }
+      target = worldReactiveAim(ctx, s, target);
       const out = steer(f, s, target, cfg.rate, !started);
       started = true;
       // v1.5 Cold Snap: lit and low, with no safe angle close by (or nearly melted).
       out.snap = mech && snapReady(s) && s.nubs.f > 0 && (s.nubs.chill < cfg.snapLast || (s.nubs.chill < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
+      out.snap = econReactiveSnap(ctx, s, out.snap);
       return out;
     },
   };
@@ -232,7 +268,8 @@ const STEP = TUNING.validator.stepTicks;
  */
 const ORACLE_CAMPAIGN = Object.freeze({ margin: 12, shadeWeight: 0.6 });
 
-function oracleBot(mech: boolean): Bot {
+function oracleBot(ctx: BotHookCtx): Bot {
+  const mech = ctx.mech;
   const cfg = TUNING.bots.oracle;
   const gold = new Float64Array(BINS);
   let snapNext = false;
@@ -316,6 +353,7 @@ function oracleBot(mech: boolean): Bot {
         const d = gold[b] as number;
         if (d < cfg.budReachDeg) v += cfg.budBonus * (1 - d / cfg.budReachDeg);
       }
+      v += econOracleBonus(ctx, s, b, slack) + worldOracleBonus(ctx, s, b, slack);
       if (v > bestV) {
         bestV = v;
         best = b;
@@ -328,6 +366,7 @@ function oracleBot(mech: boolean): Bot {
       const litNext = (lits[2 * BINS + best] as number) > 0;
       snapNext = bestSlack < cfg.snapSlack || (litNext && (campaign || (s.nubs.f > 0 && c < cfg.snapChill)));
     }
+    snapNext = econOracleSnap(ctx, s, snapNext, bestSlack);
   }
 
   return {
@@ -424,7 +463,7 @@ function wideLasting(now: Uint8Array, next: Uint8Array, minArc: number, out: Uin
  * The human model; `lastingShare` is the share of decisions that read the lasting shade (0 for
  * 'human', so it draws exactly the v1.0 stream).
  */
-function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: number): Bot {
+function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: number, salt: number, ctx: BotHookCtx): Bot {
   const cfg = TUNING.bots.human;
   const msTicks = (ms: number): number => Math.round((ms * TICK_HZ) / 1000);
   const f = frame();
@@ -460,7 +499,8 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
   }
 
   // v1.5: humanDial snaps in a panic (the meter glows on the HUD): lit with Chill under HUMAN_SNAP_CHILL.
-  const snaps = kind === 'humanDial';
+  const snaps = kind !== 'human';
+  const feat = kind === 'humanFeat';
   return {
     kind,
     next(s: SimState): InputFrame {
@@ -503,7 +543,8 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
     const mask =
       useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
     if (ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
-    const target = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
+    const pickT = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
+    const target = feat ? worldHumanTarget(ctx, s, pickT) : pickT;
     const want = angleDiff(target, theta);
     if (target < 0 || Math.abs(want) < HUMAN_MIN_MOVE) return f;
     // Decide: over/undershoot and aim error, then a fresh lag for the next decision.
@@ -522,21 +563,25 @@ function humanBot(kind: 'human' | 'humanDial', lastingShare: number, salt: numbe
  * `salt` (human models only) draws another player's decision stream on the same world; 0 is the
  * default stream. `mechanics` false makes the reactive and oracle bots ignore the v1.5 mechanics
  * (no gold, no snaps; the oracle plans without sunflowers) for with/without measurements; idle,
- * novice and the human models never use them.
+ * novice and the human models never use them. `opts` (v1.6) picks the reactive policy and snap
+ * rule, preAim and the Feat-seeking oracle (unset: today's bots).
  */
-export function createBot(kind: BotKind, salt = 0, mechanics = true): Bot {
+export function createBot(kind: BotKind, salt = 0, mechanics = true, opts: BotOptions = {}): Bot {
+  const ctx: BotHookCtx = { kind, mech: mechanics, opts };
   switch (kind) {
     case 'idle':
       return idleBot();
     case 'novice':
       return noviceBot();
     case 'reactive':
-      return reactiveBot(mechanics);
+      return reactiveBot(ctx);
     case 'human':
-      return humanBot('human', 0, salt);
+      return humanBot('human', 0, salt, ctx);
     case 'humanDial':
-      return humanBot('humanDial', TUNING.bots.human.lastingShare, salt);
+      return humanBot('humanDial', TUNING.bots.human.lastingShare, salt, ctx);
+    case 'humanFeat':
+      return humanBot('humanFeat', TUNING.bots.human.lastingShare, salt, ctx);
     default:
-      return oracleBot(mechanics);
+      return oracleBot(ctx);
   }
 }

@@ -364,7 +364,25 @@ export function applyDaylight(s: SimState): void {
   s.hourLit += f * DT;
   st.litTotal += f * DT;
   updateSwing(s);
+  updateLanding(s);
   if (s.lessonOn) updateLesson(s, lit, wasLit);
+}
+
+/**
+ * v1.6 Landing (docs/V1_6_PLAN.md §2.4; CORE-1 owns the body): within TUNING.garden.landWindowTicks
+ * of snapEnd after a snap that bloomed, Nubs fully shaded by another source for landHoldTicks emits
+ * snapLand (an own landing counts as a fresh SWING). Contract stub: no-op.
+ */
+export function updateLanding(_s: SimState): void {}
+
+/**
+ * v1.6 debug and screenshot hook (never called by the game loop): puts the multiplier at `level`
+ * (1..5) with `charge` ring units (≥ 0). CORE-1 owns the body.
+ */
+export function debugRing(s: SimState, level: number, charge: number): void {
+  const nb = s.nubs;
+  nb.mult = Math.max(1, Math.min(M.max, Math.round(level)));
+  nb.ringCharge = Math.max(0, Math.round(charge));
 }
 
 /** Night tick: Chill refills at +30/s; the multiplier is frozen. */

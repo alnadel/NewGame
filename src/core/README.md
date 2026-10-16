@@ -478,3 +478,48 @@ identity). Code: `sim/mechanics.ts` (buds, frost, snap), `computeCoverage`/`appl
   mechanics and must outlive it by ≥ 180 minutes (hard). The mechanics table prints blooms, snaps,
   meters filled, buds passed per daylight minute and per day, and deep shade's share. `--mech` adds
   an oracle row without them; `--campaign --nomech` plays the Journey with the bots ignoring them.
+
+## 16. v1.6 contract (docs/V1_6_PLAN.md §10, minus amendment A1)
+
+The base commit of v1.6: every shape below exists and is exported from `index.ts`; the bodies are
+stubs that change no tick, no hash and no golden (`hashState` does not read the new state yet).
+Owners (§9 as amended by A2): **CORE-1** economy (ring, bank, garden), **CORE-2** world and Journey
+(flares, Noon Heat, glass, Dares, guide.deep/flake/flare), **GAME** render, HUD, audio, input and
+META's items. Shared files (`sim/types.ts`, `events.ts`, `objects.ts`, `tuning.ts` block shapes,
+`hash.ts`, `bots.ts` dispatch and hooks, `scripts/sim.ts`, `index.ts`, this section) change only by
+agreement; CORE-1 writes the economy half of this section, CORE-2 the world half. A1: there is no
+ruleset 15, `RULES16_DATE`, challenge `r`, dual hashing or `--rules`.
+
+| Shape | Where | Body owner |
+|---|---|---|
+| `V16Rules`, `V16_ALL`, `V16_NONE`, `V16_RULES`; `RunConfig.v16` → `World.v16` (world identity) | sim/types.ts, gen/world.ts | shared (kill switches) |
+| `RunConfig.relaxedGoal` (read by `levelOutcome`), `RunConfig.brittleShare` → `World.brittleShare` | sim/types.ts, level.ts | CORE-2 |
+| NubsState `ringCharge`, `litStartMult`, `budGrewTick`, `streak`, `swFresh` (Int32Array 16), `swFreshN` | sim/types.ts | CORE-1 |
+| NubsState `frostH` (mirrors `floor(100·frost)` until the Bank inverts it), `swingFrostTick` | sim/types.ts, mechanics.ts | CORE-1 |
+| SimState `snapBankH`, `snapExt`, `snapBlooms`, `landTicks` (−1), `landHold`, `landSrc` | sim/types.ts | CORE-1 |
+| SimState `clusterId`, `clusterTaken`, `clusterBroken`; `flareIdx`, `flareId`, `flarePhase`, `flareLit`, `flareTicks` | sim/types.ts | CORE-2 |
+| GuideState `land` (CORE-1); `deep`, `flake`, `flare`, `flareTicks` (CORE-2); all 0 / −1 for now | sim/types.ts | as listed |
+| Events `multDown`, `ringTrick`, `multUp.reason`, `frostReady.charges`, `frostGain`, `frostSpill`, `snapCash`, `snapExtend`, `snapLand` | sim/events.ts | CORE-1 |
+| Events `clusterSaved`, `flareWarn/Rise/Parry/Miss/End`, `feat`, `featMet` | sim/events.ts | CORE-2 |
+| RunStats (optional, filled with 0 by createRun) `multTicks` … `snapLandsOwn` | sim/events.ts | CORE-1 |
+| RunStats `brittleSeen` … `gustWindows` | sim/events.ts | CORE-2 |
+| `TUNING.ring`, `.bank`, `.garden` (CORE-1); `TUNING.brittle`, `.flare` (CORE-2), at the plan's starting values | config/tuning.ts | as listed |
+| DayParams `noonHeat`, `flareCount`, `flareD` (plan values; nothing reads them yet) | config/days.ts | CORE-2 |
+| `FLAKE_ID_BASE`, Pickup `cluster`/`ci`/`cn`/`brittle` (filled by the placer, brittle false), `Flare`, `FLARE_*`, `World.flares` (empty) | objects.ts, gen/placer.ts, gen/store.ts | CORE-2 |
+| `Mechanics.brittle` (on outside the Journey; off on every level until the concept lands) | config/campaign.ts | CORE-2 |
+| `worldElevation` (base ε), `flareLift` (0), `noonHeatAt` (1), `keptFlares` (0) | gen/plan.ts | CORE-2 |
+| `deltaForSlot` (the plain table), `jobRows` (real) | gen/validator.ts | CORE-2 |
+| `meltBudgetOf(s, p)` (reads `p.brittle`; used by updatePickups) | sim/pickups.ts | CORE-2 |
+| `GoalKind` (+ verb goals; 'snow' stays until T6), `FeatKind`, `FeatSpec`, `LevelFlare`, `LevelDef.feats`/`.flares` (empty), `featValue` (0), `featMet`, `goalMet(…, relaxed)`, `starsFor(…, relaxed)` | config/campaign.ts | CORE-2 |
+| step.ts hooks: `updateFlare(s)` before syncEclipse (sim/flares.ts), `updateLanding(s)` in applyDaylight after updateSwing (sim/nubs.ts), `updateFeats(s)` after passObjects (sim/feats.ts); no-ops, not exported | sim/*.ts | CORE-2, CORE-1, CORE-2 |
+| `debugRing(s, level, charge)` (sets mult and ringCharge); `debugFlare(s, inTicks, d)` (adds a kept flare whose warning starts in `inTicks`; inert until updateFlare reads it) | sim/nubs.ts, sim/flares.ts | CORE-1, CORE-2 |
+| `BotKind` + `'humanFeat'` (plays like humanDial on its own stream), `BotOptions` (`policy`, `snap`, `preAim`, `feats`), `BotPolicy`, `BOT_POLICIES`, `createBot(kind, salt, mechanics, opts)` | sim/bots.ts | shared |
+| Bot hooks (no-ops): `econReactiveScore/Snap`, `econOracleBonus/Snap` | sim/bots/econ.ts | CORE-1 |
+| Bot hooks (no-ops): `worldReactiveScore/Aim`, `worldOracleBonus`, `worldHumanTarget` | sim/bots/world.ts | CORE-2 |
+| sim flags `--off ring,bank,garden,brittle,flares,noonHeat` (real: RunConfig.v16 on every row, campaign and career too), `--policy` (real on the reactive mechanics rows), `--hours`, `--decisions`, `--bake` ("not implemented yet") | scripts/sim.ts | shared |
+| Report registry: `Sim16Module` (per-run `collector` in the workers, `report` after the v1.5 report, `modes`) | scripts/sim16/registry.ts | shared |
+| `ECON` (`--policy` note, `--decisions`) / `WORLD` (`--hours`, `--bake`) | scripts/sim16/econ.ts / world.ts | CORE-1 / CORE-2 |
+
+GAME builds against the debug hooks: `startFrost` and `debugRing` for the ring and pips,
+`brittleShare: 1` for the glass arc, `startFrost: 1` for guide.land, `debugFlare` for the flare
+telegraph (each layer lights up once its owner fills the body).

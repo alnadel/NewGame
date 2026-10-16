@@ -213,6 +213,113 @@ const tuning = {
     reenterTicks: 60,
   },
 
+  /**
+   * v1.6 Flow Ring (docs/V1_6_PLAN.md §2.1; CORE-1 tunes it). Charge in integer units: a full-shade
+   * daylight tick adds shadeUnits (× deepMul in deep shade); from the (freeLitTicks + 1)-th lit tick
+   * of a stretch each tick costs bleedK[m − 1]·Σw; need[m − 1] levels x(m) up to x(m + 1). Tricks
+   * pay `trick` (every streakEvery-th pickup without a melt pays streakTrick); a SWING is fresh
+   * when its source is neither end of a SWING in the last freshTicks (freshSlots endpoint pairs
+   * kept); flake and crystal Snow use min(m, snowCap).
+   */
+  ring: {
+    shadeUnits: 5,
+    deepMul: 2,
+    freeLitTicks: 6,
+    need: [900, 1200, 1800, 2400],
+    bleedK: [2, 3, 6, 12, 20],
+    trick: 600,
+    streakTrick: 300,
+    streakEvery: 3,
+    freshTicks: 180,
+    freshSlots: 8,
+    snowCap: 3,
+  },
+  /**
+   * v1.6 Frost Bank (§2.2; CORE-1). The meter in integer hundredths, 0..capH (two snaps); a snap
+   * costs costH; income per act (bloom, fresh SWING at most once per swingEveryTicks, glass cluster
+   * saved, own landing, flare parry); the cash-in pays cashPerLevelH per ring level above x1. Start:
+   * runStartH (Endless, Daily, challenge), campaignStartH (Journey), teachStartH (the Cold Snap's
+   * teaching level); lesson runs start at 0.
+   */
+  bank: {
+    capH: 200,
+    costH: 100,
+    bloomH: 30,
+    swingH: 5,
+    swingEveryTicks: 180,
+    clusterH: 10,
+    landH: 5,
+    parryH: 10,
+    cashPerLevelH: 10,
+    runStartH: 100,
+    campaignStartH: 50,
+    teachStartH: 100,
+  },
+  /**
+   * v1.6 Frost Garden and Landing (§2.4; CORE-1). Under a snap, buds within [y − 30, y + reach]
+   * grow × growMul; each bloom adds extendTicks (at most extendCapTicks per snap); income is banked
+   * (at most bankCapH per snap); the cloud re-aims every reaimTicks. A landing must start within
+   * landWindowTicks of snapEnd and hold landHoldTicks.
+   */
+  garden: {
+    growMul: 2,
+    reach: 420,
+    extendTicks: 30,
+    extendCapTicks: 60,
+    bankCapH: 30,
+    reaimTicks: 30,
+    landWindowTicks: 20,
+    landHoldTicks: 15,
+  },
+  /**
+   * v1.6 Brittle (glass) flakes (§2.3; CORE-2). Glass flakes melt after meltBudget lit seconds; the
+   * contest test tries the shifts (s of walking) keeping minGapSec to the neighbouring clusters;
+   * quotas are shares of eligible clusters (profile 3; profile 2 half); a contested cluster needs
+   * C1 ≥ floor + marginChill and costMin ≤ C0 − C1 ≤ costMax (the shift nearest costAim wins);
+   * tailSec of slots after the melt window must lie in the job.
+   */
+  brittle: {
+    meltBudget: 0.8,
+    shiftsSec: [0, -0.5, 0.5, -1, 1],
+    quotaDay1: 0.25,
+    quotaLater: 0.35,
+    marginChill: 10,
+    costMin: 12,
+    costMax: 40,
+    costAim: 25,
+    tailSec: 1.5,
+    minGapSec: 3,
+  },
+  /**
+   * v1.6 Heat Flares (§2.5; CORE-2). Shape in ticks (warning, rise with a 3x² − 2x³ smoothstep,
+   * hold, fall); rise windows as shares of the day (t/Dl), gapSec apart; ε_world clamped to
+   * εnoon − epsMargin (Endless) or journeyEpsCap (Journey). Keep test: a parry path shaded on
+   * keepShadedShare of the hold steps, and fewer than keepMovedShare of the safe bins stay safe;
+   * otherwise shifted by shiftsSec, then dropped. A parry is ≤ parryMaxLit lit hold ticks (+snow
+   * Snow); during the rise and hold buds grow × budMul and flakes melt × meltMul.
+   */
+  flare: {
+    warnTicks: 120,
+    warnTicksJourney: 72,
+    riseTicks: 18,
+    holdTicks: 42,
+    fallTicks: 30,
+    windows: [
+      [0.2, 0.32],
+      [0.68, 0.8],
+    ],
+    gapSec: 8,
+    epsMargin: 2,
+    journeyEpsCap: 78,
+    parryMaxLit: 4,
+    keepShadedShare: 0.85,
+    keepMovedShare: 0.5,
+    shiftsSec: [0.5, -0.5, 1, -1],
+    snow: 5,
+    budMul: 3,
+    meltMul: 2,
+  },
+
   /** Pickups (V1_PLAN §5.4). */
   pickups: {
     flakeSpacing: 24,

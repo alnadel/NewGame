@@ -12,7 +12,7 @@ import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
-import type { RunConfig } from '../sim/types.ts';
+import { V16_ALL, V16_NONE, type RunConfig, type V16Rules } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
 import { placeChunk, placeStart } from './placer.ts';
 import { paramsAt } from './plan.ts';
@@ -31,15 +31,34 @@ const PLACE_COST = 8;
  * level (`level`) also fixes `mods` and `biome` (createRun derives them; createWorld reads the
  * level for its start, finish, gate and eclipse geometry and the validator's drain).
  */
-export type WorldConfig = Pick<RunConfig, 'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast' | 'mods' | 'biome' | 'level' | 'mechanics'>;
+export type WorldConfig = Pick<
+  RunConfig,
+  'seed' | 'profile' | 'tutorial' | 'noonCloud' | 'plan' | 'forecast' | 'mods' | 'biome' | 'level' | 'mechanics' | 'v16' | 'brittleShare'
+>;
 
 /** The v1.5 mechanics of a world: the level's (mechanicsOf), else all on; RunConfig.mechanics overrides either. */
 function worldMechanics(cfg: WorldConfig, level: LevelDef | null): Mechanics {
   const base = mechanicsOf(level ? level.id : null);
   const o = cfg.mechanics;
   if (!o) return base;
-  const m = { buds: o.buds ?? base.buds, snap: o.snap ?? base.snap, deep: o.deep ?? base.deep };
-  return m.buds && m.snap && m.deep ? ALL_MECHANICS : Object.freeze(m);
+  const m = { buds: o.buds ?? base.buds, snap: o.snap ?? base.snap, deep: o.deep ?? base.deep, brittle: o.brittle ?? base.brittle };
+  return m.buds && m.snap && m.deep && m.brittle ? ALL_MECHANICS : Object.freeze(m);
+}
+
+/** The v1.6 rules of a world: all on (V16_ALL) unless RunConfig.v16 switches some off. */
+function worldRules(cfg: WorldConfig): V16Rules {
+  const o = cfg.v16;
+  if (!o) return V16_ALL;
+  const r: V16Rules = {
+    ring: o.ring ?? true,
+    bank: o.bank ?? true,
+    garden: o.garden ?? true,
+    brittle: o.brittle ?? true,
+    flares: o.flares ?? true,
+    noonHeat: o.noonHeat ?? true,
+  };
+  const on = Object.values(r).filter(Boolean).length;
+  return on === 6 ? V16_ALL : on === 0 ? V16_NONE : Object.freeze(r);
 }
 
 const NO_MODS: readonly ConceptId[] = Object.freeze([]);
@@ -86,6 +105,9 @@ export function createWorld(cfg: WorldConfig): World {
     pickups: [],
     buds: [],
     mech: worldMechanics(cfg, level),
+    v16: worldRules(cfg),
+    flares: [],
+    brittleShare: cfg.brittleShare === undefined ? null : Math.min(1, Math.max(0, cfg.brittleShare)),
     maxZ: 0,
     nextId: 1,
     startHutId: -1,

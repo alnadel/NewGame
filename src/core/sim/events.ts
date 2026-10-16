@@ -1,6 +1,7 @@
 // Shared contract between the simulation (src/core) and its consumers (audio, UI, meta, render).
 // The sim emits these; nothing else constructs SimEvents. Extend only additively.
 
+import type { FeatKind } from '../../config/campaign.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { DayPlan, NoonCloud } from '../../config/days.ts';
 
@@ -39,7 +40,7 @@ export type SimEvent =
   | { e: 'flakeMelt'; x: number; y: number }
   | { e: 'shadeEnter'; litFor: number }
   | { e: 'shadeExit' }
-  | { e: 'multUp'; level: number }
+  | { e: 'multUp'; level: number; reason?: 'shade' | 'trick' | 'phew' }
   | { e: 'multReset'; from: number }
   | { e: 'phew' }
   | { e: 'noonBanner' }
@@ -59,10 +60,31 @@ export type SimEvent =
   // v1.5 core mechanics (docs/V1_5_PLAN.md)
   | { e: 'budGrow'; id: number; x: number; y: number; grow: number }
   | { e: 'bloom'; id: number; x: number; y: number; snow: number }
-  | { e: 'frostReady' }
+  | { e: 'frostReady'; charges?: number }
   | { e: 'snap'; x: number; y: number; cloudId: number }
   | { e: 'snapEnd' }
-  | { e: 'deepEnter' };
+  | { e: 'deepEnter' }
+  // v1.6 (docs/V1_6_PLAN.md §2, §10). Flow Ring (CORE-1); multReset is no longer emitted once the ring lands.
+  | { e: 'multDown'; from: number; to: number; cause: 'bleed' | 'snap' }
+  | { e: 'ringTrick'; kind: 'swing' | 'bloom' | 'streak' | 'cluster' | 'land' | 'parry'; units: number }
+  // Frost Bank (CORE-1): frostReady gains `charges` (1 or 2).
+  | { e: 'frostGain'; source: 'bloom' | 'swing' | 'cluster' | 'land' | 'parry' | 'cash' | 'garden'; amountH: number; charges: number }
+  | { e: 'frostSpill'; lostH: number }
+  | { e: 'snapCash'; level: number; refundH: number }
+  // Frost Garden and Landing (CORE-1).
+  | { e: 'snapExtend'; ticks: number }
+  | { e: 'snapLand'; chain: number; own: boolean; x: number; y: number }
+  // Glass clusters (CORE-2).
+  | { e: 'clusterSaved'; cluster: number; brittle: boolean; n: number; x: number; y: number }
+  // Heat Flares (CORE-2).
+  | { e: 'flareWarn'; id: number; ticks: number; d: number }
+  | { e: 'flareRise'; id: number }
+  | { e: 'flareParry'; id: number; snap: boolean; snow: number }
+  | { e: 'flareMiss'; id: number; lit: number }
+  | { e: 'flareEnd'; id: number }
+  // Dares (CORE-2): a Dare's live count changed; a Dare was met.
+  | { e: 'feat'; kind: FeatKind; value: number; target: number }
+  | { e: 'featMet'; kind: FeatKind };
 
 export type SimEventName = SimEvent['e'];
 
@@ -101,6 +123,42 @@ export interface RunStats {
   blooms?: number;
   snaps?: number;
   deepSeconds?: number;
+  // v1.6 (docs/V1_6_PLAN.md §10): optional in the type (absent = 0), always filled by createRun.
+  /** Flow Ring (CORE-1): Σ m over daylight ticks, daylight ticks at x5, level drops, trick payments. */
+  multTicks?: number;
+  x5Ticks?: number;
+  multDowns?: number;
+  ringTricks?: number;
+  /** Frost Bank (CORE-1, hundredths): earned from income, lost over the cap, refunded by cash-ins. */
+  frostEarnedH?: number;
+  frostSpilledH?: number;
+  snapCashH?: number;
+  /** Garden (CORE-1): blooms under a snap, landings, own-sunflower landings. */
+  gardenBlooms?: number;
+  snapLands?: number;
+  snapLandsOwn?: number;
+  /** Glass (CORE-2): glass clusters walked through, glass clusters saved whole, clusters of any kind saved whole. */
+  brittleSeen?: number;
+  brittleSaved?: number;
+  clustersSaved?: number;
+  /** Flares (CORE-2): kept flares that reached their hold, parries. */
+  flaresSeen?: number;
+  parries?: number;
+  /**
+   * Dare counters (CORE-2, §2.6; integer ticks or counts so the HUD's live count and the verdict
+   * agree): ticks in deep shade; ticks where a snap filled from income is the only source over the
+   * center; clouds ridden ≥ 0.5 s; arches walked under in deep shade; the eclipse flip's shade
+   * ticks; lock and gust windows held fully shaded, and how many there were.
+   */
+  deepTicks?: number;
+  earnedSnapSavedTicks?: number;
+  cloudsRidden?: number;
+  gateDeep?: number;
+  flipTicks?: number;
+  lockHeld?: number;
+  lockWindows?: number;
+  gustHeld?: number;
+  gustWindows?: number;
 }
 
 export type RunMode = 'endless' | 'daily' | 'challenge' | 'campaign';

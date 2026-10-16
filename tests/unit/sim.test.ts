@@ -255,8 +255,8 @@ describe('sim rules', () => {
     for (let m = 0; m < TUNING.pickups.meltBudget; m += 1 / 60) ticks++;
     expect(Math.abs(ticks - 72)).toBeLessThanOrEqual(1);
     const s = lab();
-    const near = { id: 501, kind: 'flake' as const, x: trailX(s.world.trail, 100), y: 100, day: 1, melt: 0, state: 0 as const };
-    const far = { id: 502, kind: 'flake' as const, x: trailX(s.world.trail, 300), y: 300, day: 1, melt: 0, state: 0 as const };
+    const near = { id: 501, kind: 'flake' as const, x: trailX(s.world.trail, 100), y: 100, day: 1, melt: 0, state: 0 as const, cluster: -1, ci: 0, cn: 1, brittle: false };
+    const far = { id: 502, kind: 'flake' as const, x: trailX(s.world.trail, 300), y: 300, day: 1, melt: 0, state: 0 as const, cluster: -1, ci: 0, cn: 1, brittle: false };
     insertPickup(s.world, near);
     insertPickup(s.world, far);
     const ev = run(s, ticks - 1);
@@ -272,7 +272,7 @@ describe('sim rules', () => {
   it('collecting a flake pays the multiplier in Snow and +6 Chill', () => {
     const s = lab({ startChill: 50 });
     shade(s);
-    const fl = { id: 601, kind: 'flake' as const, x: trailX(s.world.trail, 40), y: 40, day: 1, melt: 0, state: 0 as const };
+    const fl = { id: 601, kind: 'flake' as const, x: trailX(s.world.trail, 40), y: 40, day: 1, melt: 0, state: 0 as const, cluster: -1, ci: 0, cn: 1, brittle: false };
     insertPickup(s.world, fl);
     const ev = run(s, 60);
     expect(fl.state).toBe(1);

@@ -131,6 +131,16 @@ export interface Pickup {
   melt: number;
   /** 0 alive, 1 taken, 2 melted. */
   state: PickupState;
+  /**
+   * v1.6 (docs/V1_6_PLAN.md §2.3): the flake cluster it belongs to (the id of the cluster's first
+   * flake; −1 for crystals and flowers), its index in the cluster (0..cn − 1) and the cluster's size
+   * (1 outside a cluster), and whether the cluster is glass (melts after TUNING.brittle.meltBudget;
+   * read through meltBudgetOf).
+   */
+  readonly cluster: number;
+  readonly ci: number;
+  readonly cn: number;
+  readonly brittle: boolean;
 }
 
 /**
@@ -141,6 +151,8 @@ export interface Pickup {
  * their config).
  */
 export const BUD_ID_BASE = 0x20000000;
+/** v1.6: flakes placed two chunks behind the casters (like buds) take ids from here (CORE-2, T7). */
+export const FLAKE_ID_BASE = 0x30000000;
 export const RUNTIME_ID_BASE = 0x40000000;
 export const SNAP_ID_BASE = 0x60000000;
 
@@ -161,4 +173,29 @@ export interface Bud {
   state: 0 | 1;
   /** The sunflower caster once bloomed (world.byId), else −1. */
   casterId: number;
+}
+
+/** Flare.state: not decided yet, kept (it will fire), dropped (failed the keep test). */
+export type FlareState = 0 | 1 | 2;
+export const FLARE_PENDING = 0;
+export const FLARE_KEPT = 1;
+export const FLARE_DROPPED = 2;
+
+/**
+ * v1.6 Heat Flare (docs/V1_6_PLAN.md §2.5): the sun swells over the warning, every shadow snaps
+ * shorter over the rise (ε + d·lift), holds, and falls back. Flares live on the World (w.flares,
+ * sorted by riseTick); ticks are absolute. The validator (or `sim --bake` for Journey bosses)
+ * decides `state` and may shift the ticks before it does; only generation and debugFlare write them.
+ */
+export interface Flare {
+  readonly id: number;
+  readonly day: number;
+  /** Elevation lift at full strength (°). */
+  readonly d: number;
+  warnTick: number;
+  riseTick: number;
+  holdTick: number;
+  fallTick: number;
+  endTick: number;
+  state: FlareState;
 }

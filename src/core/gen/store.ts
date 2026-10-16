@@ -7,8 +7,9 @@ import type { BiomeId, DayPlan, NoonCloud, ProfileId } from '../../config/days.t
 import type { ForecastId } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { type MaskScene, sceneAddBall, sceneAddCaster, sceneAddCloud, sceneBegin } from '../intervals.ts';
-import { RUNTIME_ID_BASE, type Bud, type Caster, type Cloud, type GazingBall, type Pickup } from '../objects.ts';
+import { RUNTIME_ID_BASE, type Bud, type Caster, type Cloud, type Flare, type GazingBall, type Pickup } from '../objects.ts';
 import { casterReach, cloudAlive, distToCasterBounds, glareOffset, shadowLength, cloudOffset } from '../shadows.ts';
+import type { V16Rules } from '../sim/types.ts';
 import type { Trail } from '../trail.ts';
 import type { ValidationJob } from './validator.ts';
 
@@ -94,6 +95,18 @@ export interface World {
    * all on, or RunConfig.mechanics). Buds are only generated when `buds` is on.
    */
   readonly mech: Mechanics;
+  /**
+   * v1.6 rules this world plays with (docs/V1_6_PLAN.md §5 as amended: V16_ALL unless
+   * RunConfig.v16 switches some off; part of the world's identity).
+   */
+  readonly v16: V16Rules;
+  /**
+   * v1.6 Heat Flares (§2.5), sorted by riseTick: drawn per day by generation (Endless) or from the
+   * level's baked table (Journey bosses), kept or dropped by the validator. Empty until CORE-2.
+   */
+  readonly flares: Flare[];
+  /** v1.6 debug (RunConfig.brittleShare): the glass quota forced to this share 0..1, or null for the profile/day quota. */
+  readonly brittleShare: number | null;
   /** Largest caster height so far (for reach culling). */
   maxZ: number;
   nextId: number;

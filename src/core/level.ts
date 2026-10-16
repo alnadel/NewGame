@@ -56,9 +56,13 @@ export function levelProgress(s: SimState): number {
   return p < 0 ? 0 : p > 1 ? 1 : p;
 }
 
-/** The outcome of a campaign run: passed and stars once the finish line was crossed (phase 'won'), else 0. */
+/**
+ * The outcome of a campaign run: passed and stars once the finish line was crossed (phase 'won'),
+ * else 0. v1.6: RunConfig.relaxedGoal (the soft-fail) scores the goal as 'finish'.
+ */
 export function levelOutcome(level: LevelDef, s: SimState): RunLevel {
   const won = s.phase === 'won';
-  const passed = won && goalMet(level, s.stats);
-  return { id: level.id, passed, stars: passed ? starsFor(level, s.stats) : 0, introduces: level.introduces };
+  const relaxed = s.cfg.relaxedGoal === true;
+  const passed = won && goalMet(level, s.stats, relaxed);
+  return { id: level.id, passed, stars: passed ? starsFor(level, s.stats, relaxed) : 0, introduces: level.introduces };
 }

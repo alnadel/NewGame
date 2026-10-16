@@ -202,7 +202,7 @@ describe('Cold Snap', () => {
     run(s, 60);
     expect(s.nubs.frost - f0).toBeCloseTo(F.perShadeSec, 9);
     const fl = s.nubs.frost;
-    insertPickup(s.world, { id: 9_000_000, kind: 'flake', x: s.nubs.x, y: s.nubs.y + 1, day: 1, melt: 0, state: 0 });
+    insertPickup(s.world, { id: 9_000_000, kind: 'flake', x: s.nubs.x, y: s.nubs.y + 1, day: 1, melt: 0, state: 0, cluster: -1, ci: 0, cn: 1, brittle: false });
     run(s, 1);
     expect(s.nubs.frost - fl).toBeCloseTo(F.perFlake + F.perShadeSec / 60, 9);
     s.nubs.frost = 0.9999;

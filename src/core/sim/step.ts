@@ -1,8 +1,9 @@
 // step(): advances a run by exactly one 1/60 s tick (archive/TECH_SPEC §4, with V1_PLAN fixes).
 //
 // Order: sun → clock (+ night/dawn/noon/hour events) → sun vector and Nubs' position → world hard
-// guarantee and pruning → coverage → Chill/multiplier/PHEW (or night regen) → pickups → gates and
-// balls passed → history → death → guide. Everything is pure arithmetic on the state.
+// guarantee and pruning → flares (v1.6) → eclipse → snap → coverage → Chill/multiplier/PHEW/SWING/
+// landing (or night regen) → pickups → buds → gates and balls passed → Dares (v1.6) → history →
+// death → guide. Everything is pure arithmetic on the state.
 // The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
 import { TUNING } from '../../config/tuning.ts';
@@ -27,6 +28,8 @@ import { levelOutcome } from '../level.ts';
 import type { Caster, GazingBall } from '../objects.ts';
 import { trailX } from '../trail.ts';
 import { deathCause } from './deathcause.ts';
+import { updateFeats } from './feats.ts';
+import { updateFlare } from './flares.ts';
 import { guideDue, updateGuide } from './guide.ts';
 import { pushHistory } from './history.ts';
 import { applyDaylight, applyNight, computeCoverage, hourGlyph } from './nubs.ts';
@@ -236,6 +239,7 @@ export function step(s: SimState, input: InputFrame): void {
   ensureGenerated(s.world, s.nubs.y + W.hardAhead);
   if (s.tick % TICK_HZ === 0) pruneWorld(s.world, s.nubs.y - W.pruneBehind, s.tAbs - 2);
 
+  updateFlare(s);
   syncEclipse(s);
   updateSnap(s, inp);
   computeCoverage(s);
@@ -244,6 +248,7 @@ export function step(s: SimState, input: InputFrame): void {
   updatePickups(s, daylight);
   updateBuds(s);
   passObjects(s, prevY);
+  updateFeats(s);
   pushHistory(s);
   pushRecent(s);
 

@@ -6,7 +6,8 @@
 
 import { dayParams, dayPlan, legacyPlan, type BiomeId, type DayParams, type DayPlan } from '../../config/days.ts';
 import { FORECAST_IDS, forecastFits, PLAN_WEIGHTS, type ForecastId } from '../../config/forecasts.ts';
-import { dayStartY, timeAtY, yAtDayTick, yAtTick, yAtTime, type YTime } from '../clock.ts';
+import { dayAtTick, dayStartTick, dayStartY, elevation, TICK_HZ, timeAtY, yAtDayTick, yAtTick, yAtTime, type YTime } from '../clock.ts';
+import type { Flare } from '../objects.ts';
 import { rngFor } from '../rng.ts';
 import type { World } from './store.ts';
 
@@ -122,4 +123,35 @@ export function worldDayAtY(w: World, y: number): number {
 /** Biome of the ground at y in world `w` (the night keeps its day's biome). */
 export function biomeAtY(w: World, y: number): BiomeId {
   return worldPlan(w, worldDayAtY(w, y)).biome;
+}
+
+// v1.6 sun readers (docs/V1_6_PLAN.md §2.5; CORE-2 owns the bodies). Every ε reader (syncTime, the
+// guide, the validator's stepGeometry, stepLit and stepLitLive, the bots, deathcause) will read the
+// world's elevation through worldElevation; the placer keeps the base elevation.
+
+/**
+ * The sun's elevation (°) in world `w` at absolute tick `tickAbs`: the day's base ε plus d·flareLift
+ * of a kept flare. Contract stub: the base ε only (no flares yet). It is elevation(paramsAt(w, day),
+ * tDay) exactly as the validator's stepGeometry computes it: 0 before Day 1 dawn and after dusk, but
+ * the dusk tick itself (dayTick = dayTicks(day)) still reads ≈ EPS_DAWN, so syncTime keeps its own
+ * daylight gate (s.eps = 0 at night).
+ */
+export function worldElevation(w: World, tickAbs: number): number {
+  const day = dayAtTick(tickAbs);
+  return elevation(paramsAt(w, day), (tickAbs - dayStartTick(day)) / TICK_HZ);
+}
+
+/** A kept flare's lift 0..1 at `tickAbs` (rise smoothstep, hold 1, fall). Contract stub: 0. */
+export function flareLift(_w: World, _tickAbs: number): number {
+  return 0;
+}
+
+/** Noon Heat: the drain × this on `day` at `dayTick` (Endless and Daily, 11 AM-1 PM). Contract stub: 1. */
+export function noonHeatAt(_w: World, _day: number, _dayTick: number): number {
+  return 1;
+}
+
+/** Fills `out` with the kept flares whose window overlaps [fromTick, toTick) (sorted by rise); returns the count. Contract stub: 0. */
+export function keptFlares(_w: World, _fromTick: number, _toTick: number, _out: Flare[]): number {
+  return 0;
 }

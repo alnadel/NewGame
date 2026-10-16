@@ -35,6 +35,8 @@ export function addFrost(s: SimState, amount: number): void {
   if (nb.frost >= 1) return;
   const v = nb.frost + amount;
   nb.frost = v >= 1 ? 1 : v;
+  // v1.6 contract: frostH mirrors the v1.5 meter until the Frost Bank (CORE-1) makes it the source.
+  nb.frostH = Math.floor(100 * nb.frost);
   if (v >= 1) s.events.push({ e: 'frostReady' });
 }
 
@@ -147,6 +149,7 @@ export function castSnap(s: SimState): boolean {
   s.snapTicks = SNAP_TICKS;
   s.snapCloudId = id;
   nb.frost = 0;
+  nb.frostH = 0;
   st.snaps = n + 1;
   s.events.push({ e: 'snap', x: nb.x, y: nb.y, cloudId: id });
   return true;

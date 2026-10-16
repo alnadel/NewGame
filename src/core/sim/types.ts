@@ -36,6 +36,33 @@ export const NO_INPUT: Readonly<InputFrame> = Object.freeze({
   key: 0,
 });
 
+/**
+ * v1.6 rules (docs/V1_6_PLAN.md §2, §5 with amendment A1): each can be switched off on its own
+ * (kill switches, and with/without measurements through `sim --off …`). With every flag off the
+ * game plays like v1.5 (bit-identity is not promised).
+ */
+export interface V16Rules {
+  /** §2.1 Flow Ring: the multiplier bleeds in idle sun, tricks pump it, a snap cashes it in. */
+  readonly ring: boolean;
+  /** §2.2 Frost Bank: two snaps, earned by risk, kept overnight. */
+  readonly bank: boolean;
+  /** §2.4 Frost Garden and Landing. */
+  readonly garden: boolean;
+  /** §2.3 Brittle (glass) flake clusters. */
+  readonly brittle: boolean;
+  /** §2.5 Heat Flares. */
+  readonly flares: boolean;
+  /** §2.5 Noon Heat (T1). */
+  readonly noonHeat: boolean;
+}
+
+/** Every v1.6 rule on (the default). */
+export const V16_ALL: V16Rules = Object.freeze({ ring: true, bank: true, garden: true, brittle: true, flares: true, noonHeat: true });
+/** Every v1.6 rule off: plays like v1.5. */
+export const V16_NONE: V16Rules = Object.freeze({ ring: false, bank: false, garden: false, brittle: false, flares: false, noonHeat: false });
+/** The names of the v1.6 rules, in V16Rules order (`sim --off`). */
+export const V16_RULES: readonly (keyof V16Rules)[] = Object.freeze(['ring', 'bank', 'garden', 'brittle', 'flares', 'noonHeat'] as (keyof V16Rules)[]);
+
 export interface RunConfig {
   /** World seed (uint32). */
   seed: number;
@@ -98,8 +125,20 @@ export interface RunConfig {
    * with `buds` on).
    */
   mechanics?: Partial<Mechanics>;
-  /** v1.5 debug: the frost meter at the start (0..1; 1 = a Cold Snap ready). Default 0 (1 on the Cold Snap's teaching level). */
+  /**
+   * v1.5 debug: the frost meter at the start (0..1; 1 = a Cold Snap ready). Default 0 (1 on the Cold
+   * Snap's teaching level). v1.6 (CORE-1, the Frost Bank): charges 0..2 (frostH = 100 · startFrost).
+   */
   startFrost?: number;
+  /**
+   * v1.6 tooling and kill switches: switch single v1.6 rules off (unset keys stay on). Part of the
+   * world's identity (World.v16).
+   */
+  v16?: Partial<V16Rules>;
+  /** v1.6 campaign soft-fail (§2.6): after two misses the level's goal is scored as 'finish' (set from the save). */
+  relaxedGoal?: boolean;
+  /** v1.6 debug: force the glass-cluster quota to this share 0..1 (screenshots); part of the world's identity. */
+  brittleShare?: number;
 }
 
 /**
@@ -193,6 +232,27 @@ export interface NubsState {
   swPendTicks: number;
   swChain: number;
   swLastTick: number;
+
+  // v1.6 Flow Ring (docs/V1_6_PLAN.md §2.1; CORE-1).
+  /** Ring charge in integer units (TUNING.ring.shadeUnits = one full-shade tick); `mult` is its level. */
+  ringCharge: number;
+  /** The level at the current lit stretch's first tick (PHEW restores up to it, never above). */
+  litStartMult: number;
+  /** The last tick a bud grew (the bleed spares the tick after it). */
+  budGrewTick: number;
+  /** Flakes and crystals taken in a row without a melt (every 3rd pays a streak trick). */
+  streak: number;
+  /** The last TUNING.ring.freshSlots SWING endpoints as (source id, tick) pairs (16 slots); swFreshN pairs written so far. */
+  readonly swFresh: Int32Array;
+  swFreshN: number;
+  // v1.6 Frost Bank (§2.2; CORE-1).
+  /**
+   * The frost meter in integer hundredths, 0..TUNING.bank.capH (100 = one snap ready). Until the
+   * Bank lands it mirrors floor(100 · frost) of the v1.5 meter; afterwards `frost` mirrors frostH / 100.
+   */
+  frostH: number;
+  /** The last tick a SWING paid frost (at most once per TUNING.bank.swingEveryTicks). */
+  swingFrostTick: number;
 }
 
 export interface GuideState {
@@ -210,6 +270,17 @@ export interface GuideState {
   tick: number;
   /** False at night (no sun): masks are all 0. */
   sunUp: boolean;
+  // v1.6 dial layers (docs/V1_6_PLAN.md §4 "Dial layer budget"); all 0 until their owners fill them.
+  /** Deep shade now: all 5 samples shaded and ≥ 2 sources over the center (the snap excluded). CORE-2. */
+  readonly deep: Uint8Array;
+  /** Shades the nearest alive glass flake in its melt window (one point mask per refresh). CORE-2. */
+  readonly flake: Uint8Array;
+  /** During a snap: full shade at the snap's end (snap clouds excluded, this run's sunflowers included). CORE-1. */
+  readonly land: Uint8Array;
+  /** During a flare warning: full shade at the first hold tick. CORE-2. */
+  readonly flare: Uint8Array;
+  /** Ticks to the rise during a flare warning, −1 otherwise. CORE-2. */
+  flareTicks: number;
 }
 
 export interface SimState {
@@ -263,6 +334,29 @@ export interface SimState {
   /** v1.5 Cold Snap: ticks left of the active snap (0 none) and its cloud's id (−1 none). */
   snapTicks: number;
   snapCloudId: number;
+  // v1.6 Frost Bank and Garden (docs/V1_6_PLAN.md §2.2, §2.4; CORE-1).
+  /** Frost income banked during the snap (hundredths), paid when it ends (at most TUNING.garden.bankCapH). */
+  snapBankH: number;
+  /** Ticks this snap was extended by blooms (≤ TUNING.garden.extendCapTicks), and the blooms under it. */
+  snapExt: number;
+  snapBlooms: number;
+  /** Landing: ticks left of the window after snapEnd (−1 none), ticks held so far, the source holding Nubs (−1 none). */
+  landTicks: number;
+  landHold: number;
+  landSrc: number;
+  // v1.6 glass clusters (§2.3; CORE-2): the cluster being walked through (−1 none), flakes taken from it, a flake of it melted.
+  clusterId: number;
+  clusterTaken: number;
+  clusterBroken: boolean;
+  // v1.6 Heat Flares (§2.5; CORE-2).
+  /** Index in world.flares of the next or current flare, and its id (−1 none). */
+  flareIdx: number;
+  flareId: number;
+  /** 0 none, 1 warning, 2 rise, 3 hold, 4 fall. */
+  flarePhase: 0 | 1 | 2 | 3 | 4;
+  /** Lit ticks during the current flare's hold, and ticks to its rise during the warning (−1 otherwise). */
+  flareLit: number;
+  flareTicks: number;
   readonly guide: GuideState;
   readonly world: World;
   readonly stats: RunStats;

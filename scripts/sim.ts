@@ -3,6 +3,8 @@
 //   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W] [--mech]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
 //   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
+//   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] on any of the above;
+//   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions and --bake.
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
 // per row, death-time quantiles, melted%, first-night share, median run seconds, mean Snow, SWINGs
@@ -33,11 +35,16 @@
 // hashString(`career-${c}-${r}`), rungConfig/comfortAfterRun between runs). --meta folds every run
 // through the meta API (A14): beginRun, applyRunResult, stale missions swapped, the cheapest
 // affordable cosmetic bought, one Daily try per sim-day once unlocked; a sim-day is 5 runs.
+//
+// v1.6 report registry (scripts/sim16/registry.ts): --off switches v1.6 rules off on every row
+// (RunConfig.v16); the economy module (sim16/econ.ts, CORE-1: --policy, --decisions) and the world
+// module (sim16/world.ts, CORE-2: --hours, --bake) add per-run metrics gathered in the workers,
+// their tables and gates after the v1.5 report, and their own modes.
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import { CAMPAIGN_LEVELS, LEVEL_COUNT, type LevelDef } from '../src/config/campaign.ts';
-import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type NoonCloud, type ProfileId } from '../src/config/days.ts';
+import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
 import { dayStartTick, dayStartY } from '../src/core/clock.ts';
@@ -45,28 +52,23 @@ import { formatScore } from '../src/core/format.ts';
 import { ensureGenerated } from '../src/core/gen/world.ts';
 import { hashString } from '../src/core/rng.ts';
 import { BUD_ID_BASE } from '../src/core/objects.ts';
-import { BOT_KINDS, createBot, type BotKind } from '../src/core/sim/bots.ts';
+import { BOT_KINDS, BOT_POLICIES, createBot, type BotKind, type BotOptions, type BotPolicy } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import type { RunResult } from '../src/core/sim/events.ts';
 import { headlessConfig } from '../src/core/sim/headless.ts';
 import { campaignConfig, levelProgress } from '../src/core/level.ts';
 import { buildRunResult } from '../src/core/sim/result.ts';
 import { step } from '../src/core/sim/step.ts';
-import type { RunConfig, SimState } from '../src/core/sim/types.ts';
+import { V16_RULES, type RunConfig, type SimState, type V16Rules } from '../src/core/sim/types.ts';
+import { ECON } from './sim16/econ.ts';
+import type { Sim16Collector, Sim16Ctx, Sim16Job, Sim16Module, Sim16Row } from './sim16/registry.ts';
+import { WORLD } from './sim16/world.ts';
+
+/** The v1.6 report modules (scripts/sim16/registry.ts). */
+const SIM16: readonly Sim16Module[] = [ECON, WORLD];
 
 /** One row of the report: a bot on one kind of run. */
-interface Job {
-  bot: BotKind;
-  profile: ProfileId;
-  drain?: number;
-  noonCloud?: NoonCloud;
-  lesson?: boolean;
-  forecast?: ForecastId;
-  /** Advisory comfort-rung row (PASS/MISS only, never fails --check). */
-  rung?: number;
-  /** v1.5 --mech: the bot ignores the core mechanics (no gold, no snaps). */
-  noMech?: boolean;
-}
+type Job = Sim16Job;
 
 interface Task {
   job: number;
@@ -105,10 +107,12 @@ interface RunOut {
   frostReady: number;
   deepSec: number;
   budsPassed: number;
+  /** v1.6: the report modules' metrics (scripts/sim16). */
+  m: Record<string, number>;
 }
 
 /** A bot plays one run to death or the dawn of Day `days`. */
-function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false, mech = true): { out: Omit<RunOut, 'job' | 'seed'>; result: RunResult } {
+function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false, mech = true, opts: BotOptions = {}): { out: Omit<RunOut, 'job' | 'seed'>; result: RunResult } {
   let genMs = 0;
   const s = createRun(cfg);
   if (timeGen) {
@@ -116,7 +120,9 @@ function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false, m
     ensureGenerated(s.world, dayStartY(days) + 2000);
     genMs = performance.now() - g0;
   }
-  const bot = createBot(kind, 0, mech);
+  const bot = createBot(kind, 0, mech, opts);
+  const cols: Sim16Collector[] = [];
+  for (const mod of SIM16) if (mod.collector) cols.push(mod.collector());
   const endTick = dayStartTick(days);
   let botMs = 0;
   let daylight = 0;
@@ -143,12 +149,20 @@ function playRun(cfg: RunConfig, kind: BotKind, days: number, timeGen = false, m
         if (b.id - BUD_ID_BASE > budPassed) budPassed = b.id - BUD_ID_BASE;
       }
     }
+    if (cols.length > 0) {
+      // v1.6 collectors are timed with the bot, so stepMs stays the cost of step() alone.
+      const c0 = performance.now();
+      for (const c of cols) c.tick(s);
+      botMs += performance.now() - c0;
+    }
   }
   // Bot decisions are timed and subtracted, so stepMs is the cost of step() alone.
   const stepMs = performance.now() - start - botMs;
   const { flakes, flakesMelted, snow, swings, litTotal } = s.stats;
   const mechOut = { blooms: s.stats.blooms ?? 0, snaps: s.stats.snaps ?? 0, frostReady, deepSec: s.stats.deepSeconds ?? 0, budsPassed: budPassed + 1 };
-  const out = { died: s.phase === 'dead', minutes: s.minutes, day: s.day, flakes, flakesMelted, snow, swings, swingSnow, ticks: s.tick, daylight, litTotal, lessonDone, stepMs, genMs, ...mechOut };
+  const m: Record<string, number> = {};
+  for (const c of cols) c.finish(s, m);
+  const out = { died: s.phase === 'dead', minutes: s.minutes, day: s.day, flakes, flakesMelted, snow, swings, swingSnow, ticks: s.tick, daylight, litTotal, lessonDone, stepMs, genMs, ...mechOut, m };
   return { out: { ...out, ...worldStats(s) }, result: buildRunResult(s) };
 }
 
@@ -180,10 +194,10 @@ interface LevelOut {
 }
 
 /** A bot plays one campaign level to its finish line (or Nubs melts). */
-function playLevel(id: number, kind: BotKind, salt: number, mech = true): LevelOut {
+function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: Partial<V16Rules>): LevelOut {
   const t0 = performance.now();
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
-  const s = createRun(campaignConfig(id, { lesson: id === 1 }));
+  const s = createRun(campaignConfig(id, v16 ? { lesson: id === 1, v16 } : { lesson: id === 1 }));
   const bot = createBot(kind, salt, mech);
   // A level is at most 1080 minutes (one and a half days, ~6000 ticks).
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) step(s, bot.next(s));
@@ -197,6 +211,7 @@ function jobConfig(j: Job, seed: number): RunConfig {
   const cfg = headlessConfig(seed, j.profile, j.drain, j.noonCloud);
   if (j.lesson !== undefined) cfg.lesson = j.lesson;
   if (j.forecast !== undefined) cfg.forecast = j.forecast;
+  if (j.v16 !== undefined) cfg.v16 = j.v16;
   return cfg;
 }
 
@@ -230,7 +245,7 @@ async function loadMeta(): Promise<Meta> {
 const CAREER_START = Date.UTC(2026, 10, 2);
 const dateOf = (dayIndex: number): string => new Date(CAREER_START + dayIndex * 86_400_000).toISOString().slice(0, 10);
 
-async function runCareer(c: number, runs: number, kind: BotKind, days: number, withMeta: boolean): Promise<CareerOut> {
+async function runCareer(c: number, runs: number, kind: BotKind, days: number, withMeta: boolean, v16?: Partial<V16Rules>): Promise<CareerOut> {
   const api = withMeta ? await loadMeta() : null;
   let save = api ? api.defaults(CAREER_START) : null;
   let rung = 0;
@@ -244,6 +259,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
     if (api && save) save = api.beginRun(save).save;
     const rc = rungConfig(rung, { tutorialDone, warmup: isWarmup(rung, prevRung) });
     const cfg: RunConfig = { ...headlessConfig(hashString(`career-${c}-${r}`), rc.profile, rc.drain, rc.noonCloud), tutorial: rc.tutorial, lesson: rc.lesson };
+    if (v16) cfg.v16 = v16;
     const { out: o, result } = playRun(cfg, kind, days);
     if (o.lessonDone) tutorialDone = true;
     let missionDone = false;
@@ -263,6 +279,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
         lastDaily = today;
         const tried = api.dailyTryStarted(save, today);
         const daily: RunConfig = { ...headlessConfig(hashString(`daily-${today}`), 3), mode: 'daily', dailyDate: today, plan: today >= PLAN_START_DATE };
+        if (v16) daily.v16 = v16;
         const d = playRun(daily, kind, days);
         const dApplied = api.applyRunResult(tried.save, d.result, { today, dailyTry: tried.tryNumber, playSeconds: d.out.ticks / 60 });
         save = dApplied.save;
@@ -287,18 +304,18 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
 
 type WorkerMsg =
   | { kind: 'run'; task: Task; job: Job }
-  | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean }
-  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean };
+  | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean; v16?: Partial<V16Rules> }
+  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean; v16?: Partial<V16Rules> };
 
 if (!isMainThread && workerData === 'sim') {
   parentPort?.on('message', (m: WorkerMsg) => {
     if (m.kind === 'run') {
-      const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen, !m.job.noMech);
+      const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen, !m.job.noMech, m.job.opts);
       parentPort?.postMessage({ ...out, job: m.task.job, seed: m.task.seed });
     } else if (m.kind === 'level') {
-      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech));
+      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech, m.v16));
     } else {
-      void runCareer(m.c, m.runs, m.bot, m.days, m.meta).then((o) => parentPort?.postMessage(o));
+      void runCareer(m.c, m.runs, m.bot, m.days, m.meta, m.v16).then((o) => parentPort?.postMessage(o));
     }
   });
 }
@@ -379,9 +396,73 @@ function mechTable(rows: { j: Job; rs: RunOut[] }[], days: number): void {
 }
 
 function jobName(j: Job): string {
+  if (j.label !== undefined) return j.label;
   const extra = [j.drain !== undefined ? `@${j.drain}` : '', j.noonCloud !== undefined ? ` nc${j.noonCloud}` : '', j.forecast ? ` ${j.forecast}` : ''].join('');
-  const nm = j.noMech ? (j.bot === 'reactive' ? ' dial' : ' no mech') : '';
+  const o = j.opts;
+  const opt = o ? [o.policy, o.snap, o.preAim ? 'preAim' : undefined, o.feats ? 'feats' : undefined].filter((x) => x !== undefined).map((x) => ` ${x}`).join('') : '';
+  const nm = (j.noMech ? (j.bot === 'reactive' ? ' dial' : ' no mech') : '') + opt;
   return j.rung !== undefined ? `${j.bot} R${j.rung} (p${j.profile}${extra})${nm}` : `${j.bot} p${j.profile}${extra}${nm}`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// v1.6 flags (docs/V1_6_PLAN.md §10, amendment A1: no --rules)
+
+/** --off ring,bank,…: the v1.6 rules switched off on every row ({} when none). */
+function offArg(): Partial<V16Rules> {
+  const raw = arg('off', '');
+  const off: { -readonly [K in keyof V16Rules]?: boolean } = {};
+  if (raw === '') return off;
+  for (const name of raw.split(',')) {
+    if (!(V16_RULES as readonly string[]).includes(name)) throw new Error(`unknown v1.6 rule ${name} (one of ${V16_RULES.join(', ')})`);
+    off[name as keyof V16Rules] = false;
+  }
+  return off;
+}
+
+/** --policy plain|chase|naive|safe: the reactive rows' policy (null when unset). */
+function policyArg(): BotPolicy | null {
+  const raw = arg('policy', '');
+  if (raw === '') return null;
+  if (!(BOT_POLICIES as readonly string[]).includes(raw)) throw new Error(`unknown policy ${raw} (one of ${BOT_POLICIES.join(', ')})`);
+  return raw as BotPolicy;
+}
+
+/** Applies --off to a job (its own v16 keys win). */
+function withOff(j: Job, off: Partial<V16Rules>): Job {
+  return Object.keys(off).length === 0 ? j : { ...j, v16: { ...off, ...j.v16 } };
+}
+
+/** "" or ", v1.6 off: ring, bank" for the report headers. */
+function offNote(off: Partial<V16Rules>): string {
+  const names = Object.keys(off);
+  return names.length === 0 ? '' : `, v1.6 off: ${names.join(', ')}`;
+}
+
+/** The finished runs of job `ji` as the v1.6 modules see them. */
+function rowOf(j: Job, rs: RunOut[]): Sim16Row {
+  return { name: jobName(j), job: j, runs: rs.map((r) => ({ seed: r.seed, died: r.died, minutes: r.minutes, day: r.day, ticks: r.ticks, daylight: r.daylight, m: r.m })) };
+}
+
+/** Plays every job on seeds 1..seeds in the pool; one row per job, in order. */
+async function runRows(jobs: readonly Job[], seeds: number, days: number, workers: number): Promise<Sim16Row[]> {
+  const msgs: WorkerMsg[] = [];
+  jobs.forEach((job, ji) => {
+    for (let seed = 1; seed <= seeds; seed++) msgs.push({ kind: 'run', job, task: { job: ji, seed, days, timeGen: job.bot === 'oracle' } });
+  });
+  const results = await pool<RunOut>(msgs, workers);
+  return jobs.map((j, ji) => rowOf(j, results.filter((r) => r.job === ji)));
+}
+
+/** The v1.6 context handed to the report modules (failures land in `failures`). */
+function sim16Ctx(o: { seeds: number; days: number; workers: number; check: boolean; margin: number; off: Partial<V16Rules>; policy: BotPolicy | null }, failures: string[]): Sim16Ctx {
+  return {
+    ...o,
+    hours: process.argv.includes('--hours'),
+    run: (jobs) => runRows(jobs.map((j) => withOff(j, o.off)), o.seeds, o.days, o.workers),
+    fail: (what) => {
+      failures.push(what);
+    },
+  };
 }
 
 /** Comfort-rung rows for the human model (R0 with the lesson; R1-R4 after it). */
@@ -392,17 +473,18 @@ function rungJobs(bot: BotKind): Job[] {
   });
 }
 
-async function careerMain(workers: number, days: number): Promise<void> {
+async function careerMain(workers: number, days: number, off: Partial<V16Rules>): Promise<void> {
   const careers = Number(arg('career', '20'));
   const runs = Number(arg('runs', '40'));
   const bot = arg('bot', 'humanDial') as BotKind;
   const withMeta = process.argv.includes('--meta');
   if (!BOT_KINDS.includes(bot)) throw new Error(`unknown bot ${bot}`);
   const t0 = performance.now();
-  const msgs: WorkerMsg[] = Array.from({ length: careers }, (_, c) => ({ kind: 'career', c, runs, bot, days, meta: withMeta }));
+  const v16 = Object.keys(off).length > 0 ? off : undefined;
+  const msgs: WorkerMsg[] = Array.from({ length: careers }, (_, c) => ({ kind: 'career', c, runs, bot, days, meta: withMeta, ...(v16 ? { v16 } : {}) }));
   const out = await pool<CareerOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
-  console.log(`SHADY career sim: ${careers} careers × ${runs} runs, bot ${bot}${withMeta ? ', meta' : ''}, ${workers} workers, ${wall.toFixed(1)} s\n`);
+  console.log(`SHADY career sim: ${careers} careers × ${runs} runs, bot ${bot}${withMeta ? ', meta' : ''}${offNote(off)}, ${workers} workers, ${wall.toFixed(1)} s\n`);
   const windows: [string, number, number][] = [
     ['runs 1-3', 0, 3],
     ['runs 4-9', 3, 9],
@@ -480,7 +562,7 @@ async function careerMain(workers: number, days: number): Promise<void> {
 
 const CAMPAIGN_BOTS: readonly BotKind[] = ['oracle', 'reactive', 'humanDial'];
 
-async function campaignMain(workers: number): Promise<void> {
+async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<void> {
   const levelArg = arg('level', '');
   const botArg = arg('bot', 'all');
   // --tries N: the human models play each level N times (another player's decisions each try).
@@ -491,12 +573,13 @@ async function campaignMain(workers: number): Promise<void> {
   for (const id of ids) if (!CAMPAIGN_LEVELS[id - 1]) throw new Error(`unknown level ${id}`);
   const msgs: WorkerMsg[] = [];
   const mech = !process.argv.includes('--nomech');
-  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t, mech });
+  const v16 = Object.keys(off).length > 0 ? off : undefined;
+  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t, mech, ...(v16 ? { v16 } : {}) });
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
   const of = (bot: BotKind, lo = 1, hi = LEVEL_COUNT): LevelOut[] => outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
-  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}${mech ? '' : ', bots ignore the v1.5 mechanics'}, ${workers} workers, ${wall.toFixed(1)} s\n`);
+  console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}${mech ? '' : ', bots ignore the v1.5 mechanics'}${offNote(off)}, ${workers} workers, ${wall.toFixed(1)} s\n`);
   const cell = (rs: LevelOut[]): string => {
     const o = rs[0];
     if (!o) return '-'.padEnd(22);
@@ -560,14 +643,29 @@ async function main(): Promise<void> {
   const seeds = Number(arg('seeds', '100'));
   const days = Number(arg('days', '8'));
   const workers = Math.max(1, Number(arg('workers', String(Math.min(4, availableParallelism())))));
-  if (process.argv.includes('--campaign')) return campaignMain(workers);
-  if (process.argv.includes('--career')) return careerMain(workers, days);
+  const off = offArg();
+  const policy = policyArg();
+  const check = process.argv.includes('--check');
+  const margin = Number(arg('margin', '3'));
+  const failures: string[] = [];
+  // v1.6 modes (--decisions, --bake): a module's own run instead of the report.
+  for (const mod of SIM16) {
+    for (const [mode, fn] of Object.entries(mod.modes ?? {})) {
+      if (!process.argv.includes(`--${mode}`)) continue;
+      await fn(sim16Ctx({ seeds, days, workers, check, margin, off, policy }, failures));
+      if (failures.length) {
+        console.log(`\n${failures.length} target(s) failed.`);
+        process.exit(1);
+      }
+      return;
+    }
+  }
+  if (process.argv.includes('--campaign')) return campaignMain(workers, off);
+  if (process.argv.includes('--career')) return careerMain(workers, days, off);
   const botArg = arg('bot', 'all');
   const profileArg = arg('profile', '');
   const forced = arg('forecast', '') as ForecastId | '';
-  const check = process.argv.includes('--check');
   const mechRows = process.argv.includes('--mech');
-  const margin = Number(arg('margin', '3'));
   if (botArg !== 'all' && !BOT_KINDS.includes(botArg as BotKind)) throw new Error(`unknown bot ${botArg}`);
   if (forced && !FORECAST_IDS.includes(forced)) throw new Error(`unknown forecast ${forced}`);
   const fc = forced || undefined;
@@ -598,7 +696,9 @@ async function main(): Promise<void> {
     check && !fc && botArg === 'all' && profileArg === ''
       ? FORECAST_IDS.flatMap((forecast) => (['idle', 'novice', 'reactive', 'oracle'] as BotKind[]).map((bot) => ({ bot, profile: 3 as ProfileId, forecast, ...(bot === 'reactive' ? { noMech: true } : {}) })))
       : [];
-  const jobs = [...base, ...advisory, ...forecastJobs];
+  // v1.6: --policy on the reactive rows that use the mechanics, --off on every row.
+  if (policy !== null) base = base.map((j) => (j.bot === 'reactive' && !j.noMech ? { ...j, opts: { ...j.opts, policy } } : j));
+  const jobs = [...base, ...advisory, ...forecastJobs].map((j) => withOff(j, off));
 
   const msgs: WorkerMsg[] = [];
   jobs.forEach((job, ji) => {
@@ -612,7 +712,6 @@ async function main(): Promise<void> {
   const wall = (performance.now() - t0) / 1000;
   const of = (ji: number): RunOut[] => results.filter((r) => r.job === ji);
 
-  const failures: string[] = [];
   const report = (ok: boolean, what: string, got: string): void => {
     if (!ok) failures.push(what);
     console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${what}: ${got}`);
@@ -632,7 +731,7 @@ async function main(): Promise<void> {
     report(ok, `${what} (${margin}-point margin)`, `${clockOf(m, days)} (${pts(after)} after the start, ${pts(before)} before the end)`);
   };
 
-  console.log(`SHADY sim: ${seeds} seeds, up to Day ${days}, ${workers} workers, ${wall.toFixed(1)} s${fc ? `, forecast ${fc} forced` : ''}\n`);
+  console.log(`SHADY sim: ${seeds} seeds, up to Day ${days}, ${workers} workers, ${wall.toFixed(1)} s${fc ? `, forecast ${fc} forced` : ''}${offNote(off)}\n`);
   console.log(`${'row'.padEnd(30)} ${'median'.padEnd(17)} ${'p10'.padEnd(17)} ${'p90'.padEnd(17)} 11AM+  night  run s  melted%  Snow   sw/min  lit%   µs/tick`);
   const rowLine = (ji: number): void => {
     const rs = of(ji);
@@ -734,6 +833,11 @@ async function main(): Promise<void> {
     console.log('\nAdvisory (PASS/MISS never fails --check):');
     for (const l of advLines) console.log(l);
   }
+
+  // v1.6 modules: their tables and gates over every row (their failures count under --check).
+  const ctx = sim16Ctx({ seeds, days, workers, check, margin, off, policy }, failures);
+  const rows = jobs.map((j, ji) => rowOf(j, of(ji)));
+  for (const mod of SIM16) mod.report?.(ctx, rows);
 
   if (!check) return;
   console.log(`\nAcceptance (V1_PLAN §13 on ${fc ? `forecast ${fc}` : 'the plan mix'}, V1_1_PLAN §6), required margin ${margin} points:`);

@@ -51,13 +51,21 @@ export function pointLitWeight(s: SimState, px: number, py: number): number {
   return 1;
 }
 
+/**
+ * Lit seconds until pickup `p` melts: the day's meltBudget, or TUNING.brittle.meltBudget for a
+ * v1.6 glass flake (docs/V1_6_PLAN.md §2.3; glass is only placed where the day's budget is above it).
+ * CORE-2 adds the flare's ×meltMul.
+ */
+export function meltBudgetOf(s: SimState, p: Pickup): number {
+  return p.brittle ? TUNING.brittle.meltBudget : s.params.meltBudget;
+}
+
 /** Collects pickups within reach and melts lit flakes/crystals ahead. */
 export function updatePickups(s: SimState, daylight: boolean): void {
   const nb = s.nubs;
   const st = s.stats;
   const ps = s.world.pickups;
   const ahead = P.meltAheadSec * s.params.v;
-  const budget = s.params.meltBudget;
   const radius = TUNING.nubs.collectRadius;
   for (let i = lowerBound(ps, nb.y - radius); i < ps.length; i++) {
     const p = ps[i] as Pickup;
@@ -73,7 +81,7 @@ export function updatePickups(s: SimState, daylight: boolean): void {
     const wgt = pointLitWeight(s, p.x, p.y);
     if (wgt === 0) continue;
     p.melt += wgt * DT;
-    if (p.melt >= budget) {
+    if (p.melt >= meltBudgetOf(s, p)) {
       p.state = PICKUP_MELTED;
       if (p.kind === 'flake') st.flakesMelted++;
       s.events.push({ e: 'flakeMelt', x: p.x, y: p.y });

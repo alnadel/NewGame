@@ -238,7 +238,12 @@ function placeLandmark(w: World, kind: 'finish' | 'arch', y0: number, chunk: num
   return commit(w, kind, x, y0, 0, gateArchParts(x, y0), 0, chunk, false, kind === 'arch', -1, name);
 }
 
-function addPickup(w: World, kind: PickupKind, y: number): void {
+/**
+ * Adds a pickup on the centerline at y. v1.6: a flake cluster's members carry the cluster (its
+ * first flake's id: ids are taken in order), their index and the cluster's size; glass stays false
+ * until CORE-2's contest pass (§2.3). Crystals and flowers are no cluster's (−1, 0, 1).
+ */
+function addPickup(w: World, kind: PickupKind, y: number, cluster = -1, ci = 0, cn = 1): void {
   insertPickup(w, {
     id: takeId(w),
     kind,
@@ -247,7 +252,17 @@ function addPickup(w: World, kind: PickupKind, y: number): void {
     day: worldDayAtY(w, y),
     melt: 0,
     state: PICKUP_ALIVE,
+    cluster,
+    ci,
+    cn,
+    brittle: false,
   });
+}
+
+/** A cluster of n flakes from y, flakeSpacing apart on the centerline. */
+function addCluster(w: World, y: number, n: number): void {
+  const cluster = w.nextId;
+  for (let i = 0; i < n; i++) addPickup(w, 'flake', y + i * TUNING.pickups.flakeSpacing, cluster, i, n);
 }
 
 /** Render-only cloud lumps (dx, dy, r) from their own stream, so they never shift gameplay draws. */
@@ -316,7 +331,8 @@ export function placeStart(w: World): void {
   for (const a of TUTORIAL.casters) {
     placeBeside(w, { kind: a.kind, y: a.y, side: a.side, lat: a.lat, rotIdx: a.rot, chunk: 0 });
   }
-  for (const y of TUTORIAL.flakes) addPickup(w, 'flake', y);
+  const tc = w.nextId;
+  TUTORIAL.flakes.forEach((y, i) => addPickup(w, 'flake', y, tc, i, TUTORIAL.flakes.length));
   const last = TUTORIAL.casters[TUTORIAL.casters.length - 1];
   w.cursorY = last ? last.y : CH;
   w.cursorSide = last ? last.side : 1;
@@ -631,7 +647,7 @@ function placeFlakes(w: World, k: number, y1: number): void {
       continue;
     }
     if (w.flakeY >= y1) break;
-    for (let i = 0; i < p.flakesPerCluster; i++) addPickup(w, 'flake', w.flakeY + i * P.flakeSpacing);
+    addCluster(w, w.flakeY, p.flakesPerCluster);
     w.flakeY += rng.range(P.clusterGapMin, P.clusterGapMax) * p.clusterGap * p.v;
   }
 }

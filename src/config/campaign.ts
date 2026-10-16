@@ -14,7 +14,26 @@ import { TUNING } from './tuning.ts';
 export type { Concept, ConceptId, ConceptKind, ConceptLevel, DayTuning } from './concepts.ts';
 export { CONCEPT_CONFLICTS, CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, MECHANIC_CONCEPTS, TEACH_LEVELS } from './concepts.ts';
 
-export type GoalKind = 'finish' | 'flakes' | 'snow';
+/**
+ * A level's goal (star 1). v1.6 adds the verb goals of the teaching levels (docs/V1_6_PLAN.md
+ * §2.6); 'snow' stays until CORE-2 retires it (T6: L7's goal becomes 1 SWING).
+ */
+export type GoalKind = 'finish' | 'flakes' | 'snow' | 'deep' | 'clean' | 'swings' | 'blooms' | 'snapSave' | 'gate' | 'brittle' | 'flip' | 'parry';
+
+/** v1.6 Dares (star 2, §2.6): what a Feat counts (featValue), one kind per concept. */
+export type FeatKind = 'blooms' | 'swings' | 'deep' | 'snapSave' | 'parry' | 'brittle' | 'flakes' | 'clean' | 'ride' | 'gates' | 'flip' | 'still' | 'ring';
+
+/** One Dare: met when featValue(kind, stats) ≥ target. */
+export interface FeatSpec {
+  readonly kind: FeatKind;
+  readonly target: number;
+}
+
+/** A Journey boss finale's baked Heat Flare (§2.5): its rise at `minute` (in-game minutes after 6:00 AM), lift d (°). */
+export interface LevelFlare {
+  readonly minute: number;
+  readonly d: number;
+}
 
 export interface LevelDef {
   /** 1..200. */
@@ -45,6 +64,10 @@ export interface LevelDef {
   readonly stars: { readonly flakes: number; readonly minChill: number; readonly sunSec: number };
   /** Chill/s at f = 1 (the campaign ignores the comfort ladder). */
   readonly drain: number;
+  /** v1.6 Dares (star 2): one, or two on finales (either earns the star). Empty until CORE-2 assigns them. */
+  readonly feats: readonly FeatSpec[];
+  /** v1.6 baked boss-finale flares (`sim --bake`). Empty until CORE-2 bakes them. */
+  readonly flares: readonly LevelFlare[];
 }
 
 export interface Chapter {
@@ -113,6 +136,23 @@ export interface LevelStats {
   readonly minChill: number;
   /** Seconds in the sun (∫f dt); a missing value counts as 0. */
   readonly litTotal?: number;
+  // v1.6 Dare and verb-goal counters (RunStats, docs/V1_6_PLAN.md §2.6); a missing value counts as 0.
+  readonly swings?: number;
+  readonly blooms?: number;
+  readonly maxMult?: number;
+  readonly ballsPassedClean?: number;
+  readonly cloudRideBest?: number;
+  readonly cloudsRidden?: number;
+  readonly deepTicks?: number;
+  readonly earnedSnapSavedTicks?: number;
+  readonly parries?: number;
+  readonly brittleSaved?: number;
+  readonly gateDeep?: number;
+  readonly flipTicks?: number;
+  readonly lockHeld?: number;
+  readonly lockWindows?: number;
+  readonly gustHeld?: number;
+  readonly gustWindows?: number;
 }
 
 /** The chapter of level `id`. */
@@ -202,9 +242,14 @@ export interface Mechanics {
   readonly buds: boolean;
   readonly snap: boolean;
   readonly deep: boolean;
+  /**
+   * v1.6 glass (brittle) flake clusters (docs/V1_6_PLAN.md §2.3): on outside the Journey; in the
+   * Journey from the 'brittle' concept's teaching level (L21) once CORE-2 adds it (off until then).
+   */
+  readonly brittle: boolean;
 }
 
-export const ALL_MECHANICS: Mechanics = Object.freeze({ buds: true, snap: true, deep: true });
+export const ALL_MECHANICS: Mechanics = Object.freeze({ buds: true, snap: true, deep: true, brittle: true });
 
 /** The level that teaches a concept (its index in the teaching order + 1), or 0 when none does. */
 export function teachLevel(id: ConceptId): number {
@@ -227,6 +272,7 @@ export function mechanicsOf(levelId: number | null): Mechanics {
       buds: levelId >= teachLevel(MECHANIC_CONCEPTS.buds),
       snap: levelId >= teachLevel(MECHANIC_CONCEPTS.snap),
       deep: levelId >= teachLevel(MECHANIC_CONCEPTS.deep),
+      brittle: false,
     });
     mechanicsMemo[levelId] = m;
   }
@@ -314,8 +360,13 @@ function makeLevel(id: number): LevelDef {
     goal: Object.freeze({ kind: goal, target }),
     stars: Object.freeze({ flakes: starFlakes, minChill: Math.round(0.2 * p.maxChill), sunSec: Math.round((2.2 * lengthMinutes * p.dayLen) / 720) / 10 }),
     drain,
+    feats: NO_FEATS,
+    flares: NO_FLARES,
   });
 }
+
+const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
+const NO_FLARES: readonly LevelFlare[] = Object.freeze([]);
 
 /** Builds the 200 levels (pure; the same table every time). */
 export function buildCampaign(): readonly LevelDef[] {
@@ -333,8 +384,26 @@ export function levelDef(id: number): LevelDef | null {
   return CAMPAIGN_LEVELS[id - 1] as LevelDef;
 }
 
-/** True when the level's goal is met by these stats (a 'finish' goal is met by reaching the line). */
-export function goalMet(level: LevelDef, stats: LevelStats): boolean {
+/**
+ * v1.6 (§2.6; CORE-2 owns the body): what a Dare of `kind` counts in these stats. Stub: 0 until the
+ * counters exist.
+ */
+export function featValue(_kind: FeatKind, _stats: LevelStats): number {
+  return 0;
+}
+
+/** True when any of the level's Dares is met (finales offer two; either earns star 2). */
+export function featMet(level: LevelDef, stats: LevelStats): boolean {
+  for (const f of level.feats) if (featValue(f.kind, stats) >= f.target) return true;
+  return false;
+}
+
+/**
+ * True when the level's goal is met by these stats (a 'finish' goal is met by reaching the line).
+ * `relaxed` (RunConfig.relaxedGoal, the v1.6 soft-fail after two misses) scores the goal as 'finish'.
+ */
+export function goalMet(level: LevelDef, stats: LevelStats, relaxed = false): boolean {
+  if (relaxed) return true;
   const g = level.goal;
   if (g.kind === 'flakes') return stats.flakes >= g.target;
   if (g.kind === 'snow') return stats.snow >= g.target;
@@ -345,8 +414,8 @@ export function goalMet(level: LevelDef, stats: LevelStats): boolean {
  * Stars for a run that reached the finish line with these stats: 0 when the goal is not met, else
  * 1, +1 if flakes ≥ stars.flakes, +1 for a cool run (lit ≤ stars.sunSec s and lowest Chill ≥ stars.minChill).
  */
-export function starsFor(level: LevelDef, stats: LevelStats): 0 | 1 | 2 | 3 {
-  if (!goalMet(level, stats)) return 0;
+export function starsFor(level: LevelDef, stats: LevelStats, relaxed = false): 0 | 1 | 2 | 3 {
+  if (!goalMet(level, stats, relaxed)) return 0;
   const two = stats.flakes >= level.stars.flakes;
   const three = stats.minChill >= level.stars.minChill && (stats.litTotal ?? 0) <= level.stars.sunSec;
   return two && three ? 3 : two || three ? 2 : 1;
