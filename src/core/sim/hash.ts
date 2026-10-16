@@ -104,6 +104,23 @@ export function hashState(s: SimState): string {
   feed(st.ringTricks ?? 0);
   feed(st.frostEarnedH ?? 0);
   feed(st.snapLands ?? 0);
+  // State that steers the next ticks: the bleed exemption after a bud grew, the endpoint a pending
+  // hand-off will record, this snap's own sunflowers (the landing) and the snap cloud's re-aimed path.
+  feed(nb.budGrewTick);
+  feed(nb.swPendFrom);
+  const nOwn = Math.min(s.snapBlooms, s.snapBloomIds.length);
+  for (let i = 0; i < nOwn; i++) feed(s.snapBloomIds[i] as number);
+  if (s.snapCloudId >= 0) {
+    for (const cl of s.world.clouds) {
+      if (cl.id !== s.snapCloudId) continue;
+      feed(cl.x0);
+      feed(cl.y0);
+      feed(cl.vx);
+      feed(cl.vy);
+      feed(cl.life);
+      break;
+    }
+  }
   // Campaign state (only hashed when concepts are active, so every pre-campaign hash still holds).
   if (s.mods.size > 0) {
     feed(s.eclipse);
@@ -116,6 +133,7 @@ export function hashState(s: SimState): string {
   // through, the glass/flare/Dare counters, and the kept flares whose warning starts within
   // FLARE_HASH_AHEAD (decided long before: the validator decides a flare once its chunk is reached).
   for (const v of [
+    s.flareIdx,
     s.flareId,
     s.flarePhase,
     s.flareLit,

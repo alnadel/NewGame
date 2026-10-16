@@ -131,6 +131,8 @@ export function biomeAtY(w: World, y: number): BiomeId {
 // worldElevation / liftElevation; the placer keeps the base elevation (its clouds avoid flares).
 
 const FL = TUNING.flare;
+/** The validator's step (ticks): Noon Heat's window edges snap to it. */
+const NOON_STEP = TUNING.validator.stepTicks;
 /** A lift window never lasts longer than this (rise + hold + fall, ticks), so a backward scan can stop. */
 const LIFT_SPAN = FL.riseTicks + FL.holdTicks + FL.fallTicks;
 
@@ -204,8 +206,15 @@ export function flareLift(w: World, tickAbs: number): number {
  */
 export function noonHeatAt(w: World, day: number, dayTick: number): number {
   if (!w.v16.noonHeat || w.level !== null) return 1;
+  // Exact in the validator: its DP charges a whole step (t − 6, t] at the heat of its end tick t, so
+  // the window's edges sit on the step grid (absolute ticks) and a tick is heated when the step that
+  // holds it ends inside them.
+  const t0 = dayStartTick(day);
   const dl = dayTicks(day);
-  if (12 * dayTick < 5 * dl || 12 * dayTick >= 7 * dl) return 1;
+  const a = NOON_STEP * Math.round((t0 + (5 * dl) / 12) / NOON_STEP);
+  const b = NOON_STEP * Math.round((t0 + (7 * dl) / 12) / NOON_STEP);
+  const end = NOON_STEP * Math.ceil((t0 + dayTick) / NOON_STEP);
+  if (end < a || end >= b) return 1;
   return paramsAt(w, day).noonHeat;
 }
 

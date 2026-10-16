@@ -24,7 +24,7 @@ import { BINS, createMaskScene, glareMask, shadeMask } from '../intervals.ts';
 import { FLARE_KEPT, FLARE_PENDING, type Flare } from '../objects.ts';
 import { paramsAt } from './plan.ts';
 import { gatherScene, type World } from './store.ts';
-import { deltaForSlot, slidingMaxCircular, type ValidationJob } from './validator.ts';
+import { deltaForSlot, eclipseTouches, slidingMaxCircular, type ValidationJob } from './validator.ts';
 
 const B = TUNING.brittle;
 const STEP = TUNING.validator.stepTicks;
@@ -120,6 +120,9 @@ function meltWindow(w: World, job: ValidationJob, py: number, budget: number): b
     if (w.startTick > 0 && slotTick(job, s) - STEP < w.startTick) return false;
   }
   if (nearFlare(w, job, slotTick(job, w0 - 1), slotTick(job, w1 + TAIL))) return false;
+  // Nothing melts in the eclipse (pointLitWeight is 0), and the validator's rows do not model it:
+  // a window it touches could be free glass.
+  if (eclipseTouches(w, slotTick(job, w0 - 1) - STEP, slotTick(job, w1 + TAIL))) return false;
   const maxC = paramsAt(w, 1).maxChill;
   out.floor = (paramsAt(w, job.sDay[w0] as number).floor * maxC) / TUNING.nubs.maxChill;
   out.w0 = w0;

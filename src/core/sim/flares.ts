@@ -134,5 +134,9 @@ export function debugFlare(s: SimState, inTicks: number, d: number): Flare {
   let i = w.flares.length;
   while (i > 0 && (w.flares[i - 1] as Flare).riseTick > riseTick) i--;
   w.flares.splice(i, 0, flare);
+  // Indices into w.flares that the insert moved: the validator's flare under test and the sim's
+  // active flare (a pending or running one must stay the one being decided or played).
+  if (w.job && w.job.flareQ >= i) w.job.flareQ++;
+  if (s.flarePhase > 0 && s.flareIdx >= i) s.flareIdx++;
   return flare;
 }

@@ -16,7 +16,7 @@ import { FLAKE_ID_BASE, FLARE_DROPPED, FLARE_KEPT, PICKUP_ALIVE, type Flare, typ
 import { campaignConfig } from '../../src/core/level.ts';
 import { createRun } from '../../src/core/sim/create.ts';
 import type { SimEvent } from '../../src/core/sim/events.ts';
-import { debugFlare } from '../../src/core/sim/flares.ts';
+import { debugFlare, flareMeltMul } from '../../src/core/sim/flares.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { meltBudgetOf } from '../../src/core/sim/pickups.ts';
@@ -70,8 +70,23 @@ describe('Noon Heat (T1)', () => {
     const dl = dayTicks(2);
     expect(noonHeatAt(w, 1, Math.round(dl / 2))).toBe(1);
     expect(noonHeatAt(w, 2, Math.round(dl / 2))).toBe(1.1);
-    expect(noonHeatAt(w, 2, Math.floor((5 * dl) / 12) - 1)).toBe(1);
-    expect(noonHeatAt(w, 2, Math.ceil((7 * dl) / 12))).toBe(1);
+    const STEP = TUNING.validator.stepTicks;
+    expect(noonHeatAt(w, 2, Math.floor((5 * dl) / 12) - 2 * STEP)).toBe(1);
+    expect(noonHeatAt(w, 2, Math.ceil((7 * dl) / 12) + STEP)).toBe(1);
+    // Exact in the validator: the edges sit on its 0.1 s step grid, so every tick of a DP step (t − 6,
+    // t] has the heat of its end tick t, and the window keeps its 2 h length to within a step.
+    for (const day of [2, 4]) {
+      const t0 = dayStartTick(day);
+      const d = dayTicks(day);
+      let heated = 0;
+      for (let t = Math.floor((4 * d) / 12); t < Math.ceil((8 * d) / 12); t++) {
+        const h = noonHeatAt(w, day, t);
+        if (h !== 1) heated++;
+        const end = STEP * Math.ceil((t0 + t) / STEP);
+        expect(h, `day ${day} tick ${t}`).toBe(noonHeatAt(w, day, end - t0));
+      }
+      expect(Math.abs(heated - d / 6)).toBeLessThanOrEqual(STEP);
+    }
     expect(noonHeatAt(w, 4, Math.round(dl / 2))).toBe(1.2);
     // Profiles 0-2 one day later; off with the rule switched off and on every campaign level.
     expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 2, Math.round(dl / 2))).toBe(1);
@@ -178,9 +193,13 @@ describe('Heat Flares (§2.5)', () => {
     shadeAll(s, s.nubs.y - 200, s.nubs.y + 900);
     const f = debugFlare(s, 0, 10);
     const p: Pickup = { id: FLAKE_ID_BASE + 9999, kind: 'flake', x: 0, y: 0, day: 1, melt: 0, state: PICKUP_ALIVE, cluster: -1, ci: 0, cn: 1, brittle: false };
+    // The rate doubles in the rise and hold; the budget (the threshold) never moves.
+    expect(flareMeltMul(s)).toBe(1);
     while (s.tickAbs < f.riseTick) step(s, NO_INPUT);
-    expect(meltBudgetOf(s, p)).toBe(s.params.meltBudget / TUNING.flare.meltMul);
+    expect(flareMeltMul(s)).toBe(TUNING.flare.meltMul);
+    expect(meltBudgetOf(s, p)).toBe(s.params.meltBudget);
     while (s.tickAbs < f.fallTick) step(s, NO_INPUT);
+    expect(flareMeltMul(s)).toBe(1);
     expect(meltBudgetOf(s, p)).toBe(s.params.meltBudget);
   });
 

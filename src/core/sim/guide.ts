@@ -105,9 +105,11 @@ function deepGuide(s: SimState): void {
     for (let b = 0; b < BINS; b++) sources[b] = (sources[b] as number) + (tmp[b] as number);
   }
   const cl = scene.clouds;
+  // T3 (with the Garden, as computeCoverage): the Cold Snap's cloud is not a deep-shade source.
+  const snapNotDeep = s.world.v16.garden;
   for (let i = 0; i < scene.nClouds; i++) {
     const o = i * CLOUD_STRIDE;
-    if ((cl[o + 4] as number) >= SNAP_ID_BASE) continue;
+    if (snapNotDeep && (cl[o + 4] as number) >= SNAP_ID_BASE) continue;
     tmp.fill(0);
     markEllipse(tmp, x, y, cl[o + 5] as number, cl[o] as number, cl[o + 1] as number, cl[o + 2] as number, cl[o + 3] as number);
     for (let b = 0; b < BINS; b++) sources[b] = (sources[b] as number) + (tmp[b] as number);

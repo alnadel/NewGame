@@ -56,11 +56,12 @@ export function pointLitWeight(s: SimState, px: number, py: number): number {
 
 /**
  * Lit seconds until pickup `p` melts: the day's meltBudget, or TUNING.brittle.meltBudget for a
- * v1.6 glass flake (docs/V1_6_PLAN.md §2.3; glass is only placed where the day's budget is above it),
- * ÷ TUNING.flare.meltMul during a flare's rise and hold (flakes melt ×2 in the heat, §2.5).
+ * v1.6 glass flake (docs/V1_6_PLAN.md §2.3; glass is only placed where the day's budget is above it).
+ * The budget never changes during a flare: the melt *rate* doubles in its rise and hold instead
+ * (updatePickups, §2.5), so a half-melted flake is not lost the tick the rise starts.
  */
 export function meltBudgetOf(s: SimState, p: Pickup): number {
-  return (p.brittle ? TUNING.brittle.meltBudget : s.params.meltBudget) / flareMeltMul(s);
+  return p.brittle ? TUNING.brittle.meltBudget : s.params.meltBudget;
 }
 
 /** Collects pickups within reach and melts lit flakes/crystals ahead. */
@@ -83,7 +84,8 @@ export function updatePickups(s: SimState, daylight: boolean): void {
     if (!daylight || dy <= 0 || p.kind === 'flower') continue;
     const wgt = pointLitWeight(s, p.x, p.y);
     if (wgt === 0) continue;
-    p.melt += wgt * DT;
+    // Flakes melt × TUNING.flare.meltMul in a flare's rise and hold (§2.5).
+    p.melt += wgt * DT * flareMeltMul(s);
     if (p.melt >= meltBudgetOf(s, p)) {
       p.state = PICKUP_MELTED;
       if (p.kind === 'flake') st.flakesMelted++;

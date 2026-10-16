@@ -514,6 +514,11 @@ const keepCand: { -readonly [K in keyof Flare]: Flare[K] } = { id: 0, day: 0, d:
 /** Eclipse window length (ticks; gen/world.ts ECLIPSE_SEC, not imported to keep the module graph acyclic). */
 const ECLIPSE_TICKS = 6 * TICK_HZ;
 
+/** True when the eclipse window (gen/world.ts eclipseAt) touches absolute ticks [a, b]. */
+export function eclipseTouches(w: World, a: number, b: number): boolean {
+  return w.eclipseTick >= 0 && a < w.eclipseTick + ECLIPSE_TICKS && b >= w.eclipseTick;
+}
+
 /** Moves every tick of flare f by dt. */
 function shiftFlare(f: Flare, dt: number): void {
   f.warnTick += dt;

@@ -596,6 +596,10 @@ export function applyNight(s: SimState): void {
   nb.rideTicks = 0;
   nb.rideId = -1;
   nb.prevGlareBallId = -1;
+  // Nightfall ends the lit stretch: dawn's first lit tick starts a new one (its free ticks, and
+  // PHEW's restore level, are today's, not yesterday's dusk's).
+  nb.litTicks = 0;
+  nb.litStartMult = nb.mult;
   // Nightfall ends the lesson, any shade hand-off and a landing window.
   nb.swSrc = -1;
   nb.swPend = -1;
