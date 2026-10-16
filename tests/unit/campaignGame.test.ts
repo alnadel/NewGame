@@ -44,11 +44,13 @@ describe('level table (core)', () => {
     expect(CONCEPTS.glare.blurb).toContain('Gazing balls');
   });
 
-  it('awards stars for the pass, the flakes and the lowest Chill', () => {
+  it('awards stars for the pass, the Dare and the lowest Chill', () => {
+    // v1.6 (docs/V1_6_PLAN.md §2.6): star 2 is the level's Dare (First Shade: reach x3).
     const l = levelDef(1)!;
+    expect(l.feats).toEqual([{ kind: 'ring', target: 3 }]);
     expect(starsFor(l, { flakes: 0, snow: 0, minChill: 0 })).toBe(1);
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: 0 })).toBe(2);
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill })).toBe(3);
+    expect(starsFor(l, { flakes: 0, snow: 0, minChill: 0, maxMult: 3 })).toBe(2);
+    expect(starsFor(l, { flakes: 0, snow: 0, minChill: l.stars.minChill, maxMult: 3 })).toBe(3);
     // A goal level short of its goal earns nothing.
     const f = levelDef(2)!;
     expect(starsFor(f, { flakes: f.goal.target - 1, snow: 0, minChill: 100 })).toBe(0);
@@ -84,17 +86,19 @@ describe('the words', () => {
     // The three star rules: the goal, the level's flakes, a cool run (lit at most sunSec, rounded up).
     expect(c.stars).toEqual(['Finish', `${levelDef(6)!.stars.flakes} flakes`, `≤ ${Math.ceil(levelDef(6)!.stars.sunSec)} s in sun`]);
     expect(introCard(levelDef(2)!).stars[0]).toBe(`${levelDef(2)!.goal.target} flakes`);
-    expect(introCard(levelDef(7)!).stars[0]).toBe(`${levelDef(7)!.goal.target} Snow`);
+    // v1.6 (T6): no level has a Snow goal any more; the words still read one.
+    expect(introCard({ ...levelDef(7)!, goal: { kind: 'snow', target: 12 } }).stars[0]).toBe('12 Snow');
     const combo = introCard(levelDef(41)!);
     expect(combo.concept).toBeNull();
     expect(combo.conceptName).toContain(' · ');
   });
   it('goal text and the Results goal line', () => {
     const flakes = levelDef(2)!;
-    const swing = levelDef(7)!;
+    // v1.6 (T6): L7's goal is 1 SWING; the Snow-goal words are checked on a made-up level.
+    const swing = { ...levelDef(7)!, goal: { kind: 'snow' as const, target: 20 } };
     const finish = levelDef(1)!;
     expect(flakes.goal.kind).toBe('flakes');
-    expect(swing.goal.kind).toBe('snow');
+    expect(levelDef(7)!.goal).toEqual({ kind: 'swings', target: 1 });
     const ft = flakes.goal.target;
     const st = swing.goal.target;
     expect(goalText(flakes)).toBe(`Collect ${ft} flakes`);

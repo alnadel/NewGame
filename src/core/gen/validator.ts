@@ -9,11 +9,12 @@ import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, elevation, TICK_HZ } from '../clock.ts';
 import { SUN_COS, SUN_SIN, tanD } from '../dmath.ts';
 import { BINS, binOf, countPrism, createMaskScene, litMask, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
-import { RUNTIME_ID_BASE, type Caster, type Cloud, type PrismPart } from '../objects.ts';
+import { FLARE_DROPPED, FLARE_KEPT, FLARE_PENDING, RUNTIME_ID_BASE, type Caster, type Cloud, type Flare, type PrismPart } from '../objects.ts';
+import { sunLockedAt } from '../sim/sun.ts';
 import { cloudOffset, distToCasterBounds, shadowLength } from '../shadows.ts';
 import { trailX } from '../trail.ts';
 import { rockHeight } from './catalog.ts';
-import { paramsAt, worldYAtTick } from './plan.ts';
+import { flareEps, liftElevation, noonHeatAt, paramsAt, worldElevation, worldYAtTick } from './plan.ts';
 import { addCloud, commitRescue, findSpot, type Spot } from './placer.ts';
 import { gatherScene, lowerBound, type ChunkLit, type World } from './store.ts';
 
@@ -51,6 +52,15 @@ export interface ValidationJob {
   /** After an accepted (unresolved) failure, further checks wait until max C recovers. */
   accepting: boolean;
   done: boolean;
+  /**
+   * v1.6 keep test (§2.5): index in w.flares of the pending flare being tested (−1 none), the
+   * candidate position being tried (0 = where it stands, then TUNING.flare.shiftsSec), the rows of
+   * that candidate computed so far, and the flare's rise before the test.
+   */
+  flareQ: number;
+  flareTry: number;
+  flareRows: number;
+  flareRise0: number;
 }
 
 const scene = createMaskScene();
@@ -118,13 +128,34 @@ export function validatorDrain(w: World): number {
   return w.validatorDrain * paramsAt(w, 1).drainMul;
 }
 
+/** Per world: Chill-delta tables per (day, inside the Noon Heat window), index 2·day + window. */
+const slotDeltas = new WeakMap<World, (Float64Array | undefined)[]>();
+
 /**
- * v1.6 Noon Heat (docs/V1_6_PLAN.md §2.5; CORE-2): the DP's Chill-delta table for the slot at
- * (day, dayTick), chillDeltaTable(validatorDrain(w) · noonHeatAt(…), regen), cached per (day, in
- * window). Contract stub: the plain table stepValidation uses today.
+ * v1.6 Noon Heat (docs/V1_6_PLAN.md §2.5, T1): the DP's Chill-delta table for the slot at (day,
+ * dayTick), chillDeltaTable(validatorDrain(w) · noonHeatAt(…), regen), cached per (day, in window).
+ * Outside the window (and on worlds without Noon Heat) it is the plain table.
  */
-export function deltaForSlot(w: World, _day: number, _dayTick: number): Float64Array {
-  return chillDeltaTable(validatorDrain(w), paramsAt(w, 1).regen);
+export function deltaForSlot(w: World, day: number, dayTick: number): Float64Array {
+  const h = noonHeatAt(w, day, dayTick);
+  const key = 2 * day + (h !== 1 ? 1 : 0);
+  let memo = slotDeltas.get(w);
+  if (!memo) {
+    memo = [];
+    slotDeltas.set(w, memo);
+  }
+  let t = memo[key];
+  if (!t) {
+    t = chillDeltaTable(validatorDrain(w) * h, paramsAt(w, 1).regen);
+    memo[key] = t;
+  }
+  return t;
+}
+
+/** deltaForSlot of job slot s (its day and the dayTick of its absolute time). */
+function slotDelta(w: World, job: ValidationJob, s: number): Float64Array {
+  const day = job.sDay[s] as number;
+  return deltaForSlot(w, day, Math.round((job.sT[s] as number) * TICK_HZ) - dayStartTick(day));
 }
 
 /**
@@ -144,7 +175,7 @@ function stepGeometry(w: World, j: number, job: ValidationJob, s: number): void 
   const p = paramsAt(w, day);
   const y = worldYAtTick(w, tick);
   const tDay = (tick - dayStartTick(day)) / TICK_HZ;
-  const eps = j < 0 ? 0 : elevation(p, tDay);
+  const eps = j < 0 ? 0 : liftElevation(w, p, tick, elevation(p, tDay));
   job.sx[s] = trailX(w.trail, y);
   job.sy[s] = y;
   job.sT[s] = tick / TICK_HZ;
@@ -182,8 +213,13 @@ export function beginValidation(w: World, k: number): ValidationJob {
     parked: 0,
     accepting: false,
     done: false,
+    flareQ: -1,
+    flareTry: 0,
+    flareRows: 0,
+    flareRise0: 0,
   };
   for (let s = 0; s < slots; s++) stepGeometry(w, j0 + s - 1 - pre, job, s);
+  if (w.flares.length > 0) startFlareTest(w, job, findFlareTest(w, job));
   // The entry step and the re-run prefix come from the carry (their DP rows stay valid until a
   // rescue touches them); this chunk's steps must be computed.
   job.lit.set(w.carryLit.subarray(0, (pre + 1) * BINS), 0);
@@ -452,16 +488,261 @@ function finish(w: World, job: ValidationJob): void {
   job.done = true;
 }
 
+// ---------------------------------------------------------------------------------------------
+// v1.6 Heat Flares: the keep test (docs/V1_6_PLAN.md §2.5).
+//
+// A pending flare is decided by the job of the chunk whose own steps hold its window [rise − 1
+// step, end] (a flare straddling the chunk's end moves the least way into one chunk), before that
+// chunk's lit rows are computed, so the rows, the DP, its rescues and the stepLit cache all see the
+// lift. It is kept only if (a) a parry exists: some path turning ≤ turnBins per step, starting
+// anywhere at rise − 1 step, is shaded (3-step rule) on ≥ keepShadedShare of the hold steps; and
+// (b) the shade moves: fewer than keepMovedShare of the bins safe at the first hold step without the
+// flare stay safe with it. Otherwise it is shifted by TUNING.flare.shiftsSec and retested, then
+// dropped. One lit row is one work unit (KEEP_ROWS per candidate).
+
+const FL = TUNING.flare;
+/** Candidate offsets of a flare's rise (ticks): where it stands, then the shifts. */
+const FLARE_TRIES: readonly number[] = [0, ...FL.shiftsSec.map((sec) => Math.round(sec * TICK_HZ))];
+const HOLD_STEPS = Math.round(FL.holdTicks / STEP);
+/** Lifted rows from the step before the hold to the step after it, then the hold's first step without the flare. */
+export const KEEP_ROWS = HOLD_STEPS + 3;
+const keepLit = new Uint8Array(KEEP_ROWS * BINS);
+const keepScene = createMaskScene();
+const keepG = new Float64Array(BINS);
+const keepWin = new Float64Array(BINS);
+const keepCand: { -readonly [K in keyof Flare]: Flare[K] } = { id: 0, day: 0, d: 0, warnTick: 0, riseTick: 0, holdTick: 0, fallTick: 0, endTick: 0, state: FLARE_PENDING };
+/** Eclipse window length (ticks; gen/world.ts ECLIPSE_SEC, not imported to keep the module graph acyclic). */
+const ECLIPSE_TICKS = 6 * TICK_HZ;
+
+/** Moves every tick of flare f by dt. */
+function shiftFlare(f: Flare, dt: number): void {
+  f.warnTick += dt;
+  f.riseTick += dt;
+  f.holdTick += dt;
+  f.fallTick += dt;
+  f.endTick += dt;
+}
+
+/** Keeps w.flares sorted by rise after flare i moved; returns its new index. */
+function resortFlare(w: World, i: number): number {
+  const fl = w.flares;
+  const f = fl[i] as Flare;
+  let j = i;
+  while (j > 0 && (fl[j - 1] as Flare).riseTick > f.riseTick) {
+    fl[j] = fl[j - 1] as Flare;
+    j--;
+  }
+  while (j < fl.length - 1 && (fl[j + 1] as Flare).riseTick < f.riseTick) {
+    fl[j] = fl[j + 1] as Flare;
+    j++;
+  }
+  fl[j] = f;
+  return j;
+}
+
+/** The first tick a flare's window may touch in this job: its re-run prefix's first step (slot 1). */
+function rangeFirst(job: ValidationJob): number {
+  return (job.j0 - job.pre) * STEP;
+}
+
+/** The job's last own step (absolute tick). */
+function ownLast(job: ValidationJob): number {
+  return (job.j0 + job.n - 1) * STEP;
+}
+
+/**
+ * The index of the next pending flare this job decides, or −1: the first pending flare whose
+ * window ends within the job's own steps (one that runs past them waits for the next job, whose
+ * re-run prefix holds its start). A level's flare that starts before the job's range moves into it.
+ */
+function findFlareTest(w: World, job: ValidationJob): number {
+  const A = rangeFirst(job);
+  const T1 = ownLast(job);
+  const fl = w.flares;
+  for (let i = 0; i < fl.length; i++) {
+    const f = fl[i] as Flare;
+    if (f.state !== FLARE_PENDING) continue;
+    if (f.endTick > T1) return -1;
+    if (f.riseTick - STEP < A) {
+      shiftFlare(f, A + STEP - f.riseTick);
+      i = resortFlare(w, i) - 1;
+      continue;
+    }
+    return i;
+  }
+  return -1;
+}
+
+function startFlareTest(w: World, job: ValidationJob, i: number): void {
+  job.flareQ = i;
+  job.flareTry = 0;
+  job.flareRows = 0;
+  job.flareRise0 = i >= 0 ? (w.flares[i] as Flare).riseTick : 0;
+}
+
+/** True when a lock window of the 'lock' concept touches daylight ticks [a, b) (sun.ts sunLockedAt). */
+function lockTouches(w: World, a: number, b: number): boolean {
+  if (!w.mods.has('lock')) return false;
+  for (let t = a; t < b; t++) if (sunLockedAt(t)) return true;
+  return false;
+}
+
+/**
+ * Whether candidate c of flare index i may stand there: inside the job's range (re-run prefix and
+ * own steps), in daylight and clear of noon,
+ * clear of its neighbours (Endless: rises TUNING.flare.gapSec apart; Journey: a warning may start
+ * during the previous flare's fall, never sooner), of the eclipse window and of lock windows.
+ */
+function candidateFits(w: World, job: ValidationJob, i: number, c: Flare): boolean {
+  if (c.riseTick - STEP < rangeFirst(job) || c.endTick > ownLast(job)) return false;
+  const day = dayAtTick(c.warnTick);
+  const t0 = dayStartTick(day);
+  const dl = Math.round(paramsAt(w, day).dayLen * TICK_HZ);
+  if (c.warnTick < t0 || c.endTick > t0 + dl) return false;
+  // Flares avoid noon (the Noon Heat window 11 AM-1 PM, [5/12, 7/12) of the day).
+  if (12 * (c.endTick - t0) > 5 * dl && 12 * (c.riseTick - t0) < 7 * dl) return false;
+  const fl = w.flares;
+  const gap = Math.round(FL.gapSec * TICK_HZ);
+  for (let k = i - 1; k >= 0; k--) {
+    const p = fl[k] as Flare;
+    if (p.state === FLARE_DROPPED) continue;
+    if (w.level ? c.warnTick < p.fallTick : c.riseTick - p.riseTick < gap) return false;
+    break;
+  }
+  for (let k = i + 1; k < fl.length; k++) {
+    const q = fl[k] as Flare;
+    if (q.state === FLARE_DROPPED) continue;
+    if (w.level ? q.warnTick < c.fallTick : q.riseTick - c.riseTick < gap) return false;
+    break;
+  }
+  if (w.eclipseTick >= 0 && c.warnTick < w.eclipseTick + ECLIPSE_TICKS && c.endTick > w.eclipseTick) return false;
+  if (lockTouches(w, c.riseTick - FL.riseTicks - t0, c.endTick - t0)) return false;
+  return true;
+}
+
+/** Lit counts (validator rules) at absolute tick `tick` with flare c's lift (null: without) into `out`. */
+function keepRow(w: World, c: Flare | null, tick: number, out: Uint8Array): void {
+  const day = dayAtTick(tick);
+  const p = paramsAt(w, day);
+  const base = elevation(p, (tick - dayStartTick(day)) / TICK_HZ);
+  const eps = c ? flareEps(w, p, c, tick, base) : base;
+  if (eps <= 0) {
+    out.fill(0);
+    return;
+  }
+  const y = worldYAtTick(w, tick);
+  const x = trailX(w.trail, y);
+  gatherScene(w, keepScene, x, y, SAMPLE_MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps), false);
+  litMask(keepScene, x, y, true, out, null);
+}
+
+/**
+ * The keep test's verdict over a candidate's rows (keepRows: the lifted rows from the step before
+ * the hold to the step after it, then the hold's first step without the flare): the most shaded
+ * hold steps a turn-limited path gets (a), the share of the bins safe without the flare that stay
+ * safe with it (b), and whether the flare is kept.
+ */
+export function keepVerdict(rows: Uint8Array): { parry: number; moved: number; kept: boolean } {
+  keepG.fill(0);
+  for (let r = 1; r <= HOLD_STEPS; r++) {
+    slidingMaxCircular(keepG, TURN, keepWin);
+    const a = (r - 1) * BINS;
+    for (let b = 0; b < BINS; b++) {
+      const lh = Math.max(rows[a + b] as number, rows[a + BINS + b] as number, rows[a + 2 * BINS + b] as number);
+      keepG[b] = (keepWin[b] as number) + (lh === 0 ? 1 : 0);
+    }
+  }
+  let parry = 0;
+  for (let b = 0; b < BINS; b++) if ((keepG[b] as number) > parry) parry = keepG[b] as number;
+  const base = (KEEP_ROWS - 1) * BINS;
+  let safe0 = 0;
+  let stay = 0;
+  for (let b = 0; b < BINS; b++) {
+    if (rows[base + b] !== 0) continue;
+    safe0++;
+    if (rows[BINS + b] === 0) stay++;
+  }
+  // Nothing safe without the flare: whatever shade the flare offers is new, so it moved.
+  const moved = safe0 > 0 ? stay / safe0 : 0;
+  const kept = parry >= Math.ceil(FL.keepShadedShare * HOLD_STEPS - 1e-9) && moved < FL.keepMovedShare;
+  return { parry, moved, kept };
+}
+
+/** Every keep-test row of flare f where it stands, into `out` (KEEP_ROWS × 360; tests and tools). */
+export function keepRows(w: World, f: Flare, out: Uint8Array = new Uint8Array(KEEP_ROWS * BINS)): Uint8Array {
+  for (let r = 0; r < KEEP_ROWS - 1; r++) keepRow(w, f, f.holdTick + (r - 1) * STEP, out.subarray(r * BINS, (r + 1) * BINS));
+  keepRow(w, null, f.holdTick, out.subarray((KEEP_ROWS - 1) * BINS, KEEP_ROWS * BINS));
+  return out;
+}
+
+/** One unit of the keep test: a lit row of the current candidate, or (free) a verdict and the next candidate or flare. */
+function keepStep(w: World, job: ValidationJob): number {
+  const f = w.flares[job.flareQ] as Flare;
+  if (job.flareRows === 0) {
+    // Set up the next candidate that fits; none left: drop the flare where it stood.
+    for (;;) {
+      if (job.flareTry >= FLARE_TRIES.length) {
+        shiftFlare(f, job.flareRise0 - f.riseTick);
+        f.state = FLARE_DROPPED;
+        resortFlare(w, job.flareQ);
+        startFlareTest(w, job, findFlareTest(w, job));
+        return 0;
+      }
+      const dt = job.flareRise0 + (FLARE_TRIES[job.flareTry] as number) - f.riseTick;
+      keepCand.d = f.d;
+      keepCand.warnTick = f.warnTick + dt;
+      keepCand.riseTick = f.riseTick + dt;
+      keepCand.holdTick = f.holdTick + dt;
+      keepCand.fallTick = f.fallTick + dt;
+      keepCand.endTick = f.endTick + dt;
+      if (candidateFits(w, job, job.flareQ, keepCand)) break;
+      job.flareTry++;
+    }
+  }
+  if (job.flareRows < KEEP_ROWS) {
+    const r = job.flareRows;
+    const lifted = r < KEEP_ROWS - 1;
+    keepRow(w, lifted ? keepCand : null, lifted ? keepCand.holdTick + (r - 1) * STEP : keepCand.holdTick, keepLit.subarray(r * BINS, (r + 1) * BINS));
+    job.flareRows++;
+    return 1;
+  }
+  job.flareRows = 0;
+  if (!keepVerdict(keepLit).kept) {
+    job.flareTry++;
+    return 0;
+  }
+  shiftFlare(f, keepCand.riseTick - f.riseTick);
+  f.state = FLARE_KEPT;
+  resortFlare(w, job.flareQ);
+  // The chunk's geometry now carries the lift. Its own lit rows are computed after the test; rows of
+  // the re-run prefix inside the window are recomputed, and the DP re-runs from the step before them.
+  const slots = job.pre + job.n + 2;
+  for (let s = 0; s < slots; s++) {
+    stepGeometry(w, job.j0 + s - 1 - job.pre, job, s);
+    const tick = (job.j0 + s - 1 - job.pre) * STEP;
+    if (s >= 1 && s <= job.pre && tick >= f.riseTick && tick < f.endTick) {
+      job.need[s] = 1;
+      if (s - 1 < job.dpFrom) job.dpFrom = Math.max(1, s - 1);
+    }
+  }
+  startFlareTest(w, job, findFlareTest(w, job));
+  return 0;
+}
+
 /**
  * Advances a validation job by at most `budget` work units (one per lit computation; the DP is
  * cheap and runs in the same call). Returns the units used.
  */
 export function stepValidation(w: World, job: ValidationJob, budget: number): number {
-  const p1 = paramsAt(w, 1);
-  const delta = chillDeltaTable(validatorDrain(w), p1.regen);
-  const maxC = p1.maxChill;
+  const maxC = paramsAt(w, 1).maxChill;
   let used = 0;
   while (!job.done) {
+    // 0) v1.6: the keep test of the pending flares this chunk holds, before its lit rows.
+    if (job.flareQ >= 0) {
+      if (used >= budget) return used;
+      used += keepStep(w, job);
+      continue;
+    }
     // 1) (Re)compute pending lit slots in order.
     let pending = -1;
     for (let s = 1; s <= job.pre + job.n + 1; s++) {
@@ -481,7 +762,7 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
     let i = job.dpFrom;
     let resume = -1;
     for (; i <= job.pre + job.n; i++) {
-      const best = dpSlot(w, job, i, delta, maxC);
+      const best = dpSlot(w, job, i, slotDelta(w, job, i), maxC);
       // The floor scales with the level's tank (ration: 50 of 100 at Day 1 keeps the ratio).
       const floor = (paramsAt(w, job.sDay[i] as number).floor * maxC) / TUNING.nubs.maxChill;
       if (job.accepting) {
@@ -513,8 +794,7 @@ const MAX_R = TUNING.world.maxCasterRadius;
  */
 export function stepLitLive(w: World, j: number, out: Uint8Array): boolean {
   const tick = j * STEP;
-  const day = dayAtTick(tick);
-  const eps = elevation(paramsAt(w, day), (tick - dayStartTick(day)) / TICK_HZ);
+  const eps = worldElevation(w, tick);
   if (eps <= 0) {
     out.fill(0);
     return false;
@@ -566,8 +846,7 @@ export function stepLit(w: World, j: number, out: Uint8Array): void {
     if (j >= c.j0 + c.n) break;
   }
   const tick = j * STEP;
-  const day = dayAtTick(tick);
-  const eps = elevation(paramsAt(w, day), (tick - dayStartTick(day)) / TICK_HZ);
+  const eps = worldElevation(w, tick);
   if (eps <= 0) {
     out.fill(0);
     return;

@@ -837,7 +837,7 @@ async function main(): Promise<void> {
   // v1.6 modules: their tables and gates over every row (their failures count under --check).
   const ctx = sim16Ctx({ seeds, days, workers, check, margin, off, policy }, failures);
   const rows = jobs.map((j, ji) => rowOf(j, of(ji)));
-  for (const mod of SIM16) mod.report?.(ctx, rows);
+  for (const mod of SIM16) await mod.report?.(ctx, rows);
 
   if (!check) return;
   console.log(`\nAcceptance (V1_PLAN §13 on ${fc ? `forecast ${fc}` : 'the plan mix'}, V1_1_PLAN §6), required margin ${margin} points:`);

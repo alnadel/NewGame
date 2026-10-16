@@ -9,6 +9,7 @@ import {
   CONCEPTS,
   conceptsCompatible,
   goalMet,
+  isBossFinale,
   LEVEL_COUNT,
   levelDef,
   mechanicsOf,
@@ -109,7 +110,12 @@ describe('the level table', () => {
       expect(l.seed).toBe(hashString(`journey-${l.id}`));
       expect(l.name.length).toBeGreaterThan(2);
       expect(l.concepts.length).toBeGreaterThanOrEqual(1);
-      expect(l.concepts.length).toBeLessThanOrEqual(3);
+      // v1.6: a boss finale (50, 60, …, 200) carries the Solar Flare on top of its three.
+      expect(l.concepts.length).toBeLessThanOrEqual(isBossFinale(l.id) ? 4 : 3);
+      expect(l.concepts.includes('flare')).toBe(isBossFinale(l.id) || l.introduces === 'flare');
+      // v1.6 Dares: one, two on finales, each with a positive target.
+      expect(l.feats.length).toBe(l.id % 10 === 0 ? 2 : 1);
+      for (const f of l.feats) expect(f.target).toBeGreaterThan(0);
       expect(new Set(l.concepts).size).toBe(l.concepts.length);
       expect(l.lengthMinutes).toBeGreaterThan(0);
       expect(l.drain).toBeGreaterThanOrEqual(22);
@@ -138,7 +144,9 @@ describe('the level table', () => {
 
   it('levels 1-40 introduce the first forty concepts in catalog order, alone; later levels introduce nothing', () => {
     expect(TEACH_LEVELS).toBe(40);
-    expect(CONCEPT_IDS).toHaveLength(43);
+    // v1.6: Glass Flakes (21) and the Solar Flare (38) take Lowland's and Moon Sun's teaching slots.
+    expect(CONCEPT_IDS).toHaveLength(45);
+    expect([teachLevel('brittle'), teachLevel('flare'), teachLevel('lowland'), teachLevel('moonlit')]).toEqual([21, 38, 0, 0]);
     expect(Object.keys(CONCEPTS).sort()).toEqual([...CONCEPT_IDS].sort());
     for (let id = 1; id <= 40; id++) {
       const l = levelDef(id) as LevelDef;
@@ -149,11 +157,11 @@ describe('the level table', () => {
       expect(l.name).toBe(c.title);
       expect(c.name).not.toBe(c.title);
     }
-    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(43);
+    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(45);
     for (let id = 41; id <= 200; id++) expect((levelDef(id) as LevelDef).introduces).toBeNull();
     // v1.5: the core mechanics are taught in chapter 1; Wide Open, Crowded and Drought only compose.
     expect([teachLevel('deep'), teachLevel('bloom'), teachLevel('snap')]).toEqual([5, 8, 10]);
-    for (const c of ['sparse', 'dense', 'drought'] as const) {
+    for (const c of ['sparse', 'dense', 'drought', 'lowland', 'moonlit'] as const) {
       expect(teachLevel(c)).toBe(0);
       expect(CAMPAIGN_LEVELS.some((l) => l.concepts.includes(c))).toBe(true);
     }
@@ -162,14 +170,16 @@ describe('the level table', () => {
   });
 
   it('turns each core mechanic on from the level that teaches it (all on outside the Journey)', () => {
-    // v1.6 contract: glass (brittle) is on outside the Journey and off on every level until its concept lands.
+    // v1.6: glass (brittle) is on outside the Journey and from its own level (21).
     expect(mechanicsOf(null)).toEqual({ buds: true, snap: true, deep: true, brittle: true });
     expect(mechanicsOf(1)).toEqual({ buds: false, snap: false, deep: false, brittle: false });
     expect(mechanicsOf(4)).toEqual({ buds: false, snap: false, deep: false, brittle: false });
     expect(mechanicsOf(5)).toEqual({ buds: false, snap: false, deep: true, brittle: false });
     expect(mechanicsOf(8)).toEqual({ buds: true, snap: false, deep: true, brittle: false });
     expect(mechanicsOf(10)).toEqual({ buds: true, snap: true, deep: true, brittle: false });
-    expect(mechanicsOf(200)).toEqual({ buds: true, snap: true, deep: true, brittle: false });
+    expect(mechanicsOf(20)).toEqual({ buds: true, snap: true, deep: true, brittle: false });
+    expect(mechanicsOf(21)).toEqual({ buds: true, snap: true, deep: true, brittle: true });
+    expect(mechanicsOf(200)).toEqual({ buds: true, snap: true, deep: true, brittle: true });
     // Worlds follow: no buds before level 8, buds from it; the snap level starts with a full meter.
     const w4 = createWorld(campaignConfig(4));
     ensureGenerated(w4, w4.finishY);
@@ -193,7 +203,8 @@ describe('the level table', () => {
     const l4 = levelDef(4) as LevelDef;
     expect([l4.startMinute, l4.lengthMinutes]).toEqual([270, 180]);
     expect((levelDef(teachLevel('oldtown')) as LevelDef).biome).toBe('oldtown');
-    expect((levelDef(7) as LevelDef).goal.kind).toBe('snow');
+    // v1.6 (T6): the SWING lesson asks for a SWING.
+    expect((levelDef(7) as LevelDef).goal).toEqual({ kind: 'swings', target: 1 });
     expect((levelDef(teachLevel('market')) as LevelDef).forecast).toBe('market');
     expect((levelDef(25) as LevelDef).stars.minChill).toBe(10);
     expect([(levelDef(37) as LevelDef).startMinute, (levelDef(37) as LevelDef).lengthMinutes]).toEqual([540, 180]);
@@ -214,8 +225,8 @@ describe('the level table', () => {
     const curve = (id: number): number => at(id).drain + at(id).concepts.reduce((a, c) => a + (CONCEPTS[c].level?.cost ?? 0), 0);
     for (const f of [10, 20, 30]) expect(curve(f)).toBeGreaterThan(Math.max(curve(f - 1), curve(f + 1)));
     expect(curve(31)).toBeGreaterThan(curve(11));
-    // A costly concept lowers the drain: Lowland drains less than Giants.
-    expect(at(teachLevel('lowland')).drain).toBeLessThan(at(teachLevel('giants')).drain);
+    // A costly concept lowers the drain: Long Shadows drains less than Gates.
+    expect(at(teachLevel('long')).drain).toBeLessThan(at(teachLevel('gate')).drain);
     // Composed chapters: the first two levels are a step shorter than the rest.
     expect(at(101).lengthMinutes).toBe(at(105).lengthMinutes - 30);
   });
@@ -226,10 +237,15 @@ describe('the level table', () => {
       const ch = CHAPTERS[l.chapter - 1]!;
       expect(l.concepts.length).toBeGreaterThanOrEqual(2);
       expect(ch.concepts).toContain(l.concepts[0]);
-      for (let i = 0; i < l.concepts.length; i++)
-        for (let j = i + 1; j < l.concepts.length; j++) expect(conceptsCompatible(l.concepts[i]!, l.concepts[j]!), `${id}: ${l.concepts.join(',')}`).toBe(true);
+      // The composed draw (the Solar Flare is appended to a boss finale after it).
+      const drawn = l.concepts.filter((c) => c !== 'flare');
+      for (let i = 0; i < drawn.length; i++)
+        for (let j = i + 1; j < drawn.length; j++) expect(conceptsCompatible(drawn[i]!, drawn[j]!), `${id}: ${l.concepts.join(',')}`).toBe(true);
       if (id % 10 === 0) {
-        expect(l.concepts).toHaveLength(3);
+        expect(l.concepts).toHaveLength(4);
+        expect(l.concepts[3]).toBe('flare');
+        expect(l.flares.length).toBeGreaterThanOrEqual(1);
+        expect(l.feats.map((f) => f.kind)).toContain('parry');
         expect(l.concepts[0]).toBe(ch.concepts[0]);
       }
       // Forecast concepts only where they fit; 'oldtown'/'market' force Old Town, 'dazzle' the Meadow.
@@ -250,6 +266,8 @@ describe('the level table', () => {
 
   it('scores: goalMet and starsFor', () => {
     const l = levelDef(2) as LevelDef;
+    // v1.6: Flake Trail's Dare is the flakes Dare (80% of the flakes offered): the old flake star.
+    expect(l.feats).toEqual([{ kind: 'flakes', target: l.stars.flakes }]);
     expect(goalMet(l, { flakes: l.goal.target, snow: 0, minChill: 0 })).toBe(true);
     expect(goalMet(l, { flakes: l.goal.target - 1, snow: 0, minChill: 0 })).toBe(false);
     expect(starsFor(l, { flakes: l.goal.target - 1, snow: 0, minChill: 100 })).toBe(0);
@@ -262,7 +280,9 @@ describe('the level table', () => {
     expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec + 0.1 })).toBe(2);
     expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill - 1, litTotal: 0 })).toBe(2);
     const s7 = levelDef(7) as LevelDef;
-    expect(goalMet(s7, { flakes: 0, snow: s7.goal.target, minChill: 0 })).toBe(true);
+    expect(goalMet(s7, { flakes: 0, snow: 99, minChill: 0 })).toBe(false);
+    expect(goalMet(s7, { flakes: 0, snow: 0, minChill: 0, swings: 1 })).toBe(true);
+    expect(goalMet(s7, { flakes: 0, snow: 0, minChill: 0 }, true)).toBe(true);
     expect(goalMet(levelDef(1) as LevelDef, { flakes: 0, snow: 0, minChill: 0 })).toBe(true);
   });
 });
@@ -442,7 +462,8 @@ describe('campaign runs', () => {
     const trees = g.casters.filter((c) => c.kind === 'tree');
     expect(trees.length).toBeGreaterThan(0);
     for (const t of trees) expect(t.maxZ).toBeCloseTo(75 * 1.6, 9);
-    const low = createWorld(campaignConfig(teachLevel('lowland')));
+    // v1.6: Lowland only composes now.
+    const low = createWorld(campaignConfig((CAMPAIGN_LEVELS.find((l) => l.concepts.includes('lowland')) as LevelDef).id));
     ensureGenerated(low, 2000);
     for (const c of low.casters) if (c.kind === 'house') expect(c.maxZ).toBeCloseTo(110 * 0.6, 9);
   });
@@ -618,16 +639,18 @@ describe('campaign runs', () => {
   });
 
   it('moonlit: a moon sun with noon elevation 30° and 0.7× the drain; s.moonlit for the renderer', () => {
-    const s = createRun(campaignConfig(38));
+    // v1.6: Moon Sun only composes now (level 38 teaches the Solar Flare): a level whose other concepts keep the drain.
+    const moon = (CAMPAIGN_LEVELS.find((l) => l.concepts.includes('moonlit') && dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts.filter((c) => c !== 'moonlit')).drainMul === 1 && !l.concepts.includes('flare')) as LevelDef).id;
+    const s = createRun(campaignConfig(moon));
     expect(s.moonlit).toBe(true);
     expect(createRun(campaignConfig(1)).moonlit).toBe(false);
     expect(s.params.epsNoon).toBe(30);
     expect(elevation(s.params, s.params.dayLen / 2)).toBe(30);
     expect(s.params.drainMul).toBe(0.7);
-    const lab = started(38);
+    const lab = started(moon);
     strip(lab);
     for (let i = 0; i < 60; i++) step(lab, NO_INPUT);
-    expect(lab.nubs.chill).toBeCloseTo(100 - (levelDef(38) as LevelDef).drain * 0.7, 6);
+    expect(lab.nubs.chill).toBeCloseTo(100 - (levelDef(moon) as LevelDef).drain * 0.7, 6);
   });
 
   it('the validator uses the level drain, regen and max Chill, and skips the stretch after the finish', () => {

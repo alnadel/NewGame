@@ -7,7 +7,7 @@ import { TUNING } from '../../src/config/tuning.ts';
 import { worldElevation } from '../../src/core/gen/plan.ts';
 import { jobRows } from '../../src/core/gen/validator.ts';
 import { createWorld, ensureGenerated } from '../../src/core/gen/world.ts';
-import { FLARE_KEPT, type Pickup } from '../../src/core/objects.ts';
+import { FLAKE_ID_BASE, FLARE_KEPT, RUNTIME_ID_BASE, type Pickup } from '../../src/core/objects.ts';
 import { BOT_KINDS, BOT_POLICIES, createBot } from '../../src/core/sim/bots.ts';
 import { createRun } from '../../src/core/sim/create.ts';
 import { debugFlare } from '../../src/core/sim/flares.ts';
@@ -33,17 +33,19 @@ describe('v1.6 contract', () => {
     const nb = s.nubs;
     expect([nb.ringCharge, nb.litStartMult, nb.streak, nb.swFreshN, nb.frostH, nb.swFresh.length]).toEqual([0, 1, 0, 0, 100, 2 * TUNING.ring.freshSlots]);
     expect([s.snapBankH, s.snapExt, s.snapBlooms, s.landTicks, s.landSrc, s.clusterId, s.flareId, s.flarePhase, s.flareTicks]).toEqual([0, 0, 0, -1, -1, -1, -1, 0, -1]);
-    for (const m of [s.guide.deep, s.guide.flake, s.guide.land, s.guide.flare]) expect(m.length === 360 && m.every((v) => v === 0)).toBe(true);
+    // guide.deep may already mark deep shade at the start hut (CORE-2); the event layers start empty.
+    expect(s.guide.deep.length).toBe(360);
+    for (const m of [s.guide.flake, s.guide.land, s.guide.flare]) expect(m.length === 360 && m.every((v) => v === 0)).toBe(true);
     expect(s.guide.flareTicks).toBe(-1);
     for (const k of ['multTicks', 'frostEarnedH', 'snapLands', 'brittleSaved', 'parries', 'deepTicks', 'gustWindows'] as const) expect(s.stats[k]).toBe(0);
   });
 
-  it('flake clusters carry their cluster (first flake id), index and size; nothing is glass yet', () => {
+  it('flake clusters carry their cluster (first flake id), index and size; flake ids come from FLAKE_ID_BASE', () => {
     const w = createWorld(headlessConfig(5));
-    ensureGenerated(w, 6000);
+    ensureGenerated(w, 8000);
     const byCluster = new Map<number, Pickup[]>();
     for (const p of w.pickups) {
-      expect(p.brittle).toBe(false);
+      expect(p.id >= FLAKE_ID_BASE && p.id < RUNTIME_ID_BASE).toBe(p.kind === 'flake');
       if (p.kind !== 'flake') {
         expect([p.cluster, p.ci, p.cn]).toEqual([-1, 0, 1]);
         continue;
@@ -54,8 +56,8 @@ describe('v1.6 contract', () => {
     const s = createRun(headlessConfig(5));
     for (const [id, ps] of byCluster) {
       expect(ps.map((p) => p.ci)).toEqual(ps.map((_, i) => i));
-      expect(ps.every((p) => p.cn === ps.length && p.id === id + p.ci)).toBe(true);
-      expect(meltBudgetOf(s, ps[0] as Pickup)).toBe(s.params.meltBudget);
+      expect(ps.every((p) => p.cn === ps.length && p.id === id + p.ci && p.brittle === (ps[0] as Pickup).brittle)).toBe(true);
+      expect(meltBudgetOf(s, ps[0] as Pickup)).toBe((ps[0] as Pickup).brittle ? TUNING.brittle.meltBudget : s.params.meltBudget);
     }
   });
 
@@ -95,9 +97,9 @@ describe('v1.6 contract', () => {
     expect(soon.id).not.toBe(late.id);
   });
 
-  it('campaign: no Dares or boss flares yet; the soft-fail scores the goal as finish', () => {
+  it('campaign: Dares and flares on the levels; the soft-fail scores the goal as finish', () => {
     const l2 = levelDef(2) as LevelDef;
-    expect([l2.feats, l2.flares]).toEqual([[], []]);
+    expect([l2.feats.length, l2.flares]).toEqual([1, []]);
     const none = { flakes: 0, snow: 0, minChill: 50 };
     expect(featMet(l2, none)).toBe(false);
     expect(l2.goal.kind).toBe('flakes');

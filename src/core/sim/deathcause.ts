@@ -3,7 +3,7 @@
 import { TUNING } from '../../config/tuning.ts';
 import { dayTicks, elevation, exactClock, TICK_HZ } from '../clock.ts';
 import { tanD } from '../dmath.ts';
-import { worldYAtDayTick } from '../gen/plan.ts';
+import { liftElevation, worldYAtDayTick } from '../gen/plan.ts';
 import { lowerBound } from '../gen/store.ts';
 import { BINS, markCaster, markEllipse, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
 import type { Caster, Cloud } from '../objects.ts';
@@ -49,7 +49,7 @@ function cloudCause(s: SimState): boolean {
   const dt = s.dayTick - back;
   const y = worldYAtDayTick(s.world, s.day, dt);
   const x = trailX(s.world.trail, y);
-  const eps = elevation(s.params, dt / TICK_HZ);
+  const eps = liftElevation(s.world, s.params, s.tickAbs - back, elevation(s.params, dt / TICK_HZ));
   if (eps <= 0) return false;
   const tAbs = s.tAbs - back / TICK_HZ;
   const R = cloudOffset(TUNING.shadow.cloudZ, 1 / tanD(eps));
@@ -82,7 +82,7 @@ function nextCaster(s: SimState, skipId: number): Caster | null {
   if (ahead >= dayTicks(s.day)) return null;
   const y = worldYAtDayTick(s.world, s.day, ahead);
   const x = trailX(s.world.trail, y);
-  const eps = elevation(s.params, ahead / TICK_HZ);
+  const eps = liftElevation(s.world, s.params, s.tickAbs - s.dayTick + ahead, elevation(s.params, ahead / TICK_HZ));
   const cot = 1 / tanD(eps);
   const cs = s.world.casters;
   const limit = s.nubs.y + TUNING.shadow.capLen + TUNING.world.maxCasterRadius;

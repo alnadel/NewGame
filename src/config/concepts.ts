@@ -10,16 +10,18 @@ import type { ForecastId } from './forecasts.ts';
  * Every concept: the first forty in teaching order (level n teaches CONCEPT_IDS[n − 1], n ≤ 40).
  * v1.5 teaches the three core mechanics in chapter 1 (deep shade at 5, Sunflowers at 8, Cold Snap
  * at 10, the chapter's finale) and keeps every other teaching level where it was except Old Town
- * (11), Gates (13), Long Shadows (14), Heat Wave (15) and Mirror Sun … Lowland (16-21, three places
+ * (11), Gates (13), Long Shadows (14), Heat Wave (15) and Mirror Sun … Giants (16-20, three places
  * later); Wide Open, Crowded and Drought, plain knob concepts, are no longer taught on a level of
- * their own and appear only in composed levels (41-200, unchanged).
+ * their own and appear only in composed levels (41-200). v1.6 (docs/V1_6_PLAN.md §2.3, §2.5) teaches
+ * Glass Flakes at 21 (Lowland's slot) and the Solar Flare at 38 (Moon Sun's); Lowland and Moon Sun
+ * stay composed concepts (COMPOSE_ORDER in campaign.ts is unchanged).
  */
 export const CONCEPT_IDS = Object.freeze([
   'drag', 'flakes', 'cloud', 'noon', 'deep', 'glare', 'swing', 'bloom', 'breezy', 'snap',
   'oldtown', 'overcast', 'gate', 'long', 'heat', 'dazzle', 'market', 'sprint', 'stroll', 'giants',
-  'lowland', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
-  'clockwork', 'gusts', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'moonlit', 'marathon', 'boss',
-  'sparse', 'dense', 'drought',
+  'brittle', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
+  'clockwork', 'gusts', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'flare', 'marathon', 'boss',
+  'sparse', 'dense', 'drought', 'lowland', 'moonlit',
 ] as const);
 
 /** Levels 1..TEACH_LEVELS each teach the next concept of CONCEPT_IDS. */
@@ -93,8 +95,8 @@ export interface ConceptLevel {
   readonly startMinute?: number;
   /** Length in in-game minutes (time-of-day concepts). */
   readonly lengthMinutes?: number;
-  /** The level's goal kind. */
-  readonly goal?: 'flakes' | 'snow';
+  /** The level's goal kind (composed levels too; the teaching levels' verb goals live in campaign.ts). */
+  readonly goal?: 'flakes';
   /** A cap on the level's effective drain (lock, gusts, eclipse: rules the validator does not model). */
   readonly drainCap?: number;
   /**
@@ -135,7 +137,7 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   noon: concept('noon', 'Noon', 'High Noon', 'sun', 'A high sun throws short shadows. Noon is the boss.', 'sun', { epsNoon: 48 }, { startMinute: 270, lengthMinutes: 180 }),
   oldtown: concept('oldtown', 'Old Town', 'Cobblestones', 'world', 'Walls, arches and stalls: taller casters, longer shade.', 'town', undefined, { biome: 'oldtown', cost: -5 }),
   glare: concept('glare', 'Glare', 'Glass Garden', 'world', 'Gazing balls throw light back. Red arcs on the dial are glare.', 'glare', { ballEvery: 12 }, { cost: 5 }),
-  swing: concept('swing', 'SWING', 'Hand-off', 'goal', 'Hand the shade from one caster to the next with a big turn. SWINGs pay Snow.', 'swing', undefined, { goal: 'snow', cost: -4 }),
+  swing: concept('swing', 'SWING', 'Hand-off', 'goal', 'Hand the shade from one caster to the next with a big turn. SWINGs pay Snow.', 'swing', undefined, { cost: -4 }),
   gate: concept('gate', 'Gates', 'The Gate', 'world', 'An arch halfway along. Walk under it fully shaded for +10 Snow.', 'gate', undefined, { cost: 3 }),
   breezy: concept('breezy', 'Breeze', 'Kite Weather', 'sky', 'More clouds, moving fast.', 'wind', undefined, { forecast: 'breezy', cost: -1 }),
   long: concept('long', 'Long Shadows', 'Autumn Light', 'sky', 'A low sun all day, casters set back from the path: only long shadows reach.', 'shadow', undefined, { forecast: 'long', cost: 8 }),
@@ -168,6 +170,8 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   sunset: concept('sunset', 'Sunset', 'Sunset Run', 'sun', 'From 3 PM into dusk: the shadows grow as you go.', 'sunset', undefined, { startMinute: 540, lengthMinutes: 180, cost: -16 }),
   moonlit: concept('moonlit', 'Moon Sun', 'Moonlit', 'sun', 'A night walk under a moon sun. Low light, gentle drain.', 'moon', { epsNoon: 30, drainMul: 0.7 }, { cost: 5 }),
   marathon: concept('marathon', 'Marathon', 'The Long Walk', 'sun', 'A day and a half. Chill refills through the night.', 'marathon', undefined, { lengthMinutes: 1080, cost: 9 }),
+  brittle: concept('brittle', 'Glass Flakes', 'Sugar Glass', 'goal', 'Glass flakes melt fast. The white arc saves them, if you can spare the sun.', 'glass', undefined, { cost: 3 }),
+  flare: concept('flare', 'Solar Flare', 'Sunspots', 'sky', 'When the sun swells, slide to the frost-rimmed shade before the flash.', 'flare', undefined, { cost: 4 }),
   boss: concept('boss', 'Heat Dome', 'Into the Dome', 'sun', 'The sun stands almost overhead. Shade is scarce.', 'boss', { epsNoon: 80 }, { startMinute: 180, lengthMinutes: 360, cost: 12 }),
 } satisfies Record<ConceptId, Concept>);
 

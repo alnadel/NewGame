@@ -152,8 +152,12 @@ export interface RunStats {
    */
   deepTicks?: number;
   earnedSnapSavedTicks?: number;
+  /** Ticks where any snap (earned or the start charge's) is the only source over the center (L10's verb goal). */
+  snapSavedTicks?: number;
   cloudsRidden?: number;
   gateDeep?: number;
+  /** Arches walked under fully shaded (L13's verb goal; gateDeep counts the deep ones). */
+  gateShaded?: number;
   flipTicks?: number;
   lockHeld?: number;
   lockWindows?: number;

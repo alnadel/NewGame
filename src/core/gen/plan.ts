@@ -6,8 +6,9 @@
 
 import { dayParams, dayPlan, legacyPlan, type BiomeId, type DayParams, type DayPlan } from '../../config/days.ts';
 import { FORECAST_IDS, forecastFits, PLAN_WEIGHTS, type ForecastId } from '../../config/forecasts.ts';
-import { dayAtTick, dayStartTick, dayStartY, elevation, TICK_HZ, timeAtY, yAtDayTick, yAtTick, yAtTime, type YTime } from '../clock.ts';
-import type { Flare } from '../objects.ts';
+import { TUNING } from '../../config/tuning.ts';
+import { dayAtTick, dayStartTick, dayStartY, dayTicks, elevation, TICK_HZ, timeAtY, yAtDayTick, yAtTick, yAtTime, type YTime } from '../clock.ts';
+import { FLARE_KEPT, type Flare } from '../objects.ts';
 import { rngFor } from '../rng.ts';
 import type { World } from './store.ts';
 
@@ -125,33 +126,97 @@ export function biomeAtY(w: World, y: number): BiomeId {
   return worldPlan(w, worldDayAtY(w, y)).biome;
 }
 
-// v1.6 sun readers (docs/V1_6_PLAN.md §2.5; CORE-2 owns the bodies). Every ε reader (syncTime, the
-// guide, the validator's stepGeometry, stepLit and stepLitLive, the bots, deathcause) will read the
-// world's elevation through worldElevation; the placer keeps the base elevation.
+// v1.6 sun readers (docs/V1_6_PLAN.md §2.5). Every ε reader (syncTime, the guide, the validator's
+// stepGeometry, stepLit and stepLitLive, the bots, deathcause) reads the world's elevation through
+// worldElevation / liftElevation; the placer keeps the base elevation (its clouds avoid flares).
+
+const FL = TUNING.flare;
+/** A lift window never lasts longer than this (rise + hold + fall, ticks), so a backward scan can stop. */
+const LIFT_SPAN = FL.riseTicks + FL.holdTicks + FL.fallTicks;
+
+/** Smoothstep 3x² − 2x³ on [0, 1] (polynomial: deterministic everywhere). */
+function smooth01(x: number): number {
+  return x * x * (3 - 2 * x);
+}
+
+/** Flare f's lift 0..1 at `tickAbs` whatever its state: the rise smoothstep, 1 through the hold, the mirrored fall. */
+export function liftOf(f: Flare, tickAbs: number): number {
+  if (tickAbs < f.riseTick || tickAbs >= f.endTick) return 0;
+  if (tickAbs < f.holdTick) return smooth01((tickAbs - f.riseTick) / (f.holdTick - f.riseTick));
+  if (tickAbs < f.fallTick) return 1;
+  return 1 - smooth01((tickAbs - f.fallTick) / (f.endTick - f.fallTick));
+}
+
+/** The kept flare whose lift window [riseTick, endTick) holds `tickAbs`, or null (w.flares is sorted by rise). */
+export function liftingFlare(w: World, tickAbs: number): Flare | null {
+  const fl = w.flares;
+  for (let i = fl.length - 1; i >= 0; i--) {
+    const f = fl[i] as Flare;
+    if (f.riseTick > tickAbs) continue;
+    if (f.state === FLARE_KEPT && tickAbs < f.endTick) return f;
+    if (f.riseTick + LIFT_SPAN < tickAbs) return null;
+  }
+  return null;
+}
+
+/**
+ * The elevation `base` (the day's ε at that tick, params `p`) lifted by flare f at `tickAbs`:
+ * base + d·lift, capped at εnoon − epsMargin (Endless) or journeyEpsCap (Journey); a cap below the
+ * base leaves the base (a flare never lowers the sun).
+ */
+export function flareEps(w: World, p: DayParams, f: Flare, tickAbs: number, base: number): number {
+  const lift = liftOf(f, tickAbs);
+  if (lift <= 0 || base <= 0) return base;
+  const e = base + f.d * lift;
+  const cap = w.level ? FL.journeyEpsCap : p.epsNoon - FL.epsMargin;
+  return e <= cap ? e : cap > base ? cap : base;
+}
+
+/** `base` (elevation(p, tDay) of the tick) with the kept flare lifting `tickAbs`, if any. */
+export function liftElevation(w: World, p: DayParams, tickAbs: number, base: number): number {
+  if (base <= 0 || w.flares.length === 0) return base;
+  const f = liftingFlare(w, tickAbs);
+  return f ? flareEps(w, p, f, tickAbs, base) : base;
+}
 
 /**
  * The sun's elevation (°) in world `w` at absolute tick `tickAbs`: the day's base ε plus d·flareLift
- * of a kept flare. Contract stub: the base ε only (no flares yet). It is elevation(paramsAt(w, day),
- * tDay) exactly as the validator's stepGeometry computes it: 0 before Day 1 dawn and after dusk, but
- * the dusk tick itself (dayTick = dayTicks(day)) still reads ≈ EPS_DAWN, so syncTime keeps its own
- * daylight gate (s.eps = 0 at night).
+ * of a kept flare. 0 before Day 1 dawn and after dusk, but the dusk tick itself (dayTick =
+ * dayTicks(day)) still reads ≈ EPS_DAWN, so syncTime keeps its own daylight gate (s.eps = 0 at night).
  */
 export function worldElevation(w: World, tickAbs: number): number {
   const day = dayAtTick(tickAbs);
-  return elevation(paramsAt(w, day), (tickAbs - dayStartTick(day)) / TICK_HZ);
+  const p = paramsAt(w, day);
+  return liftElevation(w, p, tickAbs, elevation(p, (tickAbs - dayStartTick(day)) / TICK_HZ));
 }
 
-/** A kept flare's lift 0..1 at `tickAbs` (rise smoothstep, hold 1, fall). Contract stub: 0. */
-export function flareLift(_w: World, _tickAbs: number): number {
-  return 0;
+/** A kept flare's lift 0..1 at `tickAbs` (rise smoothstep, hold 1, fall); 0 outside every kept flare. */
+export function flareLift(w: World, tickAbs: number): number {
+  const f = liftingFlare(w, tickAbs);
+  return f ? liftOf(f, tickAbs) : 0;
 }
 
-/** Noon Heat: the drain × this on `day` at `dayTick` (Endless and Daily, 11 AM-1 PM). Contract stub: 1. */
-export function noonHeatAt(_w: World, _day: number, _dayTick: number): number {
-  return 1;
+/**
+ * Noon Heat (T1): the drain × this on `day` at `dayTick`: DayParams.noonHeat between 11:00 AM and
+ * 1:00 PM (dayTick in [5/12, 7/12)·Dl), else 1. Endless, Daily and challenge worlds only (1 on a
+ * campaign level, whose concept costs were calibrated without it) and only with World.v16.noonHeat.
+ * The validator (deltaForSlot), the sim's Chill and the oracle all read it.
+ */
+export function noonHeatAt(w: World, day: number, dayTick: number): number {
+  if (!w.v16.noonHeat || w.level !== null) return 1;
+  const dl = dayTicks(day);
+  if (12 * dayTick < 5 * dl || 12 * dayTick >= 7 * dl) return 1;
+  return paramsAt(w, day).noonHeat;
 }
 
-/** Fills `out` with the kept flares whose window overlaps [fromTick, toTick) (sorted by rise); returns the count. Contract stub: 0. */
-export function keptFlares(_w: World, _fromTick: number, _toTick: number, _out: Flare[]): number {
-  return 0;
+/** Fills `out` with the kept flares whose window [warnTick, endTick) overlaps [fromTick, toTick) (sorted by rise); returns the count. */
+export function keptFlares(w: World, fromTick: number, toTick: number, out: Flare[]): number {
+  let n = 0;
+  for (const f of w.flares) {
+    if (f.state !== FLARE_KEPT || f.endTick <= fromTick || f.warnTick >= toTick) continue;
+    if (n < out.length) out[n] = f;
+    else out.push(f);
+    n++;
+  }
+  return n;
 }

@@ -3,6 +3,7 @@
 
 import { TUNING } from '../../config/tuning.ts';
 import { DT } from '../clock.ts';
+import { flareMeltMul } from './flares.ts';
 import { lowerBound } from '../gen/store.ts';
 import { PICKUP_ALIVE, PICKUP_MELTED, PICKUP_TAKEN, type Caster, type Cloud, type GazingBall, type Pickup } from '../objects.ts';
 import {
@@ -53,11 +54,11 @@ export function pointLitWeight(s: SimState, px: number, py: number): number {
 
 /**
  * Lit seconds until pickup `p` melts: the day's meltBudget, or TUNING.brittle.meltBudget for a
- * v1.6 glass flake (docs/V1_6_PLAN.md §2.3; glass is only placed where the day's budget is above it).
- * CORE-2 adds the flare's ×meltMul.
+ * v1.6 glass flake (docs/V1_6_PLAN.md §2.3; glass is only placed where the day's budget is above it),
+ * ÷ TUNING.flare.meltMul during a flare's rise and hold (flakes melt ×2 in the heat, §2.5).
  */
 export function meltBudgetOf(s: SimState, p: Pickup): number {
-  return p.brittle ? TUNING.brittle.meltBudget : s.params.meltBudget;
+  return (p.brittle ? TUNING.brittle.meltBudget : s.params.meltBudget) / flareMeltMul(s);
 }
 
 /** Collects pickups within reach and melts lit flakes/crystals ahead. */

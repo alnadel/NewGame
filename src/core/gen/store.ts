@@ -129,6 +129,15 @@ export interface World {
   budY: number;
   budCount: number;
   /**
+   * v1.6 flakes (§2.3, T7): flakes placed so far (flake ids are FLAKE_ID_BASE + n), the y of the
+   * last cluster's last flake (−Infinity before the first), and the glass quota's running count of
+   * eligible clusters and of glass ones.
+   */
+  flakeCount: number;
+  lastClusterY: number;
+  glassEligible: number;
+  glassMade: number;
+  /**
    * Validator carry: the next unvalidated step, how many already-validated steps the next job
    * re-runs (carryN), and the DP rows and lit counts of those steps plus the entry step before them
    * (carryN + 1 rows each, starting at step nextStep − carryN − 1).

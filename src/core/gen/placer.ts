@@ -22,10 +22,11 @@ import { cloudOffset } from '../shadows.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ, type YTime } from '../clock.ts';
 import { angleDiff, atan2D, cosD, sinD, tanD, wrapDeg } from '../dmath.ts';
 import { convexDistance, rectPoly } from '../geom.ts';
-import { BUD_ID_BASE, PICKUP_ALIVE, RUNTIME_ID_BASE, type Caster, type Cloud, type CloudKind, type Part, type PickupKind } from '../objects.ts';
+import { BUD_ID_BASE, FLAKE_ID_BASE, FLARE_PENDING, PICKUP_ALIVE, RUNTIME_ID_BASE, type Caster, type Cloud, type CloudKind, type Flare, type Part, type PickupKind } from '../objects.ts';
 import { rngFor } from '../rng.ts';
 import { distPolyToTrail, trailX } from '../trail.ts';
 import { buildParts, gateArchParts, isRotatable, makeCaster, solidHull } from './catalog.ts';
+import { clusterEligible, contestCluster, glassQuota } from './contest.ts';
 import { biomeAtY, firstTownDay, paramsAt, worldDayAtY, worldDayStartY, worldPlan, worldTimeAtY, worldYAtDayTick, worldYAtTime } from './plan.ts';
 import { insertBall, insertBud, insertCaster, insertPickup, lowerBound, takeId, type World } from './store.ts';
 
@@ -239,30 +240,25 @@ function placeLandmark(w: World, kind: 'finish' | 'arch', y0: number, chunk: num
 }
 
 /**
- * Adds a pickup on the centerline at y. v1.6: a flake cluster's members carry the cluster (its
- * first flake's id: ids are taken in order), their index and the cluster's size; glass stays false
- * until CORE-2's contest pass (§2.3). Crystals and flowers are no cluster's (−1, 0, 1).
+ * Adds a pickup on the centerline at y (crystals and flowers: generated ids, no cluster: −1, 0, 1).
  */
-function addPickup(w: World, kind: PickupKind, y: number, cluster = -1, ci = 0, cn = 1): void {
-  insertPickup(w, {
-    id: takeId(w),
-    kind,
-    x: trailX(w.trail, y),
-    y,
-    day: worldDayAtY(w, y),
-    melt: 0,
-    state: PICKUP_ALIVE,
-    cluster,
-    ci,
-    cn,
-    brittle: false,
-  });
+function addPickup(w: World, kind: PickupKind, y: number): void {
+  insertPickup(w, { id: takeId(w), kind, x: trailX(w.trail, y), y, day: worldDayAtY(w, y), melt: 0, state: PICKUP_ALIVE, cluster: -1, ci: 0, cn: 1, brittle: false });
 }
 
-/** A cluster of n flakes from y, flakeSpacing apart on the centerline. */
-function addCluster(w: World, y: number, n: number): void {
-  const cluster = w.nextId;
-  for (let i = 0; i < n; i++) addPickup(w, 'flake', y + i * TUNING.pickups.flakeSpacing, cluster, i, n);
+/**
+ * A cluster of n flakes from y, flakeSpacing apart on the centerline. v1.6 (§2.3, T7): flake ids
+ * come from FLAKE_ID_BASE (flakes are placed two chunks behind the casters, so they never shift a
+ * caster's id or name); each flake carries the cluster (its first flake's id), its index and the
+ * cluster's size, and whether the cluster is glass.
+ */
+function addCluster(w: World, y: number, n: number, brittle: boolean): void {
+  const cluster = FLAKE_ID_BASE + w.flakeCount;
+  for (let i = 0; i < n; i++) {
+    const fy = y + i * TUNING.pickups.flakeSpacing;
+    insertPickup(w, { id: FLAKE_ID_BASE + w.flakeCount++, kind: 'flake', x: trailX(w.trail, fy), y: fy, day: worldDayAtY(w, fy), melt: 0, state: PICKUP_ALIVE, cluster, ci: i, cn: n, brittle });
+  }
+  w.lastClusterY = y + (n - 1) * TUNING.pickups.flakeSpacing;
 }
 
 /** Render-only cloud lumps (dx, dy, r) from their own stream, so they never shift gameplay draws. */
@@ -331,8 +327,11 @@ export function placeStart(w: World): void {
   for (const a of TUTORIAL.casters) {
     placeBeside(w, { kind: a.kind, y: a.y, side: a.side, lat: a.lat, rotIdx: a.rot, chunk: 0 });
   }
-  const tc = w.nextId;
-  TUTORIAL.flakes.forEach((y, i) => addPickup(w, 'flake', y, tc, i, TUTORIAL.flakes.length));
+  // The authored flakes: one plain cluster of the tutorial's own spacing.
+  const tc = FLAKE_ID_BASE + w.flakeCount;
+  TUTORIAL.flakes.forEach((y, i) => {
+    insertPickup(w, { id: FLAKE_ID_BASE + w.flakeCount++, kind: 'flake', x: trailX(w.trail, y), y, day: worldDayAtY(w, y), melt: 0, state: PICKUP_ALIVE, cluster: tc, ci: i, cn: TUTORIAL.flakes.length, brittle: false });
+  });
   const last = TUTORIAL.casters[TUTORIAL.casters.length - 1];
   w.cursorY = last ? last.y : CH;
   w.cursorSide = last ? last.side : 1;
@@ -391,6 +390,42 @@ export function generateDay(w: World, day: number): void {
   const nightY1 = worldDayStartY(w, day + 1);
   const sp = TUNING.pickups.flowerSpacing;
   for (let y = nightY0 + sp / 2; y < nightY1; y += sp) addPickup(w, 'flower', y);
+
+  addDayFlares(w, day, p);
+}
+
+const FL = TUNING.flare;
+const STEP = TUNING.validator.stepTicks;
+
+/**
+ * A flare whose rise is at absolute tick `riseTick` (on the validator's 0.1 s grid), `warn` ticks
+ * of warning before it, then TUNING.flare's rise, hold and fall; pending until the keep test.
+ */
+export function makeFlare(id: number, day: number, d: number, riseTick: number, warn: number): Flare {
+  const holdTick = riseTick + FL.riseTicks;
+  const fallTick = holdTick + FL.holdTicks;
+  return { id, day, d, warnTick: riseTick - warn, riseTick, holdTick, fallTick, endTick: fallTick + FL.fallTicks, state: FLARE_PENDING };
+}
+
+/**
+ * v1.6 Heat Flares of an Endless day (docs/V1_6_PLAN.md §2.5; World.v16.flares, never on a campaign
+ * level, whose bosses bring their own): DayParams.flareCount rises (2: one in each of
+ * TUNING.flare.windows, 1: the afternoon one), each at t/Dl drawn from (seed, 'flares', day) and
+ * snapped to the validator's step grid, lift DayParams.flareD. They wait, pending, for the keep test
+ * of the validation job that reaches them.
+ */
+function addDayFlares(w: World, day: number, p: DayParams): void {
+  if (!w.v16.flares || w.level !== null || p.flareCount <= 0) return;
+  const r = rngFor(w.seed, 'flares', day);
+  const dl = dayTicks(day);
+  const t0 = dayStartTick(day);
+  const am = r.range(FL.windows[0][0], FL.windows[0][1]);
+  const pm = r.range(FL.windows[1][0], FL.windows[1][1]);
+  const at = p.flareCount >= 2 ? [am, pm] : [pm];
+  for (const u of at) {
+    const rise = t0 + STEP * Math.round((u * dl) / STEP);
+    w.flares.push(makeFlare(w.flares.length + 1, day, p.flareD, rise, FL.warnTicks));
+  }
 }
 
 /**
@@ -430,8 +465,10 @@ export function placeChunk(w: World, k: number): void {
   if (w.gateY >= y0 && w.gateY < y1) placeLandmark(w, 'arch', w.gateY, k);
   if (w.finishY >= y0 && w.finishY < y1) placeLandmark(w, 'finish', w.finishY, k);
   if (!(w.tutorial && k === 0)) placeCasters(w, k, y1);
-  if (k >= 0 && !(w.tutorial && k === 0)) placeFlakes(w, k, y1);
-  // Buds trail two chunks behind: by now the casters and rescue rocks around them stand.
+  // Flakes (v1.6, T7) and buds trail two chunks behind: by now the casters and rescue rocks around
+  // them stand, and chunk k − 2's finished validation job (w.lastJob) holds the rows the glass
+  // contest reads.
+  if (k >= 2 && !(w.tutorial && k === 2)) placeFlakes(w, k - 2, (k - 1) * CH);
   if (k >= 2) placeBuds(w, k - 2);
   w.stats.chunksPlaced++;
 }
@@ -647,9 +684,54 @@ function placeFlakes(w: World, k: number, y1: number): void {
       continue;
     }
     if (w.flakeY >= y1) break;
-    addCluster(w, w.flakeY, p.flakesPerCluster);
+    const y = w.flakeY;
+    const n = p.flakesPerCluster;
     w.flakeY += rng.range(P.clusterGapMin, P.clusterGapMax) * p.clusterGap * p.v;
+    const g = glassSpot(w, k, y, n, day, p, w.flakeY);
+    addCluster(w, g === null ? y : g, n, g !== null);
   }
+}
+
+const BR = TUNING.brittle;
+/** Glass shifts as y offsets per u/s of walk speed: s of walking. */
+const GLASS_SHIFTS: readonly number[] = BR.shiftsSec;
+/** A contested shift whose cost is within this of costAim ends the search (Chill). */
+const GLASS_AIM_TOL = 4;
+
+/**
+ * v1.6 glass (§2.3): the y of the glass cluster of n flakes drawn at y (chunk k, day `day`), or
+ * null when it stays plain at y. The running share of glass among eligible clusters (a cluster is
+ * eligible when its drawn spot's melt window plus tail lies inside chunk k's finished job) must be
+ * below glassQuota; then, among the shifts that keep minGapSec of walking to the previous cluster
+ * and to the next (at nextY), the contested one whose detour cost is nearest costAim wins.
+ */
+function glassSpot(w: World, k: number, y: number, n: number, day: number, p: DayParams, nextY: number): number | null {
+  const q = glassQuota(w, day, p);
+  const job = w.lastJob;
+  if (q <= 0 || !job || job.k !== k) return null;
+  const span = (n - 1) * TUNING.pickups.flakeSpacing;
+  const gap = BR.minGapSec * p.v;
+  // Eligible where drawn (cheap: no masks), then the quota, then the contest of each shift.
+  if (y - w.lastClusterY < gap || nextY - (y + span) < gap || !clusterEligible(w, job, y + span)) return null;
+  w.glassEligible++;
+  if (w.glassMade >= q * w.glassEligible) return null;
+  let best: number | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < GLASS_SHIFTS.length; i++) {
+    const y0 = y + (GLASS_SHIFTS[i] as number) * p.v;
+    if (y0 - w.lastClusterY < gap || nextY - (y0 + span) < gap) continue;
+    const c = contestCluster(w, job, trailX(w.trail, y0), y0, trailX(w.trail, y0 + span), y0 + span);
+    if (!c.contested) continue;
+    const d = Math.abs(c.cost - BR.costAim);
+    if (d < bestD) {
+      bestD = d;
+      best = y0;
+    }
+    // Close enough to the aim: the remaining shifts are not worth their DPs.
+    if (d <= GLASS_AIM_TOL) break;
+  }
+  if (best !== null) w.glassMade++;
+  return best;
 }
 
 /** Sanity helper for tests/tools: the clearance of a caster (min distance hull → centerline). */

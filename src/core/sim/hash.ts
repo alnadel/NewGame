@@ -8,13 +8,18 @@
 
 import { CASTER_KINDS } from '../../config/casters.ts';
 import { TUNING } from '../../config/tuning.ts';
-import type { Bud, Caster, Pickup } from '../objects.ts';
+import { worldYAtTick } from '../gen/plan.ts';
+import { FLARE_KEPT, type Bud, type Caster, type Pickup } from '../objects.ts';
 import type { SimState } from './types.ts';
 
 /** Casters and pickups up to this far ahead of Nubs are hashed (well inside the validated horizon). */
 export const HASH_AHEAD = TUNING.world.hardAhead - 600;
 /** Buds up to this far ahead of Nubs are hashed (past their reach; inside any run's generated world). */
 const BUD_HASH_AHEAD = 600;
+/** v1.6 (T7): pickups up to this far ahead (flakes stand two chunks behind the casters, like buds). */
+const PICKUP_HASH_AHEAD = 600;
+/** v1.6: kept flares whose warning starts up to this far ahead. */
+const FLARE_HASH_AHEAD = 600;
 
 const PHASES = ['hold', 'day', 'night', 'dead', 'won'];
 const MODES = ['idle', 'dragging', 'chasing', 'coasting'];
@@ -89,6 +94,43 @@ export function hashState(s: SimState): string {
     feed(sun.locked ? 1 : 0);
     feed(st.minChill);
   }
+  // v1.6 world and Journey state (CORE-2): the flare in progress, the glass cluster being walked
+  // through, the glass/flare/Dare counters, and the kept flares whose warning starts within
+  // FLARE_HASH_AHEAD (decided long before: the validator decides a flare once its chunk is reached).
+  for (const v of [
+    s.flareId,
+    s.flarePhase,
+    s.flareLit,
+    s.flareTicks,
+    s.clusterId,
+    s.clusterTaken,
+    s.clusterBroken ? 1 : 0,
+    st.brittleSeen ?? 0,
+    st.brittleSaved ?? 0,
+    st.clustersSaved ?? 0,
+    st.flaresSeen ?? 0,
+    st.parries ?? 0,
+    st.deepTicks ?? 0,
+    st.earnedSnapSavedTicks ?? 0,
+    st.snapSavedTicks ?? 0,
+    st.cloudsRidden ?? 0,
+    st.gateDeep ?? 0,
+    st.gateShaded ?? 0,
+    st.flipTicks ?? 0,
+    st.lockHeld ?? 0,
+    st.lockWindows ?? 0,
+    st.gustHeld ?? 0,
+    st.gustWindows ?? 0,
+  ]) {
+    feed(v);
+  }
+  const flareLimit = nb.y + FLARE_HASH_AHEAD;
+  for (const f of s.world.flares) {
+    if (f.state !== FLARE_KEPT || worldYAtTick(s.world, f.warnTick) >= flareLimit || f.endTick < s.tickAbs) continue;
+    feed(f.id);
+    feed(f.riseTick);
+    feed(f.d);
+  }
   const limit = nb.y + HASH_AHEAD;
   const casters: Caster[] = s.world.casters.filter((c) => c.y < limit);
   casters.sort((a, b) => a.id - b.id);
@@ -99,12 +141,15 @@ export function hashState(s: SimState): string {
     feed(CASTER_KINDS.indexOf(c.kind));
     feed(c.rescue ? 1 : 0);
   }
-  const pickups: Pickup[] = s.world.pickups.filter((p) => p.y < limit);
+  // T7: pickups only to PICKUP_HASH_AHEAD (flakes are placed two chunks behind the casters, like buds).
+  const pickupLimit = nb.y + PICKUP_HASH_AHEAD;
+  const pickups: Pickup[] = s.world.pickups.filter((p) => p.y < pickupLimit);
   pickups.sort((a, b) => a.id - b.id);
   for (const p of pickups) {
     feed(p.id);
     feed(p.state);
     feed(p.melt);
+    feed(p.brittle ? 1 : 0);
   }
   // Buds (generated sorted by y with rising ids, so world order is id order) up to BUD_HASH_AHEAD:
   // only buds within reach can change, and a Title run built with less lookahead has fewer beyond.

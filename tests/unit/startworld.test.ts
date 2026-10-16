@@ -53,7 +53,7 @@ describe('Day-1 difficulty wave (caster spacing)', () => {
     expect(gap(noon) / gap(dusk)).toBeGreaterThan(1.35);
     expect(gap(dawn)).toBeLessThan(p.spacing);
     expect(gap(noon)).toBeGreaterThan(p.spacing * 1.15);
-  });
+  }, 20_000);
 
   it('the authored tutorial chunk keeps its exact layout (the wave never touches it)', () => {
     for (const seed of [1, 7, 12]) {

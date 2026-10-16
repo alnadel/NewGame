@@ -5,6 +5,7 @@
 import { TUNING } from '../../config/tuning.ts';
 import { DT } from '../clock.ts';
 import { angleDiff } from '../dmath.ts';
+import { noonHeatAt } from '../gen/plan.ts';
 import { lowerBound } from '../gen/store.ts';
 import { SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../intervals.ts';
 import type { Caster, Cloud, GazingBall } from '../objects.ts';
@@ -266,7 +267,8 @@ export function applyDaylight(s: SimState): void {
 
   const deep = nb.deep;
   const regen = deep ? s.params.regen * DEEP.regenMul : s.params.regen;
-  let c = nb.chill + (-effectiveDrain(s) * f + regen * Math.max(0, 1 - f)) * DT;
+  // v1.6 Noon Heat (CORE-2, T1): the drain × noonHeatAt between 11 AM and 1 PM, as the validator's DP charges it.
+  let c = nb.chill + (-effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * f + regen * Math.max(0, 1 - f)) * DT;
   if (c > nb.maxChill) c = nb.maxChill;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
   if (s.lessonOn || s.lessonGrace > 0) {

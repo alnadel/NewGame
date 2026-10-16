@@ -30,16 +30,21 @@ export {
   CONCEPT_IDS,
   CONCEPTS,
   conceptsCompatible,
+  DARE_OF,
   featMet,
   featValue,
   foldTuning,
   goalMet,
+  goalValue,
+  isBossFinale,
   LEVEL_COUNT,
   levelDef,
   LEVELS_PER_CHAPTER,
   ALL_MECHANICS,
   MECHANIC_CONCEPTS,
   mechanicsOf,
+  relaxedGoalFor,
+  SOFT_FAIL_MISSES,
   starsFor,
   TEACH_LEVELS,
   teachLevel,
@@ -55,6 +60,7 @@ export type {
   FeatSpec,
   GoalKind,
   LevelDef,
+  LevelBake,
   LevelFlare,
   LevelStats,
   Mechanics,
@@ -153,6 +159,8 @@ export {
   firstTownDay,
   flareLift,
   keptFlares,
+  liftElevation,
+  liftOf,
   noonHeatAt,
   paramsAt,
   planDay,
@@ -191,7 +199,8 @@ export { sunMaxRate } from './sim/sun.ts';
 export { debugRing, effectiveDrain } from './sim/nubs.ts';
 export { budFacing, debugBloom, SNAP_TICKS } from './sim/mechanics.ts';
 export { meltBudgetOf } from './sim/pickups.ts';
-export { debugFlare } from './sim/flares.ts';
+export { debugFlare, flarePhaseAt } from './sim/flares.ts';
+export { glassInWindow } from './sim/guide.ts';
 export { createSnap, lerpSnap, takeSnap } from './sim/snapshot.ts';
 export type { RenderSnap } from './sim/snapshot.ts';
 export { historyAt, historyLength } from './sim/history.ts';
