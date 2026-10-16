@@ -28,7 +28,7 @@ import { slidingMaxCircular, stepLit, stepLitLive } from '../gen/validator.ts';
 import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
-import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
+import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
@@ -371,6 +371,7 @@ function oracleBot(ctx: BotHookCtx): Bot {
       snapNext = bestSlack < cfg.snapSlack || (litNext && (campaign || (s.nubs.f > 0 && c < cfg.snapChill)));
     }
     snapNext = econOracleSnap(ctx, s, snapNext, bestSlack);
+    snapNext = worldOracleSnap(ctx, s, snapNext, bestSlack);
   }
 
   return {
@@ -546,9 +547,10 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
     const theta = s.sun.theta;
     const mask =
       useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
-    if (ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
-    const pickT = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
-    const target = feat ? worldHumanTarget(ctx, s, pickT) : pickT;
+    // humanFeat (v1.6): a Dare focus (bots/world.ts) may move it even while it is safe.
+    const focus = feat ? worldHumanTarget(ctx, s, -1) : -1;
+    if (focus < 0 && ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
+    const target = focus >= 0 ? focus : humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
     const want = angleDiff(target, theta);
     if (target < 0 || Math.abs(want) < HUMAN_MIN_MOVE) return f;
     // Decide: over/undershoot and aim error, then a fresh lag for the next decision.

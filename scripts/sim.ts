@@ -43,7 +43,7 @@
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
-import { CAMPAIGN_LEVELS, LEVEL_COUNT, type LevelDef } from '../src/config/campaign.ts';
+import { CAMPAIGN_LEVELS, featMet, LEVEL_COUNT, SOFT_FAIL_MISSES, type LevelDef } from '../src/config/campaign.ts';
 import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
@@ -178,10 +178,16 @@ function worldStats(s: SimState): { chunks: number; rescues: number; maxRescues:
 
 interface LevelOut {
   id: number;
-  bot: BotKind;
+  /** The bot, or its v1.6 variant's label ('oracle+feats': the Feat-seeking oracle). */
+  bot: string;
   phase: string;
   passed: boolean;
   stars: number;
+  /** v1.6: a Dare of the level met at the finish (star 2), and its first Dare's kind. */
+  featMet: boolean;
+  dare: string;
+  /** The bot's seed salt (the try). */
+  salt: number;
   flakes: number;
   snow: number;
   minChill: number;
@@ -193,18 +199,30 @@ interface LevelOut {
   unresolved: number;
 }
 
-/** A bot plays one campaign level to its finish line (or Nubs melts). */
-function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: Partial<V16Rules>): LevelOut {
+/**
+ * A bot plays one campaign level to its finish line (or Nubs melts). v1.6: `opts` (the
+ * Feat-seeking oracle: feats), `label` names the variant, and `relaxed` scores the goal as 'finish'
+ * (the reactive bot on the teaching levels' verb goals, docs/V1_6_PLAN.md §2.6).
+ */
+function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: Partial<V16Rules>, opts: BotOptions = {}, label?: string, relaxed = false): LevelOut {
   const t0 = performance.now();
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
-  const s = createRun(campaignConfig(id, v16 ? { lesson: id === 1, v16 } : { lesson: id === 1 }));
-  const bot = createBot(kind, salt, mech);
+  const base: Partial<RunConfig> = { lesson: id === 1, ...(v16 ? { v16 } : {}), ...(relaxed ? { relaxedGoal: true } : {}) };
+  const s = createRun(campaignConfig(id, base));
+  const bot = createBot(kind, salt, mech, opts);
   // A level is at most 1080 minutes (one and a half days, ~6000 ticks).
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) step(s, bot.next(s));
   const r = buildRunResult(s).level;
   const { flakes, snow, minChill } = s.stats;
   const { rescues, chunks, unresolved } = worldStats(s);
-  return { id, bot: kind, phase: s.phase, passed: r?.passed ?? false, stars: r?.stars ?? 0, flakes, snow, minChill, progress: levelProgress(s), ms: performance.now() - t0, rescues, chunks, unresolved };
+  const lv = CAMPAIGN_LEVELS[id - 1] as LevelDef;
+  const met = s.phase === 'won' && featMet(lv, s.stats);
+  return { id, bot: label ?? kind, phase: s.phase, passed: r?.passed ?? false, stars: r?.stars ?? 0, featMet: met, dare: lv.feats[0]?.kind ?? '', salt, flakes, snow, minChill, progress: levelProgress(s), ms: performance.now() - t0, rescues, chunks, unresolved };
+}
+
+/** True when level `l`'s goal is a teaching verb goal (the reactive bot scores it as 'finish'). */
+function verbGoal(l: LevelDef): boolean {
+  return l.introduces !== null && l.goal.kind !== 'finish' && l.goal.kind !== 'flakes';
 }
 
 function jobConfig(j: Job, seed: number): RunConfig {
@@ -305,7 +323,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
 type WorkerMsg =
   | { kind: 'run'; task: Task; job: Job }
   | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean; v16?: Partial<V16Rules> }
-  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean; v16?: Partial<V16Rules> };
+  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean; v16?: Partial<V16Rules>; opts?: BotOptions; label?: string; relaxed?: boolean };
 
 if (!isMainThread && workerData === 'sim') {
   parentPort?.on('message', (m: WorkerMsg) => {
@@ -313,7 +331,7 @@ if (!isMainThread && workerData === 'sim') {
       const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen, !m.job.noMech, m.job.opts);
       parentPort?.postMessage({ ...out, job: m.task.job, seed: m.task.seed });
     } else if (m.kind === 'level') {
-      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech, m.v16));
+      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech, m.v16, m.opts, m.label, m.relaxed));
     } else {
       void runCareer(m.c, m.runs, m.bot, m.days, m.meta, m.v16).then((o) => parentPort?.postMessage(o));
     }
@@ -560,39 +578,48 @@ async function careerMain(workers: number, days: number, off: Partial<V16Rules>)
   for (const a of api.ACHIEVEMENTS) console.log(`  ${a.id.padEnd(16)} ${((100 * out.filter((o) => o.achievements.includes(a.id)).length) / out.length).toFixed(0)}%`);
 }
 
-const CAMPAIGN_BOTS: readonly BotKind[] = ['oracle', 'reactive', 'humanDial'];
+/** The --campaign rows: the v1.5 bots, and v1.6's Feat-seeking oracle and humanFeat (docs/V1_6_PLAN.md §2.6). */
+const CAMPAIGN_BOTS: readonly string[] = ['oracle', 'reactive', 'humanDial', 'oracle+feats', 'humanFeat'];
 
 async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<void> {
   const levelArg = arg('level', '');
   const botArg = arg('bot', 'all');
   // --tries N: the human models play each level N times (another player's decisions each try).
   const tries = Math.max(1, Number(arg('tries', '1')));
-  const bots: BotKind[] = botArg === 'all' ? [...CAMPAIGN_BOTS] : (botArg.split(',') as BotKind[]);
-  for (const b of bots) if (!BOT_KINDS.includes(b)) throw new Error(`unknown bot ${b}`);
+  const bots: string[] = botArg === 'all' ? [...CAMPAIGN_BOTS] : botArg.split(',');
+  const kindOf = (b: string): BotKind => (b === 'oracle+feats' ? 'oracle' : (b as BotKind));
+  for (const b of bots) if (!BOT_KINDS.includes(kindOf(b))) throw new Error(`unknown bot ${b}`);
   const ids = levelArg !== '' ? levelArg.split(',').map(Number) : Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1);
   for (const id of ids) if (!CAMPAIGN_LEVELS[id - 1]) throw new Error(`unknown level ${id}`);
   const msgs: WorkerMsg[] = [];
   const mech = !process.argv.includes('--nomech');
   const v16 = Object.keys(off).length > 0 ? off : undefined;
-  for (const id of ids) for (const bot of bots) for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot, salt: t, mech, ...(v16 ? { v16 } : {}) });
+  for (const id of ids) {
+    for (const bot of bots) {
+      const l = CAMPAIGN_LEVELS[id - 1] as LevelDef;
+      const extra = { ...(v16 ? { v16 } : {}), ...(bot === 'oracle+feats' ? { opts: { feats: true }, label: bot } : {}), ...(bot === 'reactive' && verbGoal(l) ? { relaxed: true } : {}) };
+      for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot: kindOf(bot), salt: t, mech, ...extra });
+    }
+  }
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
-  const of = (bot: BotKind, lo = 1, hi = LEVEL_COUNT): LevelOut[] => outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
+  const of = (bot: string, lo = 1, hi = LEVEL_COUNT): LevelOut[] => outs.filter((o) => o.bot === bot && o.id >= lo && o.id <= hi);
   console.log(`SHADY Journey sim: ${ids.length} level(s) × ${bots.join('/')}${tries > 1 ? ` (human ×${tries})` : ''}${mech ? '' : ', bots ignore the v1.5 mechanics'}${offNote(off)}, ${workers} workers, ${wall.toFixed(1)} s\n`);
   const cell = (rs: LevelOut[]): string => {
     const o = rs[0];
     if (!o) return '-'.padEnd(22);
     const mark = o.passed ? `${'★'.repeat(o.stars)}${'☆'.repeat(3 - o.stars)}` : o.phase === 'won' ? 'goal✗' : `melt ${(100 * o.progress).toFixed(0)}%`;
     const n = rs.length > 1 ? `${rs.filter((r) => r.passed).length}/${rs.length} ` : '';
-    return `${n}${mark} f${o.flakes} s${o.snow} c${Math.max(0, o.minChill).toFixed(0)}`.padEnd(22);
+    return `${n}${mark}${o.featMet ? 'D' : ' '} f${o.flakes} c${Math.max(0, o.minChill).toFixed(0)}`.padEnd(22);
   };
-  console.log(`${'lvl'.padEnd(4)} ${'name'.padEnd(18)} ${'start+len'.padEnd(9)} ${'goal'.padEnd(10)} ${'drain'.padEnd(5)} ${bots.map((b) => b.padEnd(22)).join(' ')} concepts`);
+  console.log(`${'lvl'.padEnd(4)} ${'name'.padEnd(18)} ${'start+len'.padEnd(9)} ${'goal'.padEnd(12)} ${'dare'.padEnd(14)} ${'drain'.padEnd(5)} ${bots.map((b) => b.padEnd(22)).join(' ')} concepts`);
   for (const id of ids) {
     const l = CAMPAIGN_LEVELS[id - 1] as LevelDef;
     const goal = l.goal.kind === 'finish' ? 'finish' : `${l.goal.kind} ${l.goal.target}`;
+    const dare = l.feats.map((f) => `${f.kind} ${f.target}`).join('|');
     console.log(
-      `${String(id).padEnd(4)} ${l.name.padEnd(18)} ${`${l.startMinute}+${l.lengthMinutes}`.padEnd(9)} ${goal.padEnd(10)} ${String(l.drain).padEnd(5)} ${bots.map((b) => cell(of(b, id, id))).join(' ')} ${l.concepts.join(',')}`,
+      `${String(id).padEnd(4)} ${l.name.padEnd(18)} ${`${l.startMinute}+${l.lengthMinutes}`.padEnd(9)} ${goal.padEnd(12)} ${dare.padEnd(14)} ${String(l.drain).padEnd(5)} ${bots.map((b) => cell(of(b, id, id))).join(' ')} ${l.concepts.join(',')}`,
     );
   }
   const pct = (rs: LevelOut[]): number => (100 * rs.filter((o) => o.passed).length) / Math.max(1, rs.length);
@@ -601,14 +628,25 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   for (const bot of bots) {
     const rs = of(bot);
     console.log(
-      `  ${bot.padEnd(9)} passed ${pct(rs).toFixed(1)}% of ${rs.length}, stars ${meanStars(rs).toFixed(2)}/level (1-40: ${meanStars(of(bot, 1, 40)).toFixed(2)}), 3-star ${rs.filter((o) => o.stars === 3).length}, melted ${rs.filter((o) => o.phase === 'dead').length}, goal missed ${rs.filter((o) => o.phase === 'won' && !o.passed).length}, ${(rs.reduce((a, o) => a + o.ms, 0) / Math.max(1, rs.length)).toFixed(0)} ms/level`,
+      `  ${bot.padEnd(13)} passed ${pct(rs).toFixed(1)}% of ${rs.length}, stars ${meanStars(rs).toFixed(2)}/level (1-40: ${meanStars(of(bot, 1, 40)).toFixed(2)}, 41-200: ${meanStars(of(bot, 41, 200)).toFixed(2)}), 3-star ${rs.filter((o) => o.stars === 3).length}, Dare met ${((100 * rs.filter((o) => o.featMet).length) / Math.max(1, rs.length)).toFixed(1)}%, melted ${rs.filter((o) => o.phase === 'dead').length}, goal missed ${rs.filter((o) => o.phase === 'won' && !o.passed).length}, ${(rs.reduce((a, o) => a + o.ms, 0) / Math.max(1, rs.length)).toFixed(0)} ms/level`,
     );
   }
   // Per chapter: pass % and mean stars for each bot (the chapter ramp).
-  console.log(`\n  ${'chapter'.padEnd(8)} ${bots.map((b) => `${b} pass ★`.padEnd(18)).join(' ')}`);
+  console.log(`\n  ${'chapter'.padEnd(8)} ${bots.map((b) => `${b} pass ★`.padEnd(20)).join(' ')}`);
   for (let c = 1; c <= LEVEL_COUNT / 10; c++) {
     if (!ids.some((id) => Math.ceil(id / 10) === c)) continue;
-    console.log(`  ${String(c).padEnd(8)} ${bots.map((b) => `${pct(of(b, c * 10 - 9, c * 10)).toFixed(0)}% ${meanStars(of(b, c * 10 - 9, c * 10)).toFixed(2)}`.padEnd(18)).join(' ')}`);
+    console.log(`  ${String(c).padEnd(8)} ${bots.map((b) => `${pct(of(b, c * 10 - 9, c * 10)).toFixed(0)}% ${meanStars(of(b, c * 10 - 9, c * 10)).toFixed(2)}`.padEnd(20)).join(' ')}`);
+  }
+  // v1.6 Dares by kind (a level counts under its first Dare's kind): met share per bot.
+  const dareKinds = [...new Set(ids.map((id) => String((CAMPAIGN_LEVELS[id - 1] as LevelDef).feats[0]?.kind ?? '')))].filter((k) => k !== '');
+  console.log(`\n  Dares met by kind (levels whose first Dare it is): ${bots.map((b) => b.padEnd(13)).join(' ')}`);
+  for (const k of dareKinds) {
+    const levels = ids.filter((id) => (CAMPAIGN_LEVELS[id - 1] as LevelDef).feats[0]?.kind === k);
+    const cellK = (b: string): string => {
+      const rs = outs.filter((o) => o.bot === b && levels.includes(o.id));
+      return `${((100 * rs.filter((o) => o.featMet).length) / Math.max(1, rs.length)).toFixed(0)}%`.padEnd(13);
+    };
+    console.log(`  ${k.padEnd(10)} ${String(levels.length).padStart(3)} levels                          ${bots.map(cellK).join(' ')}`);
   }
   const worlds = new Map<number, LevelOut>();
   for (const o of outs) if (!worlds.has(o.id) || o.chunks > (worlds.get(o.id) as LevelOut).chunks) worlds.set(o.id, o);
@@ -616,22 +654,77 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   const chunks = ws.reduce((a, o) => a + o.chunks, 0);
   console.log(`  worlds: ${chunks} chunks, rescues/chunk ${(ws.reduce((a, o) => a + o.rescues, 0) / Math.max(1, chunks)).toFixed(3)}, unresolved ${ws.reduce((a, o) => a + o.unresolved, 0)}`);
 
-  // Gates (CAMPAIGN_PLAN §3 "Fairness").
+  // Gates (CAMPAIGN_PLAN §3 "Fairness", docs/V1_6_PLAN.md §2.6).
   const failures: string[] = [];
-  const gate = (hard: boolean, what: string, bot: BotKind, hi: number, bar: number): void => {
+  const line = (hard: boolean, ok: boolean, what: string, got: string): void => {
+    if (hard && !ok) failures.push(what);
+    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}`);
+  };
+  const gate = (hard: boolean, what: string, bot: string, hi: number, bar: number): void => {
     if (!bots.includes(bot)) return;
     const rs = of(bot, 1, hi);
     const p = pct(rs);
-    const ok = rs.length > 0 && p >= 100 * bar;
-    if (hard && !ok) failures.push(what);
     const failed = [...new Set(rs.filter((o) => !o.passed).map((o) => o.id))];
-    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${p.toFixed(1)}% of ${rs.length}${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
+    line(hard, rs.length > 0 && p >= 100 * bar, what, `${p.toFixed(1)}% of ${rs.length}${failed.length ? ` (failed: ${failed.join(', ')})` : ''}`);
   };
   console.log('\nGates:');
-  gate(true, 'oracle passes every level', 'oracle', LEVEL_COUNT, 1);
-  gate(true, 'reactive passes ≥ 95% of levels 1-100', 'reactive', 100, 0.95);
+  gate(true, 'oracle passes every level (verb goals included)', 'oracle', LEVEL_COUNT, 1);
+  gate(true, 'reactive passes ≥ 95% of levels 1-100 (teaching verb goals scored as finish)', 'reactive', 100, 0.95);
+  if (bots.includes('oracle+feats')) {
+    const rs = of('oracle+feats');
+    const p = rs.filter((o) => o.passed && o.featMet).length / Math.max(1, rs.length);
+    const missed = rs.filter((o) => !(o.passed && o.featMet)).map((o) => o.id);
+    line(true, p >= 0.85, 'the Feat-seeking oracle earns ★2 (goal and a Dare) on ≥ 85% of levels', `${(100 * p).toFixed(1)}%${missed.length ? ` (missed: ${missed.join(', ')})` : ''}`);
+  }
   gate(false, 'humanDial passes ≥ 75% of levels 1-40 (advisory)', 'humanDial', 40, 0.75);
-  gate(false, 'humanDial passes ≥ 90% of levels 1-10 (advisory)', 'humanDial', 10, 0.9);
+  if (bots.includes('humanDial')) {
+    // The soft-fail: the player retries the level (the tries in order); a try after two goal misses
+    // on it scores its goal as 'finish'. A level counts as passed when one of its tries passes.
+    let pass = 0;
+    let n = 0;
+    let triesPassed = 0;
+    let tries = 0;
+    for (let id = 1; id <= Math.min(10, LEVEL_COUNT); id++) {
+      if (!ids.includes(id)) continue;
+      n++;
+      let misses = 0;
+      let ok = false;
+      for (const o of [...of('humanDial', id, id)].sort((a, b) => a.salt - b.salt)) {
+        tries++;
+        const p = o.passed || (misses >= SOFT_FAIL_MISSES && o.phase === 'won');
+        if (p) triesPassed++;
+        else if (o.phase === 'won') misses++;
+        if (p) ok = true;
+      }
+      if (ok) pass++;
+    }
+    line(false, n > 0 && pass >= 0.9 * n, 'humanDial passes ≥ 90% of levels 1-10 with the soft-fail (advisory)', `${((100 * pass) / Math.max(1, n)).toFixed(1)}% of ${n} levels (${((100 * triesPassed) / Math.max(1, tries)).toFixed(1)}% of ${tries} tries)`);
+    const ms = meanStars(of('humanDial', 41, 200));
+    line(false, ms >= 0.95, 'humanDial mean stars on 41-200 ≥ 0.95 (advisory)', ms.toFixed(2));
+  }
+  if (bots.includes('reactive')) {
+    const rs = of('reactive', 41, 200);
+    const three = rs.filter((o) => o.stars === 3).length / Math.max(1, rs.length);
+    line(false, three <= 0.5, 'reactive three-star share on 41-200 ≤ 50% (advisory)', `${(100 * three).toFixed(1)}%`);
+  }
+  // Per Dare kind (advisory): non-seeking reactive and oracle ≤ 35%, the seeking oracle ≥ 85%, humanFeat ≥ 50%.
+  for (const k of dareKinds) {
+    const levels = ids.filter((id) => (CAMPAIGN_LEVELS[id - 1] as LevelDef).feats.some((f) => f.kind === k));
+    const share = (b: string): number => {
+      const rs = outs.filter((o) => o.bot === b && levels.includes(o.id));
+      return rs.length ? rs.filter((o) => o.featMet).length / rs.length : NaN;
+    };
+    const parts = [
+      ['reactive', share('reactive'), (v: number) => v <= 0.35],
+      ['oracle', share('oracle'), (v: number) => v <= 0.35],
+      ['oracle+feats', share('oracle+feats'), (v: number) => v >= 0.85],
+      ['humanFeat', share('humanFeat'), (v: number) => v >= 0.5],
+    ] as const;
+    const shown = parts.filter(([, v]) => !Number.isNaN(v));
+    if (shown.length === 0) continue;
+    const ok = shown.every(([, v, f]) => f(v));
+    console.log(`  ${ok ? 'PASS' : 'MISS'}  Dare '${k}' (${levels.length} levels; advisory): ${shown.map(([b, v]) => `${b} ${(100 * v).toFixed(0)}%`).join(', ')}`);
+  }
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
     process.exit(1);

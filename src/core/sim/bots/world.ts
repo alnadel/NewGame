@@ -3,6 +3,7 @@
 // 18 ticks), the oracle's Noon Heat and flare step costs, glass and Feat terms, and humanFeat's Dare
 // focus. bots.ts calls these hooks at fixed points. No allocation per call.
 
+import { splitmix32 } from '../../../config/rng.ts';
 import { TUNING } from '../../../config/tuning.ts';
 import { dayAtTick, dayStartTick, DT, minutesOfDay } from '../../clock.ts';
 import { liftingFlare, noonHeatAt } from '../../gen/plan.ts';
@@ -10,6 +11,7 @@ import { chillDeltaTable, slidingMaxCircular, stepLitLive } from '../../gen/vali
 import { BINS, binOf } from '../../intervals.ts';
 import { FLARE_KEPT, type Flare } from '../../objects.ts';
 import type { BotHookCtx } from '../bots.ts';
+import { dareBonus, dareSnap, dareTarget } from './dares.ts';
 import type { SimState } from '../types.ts';
 
 const STEP = TUNING.validator.stepTicks;
@@ -165,10 +167,32 @@ export function worldOracleBonus(ctx: BotHookCtx, s: SimState, b: number, slack:
   if (parryOn && slack >= PARRY_SLACK) v += PARRY_W * (parryV[b] as number);
   // Glass (§2.3): a bin that shades the nearest alive glass flake in its melt window, while comfortable.
   if (ctx.mech && slack >= ORACLE_GLASS_SLACK && s.guide.flake[b] === 1) v += ORACLE_GLASS;
+  // §2.6: the level's unmet verb goal, and the Feat-seeking oracle's unmet Dares.
+  if (s.level) v += dareBonus(s, b, slack, ctx.opts.feats === true);
   return v;
 }
 
-/** humanFeat, each decision: the aim target (`target` is humanDial's pick; the Dare focus may replace it). */
-export function worldHumanTarget(_ctx: BotHookCtx, _s: SimState, target: number): number {
-  return target;
+/** Oracle, each plan: the Cold Snap decision after the economy's (the Feat-seeking oracle's snapSave Dare, §2.6). */
+export function worldOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slack: number): boolean {
+  return dareSnap(s, snap, slack, ctx.opts.feats === true);
+}
+
+/** humanFeat's share of decisions that aim for the level's Dare (§2.6: a seeded 50% focus). */
+const FEAT_FOCUS = 0.5;
+
+/** humanFeat's focus coin is drawn per window of this many ticks (about one decision). */
+const FOCUS_TICKS = 30;
+
+/**
+ * humanFeat, each decision: the aim target (`target` is humanDial's pick, −1 while it would not
+ * move). In FEAT_FOCUS of the half-second windows (a coin from the run's seed and the window: its
+ * own stream, independent of humanDial's) it aims for the level's first unmet Dare instead
+ * (bots/dares.ts), when the dial shows one; its lag and aim error still apply.
+ */
+export function worldHumanTarget(_ctx: BotHookCtx, s: SimState, target: number): number {
+  if (!s.level) return target;
+  const coin = (splitmix32((s.cfg.seed ^ Math.imul(Math.floor(s.tick / FOCUS_TICKS) + 1, 0x9e3779b1)) >>> 0) >>> 0) / 4294967296;
+  if (coin >= FEAT_FOCUS) return target;
+  const t = dareTarget(s, s.sun.theta);
+  return t >= 0 ? t : target;
 }

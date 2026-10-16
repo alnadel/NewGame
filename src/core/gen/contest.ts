@@ -241,17 +241,22 @@ export function clusterEligible(w: World, job: ValidationJob, y: number): boolea
  * The contest test of a cluster whose first flake is at (x0, y0) and last at (x1, y1), against the
  * job of its chunk: the last flake's S_free ≤ need − 2, the uncapped detour cost C0 − C1 within
  * [costMin, costMax], the capped C1 ≥ floor + marginChill, and the first flake's capped C1 too.
+ * `savableOnly` (the Glass Flakes lesson's fallback) keeps only the last two: a perfect player can
+ * save it without risking the floor.
  */
-export function contestCluster(w: World, job: ValidationJob, x0: number, y0: number, x1: number, y1: number): ClusterContest {
+export function contestCluster(w: World, job: ValidationJob, x0: number, y0: number, x1: number, y1: number, savableOnly = false): ClusterContest {
   verdict.eligible = false;
   verdict.contested = false;
   verdict.cost = 0;
   if (!meltWindow(w, job, y1, B.meltBudget)) return verdict;
   verdict.eligible = true;
   computeM(w, job, x1, y1);
-  if (freeHits(job) > out.need - 2) return verdict;
-  const cost = chillDP(w, job, 1, false) - chillDP(w, job, out.need + 1, false);
-  if (cost < B.costMin || cost > B.costMax) return verdict;
+  let cost = 0;
+  if (!savableOnly) {
+    if (freeHits(job) > out.need - 2) return verdict;
+    cost = chillDP(w, job, 1, false) - chillDP(w, job, out.need + 1, false);
+    if (cost < B.costMin || cost > B.costMax) return verdict;
+  }
   const floor = out.floor + B.marginChill;
   if (chillDP(w, job, out.need + 1, true) < floor) return verdict;
   // The first flake must be savable too.

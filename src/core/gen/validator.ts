@@ -599,8 +599,8 @@ function candidateFits(w: World, job: ValidationJob, i: number, c: Flare): boole
   const t0 = dayStartTick(day);
   const dl = Math.round(paramsAt(w, day).dayLen * TICK_HZ);
   if (c.warnTick < t0 || c.endTick > t0 + dl) return false;
-  // Flares avoid noon (the Noon Heat window 11 AM-1 PM, [5/12, 7/12) of the day).
-  if (12 * (c.endTick - t0) > 5 * dl && 12 * (c.riseTick - t0) < 7 * dl) return false;
+  // Endless flares avoid noon (the Noon Heat window 11 AM-1 PM, [5/12, 7/12) of the day); a boss's middle phase may not.
+  if (!w.level && 12 * (c.endTick - t0) > 5 * dl && 12 * (c.riseTick - t0) < 7 * dl) return false;
   const fl = w.flares;
   const gap = Math.round(FL.gapSec * TICK_HZ);
   for (let k = i - 1; k >= 0; k--) {

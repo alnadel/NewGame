@@ -50,8 +50,20 @@ export interface LevelBake {
   readonly balls: number;
   /** Glass clusters on the trail. */
   readonly glass: number;
-  /** Lock and gust windows in the level's daylight. */
+  /** Lock and gust windows in the level's daylight, and the holdable ones (some bin fully shaded through the window). */
   readonly windows: number;
+  readonly holdable: number;
+  /** Plain flakes on the trail. */
+  readonly flakes: number;
+  /** Ticks of the level's daylight with a bin in deep shade at Nubs' place on the trail (the validator's step grid). */
+  readonly deep: number;
+  /** The longest stretch (s) one cloud can cover all five of Nubs' samples, and the clouds that can for ≥ 1 s. */
+  readonly rideBest: number;
+  readonly rides: number;
+  /** SWING hand-offs the trail offers (a lit gap of 42-60° between two sources' full shade), at most one per 2 s. */
+  readonly swings: number;
+  /** The longest stretch (ticks) a turn-limited path stays fully shaded (what the ring Dare needs). */
+  readonly shadeRun: number;
   /** The level's flares after the keep test (the kept ones; the boss's HP is their count). */
   readonly flares: readonly LevelFlare[];
 }
@@ -452,7 +464,7 @@ export function isBossFinale(id: number): boolean {
  * 0.55 and 0.80 of the level (d 10); a boss finale min(8, floor(level seconds / 3.2)) in three phases
  * (0.20-0.40, 0.50-0.68, 0.76-0.92 of the level, d 10, 13 and 16), spread evenly in each phase.
  */
-function nominalFlares(id: number, startMinute: number, lengthMinutes: number): readonly LevelFlare[] {
+export function nominalFlares(id: number, startMinute: number, lengthMinutes: number): readonly LevelFlare[] {
   const out: LevelFlare[] = [];
   const at = (frac: number, d: number): void => {
     out.push(Object.freeze({ minute: startMinute + frac * lengthMinutes, d }));
@@ -480,22 +492,28 @@ function nominalFlares(id: number, startMinute: number, lengthMinutes: number): 
 /** The fingerprint of a level's world identity that its bake entry must match (hex). */
 export function levelBakeKey(seed: number, concepts: readonly ConceptId[], drain: number, startMinute: number, lengthMinutes: number, biome: BiomeId, forecast: ForecastId, flares: readonly LevelFlare[]): string {
   const f = flares.map((x) => `${x.minute}:${x.d}`).join(',');
-  return hashString(`${seed}|${concepts.join(',')}|${drain}|${startMinute}|${lengthMinutes}|${biome}|${forecast}|${f}|v${BAKE_VERSION}`).toString(16);
+  const tune = JSON.stringify(foldTuning(concepts));
+  return hashString(`${seed}|${concepts.join(',')}|${tune}|${drain}|${startMinute}|${lengthMinutes}|${biome}|${forecast}|${f}|v${BAKE_VERSION}`).toString(16);
 }
 
 /** Bump when the generator changes what a level offers (every bake entry goes stale). */
 export const BAKE_VERSION = 1;
 
 /** The concepts a level carries that set a mechanic or world feature a Dare needs. */
-function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], keptFlares: number, bake: LevelBake | null): boolean {
+function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], keptFlares: number, bake: LevelBake | null, sec: number): boolean {
   const m = mechanicsOf(id);
   switch (kind) {
     case 'blooms':
       return m.buds;
     case 'deep':
-      return m.deep;
+      // Deep shade the level offers: at least DEEP_OFFER × the smallest deep Dare.
+      return m.deep && (bake === null || bake.deep >= DEEP_OFFER * DEEP_MIN_TICKS);
+    case 'flakes':
+      return bake === null || bake.flakes >= FLAKES_OFFER_MIN;
     case 'snapSave':
-      return m.snap;
+      // A snap earned on the level: its gold must be able to fill the bank from the level's start
+      // (SNAP_BLOOM_SHARE of the buds blooming).
+      return m.snap && (bake === null || SNAP_BLOOM_SHARE * bake.buds * TUNING.bank.bloomH >= TUNING.bank.costH - TUNING.bank.campaignStartH);
     case 'brittle':
       return m.brittle && (bake === null || bake.glass > 0);
     case 'parry':
@@ -503,15 +521,38 @@ function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], ke
     case 'clean':
       return bake === null || bake.balls > 0;
     case 'still':
-      return bake === null || bake.windows > 0;
+      return bake === null || bake.holdable > 0;
+    case 'swings':
+      return bake === null || bake.swings >= SWING_OFFER_PER * (sec > 30 ? 3 : 2);
+    case 'ring':
+      return bake === null || bake.shadeRun >= RING_RUN_X3;
     case 'ride': {
+      // A ride the level offers with room to spare: one cloud for RIDE_OFFER_SEC, or RIDE_OFFER_CLOUDS clouds for ≥ 1 s.
       const t = foldTuning(concepts);
-      return (t?.cloudCount ?? 1) > 0;
+      if ((t?.cloudCount ?? 1) <= 0) return false;
+      return bake === null || bake.rideBest >= RIDE_OFFER_SEC || bake.rides >= RIDE_OFFER_CLOUDS;
     }
     default:
       return true;
   }
 }
+
+/** The deep Dare's least target (ticks), and the deep shade a level must offer per target tick to carry it. */
+const DEEP_MIN_TICKS = 90;
+const DEEP_OFFER = 5;
+/** The ride Dare needs a level offering one cloud ride of this many seconds, or this many clouds for ≥ 1 s. */
+const RIDE_OFFER_SEC = 3.5;
+const RIDE_OFFER_CLOUDS = 4;
+/** The flakes Dare needs this many plain flakes on the trail; it asks for 80% of the expected flakes, expected being 85% of those offered. */
+const FLAKES_OFFER_MIN = 5;
+const FLAKES_EXPECTED = 0.85;
+/** The snapSave Dare needs gold enough to bank a snap from a level's start with this share of its buds bloomed. */
+const SNAP_BLOOM_SHARE = 0.6;
+/** The swings Dare needs this many SWING hand-offs offered per SWING asked. */
+const SWING_OFFER_PER = 4;
+/** The ring Dare: x3 needs a fully shaded stretch of this many ticks on offer, x4 this many (else x3). */
+const RING_RUN_X3 = 600;
+const RING_RUN_X4 = 1100;
 
 /** A Dare's target on a level (§2.6 table), sized from what the level offers. */
 function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): number {
@@ -522,7 +563,7 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
     case 'swings':
       return sec > 30 ? 3 : 2;
     case 'deep':
-      return Math.max(90, Math.round(0.12 * daylightTicks));
+      return Math.max(DEEP_MIN_TICKS, Math.min(Math.round(0.12 * daylightTicks), bake ? Math.floor(bake.deep / DEEP_OFFER) : Infinity));
     case 'snapSave':
       return 60;
     case 'parry':
@@ -530,13 +571,13 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
     case 'brittle':
       return Math.max(1, Math.ceil(0.6 * (bake ? bake.glass : 1)));
     case 'flakes':
-      return Math.max(3, Math.round(0.8 * flakes));
+      return Math.max(3, Math.round(0.8 * (bake ? Math.min(flakes, FLAKES_EXPECTED * bake.flakes) : flakes)));
     case 'clean':
       return Math.max(1, bake ? bake.balls : 1);
     case 'still':
-      return Math.max(1, Math.ceil((bake ? bake.windows : 2) / 2));
+      return Math.max(1, Math.ceil((bake ? bake.holdable : 2) / 2));
     case 'ring':
-      return sec <= 25 ? 3 : 4;
+      return sec <= 25 || (bake !== null && bake.shadeRun < RING_RUN_X4) ? 3 : 4;
     default:
       return 1;
   }
@@ -548,7 +589,7 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
  * finale the parry Dare, a teaching finale another core verb.
  */
 function assignFeats(id: number, seed: number, concepts: readonly ConceptId[], lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): readonly FeatSpec[] {
-  const fits = (k: FeatKind): boolean => dareFits(k, id, concepts, keptFlares, bake);
+  const fits = (k: FeatKind): boolean => dareFits(k, id, concepts, keptFlares, bake, (lengthMinutes / 720) * dayLen);
   const spec = (k: FeatKind): FeatSpec => Object.freeze({ kind: k, target: dareTarget(k, lengthMinutes, dayLen, daylightTicks, flakes, keptFlares, bake) });
   const rng = rngFor(seed, 'dare', id);
   const fallback = (not: FeatKind | null): FeatKind => {

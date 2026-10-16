@@ -730,6 +730,9 @@ function glassSpot(w: World, k: number, y: number, n: number, day: number, p: Da
     // Close enough to the aim: the remaining shifts are not worth their DPs.
     if (d <= GLASS_AIM_TOL) break;
   }
+  // The Glass Flakes lesson (its own level) must offer glass: without a contested shift, a cluster
+  // a perfect player can save where it was drawn.
+  if (best === null && w.level?.introduces === 'brittle' && contestCluster(w, job, trailX(w.trail, y), y, trailX(w.trail, y + span), y + span, true).contested) best = y;
   if (best !== null) w.glassMade++;
   return best;
 }
