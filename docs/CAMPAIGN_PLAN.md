@@ -234,21 +234,28 @@ docs/V1_6_PLAN.md §2.3, §2.5, §2.6 (CORE-2); the core API is src/core/README.
   ride 1 (needs a 3.5 s ride or 4 clouds), gates 1 deep, flip 1, still half the holdable windows,
   ring x4 (x3 on levels of 25 s or less, or without an 1100-tick shaded stretch on offer).
 
-`node scripts/sim.ts --campaign --bot all --tries 3` (v1.6, this branch; pass % and mean stars per
-level over all 200 levels; humanDial and humanFeat × 3 decision streams):
+- **The Frost Bank ships off** (calibration, src/core/README.md §16.3), so a level plays the v1.5
+  frost meter: it starts at half a meter (full on the Cold Snap's own level, L10), shade, flakes,
+  SWINGs and blooms fill it. The snapSave Dare and L10's goal still count a snap that saves Nubs; the
+  Dare's fit (`SNAP_BLOOM_SHARE`) is sized for the Bank and stays conservative without it.
+
+`node scripts/sim.ts --campaign --bot all --tries 3` (v1.6 as shipped, after calibration; pass % and
+mean stars per level over all 200 levels; humanDial and humanFeat × 3 decision streams):
 
 | bot | passed | stars (1-40 / 41-200) | three stars | Dare met |
 |---|---|---|---|---|
-| oracle | 200/200 | 2.32 (2.40 / 2.30) | 89 | 50.5% |
-| reactive | 199/200 (100/100 on 1-100) | 2.37 (2.42 / 2.36) | 88 | 50.0% |
-| Feat-seeking oracle | 200/200 | 2.75 | 155 | 90.5% |
-| humanDial | 62.2% of tries (77.5% on 1-40) | 0.91 (1.17 / 0.84) | 23 | 22.0% |
-| humanFeat | 64.3% of tries | 1.06 (1.31 / 1.00) | 27 | 35.2% |
+| oracle | 200/200 | 2.35 (2.48 / 2.32) | 91 | 53.0% |
+| reactive | 199/200 (100/100 on 1-100) | 2.43 (2.48 / 2.42) | 99 | 53.0% |
+| Feat-seeking oracle | 200/200 | 2.79 (2.77 / 2.80) | 162 | 94.0% |
+| humanDial | 62.3% of tries (77.5% on 1-40) | 0.96 (1.26 / 0.89) | 34 | 27.3% |
+| humanFeat | 65.0% of tries | 1.14 (1.40 / 1.07) | 34 | 42.0% |
 
-Hard gates (§2.6): oracle 200/200 with the verb goals, reactive 100% of 1-100 (teaching verb goals
-scored as finish), the Feat-seeking oracle ★2 on 90.5% (≥ 85%). Advisory: reactive three stars on
-41-200 44.4% (≤ 50%; v1.5 74%); humanDial passes all of levels 1-10 with the soft-fail (76.7% of
-its tries) but earns 0.84 stars on 41-200 (target ≥ 0.95); the non-seeking bots meet most Dare kinds on more than 35% of their levels
-(ring, flakes, ride, deep, still, flip): those Dares are sized from the offer, not against the
-bots. The ring and snapSave Dares depend on CORE-1's Flow Ring and Frost Bank and were measured on
-the v1.5 multiplier and meter; re-measure after the merge.
+Hard gates (§2.6): oracle 200/200 with the verb goals and every boss finale, reactive 100% of 1-100
+(teaching verb goals scored as finish), the Feat-seeking oracle ★2 on 94.0% (≥ 85%; it misses 4, 9,
+23, 31, 32, 38, 66, 92, 105, 131, 148, 190). Advisory: reactive three stars on 41-200 50.0% (≤ 50%;
+v1.5 74%); humanDial passes all of levels 1-10 with the soft-fail (76.7% of its tries) and 77.5% of
+1-40, but earns 0.89 stars on 41-200 (target ≥ 0.95). Per Dare kind the non-seeking bots meet most
+kinds on more than 35% of their levels (ring 100%, deep 90% reactive, ride 56-61%, flakes 55-64%):
+those Dares are sized from what the level offers, not against the bots; swings (6-12%) and still
+(33-58%) are the real asks. With the Bank switched on (`--on bank`) the Journey gates pass as well
+(oracle 200/200, reactive 100% of 1-100, Feat-seeking oracle 94.5%).

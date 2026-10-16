@@ -484,6 +484,8 @@ identity). Code: `sim/mechanics.ts` (buds, frost, snap), `computeCoverage`/`appl
 The base commit of v1.6: every shape below exists and is exported from `index.ts`. The contract
 landed them as stubs; the owners filled the bodies (§16.1 economy, §16.2 world and Journey), and
 since the integration `hashState` reads the new state and the goldens are the merged sim's.
+Calibration (§16.3) ships every rule but the **Frost Bank**: `V16_SHIP` is the default of
+`RunConfig.v16`, so a run plays the v1.5 frost meter (§15) unless it switches the Bank on.
 Owners (§9 as amended by A2): **CORE-1** economy (ring, bank, garden), **CORE-2** world and Journey
 (flares, Noon Heat, glass, Dares, guide.deep/flake/flare), **GAME** render, HUD, audio, input and
 META's items. Shared files (`sim/types.ts`, `events.ts`, `objects.ts`, `tuning.ts` block shapes,
@@ -493,7 +495,7 @@ ruleset 15, `RULES16_DATE`, challenge `r`, dual hashing or `--rules`.
 
 | Shape | Where | Body owner |
 |---|---|---|
-| `V16Rules`, `V16_ALL`, `V16_NONE`, `V16_RULES`; `RunConfig.v16` → `World.v16` (world identity) | sim/types.ts, gen/world.ts | shared (kill switches) |
+| `V16Rules`, `V16_ALL`, `V16_NONE`, `V16_RULES`, `V16_SHIP` (the shipped default: all but `bank`); `RunConfig.v16` (unset keys take `V16_SHIP`'s) → `World.v16` (world identity) | sim/types.ts, gen/world.ts | shared (kill switches) |
 | `RunConfig.relaxedGoal` (read by `levelOutcome`), `RunConfig.brittleShare` → `World.brittleShare` | sim/types.ts, level.ts | CORE-2 |
 | NubsState `ringCharge`, `litStartMult`, `budGrewTick`, `streak`, `swFresh` (Int32Array 16), `swFreshN` | sim/types.ts | CORE-1 |
 | NubsState `frostH` (mirrors `floor(100·frost)` until the Bank inverts it), `swingFrostTick` | sim/types.ts, mechanics.ts | CORE-1 |
@@ -517,7 +519,7 @@ ruleset 15, `RULES16_DATE`, challenge `r`, dual hashing or `--rules`.
 | `BotKind` + `'humanFeat'` (plays like humanDial on its own stream), `BotOptions` (`policy`, `snap`, `preAim`, `feats`), `BotPolicy`, `BOT_POLICIES`, `createBot(kind, salt, mechanics, opts)` | sim/bots.ts | shared |
 | Bot hooks (no-ops): `econReactiveScore/Snap`, `econOracleBonus/Snap` | sim/bots/econ.ts | CORE-1 |
 | Bot hooks (no-ops): `worldReactiveScore/Aim`, `worldOracleBonus`, `worldHumanTarget` | sim/bots/world.ts | CORE-2 |
-| sim flags `--off ring,bank,garden,brittle,flares,noonHeat` (real: RunConfig.v16 on every row, campaign and career too), `--policy` (real on the reactive mechanics rows), `--hours`, `--decisions`, `--bake` ("not implemented yet") | scripts/sim.ts | shared |
+| sim flags `--off ring,bank,garden,brittle,flares,noonHeat` and `--on …` (RunConfig.v16 over `V16_SHIP` on every row, campaign and career too; `--on bank` measures the Bank), `--policy` (the reactive mechanics rows), `--hours`, `--decisions`, `--bake` | scripts/sim.ts | shared |
 | Report registry: `Sim16Module` (per-run `collector` in the workers, `report` after the v1.5 report, `modes`) | scripts/sim16/registry.ts | shared |
 | `ECON` (`--policy` note, `--decisions`) / `WORLD` (`--hours`, `--bake`) | scripts/sim16/econ.ts / world.ts | CORE-1 / CORE-2 |
 
@@ -528,19 +530,25 @@ telegraph (each layer lights up once its owner fills the body).
 ### 16.1 Economy (CORE-1: §2.1 Flow Ring, §2.2 Frost Bank, §2.4 Frost Garden and Landing, T2-T5)
 
 Every rule keys off `World.v16` (`ring`, `bank`, `garden`); with all three off the v1.5 multiplier,
-meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `sim/mechanics.ts`
-(bank, cash-in, garden, re-aim, guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts`
-(start frost), `sim/bots/econ.ts`, `scripts/sim16/econ.ts`; values in `TUNING.ring/.bank/.garden`.
+meter and snap return. **Shipped: ring and garden on, the Frost Bank off** (`V16_SHIP`, §16.3): the
+v1.5 meter fills (shade, flakes, SWINGs, blooms, and the parries and saved glass clusters of
+`payTrick`) and a snap empties it; a snap does not cash the ring in, and the landing and the
+Garden's banking pay no frost. Everything below still runs with `v16: { bank: true }`. Code:
+`sim/nubs.ts` (ring, freshness, PHEW, landing), `sim/mechanics.ts` (bank, cash-in, garden, re-aim,
+guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
+`sim/bots/econ.ts`, `scripts/sim16/econ.ts`; values in `TUNING.ring/.bank/.garden`.
 
 - **Flow Ring** (daylight only). `nubs.mult` 1..5 is the level of `nubs.ringCharge` (integer units).
   A full-shade tick (snap cover included) adds `shadeUnits` 5 (×`deepMul` 2 in deep shade); the
   first `freeLitTicks` 6 lit ticks of a stretch are free, then each lit tick bleeds
-  `bleedK[m−1]·Σw` (Σw = the 5 sample weights, glare 2), except on the tick after a bud grew
-  (`nubs.budGrewTick`). At `need[m−1]` (900/1200/1800/2400) the level rises (`multUp {level,
-  reason}`, remainder kept; x5 keeps at most 2400); below 0 it drops one level to ¾ of the new
-  level's need (`multDown {from, to, cause: 'bleed'}`); x1 floors at 0. `multReset` is never
-  emitted with the ring on. `nubs.shadeTicks` mirrors the progress to the next level in v1.5 units
-  (`floor(charge · mult.stepTicks / need)`) for the old HUD bar.
+  `bleedK[m−1]·Σw` (Σw = the 5 sample weights, glare 2; `bleedK` 2/3/6/12/24), except on the tick
+  after a bud grew (`nubs.budGrewTick`). At `need[m−1]` (1080/1440/2160/2880, calibrated +20% from
+  the plan's 900/1200/1800/2400: 25.2 s of plain shade from x1 to x5) the level rises (`multUp
+  {level, reason}`, remainder kept; x5 keeps at most 2880, which full sun bleeds in 0.4 s and
+  edge-riding in 2 s); below 0 it drops one level to ¾ of the new level's need (`multDown {from,
+  to, cause: 'bleed'}`); x1 floors at 0. `multReset` is never emitted with the ring on.
+  `nubs.shadeTicks` mirrors the progress to the next level in v1.5 units (`floor(charge ·
+  mult.stepTicks / need)`) for the old HUD bar.
 - **Tricks** (`ringTrick {kind, units}`, `stats.ringTricks`): +`trick` 600 for a fresh SWING, a
   bloom, an own landing (and CORE-2's saved glass cluster and flare parry: call
   `ringTrick(s, kind, units)` from nubs.ts); +`streakTrick` 300 for every 3rd flake or crystal in a
@@ -563,10 +571,11 @@ meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `si
 - **castSnap** needs `frostH ≥ costH` and subtracts it, then cashes the ring in: `frostH +=
   cashPerLevelH·(m − 1)`, the ring back to x1 at 0 (`multDown {cause: 'snap'}` when m > 1, then
   `snapCash {level, refundH}` and `frostGain {source: 'cash'}`). Charges carry through night and dawn.
-- **Start frost** (`createRun`): Endless/Daily/challenge `runStartH`, lesson runs 0, Journey
+- **Start frost** (`createRun`, Bank on): Endless/Daily/challenge `runStartH`, lesson runs 0, Journey
   `campaignStartH` 50, the Cold Snap's own level `teachStartH` 100; `RunConfig.startFrost` (charges
   0..2) overrides. `runStartH` is **0**: measured, the starting charge alone added +683 min (mean,
-  80 seeds) to the reactive bot, over the plan's 120-minute bar (§2.2).
+  80 seeds) to the reactive bot, over the plan's 120-minute bar (§2.2). With the Bank off (shipped)
+  the v1.5 start applies: 0 in Endless, 0.5 on a Journey level, full on the Cold Snap's.
 - **Frost Garden** (while `s.snapTicks > 0`): buds within [y − 30, y + `reach` 420] grow ×`growMul`
   2 (guide.bud uses the same reach; a flare's rise and hold use `TUNING.flare.budMul` instead when
   larger, never the product, once CORE-2's `s.flarePhase` runs). A bloom under the snap adds
@@ -608,7 +617,9 @@ meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `si
   under a snap, priced moments) and frost income by source, with the §2.1/§2.2/§2.4 gates (hard:
   reactive x5 ≤ 20% and mean x2.8-3.8, full bank ≤ 10%, dial-only ≤ 0.15 meters a day).
   `--decisions [--seeds 80]` plays reactive plain/chase/naive/safe, plain with plan snaps, dial-only,
-  humanDial R2-R4 and plain with every v1.6 rule off, and checks §2.2's gates.
+  humanDial R2-R4 and plain with every v1.6 rule off, and checks §2.2's gates; the Bank's own rows
+  (full bank, dial-only income) print `n/a` with the v1.5 meter's full share while the Bank is off
+  (`--on bank` measures it), as `--check` already did.
 
 ### 16.2 World and Journey (CORE-2: §2.3 glass, §2.5 Heat Flares and Noon Heat, §2.6 Dares, T1, T6, T7)
 
@@ -625,7 +636,7 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   same at the world's own clock; step.ts, guide.ts, deathcause.ts, the validator rows and the bots
   all read it, so the sim and the fairness proof agree tick for tick.
 - **Noon Heat (T1).** `noonHeatAt(w, day, dayTick)`: `DayParams.noonHeat` (`noonHeatOf`: Day 1 ×1,
-  Days 2-3 ×1.1, Day 4+ ×1.2; calibrated down from the plan's 1.15/1.25, see below) while dayTick ∈
+  Days 2-3 ×1.1, Day 4+ ×1.2; down from the plan's 1.15/1.25, kept by the calibration, §16.3) while dayTick ∈
   [5/12, 7/12)·Dl, Endless only (`w.level` null), else 1. The Chill line in nubs.ts multiplies the
   drain by it; the validator uses one delta table per day slot (`deltaForSlot`, memoised per (day,
   in-window)) and the oracle one per planned step (`worldOracleDelta`).
@@ -696,3 +707,64 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   Feat-seeking oracle) adds each unmet Dare's term (pulls toward bud, deep, glass, cloud-ride, gate-deep,
   flip and window-hold bins, a committed SWING aim over a lit gap, glare lookahead, and a charged
   snap cast for snapSave); `humanFeat` aims at its first unmet Dare in a seeded half of its decisions.
+
+### 16.3 Calibration (docs/V1_6_PLAN.md §11 Steps 2-3, §6)
+
+Measured with every rule on, then with what ships (`V16_SHIP`), on `sim --check --seeds 40
+--hours`, `--decisions --seeds 80`, `--campaign --bot all --tries 3` and `--career 40 --meta`
+(profile 3 unless noted). Values tuned only inside the §11 ranges.
+
+**Shipped off: the Frost Bank** (amendment A1 / §12). At every in-range setting it failed two of
+its hard gates: the dial-only bot filled 0.23 meters a day from income (≤ 0.15; bloomH is at the
+bottom of its range, 25, and the dial-only bot's accidental blooms alone pay 0.15 a day, the fixed
+SWING, parry and glass income the rest), and naive greed outlived plain play by +1167 to +1336 min
+mean (≤ 0; cashPerLevelH 5 with extendCapTicks 30 gave +906, Noon Heat 1.3 +1201, a naive bot that
+keeps chase's Chill bar +1121, any other rule off +557 to +1207): with bloom income, greed always
+pays. With the Bank off the v1.5 meter plays and the decision gates pass; the Bank's own rows (a
+full meter, dial-only income) then measure the v1.5 meter (full 24-27% of daylight, 0.29 meters a
+day passively, as in v1.5) and print n/a. `sim … --on bank` and `RunConfig.v16 = { bank: true }`
+(the game's `?on=bank`) bring it back.
+
+**Tuned** (everything else stays at the builders' values, all inside the ranges: bloomH 25,
+runStartH 0, cashPerLevelH 10, extendCapTicks 60, glass meltBudget 0.8 and quotas 0.25/0.35,
+flare d 10 (Days 2-3) / 8 (Day 4+), holdTicks 42, warnTicks 120, Noon Heat 1.1 (Days 2-3) / 1.2):
+ring `need` +20% (1080/1440/2160/2880) and `bleedK` at x5 24. Without the Bank's cash-in a snap
+leaves the ring as it is and the snap's cover keeps filling it, so the reactive bot sat at x5 20.2%
+of daylight; now 16.1%. Survival does not move (the ring never touches coverage or Chill).
+
+| §6 metric | v1.5 | target | shipped (Bank off) | gate |
+|---|---|---|---|---|
+| Reactive mean multiplier / x5 share | x1.5 / 2% | x2.8-3.8 / ≤ 20% | x3.47 / 16.1% | hard: pass |
+| humanDial R2 Day-1 mean multiplier | x1.0-1.2 | x1.8-2.5 | x2.15 | advisory: pass |
+| Chase − plain (mean) | +147 | ≥ +150 | +157 (Bank on +587) | hard: pass |
+| Naive − plain / safe − plain | – | ≤ 0 / < 0 | −167 / −94 (Bank on +1167 / −829) | hard: pass |
+| Plan-snap − panic-snap | – | ≥ +60 | −33 | advisory: miss |
+| Full meter unspent | 14-36% | ≤ 10% | v1.5 meter 23.8% (`--check`), 26.7% (`--decisions`); Bank on 1.6% | the Bank's row: n/a |
+| Dial-only meters from income | 0.29 | ≤ 0.15 | v1.5 meter 0.29 (Bank on 0.23) | the Bank's row: n/a |
+| Reactive snaps a day | 0.37 | 0.5-0.9 | 0.36 (Bank on 0.76) | advisory: miss |
+| Glass clusters per daylight minute (Day 1 / 2+) | 0 | ≥ 1.8 / ≥ 2.5 | 0.62 / 1.09 | advisory: miss |
+| Blooms per snap (reactive) | ~0.2 | ≥ 0.8 | 1.81 | advisory: pass |
+| Lit ticks in the 40 after snapEnd (reactive / oracle) | 22 / 32 | ≤ 10 / ≤ 12 | 10.2 / 15.1 | advisory: miss |
+| Kept flares parry-feasible | – | 100% | 100% (validator test) | hard: pass |
+| Oracle parry rate | – | ≥ 70% | 91.1% | hard: pass |
+| Flare candidates kept, Days 2-4 | – | ≥ 85% | 89.5% (Days 5+ 70.4%) | hard: pass |
+| PreAim − plain parry rate | – | ≥ +15 points | +8.6 (53.5% vs 44.9%) | advisory: miss |
+| Reactive deaths at 11 AM-1 PM | 12% | ≥ 25% | 40.0% | advisory: pass |
+| Priced moments a daylight minute, Days 2-4 | – | ≥ +3 over v1.6 all off | 25.15 vs 22.74 (+2.41) | advisory: miss |
+| Reactive dial median | Day 3 · 11:33 AM | Day 2 noon-Day 4 noon | Day 3 · 10:41 AM | hard: pass |
+| Mechanics vs dial (median) | +609 min | ≥ +180 | +202 (Day 3 · 2:03 PM) | hard: pass |
+| Novice p3 median / idle / oracle | 11:34 AM / < 8 AM / Day 8 | unchanged windows | Day 1 · 11:34 AM / 100% < 8 AM / 100% Day 8 | hard: pass |
+| Rescues per chunk / unresolved | 0.22-0.25 / 0 | ≤ 0.8, ≤ +0.1 / 0 | 0.571 (heat 0.786), +0.035 / 0 | hard: pass |
+| Generation ms per chunk | 2.37 | ≤ 3.5 | 2.48 (an idle machine) | hard: pass |
+| Journey oracle / reactive 1-100 / Feat oracle ★2 | 200 / ≥ 95% / – | 200 / ≥ 95% / ≥ 85% | 200 / 100% / 94.0% | hard: pass |
+| Reactive three stars, 41-200 | 74% | ≤ 50% | 50.0% | advisory: pass |
+| humanDial mean stars, 41-200 | 1.07 | ≥ 0.95 | 0.89 | advisory: miss |
+| Career: humanDial at standard within 20 runs | 88% | ≥ 85% | 93% | advisory: pass |
+
+T8 (META mission retargets ×4 and ×5): `--career 40 --meta` completes a mission in runs 31-40 in
+83% of careers (≥ 80%), the last at run 36 (≥ 36). The other advisory misses stay open for v1.7:
+glass is contested on fewer clusters than the plan hoped (the quotas stay at 0.25/0.35: the
+plan's 1.8-2.5 a minute is out of reach of their 0.2-0.4 range), humanDial's level changes (16-17 a minute, ≤ 14), the oracle's glass saves
+(68%, ≥ 85%) and its blooms per snap (0.85, ≥ 1.2), humanDial's stars on 41-200, and the per-Dare
+shares (the non-seeking bots meet the ring, deep, ride and flakes Dares on more than 35% of their
+levels).
