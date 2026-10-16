@@ -21,17 +21,18 @@
 // stubs return their input unchanged.
 
 import { TUNING } from '../../config/tuning.ts';
-import { dayAtTick, dayStartTick, DT, elevation, TICK_HZ } from '../clock.ts';
+import { dayAtTick, dayStartTick, DT, TICK_HZ } from '../clock.ts';
 import { angleDiff, wrapDeg } from '../dmath.ts';
-import { paramsAt } from '../gen/plan.ts';
-import { chillDeltaTable, slidingMaxCircular, stepLit, stepLitLive } from '../gen/validator.ts';
+import { worldElevation } from '../gen/plan.ts';
+import { slidingMaxCircular, stepLit, stepLitLive } from '../gen/validator.ts';
 import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
-import { worldHumanTarget, worldOracleBonus, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
+import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
+import type { DareTerms } from './bots/dares.ts';
 
 export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat';
 export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat'] as BotKind[]);
@@ -50,6 +51,12 @@ export interface BotOptions {
   preAim?: boolean;
   /** Oracle: weights for the level's Dare (the Feat-seeking oracle). CORE-2. */
   feats?: boolean;
+  /**
+   * v1.6 Journey terms (bots/dares.ts `DARE_TERMS`): with them the oracle plays a level's verb goal
+   * (and with `feats` its Dares) and humanFeat aims at its Dare. Tooling passes them; unset, the
+   * bots play every level as 'finish' (and humanFeat plays like humanDial). CORE-2.
+   */
+  dares?: DareTerms;
 }
 
 /** What a v1.6 hook (bots/econ.ts, bots/world.ts) knows about the bot calling it. */
@@ -281,6 +288,8 @@ function oracleBot(ctx: BotHookCtx): Bot {
   /** 1 where the step falls in a 'lock' window (the sun cannot turn into it). */
   const locked = new Uint8Array(H + 3);
   const need = new Float64Array((H + 1) * BINS);
+  /** v1.6: the Chill-delta table of each planned step (rows like `lits`). */
+  const deltas: Float64Array[] = new Array<Float64Array>(H + 3);
   const tmp = new Float64Array(BINS);
   const win = new Float64Array(BINS);
   const reach = Math.round(cfg.rate * STEP * DT);
@@ -306,10 +315,12 @@ function oracleBot(ctx: BotHookCtx): Bot {
       const tick = j * STEP;
       const d = dayAtTick(tick);
       const dayTick = tick - dayStartTick(d);
-      night[h] = elevation(paramsAt(s.world, d), dayTick / TICK_HZ) > 0 ? 0 : 1;
+      night[h] = worldElevation(s.world, tick) > 0 ? 0 : 1;
       locked[h] = lock && sunLockedAt(dayTick) ? 1 : 0;
     }
-    const delta = chillDeltaTable(effectiveDrain(s), s.params.regen);
+    // v1.6: one Chill-delta table per step (Noon Heat, kept flares' holds; bots/world.ts).
+    const drain = effectiveDrain(s);
+    for (let h = 0; h < H + 3; h++) deltas[h] = worldOracleDelta(ctx, s, (j0 - 1 + h) * STEP, drain, s.params.regen);
     const maxC = s.nubs.maxChill;
     const campaign = s.level !== null;
     const margin = campaign ? Math.min(ORACLE_CAMPAIGN.margin, maxC / 4) : cfg.margin;
@@ -325,7 +336,7 @@ function oracleBot(ctx: BotHookCtx): Bot {
       const on = (i + 1) * BINS;
       for (let b = 0; b < BINS; b++) {
         const nn = need[on + b] as number;
-        const req = nn - (delta[litH(i + 1, b)] as number);
+        const req = nn - ((deltas[i + 2] as Float64Array)[litH(i + 1, b)] as number);
         tmp[b] = nn > maxC ? -INF : -(req < margin ? margin : req);
       }
       // A locked step cannot be turned into: the bin must already be held (CAMPAIGN 'lock').
@@ -343,7 +354,7 @@ function oracleBot(ctx: BotHookCtx): Bot {
     let bestSlack = 0;
     for (let k = -reach; k <= reach; k++) {
       const b = (b0 + k + BINS) % BINS;
-      let next = c + (delta[litH(1, b)] as number);
+      let next = c + ((deltas[2] as Float64Array)[litH(1, b)] as number);
       if (next > maxC) next = maxC;
       const slack = next - (need[BINS + b] as number);
       let v = (slack > cfg.slackCap ? cfg.slackCap : slack) - cfg.penalty * Math.abs(k) - shadeW * (lits[2 * BINS + b] as number);
@@ -367,6 +378,7 @@ function oracleBot(ctx: BotHookCtx): Bot {
       snapNext = bestSlack < cfg.snapSlack || (litNext && (campaign || (s.nubs.f > 0 && c < cfg.snapChill)));
     }
     snapNext = econOracleSnap(ctx, s, snapNext, bestSlack);
+    snapNext = worldOracleSnap(ctx, s, snapNext, bestSlack);
   }
 
   return {
@@ -542,9 +554,10 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
     const theta = s.sun.theta;
     const mask =
       useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
-    if (ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
-    const pickT = humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
-    const target = feat ? worldHumanTarget(ctx, s, pickT) : pickT;
+    // humanFeat (v1.6): a Dare focus (bots/world.ts) may move it even while it is safe.
+    const focus = feat ? worldHumanTarget(ctx, s, -1) : -1;
+    if (focus < 0 && ring.nubsLit[pick] === 0 && mask[binOf(theta)] === 1) return f;
+    const target = focus >= 0 ? focus : humanTarget(mask, ring.lit[pick] as Uint8Array, theta);
     const want = angleDiff(target, theta);
     if (target < 0 || Math.abs(want) < HUMAN_MIN_MOVE) return f;
     // Decide: over/undershoot and aim error, then a fresh lag for the next decision.

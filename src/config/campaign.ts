@@ -8,6 +8,7 @@
 import { CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, MECHANIC_CONCEPTS, TEACH_LEVELS, type ConceptId } from './concepts.ts';
 import { dayParams, dayPlan, type BiomeId } from './days.ts';
 import type { ForecastId } from './forecasts.ts';
+import { LEVEL_BAKE_RUN } from './levelBake.gen.ts';
 import { hashString, rngFor } from './rng.ts';
 import { TUNING } from './tuning.ts';
 
@@ -16,7 +17,8 @@ export { CONCEPT_CONFLICTS, CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTunin
 
 /**
  * A level's goal (star 1). v1.6 adds the verb goals of the teaching levels (docs/V1_6_PLAN.md
- * §2.6); 'snow' stays until CORE-2 retires it (T6: L7's goal becomes 1 SWING).
+ * §2.6). 'snow' is retired (T6: no level has it any more; L7's goal is 1 SWING); the literal stays
+ * in the type only until the game layer drops its Snow-goal branches.
  */
 export type GoalKind = 'finish' | 'flakes' | 'snow' | 'deep' | 'clean' | 'swings' | 'blooms' | 'snapSave' | 'gate' | 'brittle' | 'flip' | 'parry';
 
@@ -33,6 +35,38 @@ export interface FeatSpec {
 export interface LevelFlare {
   readonly minute: number;
   readonly d: number;
+}
+
+/**
+ * What `node scripts/sim.ts --bake` measured on a level's fixed seed (src/config/levelBake.gen.ts
+ * `LEVEL_BAKE`, tooling only): the Dare targets are sized from it (`bakeRunEntry`), and its flares are
+ * the level's (kept by the keep test). The game reads only the result, `LEVEL_BAKE_RUN`.
+ */
+export interface LevelBake {
+  /** levelBakeKey of the level's world identity when it was baked (the bake test checks it is current). */
+  readonly key: string;
+  /** Sunflower buds whose reach the trail passes between the start and the finish. */
+  readonly buds: number;
+  /** Gazing balls with a glare-free line (a turn-limited, survivable path that never touches their glare). */
+  readonly balls: number;
+  /** Glass clusters on the trail. */
+  readonly glass: number;
+  /** Lock and gust windows in the level's daylight, and the holdable ones (some bin fully shaded through the window). */
+  readonly windows: number;
+  readonly holdable: number;
+  /** Plain flakes on the trail. */
+  readonly flakes: number;
+  /** Ticks of the level's daylight with a bin in deep shade at Nubs' place on the trail (the validator's step grid). */
+  readonly deep: number;
+  /** The longest stretch (s) one cloud can cover all five of Nubs' samples, and the clouds that can for ≥ 1 s. */
+  readonly rideBest: number;
+  readonly rides: number;
+  /** SWING hand-offs the trail offers (a lit gap of 42-60° between two sources' full shade), at most one per 2 s. */
+  readonly swings: number;
+  /** The longest stretch (ticks) a turn-limited path stays fully shaded (what the ring Dare needs). */
+  readonly shadeRun: number;
+  /** The level's flares after the keep test (the kept ones; the boss's HP is their count). */
+  readonly flares: readonly LevelFlare[];
 }
 
 export interface LevelDef {
@@ -55,18 +89,19 @@ export interface LevelDef {
   readonly startMinute: number;
   /** In-game minutes to the finish line; only 'marathon' levels span a night. */
   readonly lengthMinutes: number;
-  /** 'finish' target 0; 'flakes' N; 'snow' N. */
+  /** 'finish' target 0; otherwise the goal's counter must reach `target` (goalMet; 'flip': within `target` ticks). */
   readonly goal: { readonly kind: GoalKind; readonly target: number };
   /**
-   * Star 1 is passing; one star for flakes ≥ `flakes`, one for a cool run: at most `sunSec` seconds
-   * in the sun (∫f dt, RunStats.litTotal) with the lowest Chill never below `minChill`.
+   * Star 1 is passing; v1.6: star 2 is a Dare (`feats`), star 3 a cool run: at most `sunSec`
+   * seconds in the sun (∫f dt, RunStats.litTotal) with the lowest Chill never below `minChill`.
+   * `flakes` is the v1.5 flake star's bar (80% / 65% of the flakes offered), kept for the UI.
    */
   readonly stars: { readonly flakes: number; readonly minChill: number; readonly sunSec: number };
   /** Chill/s at f = 1 (the campaign ignores the comfort ladder). */
   readonly drain: number;
-  /** v1.6 Dares (star 2): one, or two on finales (either earns the star). Empty until CORE-2 assigns them. */
+  /** v1.6 Dares (star 2): one, or two on finales (either earns the star). */
   readonly feats: readonly FeatSpec[];
-  /** v1.6 baked boss-finale flares (`sim --bake`). Empty until CORE-2 bakes them. */
+  /** v1.6 Heat Flares: the Solar Flare's level (38) and every boss finale of chapters 5-20 (`sim --bake`). */
   readonly flares: readonly LevelFlare[];
 }
 
@@ -153,6 +188,8 @@ export interface LevelStats {
   readonly lockWindows?: number;
   readonly gustHeld?: number;
   readonly gustWindows?: number;
+  readonly snapSavedTicks?: number;
+  readonly gateShaded?: number;
 }
 
 /** The chapter of level `id`. */
@@ -244,7 +281,7 @@ export interface Mechanics {
   readonly deep: boolean;
   /**
    * v1.6 glass (brittle) flake clusters (docs/V1_6_PLAN.md §2.3): on outside the Journey; in the
-   * Journey from the 'brittle' concept's teaching level (L21) once CORE-2 adds it (off until then).
+   * Journey from the 'brittle' concept's teaching level (L21).
    */
   readonly brittle: boolean;
 }
@@ -272,7 +309,7 @@ export function mechanicsOf(levelId: number | null): Mechanics {
       buds: levelId >= teachLevel(MECHANIC_CONCEPTS.buds),
       snap: levelId >= teachLevel(MECHANIC_CONCEPTS.snap),
       deep: levelId >= teachLevel(MECHANIC_CONCEPTS.deep),
-      brittle: false,
+      brittle: levelId >= teachLevel('brittle'),
     });
     mechanicsMemo[levelId] = m;
   }
@@ -311,7 +348,10 @@ function makeLevel(id: number): LevelDef {
   const seed = hashString(`journey-${id}`);
   const chapter = CHAPTERS[chapterOf(id) - 1] as Chapter;
   const introduces: ConceptId | null = id <= TEACH_LEVELS ? (CONCEPT_IDS[id - 1] as ConceptId) : null;
-  const concepts: readonly ConceptId[] = introduces ? [introduces] : composeConcepts(id, seed, chapter);
+  // v1.6: every boss finale of chapters 5-20 also carries the Solar Flare, appended after the draw
+  // (so the composition's draws are unchanged).
+  const composed = introduces ? [introduces] : composeConcepts(id, seed, chapter);
+  const concepts: readonly ConceptId[] = isBossFinale(id) ? [...composed, 'flare'] : composed;
   const biome = requiredBiome(concepts) ?? chapter.biome;
   let forecast: ForecastId = 'clear';
   let startMinute = 0;
@@ -343,9 +383,17 @@ function makeLevel(id: number): LevelDef {
   if (goal === 'flakes') {
     target = Math.max(3, Math.round(0.55 * flakes));
     starFlakes = Math.max(target + 1, Math.round(0.8 * flakes));
-  } else if (goal === 'snow') {
-    target = Math.max(5, Math.round(0.7 * flakes * p.snowMult));
   }
+  // v1.6 verb goals (§2.6): a teaching level asks for the verb it teaches, kept small.
+  // The Dares, kept flares and bake-sized goal targets come from the bake's result (LEVEL_BAKE_RUN).
+  const run = bakeRun(id);
+  const teach = introduces ? TEACH_GOALS[introduces] : undefined;
+  if (teach) {
+    goal = teach;
+    target = teach === 'clean' ? (run?.goal ?? 1) : (TEACH_TARGETS[teach] ?? 1);
+  }
+  const flares = run ? run.flares : NO_FLARES;
+  const feats = run ? run.feats : NO_FEATS;
   return Object.freeze({
     id,
     chapter: chapter.id,
@@ -360,13 +408,258 @@ function makeLevel(id: number): LevelDef {
     goal: Object.freeze({ kind: goal, target }),
     stars: Object.freeze({ flakes: starFlakes, minChill: Math.round(0.2 * p.maxChill), sunSec: Math.round((2.2 * lengthMinutes * p.dayLen) / 720) / 10 }),
     drain,
-    feats: NO_FEATS,
-    flares: NO_FLARES,
+    feats,
+    flares,
   });
 }
 
-const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
+// ---------------------------------------------------------------------------------------------
+// v1.6 Journey (docs/V1_6_PLAN.md §2.5, §2.6; CORE-2): verb goals, Dares, flare levels.
+
+/** The verb goal of a teaching level, by the concept it teaches (others keep their concept's goal). */
+const TEACH_GOALS: Readonly<Partial<Record<ConceptId, GoalKind>>> = Object.freeze({
+  deep: 'deep',
+  glare: 'clean',
+  swing: 'swings',
+  bloom: 'blooms',
+  snap: 'snapSave',
+  gate: 'gate',
+  brittle: 'brittle',
+  eclipse: 'flip',
+  flare: 'parry',
+});
+
+/** Verb goal targets: deep and snapSave in ticks (1.5 s, 1 s), flip within 60 ticks of the flip; clean comes from the bake. */
+const TEACH_TARGETS: Readonly<Partial<Record<GoalKind, number>>> = Object.freeze({ deep: 90, swings: 1, blooms: 1, snapSave: 60, gate: 1, brittle: 1, flip: 60, parry: 2 });
+
+/** Every concept's Dare (§2.6 table). */
+export const DARE_OF: Readonly<Record<ConceptId, FeatKind>> = Object.freeze({
+  bloom: 'blooms', drought: 'blooms', sparse: 'blooms', lowland: 'blooms', heat: 'blooms',
+  swing: 'swings', dazzle: 'swings', clockwork: 'swings', slippery: 'swings',
+  deep: 'deep', dense: 'deep', giants: 'deep', oldtown: 'deep', noon: 'deep', sprint: 'deep',
+  snap: 'snapSave', thaw: 'snapSave', ration: 'snapSave', boss: 'snapSave',
+  flare: 'parry',
+  brittle: 'brittle',
+  flakes: 'flakes', flurry: 'flakes', meltfast: 'flakes', fog: 'flakes', blind: 'flakes',
+  glare: 'clean',
+  cloud: 'ride', breezy: 'ride', fleet: 'ride', overcast: 'ride',
+  gate: 'gates', market: 'gates',
+  eclipse: 'flip',
+  lock: 'still', gusts: 'still',
+  drag: 'ring', long: 'ring', stroll: 'ring', sunset: 'ring', frosty: 'ring', marathon: 'ring', moonlit: 'ring', heavy: 'ring', hardy: 'ring',
+} satisfies Record<ConceptId, FeatKind>);
+
+/** The fallback Dares (core verbs), drawn from (seed, 'dare', id) when no concept's Dare can be played. */
+const FALLBACK_DARES: readonly FeatKind[] = Object.freeze(['blooms', 'swings', 'deep', 'snapSave'] as FeatKind[]);
+
+/** True for the boss finales of chapters 5-20 (levels 50, 60, …, 200): they carry the Solar Flare. */
+export function isBossFinale(id: number): boolean {
+  return id > TEACH_LEVELS && id % LEVELS_PER_CHAPTER === 0;
+}
+
+/**
+ * The flares a level asks for before the bake decides them: the Solar Flare's level gets 3 at 0.30,
+ * 0.55 and 0.80 of the level (d 10); a boss finale min(8, floor(level seconds / 3.2)) in three phases
+ * (0.20-0.40, 0.50-0.68, 0.76-0.92 of the level, d 10, 13 and 16), spread evenly in each phase.
+ */
+export function nominalFlares(id: number, startMinute: number, lengthMinutes: number): readonly LevelFlare[] {
+  const out: LevelFlare[] = [];
+  const at = (frac: number, d: number): void => {
+    out.push(Object.freeze({ minute: startMinute + frac * lengthMinutes, d }));
+  };
+  if (id <= TEACH_LEVELS) {
+    if (CONCEPT_IDS[id - 1] === 'flare') for (const f of [0.3, 0.55, 0.8]) at(f, 10);
+    return Object.freeze(out);
+  }
+  if (!isBossFinale(id)) return Object.freeze(out);
+  const sec = (lengthMinutes / 720) * 50;
+  const n = Math.min(8, Math.floor(sec / 3.2));
+  const phases: readonly (readonly [number, number, number])[] = [
+    [0.2, 0.4, 10],
+    [0.5, 0.68, 13],
+    [0.76, 0.92, 16],
+  ];
+  for (let k = 0; k < 3; k++) {
+    const [a, b, d] = phases[k] as [number, number, number];
+    const m = Math.floor((n + k) / 3);
+    for (let i = 0; i < m; i++) at(a + ((b - a) * (i + 0.5)) / m, d);
+  }
+  return Object.freeze(out);
+}
+
+/** The fingerprint of a level's world identity that its bake entry must match (hex). */
+export function levelBakeKey(seed: number, concepts: readonly ConceptId[], drain: number, startMinute: number, lengthMinutes: number, biome: BiomeId, forecast: ForecastId, flares: readonly LevelFlare[]): string {
+  const f = flares.map((x) => `${x.minute}:${x.d}`).join(',');
+  const tune = JSON.stringify(foldTuning(concepts));
+  return hashString(`${seed}|${concepts.join(',')}|${tune}|${drain}|${startMinute}|${lengthMinutes}|${biome}|${forecast}|${f}|v${BAKE_VERSION}`).toString(16);
+}
+
+/** Bump when the generator changes what a level offers (every bake entry goes stale). */
+export const BAKE_VERSION = 1;
+
 const NO_FLARES: readonly LevelFlare[] = Object.freeze([]);
+const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
+/** LEVEL_BAKE_RUN's Dare letters: a = blooms … m = ring. */
+const FEAT_CODES: readonly FeatKind[] = ['blooms', 'swings', 'deep', 'snapSave', 'parry', 'brittle', 'flakes', 'clean', 'ride', 'gates', 'flip', 'still', 'ring'];
+let runEntries: string[] | null = null;
+
+/**
+ * Level `id`'s bake result (LEVEL_BAKE_RUN, entry id − 1 of the ';'-separated list): its Dares
+ * (letter + target each), its kept flares (minute:d, ','-separated) and a bake-sized goal target
+ * ('/'-separated fields), or null when the bake has no entry for it.
+ */
+function bakeRun(id: number): { feats: readonly FeatSpec[]; flares: readonly LevelFlare[]; goal: number | null } | null {
+  const entries = (runEntries ??= LEVEL_BAKE_RUN.split(';'));
+  const e = entries[id - 1];
+  if (e === undefined || e === '') return null;
+  const [fs = '', fl = '', g = ''] = e.split('/');
+  const feats: FeatSpec[] = [];
+  for (const m of fs.matchAll(/([a-m])(\d+)/g)) feats.push(Object.freeze({ kind: FEAT_CODES[(m[1] as string).charCodeAt(0) - 97] as FeatKind, target: Number(m[2]) }));
+  const flares: LevelFlare[] = [];
+  for (const x of fl === '' ? [] : fl.split(',')) {
+    const [minute, d] = x.split(':');
+    flares.push(Object.freeze({ minute: Number(minute), d: Number(d) }));
+  }
+  return { feats: Object.freeze(feats), flares: Object.freeze(flares), goal: g === '' ? null : Number(g) };
+}
+
+/**
+ * Tooling (scripts/sim16/bake.ts, the bake test): level `l`'s LEVEL_BAKE_RUN entry from what the bake
+ * measured: its Dares (assignFeats over the offers), its kept flares and, for the glare lesson, the
+ * clean goal (every ball with a glare-free line, minus one, at least 1).
+ */
+export function bakeRunEntry(l: LevelDef, bake: LevelBake): string {
+  const p = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts);
+  const flakes = expectedFlakes(l.startMinute, l.lengthMinutes, l.concepts, l.biome, l.forecast);
+  const daylightTicks = Math.round((l.lengthMinutes / 720) * p.dayLen * 60);
+  const feats = assignFeats(l.id, l.seed, l.concepts, l.lengthMinutes, p.dayLen, daylightTicks, flakes, bake.flares.length, bake);
+  const fs = feats.map((f) => String.fromCharCode(97 + FEAT_CODES.indexOf(f.kind)) + f.target).join('');
+  const fl = bake.flares.map((f) => `${f.minute}:${f.d}`).join(',');
+  const g = l.introduces && TEACH_GOALS[l.introduces] === 'clean' ? String(Math.max(1, bake.balls - 1)) : '';
+  return `${fs}/${fl}/${g}`;
+}
+
+/** The concepts a level carries that set a mechanic or world feature a Dare needs. */
+function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], keptFlares: number, bake: LevelBake | null, sec: number): boolean {
+  const m = mechanicsOf(id);
+  switch (kind) {
+    case 'blooms':
+      return m.buds;
+    case 'deep':
+      // Deep shade the level offers: at least DEEP_OFFER × the smallest deep Dare.
+      return m.deep && (bake === null || bake.deep >= DEEP_OFFER * DEEP_MIN_TICKS);
+    case 'flakes':
+      return bake === null || bake.flakes >= FLAKES_OFFER_MIN;
+    case 'snapSave':
+      // A snap earned on the level: its gold must be able to fill the bank from the level's start
+      // (SNAP_BLOOM_SHARE of the buds blooming).
+      return m.snap && (bake === null || SNAP_BLOOM_SHARE * bake.buds * TUNING.bank.bloomH >= TUNING.bank.costH - TUNING.bank.campaignStartH);
+    case 'brittle':
+      return m.brittle && (bake === null || bake.glass > 0);
+    case 'parry':
+      return keptFlares > 0;
+    case 'clean':
+      return bake === null || bake.balls > 0;
+    case 'still':
+      return bake === null || bake.holdable > 0;
+    case 'swings':
+      return bake === null || bake.swings >= SWING_OFFER_PER * (sec > 30 ? 3 : 2);
+    case 'ring':
+      return bake === null || bake.shadeRun >= RING_RUN_X3;
+    case 'ride': {
+      // A ride the level offers with room to spare: one cloud for RIDE_OFFER_SEC, or RIDE_OFFER_CLOUDS clouds for ≥ 1 s.
+      const t = foldTuning(concepts);
+      if ((t?.cloudCount ?? 1) <= 0) return false;
+      return bake === null || bake.rideBest >= RIDE_OFFER_SEC || bake.rides >= RIDE_OFFER_CLOUDS;
+    }
+    default:
+      return true;
+  }
+}
+
+/** The deep Dare's least target (ticks), and the deep shade a level must offer per target tick to carry it. */
+const DEEP_MIN_TICKS = 90;
+const DEEP_OFFER = 5;
+/** The ride Dare needs a level offering one cloud ride of this many seconds, or this many clouds for ≥ 1 s. */
+const RIDE_OFFER_SEC = 3.5;
+const RIDE_OFFER_CLOUDS = 4;
+/** The flakes Dare needs this many plain flakes on the trail; it asks for 80% of the expected flakes, expected being 85% of those offered. */
+const FLAKES_OFFER_MIN = 5;
+const FLAKES_EXPECTED = 0.85;
+/** The snapSave Dare needs gold enough to bank a snap from a level's start with this share of its buds bloomed. */
+const SNAP_BLOOM_SHARE = 0.6;
+/** The swings Dare needs this many SWING hand-offs offered per SWING asked. */
+const SWING_OFFER_PER = 4;
+/** The ring Dare: x3 needs a fully shaded stretch of this many ticks on offer, x4 this many (else x3). */
+const RING_RUN_X3 = 600;
+const RING_RUN_X4 = 1100;
+
+/** A Dare's target on a level (§2.6 table), sized from what the level offers. */
+function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): number {
+  const sec = (lengthMinutes / 720) * dayLen;
+  switch (kind) {
+    case 'blooms':
+      return Math.max(1, Math.min(4, Math.round(0.35 * (bake ? bake.buds : sec / 4))));
+    case 'swings':
+      return sec > 30 ? 3 : 2;
+    case 'deep':
+      return Math.max(DEEP_MIN_TICKS, Math.min(Math.round(0.12 * daylightTicks), bake ? Math.floor(bake.deep / DEEP_OFFER) : Infinity));
+    case 'snapSave':
+      return 60;
+    case 'parry':
+      return Math.max(1, Math.ceil(0.75 * keptFlares));
+    case 'brittle':
+      return Math.max(1, Math.ceil(0.6 * (bake ? bake.glass : 1)));
+    case 'flakes':
+      return Math.max(3, Math.round(0.8 * (bake ? Math.min(flakes, FLAKES_EXPECTED * bake.flakes) : flakes)));
+    case 'clean':
+      return Math.max(1, bake ? bake.balls : 1);
+    case 'still':
+      return Math.max(1, Math.ceil((bake ? bake.holdable : 2) / 2));
+    case 'ring':
+      return sec <= 25 || (bake !== null && bake.shadeRun < RING_RUN_X4) ? 3 : 4;
+    default:
+      return 1;
+  }
+}
+
+/**
+ * A level's Dares: the first of its concepts whose Dare fits the level (the mechanic it needs is on,
+ * the level offers it), else a core verb drawn from (seed, 'dare', id); finales offer a second: a boss
+ * finale the parry Dare, a teaching finale another core verb.
+ */
+function assignFeats(id: number, seed: number, concepts: readonly ConceptId[], lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): readonly FeatSpec[] {
+  const fits = (k: FeatKind): boolean => dareFits(k, id, concepts, keptFlares, bake, (lengthMinutes / 720) * dayLen);
+  const spec = (k: FeatKind): FeatSpec => Object.freeze({ kind: k, target: dareTarget(k, lengthMinutes, dayLen, daylightTicks, flakes, keptFlares, bake) });
+  const rng = rngFor(seed, 'dare', id);
+  const fallback = (not: FeatKind | null): FeatKind => {
+    const pool = FALLBACK_DARES.filter((k) => k !== not && fits(k));
+    return pool.length > 0 ? rng.pick(pool) : 'swings';
+  };
+  let first: FeatKind | null = null;
+  for (const c of concepts) {
+    const k = DARE_OF[c];
+    if (c !== 'flare' && fits(k)) {
+      first = k;
+      break;
+    }
+  }
+  if (first === null) first = concepts.includes('flare') && fits('parry') && !isBossFinale(id) ? 'parry' : fallback(null);
+  const out = [spec(first)];
+  if (id % LEVELS_PER_CHAPTER === 0) {
+    const second = isBossFinale(id) && fits('parry') && first !== 'parry' ? 'parry' : fallback(first);
+    if (second !== first) out.push(spec(second));
+  }
+  return Object.freeze(out);
+}
+
+/** Goal misses (a finish reached without the goal) after which the level's goal relaxes to 'finish' (§2.6 soft-fail). */
+export const SOFT_FAIL_MISSES = 2;
+
+/** True when a level's goal is relaxed after `misses` goal misses (RunConfig.relaxedGoal; a 'finish' level never relaxes). */
+export function relaxedGoalFor(level: LevelDef, misses: number): boolean {
+  return level.goal.kind !== 'finish' && misses >= SOFT_FAIL_MISSES;
+}
 
 /** Builds the 200 levels (pure; the same table every time). */
 export function buildCampaign(): readonly LevelDef[] {
@@ -384,13 +677,76 @@ export function levelDef(id: number): LevelDef | null {
   return CAMPAIGN_LEVELS[id - 1] as LevelDef;
 }
 
+/** The brittle concept's teaching level makes this share of its eligible clusters glass (§2.3). */
+const BRITTLE_TEACH_SHARE = 0.6;
+const glassMemo = new Map<number, number>();
+
 /**
- * v1.6 (§2.6; CORE-2 owns the body): what a Dare of `kind` counts in these stats. Stub: 0 until the
- * counters exist.
+ * v1.6 glass (§2.3): the glass quota of a Journey level (once Mechanics.brittle is on, from L21):
+ * 60% on the brittle concept's own level, else TUNING.brittle.quotaDay1; on a level with a flake goal
+ * or a concept whose Dare is 'flakes' it is capped at (1 − target / expected) − 0.15, so the flakes
+ * stay collectable.
  */
-export function featValue(_kind: FeatKind, _stats: LevelStats): number {
-  return 0;
+export function levelGlassShare(level: LevelDef): number {
+  const hit = glassMemo.get(level.id);
+  if (hit !== undefined) return hit;
+  let q = level.introduces === 'brittle' ? BRITTLE_TEACH_SHARE : TUNING.brittle.quotaDay1;
+  const expected = expectedFlakes(level.startMinute, level.lengthMinutes, level.concepts, level.biome, level.forecast);
+  // A flake goal, or a concept that may carry the flakes Dare (its target is 80% of the expected
+  // flakes at most): world identity from the concepts alone, so the bake that sizes the Dares from
+  // this world never feeds back into it.
+  let target = level.goal.kind === 'flakes' ? level.goal.target : 0;
+  if (level.concepts.some((c) => DARE_OF[c] === 'flakes')) target = Math.max(target, Math.round(0.8 * expected));
+  if (target > 0 && expected > 0) q = Math.min(q, Math.max(0, 1 - target / expected - 0.15));
+  glassMemo.set(level.id, q);
+  return q;
 }
+
+/**
+ * v1.6 (§2.6): what a Dare of `kind` counts in these stats (RunStats counters; a missing value is 0):
+ * blooms, SWINGs, deep-shade ticks, earned-snap-saved ticks, parries, glass clusters saved, flakes,
+ * clean balls; ride 1 for a best ride ≥ 2.5 s or ≥ 3 clouds ridden ≥ 0.5 s; gates the arches walked
+ * under in deep shade; flip 1 when shaded within 12 ticks of the eclipse flip; still the lock and
+ * gust windows held fully shaded; ring the best multiplier level.
+ */
+export function featValue(kind: FeatKind, stats: LevelStats): number {
+  switch (kind) {
+    case 'blooms':
+      return stats.blooms ?? 0;
+    case 'swings':
+      return stats.swings ?? 0;
+    case 'deep':
+      return stats.deepTicks ?? 0;
+    case 'snapSave':
+      return stats.earnedSnapSavedTicks ?? 0;
+    case 'parry':
+      return stats.parries ?? 0;
+    case 'brittle':
+      return stats.brittleSaved ?? 0;
+    case 'flakes':
+      return stats.flakes;
+    case 'clean':
+      return stats.ballsPassedClean ?? 0;
+    case 'ride':
+      return (stats.cloudRideBest ?? 0) >= RIDE_BEST_SEC || (stats.cloudsRidden ?? 0) >= RIDE_COUNT ? 1 : 0;
+    case 'gates':
+      return stats.gateDeep ?? 0;
+    case 'flip': {
+      const t = stats.flipTicks ?? 0;
+      return t > 0 && t <= FLIP_DARE_TICKS ? 1 : 0;
+    }
+    case 'still':
+      return (stats.lockHeld ?? 0) + (stats.gustHeld ?? 0);
+    case 'ring':
+      return stats.maxMult ?? 1;
+  }
+}
+
+/** The 'ride' Dare: a best ride of this many seconds, or this many clouds ridden ≥ 0.5 s. */
+const RIDE_BEST_SEC = 2.5;
+const RIDE_COUNT = 3;
+/** The 'flip' Dare: shaded within this many ticks of the eclipse flip. */
+const FLIP_DARE_TICKS = 12;
 
 /** True when any of the level's Dares is met (finales offer two; either earns star 2). */
 export function featMet(level: LevelDef, stats: LevelStats): boolean {
@@ -398,25 +754,59 @@ export function featMet(level: LevelDef, stats: LevelStats): boolean {
   return false;
 }
 
+/** The live count of a level's goal (the HUD's pill): the goal's counter in these stats (0 for 'finish'). */
+export function goalValue(kind: GoalKind, stats: LevelStats): number {
+  switch (kind) {
+    case 'flakes':
+      return stats.flakes;
+    case 'snow':
+      return stats.snow;
+    case 'deep':
+      return stats.deepTicks ?? 0;
+    case 'clean':
+      return stats.ballsPassedClean ?? 0;
+    case 'swings':
+      return stats.swings ?? 0;
+    case 'blooms':
+      return stats.blooms ?? 0;
+    case 'snapSave':
+      return stats.snapSavedTicks ?? 0;
+    case 'gate':
+      return stats.gateShaded ?? 0;
+    case 'brittle':
+      return stats.brittleSaved ?? 0;
+    case 'flip':
+      return stats.flipTicks ?? 0;
+    case 'parry':
+      return stats.parries ?? 0;
+    default:
+      return 0;
+  }
+}
+
 /**
- * True when the level's goal is met by these stats (a 'finish' goal is met by reaching the line).
- * `relaxed` (RunConfig.relaxedGoal, the v1.6 soft-fail after two misses) scores the goal as 'finish'.
+ * True when the level's goal is met by these stats (a 'finish' goal is met by reaching the line;
+ * 'flip' when Nubs was shaded within `target` ticks of the eclipse flip; the others when their
+ * counter reaches the target). `relaxed` (RunConfig.relaxedGoal, the v1.6 soft-fail after two
+ * misses) scores the goal as 'finish'.
  */
 export function goalMet(level: LevelDef, stats: LevelStats, relaxed = false): boolean {
   if (relaxed) return true;
   const g = level.goal;
-  if (g.kind === 'flakes') return stats.flakes >= g.target;
-  if (g.kind === 'snow') return stats.snow >= g.target;
-  return true;
+  if (g.kind === 'finish') return true;
+  const v = goalValue(g.kind, stats);
+  if (g.kind === 'flip') return v > 0 && v <= g.target;
+  return v >= g.target;
 }
 
 /**
  * Stars for a run that reached the finish line with these stats: 0 when the goal is not met, else
- * 1, +1 if flakes ≥ stars.flakes, +1 for a cool run (lit ≤ stars.sunSec s and lowest Chill ≥ stars.minChill).
+ * 1, +1 for a Dare met (featMet; a level without Dares: flakes ≥ stars.flakes), +1 for a cool run
+ * (lit ≤ stars.sunSec s and lowest Chill ≥ stars.minChill).
  */
 export function starsFor(level: LevelDef, stats: LevelStats, relaxed = false): 0 | 1 | 2 | 3 {
   if (!goalMet(level, stats, relaxed)) return 0;
-  const two = stats.flakes >= level.stars.flakes;
+  const two = level.feats.length > 0 ? featMet(level, stats) : stats.flakes >= level.stars.flakes;
   const three = stats.minChill >= level.stars.minChill && (stats.litTotal ?? 0) <= level.stars.sunSec;
   return two && three ? 3 : two || three ? 2 : 1;
 }

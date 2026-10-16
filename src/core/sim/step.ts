@@ -21,7 +21,7 @@ import {
   TICK_HZ,
 } from '../clock.ts';
 import { cosD, sinD, tanD, wrapDeg } from '../dmath.ts';
-import { paramsAt, worldYAtDayTick } from '../gen/plan.ts';
+import { liftElevation, paramsAt, worldYAtDayTick } from '../gen/plan.ts';
 import { lowerBound, pruneWorld } from '../gen/store.ts';
 import { ECLIPSE_FADE_TICKS, ECLIPSE_SEC, eclipseAt, ensureGenerated } from '../gen/world.ts';
 import { levelOutcome } from '../level.ts';
@@ -54,7 +54,7 @@ export function syncTime(s: SimState): void {
   s.tickAbs = dayStartTick(s.day) + s.dayTick;
   s.tAbs = s.tickAbs / TICK_HZ;
   s.minutes = scoreMinutes(s.day, s.dayTick);
-  s.eps = daylight ? elevation(s.params, s.tDay) : 0;
+  s.eps = daylight ? liftElevation(s.world, s.params, s.tickAbs, elevation(s.params, s.tDay)) : 0;
   s.sunUp = s.eps > 0;
   s.tanEps = s.sunUp ? tanD(s.eps) : 0;
   s.cot = s.sunUp ? 1 / s.tanEps : 0;

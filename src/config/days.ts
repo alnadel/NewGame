@@ -102,8 +102,9 @@ export interface DayParams {
   // v1.6 (docs/V1_6_PLAN.md §2.5; CORE-2 owns the values and their readers).
   /**
    * Noon Heat: the drain × this between 11:00 AM and 1:00 PM (Endless and Daily; the Journey reads
-   * it as 1 through noonHeatAt). 1 on Day 1, 1.15 on Days 2-3, 1.25 from Day 4 (profile 3; profiles
-   * 0-2 one day later).
+   * it as 1 through noonHeatAt). 1 on Day 1, 1.1 on Days 2-3, 1.2 from Day 4 (profile 3; profiles
+   * 0-2 one day later). Calibrated down from the plan's 1.15 / 1.25, which put the heat forecast's
+   * rescues per chunk at 0.80 (40 seeds).
    */
   readonly noonHeat: number;
   /** Heat Flares drawn for the day (profile 3: 0, 1, then 2 from Day 3; profiles 0-2: 1 from Day 3). */
@@ -289,7 +290,7 @@ function rampRow(day: number): Row {
 /** v1.6 Noon Heat of day d (profile 3; profiles 0-2 take each step one day later). */
 function noonHeatOf(d: number, profile: ProfileId): number {
   const k = profile === 3 ? d : d - 1;
-  return k >= 4 ? 1.25 : k >= 2 ? 1.15 : 1;
+  return k >= 4 ? 1.2 : k >= 2 ? 1.1 : 1;
 }
 
 /** v1.6 Heat Flares of day d: how many, and their lift (°). */

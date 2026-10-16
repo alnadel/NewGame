@@ -81,8 +81,8 @@ export interface Sim16Module {
   readonly name: string;
   /** A fresh collector for each run (called in the worker). */
   collector?(): Sim16Collector;
-  /** Tables and gates printed after the v1.5 report, over its rows. */
-  report?(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void;
+  /** Tables and gates printed after the v1.5 report, over its rows (awaited: it may play more rows with ctx.run). */
+  report?(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void | Promise<void>;
   /** Modes run instead of the report, keyed by their flag without the dashes ('decisions', 'bake'). */
   readonly modes?: Readonly<Record<string, (ctx: Sim16Ctx) => Promise<void>>>;
 }

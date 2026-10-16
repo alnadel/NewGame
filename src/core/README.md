@@ -608,3 +608,90 @@ meter and snap return. Code: `sim/nubs.ts` (ring, freshness, PHEW, landing), `si
   reactive x5 ≤ 20% and mean x2.8-3.8, full bank ≤ 10%, dial-only ≤ 0.15 meters a day).
   `--decisions [--seeds 80]` plays reactive plain/chase/naive/safe, plain with plan snaps, dial-only,
   humanDial R2-R4 and plain with every v1.6 rule off, and checks §2.2's gates.
+
+### 16.2 World and Journey (CORE-2: §2.3 glass, §2.5 Heat Flares and Noon Heat, §2.6 Dares, T1, T6, T7)
+
+Every world rule keys off `World.v16` (`brittle`, `flares`, `noonHeat`); with all three off the
+v1.5 world returns (the Dares and the bake are Journey data and always on). Code: `gen/plan.ts`
+(elevation, Noon Heat), `gen/placer.ts` + `gen/contest.ts` (flares, glass), `gen/validator.ts`
+(slot tables, keep test), `sim/flares.ts`, `sim/glass.ts`, `sim/feats.ts`, `sim/tricks.ts`,
+`sim/guide.ts`, `sim/bots/world.ts` + `sim/bots/dares.ts`, `config/campaign.ts`,
+`scripts/sim16/world.ts` + `bake.ts`; values in `TUNING.brittle/.flare`, `DayParams.noonHeat/flareCount/flareD`.
+
+- **Elevation.** `liftElevation(w, p, tickAbs, base)` = base ε + Σ kept flares' lift (`liftOf`:
+  smoothstep rise 18, hold 42, mirrored fall 30 ticks, `d`°), capped at εnoon − `epsMargin` 2
+  (Endless) or `journeyEpsCap` 78 (Journey), never below base. `worldElevation(w, tick)` is the
+  same at the world's own clock; step.ts, guide.ts, deathcause.ts, the validator rows and the bots
+  all read it, so the sim and the fairness proof agree tick for tick.
+- **Noon Heat (T1).** `noonHeatAt(w, day, dayTick)`: `DayParams.noonHeat` (`noonHeatOf`: Day 1 ×1,
+  Days 2-3 ×1.1, Day 4+ ×1.2; calibrated down from the plan's 1.15/1.25, see below) while dayTick ∈
+  [5/12, 7/12)·Dl, Endless only (`w.level` null), else 1. The Chill line in nubs.ts multiplies the
+  drain by it; the validator uses one delta table per day slot (`deltaForSlot`, memoised per (day,
+  in-window)) and the oracle one per planned step (`worldOracleDelta`).
+- **Heat Flares (§2.5).** Endless: `addDayFlares` draws each day's flares from
+  `rngFor(seed, 'flares', day)` (count `DayParams.flareCount`: none on Day 1 of profile 3, one on Day
+  2, two from Day 3; one per window of `TUNING.flare.windows`, `gapSec` 8 apart), PENDING with a
+  120-tick warning. Journey: `LevelDef.flares` (minute, d) with `warnTicksJourney` 72. The validator
+  decides each pending flare in the job that covers it (`keepStep`): kept when a parry path is
+  shaded (3-step rule) on ≥ `keepShadedShare` 0.85 of the 7 hold steps and fewer than
+  `keepMovedShare` 0.5 of the bins safe without it stay safe (none safe counts as moved); else it
+  is shifted by `shiftsSec` (±0.5 … ±5 s, inside the job's re-run prefix, clear of eclipses, locks,
+  other flares and, in Endless, the Noon Heat window) and re-tested; else DROPPED (never lifts the
+  sun). Keeping one recomputes the job's geometry from its first touched step. `sim/flares.ts`
+  runs the kept ones: `flareWarn {id, inTicks, d}` → `flareRise` → hold (`s.flareLit` counts lit
+  hold ticks) → `flareParry {id, snow}` (≤ `parryMaxLit` 4 lit ticks: `stats.parries`, +5 Snow,
+  `payTrick(s, 'parry')`) or `flareMiss`, then `flareEnd`; `s.flarePhase` 0..4 for the renderer and
+  `flareMeltMul` (flakes melt ×2 in the rise and hold). guide.flare: during the warning, the bins
+  fully shaded at the hold's first tick (`guide.flareTicks` counts down).
+- **Glass (§2.3).** Plain and glass flakes are placed two chunks behind the casters
+  (`placeFlakes(w, k − 2)`, from the finished validation job of that chunk). A cluster turns glass
+  when `contestCluster` says it is contested (S_free ≤ need − 2, cost C0 − C1 in [12, 40], never a
+  trap, the first flake savable; see contest.ts) and the day's quota (`glassQuota`: 25% of eligible
+  clusters on Day 1 of profile 3, 35% later, half on profile 2, none on profiles 0-1, Quick Melt,
+  Hardy, the tutorial or with the rule off; `RunConfig.brittleShare` forces it; a Journey level
+  `levelGlassShare`) allows; shifts of ±0.5/±1 s are tried. The brittle level (L21) falls back to
+  savable-only glass when nothing contests. A glass flake melts after `meltBudget` 0.8 lit s.
+  `sim/glass.ts` tracks the cluster under Nubs (`s.clusterId/Taken/Broken`): all of it collected →
+  `clusterSaved {cluster, n}`, `stats.clustersSaved`, `stats.brittleSaved`, `payTrick(s,
+  'cluster')`. guide.flake: the bins that shade the nearest alive glass flake in its melt window,
+  glare removed. **T7**: `hashState` reads pickups only to 600 u ahead.
+- **guide.deep**: the part of guide.now where ≥ 2 sources (snap excluded, T3) cover the center sample.
+- **Tricks**: `payTrick(s, 'parry' | 'cluster')` (sim/tricks.ts) is the one bridge to the economy.
+  On this branch it pays the v1.5 meter (`addFrost(h / 100)`); at integration it becomes CORE-1's
+  `addFrostH(s, kind, TUNING.bank.parryH/clusterH)` plus `ringTrick(s, kind, TUNING.ring.trick)`.
+- **Dares (§2.6).** `sim/feats.ts` keeps the integer counters (`deepTicks`, `snapSavedTicks`,
+  `earnedSnapSavedTicks` (a snap beyond the level's starting charges, alone over the center),
+  `cloudsRidden`, `gateShaded`, `gateDeep`, `flipTicks`, `lockWindows/Held`, `gustWindows/Held`)
+  and emits `feat {kind, value, target}` when a Dare's value moves (deep and snapSave every 6
+  ticks) and `featMet {kind}` once. config/campaign.ts: `featValue`, `featMet`, `goalValue`,
+  `goalMet(…, relaxed)`, `starsFor(…, relaxed)` (★1 goal, ★2 a Dare, ★3 the cool run), `DARE_OF`
+  (one Dare per concept), verb goals on the teaching levels (L5 deep 90 ticks, L6 clean balls − 1,
+  L7 1 SWING, L8 1 bloom, L10 60 snap ticks, L13 the arch shaded, L21 1 glass cluster, L36 shaded ≤
+  60 ticks after the flip, L38 parry 2); 'snow' stays in `GoalKind` only for GAME's compile.
+  **Soft-fail**: `SOFT_FAIL_MISSES` 2, `relaxedGoalFor(level, misses)`, `RunConfig.relaxedGoal`
+  (read by `levelOutcome`: the goal scores as 'finish'; GAME keeps the miss count in the save).
+- **Bake** (`node scripts/sim.ts --bake` → `src/config/levelBake.gen.ts`; tests/unit/levelBake.test.ts
+  checks it is current). The game reads only `LEVEL_BAKE_RUN` (one short string: each level's Dares,
+  kept flares and bake-sized goal target, decoded by campaign.ts `bakeRun`); `LEVEL_BAKE` (tooling
+  only, so the bundler drops it, keyed by `levelBakeKey` incl. `BAKE_VERSION`) holds per level the
+  kept flares and what it offers: buds, balls with a glare-free line passed before the line,
+  glass clusters, lock/gust windows and the holdable ones, plain flakes, deep-shade ticks, the
+  longest one-cloud ride and the clouds ridable ≥ 1 s, SWING hand-offs (lit gaps of 42-60° between
+  two sources, one per 2 s), the longest fully shaded turn-limited stretch. A concept's Dare is
+  assigned only where it fits the offer (else the next concept's, else a seeded core verb) and is
+  sized from it (deep ≤ offer/5, flakes 80% of min(expected, 85% offered), ring x4 only with a
+  1100-tick stretch, still half the holdable windows, swings needs 4 hand-offs per SWING asked).
+  `bakeRunEntry(level, bake)` turns the offers into the run entry. The world never depends on the
+  Dares (a level's glass share reads its concepts), so the bake is a fixed point. Boss finales (50,
+  60, …, 200) carry `flare` (HP = kept flares) and a parry Dare.
+- **Hash**: `hashState` reads the flare state (`flareIdx/Id/Phase/Lit/Ticks`, kept flares within
+  600 u), the cluster state and the world stats above.
+- **Bots** (`sim/bots/world.ts`, `sim/bots/glassplan.ts`, `sim/bots/dares.ts`): reactive preAim (the last 18 ticks of a
+  warning toward guide.flare), chase/naive +1.5 on guide.flake; oracle: per-step Noon Heat and
+  hold deltas, a parry plan (×6 on bins whose hold path stays shaded), a glass plan with slack ≥ 10
+  (`glassValue`: a 1.6 s turn-limited DP over every glass flake in its melt window, the most urgent
+  weighted up, ×45). With `BotOptions.dares` (`DARE_TERMS` from bots/dares.ts; tooling passes it,
+  the game never imports it) the oracle plays the level's unmet verb goal and `BotOptions.feats` (the
+  Feat-seeking oracle) adds each unmet Dare's term (pulls toward bud, deep, glass, cloud-ride, gate-deep,
+  flip and window-hold bins, a committed SWING aim over a lit gap, glare lookahead, and a charged
+  snap cast for snapSave); `humanFeat` aims at its first unmet Dare in a seeded half of its decisions.

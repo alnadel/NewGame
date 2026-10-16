@@ -10,11 +10,11 @@ import { ALL_MECHANICS, levelDef, mechanicsOf, type LevelDef, type Mechanics } f
 import { foldTuning, type ConceptId } from '../../config/concepts.ts';
 import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
-import { tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
+import { dayAtTick, tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
 import { V16_ALL, V16_NONE, type RunConfig, type V16Rules } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
-import { placeChunk, placeStart } from './placer.ts';
+import { makeFlare, placeChunk, placeStart } from './placer.ts';
 import { paramsAt } from './plan.ts';
 import type { World } from './store.ts';
 import { beginValidation, stepValidation } from './validator.ts';
@@ -63,12 +63,15 @@ function worldRules(cfg: WorldConfig): V16Rules {
 
 const NO_MODS: readonly ConceptId[] = Object.freeze([]);
 
-/** Creates a world with its start hut (and tutorial layout); nothing else is generated yet. */
-export function createWorld(cfg: WorldConfig): World {
+/**
+ * Creates a world with its start hut (and tutorial layout); nothing else is generated yet.
+ * `levelOverride` (tools only: `sim --bake`) replaces the level definition cfg.level names.
+ */
+export function createWorld(cfg: WorldConfig, levelOverride?: LevelDef): World {
   const seed = cfg.seed >>> 0;
   let level: LevelDef | null = null;
   if (cfg.level !== undefined) {
-    level = levelDef(cfg.level);
+    level = levelOverride ?? levelDef(cfg.level);
     if (!level) throw new Error(`unknown campaign level ${cfg.level}`);
   }
   const modList: readonly ConceptId[] = cfg.mods && cfg.mods.length > 0 ? Object.freeze(cfg.mods.slice()) : NO_MODS;
@@ -122,6 +125,10 @@ export function createWorld(cfg: WorldConfig): World {
     rescueSide: 1,
     budY: 0,
     budCount: 0,
+    flakeCount: 0,
+    lastClusterY: -Infinity,
+    glassEligible: 0,
+    glassMade: 0,
     nextStep: 0,
     carryN: 0,
     carryC: new Float64Array(360 * (TUNING.validator.prefixSteps + 1)),
@@ -133,6 +140,15 @@ export function createWorld(cfg: WorldConfig): World {
   };
   placeStart(w);
   w.budY = w.startY + TUNING.buds.startDelay * paramsAt(w, 1).v;
+  // v1.6: a level's flares (the Solar Flare's level, boss finales), pending until the validator's
+  // keep test (the bake put them where it passes).
+  if (level && w.v16.flares) {
+    const STEP = TUNING.validator.stepTicks;
+    for (const lf of level.flares) {
+      const rise = STEP * Math.round(tickAtMinute(lf.minute) / STEP);
+      w.flares.push(makeFlare(w.flares.length + 1, dayAtTick(rise), lf.d, rise, TUNING.flare.warnTicksJourney));
+    }
+  }
   // At the start only θ0 is reachable: the run begins with the sun pointing at the start hut.
   w.carryC.fill(-1e9);
   w.carryC[binOf(w.theta0)] = paramsAt(w, 1).maxChill;
