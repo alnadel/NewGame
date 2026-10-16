@@ -70,6 +70,10 @@ describe('patterns', () => {
       frost: [6, 40, 6],
       snap: [25, 40, 35],
       deep: 8,
+      trick: 5,
+      parry: [12, 30, 18],
+      flare: [5, 60, 5],
+      land: [8, 30, 12],
     });
   });
 

@@ -33,7 +33,11 @@ export type HapticName =
   | 'bloom'
   | 'frost'
   | 'snap'
-  | 'deep';
+  | 'deep'
+  | 'trick'
+  | 'parry'
+  | 'flare'
+  | 'land';
 
 /** A single pulse (ms) or an on/off/on... sequence (ms). */
 export type HapticPattern = number | readonly number[];
@@ -66,6 +70,11 @@ export const HAPTIC_PATTERNS: Readonly<Record<HapticName, HapticPattern>> = {
   frost: [6, 40, 6],
   snap: [25, 40, 35],
   deep: 8,
+  // v1.6: a ring trick, a parry, a flare's warning, a landing out of the snap.
+  trick: 5,
+  parry: [12, 30, 18],
+  flare: [5, 60, 5],
+  land: [8, 30, 12],
 };
 
 export const HAPTIC_RULES = {
@@ -80,7 +89,7 @@ export const HAPTIC_RULES = {
   /** Shade re-entry only buzzes after at least this long lit (s), matching the "ahh". */
   shadeMinLit: 0.25,
   /** A SWING ticks, a growing bud ticks (v1.5) and deep shade buzzes (v1.5) at most this often (ms). */
-  minGapMs: { tick: 300, bud: 250, deep: 2500 } as Readonly<Partial<Record<HapticName, number>>>,
+  minGapMs: { tick: 300, bud: 250, deep: 2500, trick: 300 } as Readonly<Partial<Record<HapticName, number>>>,
 } as const;
 
 /**
@@ -93,6 +102,8 @@ const DEFER_RANK: Readonly<Partial<Record<HapticName, number>>> = {
   frost: 1,
   bloom: 2,
   snap: 4,
+  parry: 4,
+  land: 2,
   crystal: 2,
   reward: 2,
   multMax: 3,
@@ -152,6 +163,23 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
       return 'snap';
     case 'deepEnter':
       return 'deep';
+    // v1.6.
+    case 'multDown':
+      return ev.cause === 'bleed' && ev.from >= 5 ? 'glare' : null;
+    case 'ringTrick':
+      return 'trick';
+    case 'snapCash':
+      return ev.refundH > 0 ? 'frost' : null;
+    case 'snapLand':
+      return 'land';
+    case 'clusterSaved':
+      return ev.brittle ? 'crystal' : null;
+    case 'flareWarn':
+      return 'flare';
+    case 'flareParry':
+      return 'parry';
+    case 'flareMiss':
+      return 'glare';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
       // the rest have no haptic. 'best' and 'ui' are played by the UI directly.
