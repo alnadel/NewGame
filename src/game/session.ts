@@ -114,7 +114,7 @@ import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banne
 import { createMoments, type RunMoments } from './moments.ts';
 import {
   campaignConfig,
-  dareMet,
+  countText,
   dareText,
   featInSeconds,
   featLive,
@@ -264,8 +264,6 @@ export class Session {
   /** v1.6: the run's Dare counts from the sim's `feat` events, and the HUD goal pill's reused count. */
   private readonly featSeen = new Map<FeatKind, number>();
   private readonly hudGoalOut: HudGoal = { value: 0, target: -1, flakes: false, glyph: null, sec: false };
-  /** A demo's relaxed goal (the test hook's 'relaxed'). */
-  private demoRelaxed = false;
   /** When the last count-up tick buzzed (uiSound 'tick'). */
   private tickHapticAt = Number.NEGATIVE_INFINITY;
   readonly gov = new Governor();
@@ -1020,9 +1018,9 @@ export class Session {
     this.runStars = c.stars;
   }
 
-  /** The run's goal is relaxed to the finish (the soft-fail, or a demo's). */
+  /** The run's goal is relaxed to the finish (the soft-fail). */
   private relaxed(): boolean {
-    return this.s.cfg.relaxedGoal === true || this.demoRelaxed;
+    return this.s.cfg.relaxedGoal === true;
   }
 
   /** Goal misses recorded on level `id` (the soft-fail's count). */
@@ -1303,7 +1301,6 @@ export class Session {
     this.fx.resetRun();
     this.mech.reset();
     this.featSeen.clear();
-    this.demoRelaxed = false;
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     const botKind = this.params.bot ?? this.testBot;
@@ -2285,20 +2282,17 @@ export class Session {
       const seen = this.featSeen;
       const bits = starState(level, s.stats, s.phase === 'won', relaxed, seen);
       const labels = starRules(level, relaxed);
-      const count = (v: number, t: number, sec: boolean): string => (sec ? `${Math.round(v / 6) / 10}/${Math.round(t / 6) / 10} s` : `${Math.floor(v)}/${t}`);
-      // The goal's own count (a finish goal: the progress), then the Dare's pips: its count, or a check.
-      const g = level.goal;
+      // The goal's own count (a finish goal: the progress); an open Dare's count (a finale's names both).
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
-      const goalCount = goal.target >= 0 ? count(goal.value, goal.target, goal.sec) : `${Math.round(levelProgress(s) * 100)} %`;
       const f = level.feats[0];
-      const dare = f && !dareMet(level, s.stats, seen) && level.feats.length === 1 ? ` · ${count(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}` : '';
+      if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareText(level) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       return {
         title: `Level ${level.id} · ${level.name}`,
-        goal: `${goalText(level, relaxed)}${relaxed && g.kind !== 'finish' ? ' (eased)' : ''} · ${goalCount}`,
+        goal: `${goalText(level, relaxed)} · ${goal.target >= 0 ? countText(goal.value, goal.target, goal.sec) : `${Math.round(levelProgress(s) * 100)} %`}`,
         now,
         stars: [
           { label: labels[0], state: bits & STAR_GOAL ? 'earned' : 'open' },
-          { label: f ? `${level.feats.length > 1 ? dareText(level) : labels[1]}${dare}` : labels[1], state: bits & STAR_FLAKES ? 'earned' : 'open' },
+          { label: labels[1], state: bits & STAR_FLAKES ? 'earned' : 'open' },
           { label: labels[2], state: bits & STAR_COOL_LOST ? 'lost' : 'open' },
         ],
       };
@@ -2635,23 +2629,16 @@ export class Session {
         this.fx.finish(true, 'FINISH', 2, s.nubs.x, s.nubs.y);
         return;
       case 'dare':
-      case 'dares':
-      case 'relaxed': {
+      case 'dares': {
         // v1.6 Dares on the level being played (render and UI only): one Dare (Bloom 2, one
-        // bloomed so far), a finale's two, or the soft-fail's eased goal.
+        // bloomed so far) or a finale's two.
         const lv = this.runLevel;
         if (!lv) return;
-        if (name === 'relaxed') this.demoRelaxed = true;
-        else {
-          this.runLevel = { ...lv, feats: name === 'dare' ? [{ kind: 'blooms', target: 2 }] : [{ kind: 'blooms', target: 2 }, { kind: 'parry', target: 3 }] };
-          this.featSeen.set('blooms', 1);
-        }
-        if (s.phase === 'hold') showLevelCard(this.renderer.scene.banners, introCard(this.runLevel as LevelDef, this.relaxed()), lv.biome);
+        this.runLevel = { ...lv, feats: name === 'dare' ? [{ kind: 'blooms', target: 2 }] : [{ kind: 'blooms', target: 2 }, { kind: 'parry', target: 3 }] };
+        this.featSeen.set('blooms', 1);
+        if (s.phase === 'hold') showLevelCard(this.renderer.scene.banners, introCard(this.runLevel, this.relaxed()), lv.biome);
         return;
       }
-      case 'featMet':
-        ev = { e: 'featMet', kind: this.runLevel?.feats[0]?.kind ?? 'blooms' };
-        break;
       case 'swing':
         // The audio layer ignores SWING: fx only.
         this.fx.onEvents([{ e: 'swing', deg: 75, chain: 2, snow: 2, x: s.nubs.x, y: s.nubs.y }], s);

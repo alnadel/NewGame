@@ -60,8 +60,8 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],
   snap: [
-    ['go', 'A snap pours your ring into the frost: cast it while the ring is high.'],
-    ['frost', 'A pip is full! Swipe down, press ↓ or tap the meter for a Cold Snap.'],
+    ['go', 'Sunflowers fill the frost. A full pip? Swipe down.'],
+    ['frost', 'A pip is full! Swipe down, press ↓ or tap it: a snap pours your ring into the frost.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
     ['cash', 'Your ring poured into the frost.'],
   ],

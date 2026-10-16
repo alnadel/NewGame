@@ -123,10 +123,9 @@ describe('Dares (game/campaign.ts)', () => {
     expect(introCard(levelDef(12)!).dare).toBe('');
     expect(starRules(levelDef(12)!)[1]).toMatch(/flakes$/);
     expect(featLabel({ kind: 'deep', target: 90 }, one)).toBe('1.5 s deep');
-    expect(featLabel({ kind: 'brittle', target: 1 }, one)).toBe('Save the glass');
+    expect(featLabel({ kind: 'brittle', target: 1 }, one)).toBe('Save 1 glass');
+    expect(featLabel({ kind: 'swings', target: 3 }, one)).toBe('3 SWINGs');
     expect(featLabel({ kind: 'still', target: 2 }, { ...one, concepts: ['gusts'] })).toBe('Hold 2 gusts');
-    // The Cold Snap's level carries its teaching note.
-    expect(introCard({ ...levelDef(12)!, introduces: 'snap' as never }).note).toMatch(/Sunflowers fill the frost/);
   });
 
   it('counts the Dare live on the pill (from the sim\'s feat events) and lights star 2 when it is met', () => {
@@ -147,10 +146,10 @@ describe('Dares (game/campaign.ts)', () => {
   it('a verb goal counts until it is met, then the pill moves on to the Dare', () => {
     const lv: LevelDef = { ...withFeats(8, [{ kind: 'blooms', target: 3 }]), goal: { kind: 'swings', target: 1 } };
     const st = { flakes: 0, snow: 0, litTotal: 0, minChill: 100 };
-    expect(goalText(lv)).toBe('Land 1 SWING');
+    expect(goalText(lv)).toBe('1 SWING');
     expect(hudGoal(lv, st, undefined, false, new Map([['swings', 0]]))).toMatchObject({ value: 0, target: 1, glyph: 'swing' });
     expect(missLine(lv)).toBe('GOAL MISSED');
-    expect(goalLine(lv, st, false, false, new Map(), 1)).toBe('Goal missed: Land 1 SWING (0/1)');
+    expect(goalLine(lv, st, false, false, new Map(), 1)).toBe('Goal missed: 1 SWING (0/1)');
     expect(goalLine(lv, st, false, false, new Map(), SOFT_FAIL_MISSES)).toMatch(/Next try: just reach the finish$/);
   });
 
@@ -219,17 +218,18 @@ describe('v1.6 events: audio, haptics, tips', () => {
     t.send({ e: 'multDown', from: 3, to: 2, cause: 'bleed' });
     t.send({ e: 'multDown', from: 5, to: 4, cause: 'bleed' });
     t.send({ e: 'multDown', from: 5, to: 1, cause: 'snap' });
-    expect(t.played).toEqual(['cash', 'spill', 'parry', 'swing', 'flareWarn', 'multReset']);
+    expect(t.played).toEqual(['frostReady', 'snapEnd', 'parry', 'swing', 'flareWarn', 'multReset']);
     t.played.length = 0;
     for (let i = 0; i < 10; i++) t.send({ e: 'ringTrick', kind: 'streak', units: 300 }, 20);
-    expect(t.played.filter((n) => n === 'ringTrick').length).toBeLessThanOrEqual(2);
+    expect(t.played.filter((n) => n === 'budGrow').length).toBeLessThanOrEqual(2);
   });
 
   it('buzzes a parry, a landing, a trick and a flare warning', () => {
-    expect(hapticForEvent({ e: 'flareParry', id: 1, snap: true, snow: 5 })).toBe('parry');
-    expect(hapticForEvent({ e: 'snapLand', chain: 1, own: false, x: 0, y: 0 })).toBe('land');
-    expect(hapticForEvent({ e: 'ringTrick', kind: 'bloom', units: 600 })).toBe('trick');
-    expect(hapticForEvent({ e: 'flareWarn', id: 1, ticks: 120, d: 8 })).toBe('flare');
+    expect(hapticForEvent({ e: 'flareParry', id: 1, snap: true, snow: 5 })).toBe('crystal');
+    expect(hapticForEvent({ e: 'snapLand', chain: 1, own: false, x: 0, y: 0 })).toBe('bloom');
+    expect(hapticForEvent({ e: 'ringTrick', kind: 'bloom', units: 600 })).toBe('tick');
+    expect(hapticForEvent({ e: 'flareWarn', id: 1, ticks: 120, d: 8 })).toBe('frost');
+    expect(hapticForEvent({ e: 'flareMiss', id: 1, lit: 9 })).toBe('glare');
     expect(hapticForEvent({ e: 'multDown', from: 3, to: 2, cause: 'bleed' })).toBeNull();
     expect(hapticForEvent({ e: 'clusterSaved', cluster: 1, brittle: true, n: 3, x: 0, y: 0 })).toBe('crystal');
     expect(hapticForEvent({ e: 'feat', kind: 'blooms', value: 1, target: 2 })).toBeNull();

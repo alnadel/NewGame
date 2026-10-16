@@ -72,11 +72,9 @@ export interface Banners {
   levelGoal: string;
   /** The three star rules' short labels: the goal, the flakes (or the Dare), the cool run. */
   levelStars: readonly string[];
-  /** v1.6: the Dare line ('' none) and its glyph; a teaching note under the blurb, wrapped. */
+  /** v1.6: the Dare line ('' none) and its glyph. */
   levelDare: string;
   levelDareGlyph: string | null;
-  levelNote: string;
-  levelNoteLines: string[];
   levelBiome: BiomeId;
   levelLines: string[];
   levelWrapW: number;
@@ -86,7 +84,6 @@ export interface Banners {
   blurbFont: string;
   tapFont: string;
   starFont: string;
-  noteFont: string;
   /**
    * In-run toasts under the HUD (v1.4): a mission done ("MISSION ✓ 2/3"), a level tip. They queue
    * (at most TOAST_QUEUE) and wait while a card or stamp holds the top of the screen, so they never
@@ -173,8 +170,6 @@ export function createBanners(): Banners {
     levelStars: [],
     levelDare: '',
     levelDareGlyph: null,
-    levelNote: '',
-    levelNoteLines: [],
     levelBiome: 'meadow',
     levelLines: [],
     levelWrapW: 0,
@@ -184,7 +179,6 @@ export function createBanners(): Banners {
     blurbFont: '',
     tapFont: '',
     starFont: '',
-    noteFont: '',
     toasts: [],
     toastT: -1,
     toastLines: [],
@@ -203,10 +197,9 @@ export interface LevelCardWords {
   goal: string;
   /** The three star rules' short labels: "Finish", "6 flakes", "≤ 4 s in sun". */
   stars: readonly string[];
-  /** v1.6: "Dare · Bloom 2" ('' none) and its glyph; a teaching note ('' none). */
+  /** v1.6: "Dare · Bloom 2" ('' none) and its glyph. */
   dare?: string;
   dareGlyph?: string | null;
-  note?: string;
 }
 
 /**
@@ -226,7 +219,6 @@ export function showLevelCard(b: Banners, w: LevelCardWords, biome: BiomeId): vo
   b.levelStars = w.stars;
   b.levelDare = noLigatures(w.dare ?? '');
   b.levelDareGlyph = w.dareGlyph ?? null;
-  b.levelNote = w.note ?? '';
   b.levelBiome = biome;
   b.levelLines.length = 0;
   b.levelWrapW = 0;
@@ -370,7 +362,6 @@ function fonts(b: Banners, scale: number): void {
   b.blurbFont = `500 ${Math.round(14 * scale)}px ${SANS}`;
   b.tapFont = `small-caps 700 ${Math.round(11 * scale)}px ${SANS}`;
   b.starFont = `700 ${Math.round(12 * scale)}px ${SANS}`;
-  b.noteFont = `italic 600 ${Math.round(13 * scale)}px ${SANS}`;
   b.toastFont = `600 ${Math.round(13 * scale)}px ${SANS}`;
   b.toastWrapW = 0;
   b.stampW = 0;
@@ -550,18 +541,14 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
     }
     g.font = b.titleFont;
     b.levelTitleW = g.measureText(b.levelTitle).width;
-    g.font = b.noteFont;
-    wrap(g, b.levelNote, innerW, b.levelNoteLines);
-    b.levelNoteLines.length = Math.min(2, b.levelNoteLines.length);
   }
   const lineH = 18 * scale;
   const hasConcept = b.levelConceptName !== '';
   const blurbH = b.levelLines.length * lineH;
   // The same run of increments as the layout below, plus the tap line and the bottom margin.
   const starsH = b.levelStars.length === 3 ? STAR_ROW_H * scale : 0;
-  const noteH = b.levelNoteLines.length * 16 * scale;
   const dareH = b.levelDare ? 28 * scale : 0;
-  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + noteH + (22 + 12 + 14 + 14) * scale + starsH + dareH;
+  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + (22 + 12 + 14 + 14) * scale + starsH + dareH;
   // The card sits between the HUD band and the dial: centred in that space, never over Nubs.
   const dialTop = v.ny - 60 * v.S;
   const y = Math.max(top + 8, Math.min((top + dialTop) / 2, dialTop - h / 2 - 8)) - h / 2;
@@ -624,15 +611,6 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
       ly += lineH;
     }
     ly += 8 * scale;
-  }
-  if (noteH > 0) {
-    // v1.6: the level's teaching note, in teal.
-    g.fillStyle = '#13857C';
-    g.font = b.noteFont;
-    for (const line of b.levelNoteLines) {
-      g.fillText(line, cx, ly + 8 * scale);
-      ly += 16 * scale;
-    }
   }
   // The goal, as a small pill.
   g.font = b.lineFont;

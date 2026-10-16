@@ -2,7 +2,7 @@
 // they melt, the hexagonal ice crystal, night frost flowers that bloom as Nubs approaches, and the
 // gazing-ball glare spot (hot radial disc, rotating hatched ring, faint line back to its ball).
 // v1.6 glass (brittle) flakes melt in 0.8 lit seconds: they sit in a pale faceted diamond with a
-// glint that twinkles at their tip.
+// white rim.
 
 import {
   BALL_Z,
@@ -58,7 +58,7 @@ export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, 
     } else {
       const r = 7 * v.S * shrink;
       if (glass) {
-        // Glass: a pale faceted diamond around the flake, and a twinkling glint at its tip.
+        // Glass: a pale faceted diamond round the flake.
         const d = r * 1.55;
         g.fillStyle = 'rgba(214,240,255,0.55)';
         g.strokeStyle = 'rgba(255,255,255,0.95)';
@@ -76,24 +76,6 @@ export function drawPickups(g: CanvasRenderingContext2D, v: View, world: World, 
       g.rotate(time * 1.2 + p.id);
       g.drawImage(fl, -r, -r, r * 2, r * 2);
       g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-      if (glass) {
-        const tw = 0.5 + 0.5 * Math.sin(time * 5 + p.id);
-        const gx = sx + r * 0.9;
-        const gy = sy - r * 1.1;
-        const k = (2 + 3 * tw) * v.S;
-        g.fillStyle = '#FFFFFF';
-        g.beginPath();
-        g.moveTo(gx, gy - k);
-        g.lineTo(gx + k * 0.25, gy - k * 0.25);
-        g.lineTo(gx + k, gy);
-        g.lineTo(gx + k * 0.25, gy + k * 0.25);
-        g.lineTo(gx, gy + k);
-        g.lineTo(gx - k * 0.25, gy + k * 0.25);
-        g.lineTo(gx - k, gy);
-        g.lineTo(gx - k * 0.25, gy - k * 0.25);
-        g.closePath();
-        g.fill();
-      }
     }
     if (melt > 0.05) {
       // Drips falling off a melting flake.

@@ -914,14 +914,7 @@ export class Renderer {
       hi.locked = s.sun.locked;
       hi.bud = inp.screen === 'title' ? null : inp.mech.bud;
       hi.deep = inp.mech.deep;
-      const mv = inp.mech;
-      hi.deepBand = mv.deepBand;
-      hi.glass = mv.glass;
-      hi.land = mv.land;
-      hi.snapOn = mv.land !== null;
-      hi.flare = mv.flare;
-      hi.flareLeft = mv.flarePhase === 1 ? mv.flareLeft : -1;
-      hi.flareHot = mv.flarePhase === 2 ? mv.flareT : mv.flarePhase === 3 ? 1 : mv.flarePhase === 4 ? 1 - mv.flareT : 0;
+      hi.mech = inp.screen === 'title' ? null : inp.mech;
       hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
       drawHalo(g, sc.halo, hi);
     }

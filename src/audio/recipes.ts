@@ -452,24 +452,7 @@ export const RECIPES = {
     bellTone(v, t + 0.04, root * semis(19), 0.03, 0.7, 0.2);
   },
 
-  // v1.6 (docs/V1_6_PLAN.md §2): the Flow Ring, the Frost Bank, Heat Flares.
-
-  /** A trick pumps the ring: two quick plucks a fifth apart, rising. */
-  ringTrick(g, t, p) {
-    seq(g.voice('sfx', t), t, tonic5(p), [[0, 7], [0.05, 14]], 'pluck', 0.05, 0.12, 1.5);
-  },
-
-  /** A cash-in: frost pouring into the meter, a quick bell run climbing over a soft root. */
-  cash(g, t, p) {
-    const v = g.voice('sfx', t);
-    seq(v, t, tonic5(p), run([0, 2, 4, 5, 7, 9], 0.035), 'bell', 0.04, 0.5, 1.6);
-    v.burst(g.white, t, 0.012, 0.02, 0.2, v.filter('bandpass', 5000, 3));
-  },
-
-  /** Frost over the cap: three small bells tumbling down. */
-  spill(g, t, p) {
-    seq(g.voice('sfx', t), t, tonic5(p), [[0, 19], [0.06, 14], [0.12, 7]], 'bell', 0.03, 0.35, 1.2);
-  },
+  // v1.6 (docs/V1_6_PLAN.md §2.5): Heat Flares.
 
   /** A flare's warning: a low hum swelling and rising a fourth over a second, warm and quiet. */
   flareWarn(g, t) {

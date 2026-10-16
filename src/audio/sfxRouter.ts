@@ -226,13 +226,14 @@ export class SfxRouter {
         if (ev.cause === 'bleed' && ev.from >= 5) this.cue('multReset');
         return;
       case 'ringTrick':
-        if (this.tricks.tryAcquire(now)) this.cue('ringTrick', { day });
+        // A pluck high on the bud tick's ladder; the cash-in pours with the meter's shimmer; a spill tumbles down.
+        if (this.tricks.tryAcquire(now)) this.cue('budGrow', { day, degree: 8 });
         return;
       case 'snapCash':
-        if (ev.refundH > 0) this.cue('cash', { day });
+        if (ev.refundH > 0) this.cue('frostReady', { day });
         return;
       case 'frostSpill':
-        return this.cue('spill', { day });
+        return this.cue('snapEnd', { day });
       case 'snapExtend':
         return this.cue('budGrow', { day, degree: 9 });
       case 'snapLand':

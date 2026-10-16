@@ -45,7 +45,7 @@ import {
   spawn,
 } from '../render/particles.ts';
 import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
-import { GAIN_S, POUR_S, RING_FLASH_S, RING_POP_S, snapsText, SPILL_S } from '../render/hud.ts';
+import { POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
 import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { MechView, RenderScene } from '../render/renderer.ts';
@@ -325,7 +325,8 @@ export class Fx {
           break;
         case 'ringTrick':
           sc.hud.ringFlash = RING_FLASH_S;
-          if (!this.trickSeen) sc.hud.ringPop = RING_POP_S;
+          // The run's first trick says what charged.
+          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -18, 200, 0.8);
           this.trickSeen = true;
           break;
         case 'frostGain':
@@ -408,11 +409,9 @@ export class Fx {
     this.clock.addHitStop(0.04);
   }
 
-  /** v1.6: frost gained (hundredths) pops over the meter; the run's first says "snap". */
+  /** v1.6: frost gained (hundredths) pops beside Nubs in frost blue; the run's first says "snap". */
   private gain(h: number): void {
-    const hud = this.sc.hud;
-    hud.gainT = GAIN_S;
-    hud.gainText = this.gainSeen ? snapsText(h) : `${snapsText(h)} snap`;
+    addPop(this.sc.pops, this.gainSeen ? snapsText(h) : `${snapsText(h)} snap`, POP_DEEP, 20, 120, 0.9);
     this.gainSeen = true;
   }
 

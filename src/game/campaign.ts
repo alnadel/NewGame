@@ -51,35 +51,27 @@ export function campaignConfig(level: LevelDef, reducedMotion: boolean, tutorial
   return levelConfig(level.id, base);
 }
 
-/** The Dare kind a verb goal counts with (null: finish and Snow). */
-const GOAL_FEAT: Readonly<Partial<Record<GoalKind, FeatKind>>> = {
-  flakes: 'flakes',
-  deep: 'deep',
-  clean: 'clean',
-  swings: 'swings',
-  blooms: 'blooms',
-  snapSave: 'snapSave',
-  gate: 'gates',
-  brittle: 'brittle',
-  flip: 'flip',
-  parry: 'parry',
-};
+/** The Dare kind a verb goal counts with ('gate' counts 'gates'; finish and Snow none). */
+const goalFeat = (k: GoalKind): FeatKind | undefined => (k === 'gate' ? 'gates' : k === 'finish' || k === 'snow' ? undefined : (k as FeatKind));
 
-/** Each Dare's glyph (render/glyphs.ts). */
-const FEAT_GLYPH: Readonly<Record<FeatKind, string>> = {
-  blooms: 'sunflower',
-  swings: 'swing',
-  deep: 'deep',
-  snapSave: 'coldsnap',
-  parry: 'flare',
-  brittle: 'brittle',
-  flakes: 'frosty',
-  clean: 'glare',
-  ride: 'cloud',
-  gates: 'gate',
-  flip: 'eclipse',
-  still: 'lock',
-  ring: 'ring',
+/**
+ * Each Dare's glyph (render/glyphs.ts) and short label: '#' is the target, '$' the target in
+ * seconds (ticks), '*' a plural 's'.
+ */
+const FEAT_WORDS: Readonly<Record<FeatKind, readonly [string, string]>> = {
+  blooms: ['sunflower', 'Bloom #'],
+  swings: ['swing', '# SWING*'],
+  deep: ['deep', '$ s deep'],
+  snapSave: ['coldsnap', '$ s snap shade'],
+  parry: ['flare', 'Parry #'],
+  brittle: ['brittle', 'Save # glass'],
+  flakes: ['frosty', '# flakes'],
+  clean: ['glare', '# clean ball*'],
+  ride: ['cloud', 'Ride a cloud'],
+  gates: ['gate', 'Deep arch'],
+  flip: ['eclipse', 'Shade the flip'],
+  still: ['lock', 'Hold # lock*'],
+  ring: ['ring', 'Reach ×#'],
 };
 
 /** Counts in ticks (shown in seconds). */
@@ -88,45 +80,19 @@ export function featInSeconds(kind: FeatKind): boolean {
 }
 
 const secs = (ticks: number): string => String(Math.round(ticks / 6) / 10);
-const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+const gusty = (level?: Pick<LevelDef, 'concepts'>): boolean => level?.concepts.includes('gusts') === true;
 
 /** The Dare's (or verb goal's) glyph; a Gusts level's 'still' Dare is about gusts. */
 export function featGlyph(kind: FeatKind, level?: Pick<LevelDef, 'concepts'>): string {
-  return kind === 'still' && level?.concepts.includes('gusts') ? 'gusts' : FEAT_GLYPH[kind];
+  return kind === 'still' && gusty(level) ? 'gusts' : FEAT_WORDS[kind][0];
 }
 
-/** A Dare's short label: "Bloom 2", "3 SWINGs", "2.5 s deep", "Parry 6", "Save the glass", "Reach ×4". */
+/** A Dare's short label: "Bloom 2", "3 SWINGs", "2.5 s deep", "Parry 6", "Save 1 glass", "Reach ×4". */
 export function featLabel(f: FeatSpec, level: Pick<LevelDef, 'concepts' | 'lengthMinutes'>): string {
-  const t = f.target;
-  switch (f.kind) {
-    case 'blooms':
-      return `Bloom ${t}`;
-    case 'swings':
-      return t === 1 ? '1 SWING' : `${t} SWINGs`;
-    case 'deep':
-      return `${secs(t)} s deep`;
-    case 'snapSave':
-      return `${secs(t)} s snap shade`;
-    case 'parry':
-      return `Parry ${t}`;
-    case 'brittle':
-      return t === 1 ? 'Save the glass' : `Save ${t} glass`;
-    case 'flakes':
-      return `${t} flakes`;
-    case 'clean':
-      return plural(t, 'clean ball');
-    case 'ride':
-      return 'Ride a cloud';
-    case 'gates':
-      return 'Deep arch';
-    case 'flip':
-      return 'Shade the flip';
-    case 'still':
-      return `Hold ${plural(t, level.concepts.includes('gusts') ? 'gust' : 'lock')}`;
-    case 'ring':
-      // ×3 on levels of 25 s or less (§2.6).
-      return `Reach ×${(level.lengthMinutes / 720) * (dayTicks(1) / 60) <= 25 ? 3 : 4}`;
-  }
+  // 'ring': ×3 on levels of 25 s or less (§2.6).
+  const t = f.kind === 'ring' ? ((level.lengthMinutes / 720) * dayTicks(1) <= 1500 ? 3 : 4) : f.target;
+  const w = f.kind === 'still' && gusty(level) ? 'Hold # gust*' : FEAT_WORDS[f.kind][1];
+  return w.replace('#', String(t)).replace('$', secs(t)).replace('*', t === 1 ? '' : 's');
 }
 
 /** The level's Dares as one line: "Bloom 2", or a finale's "Bloom 2 or Parry 6" ('' when it has none). */
@@ -156,16 +122,10 @@ export interface IntroCard {
   goal: string;
   /** The three star rules: the goal ("Finish", "4 flakes", "20 Snow"), "6 flakes" or the Dare, "≤ 4 s in sun". */
   stars: [string, string, string];
-  /** v1.6: the Dare line ("Dare · Bloom 2", '' none), its glyph, and a teaching note under the blurb ('' none). */
+  /** v1.6: the Dare line ("Dare · Bloom 2", '' none) and its glyph. */
   dare: string;
   dareGlyph: string | null;
-  note: string;
 }
-
-/** v1.6 teaching notes on the intro card of the level that teaches a concept (§2.2). */
-const INTRO_NOTES: Readonly<Partial<Record<string, string>>> = {
-  snap: 'Sunflowers fill the frost. A full pip? Swipe down.',
-};
 
 export function introCard(level: LevelDef, relaxed = false): IntroCard {
   const c = level.introduces ? CONCEPTS[level.introduces] : null;
@@ -180,14 +140,13 @@ export function introCard(level: LevelDef, relaxed = false): IntroCard {
     stars: starRules(level, relaxed),
     dare: f ? `Dare · ${dareText(level)}` : '',
     dareGlyph: f ? featGlyph(f.kind, level) : null,
-    note: (level.introduces && INTRO_NOTES[level.introduces]) ?? '',
   };
 }
 
 /** The star rules' short labels (CAMPAIGN_PLAN §3: pass, the flakes or the Dare, a cool run). */
 export function starRules(level: LevelDef, relaxed = false): [string, string, string] {
   const g = level.goal;
-  const verb = GOAL_FEAT[g.kind];
+  const verb = goalFeat(g.kind);
   const pass = relaxed || g.kind === 'finish' ? 'Finish' : g.kind === 'snow' ? `${g.target} Snow` : verb ? featLabel({ kind: verb, target: g.target }, level) : 'Finish';
   const two = level.feats.length > 0 ? (level.feats.length > 1 ? 'A Dare' : featLabel(level.feats[0] as FeatSpec, level)) : `${level.stars.flakes} flakes`;
   return [pass, two, `≤ ${Math.ceil(level.stars.sunSec)} s in sun`];
@@ -207,37 +166,11 @@ export function conceptList(level: LevelDef): string {
   return level.concepts.map((id) => CONCEPTS[id].name).join(' · ');
 }
 
-/** "Reach the finish", "Collect 8 flakes", "Score 20 Snow", "Bloom 1 sunflower", "Land 1 SWING"… */
+/** "Reach the finish", "Collect 8 flakes", "Score 20 Snow", or a verb goal's label ("1 SWING", "Bloom 1"…). */
 export function goalText(level: LevelDef, relaxed = false): string {
   const g = level.goal;
-  const t = g.target;
-  if (relaxed) return 'Reach the finish';
-  switch (g.kind) {
-    case 'flakes':
-      return `Collect ${t} flakes`;
-    case 'snow':
-      return `Score ${t} Snow`;
-    case 'deep':
-      return `${secs(t)} s in deep shade`;
-    case 'clean':
-      return `Pass ${plural(t, 'ball')} clean`;
-    case 'swings':
-      return `Land ${t === 1 ? '1 SWING' : `${t} SWINGs`}`;
-    case 'blooms':
-      return `Bloom ${plural(t, 'sunflower')}`;
-    case 'snapSave':
-      return `Save ${secs(t)} s with a Cold Snap`;
-    case 'gate':
-      return 'Walk the arch in shade';
-    case 'brittle':
-      return `Save ${plural(t, 'glass cluster')}`;
-    case 'flip':
-      return 'Be shaded at the eclipse flip';
-    case 'parry':
-      return `Parry ${plural(t, 'flare')}`;
-    default:
-      return 'Reach the finish';
-  }
+  const verb = goalFeat(g.kind);
+  return relaxed || !verb ? (g.kind === 'snow' && !relaxed ? `Score ${g.target} Snow` : 'Reach the finish') : verb === 'flakes' ? `Collect ${g.target} flakes` : featLabel({ kind: verb, target: g.target }, level);
 }
 
 /** A goal's live count (flakes, Snow, or its verb's Dare counter). */
@@ -245,12 +178,12 @@ export function goalValue(level: LevelDef, stats: Stats, seen: FeatSeen = NONE):
   const g = level.goal;
   if (g.kind === 'snow') return Math.floor(stats.snow);
   if (g.kind === 'flakes') return stats.flakes;
-  const verb = GOAL_FEAT[g.kind];
+  const verb = goalFeat(g.kind);
   return verb ? featLive(verb, stats, seen) : 0;
 }
 
-/** "9/8 flakes" style count of a goal ("1.2/1.5 s" for ticks). */
-function countText(value: number, target: number, sec: boolean): string {
+/** A count against its target: "9/8", or "1.2/1.5 s" for ticks. */
+export function countText(value: number, target: number, sec: boolean): string {
   return sec ? `${secs(value)}/${secs(target)} s` : `${Math.floor(value)}/${target}`;
 }
 
@@ -262,7 +195,7 @@ function countText(value: number, target: number, sec: boolean): string {
 export function goalLine(level: LevelDef, stats: Stats, passed: boolean, relaxed = false, seen: FeatSeen = NONE, misses = 0): string {
   const g = level.goal;
   const snow = Math.floor(stats.snow);
-  const verb = relaxed ? undefined : GOAL_FEAT[g.kind];
+  const verb = relaxed ? undefined : goalFeat(g.kind);
   if (!passed) {
     if (relaxed || g.kind === 'finish') return 'Melted before the finish';
     const soft = misses >= SOFT_FAIL_MISSES ? ' · Next try: just reach the finish' : '';
@@ -331,7 +264,7 @@ export function goalMetLive(level: LevelDef, stats: Stats, seen: FeatSeen = NONE
   if (g.kind === 'finish') return false;
   if (g.kind === 'flakes') return stats.flakes >= g.target;
   if (g.kind === 'snow') return stats.snow >= g.target;
-  return GOAL_FEAT[g.kind] !== undefined && goalValue(level, stats, seen) >= g.target;
+  return goalFeat(g.kind) !== undefined && goalValue(level, stats, seen) >= g.target;
 }
 
 /** What the HUD's goal pill counts. */
@@ -354,7 +287,7 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
   out.glyph = null;
   out.sec = false;
   const g = level?.goal;
-  const verb = g && !relaxed ? GOAL_FEAT[g.kind] : undefined;
+  const verb = g && !relaxed ? goalFeat(g.kind) : undefined;
   if (!level || !g || ((g.kind === 'finish' || relaxed) && level.feats.length === 0)) {
     out.value = Math.floor(stats.snow);
     out.target = -1;

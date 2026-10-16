@@ -88,16 +88,6 @@ export interface Mechanics {
   demo(name: string, s: SimState, snap: RenderSnap, time: number): boolean;
 }
 
-/** Copies `src` eroded by `k` bins at both ends of every run into `out` (a plausible narrower mask). */
-function erode(src: Uint8Array, k: number, out: Uint8Array): Uint8Array {
-  for (let b = 0; b < 360; b++) {
-    let on = src[b] === 1;
-    for (let d = 1; on && d <= k; d++) on = src[(b + d) % 360] === 1 && src[(b + 360 - d) % 360] === 1;
-    out[b] = on ? 1 : 0;
-  }
-  return out;
-}
-
 /** An arc of `w` bins centred on bin `c`. */
 function arcMask(c: number, w: number, out: Uint8Array): Uint8Array {
   out.fill(0);
@@ -352,9 +342,8 @@ export function createMechanics(): Mechanics {
           ev = { e: 'snapLand', chain: 2, own: true, x: nb.x, y: nb.y };
           break;
         case 'deepBand':
-          // Deep shade inside the lasting teal: its core, 4° in from each end.
-          erode(gd.now, 4, demoMask);
-          if (!demoMask.includes(1)) arcMask(theta, 14, demoMask);
+          // Deep shade at the sun's angle (inside the teal when Nubs is shaded).
+          arcMask(theta, 14, demoMask);
           stage('deepBand');
           deepEnd = time + DEMO_S;
           ev = { e: 'deepEnter' };
@@ -376,11 +365,10 @@ export function createMechanics(): Mechanics {
         case 'flare':
         case 'parry': {
           if (name === 'flare' || !flareDemo) {
-            // A kept flare whose warning starts now (the core's debug hook); its shade is the shade
-            // now, narrowed 8° from each end (the far shadows jump).
+            // A kept flare whose warning starts now (the core's debug hook); the shade that holds
+            // through it 40° round from the sun.
             flareDemo = debugFlare(s, 0, 10);
-            erode(gd.now, 8, demoMask);
-            if (!demoMask.includes(1)) arcMask(theta + 40, 16, demoMask);
+            arcMask(theta + 40, 16, demoMask);
           }
           const f = flareDemo as Flare;
           ev = name === 'flare' ? { e: 'flareWarn', id: f.id, ticks: f.riseTick - f.warnTick, d: f.d } : { e: 'flareParry', id: f.id, snap: false, snow: TUNING.flare.snow };
