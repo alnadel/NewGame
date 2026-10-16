@@ -17,11 +17,13 @@ import {
   shadowLength,
 } from '../shadows.ts';
 import { addFrost } from './mechanics.ts';
+import { ringTrick } from './nubs.ts';
 import type { SimState } from './types.ts';
 
 const P = TUNING.pickups;
 const R2 = TUNING.nubs.collectRadius * TUNING.nubs.collectRadius;
 const MAX_R = TUNING.world.maxCasterRadius;
+const RING = TUNING.ring;
 
 /** Lit weight of a single ground point (0 shaded, 1 lit, 2 glare) under the current sun. */
 export function pointLitWeight(s: SimState, px: number, py: number): number {
@@ -84,9 +86,26 @@ export function updatePickups(s: SimState, daylight: boolean): void {
     if (p.melt >= meltBudgetOf(s, p)) {
       p.state = PICKUP_MELTED;
       if (p.kind === 'flake') st.flakesMelted++;
+      // v1.6 ring: a melt breaks the pickup streak.
+      nb.streak = 0;
       s.events.push({ e: 'flakeMelt', x: p.x, y: p.y });
     }
   }
+}
+
+/**
+ * The multiplier flake and crystal Snow pays: v1.6 (T2, the ring on) caps it at
+ * TUNING.ring.snowCap (×4 and ×5 pay through the snap's cash-in instead).
+ */
+function snowMult(s: SimState): number {
+  return s.world.v16.ring ? Math.min(s.nubs.mult, RING.snowCap) : s.nubs.mult;
+}
+
+/** v1.6 ring: every streakEvery-th flake or crystal taken in a row without a melt pays a streak trick. */
+function streak(s: SimState): void {
+  const nb = s.nubs;
+  nb.streak++;
+  if (nb.streak % RING.streakEvery === 0) ringTrick(s, 'streak', RING.streakTrick);
 }
 
 function collect(s: SimState, p: Pickup): void {
@@ -95,20 +114,22 @@ function collect(s: SimState, p: Pickup): void {
   p.state = PICKUP_TAKEN;
   if (p.kind === 'flake') {
     // Heat Wave days pay ×1.5 (DayParams.snowMult; 1 on other days, so Snow stays an integer).
-    const snow = Math.round(nb.mult * s.params.snowMult);
+    const snow = Math.round(snowMult(s) * s.params.snowMult);
     st.flakes++;
     st.snow += snow;
     nb.chill = Math.min(nb.maxChill, nb.chill + P.flakeChill);
     s.events.push({ e: 'flake', mult: nb.mult, degree: (s.flakesToday + nb.mult) % 10, x: p.x, y: p.y, snow });
     s.flakesToday++;
     addFrost(s, TUNING.frost.perFlake);
+    streak(s);
   } else if (p.kind === 'crystal') {
-    const snow = Math.round(P.crystalSnowMult * nb.mult * s.params.snowMult);
+    const snow = Math.round(P.crystalSnowMult * snowMult(s) * s.params.snowMult);
     st.crystals++;
     st.snow += snow;
     nb.chill = Math.min(nb.maxChill, nb.chill + P.crystalChill);
     s.events.push({ e: 'crystal', mult: nb.mult, x: p.x, y: p.y, snow });
     addFrost(s, TUNING.frost.perFlake);
+    streak(s);
   } else {
     st.flowers++;
     st.snow += P.flowerSnow;

@@ -232,6 +232,8 @@ export interface NubsState {
   swPendTicks: number;
   swChain: number;
   swLastTick: number;
+  /** v1.6 (CORE-1): the source a pending hand-off (swPend) leaves, recorded as an endpoint when it confirms (−1 none). */
+  swPendFrom: number;
 
   // v1.6 Flow Ring (docs/V1_6_PLAN.md §2.1; CORE-1).
   /** Ring charge in integer units (TUNING.ring.shadeUnits = one full-shade tick); `mult` is its level. */
@@ -344,6 +346,8 @@ export interface SimState {
   landTicks: number;
   landHold: number;
   landSrc: number;
+  /** v1.6 (CORE-1): ids of the sunflowers bloomed under the current snap (the first snapBlooms, at most 8 slots; own landings). */
+  readonly snapBloomIds: Int32Array;
   // v1.6 glass clusters (§2.3; CORE-2): the cluster being walked through (−1 none), flakes taken from it, a flake of it melted.
   clusterId: number;
   clusterTaken: number;

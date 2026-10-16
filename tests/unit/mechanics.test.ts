@@ -118,7 +118,7 @@ describe('Sunflower buds', () => {
   });
 
   it('grow while the sun shines from within ±faceTol of the face, fade otherwise, and bloom into a sunflower caster', () => {
-    const s = lab();
+    const s = lab({ startFrost: 0 });
     const b = bud(s, 120, wrapDeg(s.sun.theta + 90));
     // Facing away: nothing grows.
     run(s, 30);
@@ -148,7 +148,8 @@ describe('Sunflower buds', () => {
     expect(s.world.casters).toContain(c);
     expect(s.stats.blooms).toBe(1);
     expect(s.stats.snow).toBe(snow0 + B.snow);
-    expect(s.nubs.frost).toBeCloseTo(F.perBloom, 9);
+    // v1.6 Frost Bank: a bloom pays bloomH hundredths.
+    expect([s.nubs.frostH, s.nubs.frost]).toEqual([TUNING.bank.bloomH, TUNING.bank.bloomH / 100]);
     // A bloomed bud never grows again.
     expect(run(s, 60).some((e) => e.e === 'bloom')).toBe(false);
   });
@@ -192,8 +193,8 @@ describe('Sunflower buds', () => {
 });
 
 describe('Cold Snap', () => {
-  it('the frost meter fills from full shade (×frostMul in deep shade), flakes and blooms; frostReady fires once', () => {
-    const s = lab({ mechanics: { deep: false } });
+  it('v1.5 meter (the v1.6 Bank off): fills from full shade (×frostMul in deep shade), flakes and blooms; frostReady fires once', () => {
+    const s = lab({ mechanics: { deep: false }, v16: { bank: false } });
     for (let dy = 40; dy <= 700; dy += 50) block(s, s.nubs.y + dy);
     // Walk into the block: one source over Nubs.
     for (let i = 0; i < 400 && s.nubs.f > 0; i++) step(s, NO_INPUT);
@@ -296,11 +297,12 @@ describe('deep shade', () => {
     for (let i = 0; i < 400 && !s.nubs.deep; i++) step(s, NO_INPUT);
     expect(s.nubs.deep).toBe(true);
     const c0 = s.nubs.chill;
-    const m0 = s.nubs.shadeTicks;
+    const m0 = s.nubs.ringCharge;
     run(s, 6);
     expect(s.nubs.deep).toBe(true);
     expect(s.nubs.chill - c0).toBeCloseTo(Math.min(100 - c0, (6 * TUNING.nubs.regen * TUNING.deep.regenMul) / 60), 9);
-    expect(s.nubs.shadeTicks - m0).toBe(6 * TUNING.deep.multMul);
+    // v1.6 ring: deep shade charges ×deepMul.
+    expect(s.nubs.ringCharge - m0).toBe(6 * TUNING.ring.shadeUnits * TUNING.ring.deepMul);
     expect(s.stats.deepSeconds).toBeGreaterThan(0);
   });
 
