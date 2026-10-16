@@ -9,10 +9,13 @@ import { keepAlive, mech, OPEN_SAVE, seedSave, waitForScreen, watchErrors } from
 
 const demo = (page: Page, name: string) => page.evaluate((n) => window.__SHADY_TEST__!.demo(n), name);
 
-/** An endless run at profile 3 (a debug run: nothing is saved), the oracle playing, past its start beat. */
-async function playEndless(page: Page): Promise<void> {
+/**
+ * An endless run at profile 3 (a debug run: nothing is saved), past its start beat. The Frost Bank
+ * ships off (V16_SHIP); `rules` '&on=bank' switches it on for its own layers.
+ */
+async function playEndless(page: Page, rules = '&on=bank'): Promise<void> {
   await seedSave(page, OPEN_SAVE);
-  await page.goto('/?test=1&seed=42&profile=3&t=08:30');
+  await page.goto(`/?test=1&seed=42&profile=3&t=08:30${rules}`);
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'title');
   await keepAlive(page);
@@ -53,7 +56,10 @@ test('the ring, the pips and the dial layers show their demos without errors', a
 
 test('a Heat Flare counts down on the dial and a parry marks it on the ruler', async ({ page }) => {
   const errors = watchErrors(page);
-  await playEndless(page);
+  // The shipped rules: the Frost Bank off, so the meter is one gauge; the ring is on.
+  await playEndless(page, '');
+  expect((await mech(page)).pips).toBe(1);
+  expect((await mech(page)).ring).toBe(true);
   await demo(page, 'flare');
   await expect.poll(async () => (await mech(page)).flarePhase).toBe(1);
   const m1 = await mech(page);

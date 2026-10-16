@@ -56,12 +56,12 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
     ['bud', 'A bud! Shine the sun from its gold mark to grow it. Gold on the dial grows it too.'],
-    ['bloom', 'Bloomed! A quarter of a snap of frost, and shade for the rest of the run.'],
+    ['bloom', 'Bloomed! Frost toward a snap, and shade for the rest of the run.'],
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],
   snap: [
-    ['go', 'Sunflowers fill the frost. A full pip? Swipe down.'],
-    ['frost', 'A pip is full! Swipe down, press ↓ or tap it: a snap pours your ring into the frost.'],
+    ['go', 'Sunflowers fill the frost. Full? Swipe down.'],
+    ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
     ['cash', 'Your ring poured into the frost.'],
   ],

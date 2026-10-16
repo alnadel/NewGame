@@ -1,6 +1,6 @@
 // Debug and test URL parameters (V1_PLAN §14, archive/TECH_SPEC §17).
 
-import { BOT_KINDS, COMFORT_MAX, dayLength, FORECAST_IDS, type BotKind, type ForecastId, type ProfileId } from '../core/index.ts';
+import { BOT_KINDS, COMFORT_MAX, dayLength, FORECAST_IDS, V16_RULES, type BotKind, type ForecastId, type ProfileId, type V16Rules } from '../core/index.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';
 
 export interface Params {
@@ -29,6 +29,8 @@ export interface Params {
   plan: boolean | null;
   /** Opens this campaign level (1..200) directly: a normal campaign run unless other debug params are present. */
   level: number | null;
+  /** v1.6 rules switched by ?on=bank,… and ?off=flares,… (cfg.v16, over the shipped V16_SHIP); null when neither. */
+  rules: Partial<V16Rules> | null;
 }
 
 /**
@@ -59,6 +61,10 @@ export function parseParams(search: string, today: string = localDate()): Params
   const forecast = q.get('forecast');
   const plan = q.get('plan');
   const level = num('level');
+  let rules: { -readonly [K in keyof V16Rules]?: boolean } | null = null;
+  for (const [k, v] of [['on', true], ['off', false]] as const) {
+    for (const r of (q.get(k) ?? '').split(',')) if ((V16_RULES as readonly string[]).includes(r)) (rules ??= {})[r as keyof V16Rules] = v;
+  }
   return {
     seed: seed === null ? null : Math.floor(Math.abs(seed)) >>> 0,
     daily: q.get('mode') === 'daily',
@@ -79,6 +85,7 @@ export function parseParams(search: string, today: string = localDate()): Params
     rung: rung !== null && rung >= 0 && rung <= COMFORT_MAX ? Math.floor(rung) : null,
     plan: plan === '1' ? true : plan === '0' ? false : null,
     level: level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null,
+    rules,
   };
 }
 
@@ -98,7 +105,7 @@ export function startTFor(t: string | null, day: number): number | null {
 
 /**
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
- * a forced profile, rung, forecast or Day Plan, fast-forward or a guide override. Such runs are not
+ * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward or a guide override. Such runs are not
  * scored, saved, shared or counted as Daily tries (they work in production builds for QA). ?seed,
  * ?mode=daily&date, ?level, ?mute, ?debug, ?test and ?perf don't make a run a debug run.
  */
@@ -113,6 +120,7 @@ export function isDebugRun(p: Params): boolean {
     p.guide !== null ||
     p.forecast !== null ||
     p.rung !== null ||
-    p.plan !== null
+    p.plan !== null ||
+    p.rules !== null
   );
 }

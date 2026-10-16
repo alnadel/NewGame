@@ -218,10 +218,13 @@ describe('URL params', () => {
     expect(isDebugRun(parseParams(''))).toBe(false);
     expect(isDebugRun(parseParams('?seed=7&test=1&mute=1&debug=1&perf=0'))).toBe(false);
     expect(isDebugRun(parseParams('?mode=daily&date=2026-10-01'))).toBe(false);
-    for (const q of ['?day=7', '?t=noon', '?chill=20', '?profile=3', '?bot=oracle', '?fast=4', '?guide=always', '?forecast=breezy', '?rung=1', '?plan=0']) {
+    for (const q of ['?day=7', '?t=noon', '?chill=20', '?profile=3', '?bot=oracle', '?fast=4', '?guide=always', '?forecast=breezy', '?rung=1', '?plan=0', '?on=bank']) {
       expect(isDebugRun(parseParams(q))).toBe(true);
     }
     expect(isDebugRun(parseParams('?fast=1'))).toBe(false);
+    // v1.6 rules over the shipped ones: ?on= and ?off= (unknown names ignored).
+    expect(parseParams('?on=bank&off=flares,noonHeat,nope').rules).toEqual({ bank: true, flares: false, noonHeat: false });
+    expect(parseParams('?on=nope').rules).toBeNull();
   });
 
   it('maps t= to seconds after dawn', () => {

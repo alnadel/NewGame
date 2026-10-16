@@ -48,8 +48,9 @@ v1.6 puts a price on every second ([v1.6 plan](docs/V1_6_PLAN.md)):
 
 - **Flow Ring**: the charge runs round the ×N badge. Shade fills it, tricks (a fresh SWING, a bloom,
   a glass cluster saved, a landing, a parry) pump it, idle sun drains it (the ring turns hot).
-- **Frost Bank**: the meter holds two snaps (two pips). Sunflowers and daring plays fill it, and it
-  keeps overnight. A snap pours your ring into the frost: snap while the ring is high.
+- **Frost Bank** (built, but shipped switched off after calibration: the meter plays as in v1.5):
+  the meter holds two snaps (two pips). Sunflowers and daring plays fill it, and it keeps overnight.
+  A snap pours your ring into the frost: snap while the ring is high.
 - **Frost Garden**: under the frost cloud the sun is yours. Buds grow fast; the dial's frost band
   shows where the shade will be when the snap ends. Land there in a sunflower you planted: LANDING!
 - **Glass flakes**: some clusters are glass and melt in a blink. The thin white arc outside the dial

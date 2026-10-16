@@ -1198,6 +1198,7 @@ export class Session {
     }
     if (p.forecast !== null) cfg.forecast = p.forecast;
     if (p.plan !== null) cfg.plan = p.plan;
+    if (p.rules) cfg.v16 = p.rules;
     return this.debugStart(cfg);
   }
 
