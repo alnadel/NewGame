@@ -32,6 +32,7 @@ import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, 
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
+import type { DareTerms } from './bots/dares.ts';
 
 export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat';
 export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat'] as BotKind[]);
@@ -50,6 +51,12 @@ export interface BotOptions {
   preAim?: boolean;
   /** Oracle: weights for the level's Dare (the Feat-seeking oracle). CORE-2. */
   feats?: boolean;
+  /**
+   * v1.6 Journey terms (bots/dares.ts `DARE_TERMS`): with them the oracle plays a level's verb goal
+   * (and with `feats` its Dares) and humanFeat aims at its Dare. Tooling passes them; unset, the
+   * bots play every level as 'finish' (and humanFeat plays like humanDial). CORE-2.
+   */
+  dares?: DareTerms;
 }
 
 /** What a v1.6 hook (bots/econ.ts, bots/world.ts) knows about the bot calling it. */

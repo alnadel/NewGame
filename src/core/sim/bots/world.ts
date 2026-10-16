@@ -11,7 +11,7 @@ import { chillDeltaTable, slidingMaxCircular, stepLitLive } from '../../gen/vali
 import { BINS, binOf } from '../../intervals.ts';
 import { FLARE_KEPT, type Flare } from '../../objects.ts';
 import type { BotHookCtx } from '../bots.ts';
-import { dareBonus, dareSnap, dareTarget, glassValue } from './dares.ts';
+import { glassValue } from './glassplan.ts';
 import type { SimState } from '../types.ts';
 
 const STEP = TUNING.validator.stepTicks;
@@ -176,13 +176,13 @@ export function worldOracleBonus(ctx: BotHookCtx, s: SimState, b: number, slack:
     if (gv) v += ORACLE_GLASS * (gv[b] as number);
   }
   // §2.6: the level's unmet verb goal, and the Feat-seeking oracle's unmet Dares.
-  if (s.level) v += dareBonus(s, b, slack, ctx.opts.feats === true);
+  if (s.level && ctx.opts.dares) v += ctx.opts.dares.bonus(s, b, slack, ctx.opts.feats === true);
   return v;
 }
 
 /** Oracle, each plan: the Cold Snap decision after the economy's (the Feat-seeking oracle's snapSave Dare, §2.6). */
 export function worldOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slack: number): boolean {
-  return dareSnap(s, snap, slack, ctx.opts.feats === true);
+  return ctx.opts.dares ? ctx.opts.dares.snap(s, snap, slack, ctx.opts.feats === true) : snap;
 }
 
 /** humanFeat's share of decisions that aim for the level's Dare (§2.6: a seeded 50% focus). */
@@ -197,10 +197,10 @@ const FOCUS_TICKS = 30;
  * own stream, independent of humanDial's) it aims for the level's first unmet Dare instead
  * (bots/dares.ts), when the dial shows one; its lag and aim error still apply.
  */
-export function worldHumanTarget(_ctx: BotHookCtx, s: SimState, target: number): number {
+export function worldHumanTarget(ctx: BotHookCtx, s: SimState, target: number): number {
   if (!s.level) return target;
   const coin = (splitmix32((s.cfg.seed ^ Math.imul(Math.floor(s.tick / FOCUS_TICKS) + 1, 0x9e3779b1)) >>> 0) >>> 0) / 4294967296;
   if (coin >= FEAT_FOCUS) return target;
-  const t = dareTarget(s, s.sun.theta);
+  const t = ctx.opts.dares ? ctx.opts.dares.target(s, s.sun.theta) : -1;
   return t >= 0 ? t : target;
 }

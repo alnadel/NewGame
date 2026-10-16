@@ -1,9 +1,9 @@
 // v1.6 Journey bake (docs/V1_6_PLAN.md §2.5, §2.6; CORE-2): src/config/levelBake.gen.ts is current
-// (`node scripts/sim.ts --bake` rewrites it), the levels read their Dare targets and flares from
-// it, and the baked flares are kept by the validator where they stand.
+// (`node scripts/sim.ts --bake` rewrites it), the levels read their Dares and flares from its
+// LEVEL_BAKE_RUN, and the baked flares are kept by the validator where they stand.
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN_LEVELS, isBossFinale, levelBakeKey, levelDef, nominalFlares, type LevelDef } from '../../src/config/campaign.ts';
-import { LEVEL_BAKE } from '../../src/config/levelBake.gen.ts';
+import { bakeRunEntry, CAMPAIGN_LEVELS, isBossFinale, levelBakeKey, levelDef, nominalFlares, type LevelBake, type LevelDef } from '../../src/config/campaign.ts';
+import { LEVEL_BAKE, LEVEL_BAKE_RUN } from '../../src/config/levelBake.gen.ts';
 import { TUNING } from '../../src/config/tuning.ts';
 import { tickAtMinute } from '../../src/core/clock.ts';
 import { createWorld, ensureGenerated } from '../../src/core/gen/world.ts';
@@ -18,8 +18,9 @@ describe('the Journey bake', () => {
       expect(b, `level ${l.id}: run node scripts/sim.ts --bake`).toBeDefined();
       const key = levelBakeKey(l.seed, l.concepts, l.drain, l.startMinute, l.lengthMinutes, l.biome, l.forecast, nominalFlares(l.id, l.startMinute, l.lengthMinutes));
       expect(b?.key, `level ${l.id}: run node scripts/sim.ts --bake`).toBe(key);
-      // The level plays its baked flares.
+      // The level plays its baked flares, and the game's part (LEVEL_BAKE_RUN) is the Dares sized from these offers.
       expect(l.flares).toEqual(b?.flares);
+      expect(LEVEL_BAKE_RUN.split(';')[l.id - 1], `level ${l.id}: run node scripts/sim.ts --bake`).toBe(bakeRunEntry(l, b as LevelBake));
     }
   });
 

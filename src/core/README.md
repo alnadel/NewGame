@@ -585,23 +585,28 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   60 ticks after the flip, L38 parry 2); 'snow' stays in `GoalKind` only for GAME's compile.
   **Soft-fail**: `SOFT_FAIL_MISSES` 2, `relaxedGoalFor(level, misses)`, `RunConfig.relaxedGoal`
   (read by `levelOutcome`: the goal scores as 'finish'; GAME keeps the miss count in the save).
-- **Bake** (`node scripts/sim.ts --bake` → `src/config/levelBake.gen.ts`, `LevelBake` keyed by
-  `levelBakeKey` incl. `BAKE_VERSION`; tests/unit/levelBake.test.ts checks it is current): per level
-  the kept flares and what it offers: buds, balls with a glare-free line passed before the line,
+- **Bake** (`node scripts/sim.ts --bake` → `src/config/levelBake.gen.ts`; tests/unit/levelBake.test.ts
+  checks it is current). The game reads only `LEVEL_BAKE_RUN` (one short string: each level's Dares,
+  kept flares and bake-sized goal target, decoded by campaign.ts `bakeRun`); `LEVEL_BAKE` (tooling
+  only, so the bundler drops it, keyed by `levelBakeKey` incl. `BAKE_VERSION`) holds per level the
+  kept flares and what it offers: buds, balls with a glare-free line passed before the line,
   glass clusters, lock/gust windows and the holdable ones, plain flakes, deep-shade ticks, the
   longest one-cloud ride and the clouds ridable ≥ 1 s, SWING hand-offs (lit gaps of 42-60° between
   two sources, one per 2 s), the longest fully shaded turn-limited stretch. A concept's Dare is
   assigned only where it fits the offer (else the next concept's, else a seeded core verb) and is
   sized from it (deep ≤ offer/5, flakes 80% of min(expected, 85% offered), ring x4 only with a
   1100-tick stretch, still half the holdable windows, swings needs 4 hand-offs per SWING asked).
-  Boss finales (50, 60, …, 200) carry `flare` (HP = kept flares) and a parry Dare.
+  `bakeRunEntry(level, bake)` turns the offers into the run entry. The world never depends on the
+  Dares (a level's glass share reads its concepts), so the bake is a fixed point. Boss finales (50,
+  60, …, 200) carry `flare` (HP = kept flares) and a parry Dare.
 - **Hash**: `hashState` reads the flare state (`flareIdx/Id/Phase/Lit/Ticks`, kept flares within
   600 u), the cluster state and the world stats above.
-- **Bots** (`sim/bots/world.ts`, `sim/bots/dares.ts`): reactive preAim (the last 18 ticks of a
+- **Bots** (`sim/bots/world.ts`, `sim/bots/glassplan.ts`, `sim/bots/dares.ts`): reactive preAim (the last 18 ticks of a
   warning toward guide.flare), chase/naive +1.5 on guide.flake; oracle: per-step Noon Heat and
   hold deltas, a parry plan (×6 on bins whose hold path stays shaded), a glass plan with slack ≥ 10
   (`glassValue`: a 1.6 s turn-limited DP over every glass flake in its melt window, the most urgent
-  weighted up, ×45), and every oracle plays the level's unmet verb goal; `BotOptions.feats` (the Feat-seeking
-  oracle) adds each unmet Dare's term (pulls toward bud, deep, glass, cloud-ride, gate-deep,
+  weighted up, ×45). With `BotOptions.dares` (`DARE_TERMS` from bots/dares.ts; tooling passes it,
+  the game never imports it) the oracle plays the level's unmet verb goal and `BotOptions.feats` (the
+  Feat-seeking oracle) adds each unmet Dare's term (pulls toward bud, deep, glass, cloud-ride, gate-deep,
   flip and window-hold bins, a committed SWING aim over a lit gap, glare lookahead, and a charged
   snap cast for snapSave); `humanFeat` aims at its first unmet Dare in a seeded half of its decisions.

@@ -8,7 +8,7 @@
 import { CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, MECHANIC_CONCEPTS, TEACH_LEVELS, type ConceptId } from './concepts.ts';
 import { dayParams, dayPlan, type BiomeId } from './days.ts';
 import type { ForecastId } from './forecasts.ts';
-import { LEVEL_BAKE } from './levelBake.gen.ts';
+import { LEVEL_BAKE_RUN } from './levelBake.gen.ts';
 import { hashString, rngFor } from './rng.ts';
 import { TUNING } from './tuning.ts';
 
@@ -38,11 +38,12 @@ export interface LevelFlare {
 }
 
 /**
- * What `node scripts/sim.ts --bake` measured on a level's fixed seed (src/config/levelBake.gen.ts):
- * the Dare targets are sized from it, and its flares are the level's (kept by the keep test).
+ * What `node scripts/sim.ts --bake` measured on a level's fixed seed (src/config/levelBake.gen.ts
+ * `LEVEL_BAKE`, tooling only): the Dare targets are sized from it (`bakeRunEntry`), and its flares are
+ * the level's (kept by the keep test). The game reads only the result, `LEVEL_BAKE_RUN`.
  */
 export interface LevelBake {
-  /** levelBakeKey of the level's world identity when it was baked (a stale entry is ignored). */
+  /** levelBakeKey of the level's world identity when it was baked (the bake test checks it is current). */
   readonly key: string;
   /** Sunflower buds whose reach the trail passes between the start and the finish. */
   readonly buds: number;
@@ -384,18 +385,15 @@ function makeLevel(id: number): LevelDef {
     starFlakes = Math.max(target + 1, Math.round(0.8 * flakes));
   }
   // v1.6 verb goals (§2.6): a teaching level asks for the verb it teaches, kept small.
-  const nominal = nominalFlares(id, startMinute, lengthMinutes);
-  const key = levelBakeKey(seed, concepts, drain, startMinute, lengthMinutes, biome, forecast, nominal);
-  const bake = LEVEL_BAKE[id];
-  const baked = bake !== undefined && bake.key === key ? bake : null;
+  // The Dares, kept flares and bake-sized goal targets come from the bake's result (LEVEL_BAKE_RUN).
+  const run = bakeRun(id);
   const teach = introduces ? TEACH_GOALS[introduces] : undefined;
   if (teach) {
     goal = teach;
-    target = teach === 'clean' ? Math.max(1, (baked?.balls ?? 1) - 1) : (TEACH_TARGETS[teach] ?? 1);
+    target = teach === 'clean' ? (run?.goal ?? 1) : (TEACH_TARGETS[teach] ?? 1);
   }
-  const flares = baked ? baked.flares : nominal;
-  const daylightTicks = Math.round((lengthMinutes / 720) * p.dayLen * 60);
-  const feats = assignFeats(id, seed, concepts, lengthMinutes, p.dayLen, daylightTicks, flakes, flares.length, baked);
+  const flares = run ? run.flares : NO_FLARES;
+  const feats = run ? run.feats : NO_FEATS;
   return Object.freeze({
     id,
     chapter: chapter.id,
@@ -498,6 +496,48 @@ export function levelBakeKey(seed: number, concepts: readonly ConceptId[], drain
 
 /** Bump when the generator changes what a level offers (every bake entry goes stale). */
 export const BAKE_VERSION = 1;
+
+const NO_FLARES: readonly LevelFlare[] = Object.freeze([]);
+const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
+/** LEVEL_BAKE_RUN's Dare letters: a = blooms … m = ring. */
+const FEAT_CODES: readonly FeatKind[] = ['blooms', 'swings', 'deep', 'snapSave', 'parry', 'brittle', 'flakes', 'clean', 'ride', 'gates', 'flip', 'still', 'ring'];
+let runEntries: string[] | null = null;
+
+/**
+ * Level `id`'s bake result (LEVEL_BAKE_RUN, entry id − 1 of the ';'-separated list): its Dares
+ * (letter + target each), its kept flares (minute:d, ','-separated) and a bake-sized goal target
+ * ('/'-separated fields), or null when the bake has no entry for it.
+ */
+function bakeRun(id: number): { feats: readonly FeatSpec[]; flares: readonly LevelFlare[]; goal: number | null } | null {
+  const entries = (runEntries ??= LEVEL_BAKE_RUN.split(';'));
+  const e = entries[id - 1];
+  if (e === undefined || e === '') return null;
+  const [fs = '', fl = '', g = ''] = e.split('/');
+  const feats: FeatSpec[] = [];
+  for (const m of fs.matchAll(/([a-m])(\d+)/g)) feats.push(Object.freeze({ kind: FEAT_CODES[(m[1] as string).charCodeAt(0) - 97] as FeatKind, target: Number(m[2]) }));
+  const flares: LevelFlare[] = [];
+  for (const x of fl === '' ? [] : fl.split(',')) {
+    const [minute, d] = x.split(':');
+    flares.push(Object.freeze({ minute: Number(minute), d: Number(d) }));
+  }
+  return { feats: Object.freeze(feats), flares: Object.freeze(flares), goal: g === '' ? null : Number(g) };
+}
+
+/**
+ * Tooling (scripts/sim16/bake.ts, the bake test): level `l`'s LEVEL_BAKE_RUN entry from what the bake
+ * measured: its Dares (assignFeats over the offers), its kept flares and, for the glare lesson, the
+ * clean goal (every ball with a glare-free line, minus one, at least 1).
+ */
+export function bakeRunEntry(l: LevelDef, bake: LevelBake): string {
+  const p = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts);
+  const flakes = expectedFlakes(l.startMinute, l.lengthMinutes, l.concepts, l.biome, l.forecast);
+  const daylightTicks = Math.round((l.lengthMinutes / 720) * p.dayLen * 60);
+  const feats = assignFeats(l.id, l.seed, l.concepts, l.lengthMinutes, p.dayLen, daylightTicks, flakes, bake.flares.length, bake);
+  const fs = feats.map((f) => String.fromCharCode(97 + FEAT_CODES.indexOf(f.kind)) + f.target).join('');
+  const fl = bake.flares.map((f) => `${f.minute}:${f.d}`).join(',');
+  const g = l.introduces && TEACH_GOALS[l.introduces] === 'clean' ? String(Math.max(1, bake.balls - 1)) : '';
+  return `${fs}/${fl}/${g}`;
+}
 
 /** The concepts a level carries that set a mechanic or world feature a Dare needs. */
 function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], keptFlares: number, bake: LevelBake | null, sec: number): boolean {
@@ -644,15 +684,19 @@ const glassMemo = new Map<number, number>();
 /**
  * v1.6 glass (§2.3): the glass quota of a Journey level (once Mechanics.brittle is on, from L21):
  * 60% on the brittle concept's own level, else TUNING.brittle.quotaDay1; on a level with a flake goal
- * or a flake Dare it is capped at (1 − target / expected) − 0.15, so the flakes stay collectable.
+ * or a concept whose Dare is 'flakes' it is capped at (1 − target / expected) − 0.15, so the flakes
+ * stay collectable.
  */
 export function levelGlassShare(level: LevelDef): number {
   const hit = glassMemo.get(level.id);
   if (hit !== undefined) return hit;
   let q = level.introduces === 'brittle' ? BRITTLE_TEACH_SHARE : TUNING.brittle.quotaDay1;
   const expected = expectedFlakes(level.startMinute, level.lengthMinutes, level.concepts, level.biome, level.forecast);
+  // A flake goal, or a concept that may carry the flakes Dare (its target is 80% of the expected
+  // flakes at most): world identity from the concepts alone, so the bake that sizes the Dares from
+  // this world never feeds back into it.
   let target = level.goal.kind === 'flakes' ? level.goal.target : 0;
-  for (const f of level.feats) if (f.kind === 'flakes' && f.target > target) target = f.target;
+  if (level.concepts.some((c) => DARE_OF[c] === 'flakes')) target = Math.max(target, Math.round(0.8 * expected));
   if (target > 0 && expected > 0) q = Math.min(q, Math.max(0, 1 - target / expected - 0.15));
   glassMemo.set(level.id, q);
   return q;

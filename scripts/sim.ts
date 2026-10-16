@@ -52,6 +52,7 @@ import { formatScore } from '../src/core/format.ts';
 import { ensureGenerated } from '../src/core/gen/world.ts';
 import { hashString } from '../src/core/rng.ts';
 import { BUD_ID_BASE } from '../src/core/objects.ts';
+import { DARE_TERMS } from '../src/core/sim/bots/dares.ts';
 import { BOT_KINDS, BOT_POLICIES, createBot, type BotKind, type BotOptions, type BotPolicy } from '../src/core/sim/bots.ts';
 import { createRun } from '../src/core/sim/create.ts';
 import type { RunResult } from '../src/core/sim/events.ts';
@@ -209,7 +210,9 @@ function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: P
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
   const base: Partial<RunConfig> = { lesson: id === 1, ...(v16 ? { v16 } : {}), ...(relaxed ? { relaxedGoal: true } : {}) };
   const s = createRun(campaignConfig(id, base));
-  const bot = createBot(kind, salt, mech, opts);
+  // The Journey terms (verb goals, Dares, humanFeat's focus) ride on every campaign bot here; the
+  // options cross the worker boundary as data, so they are attached on this side.
+  const bot = createBot(kind, salt, mech, { ...opts, dares: DARE_TERMS });
   // A level is at most 1080 minutes (one and a half days, ~6000 ticks).
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) step(s, bot.next(s));
   const r = buildRunResult(s).level;

@@ -18,6 +18,7 @@ import {
 } from '../../src/config/campaign.ts';
 import { campaignConfig, levelOutcome } from '../../src/core/level.ts';
 import { createBot } from '../../src/core/sim/bots.ts';
+import { DARE_TERMS } from '../../src/core/sim/bots/dares.ts';
 import { createRun } from '../../src/core/sim/create.ts';
 import type { SimEvent } from '../../src/core/sim/events.ts';
 import { snapshotFeats, updateFeats } from '../../src/core/sim/feats.ts';
@@ -109,7 +110,7 @@ describe('Dares (§2.6)', () => {
   it('a played level reports its Dare events in step order (a count event for every Dare value change of a count Dare)', () => {
     const id = CAMPAIGN_LEVELS.find((l) => l.feats[0]?.kind === 'flakes' || l.feats[0]?.kind === 'clean')?.id ?? 2;
     const s = createRun(campaignConfig(id));
-    const bot = createBot('oracle', 0, true, { feats: true });
+    const bot = createBot('oracle', 0, true, { feats: true, dares: DARE_TERMS });
     const events: SimEvent[] = [];
     while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 8000) {
       step(s, bot.next(s));

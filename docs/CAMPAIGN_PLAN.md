@@ -226,8 +226,8 @@ docs/V1_6_PLAN.md §2.3, §2.5, §2.6 (CORE-2); the core API is src/core/README.
   the validator keeps or drops each (the boss's HP is the kept count) and they cost no rescue rocks.
 - **Dares.** One per concept (`DARE_OF`); a level takes the first of its concepts' Dares that its
   world offers, else a seeded core verb (blooms, swings, deep, snapSave). `node scripts/sim.ts --bake`
-  writes what each level offers to `src/config/levelBake.gen.ts` (a vitest checks it is current) and
-  the targets are sized from it: blooms 35% of the buds (1-4), swings 2 (3 over 30 s; needs 4
+  writes what each level offers to `src/config/levelBake.gen.ts` (a vitest checks it is current; the
+  game reads only the resulting Dares and flares, `LEVEL_BAKE_RUN`) and the targets are sized from it: blooms 35% of the buds (1-4), swings 2 (3 over 30 s; needs 4
   hand-offs on offer per SWING), deep 12% of the daylight (at least 1.5 s, at most a fifth of the deep
   shade on offer), snapSave 1 s (needs buds to bank a snap), parry 75% of the kept flares, brittle 60%
   of the glass, flakes 80% of the expected (at most 85% of those offered), clean every passable ball,
@@ -239,9 +239,9 @@ level over all 200 levels; humanDial and humanFeat × 3 decision streams):
 
 | bot | passed | stars (1-40 / 41-200) | three stars | Dare met |
 |---|---|---|---|---|
-| oracle | 200/200 | 2.31 (2.40 / 2.29) | 88 | 50.0% |
+| oracle | 200/200 | 2.32 (2.40 / 2.30) | 89 | 50.5% |
 | reactive | 199/200 (100/100 on 1-100) | 2.37 (2.42 / 2.36) | 88 | 50.0% |
-| Feat-seeking oracle | 200/200 | 2.74 | 154 | 90.5% |
+| Feat-seeking oracle | 200/200 | 2.75 | 155 | 90.5% |
 | humanDial | 62.2% of tries (77.5% on 1-40) | 0.91 (1.17 / 0.84) | 23 | 22.0% |
 | humanFeat | 64.3% of tries | 1.06 (1.31 / 1.00) | 27 | 35.2% |
 
