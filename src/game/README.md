@@ -275,6 +275,55 @@ See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it r
 - **Meta**: Results tiles for blooms, Cold Snaps and deep shade; missions `blooms-2`, `snaps-2`,
   `deep-8`; trophies Green Thumb, Cold Front, Deep Diver.
 
+## v1.6 priced decisions (game side)
+
+See docs/V1_6_PLAN.md §4 and §9; CORE fills the rules, the game makes them readable. Every layer
+reads the sim defensively (`game/mechanics.ts` fills the renderer's `MechView`): absent or zero state
+shows nothing new, so the contract's stubs play like v1.5, and each `World.v16` kill switch turns its
+layer off (`ring` off: no charge ring; `bank` off: one gauge, as in v1.5).
+
+- **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the
+  pill's own outline dashed on (`ringCharge` over `TUNING.ring.need` of the level; at ×5 the gold
+  buffer); hot while the charge falls; a trick flashes it; the run's first trick pops "+RING" and
+  losing ×5 to the sun shakes the badge (lower drops are silent; a snap's drop is its pour).
+- **Frost Bank** (`hud.ts`): two pips (`frostH` / 100) fill in turn; a full one glows, breathes, pops
+  when it fills and takes the tap (the capsule round both pips); `frostSpill` shakes the second.
+  During a snap the pips freeze, the first drains white with the snap (`snapTicks` over
+  `SNAP_TICKS + snapExt`) and a chip shows `snapBankH` ("+0.3"). `snapCash` pours a stream of frost
+  from the badge into the meter; frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap").
+- **Dial layers** (`halo.ts`, §4 priority): the deep band (`guide.deep`, runs ≥ 3°) darker inside the
+  lasting teal; the glass arc (`guide.flake`) thin and frost-white outside the ring with a glint
+  running along it; during a snap (`guide.land`) a frost band says "covered", the teal on it is the
+  shade at the snap's end and the dashed arcs hide; during a flare's warning (`guide.flare`,
+  the flare's ticks) an orange rim counts down and frost-rimmed teal marks the shade that holds (the
+  glass arc hides).
+- **Heat Flares**: the sun mascot's twelve white-hot ticks go out one by one through the warning
+  while a white glow gathers (no swell, no flash; reduced motion: the ring only), a steady white-hot
+  ring through the rise and hold; PARRY! (an ice stamp), a miss's hot ring; the ruler marks the
+  day's kept flares at their rise (white-hot, teal once parried, grey once missed) and a level's
+  progress bar its flares (a boss finale's HP notches). **Noon Heat**: a hot band over 11-1 on the
+  ruler (`noonHeatAt`) and a line on the Day card of the day it rises.
+- **Glass flakes** (`pickups.ts`): `Pickup.brittle` flakes sit in a pale faceted diamond and melt on
+  `TUNING.brittle.meltBudget`. GLASS SAVED! on `clusterSaved`; LANDING! on `snapLand`.
+- **Dares** (`campaign.ts`): a level's `feats` (star 2 when it has any, else the flakes star) are
+  named on the intro card (a gold "Dare · Bloom 2" pill; a finale's "Bloom 2 or Parry 6"), counted on
+  the HUD pill once the goal is met (its glyph instead of the flake; ticks as seconds), on the Pause
+  card and in the Results' next-star hint; verb goals ('swings', 'blooms', 'deep'…) count on the pill
+  until met. Counts come from the core's `featValue`, or the sim's `feat` events where those run
+  ahead. DARE ✓ on `featMet`.
+- **Soft-fail**: a level finished with its goal missed counts in the save (`campaign.misses`, meta
+  `ApplyRunOptions.goalMiss`); after two, `campaignConfig(…, relaxed)` sets `RunConfig.relaxedGoal`,
+  the card, pill and Pause card say "Reach the finish", a tip says so at go and the Results' miss line
+  says the next try eases.
+- **Tips** (`moments.ts` `MECH_TIPS`): the ring on L2, the Bank and Garden on the Cold Snap's level
+  (a pip full, a bud in reach under the snap, the first cash-in), glass and flare levels at their
+  first window and warning; a new player's endless runs also get the ring's first drop from ×3,
+  the Garden, the cash-in, glass and flare tips.
+- **Audio and haptics**: a flare's warning hum and the parry's crack and bells are new; a ring
+  trick, the cash-in, a spill, an extension, a landing, glass saved and a miss reuse existing cues
+  and patterns (only losing ×5 sounds).
+- **Meta**: missions 'mult-3' asks ×4 and 'hold-x5' ×5 (T8).
+
 ## Test hook (`?test=1`)
 
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
@@ -290,7 +339,11 @@ outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locke
 `mapProbe(mapT)` (whole device pixels of the world rect only), `mapCallouts()` (Melt Map callout
 boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`) and `bot(kind)`
 (a core bot plays; unlike `?bot=` the runs stay scored), and in v1.5 `mech()` (the MechView, the
-meter's centre and the snaps input asked for) and the demos above. `demo('noon')` is an alias of
+meter's centre and the snaps input asked for) and the demos above. v1.6: `mech()` adds the pips, the
+banked chip, the ring (on, fill, bleeding), each dial layer's bins, the flare's phase, share left and
+outcomes, Noon Heat and the badge's centre; demos `ring`, `bleed`, `trick`, `pips`, `spill`, `cash`,
+`bank`, `land`, `landing`, `deepBand`, `glass`, `flare`, `parry`, `noonHeat` (game/mechanics.ts, with
+the core's `debugRing` and `debugFlare`) and, on a level, `dare` and `dares` (one Dare, a finale's two). `demo('noon')` is an alias of
 `'highnoon'`, and `demo('postcard')` shares without user activation (the download path).
 `forceDeath()` also ends the first-run lesson, whose Chill floor would keep Nubs alive. URL
 parameters are in V1_PLAN §14.

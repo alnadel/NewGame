@@ -233,6 +233,22 @@ export interface ShadyMech {
   budBins: number;
   buds: number;
   snaps: number;
+  /** v1.6 (game/debug.ts mech()). */
+  pips: number;
+  bankH: number;
+  ring: boolean;
+  ringFill: number;
+  bleed: boolean;
+  deepBins: number;
+  glassBins: number;
+  landBins: number;
+  flareBins: number;
+  flarePhase: number;
+  flareLeft: number;
+  flareOut: number[];
+  noonHeat: number;
+  badgeX: number;
+  badgeY: number;
 }
 
 export async function mech(page: Page): Promise<ShadyMech> {

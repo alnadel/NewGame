@@ -5,8 +5,8 @@
 // v1.5: a bud's growth sparkles, the bloom (the sunflower pops up: render/flora.ts), the frost
 // meter filling, the Cold Snap (COLD SNAP!, an ice ring, snow falling from its cloud) and deep
 // shade (DEEP, at most every DEEP_POP_GAP s).
-// v1.6: the ring's tricks flash it (the run's first pops "+ring") and losing ×5 shakes the badge;
-// frost gains pop over the meter ("+0.3", the run's first "+0.3 snap"), a spill shakes it, a
+// v1.6: the ring's tricks flash it (the run's first pops "+RING") and losing ×5 shakes the badge;
+// frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap"), a spill shakes the meter, a
 // cash-in pours from the badge into it; LANDING!, GLASS SAVED!, the PARRY! stamp, a flare's miss,
 // a Dare met (DARE ✓); the Day card names the day's Noon Heat when it rises.
 

@@ -142,6 +142,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   const budBuf: Bud[] = [];
   let tipsShown = 0;
   let tipGlyph: string | null = null;
+  /** The level whose goal tips apply (null outside the Journey and on a relaxed level: its goal is the finish). */
   let level: LevelDef | null = null;
   /** COMEBACK: armed by Chill under the PHEW line while lit, spent until Chill climbs back; the tick shade was found (-1 none). */
   let burn = false;
@@ -164,13 +165,14 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       done = total = lastCheck = tipsShown = 0;
       burn = spent = false;
       shadeAt = -1;
-      level = lv;
+      level = relaxed ? null : lv;
       tips.length = 0;
       const fresh = lv !== null && (save.campaign.stars[lv.id - 1] ?? 0) === 0;
       if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []));
       const mech = fresh ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
       else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...(FIRST_TIPS as readonly (readonly [TipOn, string])[]));
+      // Last, so it takes the place of the level's own 'go' tip.
       if (relaxed) tips.push(['go', SOFT_FAIL_TIP]);
       budTip = tips.some((t) => t[0] === 'bud');
       snapBudTip = tips.some((t) => t[0] === 'snapBud');
