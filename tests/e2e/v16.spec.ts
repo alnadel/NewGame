@@ -4,6 +4,7 @@
 // and Pause card, and the soft-fail's eased goal from the save. The rules themselves are CORE's;
 // these hold whatever the sim does, because the demos stand in for its state while they last.
 import { expect, test, type Page } from '@playwright/test';
+import { TUNING } from '../../src/core/index.ts';
 import { keepAlive, mech, OPEN_SAVE, seedSave, waitForScreen, watchErrors } from './helpers.ts';
 
 const demo = (page: Page, name: string) => page.evaluate((n) => window.__SHADY_TEST__!.demo(n), name);
@@ -35,7 +36,8 @@ test('the ring, the pips and the dial layers show their demos without errors', a
   await expect.poll(async () => (await mech(page)).frost).toBeCloseTo(1.6, 5);
   for (const d of ['trick', 'spill', 'cash', 'landing']) await demo(page, d);
   await demo(page, 'bank');
-  await expect.poll(async () => (await mech(page)).bankH).toBe(30);
+  // The demo banks one bloom's frost under its snap (TUNING.bank.bloomH; CORE-1 set it to 25).
+  await expect.poll(async () => (await mech(page)).bankH).toBe(TUNING.bank.bloomH);
   expect((await mech(page)).snapLeft).toBeGreaterThan(0);
   await page.waitForTimeout(3300);
   await demo(page, 'land');

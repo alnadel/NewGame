@@ -195,7 +195,13 @@ test.describe('in-run moments (v1.4)', () => {
     expect(st!.title).toBe('Level 2 · Flake Trail');
     expect(st!.goal).toMatch(/^Collect \d+ flakes · \d+\/\d+$/);
     expect(st!.now).toMatch(/^Day 1 · \d+:\d\d [AP]M$/);
-    expect(st!.stars.map((s) => s.label)).toEqual([expect.stringMatching(/^\d+ flakes$/), expect.stringMatching(/^\d+ flakes$/), expect.stringMatching(/^≤ \d+ s in sun$/)]);
+    // v1.6 (§2.6): star 2 is the level's Dare (L2: more flakes), with its live count while it is open.
+    const dareOpen = st!.stars[1]!.state !== 'earned';
+    expect(st!.stars.map((s) => s.label)).toEqual([
+      expect.stringMatching(/^\d+ flakes$/),
+      expect.stringMatching(dareOpen ? /^\d+ flakes · \d+\/\d+$/ : /^\d+ flakes$/),
+      expect.stringMatching(/^≤ \d+ s in sun$/),
+    ]);
     expect(st!.stars[0]!.state).toBe('earned');
     expect(errors).toEqual([]);
   });
