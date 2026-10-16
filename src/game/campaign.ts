@@ -11,9 +11,11 @@
 import {
   campaignConfig as levelConfig,
   CONCEPTS,
-  dayTicks,
   featMet,
   featValue,
+  goalMet as coreGoalMet,
+  goalValue as coreGoalValue,
+  SOFT_FAIL_MISSES,
   type ConceptId,
   type FeatKind,
   type FeatSpec,
@@ -28,8 +30,8 @@ import {
 export const FINISH_FREEZE_S = 1.0;
 /** A tap this long after the finish skips the rest of the freeze. */
 export const FINISH_SKIP_S = 0.35;
-/** Goal misses on a level after which its goal relaxes to the finish (§2.6 soft-fail). */
-export const SOFT_FAIL_MISSES = 2;
+/** Goal misses on a level after which its goal relaxes to the finish (§2.6 soft-fail; the core's number). */
+export { SOFT_FAIL_MISSES };
 
 /** Live Dare counts from the sim's `feat` events (by kind), for counts the core's featValue doesn't have yet. */
 export type FeatSeen = ReadonlyMap<FeatKind, number>;
@@ -51,8 +53,15 @@ export function campaignConfig(level: LevelDef, reducedMotion: boolean, tutorial
   return levelConfig(level.id, base);
 }
 
-/** The Dare kind a verb goal counts with ('gate' counts 'gates'; finish and Snow none). */
+/** The Dare kind a verb goal is worded and drawn with ('gate' as 'gates'; finish and Snow none). */
 const goalFeat = (k: GoalKind): FeatKind | undefined => (k === 'gate' ? 'gates' : k === 'finish' || k === 'snow' ? undefined : (k as FeatKind));
+/**
+ * Verb goals the core counts with their Dare's own counter, so the sim's `feat` events may count
+ * them live. The others count differently: 'gate' counts gateShaded (the Dare gateDeep),
+ * 'snapSave' every snap-shaded tick (the Dare only earned snaps), 'flip' is met within its target
+ * ticks of the flip (the Dare within 12).
+ */
+const goalCountsLikeDare = (k: GoalKind): boolean => k === 'deep' || k === 'clean' || k === 'swings' || k === 'blooms' || k === 'brittle' || k === 'parry';
 
 /**
  * Each Dare's glyph (render/glyphs.ts) and short label: '#' is the target, '$' the target in
@@ -89,8 +98,7 @@ export function featGlyph(kind: FeatKind, level?: Pick<LevelDef, 'concepts'>): s
 
 /** A Dare's short label: "Bloom 2", "3 SWINGs", "2.5 s deep", "Parry 6", "Save 1 glass", "Reach ×4". */
 export function featLabel(f: FeatSpec, level: Pick<LevelDef, 'concepts' | 'lengthMinutes'>): string {
-  // 'ring': ×3 on levels of 25 s or less (§2.6).
-  const t = f.kind === 'ring' ? ((level.lengthMinutes / 720) * dayTicks(1) <= 1500 ? 3 : 4) : f.target;
+  const t = f.target;
   const w = f.kind === 'still' && gusty(level) ? 'Hold # gust*' : FEAT_WORDS[f.kind][1];
   return w.replace('#', String(t)).replace('$', secs(t)).replace('*', t === 1 ? '' : 's');
 }
@@ -147,7 +155,7 @@ export function introCard(level: LevelDef, relaxed = false): IntroCard {
 export function starRules(level: LevelDef, relaxed = false): [string, string, string] {
   const g = level.goal;
   const verb = goalFeat(g.kind);
-  const pass = relaxed || g.kind === 'finish' ? 'Finish' : g.kind === 'snow' ? `${g.target} Snow` : verb ? featLabel({ kind: verb, target: g.target }, level) : 'Finish';
+  const pass = relaxed || g.kind === 'finish' ? 'Finish' : g.kind === 'snow' ? `${g.target} Snow` : verb ? verbGoalLabel(level, verb) : 'Finish';
   const two = level.feats.length > 0 ? (level.feats.length > 1 ? 'A Dare' : featLabel(level.feats[0] as FeatSpec, level)) : `${level.stars.flakes} flakes`;
   return [pass, two, `≤ ${Math.ceil(level.stars.sunSec)} s in sun`];
 }
@@ -170,16 +178,31 @@ export function conceptList(level: LevelDef): string {
 export function goalText(level: LevelDef, relaxed = false): string {
   const g = level.goal;
   const verb = goalFeat(g.kind);
-  return relaxed || !verb ? (g.kind === 'snow' && !relaxed ? `Score ${g.target} Snow` : 'Reach the finish') : verb === 'flakes' ? `Collect ${g.target} flakes` : featLabel({ kind: verb, target: g.target }, level);
+  return relaxed || !verb ? (g.kind === 'snow' && !relaxed ? `Score ${g.target} Snow` : 'Reach the finish') : verb === 'flakes' ? `Collect ${g.target} flakes` : verbGoalLabel(level, verb);
 }
 
-/** A goal's live count (flakes, Snow, or its verb's Dare counter). */
+/** A verb goal's label: its Dare's words, except the 'gate' goal (the arch shaded, not deep). */
+function verbGoalLabel(level: LevelDef, verb: FeatKind): string {
+  return level.goal.kind === 'gate' ? 'Shade the arch' : featLabel({ kind: verb, target: level.goal.target }, level);
+}
+
+/**
+ * A goal's live count: flakes, Snow, or the core's goalValue for a verb goal (raised by the sim's
+ * `feat` events where the goal counts like its Dare); a 'flip' goal counts 1 once met.
+ */
 export function goalValue(level: LevelDef, stats: Stats, seen: FeatSeen = NONE): number {
   const g = level.goal;
   if (g.kind === 'snow') return Math.floor(stats.snow);
   if (g.kind === 'flakes') return stats.flakes;
-  const verb = goalFeat(g.kind);
-  return verb ? featLive(verb, stats, seen) : 0;
+  if (g.kind === 'finish') return 0;
+  if (g.kind === 'flip') return coreGoalMet(level, stats as LevelStats) ? 1 : 0;
+  const v = coreGoalValue(g.kind, stats as LevelStats);
+  return goalCountsLikeDare(g.kind) ? Math.max(v, seen.get(g.kind as FeatKind) ?? 0) : v;
+}
+
+/** What goalValue counts toward: the goal's target ('flip': 1, met or not). */
+export function goalTarget(level: LevelDef): number {
+  return level.goal.kind === 'flip' ? 1 : level.goal.target;
 }
 
 /** A count against its target: "9/8", or "1.2/1.5 s" for ticks. */
@@ -201,7 +224,7 @@ export function goalLine(level: LevelDef, stats: Stats, passed: boolean, relaxed
     const soft = misses >= SOFT_FAIL_MISSES ? ' · Next try: just reach the finish' : '';
     if (g.kind === 'flakes') return `Not enough flakes: ${stats.flakes}/${g.target}${soft}`;
     if (g.kind === 'snow') return `Not enough Snow: ${snow}/${g.target}${soft}`;
-    if (verb) return `Goal missed: ${goalText(level)} (${countText(goalValue(level, stats, seen), g.target, featInSeconds(verb))})${soft}`;
+    if (verb) return `Goal missed: ${goalText(level)} (${countText(goalValue(level, stats, seen), goalTarget(level), featInSeconds(verb))})${soft}`;
     return 'Melted before the finish';
   }
   const line =
@@ -264,7 +287,7 @@ export function goalMetLive(level: LevelDef, stats: Stats, seen: FeatSeen = NONE
   if (g.kind === 'finish') return false;
   if (g.kind === 'flakes') return stats.flakes >= g.target;
   if (g.kind === 'snow') return stats.snow >= g.target;
-  return goalFeat(g.kind) !== undefined && goalValue(level, stats, seen) >= g.target;
+  return goalFeat(g.kind) !== undefined && goalValue(level, stats, seen) >= goalTarget(level);
 }
 
 /** What the HUD's goal pill counts. */
@@ -305,7 +328,7 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
         out.sec = featInSeconds(verb);
       }
     }
-    out.target = g.target;
+    out.target = goalTarget(level);
     return out;
   }
   let f = level.feats[0] as FeatSpec;

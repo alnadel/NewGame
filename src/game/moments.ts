@@ -56,7 +56,7 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
     ['bud', 'A bud! Shine the sun from its gold mark to grow it. Gold on the dial grows it too.'],
-    ['bloom', 'Bloomed! A third of a snap of frost, and shade for the rest of the run.'],
+    ['bloom', 'Bloomed! A quarter of a snap of frost, and shade for the rest of the run.'],
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],
   snap: [

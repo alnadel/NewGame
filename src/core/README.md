@@ -657,8 +657,8 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   glare removed. **T7**: `hashState` reads pickups only to 600 u ahead.
 - **guide.deep**: the part of guide.now where ≥ 2 sources (snap excluded, T3) cover the center sample.
 - **Tricks**: `payTrick(s, 'parry' | 'cluster')` (sim/tricks.ts) is the one bridge to the economy.
-  On this branch it pays the v1.5 meter (`addFrost(h / 100)`); at integration it becomes CORE-1's
-  `addFrostH(s, kind, TUNING.bank.parryH/clusterH)` plus `ringTrick(s, kind, TUNING.ring.trick)`.
+  It pays CORE-1's `addFrostH(s, kind, TUNING.bank.parryH/clusterH)` (the v1.5 meter,
+  `addFrost(h / 100)`, with the Bank off) plus `ringTrick(s, kind, TUNING.ring.trick)`.
 - **Dares (§2.6).** `sim/feats.ts` keeps the integer counters (`deepTicks`, `snapSavedTicks`,
   `earnedSnapSavedTicks` (a snap beyond the level's starting charges, alone over the center),
   `cloudsRidden`, `gateShaded`, `gateDeep`, `flipTicks`, `lockWindows/Held`, `gustWindows/Held`)
