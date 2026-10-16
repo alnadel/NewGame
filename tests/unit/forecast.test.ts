@@ -274,7 +274,8 @@ describe('forecast tuning', () => {
     for (let i = 0; i < 60 * 40 && s.phase !== 'dead'; i++) {
       step(s, bot.next(s));
       for (const e of s.events) if (e.e === 'flake') {
-        expect(e.snow).toBe(Math.round(e.mult * 1.5));
+        // v1.6 T2: flake Snow uses min(mult, ring.snowCap).
+        expect(e.snow).toBe(Math.round(Math.min(e.mult, TUNING.ring.snowCap) * 1.5));
         paid++;
       }
     }

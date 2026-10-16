@@ -20,8 +20,8 @@ import {
   inGlare,
   shadowLength,
 } from '../shadows.ts';
-import type { HourGlyph } from './events.ts';
-import { addFrost } from './mechanics.ts';
+import type { HourGlyph, SimEvent } from './events.ts';
+import { addFrost, addFrostH, SNAP_TICKS } from './mechanics.ts';
 import type { SimState } from './types.ts';
 
 const N = TUNING.nubs;
@@ -31,9 +31,17 @@ const SW = TUNING.swing;
 const L = TUNING.lesson;
 const DEEP = TUNING.deep;
 const FROST = TUNING.frost;
+const RING = TUNING.ring;
+const BANK = TUNING.bank;
+const GARDEN = TUNING.garden;
 const MAX_R = TUNING.world.maxCasterRadius;
 /** Max distance of a coverage sample from Nubs' center. */
 const SAMPLE_R = N.sampleOffset * 1.5;
+/**
+ * A landing completes at most landWindowTicks + landHoldTicks after snapEnd, and a SWING confirmed
+ * after the snap needs confirmTicks more: a last SWING this recent came after the snap (no pause).
+ */
+const LAND_RECENT = 100;
 
 // Candidate scratch, reused every tick.
 const cand: Caster[] = [];
@@ -103,6 +111,7 @@ export function computeCoverage(s: SimState): void {
     }
   }
 
+  const snapNotDeep = w.v16.garden;
   let sum = 0;
   let glare = 0;
   let bestShaderD = Infinity;
@@ -126,10 +135,12 @@ export function computeCoverage(s: SimState): void {
       }
     }
     for (let i = 0; i < ncl; i++) {
-      if (cloudShades(candClouds[i] as Cloud, s.tAbs, px, py, ux, uy, cot)) {
+      const cl = candClouds[i] as Cloud;
+      if (cloudShades(cl, s.tAbs, px, py, ux, uy, cot)) {
         shaded = true;
         cloudHits[i] = (cloudHits[i] as number) + 1;
-        if (k === 0) centerSources++;
+        // v1.6 T3 (Garden on): the Cold Snap's cloud is not a deep-shade source.
+        if (k === 0 && !(snapNotDeep && cl.kind === 'snap')) centerSources++;
       }
     }
     let inG = false;
@@ -197,6 +208,7 @@ function updateSwing(s: SimState): void {
     const turn = Math.abs(angleDiff(theta, nb.swTheta));
     if (turn >= SW.minDeg) {
       nb.swPend = src;
+      nb.swPendFrom = nb.swSrc;
       nb.swPendDeg = Math.round(turn);
       nb.swPendTicks = 1;
     }
@@ -205,6 +217,7 @@ function updateSwing(s: SimState): void {
   nb.swTheta = theta;
   nb.swTick = s.tick;
   if (nb.swPend < 0 || nb.swPendTicks < SW.confirmTicks) return;
+  const to = nb.swPend;
   nb.swPend = -1;
   const st = s.stats;
   const chain = s.tick - nb.swLastTick <= SW.chainTicks ? Math.min(SW.chainMax, nb.swChain + 1) : 1;
@@ -214,7 +227,109 @@ function updateSwing(s: SimState): void {
   st.snow += chain;
   if (chain > st.swingChainBest) st.swingChainBest = chain;
   s.events.push({ e: 'swing', deg: nb.swPendDeg, chain, snow: chain, x: nb.x, y: nb.y });
-  addFrost(s, FROST.perSwing);
+  // v1.6: a fresh SWING (its new source is neither end of a SWING in the last freshTicks) pumps the
+  // ring and, at most once per swingEveryTicks, pays frost; the A→B→A farm pays nothing extra.
+  const fresh = isFreshSource(s, to);
+  recordEndpoint(s, nb.swPendFrom);
+  recordEndpoint(s, to);
+  if (s.world.v16.bank) {
+    if (fresh && s.tick - nb.swingFrostTick >= BANK.swingEveryTicks) {
+      nb.swingFrostTick = s.tick;
+      addFrostH(s, 'swing', BANK.swingH);
+    }
+  } else {
+    addFrost(s, FROST.perSwing);
+  }
+  if (fresh) ringTrick(s, 'swing', RING.trick);
+}
+
+/**
+ * v1.6 SWING freshness (docs/V1_6_PLAN.md §2.1): true when `src` is not an endpoint of a SWING
+ * confirmed in the last TUNING.ring.freshTicks (nubs.swFresh keeps the last freshSlots endpoints).
+ */
+export function isFreshSource(s: SimState, src: number): boolean {
+  const nb = s.nubs;
+  const ring = nb.swFresh;
+  const n = Math.min(nb.swFreshN, RING.freshSlots);
+  for (let k = 0; k < n; k++) {
+    if (ring[2 * k] === src && s.tick - (ring[2 * k + 1] as number) <= RING.freshTicks) return false;
+  }
+  return true;
+}
+
+/** Writes a SWING endpoint (source id, this tick) into the freshness ring. */
+function recordEndpoint(s: SimState, src: number): void {
+  if (src < 0) return;
+  const nb = s.nubs;
+  const k = nb.swFreshN % RING.freshSlots;
+  nb.swFresh[2 * k] = src;
+  nb.swFresh[2 * k + 1] = s.tick;
+  nb.swFreshN++;
+}
+
+/**
+ * v1.6 Flow Ring (§2.1): adds `units` of charge (may be negative: the bleed). Levels up while the
+ * charge reaches the level's need (multUp with `reason`; the remainder carries over; x5 keeps at most
+ * need[3] as its buffer); below 0 it loses one level (multDown 'bleed') and restarts at ¾ of the new
+ * level's need; x1 floors at 0.
+ */
+function ringAdd(s: SimState, units: number, reason: 'shade' | 'trick' | 'phew'): void {
+  const nb = s.nubs;
+  let c = nb.ringCharge + units;
+  if (c < 0) {
+    if (nb.mult > 1) {
+      const from = nb.mult;
+      nb.mult--;
+      c = Math.floor((3 * (RING.need[nb.mult - 1] as number)) / 4);
+      s.stats.multDowns = (s.stats.multDowns ?? 0) + 1;
+      s.events.push({ e: 'multDown', from, to: nb.mult, cause: 'bleed' });
+    } else {
+      c = 0;
+    }
+  }
+  while (nb.mult < M.max && c >= (RING.need[nb.mult - 1] as number)) {
+    c -= RING.need[nb.mult - 1] as number;
+    nb.mult++;
+    if (nb.mult > s.stats.maxMult) s.stats.maxMult = nb.mult;
+    s.events.push({ e: 'multUp', level: nb.mult, reason });
+  }
+  const top = RING.need[M.max - 2] as number;
+  if (nb.mult === M.max && c > top) c = top;
+  nb.ringCharge = c;
+  // The v1.5 HUD bar reads shadeTicks / mult.stepTicks: mirror the ring's progress to the next level.
+  nb.shadeTicks = nb.mult < M.max ? Math.floor((c * M.stepTicks) / (RING.need[nb.mult - 1] as number)) : 0;
+}
+
+/**
+ * v1.6 ring trick (§2.1): pays `units` of ring charge for a trick (fresh SWING, bloom, saved glass
+ * cluster, own landing, flare parry; streakTrick for every 3rd pickup in a row) and emits ringTrick.
+ * No-op with the ring off. CORE-2 calls it for 'cluster' and 'parry'.
+ */
+export function ringTrick(s: SimState, kind: Extract<SimEvent, { e: 'ringTrick' }>['kind'], units: number): void {
+  if (!s.world.v16.ring) return;
+  s.stats.ringTricks = (s.stats.ringTricks ?? 0) + 1;
+  s.events.push({ e: 'ringTrick', kind, units });
+  ringAdd(s, units, 'trick');
+}
+
+/**
+ * Daylight ring tick (§2.1): a full-shade tick fills shadeUnits (× deepMul in deep shade); the first
+ * freeLitTicks of a lit stretch are free, then each lit tick bleeds bleedK[m − 1]·Σw, except on the
+ * tick after a bud grew (purposeful exposure).
+ */
+function updateRing(s: SimState, lit: boolean, deep: boolean): void {
+  const nb = s.nubs;
+  if (!lit) {
+    nb.litTicks = 0;
+    ringAdd(s, deep ? RING.shadeUnits * RING.deepMul : RING.shadeUnits, 'shade');
+    return;
+  }
+  if (nb.litTicks === 0) nb.litStartMult = nb.mult;
+  nb.litTicks++;
+  if (nb.litTicks <= RING.freeLitTicks || s.tick - nb.budGrewTick === 1) return;
+  let sw = 0;
+  for (let k = 0; k < SAMPLES; k++) sw += nb.w[k] as number;
+  ringAdd(s, -(RING.bleedK[nb.mult - 1] as number) * sw, 'shade');
 }
 
 /**
@@ -292,6 +407,12 @@ export function applyDaylight(s: SimState): void {
       st.snow += P.snow;
       if (prevChill < st.phewMinChill) st.phewMinChill = prevChill;
       s.events.push({ e: 'phew' });
+      // v1.6 ring: PHEW restores the levels this lit stretch bled away, never one above them.
+      if (s.world.v16.ring && nb.litStartMult > nb.mult) {
+        nb.mult = nb.litStartMult;
+        ringAdd(s, 0, 'phew');
+        s.events.push({ e: 'multUp', level: nb.mult, reason: 'phew' });
+      }
     }
   }
   if (c >= P.armChill) nb.highChillTick = s.tick;
@@ -299,10 +420,13 @@ export function applyDaylight(s: SimState): void {
   if (c < N.lowChill && prevChill >= N.lowChill) s.events.push({ e: 'lowChill' });
   if (c < N.lowChill) s.hourHot = true;
 
-  // Frost multiplier.
-  if (!lit) {
+  // Frost multiplier: the v1.6 Flow Ring, or the v1.5 step-and-reset rule with the ring off.
+  if (s.world.v16.ring) {
+    updateRing(s, lit, deep);
+    if (!lit && !s.world.v16.bank) addFrost(s, FROST.perShadeSec * DT * (deep ? DEEP.frostMul : 1));
+  } else if (!lit) {
     nb.litTicks = 0;
-    addFrost(s, FROST.perShadeSec * DT * (deep ? DEEP.frostMul : 1));
+    if (!s.world.v16.bank) addFrost(s, FROST.perShadeSec * DT * (deep ? DEEP.frostMul : 1));
     if (nb.mult < M.max) {
       nb.shadeTicks += deep ? DEEP.multMul : 1;
       if (nb.shadeTicks >= M.stepTicks) {
@@ -326,6 +450,8 @@ export function applyDaylight(s: SimState): void {
   }
   nb.x5Ticks = nb.mult === M.max ? nb.x5Ticks + 1 : 0;
   if (nb.x5Ticks * DT > st.x5HoldBest) st.x5HoldBest = nb.x5Ticks * DT;
+  st.multTicks = (st.multTicks ?? 0) + nb.mult;
+  if (nb.mult === M.max) st.x5Ticks = (st.x5Ticks ?? 0) + 1;
 
   // Glare touch and the death line's memory of who shaded Nubs.
   if (nb.glareBallId >= 0) {
@@ -369,11 +495,85 @@ export function applyDaylight(s: SimState): void {
 }
 
 /**
- * v1.6 Landing (docs/V1_6_PLAN.md §2.4; CORE-1 owns the body): within TUNING.garden.landWindowTicks
- * of snapEnd after a snap that bloomed, Nubs fully shaded by another source for landHoldTicks emits
- * snapLand (an own landing counts as a fresh SWING). Contract stub: no-op.
+ * v1.6 Landing (docs/V1_6_PLAN.md §2.4): armed at snapEnd only after a snap under which a bud
+ * bloomed (s.landTicks = landWindowTicks). A hold must start within that window: Nubs fully shaded
+ * by a source other than the snap, then kept fully shaded for landHoldTicks; that tick emits
+ * snapLand. An own landing (a sunflower bloomed under this snap shaded the center sample during the
+ * hold) counts as a fresh SWING: chain + 1 with the chain timer paused across the snap, Snow = chain,
+ * +landH frost and a 'land' ring trick. Any other shade gives chain + 1 only.
  */
-export function updateLanding(_s: SimState): void {}
+export function updateLanding(s: SimState): void {
+  if (s.landTicks < 0) return;
+  const nb = s.nubs;
+  const src = nb.f === 0 ? (nb.cloudId >= 0 ? nb.cloudId : nb.shaderId >= 0 ? nb.shaderId : 0) : -1;
+  if (src >= 0 && s.landHold > 0) {
+    s.landHold++;
+  } else if (src >= 0 && s.landTicks > 0) {
+    s.landHold = 1;
+    s.landSrc = src;
+  } else {
+    s.landHold = 0;
+    s.landSrc = -1;
+  }
+  if (s.landHold > 0 && !isSnapFlower(s, s.landSrc)) {
+    const own = snapFlowerOverCenter(s);
+    if (own >= 0) s.landSrc = own;
+  }
+  if (s.landTicks > 0) s.landTicks--;
+  if (s.landHold >= GARDEN.landHoldTicks) {
+    land(s);
+    return;
+  }
+  if (s.landTicks === 0 && s.landHold === 0) s.landTicks = -1;
+}
+
+/** True when caster `id` is a sunflower bloomed under the current (or just ended) snap. */
+function isSnapFlower(s: SimState, id: number): boolean {
+  if (id < 0) return false;
+  const n = Math.min(s.snapBlooms, s.snapBloomIds.length);
+  for (let i = 0; i < n; i++) if (s.snapBloomIds[i] === id) return true;
+  return false;
+}
+
+/** The id of a sunflower bloomed under this snap that shades Nubs' center sample now, or −1. */
+function snapFlowerOverCenter(s: SimState): number {
+  const n = Math.min(s.snapBlooms, s.snapBloomIds.length);
+  for (let i = 0; i < n; i++) {
+    const id = s.snapBloomIds[i] as number;
+    const c = s.world.byId.get(id);
+    if (c && casterShades(c, s.nubs.x, s.nubs.y, s.ux, s.uy, s.cot)) return id;
+  }
+  return -1;
+}
+
+/** A completed landing: chain + 1 (timer paused across the snap); an own one pays like a fresh SWING. */
+function land(s: SimState): void {
+  const nb = s.nubs;
+  const st = s.stats;
+  const own = isSnapFlower(s, s.landSrc);
+  // The chain timer is paused across the snap: a SWING from before it counts the snap's ticks out.
+  const since = s.tick - nb.swLastTick;
+  const paused = since > LAND_RECENT ? since - (SNAP_TICKS + s.snapExt) : since;
+  const chain = paused <= SW.chainTicks ? Math.min(SW.chainMax, nb.swChain + 1) : 1;
+  nb.swChain = chain;
+  nb.swLastTick = s.tick;
+  st.snapLands = (st.snapLands ?? 0) + 1;
+  if (own) {
+    st.snapLandsOwn = (st.snapLandsOwn ?? 0) + 1;
+    st.swings++;
+    st.snow += chain;
+    if (chain > st.swingChainBest) st.swingChainBest = chain;
+    recordEndpoint(s, s.landSrc);
+  }
+  s.events.push({ e: 'snapLand', chain, own, x: nb.x, y: nb.y });
+  if (own) {
+    addFrostH(s, 'land', BANK.landH);
+    ringTrick(s, 'land', RING.trick);
+  }
+  s.landTicks = -1;
+  s.landHold = 0;
+  s.landSrc = -1;
+}
 
 /**
  * v1.6 debug and screenshot hook (never called by the game loop): puts the multiplier at `level`
@@ -393,9 +593,12 @@ export function applyNight(s: SimState): void {
   nb.rideTicks = 0;
   nb.rideId = -1;
   nb.prevGlareBallId = -1;
-  // Nightfall ends the lesson and any shade hand-off.
+  // Nightfall ends the lesson, any shade hand-off and a landing window.
   nb.swSrc = -1;
   nb.swPend = -1;
+  s.landTicks = -1;
+  s.landHold = 0;
+  s.landSrc = -1;
   s.lessonOn = false;
   s.lessonGrace = 0;
 }

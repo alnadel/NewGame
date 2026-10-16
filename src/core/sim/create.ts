@@ -65,10 +65,23 @@ function freshStats(day: number, chill: number): RunStats {
   };
 }
 
-/** The frost meter at the start: full on the Cold Snap's teaching level, half on later levels, else empty. */
+/** v1.5 frost meter (the Frost Bank off) at the start: full on the Cold Snap's teaching level, half on later levels, else empty. */
 function startFrost(w: World): number {
   if (!w.level) return 0;
   return w.level.introduces === 'snap' ? 1 : TUNING.frost.campaignStart;
+}
+
+/**
+ * v1.6 Frost Bank (docs/V1_6_PLAN.md §2.2): the meter at the start in hundredths. Endless, Daily
+ * and challenge runs start with one snap (runStartH), lesson runs empty; Journey levels at
+ * campaignStartH, the Cold Snap's teaching level at teachStartH. RunConfig.startFrost (charges 0..2)
+ * overrides it.
+ */
+function startFrostH(w: World, cfg: RunConfig): number {
+  const B = TUNING.bank;
+  if (cfg.startFrost !== undefined) return Math.min(B.capH, Math.max(0, Math.round(B.costH * cfg.startFrost)));
+  if (w.level) return w.level.introduces === 'snap' ? B.teachStartH : B.campaignStartH;
+  return cfg.lesson === true ? 0 : B.runStartH;
 }
 
 /** The start day and tick of a run (cfg.startDay/startT are debug hooks). */
@@ -124,7 +137,9 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
   const maxChill = params.maxChill;
   const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? maxChill));
   const theta0 = world.theta0;
-  const frost = world.mech.snap ? Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world))) : 0;
+  const bank = world.v16.bank;
+  const frostH = !world.mech.snap ? 0 : bank ? startFrostH(world, cfg) : Math.floor(100 * Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world))));
+  const frost = !world.mech.snap ? 0 : bank ? frostH / TUNING.bank.costH : Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world)));
   const s: SimState = {
     cfg: { ...cfg },
     params,
@@ -186,13 +201,14 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
       swPendTicks: 0,
       swChain: 0,
       swLastTick: -1e9,
+      swPendFrom: -1,
       ringCharge: 0,
       litStartMult: 1,
       budGrewTick: -1e9,
       streak: 0,
       swFresh: new Int32Array(2 * TUNING.ring.freshSlots),
       swFreshN: 0,
-      frostH: Math.floor(100 * frost),
+      frostH,
       swingFrostTick: -1e9,
     },
     snapTicks: 0,
@@ -203,6 +219,7 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     landTicks: -1,
     landHold: 0,
     landSrc: -1,
+    snapBloomIds: new Int32Array(8).fill(-1),
     clusterId: -1,
     clusterTaken: 0,
     clusterBroken: false,

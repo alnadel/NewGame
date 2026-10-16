@@ -185,8 +185,8 @@ describe('sim rules', () => {
     expect(ev.some((e) => e.e === 'glareTouch' && e.ballId === 77)).toBe(true);
   });
 
-  it('multiplier: +1 per 4.0 s of full shade, survives a flicker, resets after 0.15 s lit', () => {
-    const s = lab();
+  it('v1.5 multiplier (the v1.6 ring off): +1 per 4.0 s of full shade, survives a flicker, resets after 0.15 s lit', () => {
+    const s = lab({ v16: { ring: false } });
     shade(s);
     let ev = run(s, 239);
     expect(s.nubs.mult).toBe(1);

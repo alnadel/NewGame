@@ -81,6 +81,24 @@ export function hashState(s: SimState): string {
   ]) {
     feed(v);
   }
+  // v1.6 economy (CORE-1): the Flow Ring, the Frost Bank, the Garden and the landing.
+  feed(nb.ringCharge);
+  feed(nb.litStartMult);
+  feed(nb.streak);
+  feed(nb.swFreshN);
+  for (let i = 0; i < nb.swFresh.length; i++) feed(nb.swFresh[i] as number);
+  feed(nb.frostH);
+  feed(nb.swingFrostTick);
+  feed(s.snapBankH);
+  feed(s.snapExt);
+  feed(s.snapBlooms);
+  feed(s.landTicks);
+  feed(s.landHold);
+  feed(s.landSrc);
+  feed(st.multTicks ?? 0);
+  feed(st.ringTricks ?? 0);
+  feed(st.frostEarnedH ?? 0);
+  feed(st.snapLands ?? 0);
   // Campaign state (only hashed when concepts are active, so every pre-campaign hash still holds).
   if (s.mods.size > 0) {
     feed(s.eclipse);

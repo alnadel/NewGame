@@ -8,14 +8,14 @@ import type { SimEvent } from '../../src/core/sim/events.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { applyDaylight, applyNight } from '../../src/core/sim/nubs.ts';
 import { step } from '../../src/core/sim/step.ts';
-import type { SimState } from '../../src/core/sim/types.ts';
+import type { RunConfig, SimState } from '../../src/core/sim/types.ts';
 
 const SW = TUNING.swing;
 const CONFIRM = SW.confirmTicks;
 
 /** A started run whose daylight ticks are driven by hand: coverage is scripted, Chill stays high. */
-function rig(): SimState {
-  const s = createRun({ ...headlessConfig(1), plan: false });
+function rig(cfg: Partial<RunConfig> = {}): SimState {
+  const s = createRun({ ...headlessConfig(1), plan: false, ...cfg });
   s.phase = 'day';
   s.tick = 1000;
   return s;
@@ -156,10 +156,10 @@ describe('SWING', () => {
   });
 });
 
-describe('Frost grace', () => {
+describe('Frost grace (v1.5; the v1.6 ring off)', () => {
   /** ×3 built in shade, then `lit` lit ticks with a quick turn by `turn` (done by the 4th), then shade. */
   function stretch(lit: number, turn: number): number {
-    const s = rig();
+    const s = rig({ v16: { ring: false } });
     s.nubs.mult = 3;
     hold(s, 1, 0, 5);
     for (let i = 1; i <= lit; i++) tick(s, -1, (turn * Math.min(3, i - 1)) / 3);
