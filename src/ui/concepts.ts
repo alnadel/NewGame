@@ -52,6 +52,9 @@ const CONCEPT_ICONS: Readonly<Partial<Record<ConceptId | (string & {}), IconName
   deep: 'deep',
   bloom: 'sunflower',
   snap: 'coldsnap',
+  // v1.6: Glass Flakes and Solar Flare (their own icons can follow; these read well meanwhile).
+  brittle: 'flakes',
+  flare: 'sun',
 };
 
 /** The icon of a concept (a flag for an id this build doesn't know). */

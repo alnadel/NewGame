@@ -24,9 +24,18 @@
 // edge and home-bar zones, shown on runs that fill it. Its ring fills ice-blue around a snowflake;
 // full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
 // (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
+//
+// v1.6 (docs/V1_6_PLAN.md): the Flow Ring's charge runs round the multiplier badge (teal, gold as
+// ×5's buffer, hot while it bleeds; a trick flashes it and the run's first one pops "+ring"). The
+// Frost Bank's meter is two pips that fill in turn (a full one glows and takes the tap); a spill
+// shakes the second and throws frost off it; during a snap the pips freeze, a bar over them drains
+// with the snap and a chip shows the income banked under it, which pours into the pips when the
+// snap ends; a cash-in pours a stream of frost from the badge into the meter. The ruler marks the
+// day's kept Heat Flares (teal once parried, grey once missed) and Noon Heat's 11-1 band; a level's
+// progress bar marks its flares (a boss finale's HP notches).
 
 import type { MechView } from './renderer.ts';
-import { dayTicks, FORECAST_IDS, hudClock, minutesOfDay, TUNING, type ForecastId, type SimState } from '../core/index.ts';
+import { dayStartTick, dayTicks, FLARE_KEPT, FORECAST_IDS, hudClock, minutesOfDay, TUNING, worldYAtTick, type Flare, type ForecastId, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { star } from './banners.ts';
 import { cssa, hex } from './color.ts';
@@ -38,7 +47,7 @@ const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const TAU = Math.PI * 2;
 const ROW_H = 48;
 /** Inputs of the row layer's key (syncHud). */
-const KEYS = 19;
+const KEYS = 21;
 /** The cached band reaches this far above and below the row (pill shadows, flags, the noon icon). */
 const BAND_PAD = 8;
 
@@ -89,6 +98,8 @@ export interface HudState {
   multFont: string;
   dayFont: string;
   clockFont: string;
+  /** v1.6: the meter's chips and pops, and the "+ring" pop. */
+  chipFont: string;
   cy: number;
   iconX: number;
   iconS: number;
@@ -124,6 +135,20 @@ export interface HudState {
   meterR: number;
   meterPop: number;
   meterFull: boolean;
+  /** v1.6: the pips' half-span (the capsule a tap may hit), full pips last frame, the spill (s), the banked income last frame and its chip pouring in (s). */
+  meterSpan: number;
+  meterFullN: number;
+  spill: number;
+  lastBankH: number;
+  chipT: number;
+  chipText: string;
+  /** A frost gain popping over the meter (s left, text); a cash-in pouring from the badge (s left). */
+  gainT: number;
+  gainText: string;
+  pour: number;
+  /** The ring: a trick's flash and the run's first "+ring" pop (s left). */
+  ringFlash: number;
+  ringPop: number;
 }
 
 export function createHud(): HudState {
@@ -159,6 +184,7 @@ export function createHud(): HudState {
     multFont: '',
     dayFont: '',
     clockFont: '',
+    chipFont: '',
     cy: 0,
     iconX: 0,
     iconS: 18,
@@ -187,6 +213,17 @@ export function createHud(): HudState {
     meterR: 0,
     meterPop: 0,
     meterFull: false,
+    meterSpan: 0,
+    meterFullN: 0,
+    spill: 0,
+    lastBankH: 0,
+    chipT: 0,
+    chipText: '',
+    gainT: 0,
+    gainText: '',
+    pour: 0,
+    ringFlash: 0,
+    ringPop: 0,
   };
 }
 
@@ -197,6 +234,12 @@ export function updateHud(h: HudState, dt: number): void {
   h.snowPop = Math.max(0, h.snowPop - dt);
   h.noonSparkle = Math.max(0, h.noonSparkle - dt);
   h.meterPop = Math.max(0, h.meterPop - dt);
+  h.spill = Math.max(0, h.spill - dt);
+  h.chipT = Math.max(0, h.chipT - dt);
+  h.gainT = Math.max(0, h.gainT - dt);
+  h.pour = Math.max(0, h.pour - dt);
+  h.ringFlash = Math.max(0, h.ringFlash - dt);
+  h.ringPop = Math.max(0, h.ringPop - dt);
 }
 
 export function hudScale(v: View): number {
@@ -293,6 +336,12 @@ export interface HudCampaign {
   stars: number;
   /** The cool run's sun budget left, 1..0 (a ring drains around the third pip as Nubs spends it). */
   coolLeft: number;
+  /**
+   * v1.6: the pill counts a Dare or a verb goal (its glyph replaces the flake; null: flakes or Snow),
+   * in seconds when `goalSec` (the count and target are ticks).
+   */
+  goalGlyph: string | null;
+  goalSec: boolean;
 }
 
 export interface HudInput {
@@ -320,12 +369,14 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
 
   // Text that changes with the run (cached strings; no per-frame allocation).
   const target = c ? c.goalTarget : -1;
-  const snowNow = c && target >= 0 ? c.goalValue : s.stats.snow;
+  const sec = c !== null && c.goalSec;
+  // Seconds show in tenths under 10 s, else whole (a count of ticks changes the text 10× a second at most).
+  const snowNow = c && target >= 0 ? (sec ? Math.floor(c.goalValue / (target < 600 ? 6 : 60)) : c.goalValue) : s.stats.snow;
   if (snowNow !== h.snowVal || target !== h.snowTarget) {
     if (h.snowVal >= 0 && snowNow > h.snowVal && target === h.snowTarget) h.snowPop = 0.18;
     h.snowVal = snowNow;
     h.snowTarget = target;
-    h.snowText = target >= 0 ? `${Math.floor(snowNow)}/${target}` : String(Math.floor(snowNow));
+    h.snowText = target < 0 ? String(Math.floor(snowNow)) : sec ? `${target < 600 ? (snowNow / 10).toFixed(1) : snowNow}/${target < 600 ? (target / 60).toFixed(1) : Math.round(target / 60)}s` : `${Math.floor(snowNow)}/${target}`;
   }
   const dayKey = c ? -c.id : s.day;
   if (dayKey !== h.dayVal) {
@@ -372,13 +423,16 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   n[16] = v.safe.right;
   n[17] = v.dpr;
   n[18] = stars;
+  n[19] = inp.mech ? inp.mech.flareSig : 0;
+  n[20] = inp.mech ? Math.round(inp.mech.noonHeat * 100) : 100;
   let same = h.layer !== null;
   for (let i = 0; i < KEYS && same; i++) same = n[i] === h.key[i];
   if (!same) {
     h.key.set(n);
     buildLayer(h, v, inp, passed, night);
   }
-  if (h.badgeKey !== s.nubs.mult) renderBadge(h, v, s.nubs.mult);
+  const mult = inp.mech ? inp.mech.mult : s.nubs.mult;
+  if (h.badgeKey !== mult) renderBadge(h, v, mult);
 }
 
 /** Draws the HUD row. Updates h.bottom (bottom edge of the band in CSS px). */
@@ -399,15 +453,17 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   g.drawImage(layer, h.layerX, h.layerY, h.layerW, h.layerH);
   const cy = h.cy;
 
-  // Snow flake icon (pops on +Snow); a tight row drops it (buildLayer).
+  // Snow flake icon (pops on +Snow; a Dare's or verb goal's glyph instead); a tight row drops it (buildLayer).
   if (h.iconS > 0) {
     const pop = h.snowPop > 0 ? 1 + 0.18 * Math.sin((Math.PI * h.snowPop) / 0.18) : 1;
     const iz = h.iconS * pop;
-    g.drawImage(flake(), h.iconX + h.iconS / 2 - iz / 2, cy - iz / 2, iz, iz);
+    const glyph = inp.campaign?.goalGlyph;
+    if (glyph) drawGlyph(g, glyph, h.iconX + h.iconS / 2, cy, iz);
+    else g.drawImage(flake(), h.iconX + h.iconS / 2 - iz / 2, cy - iz / 2, iz, iz);
   }
 
   // Multiplier badge: pops 1 → 1.4 → 1 on ×up (elastic), shakes ±4 px on reset; gold from ×2.
-  const m = s.nubs.mult;
+  const m = inp.mech ? inp.mech.mult : s.nubs.mult;
   let bs = 1;
   if (h.multPop > 0) {
     const t = 1 - h.multPop / 0.3;
@@ -420,7 +476,40 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const badge = h.badge as Canvas2D;
   const bp = BADGE_PAD * bs;
   g.drawImage(badge, bx - bw / 2 - bp, cy - bh / 2 - bp, bw + 2 * bp, bh + 2 * bp);
-  if (m >= 5) {
+  const mech = inp.mech;
+  if (mech?.ring) {
+    // v1.6 Flow Ring: the charge runs clockwise round the badge from its top (×5: the buffer).
+    const k = hudScale(v);
+    const o = 3 * k;
+    g.lineWidth = 2.5 * k;
+    g.strokeStyle = cssa(INK, 0.16);
+    g.beginPath();
+    pillPath(g, bx, cy, bw + 2 * o, bh + 2 * o, 1);
+    g.stroke();
+    const fl = h.ringFlash / RING_FLASH_S;
+    g.lineCap = 'round';
+    g.lineWidth = (2.5 + 2.5 * fl) * k;
+    g.strokeStyle = fl > 0 ? '#13C4B0' : mech.bleed ? '#FF6A3D' : m >= 5 ? '#E8A21F' : '#2EC4B6';
+    g.beginPath();
+    pillPath(g, bx, cy, bw + 2 * o, bh + 2 * o, fl > 0 ? 1 : mech.ringFill);
+    g.stroke();
+    g.lineCap = 'butt';
+    if (h.ringPop > 0) {
+      // The run's first trick: "+ring" rising off the badge.
+      const u = 1 - h.ringPop / RING_POP_S;
+      g.globalAlpha = inp.alpha * Math.min(1, 4 * (1 - u));
+      g.font = h.chipFont;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.lineWidth = 3;
+      g.strokeStyle = '#FFFFFF';
+      const ty = cy + bh / 2 + 12 * k - 6 * k * u;
+      g.strokeText('+ring', bx, ty);
+      g.fillStyle = '#13857C';
+      g.fillText('+ring', bx, ty);
+      g.globalAlpha = inp.alpha;
+    }
+  } else if (m >= 5) {
     g.strokeStyle = cssa(0xffffff, 0.6 + 0.4 * Math.sin(inp.time * 8));
     g.lineWidth = 2;
     roundRect(g, bx - bw / 2 + 1, cy - bh / 2 + 1, bw - 2, bh - 2, bh / 2 - 1);
@@ -504,63 +593,167 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
 
 /** The frost meter's radius and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px); a tap this far outside it still counts. */
 const METER_R = 24;
+/** v1.6: each of the Frost Bank's two pips, and the gap between them (× the HUD scale). */
+const BANK_R = 20;
+const BANK_GAP = 6;
 const METER_SIDE = 24;
 const METER_BOTTOM = 34;
 const METER_SLOP = 10;
+/** v1.6 timings (s): a spill's shake, the banked chip pouring in, a gain pop, a cash-in's pour, a trick's flash, the "+ring" pop. */
+export const SPILL_S = 0.6;
+const CHIP_S = 0.45;
+export const GAIN_S = 0.9;
+export const POUR_S = 0.8;
+export const RING_FLASH_S = 0.35;
+export const RING_POP_S = 0.9;
 let meterGlow: Canvas2D | null = null;
 
-/** (x, y) in CSS px is on the frost meter drawn full last frame (a tap there snaps). */
+/** (x, y) in CSS px is on the frost meter drawn ready last frame (a tap there snaps): its pips' capsule. */
 export function hudMeterHit(h: HudState, x: number, y: number): boolean {
-  return h.meterShown && h.meterFull && Math.hypot(x - h.meterX, y - h.meterY) <= h.meterR + METER_SLOP;
+  const dx = Math.max(0, Math.abs(x - h.meterX) - h.meterSpan);
+  return h.meterShown && h.meterFull && Math.hypot(dx, y - h.meterY) <= h.meterR + METER_SLOP;
 }
 
-/** The frost meter (see the header). */
+/** Adds the first `f` (0..1) of a pill's outline to the path, clockwise from its top centre. */
+function pillPath(g: CanvasRenderingContext2D, cx: number, cy: number, w: number, hgt: number, f: number): void {
+  const r = hgt / 2;
+  const hl = Math.max(0, w - hgt) / 2;
+  const arc = Math.PI * r;
+  let d = Math.max(0, Math.min(1, f)) * (4 * hl + 2 * arc);
+  g.moveTo(cx, cy - r);
+  g.lineTo(cx + Math.min(d, hl), cy - r);
+  if ((d -= hl) > 0) g.arc(cx + hl, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.min(d, arc) / r);
+  if ((d -= arc) > 0) g.lineTo(cx + hl - Math.min(d, 2 * hl), cy + r);
+  if ((d -= 2 * hl) > 0) g.arc(cx - hl, cy, r, Math.PI / 2, Math.PI / 2 + Math.min(d, arc) / r);
+  if ((d -= arc) > 0) g.lineTo(cx - hl + Math.min(d, hl), cy - r);
+}
+
+/** "+0.3": frost hundredths as snaps (cash-ins, gains, the banked chip). */
+export function snapsText(h: number): string {
+  return `+${Math.round(h) / 100}`;
+}
+
+/** The frost meter (see the header): one round gauge, or the Frost Bank's two pips. */
 function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput, m: MechView): void {
   const k = hudScale(v);
-  const r = METER_R * k;
-  const x = v.vx + v.vw - v.safe.right - METER_SIDE * k - r;
+  const n = m.pips > 1 ? 2 : 1;
+  const r = (n > 1 ? BANK_R : METER_R) * k;
+  const step = 2 * r + BANK_GAP * k;
+  const xl = v.vx + v.vw - v.safe.right - METER_SIDE * k - r - (n - 1) * step;
   const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - r;
+  const x = xl + ((n - 1) * step) / 2;
   h.meterX = x;
   h.meterY = y;
   h.meterR = r;
-  const frost = Math.max(0, Math.min(1, m.frost));
+  h.meterSpan = ((n - 1) * step) / 2;
+  const frost = Math.max(0, Math.min(n, m.frost));
   const snapping = m.snapLeft > 0;
-  const full = frost >= 0.999 && !snapping;
-  if (full && !h.meterFull) h.meterPop = 0.45;
+  const fullN = snapping ? 0 : Math.floor(frost + 0.001);
+  const full = fullN > 0;
+  if (fullN > h.meterFullN) h.meterPop = 0.45;
+  h.meterFullN = fullN;
   h.meterFull = full;
   const rm = inp.reducedMotion;
-  // Full: it breathes, and pops (1 → 1.25 → 1) when it fills.
+  const a = inp.alpha;
+  // A full pip breathes, and pops (1 → 1.25 → 1) when it fills.
   const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
-  const R = r * (1 + 0.25 * Math.sin((Math.PI * h.meterPop) / 0.45) + (rm ? 0 : 0.04 * breathe));
-  if (full) {
-    meterGlow ??= radialSprite('90,184,255', 96, 0.7, 0.42, 0.3);
-    const gr = R * (2.1 + 0.25 * breathe);
-    g.globalAlpha = inp.alpha * (0.55 + 0.45 * breathe);
-    g.drawImage(meterGlow, x - gr, y - gr, gr * 2, gr * 2);
-    g.globalAlpha = inp.alpha;
+  const fl = flake();
+  for (let i = 0; i < n; i++) {
+    const fill = Math.max(0, Math.min(1, frost - i));
+    const on = fill >= 0.999 && !snapping;
+    let px = xl + i * step;
+    if (i === n - 1 && h.spill > 0 && !rm) px += Math.sin(h.spill * 70) * 2.5 * k * (h.spill / SPILL_S);
+    const R = r * (1 + (on && i === fullN - 1 ? 0.25 * Math.sin((Math.PI * h.meterPop) / 0.45) : 0) + (on && !rm ? 0.04 * breathe : 0));
+    if (on) {
+      meterGlow ??= radialSprite('90,184,255', 96, 0.7, 0.42, 0.3);
+      const gr = R * (2.1 + 0.25 * breathe);
+      g.globalAlpha = a * (0.55 + 0.45 * breathe);
+      g.drawImage(meterGlow, px - gr, y - gr, gr * 2, gr * 2);
+      g.globalAlpha = a;
+    }
+    // The plate, the track and the fill; frozen (ice) while a snap lasts.
+    g.fillStyle = on ? '#2B7FD0' : snapping ? '#DDF0FF' : cssa(0xffffff, 0.92);
+    g.beginPath();
+    g.arc(px, y, R, 0, TAU);
+    g.fill();
+    g.lineWidth = 5 * k;
+    g.strokeStyle = cssa(on ? 0xffffff : INK, 0.15);
+    g.beginPath();
+    g.arc(px, y, R - 5 * k, 0, TAU);
+    g.stroke();
+    // The fill, or (v1.5's single gauge) the snap draining white.
+    const arcF = n === 1 && snapping ? m.snapLeft : fill;
+    if (arcF > 0) {
+      g.lineCap = 'round';
+      g.strokeStyle = on || (n === 1 && snapping) ? '#FFFFFF' : '#5AB8FF';
+      g.beginPath();
+      g.arc(px, y, R - 5 * k, -Math.PI / 2, -Math.PI / 2 + TAU * arcF);
+      g.stroke();
+      g.lineCap = 'butt';
+    }
+    // The snowflake, pale until the pip is full.
+    g.globalAlpha = a * (on || snapping ? 1 : 0.45 + 0.4 * fill);
+    g.drawImage(fl, px - R / 2, y - R / 2, R, R);
+    g.globalAlpha = a;
+    if (snapping && n > 1) {
+      // Frozen: frost across the pip and an ice rim (income waits in the chip).
+      g.fillStyle = cssa(0xffffff, 0.4);
+      g.beginPath();
+      g.arc(px, y, R, 0, TAU);
+      g.fill();
+      g.lineWidth = 1.5 * k;
+      g.strokeStyle = '#9FD3F5';
+      g.stroke();
+    }
   }
-  // The plate, the track and the fill (the snap left, while one lasts).
-  g.fillStyle = full ? '#2B7FD0' : snapping ? '#5AB8FF' : cssa(0xffffff, 0.92);
-  g.beginPath();
-  g.arc(x, y, R, 0, TAU);
-  g.fill();
-  g.lineWidth = 5 * k;
-  g.strokeStyle = cssa(full ? 0xffffff : INK, 0.15);
-  g.beginPath();
-  g.arc(x, y, R - 5 * k, 0, TAU);
-  g.stroke();
-  g.lineCap = 'round';
-  g.strokeStyle = snapping || full ? '#FFFFFF' : '#5AB8FF';
-  g.beginPath();
-  g.arc(x, y, R - 5 * k, -Math.PI / 2, -Math.PI / 2 + TAU * (snapping ? m.snapLeft : frost));
-  g.stroke();
-  // The snowflake, pale until the meter is full.
-  g.globalAlpha = inp.alpha * (full || snapping ? 1 : 0.45 + 0.4 * frost);
-  g.drawImage(flake(), x - R / 2, y - R / 2, R, R);
-  g.globalAlpha = inp.alpha;
+  if (h.spill > 0 && !rm) {
+    // Over the cap: frost drops thrown off the last pip, falling away.
+    const u = 1 - h.spill / SPILL_S;
+    const px = xl + (n - 1) * step;
+    g.globalAlpha = a * (1 - u * u);
+    g.fillStyle = '#FFFFFF';
+    g.strokeStyle = '#2B7FD0';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    for (let j = 0; j < 5; j++) {
+      const dx = (j - 2) * 24 * k * u;
+      const dy = -r - 46 * k * u + 80 * k * u * u;
+      g.moveTo(px + dx + 4 * k, y + dy);
+      g.arc(px + dx, y + dy, 4 * k, 0, TAU);
+    }
+    g.fill();
+    g.stroke();
+    g.globalAlpha = a;
+  }
+  const top = y - r - 14 * k;
+  if (snapping && n > 1) {
+    // The snap draining over the pips, and the frost banked under it waiting in a chip above.
+    const bw = 2 * h.meterSpan + 2 * r;
+    const bh = 6 * k;
+    g.fillStyle = cssa(INK, 0.18);
+    roundRect(g, x - bw / 2, top, bw, bh, bh / 2);
+    g.fill();
+    g.fillStyle = '#FFFFFF';
+    roundRect(g, x - bw / 2, top, Math.max(bh, bw * m.snapLeft), bh, bh / 2);
+    g.fill();
+    if (m.bankH > 0) {
+      if (m.bankH !== h.lastBankH) h.chipText = snapsText(m.bankH);
+      chip(g, h.chipFont, h.chipText, x, top - 14 * k, k, a);
+    }
+    h.lastBankH = m.bankH;
+  } else {
+    if (h.lastBankH > 0) h.chipT = CHIP_S;
+    h.lastBankH = 0;
+    if (h.chipT > 0) {
+      // The banked income pours into the pips as the snap ends.
+      const u = 1 - h.chipT / CHIP_S;
+      chip(g, h.chipFont, h.chipText, x, top - 14 * k + (rm ? 0 : u * (y - top + 14 * k)), k, a * (1 - u));
+      g.globalAlpha = a;
+    }
+  }
   if (full) {
-    // "Swipe down": a white chevron bobbing down over the meter.
-    const cy = y - R - 14 * k + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
+    // "Swipe down": a chevron bobbing down over the meter.
+    const cy = top + 2 * k + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
     const w = 8 * k;
     g.strokeStyle = '#2B7FD0';
     g.lineWidth = 3.5 * k;
@@ -571,7 +764,54 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.lineTo(x + w, cy - w / 2);
     g.stroke();
   }
-  g.lineCap = 'butt';
+  if (h.pour > 0 && !rm) {
+    // A cash-in: a stream of frost from the multiplier badge down into the meter.
+    const u = 1 - h.pour / POUR_S;
+    g.fillStyle = '#5AB8FF';
+    g.strokeStyle = '#FFFFFF';
+    g.lineWidth = 1.5;
+    for (let j = 0; j < 9; j++) {
+      const t = Math.max(0, Math.min(1, (u - j * 0.05) / 0.55));
+      if (t <= 0 || t >= 1) continue;
+      const q = 1 - t;
+      const px = q * q * h.badgeX + 2 * q * t * (h.badgeX + 30 * k) + t * t * x;
+      const py = q * q * h.cy + 2 * q * t * (y - 30 * k) + t * t * y;
+      g.beginPath();
+      g.arc(px, py, (5 - 2 * t) * k, 0, TAU);
+      g.fill();
+      g.stroke();
+    }
+  }
+  if (h.gainT > 0) {
+    // A gain (a bloom, a parry, a cash-in…) floats up off the meter.
+    const u = 1 - h.gainT / GAIN_S;
+    g.globalAlpha = a * Math.min(1, 3 * (1 - u));
+    g.font = h.chipFont;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineWidth = 4;
+    g.strokeStyle = '#FFFFFF';
+    const ty = top - (snapping ? 30 : 8) * k - (rm ? 0 : 18 * k * u);
+    g.strokeText(h.gainText, x, ty);
+    g.fillStyle = '#2B7FD0';
+    g.fillText(h.gainText, x, ty);
+    g.globalAlpha = a;
+  }
+}
+
+/** A small white chip with a snowflake and `text` ("+0.3"), centred on (x, y). */
+function chip(g: CanvasRenderingContext2D, font: string, text: string, x: number, y: number, k: number, a: number): void {
+  if (a <= 0.01) return;
+  g.globalAlpha = a;
+  g.font = font;
+  const w = g.measureText(text).width + 24 * k;
+  const hh = 18 * k;
+  pill(g, x - w / 2, y - hh / 2, w, hh, '#FFFFFF', true);
+  g.drawImage(flake(), x - w / 2 + 4 * k, y - 6 * k, 12 * k, 12 * k);
+  g.fillStyle = '#2B7FD0';
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  g.fillText(text, x - w / 2 + 18 * k, y + 0.5);
 }
 
 /** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */
@@ -639,6 +879,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     h.multFont = `800 ${Math.round(14 * k)}px ${FONT}`;
     h.dayFont = `800 ${Math.round(13 * k)}px ${FONT}`;
     h.clockFont = `800 ${Math.round(19 * k)}px ${FONT}`;
+    h.chipFont = `800 ${Math.round(13 * k)}px ${FONT}`;
     h.badgeKey = -1;
   }
 
@@ -689,7 +930,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   h.iconS = icon ? iconS : 0;
   if (icon) x += iconS + 6 * k;
   // A met goal turns its count teal ("4/4").
-  g.fillStyle = h.snowTarget >= 0 && h.snowVal >= h.snowTarget ? '#13857C' : '#2B5A8A';
+  g.fillStyle = c && h.snowTarget >= 0 && c.goalValue >= h.snowTarget ? '#13857C' : '#2B5A8A';
   drawTabular(g, h, h.snowFont, h.snowText, x, cy + 1);
   x += snowW + 8 * k;
   h.badgeX = x + badgeW / 2;
@@ -743,7 +984,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   const r1 = lx1 - 12 * k;
   if (r1 - r0 <= 24) return;
   h.rulerShown = true;
-  if (c) drawProgressStatic(g, h, c, r0, r1, cy, k, dpr);
+  if (c) drawProgressStatic(g, h, c, r0, r1, cy, k, dpr, s, inp.mech);
   else drawRulerStatic(g, h, s, r0, r1, cy, k, inp, passed === 1, night === 1, dpr);
 }
 
@@ -751,7 +992,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
  * The campaign progress bar's still parts (teal track, the checkered finish, the gate or eclipse
  * marker at the midpoint) into the layer, plus the bar and head sprites.
  */
-function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCampaign, x0: number, x1: number, cy: number, k: number, dpr: number): void {
+function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCampaign, x0: number, x1: number, cy: number, k: number, dpr: number, s: SimState, m: MechView | null): void {
   const hgt = 7 * k;
   const y = cy - hgt / 2 + 1;
   h.rulerX0 = x0;
@@ -828,6 +1069,13 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
   };
   mark(c.markGate, 'gate');
   mark(c.markEclipse, 'eclipse');
+  // v1.6: the level's kept flares where Nubs will meet them (a boss finale's HP notches).
+  const w = s.world;
+  for (let i = 0; m && i < w.flares.length; i++) {
+    const f = w.flares[i] as Flare;
+    const p = (worldYAtTick(w, f.riseTick) - w.startY) / (w.finishY - w.startY);
+    if (f.state === FLARE_KEPT && p >= 0 && p <= 1) flareMark(g, x0 + (x1 - x0) * p, y - 6 * k, y, k, m.flareOut.get(f.id) ?? 0);
+  }
 
   // The finish: a small checkered flag on a pole at the bar's end.
   const fx = x1;
@@ -848,6 +1096,50 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
   g.strokeStyle = cssa(INK, 0.5);
   g.lineWidth = 0.8;
   g.strokeRect(fx + 1, fy - 11 * k, 3 * sq, 3 * sq);
+}
+
+/**
+ * A Heat Flare's mark over the ruler at x (its disc's centre at y, its stem down to the bar at
+ * `bar`): a small hot sun, teal with a check once parried, grey once missed.
+ */
+function flareMark(g: CanvasRenderingContext2D, x: number, y: number, bar: number, k: number, out: number): void {
+  const r = 3.4 * k;
+  // Pending: white-hot in an orange ring (the noon boss is solid orange).
+  const col = out === 1 ? '#2EC4B6' : out === 2 ? '#B5ABC4' : '#FF6A3D';
+  g.strokeStyle = cssa(INK, 0.3);
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(x, y + r);
+  g.lineTo(x, bar);
+  g.stroke();
+  g.strokeStyle = col;
+  g.lineWidth = 1.4 * k;
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i * TAU) / 8;
+    g.moveTo(x + Math.cos(a) * r * 1.35, y + Math.sin(a) * r * 1.35);
+    g.lineTo(x + Math.cos(a) * r * 1.85, y + Math.sin(a) * r * 1.85);
+  }
+  g.stroke();
+  g.fillStyle = col;
+  g.beginPath();
+  g.arc(x, y, r, 0, TAU);
+  g.fill();
+  if (out === 0) {
+    g.fillStyle = '#FFF4D6';
+    g.beginPath();
+    g.arc(x, y, r * 0.55, 0, TAU);
+    g.fill();
+  }
+  if (out === 1) {
+    g.strokeStyle = '#FFFFFF';
+    g.lineWidth = 1.2 * k;
+    g.beginPath();
+    g.moveTo(x - 1.6 * k, y);
+    g.lineTo(x - 0.4 * k, y + 1.3 * k);
+    g.lineTo(x + 1.8 * k, y - 1.4 * k);
+    g.stroke();
+  }
 }
 
 /** Spacing of the campaign star pips (× the HUD scale). */
@@ -914,6 +1206,15 @@ function drawRulerStatic(
   bg.fillStyle = grad(bg, 0);
   roundRect(bg, x0, y, x1 - x0, hgt, hgt / 2);
   bg.fill();
+  const m = inp.mech;
+  if (m && m.noonHeat > 1) {
+    // v1.6 Noon Heat: 11 AM-1 PM bites harder (a hot band on the track and the elapsed bar).
+    const hx = x0 + ((x1 - x0) * 5) / 12;
+    const hw = (x1 - x0) / 6;
+    g.fillStyle = bg.fillStyle = cssa(0xff3d2b, 0.6);
+    g.fillRect(hx, y, hw, hgt);
+    bg.fillRect(hx, y, hw, hgt);
+  }
 
   // Progress head sprite (a white dot with an ink ring).
   const hr = 5 * k;
@@ -984,6 +1285,15 @@ function drawRulerStatic(
   };
   flag(inp.pbMinutes, '#FFC23D');
   flag(inp.challengeMinutes, '#2EC4B6');
+  // v1.6: today's kept Heat Flares at their rise, as soon as they are decided.
+  const dl = dayTicks(s.day);
+  const d0 = dayStartTick(s.day);
+  const fls = s.world.flares;
+  for (let i = 0; m && i < fls.length; i++) {
+    const f = fls[i] as Flare;
+    const t = f.riseTick - d0;
+    if (f.state === FLARE_KEPT && t >= 0 && t <= dl) flareMark(g, x0 + ((x1 - x0) * t) / dl, y - 6 * k, y, k, m.flareOut.get(f.id) ?? 0);
+  }
   // The next milestone: a small white tick across the ruler.
   const gm = inp.goalMinutes - dayStart;
   if (inp.goalMinutes >= 0 && gm >= 0 && gm <= 720) {

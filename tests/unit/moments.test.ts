@@ -105,7 +105,7 @@ describe('RunMoments', () => {
     expect(b.toasts.map((t) => t.kicker.replace(/‌/g, ''))).toEqual(['MISSION ✓ 2/3']);
     expect(b.toasts[0]!.text).toMatch(/^Collect 10 flakes.* · \+\d+ Snow$/);
     s.tick += 6;
-    s.stats.maxMult = 3;
+    s.stats.maxMult = 4;
     m.update(s);
     expect(b.toasts[1]!.kicker).toBe('ALL MISSIONS ✓ 3/3');
     expect(log).toEqual(['mission', 'mission']);
@@ -143,8 +143,17 @@ describe('RunMoments', () => {
     // Found by the concept's id (the core names it); a stand-in level teaching Cold Snap.
     m.begin(save, { ...levelDef(12)!, introduces: 'snap' as never }, true);
     const seen: string[] = [];
-    for (const ev of [{ e: 'go' }, { e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 1 }] as SimEvent[]) {
+    for (const ev of [{ e: 'go' }, { e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 1 }, { e: 'snapCash', level: 4, refundH: 30 }] as SimEvent[]) {
       m.onEvent(ev, s);
+      if (ev.e === 'snap') {
+        // v1.6: a bud in reach while the snap lasts (the dial's gold) brings the Garden's tip.
+        s.snapTicks = 60;
+        s.guide.bud[90] = 1;
+        s.tick += 6;
+        m.update(s);
+        s.snapTicks = 0;
+        s.guide.bud[90] = 0;
+      }
       seen.push(...b.toasts.map((t) => t.text));
       b.toasts.length = 0;
     }

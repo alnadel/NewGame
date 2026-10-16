@@ -7,6 +7,12 @@
 // finds it by its concept) gets that mechanic's tips (MECH_TIPS) until it is passed, shown when the
 // moment comes (a bud ahead, the first bloom, the meter full, a snap, deep shade). A new player's
 // first endless and daily runs (fewer than NEW_PLAYER_RUNS) get the bud and deep-shade moment tips.
+//
+// v1.6 (docs/V1_6_PLAN.md §2): the Flow Ring on L2 (the first ×up), the Frost Bank and Garden on the
+// Cold Snap's level (a pip full, a snap with a bud in reach, the first cash-in), glass flakes on
+// their level (the first glass window on the dial) and Heat Flares on theirs (the first warning).
+// A new player's endless runs get the ring's first drop from ×3 or more, the Garden, the cash-in,
+// the glass and the flare tips too. A level whose goal was relaxed (the soft-fail) says so at go.
 
 import { levelProgress, queryBuds, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
@@ -17,7 +23,7 @@ import { goalMetLive } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
-export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep';
+export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'snapBud' | 'glass' | 'warn';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -31,6 +37,7 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
   ],
   2: [
     ['go', 'Flakes melt in the sun: shade them before Nubs gets there.'],
+    ['mult', 'Shade fills the ring round your ×. Idle sun drains it.'],
     ['melt', 'One melted! Shade the next flakes early.'],
     ['goal', 'Goal done! Now bring Nubs home to the flag.'],
   ],
@@ -49,22 +56,36 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
     ['bud', 'A bud! Shine the sun from its gold mark to grow it. Gold on the dial grows it too.'],
-    ['bloom', 'Bloomed! The sunflower is shade for the rest of the run.'],
+    ['bloom', 'Bloomed! A third of a snap of frost, and shade for the rest of the run.'],
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],
   snap: [
-    ['go', 'Shade fills the frost meter, bottom right. Flakes and SWINGs fill it faster.'],
-    ['frost', 'Meter full! Swipe down, press ↓ or tap the meter for a Cold Snap.'],
-    ['snap', 'Cold Snap! Full shade wherever the sun points. Save the next one for noon.'],
+    ['go', 'A snap pours your ring into the frost: cast it while the ring is high.'],
+    ['frost', 'A pip is full! Swipe down, press ↓ or tap the meter for a Cold Snap.'],
+    ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
+    ['cash', 'Your ring poured into the frost.'],
   ],
   deep: [
-    ['go', 'Two shadows over Nubs at once is deep shade: Chill and the multiplier fill twice as fast.'],
-    ['deep', 'Deep shade! The dark ring means double cool. Hunt the overlaps.'],
+    ['go', 'Two shadows over Nubs at once is deep shade: Chill and the ring fill twice as fast.'],
+    ['deep', 'Deep shade! The dark band on the teal means double cool. Hunt the overlaps.'],
   ],
+  glass: [['glass', 'Glass flakes melt fast. The white arc saves them, if you can spare the sun.']],
+  flare: [['warn', 'A Heat Flare! When the orange rim runs out, shadows snap shorter: slide to the frost-rimmed shade first.']],
 };
 
+/** The soft-fail's tip at go (a level whose goal was missed twice). */
+export const SOFT_FAIL_TIP = 'Goal eased: just reach the finish. The Dare still earns its star.';
+
 /** Tips for the mechanics' moments in a new player's endless and daily runs (the cue line says how to snap). */
-const FIRST_TIPS = [MECH_TIPS.bud[0], MECH_TIPS.deep[1]] as const;
+const FIRST_TIPS = [
+  MECH_TIPS.bud[0],
+  MECH_TIPS.deep[1],
+  ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.'],
+  MECH_TIPS.snap[2],
+  MECH_TIPS.snap[3],
+  MECH_TIPS.glass[0],
+  MECH_TIPS.flare[0],
+] as const;
 /** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
 const NEW_PLAYER_RUNS = 12;
 /** A bud this far ahead (u) counts as coming into view. */
@@ -97,7 +118,7 @@ export interface RunMoments {
    * A run begins. `scored`: the run will fold into the save (no debug params), so its mission steps
    * are real. Tips show on a Journey level from LEVEL_TIPS until it is passed.
    */
-  begin(save: Save, level: LevelDef | null, scored: boolean): void;
+  begin(save: Save, level: LevelDef | null, scored: boolean, relaxed?: boolean): void;
   /** One tick's event (Session.onTickEvent). */
   onEvent(ev: SimEvent, s: SimState): void;
   /** Once per stepped frame, after the ticks. */
@@ -113,8 +134,10 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   /** missionValue reads only `minutes` and `stats`: one reused probe instead of a RunResult per check. */
   const probe = { minutes: 0, stats: null as unknown as RunResult['stats'] };
   let tips: (readonly [TipOn, string])[] = [];
-  /** Looks for a bud ahead (only while a tip waits for one). */
+  /** Looks for a bud ahead (only while a tip waits for one); v1.6: for a bud in reach under a snap, a glass window. */
   let budTip = false;
+  let snapBudTip = false;
+  let glassTip = false;
   let budAt = -1e9;
   const budBuf: Bud[] = [];
   let tipsShown = 0;
@@ -136,7 +159,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   };
 
   return {
-    begin(save, lv, scored) {
+    begin(save, lv, scored, relaxed = false) {
       tracked.length = 0;
       done = total = lastCheck = tipsShown = 0;
       burn = spent = false;
@@ -148,7 +171,10 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       const mech = fresh ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
       else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...(FIRST_TIPS as readonly (readonly [TipOn, string])[]));
+      if (relaxed) tips.push(['go', SOFT_FAIL_TIP]);
       budTip = tips.some((t) => t[0] === 'bud');
+      snapBudTip = tips.some((t) => t[0] === 'snapBud');
+      glassTip = tips.some((t) => t[0] === 'glass');
       budAt = -1e9;
       tipGlyph = lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
       if (!scored) return;
@@ -207,6 +233,18 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'deepEnter':
           tip('deep');
           break;
+        case 'multUp':
+          tip('mult');
+          break;
+        case 'multDown':
+          if (ev.cause === 'bleed' && ev.from >= 3) tip('drop');
+          break;
+        case 'snapCash':
+          if (ev.refundH > 0) tip('cash');
+          break;
+        case 'flareWarn':
+          tip('warn');
+          break;
         default:
           break;
       }
@@ -218,6 +256,17 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         const p = levelProgress(s);
         if (p >= 0.25) tip('p25');
         if (p >= 0.6) tip('p60');
+        if ((snapBudTip || glassTip) && s.tick - budAt >= MISSION_EVERY) {
+          // v1.6: a bud in reach under a snap; a glass flake's window on the dial.
+          if (snapBudTip && s.snapTicks > 0 && s.guide.bud.includes(1)) {
+            snapBudTip = false;
+            tip('snapBud');
+          }
+          if (glassTip && s.guide.flake?.includes(1)) {
+            glassTip = false;
+            tip('glass');
+          }
+        }
         if (budTip && s.tick - budAt >= MISSION_EVERY && s.world.buds) {
           budAt = s.tick;
           const n = queryBuds(s.world, s.nubs.y + 20, s.nubs.y + BUD_AHEAD, budBuf);

@@ -99,7 +99,7 @@ import { createDecor, drawBunting, drawDecor, invalidateDecor, type Decor, type 
 import { drawGlare, drawPickups } from './pickups.ts';
 import { createShadowLayer, drawShadowLayer, traceShadows, type ShadowLayer } from './shadowLayer.ts';
 import { ctx2d, makeCanvas } from './sprites.ts';
-import { bossWeight, createSunGlyph, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
+import { bossWeight, createSunGlyph, drawFlareCue, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
 /** Sun Lock's warning: the padlock blinks this many ticks before the lock. */
@@ -180,7 +180,7 @@ export type CampaignView = HudCampaign;
  * gold bud arcs.
  */
 export interface MechView {
-  /** The frost meter shows on this run (it has the mechanic), and its fill 0..1 (1 = a snap is ready). */
+  /** The frost meter shows on this run (it has the mechanic), and its fill in snaps (1 = one ready; v1.6: up to 2). */
   meter: boolean;
   frost: number;
   /** Nubs is in deep shade now. */
@@ -190,10 +190,38 @@ export interface MechView {
   snapCloud: Cloud | null;
   /** Angles that grow a bud now (GuideState.bud), or null. */
   bud: Uint8Array | null;
+  /** v1.6 Frost Bank: the meter's pips (2 with the Bank, else 1) and the income banked during a snap (hundredths: the pending chip). */
+  pips: number;
+  bankH: number;
+  /** v1.6 Flow Ring: the badge's level (nubs.mult), the badge wears the charge ring, its fill 0..1 toward the next level (×5: its buffer), and it is bleeding now. */
+  mult: number;
+  ring: boolean;
+  ringFill: number;
+  bleed: boolean;
+  /** v1.6 dial layers (V1_6_PLAN §4): guide.deep, guide.flake, guide.land (a snap is on) and guide.flare (a warning), null when off. */
+  deepBand: Uint8Array | null;
+  glass: Uint8Array | null;
+  land: Uint8Array | null;
+  flare: Uint8Array | null;
+  /** v1.6 Heat Flare now: 0 none, 1 warning, 2 rise, 3 hold, 4 fall; the warning's share left (1 → 0), the phase's progress 0..1. */
+  flarePhase: number;
+  flareLeft: number;
+  flareT: number;
+  /** Changes whenever the run's kept flares or their outcomes do (the HUD's ruler marks). */
+  flareSig: number;
+  /** Outcome by flare id: 1 parried, 2 missed. */
+  readonly flareOut: Map<number, number>;
+  /** Noon Heat today (×H on the drain from 11 AM to 1 PM; 1 = none). */
+  noonHeat: number;
+  /** A demo's glass cluster (its flakes draw as glass), −1 none. */
+  glassCluster: number;
 }
 
 export function createMechView(): MechView {
-  return { meter: false, frost: 0, deep: false, snapLeft: 0, snapCloud: null, bud: null };
+  return {
+    meter: false, frost: 0, deep: false, snapLeft: 0, snapCloud: null, bud: null, pips: 1, bankH: 0, mult: 1, ring: false, ringFill: 0, bleed: false,
+    deepBand: null, glass: null, land: null, flare: null, flarePhase: 0, flareLeft: 0, flareT: 0, flareSig: 0, flareOut: new Map(), noonHeat: 1, glassCluster: -1,
+  };
 }
 
 export interface RenderInput {
@@ -676,7 +704,7 @@ export class Renderer {
       }
       drawFriendPuddle(g, v, sc.friend[0] as number, sc.friend[1] as number);
     }
-    drawPickups(g, v, s.world, time, snap.nubsY, night);
+    drawPickups(g, v, s.world, time, snap.nubsY, night, inp.mech.glassCluster);
     if (sunUp && moonlit) {
       // The moon sun's shadows: the sim's own geometry in the moonlight colour.
       if (drawShadowLayer(g, sc.shadow, v, s.world, sc.moonPal, sc.groundPal.ground, ux, uy, snap.cot, snap.tAbs, MOONLIT_SHADOW * (1 - eclipse), inp.softShadows, false)) {
@@ -886,6 +914,14 @@ export class Renderer {
       hi.locked = s.sun.locked;
       hi.bud = inp.screen === 'title' ? null : inp.mech.bud;
       hi.deep = inp.mech.deep;
+      const mv = inp.mech;
+      hi.deepBand = mv.deepBand;
+      hi.glass = mv.glass;
+      hi.land = mv.land;
+      hi.snapOn = mv.land !== null;
+      hi.flare = mv.flare;
+      hi.flareLeft = mv.flarePhase === 1 ? mv.flareLeft : -1;
+      hi.flareHot = mv.flarePhase === 2 ? mv.flareT : mv.flarePhase === 3 ? 1 : mv.flarePhase === 4 ? 1 - mv.flareT : 0;
       hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
       drawHalo(g, sc.halo, hi);
     }
@@ -912,6 +948,7 @@ export class Renderer {
       else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
       drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades, moonlit, eclipse);
+      if (inp.mech.flarePhase > 0) drawFlareCue(g, sc.sun, scale, inp.mech.flarePhase, inp.mech.flareLeft, inp.mech.flareT, time, inp.reducedMotion);
     }
 
     // HUD.

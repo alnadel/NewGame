@@ -416,6 +416,56 @@ function sweatDrop(g: CanvasRenderingContext2D, u: number, time: number): void {
   g.fill();
 }
 
+/**
+ * v1.6 Heat Flare on the sun (unlike the noon boss it never swells, and never flashes): through the
+ * warning a ring of twelve white-hot ticks counts down around it (the ticks still lit are the share
+ * left; it turns slowly) while a white glow gathers; through the rise and hold a steady white-hot
+ * ring, fading over the fall. Reduced motion: the ring only.
+ */
+let flareGlow: CanvasImageSource | null = null;
+
+export function drawFlareCue(g: CanvasRenderingContext2D, s: SunGlyph, scale: number, phase: number, left: number, t: number, time: number, rm: boolean): void {
+  const a = 1 - s.night;
+  if (a <= 0.05) return;
+  const r = 20 * scale;
+  g.lineCap = 'round';
+  if (phase === 1) {
+    if (!rm) {
+      g.globalAlpha = a * 0.7 * (1 - left);
+      const gr = r * 2.6;
+      flareGlow ??= radialSprite('255,247,224', 128, 0.9, 0.3, 0.35);
+      g.drawImage(flareGlow, s.x - gr, s.y - gr, gr * 2, gr * 2);
+    }
+    const lit = Math.ceil(left * 12);
+    const rot = rm ? 0 : time * 0.5;
+    for (let pass = 0; pass < 2; pass++) {
+      g.lineWidth = (pass === 0 ? 5 : 2.5) * scale;
+      for (let i = 0; i < 12; i++) {
+        g.globalAlpha = a * (i < lit ? 1 : 0.25);
+        g.strokeStyle = pass === 0 ? '#FF6A3D' : '#FFF4D6';
+        const ang = rot + (i * TAU) / 12 - Math.PI / 2;
+        g.beginPath();
+        g.moveTo(s.x + Math.cos(ang) * r * 1.75, s.y + Math.sin(ang) * r * 1.75);
+        g.lineTo(s.x + Math.cos(ang) * r * 2.1, s.y + Math.sin(ang) * r * 2.1);
+        g.stroke();
+      }
+    }
+  } else {
+    const hot = phase === 2 ? t : phase === 3 ? 1 : 1 - t;
+    g.globalAlpha = a * hot;
+    g.lineWidth = 5 * scale;
+    g.strokeStyle = '#FF6A3D';
+    g.beginPath();
+    g.arc(s.x, s.y, r * 1.85, 0, TAU);
+    g.stroke();
+    g.lineWidth = 2.5 * scale;
+    g.strokeStyle = '#FFF4D6';
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+  g.lineCap = 'butt';
+}
+
 function drawMoon(g: CanvasRenderingContext2D, x: number, y: number, r: number, a: number, time: number): void {
   const glow = radialSprite('232,236,255', 128, 0.4, 0.4, 0.12);
   g.globalAlpha = a;

@@ -26,8 +26,9 @@ export interface Banners {
   day: number;
   dayN: number;
   dayText: string;
-  /** The Day card's second line and its biome (glyph and paper). */
+  /** The Day card's second line and its biome (glyph and paper); v1.6: its Noon Heat line ('' none). */
   dayLine: string;
+  dayHeat: string;
   dayBiome: BiomeId;
   /** Measured widths of the Day card's title and line and of the night line (0 = not yet). */
   dayTitleW: number;
@@ -69,8 +70,13 @@ export interface Banners {
   levelConceptName: string;
   levelBlurb: string;
   levelGoal: string;
-  /** The three star rules' short labels: the goal, the flakes, the cool run. */
+  /** The three star rules' short labels: the goal, the flakes (or the Dare), the cool run. */
   levelStars: readonly string[];
+  /** v1.6: the Dare line ('' none) and its glyph; a teaching note under the blurb, wrapped. */
+  levelDare: string;
+  levelDareGlyph: string | null;
+  levelNote: string;
+  levelNoteLines: string[];
   levelBiome: BiomeId;
   levelLines: string[];
   levelWrapW: number;
@@ -80,6 +86,7 @@ export interface Banners {
   blurbFont: string;
   tapFont: string;
   starFont: string;
+  noteFont: string;
   /**
    * In-run toasts under the HUD (v1.4): a mission done ("MISSION ✓ 2/3"), a level tip. They queue
    * (at most TOAST_QUEUE) and wait while a card or stamp holds the top of the screen, so they never
@@ -103,7 +110,7 @@ export interface Toast {
   hold: number;
 }
 
-export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss';
+export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost';
 
 /** Stamp timing (s): slam in, then fade out (the hold is per stamp). */
 export const STAMP_IN = 0.22;
@@ -116,6 +123,8 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [string, string, string]>>
   // The finish line: a white plate with checkered bands; the miss a rose plate.
   finish: ['#FFFFFF', '#2B2140', '#2B2140'],
   miss: ['#FFB3C1', '#B8324F', '#3A1020'],
+  // v1.6 PARRY!: an ice plate.
+  frost: ['#DDF4FF', '#2B7FD0', '#173A66'],
 };
 /** The level card's slide-out (s). */
 const LEVEL_OUT_S = 0.3;
@@ -130,6 +139,7 @@ export function createBanners(): Banners {
     dayN: 1,
     dayText: 'DAY 1',
     dayLine: '',
+    dayHeat: '',
     dayBiome: 'meadow',
     dayTitleW: 0,
     dayLineW: 0,
@@ -161,6 +171,10 @@ export function createBanners(): Banners {
     levelBlurb: '',
     levelGoal: '',
     levelStars: [],
+    levelDare: '',
+    levelDareGlyph: null,
+    levelNote: '',
+    levelNoteLines: [],
     levelBiome: 'meadow',
     levelLines: [],
     levelWrapW: 0,
@@ -170,6 +184,7 @@ export function createBanners(): Banners {
     blurbFont: '',
     tapFont: '',
     starFont: '',
+    noteFont: '',
     toasts: [],
     toastT: -1,
     toastLines: [],
@@ -188,6 +203,10 @@ export interface LevelCardWords {
   goal: string;
   /** The three star rules' short labels: "Finish", "6 flakes", "≤ 4 s in sun". */
   stars: readonly string[];
+  /** v1.6: "Dare · Bloom 2" ('' none) and its glyph; a teaching note ('' none). */
+  dare?: string;
+  dareGlyph?: string | null;
+  note?: string;
 }
 
 /**
@@ -205,6 +224,9 @@ export function showLevelCard(b: Banners, w: LevelCardWords, biome: BiomeId): vo
   b.levelBlurb = w.blurb;
   b.levelGoal = noLigatures(w.goal);
   b.levelStars = w.stars;
+  b.levelDare = noLigatures(w.dare ?? '');
+  b.levelDareGlyph = w.dareGlyph ?? null;
+  b.levelNote = w.note ?? '';
   b.levelBiome = biome;
   b.levelLines.length = 0;
   b.levelWrapW = 0;
@@ -287,8 +309,9 @@ export function showNightCard(b: Banners, day: number): void {
   b.nightW = 0;
 }
 
-/** The Day card for `day`: its biome, forecast (left out when clear) and noon elevation. */
-export function showDayCard(b: Banners, day: number, biome: BiomeId, forecast: ForecastId, epsNoon: number): void {
+/** The Day card for `day`: its biome, forecast (left out when clear), noon elevation and (v1.6) a rising Noon Heat (×H; 1 none). */
+export function showDayCard(b: Banners, day: number, biome: BiomeId, forecast: ForecastId, epsNoon: number, heat = 1): void {
+  b.dayHeat = heat > 1 ? `NOON HEAT ×${Math.round(heat * 100) / 100} · 11 AM–1 PM` : '';
   b.day = 0;
   b.dayN = day;
   b.dayText = `DAY ${day}`;
@@ -347,6 +370,7 @@ function fonts(b: Banners, scale: number): void {
   b.blurbFont = `500 ${Math.round(14 * scale)}px ${SANS}`;
   b.tapFont = `small-caps 700 ${Math.round(11 * scale)}px ${SANS}`;
   b.starFont = `700 ${Math.round(12 * scale)}px ${SANS}`;
+  b.noteFont = `italic 600 ${Math.round(13 * scale)}px ${SANS}`;
   b.toastFont = `600 ${Math.round(13 * scale)}px ${SANS}`;
   b.toastWrapW = 0;
   b.stampW = 0;
@@ -359,6 +383,9 @@ function fonts(b: Banners, scale: number): void {
 export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, top: number, scale: number, reducedMotion: boolean): void {
   const cx = v.vx + v.vw / 2;
   fonts(b, scale);
+  // A toast already showing stays under a card or stamp that arrives after it (PARRY!, a Day card).
+  const toast = b.toastT >= 0 ? b.toasts[0] : undefined;
+  if (toast) drawToast(g, b, toast, v, cx, top, scale, reducedMotion);
   if (b.night >= 0) {
     const t = b.night;
     const a = Math.min(1, t / 0.5, (2.4 - t) / 0.6);
@@ -378,8 +405,6 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
     dayCard(g, b, x, top + 74 * scale, scale, a, reducedMotion ? 0 : t);
   }
   if (b.stamp >= 0) drawStamp(g, b, cx, top + 40 * scale, scale, v.vw - 40, reducedMotion);
-  const toast = b.toastT >= 0 ? b.toasts[0] : undefined;
-  if (toast) drawToast(g, b, toast, v, cx, top, scale, reducedMotion);
   if (b.level >= 0) {
     const t = b.level;
     let x = cx;
@@ -525,13 +550,18 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
     }
     g.font = b.titleFont;
     b.levelTitleW = g.measureText(b.levelTitle).width;
+    g.font = b.noteFont;
+    wrap(g, b.levelNote, innerW, b.levelNoteLines);
+    b.levelNoteLines.length = Math.min(2, b.levelNoteLines.length);
   }
   const lineH = 18 * scale;
   const hasConcept = b.levelConceptName !== '';
   const blurbH = b.levelLines.length * lineH;
   // The same run of increments as the layout below, plus the tap line and the bottom margin.
   const starsH = b.levelStars.length === 3 ? STAR_ROW_H * scale : 0;
-  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + (22 + 12 + 14 + 14) * scale + starsH;
+  const noteH = b.levelNoteLines.length * 16 * scale;
+  const dareH = b.levelDare ? 28 * scale : 0;
+  const h = (24 + 26 + 22 + 18) * scale + (hasConcept ? 26 * scale : 0) + blurbH + (blurbH > 0 ? 8 * scale : 0) + noteH + (22 + 12 + 14 + 14) * scale + starsH + dareH;
   // The card sits between the HUD band and the dial: centred in that space, never over Nubs.
   const dialTop = v.ny - 60 * v.S;
   const y = Math.max(top + 8, Math.min((top + dialTop) / 2, dialTop - h / 2 - 8)) - h / 2;
@@ -595,6 +625,15 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
     }
     ly += 8 * scale;
   }
+  if (noteH > 0) {
+    // v1.6: the level's teaching note, in teal.
+    g.fillStyle = '#13857C';
+    g.font = b.noteFont;
+    for (const line of b.levelNoteLines) {
+      g.fillText(line, cx, ly + 8 * scale);
+      ly += 16 * scale;
+    }
+  }
   // The goal, as a small pill.
   g.font = b.lineFont;
   const gw = g.measureText(b.levelGoal).width + 34 * scale;
@@ -608,6 +647,20 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
   g.fillText(b.levelGoal, cx - gw / 2 + 22 * scale, ly + gh / 2 + 0.5);
   g.textAlign = 'center';
   ly += gh + 12 * scale;
+  if (dareH > 0) {
+    // v1.6: the Dare (star 2) as a gold pill under the goal: its glyph, "Dare · Bloom 2".
+    const dw = Math.min(innerW, g.measureText(b.levelDare).width + 40 * scale);
+    const dy = ly - 6 * scale;
+    g.fillStyle = 'rgba(255,194,61,0.22)';
+    roundRect(g, cx - dw / 2, dy, dw, gh, gh / 2);
+    g.fill();
+    if (b.levelDareGlyph) drawGlyph(g, b.levelDareGlyph, cx - dw / 2 + 14 * scale, dy + gh / 2, 14 * scale);
+    g.fillStyle = '#8A5A0A';
+    g.textAlign = 'left';
+    g.fillText(b.levelDare, cx - dw / 2 + 26 * scale, dy + gh / 2 + 0.5, dw - 32 * scale);
+    g.textAlign = 'center';
+    ly += dareH;
+  }
   if (starsH > 0) {
     starRules(g, b, x0 + pad, innerW, ly, scale);
     ly += starsH;
@@ -644,9 +697,9 @@ function starRules(g: CanvasRenderingContext2D, b: Banners, x0: number, w: numbe
     g.beginPath();
     g.arc(cx + 9 * scale, cy + 2 * scale, 8.5 * scale, 0, TAU);
     g.fill();
-    drawGlyph(g, STAR_GLYPHS[i] as string, cx + 9 * scale, cy + 2 * scale, 12 * scale);
+    drawGlyph(g, (i === 1 && b.levelDareGlyph) || (STAR_GLYPHS[i] as string), cx + 9 * scale, cy + 2 * scale, 12 * scale);
     g.fillStyle = '#5B4A2A';
-    g.fillText(b.levelStars[i] as string, cx, y + 31 * scale);
+    g.fillText(b.levelStars[i] as string, cx, y + 31 * scale, colW - 4 * scale);
   }
 }
 
@@ -797,7 +850,8 @@ function dayCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: number,
   const glyph = 14 * scale;
   const gap = 5 * scale;
   const w = Math.max(titleW, glyph + gap + lineW) + 40 * scale;
-  const h = 54 * s + 6 * scale;
+  const heatH = b.dayHeat ? 16 * scale : 0;
+  const h = 54 * s + 6 * scale + heatH;
   // Five warm rays behind the card, turning at 6°/s and fading out toward their tips.
   const len = Math.round(w * 0.62);
   if (b.rayLen !== len || !b.rayFill) {
@@ -833,13 +887,18 @@ function dayCard(g: CanvasRenderingContext2D, b: Banners, cx: number, y: number,
   g.fillStyle = '#2B2140';
   g.textAlign = 'center';
   g.font = b.dayFont;
-  g.fillText(b.dayText, cx, y - 8 * scale);
+  g.fillText(b.dayText, cx, y - 8 * scale - heatH / 2);
   // The line: the biome glyph, then the plan in small caps.
-  const ly = y + h / 2 - 15 * scale;
+  const ly = y + h / 2 - 15 * scale - heatH;
   const lx = cx - (glyph + gap + lineW) / 2;
   drawGlyph(g, b.dayBiome, lx + glyph / 2, ly, glyph);
   g.fillStyle = '#6B5A7A';
   g.textAlign = 'left';
   g.font = b.lineFont;
   g.fillText(b.dayLine, lx + glyph + gap, ly + 0.5 * scale);
+  if (heatH > 0) {
+    g.fillStyle = '#D9442B';
+    g.textAlign = 'center';
+    g.fillText(b.dayHeat, cx, ly + heatH + 0.5 * scale);
+  }
 }

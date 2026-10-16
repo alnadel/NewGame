@@ -58,6 +58,11 @@ const GLYPHS: Readonly<Record<string, string>> = {
   sunflower: 'S#4E9A4A/1.5 M0 1L0 7|F#5FAE5A M0 5.2Q2.8 2.4 4.4 3.4Q2.4 5.6 0 5.2Z|F#FFC23D O3.3-1.5 1.7O2.3 0.8 1.7O0 1.8 1.7O-2.3 0.8 1.7O-3.3-1.5 1.7O-2.3-3.8 1.7O0-4.8 1.7O2.3-3.8 1.7|F#7A4E2A O0-1.5 2.1',
   coldsnap: 'F#9FD3F5 O-2.6-2.4 2.4O0.4-3.6 3.2O3.4-2.2 2.3M-2.6-2.4h6v2.4h-6Z|S#4A9BD9/1.2 M0 1.6L0 6.8M-2.25 2.9L2.25 5.5M-2.25 5.5L2.25 2.9',
   deep: 'F#8FA3BF O-2.2 0 4.4|F#8FA3BF O2.2 0 4.4|C O-2.2 0 4.4|F#1F2A66 O2.2 0 4.4|R|F#DDF4FF M0-2.2L0.55-0.55L2.2 0L0.55 0.55L0 2.2L-0.55 0.55L-2.2 0L-0.55-0.55Z',
+  // v1.6: Heat Flare (a hot sun in a white-hot ring), glass flakes (a flake in a glass diamond with a
+  // glint), the Flow Ring (a charge running round).
+  flare: 'S#FF6A3D/1.6 O0 0 6.2|F#FFC23D O0 0 3.6|F#FFF4D6 O-1-1 1.2',
+  brittle: 'F#D6F0FF M0-6.5L5.2 0L0 6.5L-5.2 0Z|S#4A9BD9/1 M0-6.5L5.2 0L0 6.5L-5.2 0Z|S#4A9BD9/1.2 M0-3.5L0 3.5M-3-1.75L3 1.75M-3 1.75L3-1.75|F#FFFFFF M4.5-6.5L5-5L6.5-4.5L5-4L4.5-2.5L4-4L2.5-4.5L4-5Z',
+  ring: 'S#D9D3E2/2 O0 0 5.5|S#2EC4B6/2.2 M0-5.5A5.5 5.5 0 1 1-5.5 0|F#2B2140 O0 0 1.6',
   boss: 'F#FF6A3D M3.84-1.11L6.8 0L3.84 1.11M3.76 1.37L5.5 4L2.46 3.15M2.24 3.31L2.1 6.47L0.14 4M-0.14 4L-2.1 6.47L-2.24 3.31M-2.46 3.15L-5.5 4L-3.76 1.37M-3.84 1.11L-6.8 0L-3.84-1.11M-3.76-1.37L-5.5-4L-2.46-3.15M-2.24-3.31L-2.1-6.47L-0.14-4M0.14-4L2.1-6.47L2.24-3.31M2.46-3.15L5.5-4L3.76-1.37|F#FF6A3D O0 0 4|S#7A3B00/1.3 M-2.6-1.6L-0.8-0.6M2.6-1.6L0.8-0.6',
 };
 
@@ -133,6 +138,8 @@ function glyphSource(id: string): string {
   if (k.includes('bud') || k.includes('bloom') || k.includes('sunflower')) return GLYPHS.sunflower as string;
   if (k.includes('snap')) return GLYPHS.coldsnap as string;
   if (k.includes('deep')) return GLYPHS.deep as string;
+  if (k.includes('glass') || k.includes('brittle')) return GLYPHS.brittle as string;
+  if (k.includes('flare')) return GLYPHS.flare as string;
   return GLYPHS.goal as string;
 }
 
