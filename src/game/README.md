@@ -279,7 +279,7 @@ See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it r
 
 See docs/V1_6_PLAN.md §4 and §9; CORE fills the rules, the game makes them readable. Every layer
 reads the sim defensively (`game/mechanics.ts` fills the renderer's `MechView`): absent or zero state
-shows nothing new, so the contract's stubs play like v1.5, and each `World.v16` kill switch turns its
+shows nothing new (a run with every v1.6 rule off plays like v1.5), and each `World.v16` kill switch turns its
 layer off (`ring` off: no charge ring; `bank` off: one gauge, as in v1.5).
 
 - **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the

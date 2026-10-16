@@ -481,8 +481,9 @@ identity). Code: `sim/mechanics.ts` (buds, frost, snap), `computeCoverage`/`appl
 
 ## 16. v1.6 contract (docs/V1_6_PLAN.md §10, minus amendment A1)
 
-The base commit of v1.6: every shape below exists and is exported from `index.ts`; the bodies are
-stubs that change no tick, no hash and no golden (`hashState` does not read the new state yet).
+The base commit of v1.6: every shape below exists and is exported from `index.ts`. The contract
+landed them as stubs; the owners filled the bodies (§16.1 economy, §16.2 world and Journey), and
+since the integration `hashState` reads the new state and the goldens are the merged sim's.
 Owners (§9 as amended by A2): **CORE-1** economy (ring, bank, garden), **CORE-2** world and Journey
 (flares, Noon Heat, glass, Dares, guide.deep/flake/flare), **GAME** render, HUD, audio, input and
 META's items. Shared files (`sim/types.ts`, `events.ts`, `objects.ts`, `tuning.ts` block shapes,
