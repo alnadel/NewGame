@@ -11,7 +11,7 @@ import { chillDeltaTable, slidingMaxCircular, stepLitLive } from '../../gen/vali
 import { BINS, binOf } from '../../intervals.ts';
 import { FLARE_KEPT, type Flare } from '../../objects.ts';
 import type { BotHookCtx } from '../bots.ts';
-import { dareBonus, dareSnap, dareTarget } from './dares.ts';
+import { dareBonus, dareSnap, dareTarget, glassValue } from './dares.ts';
 import type { SimState } from '../types.ts';
 
 const STEP = TUNING.validator.stepTicks;
@@ -26,9 +26,14 @@ const CHASE_FROM = 200;
 const CHASE_TO = 520;
 /** preAim (§2.5): the last ticks of a flare's warning in which the reactive bot slides to guide.flare. */
 const PREAIM_TICKS = 18;
-/** Oracle glass term (§2.3): Chill-equivalent bonus on guide.flake bins while the slack is at least this. */
-const ORACLE_GLASS = 4;
-const ORACLE_GLASS_SLACK = 15;
+/**
+ * Oracle glass term (§2.3): a Chill-equivalent bonus × the glass plan's value (bots/dares.ts
+ * glassValue: every glass flake in its melt window, the most urgent first) while the slack is at
+ * least ORACLE_GLASS_SLACK. Measured (16 seeds, Days 1-3): ×4 on guide.flake saved 31% of the glass
+ * flakes, this 73%.
+ */
+const ORACLE_GLASS = 45;
+const ORACLE_GLASS_SLACK = 10;
 
 /** Reactive bot, each guide refresh: add world terms to `score` (360 bins, already holding now/next/gold). */
 export function worldReactiveScore(ctx: BotHookCtx, s: SimState, score: Float64Array): void {
@@ -165,8 +170,11 @@ export function worldOracleBonus(ctx: BotHookCtx, s: SimState, b: number, slack:
   let v = 0;
   // Flares (§2.5): steer for the shade that holds through the coming hold.
   if (parryOn && slack >= PARRY_SLACK) v += PARRY_W * (parryV[b] as number);
-  // Glass (§2.3): a bin that shades the nearest alive glass flake in its melt window, while comfortable.
-  if (ctx.mech && slack >= ORACLE_GLASS_SLACK && s.guide.flake[b] === 1) v += ORACLE_GLASS;
+  // Glass (§2.3): the bins that shade the glass flakes in their melt window (the most urgent first), while comfortable.
+  if (ctx.mech && slack >= ORACLE_GLASS_SLACK) {
+    const gv = glassValue(s);
+    if (gv) v += ORACLE_GLASS * (gv[b] as number);
+  }
   // §2.6: the level's unmet verb goal, and the Feat-seeking oracle's unmet Dares.
   if (s.level) v += dareBonus(s, b, slack, ctx.opts.feats === true);
   return v;

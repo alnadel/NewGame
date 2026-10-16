@@ -1,4 +1,4 @@
-# SHADY Journey: the campaign (v1.2, retuned in v1.3)
+# SHADY Journey: the campaign (v1.2, retuned in v1.3; Dares and flares in v1.6, §8)
 
 **Precedence for campaign work:** this file, then `V1_1_PLAN.md`, then `V1_PLAN.md`, then the module READMEs.
 
@@ -66,7 +66,7 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 | 4 | `noon` | Noon · High Noon | sun | 10:30 AM + 180 min, εnoon 48 (0) |
 | 5 | `deep` | Deep Shade · Double Shade | teach | two or more shadows over Nubs' center while fully shaded: Chill, multiplier and frost ×2 (v1.5; on from level 5) (0) |
 | 6 | `glare` | Glare · Glass Garden | world | gazing balls every 12 s (5) |
-| 7 | `swing` | SWING · Hand-off | goal | Snow goal (SWINGs count) (−4) |
+| 7 | `swing` | SWING · Hand-off | goal | goal: 1 SWING (v1.6, T6; was a Snow goal) (−4) |
 | 8 | `bloom` | Sunflowers · Sun Garden | teach | buds bloom into sunflowers when the sun shines from their face (v1.5; on from level 8) (0) |
 | 9 | `breezy` | Breeze · Kite Weather | sky | forecast breezy (−1) |
 | 10 | `snap` | Cold Snap · Frost Cloud | teach | the frost meter and the Cold Snap (v1.5; on from level 10; that level starts with a full meter, later levels at half) (3) |
@@ -80,7 +80,7 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 | 18 | `sprint` | Sprint · Hurry Up | world | walk ×1.35 (13) |
 | 19 | `stroll` | Stroll · Dawdle | world | walk ×0.75, drain ×1.25 (−12) |
 | 20 | `giants` | Giants · Tall Timber | world | heights ×1.6 (−4) |
-| 21 | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11) |
+| 21 | `brittle` | Glass Flakes · Sugar Glass | goal | glass flake clusters (melt after 0.8 lit s), 60% of the eligible clusters; goal: save 1 cluster whole (v1.6; on from level 21); cluster gap ×0.6 (3) |
 | 22 | `fleet` | Cloud Fleet · Cloud Hopping | sky | clouds ×3, spacing ×1.6 (5) |
 | 23 | `thaw` | Sunburn · Thin Ice | chill | regen ×0.45 (13) |
 | 24 | `frosty` | Frost · Frosty | chill | regen ×2.5 (−12) |
@@ -97,12 +97,14 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 | 35 | `blind` | No Dial · Blindfold | teach | render: no safe arcs on the halo (3) |
 | 36 | `eclipse` | Eclipse · Moon Shadow | sky | 6 s of f = 0 at the midpoint, then θ + 180°; drain ≤ 45 (4) |
 | 37 | `sunset` | Sunset · Sunset Run | sun | 3 PM + 180 min (−16) |
-| 38 | `moonlit` | Moon Sun · Moonlit | sun | εnoon 30, drain ×0.7, night palette (5) |
+| 38 | `flare` | Solar Flare · Sunspots | sky | three Heat Flares at 30/55/80% of the level (d 10, 72-tick warning); goal: parry 2 (v1.6) (4) |
 | 39 | `marathon` | Marathon · The Long Walk | sun | 1080 min across a night (9) |
 | 40 | `boss` | Heat Dome · Into the Dome | sun | εnoon 80, 9 AM + 360 min (12) |
 | – | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7); not taught on a level of its own since v1.5 (composed levels only) |
 | – | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7); not taught on a level of its own since v1.5 (composed levels only) |
 | – | `drought` | Drought · Cloudless | sky | no clouds (12); not taught on a level of its own since v1.5 (composed levels only) |
+| – | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11); composed levels only since v1.6 (its level went to `brittle`) |
+| – | `moonlit` | Moon Sun · Moonlit | sun | εnoon 30, drain ×0.7, night palette (5); composed levels only since v1.6 (its level went to `flare`) |
 
 **The curve (v1.3).** `drain = (curve(id) − Σ cost) / drainMul`, clamped to 22-55 (effective ≤ 62, ≤ the concepts' `drainCap`). `curve` is a sawtooth in effective drain points: the teaching chapters climb 28 → 34 by chapter (+1 every three levels, finales +6); composed chapters run from base − 5 up to base + 2 with the finale at base + 7, base = 37 + 0.6·(chapter − 5) (37 → 46). Lengths: teaching levels end before noon (240 minutes from dawn in chapter 1, 300 after), their finales an hour longer (300 in chapter 1, then noon); composed chapters grow 360 → 720 by chapter, their first two levels 30 minutes shorter. Time concepts keep their own windows. Levels 41-200 compose 2-3 concepts (never two of a kind except `world`, never a conflicting pair), the chapter's headline first; finales take three, led by the chapter's first concept.
 
@@ -206,3 +208,47 @@ Totals: oracle 200/200 (2.56 stars a level, 1-40 2.80; v1.4 2.44 / 2.73); reacti
 ready snap when lit under 30 Chill). With the mechanics ignored (`--nomech`) the oracle earns 2.44
 stars a level and the reactive bot 2.71: blooming the buds ahead (their shadows fall on the coming
 trail) and snapping buy cool runs and flakes.
+
+## 8. v1.6 world and Dares in the Journey (numbers)
+
+docs/V1_6_PLAN.md §2.3, §2.5, §2.6 (CORE-2); the core API is src/core/README.md §16.2.
+
+- **Stars.** ★1 the goal, ★2 a **Dare** (finales offer two, either earns it), ★3 the cool run
+  (unchanged). The flake star became the 'flakes' Dare; the 'snow' goal is retired (T6).
+- **Verb goals** on the teaching levels: L5 1.5 s of deep shade, L6 every ball with a glare-free line
+  passed clean minus one (at least 1), L7 1 SWING, L8 1 bloom, L10 a snap that saves 1 s, L13 the arch
+  walked under shaded, L21 1 glass cluster saved, L36 shaded within 1 s of the eclipse flip, L38 parry
+  2 of 3 flares. **Soft-fail**: after 2 misses a level's goal relaxes to 'finish'
+  (`relaxedGoalFor`, `RunConfig.relaxedGoal`; the save keeps the misses, GAME shows a tip).
+- **New concepts.** `brittle` (L21) and `flare` (L38) take the places of `lowland` and `moonlit`,
+  which compose from chapter 5 on. Every boss finale (50, 60, …, 200) carries `flare`: min(8,
+  floor(level s / 3.2)) flares in three phases (20-40%, 50-68%, 76-92% of the level; d 10, 13, 16);
+  the validator keeps or drops each (the boss's HP is the kept count) and they cost no rescue rocks.
+- **Dares.** One per concept (`DARE_OF`); a level takes the first of its concepts' Dares that its
+  world offers, else a seeded core verb (blooms, swings, deep, snapSave). `node scripts/sim.ts --bake`
+  writes what each level offers to `src/config/levelBake.gen.ts` (a vitest checks it is current) and
+  the targets are sized from it: blooms 35% of the buds (1-4), swings 2 (3 over 30 s; needs 4
+  hand-offs on offer per SWING), deep 12% of the daylight (at least 1.5 s, at most a fifth of the deep
+  shade on offer), snapSave 1 s (needs buds to bank a snap), parry 75% of the kept flares, brittle 60%
+  of the glass, flakes 80% of the expected (at most 85% of those offered), clean every passable ball,
+  ride 1 (needs a 3.5 s ride or 4 clouds), gates 1 deep, flip 1, still half the holdable windows,
+  ring x4 (x3 on levels of 25 s or less, or without an 1100-tick shaded stretch on offer).
+
+`node scripts/sim.ts --campaign --bot all --tries 3` (v1.6, this branch; pass % and mean stars per
+level over all 200 levels; humanDial and humanFeat × 3 decision streams):
+
+| bot | passed | stars (1-40 / 41-200) | three stars | Dare met |
+|---|---|---|---|---|
+| oracle | 200/200 | 2.31 (2.40 / 2.29) | 88 | 50.0% |
+| reactive | 199/200 (100/100 on 1-100) | 2.37 (2.42 / 2.36) | 88 | 50.0% |
+| Feat-seeking oracle | 200/200 | 2.74 | 154 | 90.5% |
+| humanDial | 62.2% of tries (77.5% on 1-40) | 0.91 (1.17 / 0.84) | 23 | 22.0% |
+| humanFeat | 64.3% of tries | 1.06 (1.31 / 1.00) | 27 | 35.2% |
+
+Hard gates (§2.6): oracle 200/200 with the verb goals, reactive 100% of 1-100 (teaching verb goals
+scored as finish), the Feat-seeking oracle ★2 on 90.5% (≥ 85%). Advisory: reactive three stars on
+41-200 44.4% (≤ 50%; v1.5 74%); humanDial passes all of levels 1-10 with the soft-fail (76.7% of
+its tries) but earns 0.84 stars on 41-200 (target ≥ 0.95); the non-seeking bots meet most Dare kinds on more than 35% of their levels
+(ring, flakes, ride, deep, still, flip): those Dares are sized from the offer, not against the
+bots. The ring and snapSave Dares depend on CORE-1's Flow Ring and Frost Bank and were measured on
+the v1.5 multiplier and meter; re-measure after the merge.
