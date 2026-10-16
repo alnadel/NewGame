@@ -151,7 +151,8 @@ describe('Heat Flares (§2.5)', () => {
 
   it('a parry and a saved glass cluster pay the Frost Bank and a ring trick (sim/tricks.ts, the bridge to CORE-1)', () => {
     for (const kind of ['parry', 'cluster'] as const) {
-      const s = started();
+      // The Frost Bank ships off (V16_SHIP); switched on, the bridge pays it.
+      const s = started({ ...headlessConfig(1), v16: { bank: true } });
       expect(s.world.v16.bank && s.world.v16.ring && s.world.mech.snap).toBe(true);
       const h = kind === 'parry' ? TUNING.bank.parryH : TUNING.bank.clusterH;
       const before = s.nubs.frostH;

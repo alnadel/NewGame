@@ -225,8 +225,11 @@ const tuning = {
     shadeUnits: 5,
     deepMul: 2,
     freeLitTicks: 6,
-    need: [900, 1200, 1800, 2400],
-    bleedK: [2, 3, 6, 12, 20],
+    // Calibrated (§11 Step 2, at the top of their ranges): need +20%, x5's bleed 24. With the Frost
+    // Bank shipped off a snap no longer cashes the ring in, so x5 needs the margin (16% of the reactive
+    // bot's daylight, gate ≤ 20%); x5 still lasts 0.4 s of full sun and 2 s of edge-riding.
+    need: [1080, 1440, 2160, 2880],
+    bleedK: [2, 3, 6, 12, 24],
     trick: 600,
     streakTrick: 300,
     streakEvery: 3,

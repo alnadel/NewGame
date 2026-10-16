@@ -39,7 +39,9 @@ const withFeats = (id: number, feats: LevelDef['feats']): LevelDef => ({ ...leve
 
 describe('MechView (game/mechanics.ts)', () => {
   it('reads the v1.6 state defensively: two pips with the Bank, the ring flag, no layers at the stub values', () => {
-    const s = endless();
+    // The Frost Bank ships off (V16_SHIP): one gauge by default, two pips when a run switches it on.
+    expect(createMechanics().fill(endless(), 0).pips).toBe(1);
+    const s = createRun({ seed: 7, mode: 'endless', profile: 3, tutorial: false, reducedMotion: false, v16: { bank: true } });
     const m = createMechanics();
     const v = m.fill(s, 0);
     expect(v.pips).toBe(2);

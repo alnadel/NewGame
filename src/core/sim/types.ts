@@ -56,8 +56,15 @@ export interface V16Rules {
   readonly noonHeat: boolean;
 }
 
-/** Every v1.6 rule on (the default). */
+/** Every v1.6 rule on. */
 export const V16_ALL: V16Rules = Object.freeze({ ring: true, bank: true, garden: true, brittle: true, flares: true, noonHeat: true });
+/**
+ * The rules v1.6 ships with (the default when RunConfig.v16 leaves a rule unset). Calibration
+ * (docs/V1_6_PLAN.md §11-§12) ships the Frost Bank off: at the bottom of its bloom-frost range
+ * (25) the dial-only bot still filled 0.23 meters a day from income (gate ≤ 0.15) and naive greed
+ * outlived plain play by +1336 min (gate ≤ 0), so the v1.5 meter plays instead. Every other rule is on.
+ */
+export const V16_SHIP: V16Rules = Object.freeze({ ring: true, bank: false, garden: true, brittle: true, flares: true, noonHeat: true });
 /** Every v1.6 rule off: plays like v1.5. */
 export const V16_NONE: V16Rules = Object.freeze({ ring: false, bank: false, garden: false, brittle: false, flares: false, noonHeat: false });
 /** The names of the v1.6 rules, in V16Rules order (`sim --off`). */
@@ -131,8 +138,8 @@ export interface RunConfig {
    */
   startFrost?: number;
   /**
-   * v1.6 tooling and kill switches: switch single v1.6 rules off (unset keys stay on). Part of the
-   * world's identity (World.v16).
+   * v1.6 tooling and kill switches: switch single v1.6 rules on or off (unset keys take the
+   * shipped V16_SHIP value). Part of the world's identity (World.v16).
    */
   v16?: Partial<V16Rules>;
   /** v1.6 campaign soft-fail (§2.6): after two misses the level's goal is scored as 'finish' (set from the save). */

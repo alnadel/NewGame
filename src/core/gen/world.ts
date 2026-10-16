@@ -12,7 +12,7 @@ import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
-import { V16_ALL, V16_NONE, type RunConfig, type V16Rules } from '../sim/types.ts';
+import { V16_ALL, V16_NONE, V16_RULES, V16_SHIP, type RunConfig, type V16Rules } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
 import { makeFlare, placeChunk, placeStart } from './placer.ts';
 import { paramsAt } from './plan.ts';
@@ -45,20 +45,23 @@ function worldMechanics(cfg: WorldConfig, level: LevelDef | null): Mechanics {
   return m.buds && m.snap && m.deep && m.brittle ? ALL_MECHANICS : Object.freeze(m);
 }
 
-/** The v1.6 rules of a world: all on (V16_ALL) unless RunConfig.v16 switches some off. */
+/** The v1.6 rules of a world: the shipped ones (V16_SHIP) unless RunConfig.v16 switches some. */
 function worldRules(cfg: WorldConfig): V16Rules {
   const o = cfg.v16;
-  if (!o) return V16_ALL;
+  if (!o) return V16_SHIP;
+  const d = V16_SHIP;
   const r: V16Rules = {
-    ring: o.ring ?? true,
-    bank: o.bank ?? true,
-    garden: o.garden ?? true,
-    brittle: o.brittle ?? true,
-    flares: o.flares ?? true,
-    noonHeat: o.noonHeat ?? true,
+    ring: o.ring ?? d.ring,
+    bank: o.bank ?? d.bank,
+    garden: o.garden ?? d.garden,
+    brittle: o.brittle ?? d.brittle,
+    flares: o.flares ?? d.flares,
+    noonHeat: o.noonHeat ?? d.noonHeat,
   };
   const on = Object.values(r).filter(Boolean).length;
-  return on === 6 ? V16_ALL : on === 0 ? V16_NONE : Object.freeze(r);
+  if (on === 6) return V16_ALL;
+  if (on === 0) return V16_NONE;
+  return V16_RULES.every((k) => r[k] === d[k]) ? V16_SHIP : Object.freeze(r);
 }
 
 const NO_MODS: readonly ConceptId[] = Object.freeze([]);

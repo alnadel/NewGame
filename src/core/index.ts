@@ -182,7 +182,7 @@ export { campaignConfig, levelOutcome, levelProgress, minuteStart, resolveLevelC
 export { createRun, prepareRun, prepareSome } from './sim/create.ts';
 export type { RunBuild } from './sim/create.ts';
 export { step } from './sim/step.ts';
-export { NO_INPUT, V16_ALL, V16_NONE, V16_RULES } from './sim/types.ts';
+export { NO_INPUT, V16_ALL, V16_NONE, V16_RULES, V16_SHIP } from './sim/types.ts';
 export type { GuideState, InputFrame, NubsState, Phase, RunConfig, SimState, SunMode, SunState, V16Rules } from './sim/types.ts';
 export type {
   DeathCause,

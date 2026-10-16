@@ -3,7 +3,8 @@
 //   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W] [--mech]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
 //   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
-//   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] on any of the above;
+//   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] and [--on …] (the
+//   shipped rules are V16_SHIP: the Frost Bank off) on any of the above;
 //   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions and --bake.
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
@@ -36,7 +37,7 @@
 // through the meta API (A14): beginRun, applyRunResult, stale missions swapped, the cheapest
 // affordable cosmetic bought, one Daily try per sim-day once unlocked; a sim-day is 5 runs.
 //
-// v1.6 report registry (scripts/sim16/registry.ts): --off switches v1.6 rules off on every row
+// v1.6 report registry (scripts/sim16/registry.ts): --off / --on switch v1.6 rules on every row
 // (RunConfig.v16); the economy module (sim16/econ.ts, CORE-1: --policy, --decisions) and the world
 // module (sim16/world.ts, CORE-2: --hours, --bake) add per-run metrics gathered in the workers,
 // their tables and gates after the v1.5 report, and their own modes.
@@ -428,14 +429,16 @@ function jobName(j: Job): string {
 // ---------------------------------------------------------------------------------------------
 // v1.6 flags (docs/V1_6_PLAN.md §10, amendment A1: no --rules)
 
-/** --off ring,bank,…: the v1.6 rules switched off on every row ({} when none). */
+/** --off ring,bank,… / --on bank,…: the v1.6 rules switched off or on (from V16_SHIP) on every row ({} when none). */
 function offArg(): Partial<V16Rules> {
-  const raw = arg('off', '');
   const off: { -readonly [K in keyof V16Rules]?: boolean } = {};
-  if (raw === '') return off;
-  for (const name of raw.split(',')) {
-    if (!(V16_RULES as readonly string[]).includes(name)) throw new Error(`unknown v1.6 rule ${name} (one of ${V16_RULES.join(', ')})`);
-    off[name as keyof V16Rules] = false;
+  for (const [flag, value] of [['off', false], ['on', true]] as const) {
+    const raw = arg(flag, '');
+    if (raw === '') continue;
+    for (const name of raw.split(',')) {
+      if (!(V16_RULES as readonly string[]).includes(name)) throw new Error(`unknown v1.6 rule ${name} (one of ${V16_RULES.join(', ')})`);
+      off[name as keyof V16Rules] = value;
+    }
   }
   return off;
 }
@@ -453,10 +456,12 @@ function withOff(j: Job, off: Partial<V16Rules>): Job {
   return Object.keys(off).length === 0 ? j : { ...j, v16: { ...off, ...j.v16 } };
 }
 
-/** "" or ", v1.6 off: ring, bank" for the report headers. */
+/** "" or ", v1.6 off: ring, flares; on: bank" for the report headers. */
 function offNote(off: Partial<V16Rules>): string {
-  const names = Object.keys(off);
-  return names.length === 0 ? '' : `, v1.6 off: ${names.join(', ')}`;
+  const names = (v: boolean): string[] => V16_RULES.filter((k) => off[k] === v);
+  const a = names(false);
+  const b = names(true);
+  return `${a.length ? `, v1.6 off: ${a.join(', ')}` : ''}${b.length ? `${a.length ? ';' : ', v1.6'} on: ${b.join(', ')}` : ''}`;
 }
 
 /** The finished runs of job `ji` as the v1.6 modules see them. */

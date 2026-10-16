@@ -13,7 +13,7 @@ import { dayTicks } from '../../src/core/clock.ts';
 import { formatScore } from '../../src/core/format.ts';
 import { BINS, binOf } from '../../src/core/intervals.ts';
 import type { BotKind } from '../../src/core/sim/bots.ts';
-import type { SimState } from '../../src/core/sim/types.ts';
+import { V16_RULES, V16_SHIP, type SimState, type V16Rules } from '../../src/core/sim/types.ts';
 import type { Sim16Collector, Sim16Ctx, Sim16Job, Sim16Module, Sim16Row, Sim16Run } from './registry.ts';
 
 const RING = TUNING.ring;
@@ -214,7 +214,7 @@ const isRow = (r: Sim16Row, bot: BotKind, f: (j: Sim16Job) => boolean = () => tr
 
 function report(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void {
   if (ctx.policy !== null) console.log(`\n--policy ${ctx.policy}: on the reactive rows that use the mechanics.`);
-  const on = (k: 'ring' | 'bank' | 'garden'): boolean => ctx.off[k] !== false;
+  const on = (k: 'ring' | 'bank' | 'garden'): boolean => ctx.off[k] ?? V16_SHIP[k];
   const base = rows.filter((r) => r.job.forecast === undefined);
   console.log(`\nEconomy (v1.6 ring, bank, garden${on('ring') && on('bank') && on('garden') ? '' : `; off: ${(['ring', 'bank', 'garden'] as const).filter((k) => !on(k)).join(', ')}`}):`);
   table(base, ctx.days);
@@ -237,6 +237,8 @@ function report(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void {
     line(fullShare(rea) <= 0.1, ctx.check, 'reactive p3 sits on a full bank ≤ 10% of daylight', pct(fullShare(rea)));
     const spd = snapsPerDay(rea);
     line(spd >= 0.5 && spd <= 0.9, false, 'reactive p3 0.5-0.9 snaps a day', f2(spd));
+  } else if (rea) {
+    console.log(`  n/a   the Frost Bank's gates (Bank off: the v1.5 meter; reactive p3 sits on a full meter ${pct(fullShare(rea))} of daylight, ${f2(snapsPerDay(rea))} snaps a day)`);
   }
   if (dial && on('bank')) line(metersPerDay(dial) <= 0.15, ctx.check, 'reactive p3 dial (dial-only) fills ≤ 0.15 meters a day from income', f2(metersPerDay(dial)));
   if (ora && on('ring')) line(meanMult(ora) >= 1.5, false, 'oracle p3 mean multiplier ≥ x1.5', `x${f2(meanMult(ora))}`);
@@ -288,7 +290,8 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   ];
   const rows = await ctx.run(jobs);
   const wall = (performance.now() - t0) / 1000;
-  const offNames = Object.keys(ctx.off);
+  const rule = (k: keyof V16Rules): boolean => ctx.off[k] ?? V16_SHIP[k];
+  const offNames = V16_RULES.filter((k) => !rule(k));
   console.log(`SHADY sim --decisions: ${ctx.seeds} seeds, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s${offNames.length ? `, v1.6 off: ${offNames.join(', ')}` : ''}\n`);
   console.log(`${'row'.padEnd(30)} ${'mean'.padEnd(17)} ${'median'.padEnd(17)} p90`);
   for (const r of rows) console.log(`${r.name.padEnd(30)} ${clock(meanMinutes(r), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.5), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.9), ctx.days)}`);
@@ -303,8 +306,13 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   line(d(chase, plain) >= 150, true, 'chase outlives plain by ≥ 150 min (mean)', sgn(d(chase, plain)));
   line(d(naive, plain) <= 0, true, 'naive does not beat plain (mean)', sgn(d(naive, plain)));
   line(d(safe, plain) < 0, true, 'safe trails plain (mean)', sgn(d(safe, plain)));
-  line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full bank ≤ 10% of daylight', pct(fullShare(plain)));
-  line(metersPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day from income', f2(metersPerDay(dial)));
+  if (rule('bank')) {
+    line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full bank ≤ 10% of daylight', pct(fullShare(plain)));
+    line(metersPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day from income', f2(metersPerDay(dial)));
+  } else {
+    // The Frost Bank ships off (V16_SHIP): its own rows measure a bank that is not there.
+    console.log(`  n/a   the Frost Bank's rows (Bank off: the v1.5 meter; reactive plain sits on a full meter ${pct(fullShare(plain))} of daylight; --on bank measures the Bank)`);
+  }
   const spd = snapsPerDay(plain);
   line(spd >= 0.5 && spd <= 0.9, false, 'reactive plain 0.5-0.9 snaps a day', f2(spd));
   for (const h of [h2, h3, h4]) {

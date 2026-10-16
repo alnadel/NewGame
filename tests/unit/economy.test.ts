@@ -37,8 +37,11 @@ const only = <K extends SimEvent['e']>(ev: SimEvent[], k: K): Ev<K>[] => ev.filt
 // ---------------------------------------------------------------------------------------------
 // Scripted daylight ticks (coverage set by hand), as in swing.test.ts.
 
+/** The Frost Bank ships off (V16_SHIP); these tests measure the economy with it on unless a test switches it. */
+const bankOn = (cfg: Partial<RunConfig> = {}): Partial<RunConfig> => ({ ...cfg, v16: { bank: true, ...cfg.v16 } });
+
 function rig(cfg: Partial<RunConfig> = {}): SimState {
-  const s = createRun({ ...headlessConfig(1), plan: false, ...cfg });
+  const s = createRun({ ...headlessConfig(1), plan: false, ...bankOn(cfg) });
   s.phase = 'day';
   s.tick = 1000;
   return s;
@@ -89,10 +92,10 @@ describe('Flow Ring (§2.1)', () => {
     s.events.length = 0;
     tick(s, 7, 100, undefined, 90, true);
     expect(s.nubs.ringCharge).toBe(R.shadeUnits * R.deepMul);
-    // 21 s of plain shade take x1 to x5 (need 900 + 1200 + 1800 + 2400 units at 5 a tick).
+    // 25.2 s of plain shade take x1 to x5 (need 1080 + 1440 + 2160 + 2880 units at 5 a tick).
     const t = rig();
     const total = R.need.reduce((a, v) => a + v, 0) / R.shadeUnits;
-    expect(total).toBe(21 * 60);
+    expect(total).toBe(1512);
     ticks(t, total, 7);
     expect([t.nubs.mult, t.nubs.ringCharge]).toEqual([5, 0]);
     ticks(t, 1000, 7);
@@ -106,7 +109,8 @@ describe('Flow Ring (§2.1)', () => {
     const ev = ticks(s, R.freeLitTicks, -1);
     expect([s.nubs.mult, s.nubs.ringCharge]).toEqual([5, R.need[3]]);
     expect(ev.some((e) => e.e === 'multDown')).toBe(false);
-    ticks(s, 24, -1);
+    ticks(s, R.need[3] / (5 * R.bleedK[4]), -1);
+    expect(R.need[3] / (5 * R.bleedK[4])).toBe(24);
     expect([s.nubs.mult, s.nubs.ringCharge]).toEqual([5, 0]);
     const drop = tick(s, -1);
     expect(only(drop, 'multDown')).toEqual([{ e: 'multDown', from: 5, to: 4, cause: 'bleed' }]);
@@ -115,7 +119,7 @@ describe('Flow Ring (§2.1)', () => {
     // Edge-riding (Σw = 1) bleeds an x5 level away in 2 s; glare counts 2.
     const e = rig();
     debugRing(e, 5, R.need[3]);
-    ticks(e, R.freeLitTicks + 120, -1, 100, [0, 1, 0, 0, 0]);
+    ticks(e, R.freeLitTicks + R.need[3] / R.bleedK[4], -1, 100, [0, 1, 0, 0, 0]);
     expect([e.nubs.mult, e.nubs.ringCharge]).toEqual([5, 0]);
     const g = rig();
     debugRing(g, 3, 1000);
@@ -236,7 +240,7 @@ describe('Flow Ring (§2.1)', () => {
 // Emptied worlds driven by step().
 
 function lab(cfg: Partial<RunConfig> = {}): SimState {
-  const s = createRun({ ...headlessConfig(1), plan: false, ...cfg });
+  const s = createRun({ ...headlessConfig(1), plan: false, ...bankOn(cfg) });
   const w = s.world;
   w.casters.length = 0;
   w.byId.clear();
@@ -278,15 +282,16 @@ function bud(s: SimState, ahead: number, face: number): Bud {
 
 describe('Frost Bank (§2.2)', () => {
   it('starts with one snap in Endless, none in a lesson run, half a pip in the Journey and a full pip on the Cold Snap level', () => {
-    expect(createRun(headlessConfig(1)).nubs.frostH).toBe(BK.runStartH);
-    expect(createRun({ ...headlessConfig(1), mode: 'daily', dailyDate: '2026-10-16' }).nubs.frostH).toBe(BK.runStartH);
-    expect(createRun(headlessConfig(1, 0)).nubs.frostH).toBe(0);
-    expect(createRun(campaignConfig(11)).nubs.frostH).toBe(BK.campaignStartH);
-    expect(createRun(campaignConfig(10)).nubs.frostH).toBe(BK.teachStartH);
-    const two = createRun({ ...headlessConfig(1), startFrost: 2 });
+    const on = (cfg: RunConfig): RunConfig => ({ ...cfg, ...bankOn(cfg) });
+    expect(createRun(on(headlessConfig(1))).nubs.frostH).toBe(BK.runStartH);
+    expect(createRun(on({ ...headlessConfig(1), mode: 'daily', dailyDate: '2026-10-16' })).nubs.frostH).toBe(BK.runStartH);
+    expect(createRun(on(headlessConfig(1, 0))).nubs.frostH).toBe(0);
+    expect(createRun(on(campaignConfig(11))).nubs.frostH).toBe(BK.campaignStartH);
+    expect(createRun(on(campaignConfig(10))).nubs.frostH).toBe(BK.teachStartH);
+    const two = createRun(on({ ...headlessConfig(1), startFrost: 2 }));
     expect([two.nubs.frostH, two.nubs.frost]).toEqual([200, 2]);
-    expect(createRun({ ...headlessConfig(1), startFrost: 5 }).nubs.frostH).toBe(BK.capH);
-    expect(createRun({ ...headlessConfig(1), mechanics: { snap: false } }).nubs.frostH).toBe(0);
+    expect(createRun(on({ ...headlessConfig(1), startFrost: 5 })).nubs.frostH).toBe(BK.capH);
+    expect(createRun(on({ ...headlessConfig(1), mechanics: { snap: false } })).nubs.frostH).toBe(0);
   });
 
   it('only risky acts pay: shade, deep shade and flakes pay nothing; a bloom pays bloomH; frostReady on each charge; anything above capH spills', () => {
@@ -338,8 +343,10 @@ describe('Frost Bank (§2.2)', () => {
     step(s, SNAP);
     run(s, SNAP_TICKS + 1, NO_INPUT, 100);
     expect(s.nubs.frostH).toBe(100);
-    // Three seconds under the snap filled the ring to x2: the second snap cashes that in.
-    expect(s.nubs.mult).toBe(2);
+    // Three seconds under the snap filled the ring (900 units, short of x2's need): put it at x2 so the
+    // second snap cashes a level in.
+    expect([s.nubs.mult, s.nubs.ringCharge]).toEqual([1, 3 * 60 * R.shadeUnits]);
+    debugRing(s, 2, 0);
     step(s, SNAP);
     expect([s.stats.snaps, s.nubs.frostH]).toEqual([2, BK.cashPerLevelH]);
     const n = lab({ startFrost: 2, startT: 49.5 });

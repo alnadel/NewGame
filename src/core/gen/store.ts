@@ -96,8 +96,8 @@ export interface World {
    */
   readonly mech: Mechanics;
   /**
-   * v1.6 rules this world plays with (docs/V1_6_PLAN.md §5 as amended: V16_ALL unless
-   * RunConfig.v16 switches some off; part of the world's identity).
+   * v1.6 rules this world plays with (docs/V1_6_PLAN.md §5 as amended: V16_SHIP unless
+   * RunConfig.v16 switches some; part of the world's identity).
    */
   readonly v16: V16Rules;
   /**
