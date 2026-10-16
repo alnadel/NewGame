@@ -16,7 +16,7 @@ import {
   type InputFrame,
   type SimEvent,
 } from '../../src/core/index.ts';
-import { campaignConfig, conceptLabel, goalLine, goalText, hudGoal, introCard, missLine } from '../../src/game/campaign.ts';
+import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine } from '../../src/game/campaign.ts';
 import { isDebugRun, parseParams } from '../../src/game/params.ts';
 import { campaignShareText } from '../../src/meta/share.ts';
 import { createBanners, dismissLevelCard, resetBanners, showLevelCard, showStamp, updateBanners } from '../../src/render/banners.ts';
@@ -78,13 +78,18 @@ describe('campaignConfig (§4)', () => {
 
 describe('the words', () => {
   it('intro card: level, name, the concept and the goal', () => {
-    const c = introCard(levelDef(6)!);
-    // The concept has its own short name (v1.3), so the row names it.
-    expect(c).toMatchObject({ kicker: 'LEVEL 6', title: 'Glass Garden', concept: 'glare', conceptName: 'Glare', goal: 'Reach the finish' });
+    const l6 = levelDef(6)!;
+    const c = introCard(l6);
+    // The concept has its own short name (v1.3), so the row names it. v1.6 (§2.6): L6's goal is a
+    // verb goal (balls passed clean), worded like its Dare.
+    const clean = (n: number): string => `${n} clean ball${n === 1 ? '' : 's'}`;
+    expect(l6.goal.kind).toBe('clean');
+    expect(c).toMatchObject({ kicker: 'LEVEL 6', title: 'Glass Garden', concept: 'glare', conceptName: 'Glare', goal: clean(l6.goal.target) });
     expect(conceptLabel({ name: 'Glare' }, 'glare')).toBe('New concept');
     expect(c.blurb).toContain('Gazing balls');
-    // The three star rules: the goal, the level's flakes, a cool run (lit at most sunSec, rounded up).
-    expect(c.stars).toEqual(['Finish', `${levelDef(6)!.stars.flakes} flakes`, `≤ ${Math.ceil(levelDef(6)!.stars.sunSec)} s in sun`]);
+    // The three star rules: the goal, the level's Dare (v1.6; the flakes without one), a cool run (lit at most sunSec, rounded up).
+    expect(c.stars).toEqual([clean(l6.goal.target), featLabel(l6.feats[0]!, l6), `≤ ${Math.ceil(l6.stars.sunSec)} s in sun`]);
+    expect(introCard({ ...l6, feats: [] }).stars[1]).toBe(`${l6.stars.flakes} flakes`);
     expect(introCard(levelDef(2)!).stars[0]).toBe(`${levelDef(2)!.goal.target} flakes`);
     // v1.6 (T6): no level has a Snow goal any more; the words still read one.
     expect(introCard({ ...levelDef(7)!, goal: { kind: 'snow', target: 12 } }).stars[0]).toBe('12 Snow');
@@ -106,19 +111,25 @@ describe('the words', () => {
     expect(goalLine(flakes, { flakes: ft + 1, snow: 12 }, true).startsWith(`Collected ${ft + 1}/${ft} flakes`)).toBe(true);
     expect(goalLine(flakes, { flakes: 5, snow: 12 }, false)).toBe(`Not enough flakes: 5/${ft}`);
     expect(goalLine(swing, { flakes: 5, snow: st + 4.7 }, true).startsWith(`Scored ${st + 4}/${st} Snow`)).toBe(true);
-    // A pass short of three stars names the next star: flakes first, then the cool run.
-    expect(goalLine(finish, { flakes: 0, snow: 0, litTotal: 0, minChill: 100 }, true)).toBe(finish.stars.flakes > 0 ? `Reached the finish · Next ★: ${finish.stars.flakes} flakes` : 'Reached the finish');
-    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 5, minChill: 100 }, true)).toMatch(/^Reached the finish · Next ★: under \d+ s in the sun \(\d+ s\)$/);
-    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: 0, minChill: 0 }, true)).toBe(`Reached the finish · Next ★: keep Chill above ${finish.stars.minChill}`);
-    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: 0, minChill: 100 }, true)).toBe('Reached the finish');
+    // A pass short of three stars names the next star: the Dare first (v1.6; L1's is reach ×3), then the cool run.
+    expect(finish.feats).toEqual([{ kind: 'ring', target: 3 }]);
+    expect(goalLine(finish, { flakes: 0, snow: 0, litTotal: 0, minChill: 100, maxMult: 1 }, true)).toBe('Reached the finish · Next ★: Reach ×3 (1/3)');
+    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 5, minChill: 100, maxMult: 3 }, true)).toMatch(/^Reached the finish · Next ★: under \d+ s in the sun \(\d+ s\)$/);
+    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: 0, minChill: 0, maxMult: 3 }, true)).toBe(`Reached the finish · Next ★: keep Chill above ${finish.stars.minChill}`);
+    expect(goalLine(finish, { flakes: 99, snow: 0, litTotal: 0, minChill: 100, maxMult: 3 }, true)).toBe('Reached the finish');
+    // A level without Dares names its flakes star first.
+    const plain = { ...finish, feats: [] };
+    expect(goalLine(plain, { flakes: 0, snow: 0, litTotal: 0, minChill: 100 }, true)).toBe(plain.stars.flakes > 0 ? `Reached the finish · Next ★: ${plain.stars.flakes} flakes` : 'Reached the finish');
     expect(missLine(flakes)).toBe('NOT ENOUGH FLAKES');
     expect(missLine(swing)).toBe('NOT ENOUGH SNOW');
     expect(campaignShareText({ id: 12, name: levelDef(12)!.name, stars: 2, link: null })).toBe('SHADY Journey · Level 12 ★★☆ · Grey Day');
   });
-  it('HUD goal pill: flakes/target, snow/target, or plain Snow', () => {
+  it('HUD goal pill: flakes/target, a verb goal, the Dare, or plain Snow', () => {
     expect(hudGoal(levelDef(2)!, { flakes: 3, snow: 7 })).toMatchObject({ value: 3, target: levelDef(2)!.goal.target, flakes: true, glyph: null });
-    expect(hudGoal(levelDef(7)!, { flakes: 3, snow: 7.9 })).toMatchObject({ value: 7, target: levelDef(7)!.goal.target, flakes: false });
-    expect(hudGoal(levelDef(1)!, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });
+    // v1.6: L7's goal is 1 SWING; L1 (a finish goal) counts its Dare, reach ×3.
+    expect(hudGoal(levelDef(7)!, { flakes: 3, snow: 7.9 })).toMatchObject({ value: 0, target: levelDef(7)!.goal.target, flakes: false, glyph: 'swing' });
+    expect(hudGoal(levelDef(1)!, { flakes: 3, snow: 7, maxMult: 2 })).toMatchObject({ value: 2, target: 3, flakes: false, glyph: 'ring' });
+    expect(hudGoal({ ...levelDef(1)!, feats: [] }, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });
     expect(hudGoal(null, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });
   });
 });

@@ -21,6 +21,7 @@ import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { meltBudgetOf } from '../../src/core/sim/pickups.ts';
 import { step, syncTime } from '../../src/core/sim/step.ts';
+import { payTrick } from '../../src/core/sim/tricks.ts';
 import { NO_INPUT, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
 
@@ -146,6 +147,28 @@ describe('Heat Flares (§2.5)', () => {
       expect(flareTicksSeen).toBeGreaterThanOrEqual(0);
       expect([s.flarePhase, s.flareId, s.flareTicks]).toEqual([0, -1, -1]);
     }
+  });
+
+  it('a parry and a saved glass cluster pay the Frost Bank and a ring trick (sim/tricks.ts, the bridge to CORE-1)', () => {
+    for (const kind of ['parry', 'cluster'] as const) {
+      const s = started();
+      expect(s.world.v16.bank && s.world.v16.ring && s.world.mech.snap).toBe(true);
+      const h = kind === 'parry' ? TUNING.bank.parryH : TUNING.bank.clusterH;
+      const before = s.nubs.frostH;
+      const tricks = s.stats.ringTricks ?? 0;
+      s.events.length = 0;
+      payTrick(s, kind);
+      expect(s.nubs.frostH).toBe(Math.min(TUNING.bank.capH, before + h));
+      expect(s.stats.ringTricks).toBe(tricks + 1);
+      expect(s.events).toContainEqual({ e: 'ringTrick', kind, units: TUNING.ring.trick });
+      expect(s.events).toContainEqual(expect.objectContaining({ e: 'frostGain', source: kind, amountH: h }));
+    }
+    // With the Bank and the ring off, the v1.5 meter takes the frost and the ring is untouched.
+    const off = started({ ...headlessConfig(1), v16: { bank: false, ring: false } });
+    off.events.length = 0;
+    payTrick(off, 'parry');
+    expect(off.nubs.frost).toBeCloseTo(TUNING.bank.parryH / 100, 12);
+    expect(off.events.some((e) => e.e === 'ringTrick')).toBe(false);
   });
 
   it('flakes melt ×2 in the rise and hold', () => {

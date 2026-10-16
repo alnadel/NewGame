@@ -12,6 +12,7 @@ import {
   dareText,
   featLabel,
   goalLine,
+  goalMetLive,
   goalText,
   hudGoal,
   introCard,
@@ -119,9 +120,9 @@ describe('Dares (game/campaign.ts)', () => {
     const two = withFeats(50, [{ kind: 'blooms', target: 2 }, { kind: 'parry', target: 6 }]);
     expect(dareText(two)).toBe('Bloom 2 or Parry 6');
     expect(starRules(two)[1]).toBe('A Dare');
-    // Without Dares the flakes star stays.
-    expect(introCard(levelDef(12)!).dare).toBe('');
-    expect(starRules(levelDef(12)!)[1]).toMatch(/flakes$/);
+    // Without Dares the flakes star stays (every v1.6 level has one; a made-up level checks the words).
+    expect(introCard(withFeats(12, [])).dare).toBe('');
+    expect(starRules(withFeats(12, []))[1]).toMatch(/flakes$/);
     expect(featLabel({ kind: 'deep', target: 90 }, one)).toBe('1.5 s deep');
     expect(featLabel({ kind: 'brittle', target: 1 }, one)).toBe('Save 1 glass');
     expect(featLabel({ kind: 'swings', target: 3 }, one)).toBe('3 SWINGs');
@@ -153,6 +154,22 @@ describe('Dares (game/campaign.ts)', () => {
     expect(goalLine(lv, st, false, false, new Map(), SOFT_FAIL_MISSES)).toMatch(/Next try: just reach the finish$/);
   });
 
+  it('verb goals count the way the core scores them (gate: shaded, snapSave: every snap tick, flip: within its ticks)', () => {
+    const gate = levelDef(13)!;
+    const snap = levelDef(10)!;
+    const flip = levelDef(36)!;
+    expect([gate.goal.kind, snap.goal.kind, flip.goal.kind]).toEqual(['gate', 'snapSave', 'flip']);
+    const st = { flakes: 0, snow: 0, litTotal: 0, minChill: 100 };
+    expect(goalText(gate)).toBe('Shade the arch');
+    // Deep under the arch is the Dare's count, not the goal's.
+    expect(hudGoal(gate, { ...st, gateShaded: 0, gateDeep: 1 })).toMatchObject({ value: 0, target: gate.goal.target, glyph: 'gate' });
+    expect(goalMetLive(gate, { ...st, gateShaded: 1, gateDeep: 0 })).toBe(true);
+    expect(goalMetLive(snap, { ...st, snapSavedTicks: snap.goal.target, earnedSnapSavedTicks: 0 })).toBe(true);
+    expect(goalMetLive(flip, { ...st, flipTicks: flip.goal.target })).toBe(true);
+    expect(goalMetLive(flip, { ...st, flipTicks: 0 })).toBe(false);
+    expect(goalLine(flip, { ...st, flipTicks: 0 }, false)).toBe('Goal missed: Shade the flip (0/1)');
+  });
+
   it('the soft-fail relaxes a missed goal to the finish: the config, the words and the pill', () => {
     const lv = levelDef(2)!;
     expect(lv.goal.kind).toBe('flakes');
@@ -162,7 +179,10 @@ describe('Dares (game/campaign.ts)', () => {
     expect(campaignConfig(levelDef(1)!, false, true, true).relaxedGoal).toBeUndefined();
     expect(goalText(lv, true)).toBe('Reach the finish');
     expect(starRules(lv, true)[0]).toBe('Finish');
-    expect(hudGoal(lv, { flakes: 1, snow: 4 }, undefined, true)).toMatchObject({ value: 4, target: -1 });
+    // Relaxed, the pill counts the level's Dare (L2: flakes), or plain Snow on a level without one.
+    const dare = lv.feats[0]!;
+    expect(hudGoal(lv, { flakes: 1, snow: 4 }, undefined, true)).toMatchObject({ value: dare.kind === 'flakes' ? 1 : 0, target: dare.target });
+    expect(hudGoal(withFeats(2, []), { flakes: 1, snow: 4 }, undefined, true)).toMatchObject({ value: 4, target: -1 });
     expect(introCard(lv, true).goal).toBe('Reach the finish');
     const s = createRun(campaignConfig(lv, false, true, true));
     expect(s.cfg.relaxedGoal).toBe(true);
