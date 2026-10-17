@@ -3,7 +3,7 @@
 // counts, the soft-fail's miss count in the save, the missions retargeted (T8 is in content.test),
 // and the new events' audio, haptics and tips.
 import { describe, expect, it } from 'vitest';
-import { buildRunResult, createRun, debugFlare, levelDef, TUNING, type LevelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { buildRunResult, createRun, debugFlare, levelDef, softFailMisses, TUNING, type LevelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
 import type { SfxName } from '../../src/audio/recipes.ts';
 import { createAudioView } from '../../src/audio/scene.ts';
 import { SfxRouter } from '../../src/audio/sfxRouter.ts';
@@ -152,8 +152,13 @@ describe('Dares (game/campaign.ts)', () => {
     expect(goalText(lv)).toBe('1 SWING');
     expect(hudGoal(lv, st, undefined, false, new Map([['swings', 0]]))).toMatchObject({ value: 0, target: 1, glyph: 'swing' });
     expect(missLine(lv)).toBe('GOAL MISSED');
-    expect(goalLine(lv, st, false, false, new Map(), 1)).toBe('Goal missed: 1 SWING (0/1)');
-    expect(goalLine(lv, st, false, false, new Map(), SOFT_FAIL_MISSES)).toMatch(/Next try: just reach the finish$/);
+    expect(goalLine(lv, st, false, false, new Map(), 0)).toBe('Goal missed: 1 SWING (0/1)');
+    // Level 8 is in the first chapter: its goal relaxes after a single miss (later levels after SOFT_FAIL_MISSES).
+    expect(softFailMisses(lv)).toBe(1);
+    expect(goalLine(lv, st, false, false, new Map(), 1)).toMatch(/Next try: just reach the finish$/);
+    const late: LevelDef = { ...lv, id: 48 };
+    expect(goalLine(late, st, false, false, new Map(), SOFT_FAIL_MISSES - 1)).toBe('Goal missed: 1 SWING (0/1)');
+    expect(goalLine(late, st, false, false, new Map(), SOFT_FAIL_MISSES)).toMatch(/Next try: just reach the finish$/);
   });
 
   it('verb goals count the way the core scores them (gate: shaded, snapSave: every snap tick, flip: within its ticks)', () => {

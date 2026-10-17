@@ -272,7 +272,9 @@ function plan(s: SimState, feats: boolean): void {
         windowHold(s);
         break;
       case 'ring':
+        // Lasting shade fills the ring; deep shade fills it twice as fast (the Dare asks for more than steady shade gives).
         for (let b = 0; b < BINS; b++) if (g.now[b] === 1 && g.next[b] === 1) add(1, b, W.ring);
+        pullTo(g.deep, 3, W.deep, W.deepReach);
         break;
       default:
         break;

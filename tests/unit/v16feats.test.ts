@@ -12,6 +12,7 @@ import {
   levelDef,
   relaxedGoalFor,
   SOFT_FAIL_MISSES,
+  softFailMisses,
   starsFor,
   type FeatKind,
   type LevelDef,
@@ -34,7 +35,8 @@ describe('Dares (§2.6)', () => {
       ['blooms', { blooms: 2 }, 2],
       ['swings', { swings: 3 }, 3],
       ['deep', { deepTicks: 90 }, 90],
-      ['snapSave', { snapSavedTicks: 200, earnedSnapSavedTicks: 40 }, 40],
+      // A snapSave level starts with its snap ready, so the Dare counts every snap-alone tick.
+      ['snapSave', { snapSavedTicks: 200, earnedSnapSavedTicks: 40 }, 200],
       ['parry', { parries: 2 }, 2],
       ['brittle', { brittleSaved: 1 }, 1],
       ['flakes', { flakes: 7 }, 7],
@@ -127,10 +129,14 @@ describe('Dares (§2.6)', () => {
 });
 
 describe('the soft-fail (§2.6)', () => {
-  it('relaxes a goal after two misses; a finish level never relaxes', () => {
+  it('relaxes a goal after two misses (one on levels 1-10); a finish level never relaxes', () => {
     expect(SOFT_FAIL_MISSES).toBe(2);
     const l2 = levelDef(2) as LevelDef;
-    expect([relaxedGoalFor(l2, 0), relaxedGoalFor(l2, 1), relaxedGoalFor(l2, 2), relaxedGoalFor(l2, 5)]).toEqual([false, false, true, true]);
+    expect(softFailMisses(l2)).toBe(1);
+    expect([relaxedGoalFor(l2, 0), relaxedGoalFor(l2, 1), relaxedGoalFor(l2, 2), relaxedGoalFor(l2, 5)]).toEqual([false, true, true, true]);
+    const late = CAMPAIGN_LEVELS.find((l) => l.id > 10 && l.goal.kind !== 'finish') as LevelDef;
+    expect(softFailMisses(late)).toBe(SOFT_FAIL_MISSES);
+    expect([relaxedGoalFor(late, 0), relaxedGoalFor(late, 1), relaxedGoalFor(late, 2), relaxedGoalFor(late, 5)]).toEqual([false, false, true, true]);
     const fin = CAMPAIGN_LEVELS.find((l) => l.goal.kind === 'finish') as LevelDef;
     expect(relaxedGoalFor(fin, 9)).toBe(false);
   });
@@ -151,6 +157,6 @@ describe('the soft-fail (§2.6)', () => {
 
 /** The RunStats field a Dare kind counts (for the simple counter kinds). */
 function statOf(kind: FeatKind): string {
-  const m: Partial<Record<FeatKind, string>> = { blooms: 'blooms', swings: 'swings', deep: 'deepTicks', snapSave: 'earnedSnapSavedTicks', parry: 'parries', brittle: 'brittleSaved', flakes: 'flakes', clean: 'ballsPassedClean' };
+  const m: Partial<Record<FeatKind, string>> = { blooms: 'blooms', swings: 'swings', deep: 'deepTicks', snapSave: 'snapSavedTicks', parry: 'parries', brittle: 'brittleSaved', flakes: 'flakes', clean: 'ballsPassedClean' };
   return m[kind] ?? kind;
 }

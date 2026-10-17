@@ -15,7 +15,9 @@ import {
   featValue,
   goalMet as coreGoalMet,
   goalValue as coreGoalValue,
+  relaxedGoalFor,
   SOFT_FAIL_MISSES,
+  softFailMisses,
   type ConceptId,
   type FeatKind,
   type FeatSpec,
@@ -30,8 +32,8 @@ import {
 export const FINISH_FREEZE_S = 1.0;
 /** A tap this long after the finish skips the rest of the freeze. */
 export const FINISH_SKIP_S = 0.35;
-/** Goal misses on a level after which its goal relaxes to the finish (§2.6 soft-fail; the core's number). */
-export { SOFT_FAIL_MISSES };
+/** Goal misses on a level after which its goal relaxes to the finish (§2.6 soft-fail; the core's rule). */
+export { relaxedGoalFor, SOFT_FAIL_MISSES };
 
 /** Live Dare counts from the sim's `feat` events (by kind), for counts the core's featValue doesn't have yet. */
 export type FeatSeen = ReadonlyMap<FeatKind, number>;
@@ -226,7 +228,7 @@ export function goalLine(level: LevelDef, stats: Stats, passed: boolean, relaxed
   const verb = relaxed ? undefined : goalFeat(g.kind);
   if (!passed) {
     if (relaxed || g.kind === 'finish') return 'Melted before the finish';
-    const soft = misses >= SOFT_FAIL_MISSES ? ' · Next try: just reach the finish' : '';
+    const soft = misses >= softFailMisses(level) ? ' · Next try: just reach the finish' : '';
     if (g.kind === 'flakes') return `Not enough flakes: ${stats.flakes}/${g.target}${soft}`;
     if (g.kind === 'snow') return `Not enough Snow: ${snow}/${g.target}${soft}`;
     if (verb) return `Goal missed: ${goalText(level)} (${countText(goalValue(level, stats, seen), goalTarget(level), featInSeconds(verb))})${soft}`;

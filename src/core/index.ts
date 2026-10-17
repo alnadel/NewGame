@@ -44,6 +44,7 @@ export {
   MECHANIC_CONCEPTS,
   mechanicsOf,
   relaxedGoalFor,
+  softFailMisses,
   SOFT_FAIL_MISSES,
   starsFor,
   TEACH_LEVELS,

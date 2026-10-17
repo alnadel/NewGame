@@ -1,5 +1,6 @@
 // createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
 
+import { startsWithSnap } from '../../config/campaign.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayTicks } from '../clock.ts';
 import { paramsAt, worldYAtDayTick } from '../gen/plan.ts';
@@ -67,10 +68,14 @@ function freshStats(day: number, chill: number): RunStats {
   };
 }
 
-/** v1.5 frost meter (the Frost Bank off) at the start: full on the Cold Snap's teaching level, half on later levels, else empty. */
+/**
+ * v1.5 frost meter (the Frost Bank off) at the start: full on a level that dares a snap (the Cold
+ * Snap's teaching level, a snapSave Dare: campaign.ts startsWithSnap), half on other levels, else
+ * empty.
+ */
 function startFrost(w: World): number {
   if (!w.level) return 0;
-  return w.level.introduces === 'snap' ? 1 : TUNING.frost.campaignStart;
+  return startsWithSnap(w.level) ? 1 : TUNING.frost.campaignStart;
 }
 
 /**
@@ -82,7 +87,7 @@ function startFrost(w: World): number {
 function startFrostH(w: World, cfg: RunConfig): number {
   const B = TUNING.bank;
   if (cfg.startFrost !== undefined) return Math.min(B.capH, Math.max(0, Math.round(B.costH * cfg.startFrost)));
-  if (w.level) return w.level.introduces === 'snap' ? B.teachStartH : B.campaignStartH;
+  if (w.level) return startsWithSnap(w.level) ? B.teachStartH : B.campaignStartH;
   return cfg.lesson === true ? 0 : B.runStartH;
 }
 

@@ -555,13 +555,8 @@ function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], ke
     case 'flakes':
       return bake === null || bake.flakes >= FLAKES_OFFER_MIN;
     case 'snapSave':
-      // A snap earned on the level: its gold (SNAP_BLOOM_SHARE of the buds blooming) must fill the
-      // meter that ships from the level's start: the Bank's bloom income, or the v1.5 meter's
-      // (blooms, and its passive shade income over half the level).
-      if (!m.snap) return false;
-      if (bake === null) return true;
-      if (TUNING.bank.ships) return SNAP_BLOOM_SHARE * bake.buds * TUNING.bank.bloomH >= TUNING.bank.costH - TUNING.bank.campaignStartH;
-      return SNAP_BLOOM_SHARE * bake.buds * TUNING.frost.perBloom + 0.5 * sec * TUNING.frost.perShadeSec >= 1 - TUNING.frost.campaignStart;
+      // A level that dares a snap starts with one ready (create.ts startsWithSnap): the Dare is when to cast it.
+      return m.snap;
     case 'brittle':
       return m.brittle && (bake === null || bake.glass > 0);
     case 'parry':
@@ -586,22 +581,39 @@ function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], ke
   }
 }
 
-/** The deep Dare's least target (ticks), and the deep shade a level must offer per target tick to carry it. */
+/**
+ * The deep Dare's least target (ticks), the deep shade a level must offer per target tick to carry
+ * it, and the share of the level's daylight it asks for (sized so that sitting in the teal does not
+ * meet it by itself: 12% was met by 90% of non-seeking reactive runs).
+ */
 const DEEP_MIN_TICKS = 90;
-const DEEP_OFFER = 5;
+const DEEP_OFFER = 4;
+const DEEP_SHARE = 0.16;
 /** The ride Dare needs a level offering one cloud ride of this many seconds, or this many clouds for ≥ 1 s. */
 const RIDE_OFFER_SEC = 3.5;
 const RIDE_OFFER_CLOUDS = 4;
 /** The flakes Dare needs this many plain flakes on the trail; it asks for 80% of the expected flakes, expected being 85% of those offered. */
 const FLAKES_OFFER_MIN = 5;
 const FLAKES_EXPECTED = 0.85;
-/** The snapSave Dare needs gold enough to bank a snap from a level's start with this share of its buds bloomed. */
-const SNAP_BLOOM_SHARE = 0.6;
 /** The swings Dare needs this many SWING hand-offs offered per SWING asked. */
 const SWING_OFFER_PER = 4;
-/** The ring Dare: x3 needs a fully shaded stretch of this many ticks on offer, x4 this many (else x3). */
+/** The ring Dare needs a fully shaded stretch of this many ticks on offer. */
 const RING_RUN_X3 = 600;
-const RING_RUN_X4 = 1100;
+/** The share of a level's daylight a steady player keeps Nubs in full shade (the reactive bot's ~84%). */
+const RING_PLAIN_SHADE = 0.85;
+
+/**
+ * The ring Dare's level: the first one that plain steady shade (RING_PLAIN_SHADE of the level's
+ * daylight at shadeUnits a tick) does not reach, so the Dare asks for the verbs that pump the ring
+ * (deep shade, fresh SWINGs, blooms, glass, parries); x3 at least, x5 at most.
+ */
+function ringTarget(daylightTicks: number): number {
+  const plain = RING_PLAIN_SHADE * daylightTicks * TUNING.ring.shadeUnits;
+  let m = 1;
+  let need = 0;
+  while (m < 5 && need + (TUNING.ring.need[m - 1] as number) <= plain) need += TUNING.ring.need[m++ - 1] as number;
+  return Math.max(3, Math.min(5, m + 1));
+}
 
 /** A Dare's target on a level (§2.6 table), sized from what the level offers. */
 function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): number {
@@ -612,7 +624,7 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
     case 'swings':
       return sec > 30 ? 3 : 2;
     case 'deep':
-      return Math.max(DEEP_MIN_TICKS, Math.min(Math.round(0.12 * daylightTicks), bake ? Math.floor(bake.deep / DEEP_OFFER) : Infinity));
+      return Math.max(DEEP_MIN_TICKS, Math.min(Math.round(DEEP_SHARE * daylightTicks), bake ? Math.floor(bake.deep / DEEP_OFFER) : Infinity));
     case 'snapSave':
       return 60;
     case 'parry':
@@ -626,7 +638,7 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
     case 'still':
       return Math.max(1, Math.ceil((bake ? bake.holdable : 2) / 2));
     case 'ring':
-      return sec <= 25 || (bake !== null && bake.shadeRun < RING_RUN_X4) ? 3 : 4;
+      return ringTarget(daylightTicks);
     default:
       return 1;
   }
@@ -664,10 +676,22 @@ function assignFeats(id: number, seed: number, concepts: readonly ConceptId[], l
 
 /** Goal misses (a finish reached without the goal) after which the level's goal relaxes to 'finish' (§2.6 soft-fail). */
 export const SOFT_FAIL_MISSES = 2;
+/** The first chapter's levels (the first verbs) relax after a single miss. */
+const SOFT_FAIL_EARLY_LEVELS = 10;
+
+/** Goal misses after which level `level`'s goal relaxes: one on levels 1-10, else SOFT_FAIL_MISSES. */
+export function softFailMisses(level: LevelDef): number {
+  return level.id <= SOFT_FAIL_EARLY_LEVELS ? 1 : SOFT_FAIL_MISSES;
+}
+
+/** True when level `l` dares a snap (a snapSave Dare or goal): it starts with a snap ready, as the Cold Snap's own level does. */
+export function startsWithSnap(l: LevelDef): boolean {
+  return l.introduces === 'snap' || l.goal.kind === 'snapSave' || l.feats.some((f) => f.kind === 'snapSave');
+}
 
 /** True when a level's goal is relaxed after `misses` goal misses (RunConfig.relaxedGoal; a 'finish' level never relaxes). */
 export function relaxedGoalFor(level: LevelDef, misses: number): boolean {
-  return level.goal.kind !== 'finish' && misses >= SOFT_FAIL_MISSES;
+  return level.goal.kind !== 'finish' && misses >= softFailMisses(level);
 }
 
 /** Builds the 200 levels (pure; the same table every time). */
@@ -727,7 +751,8 @@ export function featValue(kind: FeatKind, stats: LevelStats): number {
     case 'deep':
       return stats.deepTicks ?? 0;
     case 'snapSave':
-      return stats.earnedSnapSavedTicks ?? 0;
+      // Any snap's ticks alone over Nubs' center: a snapSave level starts with its snap ready (create.ts).
+      return stats.snapSavedTicks ?? 0;
     case 'parry':
       return stats.parries ?? 0;
     case 'brittle':

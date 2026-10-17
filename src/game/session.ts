@@ -125,7 +125,7 @@ import {
   hudGoal,
   introCard,
   missLine,
-  SOFT_FAIL_MISSES,
+  relaxedGoalFor,
   STAR_COOL_LOST,
   STAR_FLAKES,
   STAR_GOAL,
@@ -1144,7 +1144,7 @@ export class Session {
     if (def) {
       // A campaign level (CAMPAIGN_PLAN §4): the level's own rules, never the comfort ladder.
       this.cfgLevel = def;
-      cfg = campaignConfig(def, rm, save.flags.tutorialDone, (save.campaign.misses?.[def.id - 1] ?? 0) >= SOFT_FAIL_MISSES);
+      cfg = campaignConfig(def, rm, save.flags.tutorialDone, relaxedGoalFor(def, save.campaign.misses?.[def.id - 1] ?? 0));
       this.kind = 'campaign';
     } else if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
