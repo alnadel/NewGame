@@ -23,12 +23,13 @@ import { dayStartTick, dayTicks, elevation, TICK_HZ, type YTime } from '../clock
 import { angleDiff, atan2D, cosD, sinD, tanD, wrapDeg } from '../dmath.ts';
 import { convexDistance, rectPoly } from '../geom.ts';
 import { BUD_ID_BASE, FLAKE_ID_BASE, FLARE_PENDING, PICKUP_ALIVE, RUNTIME_ID_BASE, type Caster, type Cloud, type CloudKind, type Flare, type Part, type PickupKind } from '../objects.ts';
-import { rngFor } from '../rng.ts';
+import { rngFor, type Rng } from '../rng.ts';
 import { distPolyToTrail, trailX } from '../trail.ts';
 import { buildParts, gateArchParts, isRotatable, makeCaster, solidHull } from './catalog.ts';
-import { clusterEligible, contestCluster, glassQuota } from './contest.ts';
+import { clusterEligible, contestStage, contestStageUnits, glassQuota, newContestRun, startContest } from './contest.ts';
 import { biomeAtY, firstTownDay, paramsAt, worldDayAtY, worldDayStartY, worldPlan, worldTimeAtY, worldYAtDayTick, worldYAtTime } from './plan.ts';
-import { insertBall, insertBud, insertCaster, insertPickup, lowerBound, takeId, type World } from './store.ts';
+import { insertBall, insertBud, insertCaster, insertPickup, lowerBound, takeId, type PickupJob, type World } from './store.ts';
+import type { ValidationJob } from './validator.ts';
 
 const WT = TUNING.world;
 const CH = WT.chunkLen;
@@ -456,6 +457,17 @@ function addParkedNoonCloud(w: World, day: number): void {
  * chunk's casters keep clear of them.
  */
 export function placeChunk(w: World, k: number): void {
+  placeChunkCasters(w, k);
+  const pj = beginPickups(w, k);
+  if (pj) while (!pj.done) stepPickups(w, pj, Infinity, true);
+}
+
+/**
+ * The casters of chunk k (placeChunk without its pickups): the days it reaches, a campaign level's
+ * landmarks and the casters. Generation (world.ts) runs the pickups of chunk k − 2 next as their own
+ * resumable job (beginPickups, stepPickups), so the glass contest is sliced like validation.
+ */
+export function placeChunkCasters(w: World, k: number): void {
   const y0 = k * CH;
   const y1 = y0 + CH;
   while (worldDayStartY(w, w.daysGenerated + 1) < y1) {
@@ -465,12 +477,75 @@ export function placeChunk(w: World, k: number): void {
   if (w.gateY >= y0 && w.gateY < y1) placeLandmark(w, 'arch', w.gateY, k);
   if (w.finishY >= y0 && w.finishY < y1) placeLandmark(w, 'finish', w.finishY, k);
   if (!(w.tutorial && k === 0)) placeCasters(w, k, y1);
-  // Flakes (v1.6, T7) and buds trail two chunks behind: by now the casters and rescue rocks around
-  // them stand, and chunk k − 2's finished validation job (w.lastJob) holds the rows the glass
-  // contest reads.
-  if (k >= 2 && !(w.tutorial && k === 2)) placeFlakes(w, k - 2, (k - 1) * CH);
-  if (k >= 2) placeBuds(w, k - 2);
   w.stats.chunksPlaced++;
+}
+
+/**
+ * Starts the pickups that follow placing chunk k: the flakes and buds of chunk k − 2 (none before
+ * chunk 2). Flakes (v1.6, T7) and buds trail two chunks behind: by now the casters and rescue rocks
+ * around them stand, and chunk k − 2's finished validation job (w.lastJob) holds the rows the glass
+ * contest reads.
+ */
+export function beginPickups(w: World, k: number): PickupJob | null {
+  if (k < 2) return null;
+  const c = k - 2;
+  const flakes = !(w.tutorial && k === 2);
+  return {
+    k: c,
+    y1: (c + 1) * CH,
+    rng: flakes ? rngFor(w.seed, 'flakes', c) : null,
+    phase: flakes ? 0 : 1,
+    guard: 0,
+    y: 0,
+    n: 0,
+    day: 0,
+    p: null,
+    nextY: 0,
+    shift: -1,
+    best: null,
+    bestD: Infinity,
+    run: (w.contestRun ??= newContestRun()),
+    contestOn: false,
+    done: false,
+  };
+}
+
+/**
+ * Advances pickup job `pj` by about `budget` work units (one lit row ≈ 1; a contest stage reports its
+ * own): clusters are drawn exactly as before (the same stream and order), a glass contest runs one
+ * stage at a time and, unless `fresh` (the slice's first work), only when its estimate fits the
+ * budget left (otherwise it yields the rest of the budget); the buds come last. Returns the units used.
+ */
+export function stepPickups(w: World, pj: PickupJob, budget: number, fresh: boolean): number {
+  let used = 0;
+  while (!pj.done) {
+    if (pj.contestOn) {
+      // A glass contest stage: never two in one slice unless they fit the budget.
+      const est = contestStageUnits(pj.run);
+      if (!(fresh && used === 0) && used + est > budget) return Math.max(used, budget);
+      used += contestStage(w, w.lastJob as ValidationJob, pj.run);
+      if (pj.run.done) {
+        pj.contestOn = false;
+        glassResult(pj);
+      }
+      continue;
+    }
+    if (used >= budget) return used;
+    if (pj.phase === 0) {
+      if (pj.p !== null) {
+        // The cluster drawn last: its next glass candidate, or its placement.
+        if (!glassNext(w, pj)) finishCluster(w, pj);
+        continue;
+      }
+      used += 1;
+      if (!drawCluster(w, pj)) pj.phase = 1;
+      continue;
+    }
+    placeBuds(w, pj.k);
+    used += 1;
+    pj.done = true;
+  }
+  return used;
 }
 
 /** Bud footprint used for spacing (u, a square). */
@@ -664,12 +739,14 @@ function pickWeighted(kinds: readonly CasterKind[], weights: readonly number[], 
 /**
  * Flake clusters: one every U(5, 8) s of walking while t/Dl ∈ [0.08, 0.92], 24 u apart on the
  * centerline. The cursor (next cluster start) carries across chunks; a day's first cluster comes
- * 0-2 s after 0.08·Dl.
+ * 0-2 s after 0.08·Dl. drawCluster draws the next cluster of pickup job `pj` (its chunk's stream,
+ * in order) into pj (y, n, day, p, nextY) and starts its glass search; false when the chunk has no
+ * more clusters.
  */
-function placeFlakes(w: World, k: number, y1: number): void {
-  const rng = rngFor(w.seed, 'flakes', k);
+function drawCluster(w: World, pj: PickupJob): boolean {
+  const rng = pj.rng as Rng;
   const P = TUNING.pickups;
-  for (let guard = 0; guard < 64; guard++) {
+  for (; pj.guard < 64; pj.guard++) {
     worldTimeAtY(w, w.flakeY, yt);
     const day = yt.day;
     const p = paramsAt(w, day);
@@ -683,13 +760,20 @@ function placeFlakes(w: World, k: number, y1: number): void {
       w.flakeY = worldYAtDayTick(w, day, P.clusterTMin * dl) + rng.range(0, 2) * p.v;
       continue;
     }
-    if (w.flakeY >= y1) break;
-    const y = w.flakeY;
-    const n = p.flakesPerCluster;
+    if (w.flakeY >= pj.y1) return false;
+    pj.guard++;
+    pj.y = w.flakeY;
+    pj.n = p.flakesPerCluster;
+    pj.day = day;
+    pj.p = p;
     w.flakeY += rng.range(P.clusterGapMin, P.clusterGapMax) * p.clusterGap * p.v;
-    const g = glassSpot(w, k, y, n, day, p, w.flakeY);
-    addCluster(w, g === null ? y : g, n, g !== null);
+    pj.nextY = w.flakeY;
+    pj.best = null;
+    pj.bestD = Infinity;
+    pj.shift = glassOpen(w, pj) ? 0 : GLASS_DONE;
+    return true;
   }
+  return false;
 }
 
 const BR = TUNING.brittle;
@@ -697,44 +781,88 @@ const BR = TUNING.brittle;
 const GLASS_SHIFTS: readonly number[] = BR.shiftsSec;
 /** A contested shift whose cost is within this of costAim ends the search (Chill). */
 const GLASS_AIM_TOL = 4;
+/** pj.shift past the shifts: the Glass Flakes lesson's savable fallback, then done. */
+const GLASS_FALLBACK = GLASS_SHIFTS.length;
+const GLASS_DONE = GLASS_SHIFTS.length + 1;
+
+/** The span (u) of the drawn cluster's flakes and the gap (u) it keeps to its neighbours. */
+function clusterSpan(pj: PickupJob): number {
+  return (pj.n - 1) * TUNING.pickups.flakeSpacing;
+}
 
 /**
- * v1.6 glass (§2.3): the y of the glass cluster of n flakes drawn at y (chunk k, day `day`), or
- * null when it stays plain at y. The running share of glass among eligible clusters (a cluster is
- * eligible when its drawn spot's melt window plus tail lies inside chunk k's finished job) must be
- * below glassQuota; then, among the shifts that keep minGapSec of walking to the previous cluster
- * and to the next (at nextY), the contested one whose detour cost is nearest costAim wins.
+ * v1.6 glass (§2.3): whether the cluster drawn into pj may turn glass. The running share of glass
+ * among eligible clusters (a cluster is eligible when its drawn spot's melt window plus tail lies
+ * inside chunk k's finished job and it keeps minGapSec of walking to its neighbours) must be below
+ * glassQuota; then glassNext tries the shifts, and the contested one whose detour cost is nearest
+ * costAim wins.
  */
-function glassSpot(w: World, k: number, y: number, n: number, day: number, p: DayParams, nextY: number): number | null {
-  const q = glassQuota(w, day, p);
+function glassOpen(w: World, pj: PickupJob): boolean {
+  const p = pj.p as DayParams;
+  const q = glassQuota(w, pj.day, p);
   const job = w.lastJob;
-  if (q <= 0 || !job || job.k !== k) return null;
-  const span = (n - 1) * TUNING.pickups.flakeSpacing;
+  if (q <= 0 || !job || job.k !== pj.k) return false;
+  const span = clusterSpan(pj);
   const gap = BR.minGapSec * p.v;
   // Eligible where drawn (cheap: no masks), then the quota, then the contest of each shift.
-  if (y - w.lastClusterY < gap || nextY - (y + span) < gap || !clusterEligible(w, job, y + span)) return null;
+  if (pj.y - w.lastClusterY < gap || pj.nextY - (pj.y + span) < gap || !clusterEligible(w, job, pj.y + span)) return false;
   w.glassEligible++;
-  if (w.glassMade >= q * w.glassEligible) return null;
-  let best: number | null = null;
-  let bestD = Infinity;
-  for (let i = 0; i < GLASS_SHIFTS.length; i++) {
-    const y0 = y + (GLASS_SHIFTS[i] as number) * p.v;
-    if (y0 - w.lastClusterY < gap || nextY - (y0 + span) < gap) continue;
-    const c = contestCluster(w, job, trailX(w.trail, y0), y0, trailX(w.trail, y0 + span), y0 + span);
-    if (!c.contested) continue;
-    const d = Math.abs(c.cost - BR.costAim);
-    if (d < bestD) {
-      bestD = d;
-      best = y0;
+  return w.glassMade < q * w.glassEligible;
+}
+
+/** Starts the drawn cluster's next glass contest (the next shift that keeps its gaps, else the lesson's fallback); false when the search is over. */
+function glassNext(w: World, pj: PickupJob): boolean {
+  const p = pj.p as DayParams;
+  const span = clusterSpan(pj);
+  const gap = BR.minGapSec * p.v;
+  while (pj.shift < GLASS_FALLBACK) {
+    const y0 = pj.y + (GLASS_SHIFTS[pj.shift] as number) * p.v;
+    if (y0 - w.lastClusterY < gap || pj.nextY - (y0 + span) < gap) {
+      pj.shift++;
+      continue;
+    }
+    startContest(pj.run, trailX(w.trail, y0), y0, trailX(w.trail, y0 + span), y0 + span);
+    pj.contestOn = true;
+    return true;
+  }
+  // The Glass Flakes lesson (its own level) must offer glass: without a contested shift, a cluster a
+  // perfect player can save where it was drawn.
+  if (pj.shift === GLASS_FALLBACK && pj.best === null && w.level?.introduces === 'brittle') {
+    startContest(pj.run, trailX(w.trail, pj.y), pj.y, trailX(w.trail, pj.y + span), pj.y + span, true);
+    pj.contestOn = true;
+    return true;
+  }
+  return false;
+}
+
+/** Folds a finished glass contest into the drawn cluster's search. */
+function glassResult(pj: PickupJob): void {
+  const r = pj.run;
+  if (pj.shift === GLASS_FALLBACK) {
+    if (r.contested) pj.best = pj.y;
+    pj.shift = GLASS_DONE;
+    return;
+  }
+  if (r.contested) {
+    const d = Math.abs(r.cost - BR.costAim);
+    if (d < pj.bestD) {
+      pj.bestD = d;
+      pj.best = pj.y + (GLASS_SHIFTS[pj.shift] as number) * (pj.p as DayParams).v;
     }
     // Close enough to the aim: the remaining shifts are not worth their DPs.
-    if (d <= GLASS_AIM_TOL) break;
+    if (d <= GLASS_AIM_TOL) {
+      pj.shift = GLASS_FALLBACK;
+      return;
+    }
   }
-  // The Glass Flakes lesson (its own level) must offer glass: without a contested shift, a cluster
-  // a perfect player can save where it was drawn.
-  if (best === null && w.level?.introduces === 'brittle' && contestCluster(w, job, trailX(w.trail, y), y, trailX(w.trail, y + span), y + span, true).contested) best = y;
-  if (best !== null) w.glassMade++;
-  return best;
+  pj.shift++;
+}
+
+/** Places the drawn cluster: glass at its best shift, else plain where drawn. */
+function finishCluster(w: World, pj: PickupJob): void {
+  if (pj.best !== null) w.glassMade++;
+  addCluster(w, pj.best === null ? pj.y : pj.best, pj.n, pj.best !== null);
+  pj.p = null;
 }
 
 /** Sanity helper for tests/tools: the clearance of a caster (min distance hull → centerline). */

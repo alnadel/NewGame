@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
 import { dayStartTick, dayStartY, dayTicks, elevation } from '../../src/core/clock.ts';
-import { clusterEligible, contestCluster, glassQuota } from '../../src/core/gen/contest.ts';
+import { clusterEligible, contestCluster, contestStats, glassQuota } from '../../src/core/gen/contest.ts';
 import { flareLift, liftOf, noonHeatAt, paramsAt, worldElevation } from '../../src/core/gen/plan.ts';
 import { insertCaster, insertPickup } from '../../src/core/gen/store.ts';
 import { chillDeltaTable, deltaForSlot, keepRows, keepVerdict, slotDeltaAt, validatorDrain } from '../../src/core/gen/validator.ts';
@@ -335,18 +335,42 @@ describe('Heat Flares (§2.5)', () => {
   });
 });
 
-/** Generates world `w` through `y` chunk by chunk, calling `onPlace` after each chunk placement. */
+/** Generates world `w` through `y` in 1-unit slices, calling `onPlace` each time a chunk's pickups (flakes and buds, two chunks behind) are placed. */
 function generateWatching(w: World, y: number, onPlace: () => void): void {
-  let placed = w.placedThrough;
+  let pending = w.pickJob;
   while (!generateSome(w, y, 1)) {
-    if (w.placedThrough !== placed) {
-      placed = w.placedThrough;
-      onPlace();
-    }
+    if (pending && w.pickJob !== pending) onPlace();
+    pending = w.pickJob;
   }
 }
 
 describe('glass clusters (§2.3, T7)', () => {
+  it('glass contests are sliced (fix round 2): a 12-unit idle slice runs one contest stage, or stages within its budget; the world is the same however it is sliced', () => {
+    const sig = (w: World): string => w.pickups.map((p) => `${p.id}:${p.y.toFixed(3)}:${p.brittle ? 1 : 0}`).join(',');
+    for (const seed of [1, 2]) {
+      const cfg = { ...headlessConfig(seed), brittleShare: 1 };
+      const w = createWorld(cfg);
+      let slices = 0;
+      let staged = 0;
+      for (;;) {
+        const s0 = contestStats.stages;
+        const u0 = contestStats.units;
+        const done = generateSome(w, dayStartY(3), 12);
+        const stages = contestStats.stages - s0;
+        const units = contestStats.units - u0;
+        if (stages > 0) staged++;
+        expect(stages <= 1 || units <= 12, `seed ${seed} slice ${slices}: ${stages} stages, ${units} units`).toBe(true);
+        slices++;
+        if (done) break;
+      }
+      expect(staged).toBeGreaterThan(20);
+      const whole = createWorld(cfg);
+      ensureGenerated(whole, dayStartY(3));
+      expect(sig(w)).toBe(sig(whole));
+      expect(w.pickups.some((p) => p.brittle)).toBe(true);
+    }
+  }, 60_000);
+
   it('every glass cluster passes the contest test where it stands (40 seeds × Days 1-4); flakes trail the casters by two chunks', () => {
     let glass = 0;
     let eligible = 0;

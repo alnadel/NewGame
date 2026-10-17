@@ -14,7 +14,8 @@
 //     W in M forced, from a DP over (bin, hits ≤ need) seeded with the job's row before W.
 // Contested ⇔ S_free ≤ need − 2 (the safe line can't save it), C1 ≥ floor + marginChill (never a
 // trap), costMin ≤ C0 − C1 ≤ costMax (never free, never brutal), and the first flake is savable
-// too (its own C1 ≥ floor + marginChill). Per-call work is O(|W| · need · 360); no allocation.
+// too (its own C1 ≥ floor + marginChill). Per-call work is O(|W| · need · 360); no allocation. The
+// placer runs the test in stages (ContestRun, contestStage), at most one per idle-generation slice.
 
 import { levelGlassShare } from '../../config/campaign.ts';
 import type { DayParams } from '../../config/days.ts';
@@ -66,6 +67,14 @@ export interface FlakeContest {
 
 const out: FlakeContest = { eligible: false, w0: 0, w1: 0, need: 0, sFree: 0, c0: 0, c1: 0, floor: 0 };
 
+/** A melt window: its slots [w0, w1] in the job, the shaded steps it needs and the day's floor (Chill). */
+interface MeltWin {
+  w0: number;
+  w1: number;
+  need: number;
+  floor: number;
+}
+
 /** Slot s's absolute tick. */
 function slotTick(job: ValidationJob, s: number): number {
   return (job.j0 + s - 1 - job.pre) * STEP;
@@ -96,11 +105,10 @@ function nearFlare(w: World, job: ValidationJob, a: number, b: number): boolean 
 
 /**
  * The melt window of a flake at y against the finished job `job` (the validation job of its chunk)
- * into `out` (w0, w1, need, floor); false when it plus tailSec does not lie inside the job's own
+ * into `mw` (w0, w1, need, floor); false when it plus tailSec does not lie inside the job's own
  * computed slots in plain daylight (no flare near), or when the flake cannot melt (need ≤ 0).
  */
-function meltWindow(w: World, job: ValidationJob, py: number, budget: number): boolean {
-  out.eligible = false;
+function meltWindow(w: World, job: ValidationJob, py: number, budget: number, mw: MeltWin): boolean {
   const last = job.pre + job.n;
   let w0 = -1;
   let w1 = -1;
@@ -124,37 +132,36 @@ function meltWindow(w: World, job: ValidationJob, py: number, budget: number): b
   // a window it touches could be free glass.
   if (eclipseTouches(w, slotTick(job, w0 - 1) - STEP, slotTick(job, w1 + TAIL))) return false;
   const maxC = paramsAt(w, 1).maxChill;
-  out.floor = (paramsAt(w, job.sDay[w0] as number).floor * maxC) / TUNING.nubs.maxChill;
-  out.w0 = w0;
-  out.w1 = w1;
-  out.need = need;
-  out.eligible = true;
+  mw.floor = (paramsAt(w, job.sDay[w0] as number).floor * maxC) / TUNING.nubs.maxChill;
+  mw.w0 = w0;
+  mw.w1 = w1;
+  mw.need = need;
   return true;
 }
 
-/** M rows of the window in `out`: the bins that shade (px, py) at each step (clouds as circles of ry), glare bins removed. */
-function computeM(w: World, job: ValidationJob, px: number, py: number): void {
-  for (let s = out.w0; s <= out.w1; s++) {
-    const m = mRows.subarray((s - out.w0) * BINS, (s - out.w0 + 1) * BINS);
+/** M rows of window `mw` into `m`: the bins that shade (px, py) at each step (clouds as circles of ry), glare bins removed. */
+function computeM(w: World, job: ValidationJob, px: number, py: number, mw: MeltWin, m: Uint8Array): void {
+  for (let s = mw.w0; s <= mw.w1; s++) {
+    const row = m.subarray((s - mw.w0) * BINS, (s - mw.w0 + 1) * BINS);
     gatherScene(w, scene, px, py, 1, job.sT[s] as number, job.sEps[s] as number, job.sCot[s] as number, false);
-    shadeMask(scene, px, py, true, m);
+    shadeMask(scene, px, py, true, row);
     if (scene.glareOn && scene.nBalls > 0) {
       glareMask(scene, px, py, glare);
-      for (let b = 0; b < BINS; b++) if (glare[b] === 1) m[b] = 0;
+      for (let b = 0; b < BINS; b++) if (glare[b] === 1) row[b] = 0;
     }
   }
 }
 
-/** S_free of the window in `out`: the most M hits a turn-limited path gets on zero-lit bins (3-step rule); −1 when no such path exists. */
-function freeHits(job: ValidationJob): number {
-  const w0 = out.w0;
+/** S_free of window `mw`: the most M hits a turn-limited path gets on zero-lit bins (3-step rule); −1 when no such path exists. */
+function freeHits(job: ValidationJob, mw: MeltWin, m: Uint8Array): number {
+  const w0 = mw.w0;
   for (let b = 0; b < BINS; b++) fRow[b] = litH(job, w0 - 1, b) === 0 ? 0 : DEAD;
-  for (let s = w0; s <= out.w1; s++) {
+  for (let s = w0; s <= mw.w1; s++) {
     slidingMaxCircular(fRow, TURN, fWin);
     const mo = (s - w0) * BINS;
     for (let b = 0; b < BINS; b++) {
       const v = fWin[b] as number;
-      fRow[b] = litH(job, s, b) === 0 && v > DEAD / 2 ? v + (mRows[mo + b] as number) : DEAD;
+      fRow[b] = litH(job, s, b) === 0 && v > DEAD / 2 ? v + (m[mo + b] as number) : DEAD;
     }
   }
   let best = DEAD;
@@ -163,24 +170,24 @@ function freeHits(job: ValidationJob): number {
 }
 
 /**
- * The Chill DP over the window in `out` plus tailSec, seeded with the job's row before the window:
+ * The Chill DP over window `mw` plus tailSec, seeded with the job's row before the window:
  * `layers` = need + 1 tracks the M hits so far (saturating at need) and returns the best Chill at
  * the end with ≥ need hits; `layers` = 1 ignores M (the best Chill at the end). `capped` clamps at
  * the tank like the validator; uncapped it sums the Chill deltas (the true price of a detour even
  * when the tank is full).
  */
-function chillDP(w: World, job: ValidationJob, layers: number, capped: boolean): number {
+function chillDP(w: World, job: ValidationJob, mw: MeltWin, m: Uint8Array, layers: number, capped: boolean): number {
   const need = layers - 1;
   const maxC = capped ? paramsAt(w, 1).maxChill : Infinity;
   let cur = layA;
   let nxt = layB;
   cur.fill(DEAD, 0, layers * BINS);
-  cur.set(job.c.subarray((out.w0 - 1) * BINS, out.w0 * BINS), 0);
+  cur.set(job.c.subarray((mw.w0 - 1) * BINS, mw.w0 * BINS), 0);
   // Layer k can only be alive after k steps of the window: lo..hi are the live layers.
   let hi = 0;
-  for (let s = out.w0; s <= out.w1 + TAIL; s++) {
-    const inW = s <= out.w1;
-    const mo = (s - out.w0) * BINS;
+  for (let s = mw.w0; s <= mw.w1 + TAIL; s++) {
+    const inW = s <= mw.w1;
+    const mo = (s - mw.w0) * BINS;
     const day = job.sDay[s] as number;
     const delta = deltaForSlot(w, day, slotTick(job, s) - dayStartTick(day));
     for (let b = 0; b < BINS; b++) dRow[b] = delta[litH(job, s, b)] as number;
@@ -196,7 +203,7 @@ function chillDP(w: World, job: ValidationJob, layers: number, capped: boolean):
         let v = from + (dRow[b] as number);
         if (v <= 0) continue;
         if (v > maxC) v = maxC;
-        const o = (up && mRows[mo + b] === 1 ? k + 1 : k) * BINS + b;
+        const o = (up && m[mo + b] === 1 ? k + 1 : k) * BINS + b;
         if (v > (nxt[o] as number)) nxt[o] = v;
       }
     }
@@ -213,17 +220,28 @@ function chillDP(w: World, job: ValidationJob, layers: number, capped: boolean):
 }
 
 /**
+ * Work units of a chillDP over window `mw` with `layers` layers (a unit ≈ one validator lit row):
+ * about DP_LAYER_STEPS slot-layers each (measured in Node: a 13-layer DP over 35 slots ≈ 0.35 ms).
+ */
+const DP_LAYER_STEPS = 25;
+function dpUnits(mw: MeltWin, layers: number): number {
+  return Math.ceil(((mw.w1 - mw.w0 + 1 + TAIL) * layers) / DP_LAYER_STEPS);
+}
+
+/**
  * The contest numbers of a flake at (px, py) against the finished job `job` (tests and tools; the
  * placer calls contestCluster): its melt window, need, S_free, the uncapped best Chill tailSec
  * after the window without (C0) and with (C1) the flake saved, and the capped C1 (cappedC1).
  */
 export function contestFlake(w: World, job: ValidationJob, px: number, py: number, budget: number): FlakeContest & { cappedC1: number } {
-  if (!meltWindow(w, job, py, budget)) return { ...out, cappedC1: DEAD };
-  computeM(w, job, px, py);
-  out.sFree = freeHits(job);
-  out.c0 = chillDP(w, job, 1, false);
-  out.c1 = chillDP(w, job, out.need + 1, false);
-  return { ...out, cappedC1: chillDP(w, job, out.need + 1, true) };
+  out.eligible = false;
+  if (!meltWindow(w, job, py, budget, out)) return { ...out, cappedC1: DEAD };
+  out.eligible = true;
+  computeM(w, job, px, py, out, mRows);
+  out.sFree = freeHits(job, out, mRows);
+  out.c0 = chillDP(w, job, out, mRows, 1, false);
+  out.c1 = chillDP(w, job, out, mRows, out.need + 1, false);
+  return { ...out, cappedC1: chillDP(w, job, out, mRows, out.need + 1, true) };
 }
 
 /** The contest verdict of a cluster: eligible (its drawn spot's window fits the job), contested, and its detour cost C0 − C1 (Chill). */
@@ -233,42 +251,129 @@ export interface ClusterContest {
   cost: number;
 }
 
+/**
+ * A cluster's contest test in progress (fix round 2: the placer runs it a stage per call, so one
+ * idle-generation slice holds at most one stage, each at most a few lit rows or one Chill DP).
+ * Stages: 0 the last flake's window, M and S_free; 1 its uncapped detour cost (C0 − C1); 2 its
+ * capped C1; 3 the first flake's window, M and capped C1; then `done`.
+ */
+export interface ContestRun extends ClusterContest, MeltWin {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  savableOnly: boolean;
+  stage: number;
+  done: boolean;
+  /** M rows of the flake under test (MAX_W × 360), owned by the run (runs of different worlds may interleave). */
+  readonly m: Uint8Array;
+}
+
+/** A contest run with its own M rows (one per world; reused cluster after cluster). */
+export function newContestRun(): ContestRun {
+  return { x0: 0, y0: 0, x1: 0, y1: 0, savableOnly: false, stage: 0, done: true, eligible: false, contested: false, cost: 0, w0: 0, w1: 0, need: 0, floor: 0, m: new Uint8Array(MAX_W * BINS) };
+}
+
+/** (Re)starts `run` on the cluster whose first flake is at (x0, y0) and last at (x1, y1). */
+export function startContest(run: ContestRun, x0: number, y0: number, x1: number, y1: number, savableOnly = false): ContestRun {
+  run.x0 = x0;
+  run.y0 = y0;
+  run.x1 = x1;
+  run.y1 = y1;
+  run.savableOnly = savableOnly;
+  run.stage = 0;
+  run.done = false;
+  run.eligible = false;
+  run.contested = false;
+  run.cost = 0;
+  return run;
+}
+
+/** The work units the next stage of `run` will cost about (0 when done). */
+export function contestStageUnits(run: ContestRun): number {
+  if (run.done) return 0;
+  if (run.stage === 0) return MAX_W + 1;
+  if (run.stage === 1) return dpUnits(run, 1) + dpUnits(run, run.need + 1);
+  if (run.stage === 2) return dpUnits(run, run.need + 1);
+  return MAX_W + dpUnits(run, run.need + 1);
+}
+
+/** Contest stages run so far and their work units (tests: how generation slices them). */
+export const contestStats = { stages: 0, units: 0 };
+
+/** Runs the next stage of `run` against chunk job `job`; returns the work units it took. */
+export function contestStage(w: World, job: ValidationJob, run: ContestRun): number {
+  const units = stageOf(w, job, run);
+  contestStats.stages++;
+  contestStats.units += units;
+  return units;
+}
+
+function stageOf(w: World, job: ValidationJob, run: ContestRun): number {
+  const fail = (units: number): number => {
+    run.done = true;
+    return units;
+  };
+  switch (run.stage) {
+    case 0: {
+      if (!meltWindow(w, job, run.y1, B.meltBudget, run)) return fail(1);
+      run.eligible = true;
+      computeM(w, job, run.x1, run.y1, run, run.m);
+      const units = run.w1 - run.w0 + 2;
+      if (!run.savableOnly && freeHits(job, run, run.m) > run.need - 2) return fail(units);
+      run.stage = run.savableOnly ? 2 : 1;
+      return units;
+    }
+    case 1: {
+      run.cost = chillDP(w, job, run, run.m, 1, false) - chillDP(w, job, run, run.m, run.need + 1, false);
+      const units = dpUnits(run, 1) + dpUnits(run, run.need + 1);
+      if (run.cost < B.costMin || run.cost > B.costMax) return fail(units);
+      run.stage = 2;
+      return units;
+    }
+    case 2: {
+      const units = dpUnits(run, run.need + 1);
+      if (chillDP(w, job, run, run.m, run.need + 1, true) < run.floor + B.marginChill) return fail(units);
+      run.stage = 3;
+      return units;
+    }
+    default: {
+      // The first flake must be savable too (against the last flake's floor).
+      const floor = run.floor + B.marginChill;
+      run.done = true;
+      if (!meltWindow(w, job, run.y0, B.meltBudget, out)) {
+        run.contested = true;
+        return 1;
+      }
+      computeM(w, job, run.x0, run.y0, out, run.m);
+      run.contested = chillDP(w, job, out, run.m, out.need + 1, true) >= floor;
+      return out.w1 - out.w0 + 1 + dpUnits(out, out.need + 1);
+    }
+  }
+}
+
+const run0 = newContestRun();
 const verdict: ClusterContest = { eligible: false, contested: false, cost: 0 };
 
 /** True when the cluster whose last flake is at y would be eligible (its melt window plus tail lies inside the job). Cheap: no masks. */
 export function clusterEligible(w: World, job: ValidationJob, y: number): boolean {
-  return meltWindow(w, job, y, B.meltBudget);
+  return meltWindow(w, job, y, B.meltBudget, out);
 }
 
 /**
  * The contest test of a cluster whose first flake is at (x0, y0) and last at (x1, y1), against the
- * job of its chunk: the last flake's S_free ≤ need − 2, the uncapped detour cost C0 − C1 within
- * [costMin, costMax], the capped C1 ≥ floor + marginChill, and the first flake's capped C1 too.
- * `savableOnly` (the Glass Flakes lesson's fallback) keeps only the last two: a perfect player can
- * save it without risking the floor.
+ * job of its chunk, in one go (tests and tools; the placer runs it stage by stage): the last
+ * flake's S_free ≤ need − 2, the uncapped detour cost C0 − C1 within [costMin, costMax], the
+ * capped C1 ≥ floor + marginChill, and the first flake's capped C1 too. `savableOnly` (the Glass
+ * Flakes lesson's fallback) keeps only the last two: a perfect player can save it without risking
+ * the floor.
  */
 export function contestCluster(w: World, job: ValidationJob, x0: number, y0: number, x1: number, y1: number, savableOnly = false): ClusterContest {
-  verdict.eligible = false;
-  verdict.contested = false;
-  verdict.cost = 0;
-  if (!meltWindow(w, job, y1, B.meltBudget)) return verdict;
-  verdict.eligible = true;
-  computeM(w, job, x1, y1);
-  let cost = 0;
-  if (!savableOnly) {
-    if (freeHits(job) > out.need - 2) return verdict;
-    cost = chillDP(w, job, 1, false) - chillDP(w, job, out.need + 1, false);
-    if (cost < B.costMin || cost > B.costMax) return verdict;
-  }
-  const floor = out.floor + B.marginChill;
-  if (chillDP(w, job, out.need + 1, true) < floor) return verdict;
-  // The first flake must be savable too.
-  if (meltWindow(w, job, y0, B.meltBudget)) {
-    computeM(w, job, x0, y0);
-    if (chillDP(w, job, out.need + 1, true) < floor) return verdict;
-  }
-  verdict.contested = true;
-  verdict.cost = cost;
+  startContest(run0, x0, y0, x1, y1, savableOnly);
+  while (!run0.done) contestStage(w, job, run0);
+  verdict.eligible = run0.eligible;
+  verdict.contested = run0.contested;
+  verdict.cost = run0.contested ? run0.cost : 0;
   return verdict;
 }
 

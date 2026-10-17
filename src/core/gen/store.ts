@@ -3,14 +3,16 @@
 
 import type { LevelDef, Mechanics } from '../../config/campaign.ts';
 import type { ConceptId } from '../../config/concepts.ts';
-import type { BiomeId, DayPlan, NoonCloud, ProfileId } from '../../config/days.ts';
+import type { BiomeId, DayParams, DayPlan, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { type MaskScene, sceneAddBall, sceneAddCaster, sceneAddCloud, sceneBegin } from '../intervals.ts';
 import { RUNTIME_ID_BASE, type Bud, type Caster, type Cloud, type Flare, type GazingBall, type Pickup } from '../objects.ts';
 import { casterReach, cloudAlive, distToCasterBounds, glareOffset, shadowLength, cloudOffset } from '../shadows.ts';
 import type { V16Rules } from '../sim/types.ts';
+import type { Rng } from '../rng.ts';
 import type { Trail } from '../trail.ts';
+import type { ContestRun } from './contest.ts';
 import type { ValidationJob } from './validator.ts';
 
 const MAX_R = TUNING.world.maxCasterRadius;
@@ -149,8 +151,41 @@ export interface World {
   job: ValidationJob | null;
   /** The last finished job, whose buffers the next one reuses. */
   lastJob: ValidationJob | null;
+  /** v1.6 (fix round 2): the pickups job of the chunk placed two chunks back, in progress (null: none). */
+  pickJob: PickupJob | null;
+  /** The glass contest run the pickups jobs reuse (its M rows), made on first use. */
+  contestRun: ContestRun | null;
   readonly chunkLit: ChunkLit[];
   readonly stats: WorldStats;
+}
+
+/**
+ * The flakes and buds of chunk k, placed after the casters of chunk k + 2 as a resumable job
+ * (placer.ts beginPickups / stepPickups): the cluster being placed and its glass contest run.
+ */
+export interface PickupJob {
+  readonly k: number;
+  /** The chunk's end (y): clusters start below it. */
+  readonly y1: number;
+  /** The chunk's flake stream (null: no flakes, the tutorial's authored chunk). */
+  readonly rng: Rng | null;
+  /** 0 flakes, 1 buds. */
+  phase: number;
+  guard: number;
+  /** The cluster drawn last (p null: none pending): its y, size, day, day params and the next cluster's y. */
+  y: number;
+  n: number;
+  day: number;
+  p: DayParams | null;
+  nextY: number;
+  /** Its glass search: the shift tried next, the best contested y and its distance to costAim. */
+  shift: number;
+  best: number | null;
+  bestD: number;
+  readonly run: ContestRun;
+  /** A contest stage is due (run is not done). */
+  contestOn: boolean;
+  done: boolean;
 }
 
 /** Index of the first element with y ≥ target in a y-sorted array. */

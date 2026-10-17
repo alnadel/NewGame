@@ -14,7 +14,7 @@ import { dayAtTick, tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
 import { V16_ALL, V16_NONE, V16_RULES, V16_SHIP, type RunConfig, type V16Rules } from '../sim/types.ts';
 import { createTrail } from '../trail.ts';
-import { makeFlare, placeChunk, placeStart } from './placer.ts';
+import { beginPickups, makeFlare, placeChunkCasters, placeStart, stepPickups } from './placer.ts';
 import { paramsAt } from './plan.ts';
 import type { World } from './store.ts';
 import { beginValidation, stepValidation } from './validator.ts';
@@ -138,6 +138,8 @@ export function createWorld(cfg: WorldConfig, levelOverride?: LevelDef): World {
     carryLit: new Uint8Array(360 * (TUNING.validator.prefixSteps + 1)),
     job: null,
     lastJob: null,
+    pickJob: null,
+    contestRun: null,
     chunkLit: [],
     stats: { chunksPlaced: 0, chunksValidated: 0, rescues: 0, rescuesPerChunk: [], parkedClouds: 0, unresolved: 0, dropped: 0, work: 0 },
   };
@@ -173,16 +175,27 @@ export function validatedY(w: World): number {
   return (w.validatedThrough + 1) * CH;
 }
 
-/** Runs (part of) the next job. Returns the work units used. */
-function runJob(w: World, budget: number): number {
+/**
+ * Runs (part of) the next job. Returns the work units used. `fresh` is true for a slice's first job:
+ * a pickups job may then run a glass contest stage larger than the budget (it would never run
+ * otherwise); later in the slice it yields instead.
+ */
+function runJob(w: World, budget: number, fresh: boolean): number {
   if (w.job) {
     const used = stepValidation(w, w.job, budget);
     if (w.job.done) w.job = null;
     return used;
   }
+  if (w.pickJob) {
+    const used = stepPickups(w, w.pickJob, budget, fresh);
+    if (w.pickJob.done) w.pickJob = null;
+    return used;
+  }
   if (w.placedThrough < w.validatedThrough + 2) {
-    placeChunk(w, w.placedThrough + 1);
-    w.placedThrough++;
+    const k = w.placedThrough + 1;
+    placeChunkCasters(w, k);
+    w.placedThrough = k;
+    w.pickJob = beginPickups(w, k);
     w.stats.work += PLACE_COST;
     return PLACE_COST;
   }
@@ -192,14 +205,15 @@ function runJob(w: World, budget: number): number {
 
 /**
  * Generates toward `yTarget` (validated) using at most ~`budget` work units (≈ 0.02-0.05 ms each in
- * Node). Returns true once the world is validated through yTarget. Call it from idle time with a
- * small budget; the result never depends on how the work was sliced.
+ * Node; a glass contest stage, the largest single piece, is a few lit rows or one Chill DP). Returns
+ * true once the world is validated through yTarget. Call it from idle time with a small budget; the
+ * result never depends on how the work was sliced.
  */
 export function generateSome(w: World, yTarget: number, budget: number): boolean {
   let used = 0;
   while (validatedY(w) < yTarget) {
     if (used >= budget) return false;
-    used += runJob(w, budget - used);
+    used += runJob(w, budget - used, used === 0);
   }
   return true;
 }

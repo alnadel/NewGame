@@ -806,6 +806,9 @@ function keepStep(w: World, job: ValidationJob): number {
   return 0;
 }
 
+/** Work units charged for a rescue (gen/world.ts charges 8 for placing a chunk). */
+const RESCUE_COST = 8;
+
 /**
  * Advances a validation job by at most `budget` work units (one per lit computation; the DP is
  * cheap and runs in the same call). Returns the units used.
@@ -835,7 +838,9 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
       used++;
       continue;
     }
-    // 2) DP forward from dpFrom; on failure, insert a fallback and resume.
+    // 2) DP forward from dpFrom; on failure, insert a fallback and resume (a rescue that changed no
+    // row resumes the DP at once, so the budget is checked here too).
+    if (used >= budget) return used;
     let i = job.dpFrom;
     let resume = -1;
     for (; i <= job.pre + job.n; i++) {
@@ -848,6 +853,9 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
       }
       if (best < floor) {
         resume = onFailure(w, job, i, floor, best);
+        // A rescue (aiming a rock over the reachable angles, or a parked cloud) costs about a chunk
+        // placement: charged, so an idle slice holds one or two of them, not a chunk's worth.
+        used += RESCUE_COST;
         break;
       }
     }
