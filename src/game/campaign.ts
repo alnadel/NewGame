@@ -338,14 +338,18 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
     out.target = goalTarget(level);
     return out;
   }
+  // A finale's two Dares: either earns star 2, so once one is met the pill stays on it (it used to
+  // switch to the other, unmet one, as if that were still needed); before that, the first unmet one.
   let f = level.feats[0] as FeatSpec;
+  const met = dareMet(level, stats, seen);
   for (const d of level.feats) {
-    if (featLive(d.kind, stats, seen) < d.target) {
+    if (featLive(d.kind, stats, seen) >= d.target === met) {
       f = d;
       break;
     }
   }
-  out.value = featLive(f.kind, stats, seen);
+  // Clamped at the target ("2/1 s" read as overflow).
+  out.value = Math.min(featLive(f.kind, stats, seen), f.target);
   out.target = f.target;
   out.flakes = f.kind === 'flakes';
   out.glyph = f.kind === 'flakes' ? null : featGlyph(f.kind, level);
