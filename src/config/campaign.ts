@@ -453,6 +453,8 @@ export const DARE_OF: Readonly<Record<ConceptId, FeatKind>> = Object.freeze({
 
 /** The fallback Dares (core verbs), drawn from (seed, 'dare', id) when no concept's Dare can be played. */
 const FALLBACK_DARES: readonly FeatKind[] = Object.freeze(['blooms', 'swings', 'deep', 'snapSave'] as FeatKind[]);
+/** When no core verb fits (the first levels), the first of these the level offers. */
+const LAST_DARES: readonly FeatKind[] = Object.freeze(['flakes', 'clean', 'ride'] as FeatKind[]);
 
 /** True for the boss finales of chapters 5-20 (levels 50, 60, …, 200): they carry the Solar Flare. */
 export function isBossFinale(id: number): boolean {
@@ -499,7 +501,7 @@ export function levelBakeKey(seed: number, concepts: readonly ConceptId[], drain
 }
 
 /** Bump when the generator changes what a level offers (every bake entry goes stale). */
-export const BAKE_VERSION = 2;
+export const BAKE_VERSION = 3;
 
 const NO_FLARES: readonly LevelFlare[] = Object.freeze([]);
 const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
@@ -569,7 +571,10 @@ function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], ke
     case 'swings':
       return bake === null || bake.swings >= SWING_OFFER_PER * (sec > 30 ? 3 : 2);
     case 'ring':
-      return bake === null || bake.shadeRun >= RING_RUN_X3;
+      // Only where a verb pumps the ring past what plain shade reaches (its target is the first level
+      // plain shade does not reach): deep shade, blooms, glass or parries. Fix round 2: on the first
+      // levels (no pump yet) 'reach x4' was met by no bot, the Feat-seeking oracle included.
+      return (m.deep || m.buds || m.brittle || keptFlares > 0) && (bake === null || bake.shadeRun >= RING_RUN_X3);
     case 'ride': {
       // A ride the level offers with room to spare: one cloud for RIDE_OFFER_SEC, or RIDE_OFFER_CLOUDS clouds for ≥ 1 s.
       const t = foldTuning(concepts);
@@ -653,9 +658,13 @@ function assignFeats(id: number, seed: number, concepts: readonly ConceptId[], l
   const fits = (k: FeatKind): boolean => dareFits(k, id, concepts, keptFlares, bake, (lengthMinutes / 720) * dayLen);
   const spec = (k: FeatKind): FeatSpec => Object.freeze({ kind: k, target: dareTarget(k, lengthMinutes, dayLen, daylightTicks, flakes, keptFlares, bake) });
   const rng = rngFor(seed, 'dare', id);
+  // A core verb the level has taught (SWINGs from their own lesson on), else a last resort the level
+  // offers (fix round 2: L4 used to fall back to an unplayable 'swings'), else 'swings'.
+  const taught = (k: FeatKind): boolean => k !== 'swings' || id >= teachLevel('swing');
   const fallback = (not: FeatKind | null): FeatKind => {
-    const pool = FALLBACK_DARES.filter((k) => k !== not && fits(k));
-    return pool.length > 0 ? rng.pick(pool) : 'swings';
+    const pool = FALLBACK_DARES.filter((k) => k !== not && taught(k) && fits(k));
+    if (pool.length > 0) return rng.pick(pool);
+    return LAST_DARES.find((k) => k !== not && fits(k)) ?? 'swings';
   };
   let first: FeatKind | null = null;
   for (const c of concepts) {

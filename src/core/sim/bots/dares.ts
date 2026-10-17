@@ -23,7 +23,7 @@ const SWING_DEG = TUNING.swing.minDeg;
 const W = Object.freeze({
   bloom: 12, bloomReach: 90, bloomSlack: 10,
   deep: 8, deepReach: 60,
-  swing: 14, swingSlack: 20, swingGapTicks: 120, swingReach: 70,
+  swing: 14, swingSlack: 20, swingGapTicks: 90, swingReach: 70,
   snap: 15, snapCastSlack: 10,
   glass: 8, glassReach: 60,
   flake: 5, flakeReach: 45,

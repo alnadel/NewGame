@@ -66,12 +66,14 @@ describe('Dares (§2.6)', () => {
       // A boss finale dares a parry wherever a fixed angle parries one of its flares (the bake's stillFlares).
       if (isBossFinale(l.id) && (LEVEL_BAKE[l.id]?.stillFlares ?? 0) > 0) expect(l.feats.map((f) => f.kind), `level ${l.id}`).toContain('parry');
     }
-    // A teaching level's Dare is its concept's when the level offers it, else a core verb; the verb
-    // teaching levels dare their own verb.
+    // A teaching level's Dare is its concept's when the level offers it, else a core verb it has taught
+    // (SWINGs from L7), else a last resort it offers (flakes, clean, ride); the verb teaching levels
+    // dare their own verb. No level before the deep shade lesson dares the ring (fix round 2).
     for (const l of CAMPAIGN_LEVELS.slice(0, 40)) {
       const k = l.introduces ? DARE_OF[l.introduces] : undefined;
-      if (k && l.feats[0]) expect([k, 'blooms', 'swings', 'deep', 'snapSave'], `level ${l.id}`).toContain(l.feats[0].kind);
+      if (k && l.feats[0]) expect([k, 'blooms', ...(l.id >= 7 ? ['swings'] : []), 'deep', 'snapSave', 'flakes', 'clean', 'ride'], `level ${l.id}`).toContain(l.feats[0].kind);
     }
+    for (const l of CAMPAIGN_LEVELS.slice(0, 4)) expect(l.feats.map((f) => f.kind), `level ${l.id}`).not.toContain('ring');
     for (const id of [5, 7, 8, 13, 21, 36, 38]) {
       const l = levelDef(id) as LevelDef;
       expect(l.feats[0]?.kind, `level ${id}`).toBe(DARE_OF[l.introduces as keyof typeof DARE_OF]);

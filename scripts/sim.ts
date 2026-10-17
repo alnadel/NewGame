@@ -697,6 +697,10 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
     const p = rs.filter((o) => o.passed && o.featMet).length / Math.max(1, rs.length);
     const missed = rs.filter((o) => !(o.passed && o.featMet)).map((o) => o.id);
     line(true, p >= 0.85, 'the Feat-seeking oracle earns ★2 (goal and a Dare) on ≥ 85% of levels', `${(100 * p).toFixed(1)}%${missed.length ? ` (missed: ${missed.join(', ')})` : ''}`);
+    // Fix round 2: the first chapter's Dares are within reach (L1's 'reach x4' was met by no bot).
+    const early = rs.filter((o) => o.id <= 10);
+    const earlyMissed = early.filter((o) => !o.featMet).map((o) => o.id);
+    if (early.length) line(true, earlyMissed.length === 0, "the Feat-seeking oracle meets every Dare of levels 1-10", earlyMissed.length ? `missed: ${earlyMissed.join(', ')}` : `${early.length} of ${early.length}`);
   }
   gate(false, 'humanDial passes ≥ 75% of levels 1-40 (advisory)', 'humanDial', 40, 0.75);
   if (bots.includes('humanDial')) {
