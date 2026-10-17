@@ -5,11 +5,11 @@
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
 import { dayStartTick, dayStartY, dayTicks, elevation } from '../../src/core/clock.ts';
-import { clusterEligible, contestCluster, contestStats, glassQuota } from '../../src/core/gen/contest.ts';
-import { flareLift, liftOf, noonHeatAt, paramsAt, worldElevation } from '../../src/core/gen/plan.ts';
+import { clusterEligible, contestCluster, contestFlake, contestStats, glassQuota, meltRows, meltTicksOf } from '../../src/core/gen/contest.ts';
+import { flareLift, liftOf, noonHeatAt, paramsAt, worldElevation, worldYAtTick } from '../../src/core/gen/plan.ts';
 import { gatherScene, insertCaster, insertPickup } from '../../src/core/gen/store.ts';
 import { addCloud } from '../../src/core/gen/placer.ts';
-import { BINS, createMaskScene, shadeMask } from '../../src/core/intervals.ts';
+import { BINS, createMaskScene, glareMask, shadeMask } from '../../src/core/intervals.ts';
 import { cloudOffset } from '../../src/core/shadows.ts';
 import { updateGuide } from '../../src/core/sim/guide.ts';
 import { chillDeltaTable, deltaForSlot, keepRows, keepVerdict, slotDeltaAt, validatorDrain } from '../../src/core/gen/validator.ts';
@@ -28,6 +28,10 @@ import { step, syncTime } from '../../src/core/sim/step.ts';
 import { payTrick } from '../../src/core/sim/tricks.ts';
 import { NO_INPUT, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
+
+const scene = createMaskScene();
+const gm = new Uint8Array(BINS);
+const sm = new Uint8Array(BINS);
 
 const TAP: InputFrame = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, key: 0 };
 
@@ -393,13 +397,111 @@ describe('glass clusters (§2.3, T7)', () => {
           if (clusterEligible(w, job, p.y)) eligible++;
           if (!p.brittle) continue;
           glass++;
-          expect(contestCluster(w, job, first.x, first.y, p.x, p.y).contested, `seed ${seed} cluster ${p.cluster}`).toBe(true);
+          expect(contestCluster(w, job, first.x, first.y, p.x, p.y, p.cn).contested, `seed ${seed} cluster ${p.cluster}`).toBe(true);
         }
       });
       expect(w.glassMade).toBeLessThanOrEqual(Math.ceil(TUNING.brittle.quotaLater * w.glassEligible) + 1);
     }
     expect(glass).toBeGreaterThan(40);
     expect(eligible).toBeGreaterThan(glass);
+  }, 120_000);
+
+  it('every flake of every glass cluster is savable on its own (fix round 3: none skipped): its window lies in the job and a path that saves it ends marginChill above the floor (40 seeds × Days 1-4)', () => {
+    let flakes = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const w = createWorld(headlessConfig(seed));
+      const seen = new Set<number>();
+      generateWatching(w, dayStartY(5), () => {
+        const job = w.lastJob;
+        if (!job) return;
+        for (const p of w.pickups) {
+          if (!p.brittle || seen.has(p.id)) continue;
+          seen.add(p.id);
+          const c = contestFlake(w, job, p.x, p.y, TUNING.brittle.meltBudget, 1);
+          expect(c.eligible, `seed ${seed} flake ${p.id} (${p.ci + 1} of ${p.cn}): window not checkable`).toBe(true);
+          expect(c.cappedC1, `seed ${seed} flake ${p.id} (${p.ci + 1} of ${p.cn})`).toBeGreaterThanOrEqual(c.floor + TUNING.brittle.marginChill);
+          flakes++;
+        }
+      });
+    }
+    expect(flakes).toBeGreaterThan(120);
+  }, 120_000);
+
+  it('a flake lit exactly its budget melts in the sim, whatever order its glare and plain ticks came in (fix round 3)', () => {
+    // 0.8 s = 48 weighted lit ticks: this glare/plain order sums to 0.7999999999999999 in floating point.
+    const seq = [2, 1, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 1, 2, 1, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1];
+    expect(seq.reduce((a, b) => a + b, 0)).toBe(meltTicksOf(TUNING.brittle.meltBudget));
+    const s = started({ ...headlessConfig(1), lesson: true });
+    strip(s);
+    const y = s.nubs.y + 60;
+    let melt = 0;
+    for (const k of seq.slice(0, -1)) melt += k * (1 / 60);
+    insertPickup(s.world, { id: FLAKE_ID_BASE + 7000, kind: 'flake', x: trailX(s.world.trail, y), y, day: 1, melt, state: PICKUP_ALIVE, cluster: FLAKE_ID_BASE + 7000, ci: 0, cn: 1, brittle: true });
+    step(s, NO_INPUT);
+    // Its last plain lit tick reaches the budget: melted.
+    expect(s.world.pickups.find((q) => q.id === FLAKE_ID_BASE + 7000)?.state).toBe(2);
+    expect(s.events.some((e) => e.e === 'flakeMelt')).toBe(true);
+  });
+
+  it('guide.flake never offers an angle that lights the glass flake for exactly the ticks it has left (fix round 3)', () => {
+    const STEP = TUNING.validator.stepTicks;
+    for (const steps of [7, 6]) {
+      const s = started({ ...headlessConfig(1), lesson: true });
+      strip(s);
+      while ((s.tickAbs + 1) % TUNING.guide.everyTicks !== 0) step(s, NO_INPUT);
+      // The next tick T refreshes the guide; the flake's window then holds `steps` steps before Nubs
+      // is within reach, all lit in this open field: 6·steps weighted lit ticks. It has melted
+      // 48 − 6·steps − 1 ticks so far and melts one more on tick T: exactly 6·steps are left.
+      const T = s.tickAbs + 1;
+      const y = worldYAtTick(s.world, T + steps * STEP - 3) + TUNING.nubs.collectRadius;
+      let melt = 0;
+      for (let i = 0; i < meltTicksOf(TUNING.brittle.meltBudget) - 6 * steps - 1; i++) melt += 1 / 60;
+      insertPickup(s.world, { id: FLAKE_ID_BASE + 7100, kind: 'flake', x: trailX(s.world.trail, y), y, day: 1, melt, state: PICKUP_ALIVE, cluster: FLAKE_ID_BASE + 7100, ci: 0, cn: 1, brittle: true });
+      step(s, NO_INPUT);
+      expect(s.guide.tick).toBe(s.tick);
+      expect(s.guide.flake.every((v) => v === 0), `${steps} steps`).toBe(true);
+      // A step less of window (one step under its budget): every angle saves it.
+      const p = s.world.pickups.find((q) => q.id === FLAKE_ID_BASE + 7100) as Pickup;
+      expect(p.state).toBe(PICKUP_ALIVE);
+      p.state = 1;
+      const y1 = y - STEP * (s.params.v / 60);
+      insertPickup(s.world, { id: FLAKE_ID_BASE + 7101, kind: 'flake', x: trailX(s.world.trail, y1), y: y1, day: 1, melt: p.melt, state: PICKUP_ALIVE, cluster: FLAKE_ID_BASE + 7101, ci: 0, cn: 1, brittle: true });
+      for (let i = 0; i < STEP; i++) step(s, NO_INPUT);
+      expect(s.guide.flake.every((v) => v === 1), `${steps} steps, one less`).toBe(true);
+    }
+  });
+
+  it("the contest's melt rows weigh glare 2, as the sim melts it (fix round 3)", () => {
+    let found = 0;
+    for (let seed = 1; seed <= 40 && found < 3; seed++) {
+      const w = createWorld({ ...headlessConfig(seed), brittleShare: 1 });
+      generateWatching(w, dayStartY(4), () => {
+        const job = w.lastJob;
+        if (!job || found >= 3) return;
+        for (const p of w.pickups) {
+          if (p.kind !== 'flake' || p.day < 2) continue;
+          const c = contestFlake(w, job, p.x, p.y, TUNING.brittle.meltBudget, 1);
+          if (!c.eligible) continue;
+          const rows = new Uint8Array((c.w1 - c.w0 + 1) * BINS);
+          meltRows(w, job, p.x, p.y, c.w0, c.w1, rows);
+          for (let i = 0; i <= c.w1 - c.w0; i++) {
+            const sl = c.w0 + i;
+            gatherScene(w, scene, p.x, p.y, 1, job.sT[sl] as number, job.sEps[sl] as number, job.sCot[sl] as number, false);
+            if (!scene.glareOn || scene.nBalls === 0) continue;
+            glareMask(scene, p.x, p.y, gm);
+            shadeMask(scene, p.x, p.y, true, sm);
+            let any = false;
+            for (let b = 0; b < BINS; b++) {
+              const want = gm[b] === 1 ? 2 : sm[b] === 1 ? 0 : 1;
+              expect(rows[i * BINS + b], `seed ${seed} flake ${p.id} step ${i} bin ${b}`).toBe(want);
+              if (gm[b] === 1) any = true;
+            }
+            if (any) found++;
+          }
+        }
+      });
+    }
+    expect(found).toBeGreaterThanOrEqual(3);
   }, 120_000);
 
   it('glass quota: none in the tutorial, on profiles 0-1, on Quick Melt and Hardy days, or with the rule off; brittleShare forces it', () => {

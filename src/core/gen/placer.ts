@@ -864,14 +864,14 @@ function glassNext(w: World, pj: PickupJob): boolean {
       pj.shift++;
       continue;
     }
-    startContest(pj.run, trailX(w.trail, y0), y0, trailX(w.trail, y0 + span), y0 + span);
+    startContest(pj.run, trailX(w.trail, y0), y0, trailX(w.trail, y0 + span), y0 + span, pj.n);
     pj.contestOn = true;
     return true;
   }
   // The Glass Flakes lesson (its own level) must offer glass: without a contested shift, a cluster a
   // perfect player can save where it was drawn.
   if (pj.shift === GLASS_FALLBACK && pj.best === null && w.level?.introduces === 'brittle') {
-    startContest(pj.run, trailX(w.trail, pj.y), pj.y, trailX(w.trail, pj.y + span), pj.y + span, true);
+    startContest(pj.run, trailX(w.trail, pj.y), pj.y, trailX(w.trail, pj.y + span), pj.y + span, pj.n, true);
     pj.contestOn = true;
     return true;
   }

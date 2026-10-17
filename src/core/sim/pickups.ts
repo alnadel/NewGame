@@ -2,7 +2,7 @@
 // are lit while at most 1.6 s of walking ahead of Nubs (1.0 s budget, ×2 in glare, never refreezes).
 
 import { TUNING } from '../../config/tuning.ts';
-import { DT } from '../clock.ts';
+import { DT, TICK_HZ } from '../clock.ts';
 import { flareMeltMul } from './flares.ts';
 import { lowerBound } from '../gen/store.ts';
 import { PICKUP_ALIVE, PICKUP_MELTED, PICKUP_TAKEN, type Caster, type Cloud, type GazingBall, type Pickup } from '../objects.ts';
@@ -86,7 +86,10 @@ export function updatePickups(s: SimState, daylight: boolean): void {
     if (wgt === 0) continue;
     // Flakes melt × TUNING.flare.meltMul in a flare's rise and hold (§2.5).
     p.melt += wgt * DT * flareMeltMul(s);
-    if (p.melt >= meltBudgetOf(s, p)) {
+    // Compared in whole weighted lit ticks (p.melt is a sum of k/60 s): a flake lit exactly its
+    // budget melts whatever order its plain, glare and flare ticks came in (the contest and
+    // guide.flake count the same way: gen/contest.ts meltTicksOf).
+    if (Math.round(p.melt * TICK_HZ) >= Math.round(meltBudgetOf(s, p) * TICK_HZ)) {
       p.state = PICKUP_MELTED;
       if (p.kind === 'flake') st.flakesMelted++;
       // v1.6 ring: a melt breaks the pickup streak.
