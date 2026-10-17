@@ -232,52 +232,87 @@ docs/V1_6_PLAN.md §2.3, §2.5, §2.6 (CORE-2); the core API is src/core/README.
   from a fixed angle (≤ 4 lit hold ticks, counted tick by tick), so every kept flare, boss or lesson,
   is parried by holding any angle the dial's frost-rimmed arc names (its still arcs on L38: 19°, 18°
   and 22°).
-- **Dares.** One per concept (`DARE_OF`); a level takes the first of its concepts' Dares that its
-  world offers, else a seeded core verb it has taught (blooms, swings from L7, deep, snapSave), else
-  the first of flakes / clean / ride it offers (fix round 2: L1 and L4 dare 4 flakes; L1's "reach
-  x4", before any verb pumps the ring, and L4's unplayable "2 SWINGs" were met by no bot). `node scripts/sim.ts --bake`
-  writes what each level offers to `src/config/levelBake.gen.ts` (a vitest checks it is current; the
-  game reads only the resulting Dares and flares, `LEVEL_BAKE_RUN`) and the targets are sized from it: blooms 35% of the buds (1-4), swings 2 (3 over 30 s; needs 4
-  hand-offs on offer per SWING), deep 16% of the daylight (at least 1.5 s, at most a quarter of the
-  deep shade on offer; 12% was met by 90% of non-seeking reactive runs), snapSave 1 s (any level with
-  the snap: such a level starts with one ready and any snap's saved ticks count), parry 75% of the
-  kept flares (every kept flare is parried from a fixed angle since fix round 2; L190 has its parry
-  Dare again), brittle 60% of the glass, flakes 80% of the expected (at most 85% of those offered),
-  clean every passable ball, ride 1 (needs a 3.5 s ride or 4 clouds), gates 1 deep, flip 1, still
-  half the holdable windows, ring one level past what plain steady shade reaches on the level (85%
-  of its daylight in full shade; x3-x5), only where a verb pumps the ring (deep shade, buds, glass
-  or a kept flare).
+- **Dares need their verb (fix round 3).** Review r3 found most Dares met by players who never
+  sought them (reactive: flakes 71%, deep 73%, ride 63%, ring 63%, parry 65%) and some out of the
+  seekers' reach (ring 0% for both human models). The offers alone cannot tell, so `node
+  scripts/sim.ts --bake` now measures each level's Dare candidates with the bots (scripts/sim16/
+  dares.ts): to the finish line, the players who do not seek the candidate (the reactive bot, the
+  oracle playing the verb goal, humanDial) and those who do (the Feat-seeking oracle, humanFeat),
+  the human models on 10 training decision streams the campaign sim never plays (`SIZE_SALTS`).
+  The target sits just above the non-seekers (the reactive bot and the oracle under it, at most 2
+  of 10 humanDial players at it; deep and snap ticks clear by 12 ticks and 10%; more than the goal
+  where the goal counts the same thing), and a candidate needs its verb when the Feat-seeking oracle
+  and ≥ 7 of 10 humanFeat players reach it (8 for the minor kinds). The candidates in order: the
+  level's concepts' Dares (`DARE_OF`), then blooms / SWINGs (from L7) / snapSave in a seeded order,
+  then flakes and deep; the first that needs its verb is the Dare, else a core verb the Feat-seeking
+  oracle reaches, else flakes (on L1-L7 no verb is taught yet, so their flake Dares are plain). A
+  finale's second Dare only where it needs its verb too (either earns the star). Measured that way,
+  only blooms, SWINGs, the snap and some flake levels separate the seekers; deep, ride, clean,
+  gates, flip, parry and the glass come to good shade play (or to the oracle's own flare and glass
+  plans) by themselves on nearly every level, so their concepts dare a core verb; the ring Dare is
+  retired (on none of the 52 levels that offered it did it need its verb). The bake stores the
+  measures (`LevelBake.dares`, `dares2`) and campaign.ts `pickDare` / `sizeDare` re-derive the
+  Dares from them, so the game data is a fixed point of the file. humanFeat (bots/dares.ts) now has
+  a focus for every kind and turns to the Dare whose moment is now (a flare, its own snap, the flip,
+  a lock or gust).
+- **Teaching without walls (fix round 3).** humanDial failed the verb goals of L5, L6, L7, L10, L13,
+  L21 and L38 on its first try (5/30 on L6, 6/30 on L10, 0/30 on L38) and melted on its own world of
+  L36 every time. The bake now plays a teaching level's world variants (`levelSeed(id, v)`) until
+  one reads (`lessonReads`: humanDial passes on its first try on 80% of the training streams, the
+  oracle passes, the reactive bot finishes), confirmed on 20 fresh streams (a search over many
+  worlds with one set of streams finds worlds that suit them by luck: L7's first pick read 9 of 10
+  in training and 12 of 20 held out). L5, L6, L10, L13, L21, L22, L27, L30, L32, L36, L39 and L40
+  play a variant; L7 found none and keeps its own (60%); L38 keeps its own world: humanDial does not
+  read the flare telegraph, and the keep test makes the shade move, so a dial-follower parries by
+  luck on any world (the flare's parry arc covers 10-46% of the teal before it). The soft-fail stays
+  the net there.
 - **The Sunflowers lesson (L8)** turns its buds to faces inside the safe teal (fix round 2), so a
-  player following the dial grows one: humanDial passes it 3 of 3 tries (0 of 3 before).
-
+  player following the dial grows one.
 - **The Frost Bank ships off** (calibration, src/core/README.md §16.3), so a level plays the v1.5
   frost meter: it starts at half a meter (full on a level that dares a snap: L10 and every snapSave
   Dare, `startsWithSnap`), and shade, flakes, SWINGs and blooms fill it; a snap cashes the ring in on
   it (fix round 2: 0.1 of a meter per level above x1, the ring back to x1). The snapSave Dare and
-  L10's goal count every tick a snap alone shades Nubs.
+  L10's goal count every tick a snap alone shades Nubs, never during an eclipse (fix round 3: a
+  snap cast into L192/L199/L200's eclipse used to earn the Dare for free).
 
-`node scripts/sim.ts --campaign --bot all --tries 3` (v1.6 as shipped, after fix round 2; pass % and
-mean stars per level over all 200 levels; humanDial and humanFeat × 3 decision streams):
+`node scripts/sim.ts --campaign --bot all --tries 3` (fix round 3, bake v4; pass % and mean stars
+over all 200 levels; humanDial and humanFeat × 3 decision streams, none of them a training stream):
 
 | bot | passed | stars (1-40 / 41-200) | three stars | Dare met |
 |---|---|---|---|---|
-| oracle | 200/200 | 2.35 (2.40 / 2.33) | 85 | 50.5% |
-| reactive | 199/200 (100/100 on 1-100) | 2.38 (2.38 / 2.39) | 89 | 47.0% |
-| Feat-seeking oracle | 200/200 | 2.79 (2.80 / 2.79) | 160 | 91.5% |
-| humanDial | 65.5% of tries (81.7% on 1-40) | 1.00 (1.30 / 0.93) | 28 | 27.3% |
-| humanFeat | 70.5% of tries | 1.17 (1.34 / 1.13) | 28 | 39.2% |
+| oracle | 200/200 | 1.86 (2.02 / 1.82) | 3 | 2.0% |
+| reactive | 199/200 (100/100 on 1-100) | 1.95 (2.05 / 1.92) | 6 | 3.5% |
+| Feat-seeking oracle | 200/200 | 2.85 (3.00 / 2.82) | 171 | 100% |
+| humanDial | 65.0% of tries (92.5% on 1-40) | 0.81 (1.14 / 0.73) | 9 | 8.7% |
+| humanFeat | 74.3% of tries | 1.41 (1.73 / 1.32) | 38 | 58.0% |
 
-Hard gates (§2.6): oracle 200/200 with the verb goals and every boss finale, reactive 100% of 1-100
-(teaching verb goals scored as finish), the Feat-seeking oracle ★2 on 91.5% (≥ 85%; it misses 14,
-19, 24, 27, 29, 31, 66, 92, 103, 105, 109, 131, 145, 146, 148, 154, 187) and, a fix round 2 row,
-every Dare of levels 1-10 (10 of 10; it now tries a SWING 1.5 s after the last, meeting the swings
-Dare on 14 of 16 levels). Advisory: reactive three stars on 41-200 46.3% (≤ 50%; v1.5 74%);
-humanDial passes all of levels 1-10 with the soft-fail (83.3% of its tries) and 81.7% of 1-40 (v1.5
-88.3%; it still misses verb goals on L5, L6, L7, L10, L21, L36 and L38, where it would have to seek
-the verb), but earns 0.93 stars on 41-200 (target ≥ 0.95). Per Dare kind (non-seeking reactive /
-Feat-seeking oracle / humanFeat; advisory ≤ 35% / ≥ 85% / ≥ 50%): ring 63% / 63% / 0% (a snap now
-cashes the ring in, so a snap before x4 resets it), deep 73% / 82% / 47%, snapSave 22% / 100% /
-43%, parry 65% / 100% / 43%, swings 13% / 88% / 48%, ride 63% / 100% / 56%, flakes 71% / 96% /
-50%. Most Dares still come to non-seekers on more than 35% of their levels; resizing them (the
-review: deep only while the deep band is narrower than the teal, ride 3 clouds, flakes in streaks,
-ring with tricks) is open.
+Before fix round 3: oracle 2.35 stars and Dare met 50.5%, reactive 2.38 / 47.0%, humanDial 1.00 /
+27.3% and 81.7% on 1-40, Feat-seeking oracle 2.79 / 91.5%, humanFeat 1.17 / 39.2%. A Dare is now
+what separates the player who goes for it: the players who do not seek one earn ★2 on 2-9% of
+levels, those who do on 58-100%.
+
+Per Dare kind (each Dare counted on its own; `--tries 10`, so the human models play 10 streams;
+the advisory bars are ≤ 35% for the bots that do not seek it, ≥ 85% for the Feat-seeking oracle,
+≥ 50% for humanFeat):
+
+| Dare | levels | reactive | oracle | Feat-seeking oracle | humanFeat | humanDial |
+|---|---|---|---|---|---|---|
+| blooms | 122 | 1% | 0% | 100% | 56% | 4% |
+| snapSave | 32 | 0% | 0% | 100% | 67% | 4% |
+| swings | 28 | 0% | 0% | 100% | 54% | 16% |
+| flakes | 18 | 33% | 22% | 100% | 56% | 34% |
+| still | 1 | 0% | 0% | 100% | 50% | 0% |
+
+The reactive bot and the oracle are deterministic and the bake sizes each Dare above them, so
+their columns hold by construction; humanFeat and humanDial play streams the bake never saw, so
+theirs are held out (with `--tries 3`: 58 / 64 / 52 / 59 / 0%, the one `still` level being 3
+tries; over 20 streams that level is met by 12 of 20). Flakes' non-seeker share is the first levels
+(L1-L5, L7: every player collects all their flakes) and four late levels where no Dare needs its
+verb.
+
+humanDial's first try on levels 1-40 (20 held-out streams; v1.5 88.3%, before fix round 3 81.7%):
+see the per-level table in V1_6_PLAN.md §6.1. Hard gates (§2.6): oracle 200/200 with the verb goals,
+reactive 100% of 1-100 (teaching verb goals scored as finish), the Feat-seeking oracle ★2 on 100%
+and every Dare of levels 1-10. Advisory: reactive three stars on 41-200 2.5% (≤ 50%); humanDial
+passes all of levels 1-10 with the soft-fail; humanDial's mean stars on 41-200 0.73 miss the 0.95
+bar, by design of the Dares (it no longer earns ★2 without seeking it; humanFeat earns 1.32 there).

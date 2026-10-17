@@ -781,6 +781,54 @@ All runs use profile 3 unless noted.
 | Career: humanDial reaching standard within 20 runs | 88% | ≥ 85% | advisory | `sim --career 40` |
 | Ruleset 15 | — | identical to v1.5 output and goldens | hard | `sim --rules 15 --check --seeds 40`, vitest |
 
+### 6.1 Gate changes (fix round 3, Journey)
+
+Each change below is stricter than, or measures more exactly, the row it replaces; none relaxes a bar.
+
+- **humanDial on levels 1-40**: was "passes ≥ 75% of levels 1-40", now "passes ≥ 85% of levels
+  1-40 **on its first try**" (`sim --campaign`; every humanDial try there is another player's first,
+  the soft-fail relaxes nothing), with a per-level line. Stricter bar, same measure; v1.5 had 88.3%.
+- **Dares per kind** (§2.6 advisory): the row counted a level under every kind it dares and called
+  it met when *either* of a finale's two Dares was met, so a finale's second kind was credited with
+  the first's success (L190's parry Dare read "met" whenever its snap Dare was). Each Dare is now
+  counted on its own, with humanDial (who does not seek it either, on streams the bake never sized
+  from) shown alongside the bars. Same bars (≤ 35% / ≥ 85% / ≥ 50%), exact count.
+- **Not re-specified**: "humanDial mean stars on 41-200 ≥ 0.95" now misses at 0.73 (was 0.93):
+  making every Dare need its verb (review r3, J1) takes ★2 away from players who do not seek it
+  (humanDial meets a Dare on 8.7% of tries, was 27.3%); the player who seeks it earns 1.32. The row
+  stays as it is and reads MISS; whether the star curve should be re-specified around humanFeat is
+  the integrator's call.
+
+How the Dares are sized changed (§2.6 "Sizing and assignment"; src/core/README.md §16.2, CAMPAIGN_PLAN
+§8): from the bots' measured play on each level instead of the offers. The reactive bot and the
+oracle are deterministic and the bake sizes each Dare just above them, so their per-kind shares are
+low by construction (blooms 1% / 0%, snapSave 0% / 0%, swings 0% / 0%, flakes 33% / 22%, the one
+`still` level 0% / 0%); the held-out checks are humanFeat (≥ 50%: 56%, 67%, 54%, 56%, 50% over 10
+streams the bake never played) and humanDial (4%, 4%, 16%, 34%, 0%).
+
+humanDial's first try on the levels with a goal (20 held-out streams; the other levels of 1-40 lose
+only L17 4, L18 1, L22 4, L25 1 and L39 5 runs to melting): levels 1-40 **93.6%** of 800 (v1.5 88.3%,
+before this round 81.7%).
+
+| Level | Goal | World | First try | Before |
+|---|---|---|---|---|
+| L2 Flake Trail | 4 flakes | own | 20/20 | – |
+| L5 Double Shade | 1.5 s deep | variant 1 | 20/20 | 21/30 |
+| L6 Glass Garden | 1 clean ball | variant 7 | 19/20 | 5/30 |
+| L7 Hand-off | 1 SWING | own (no variant read) | 13/20 | 19/30 |
+| L8 Sun Garden | 1 bloom | own | 19/20 | – |
+| L10 Frost Cloud | 1 s of snap | variant 29 | 18/20 | 6/30 |
+| L13 The Gate | the arch shaded | variant 2 | 15/20 | 2/6 * |
+| L21 Sugar Glass | 1 glass cluster | variant 8 | 20/20 | 17/30 |
+| L27 Snow Pile | 7 flakes | variant 2 | 20/20 | – |
+| L36 Moon Shadow | shaded ≤ 1 s after the flip | variant 1 | 20/20 | 0/6 *, all melted |
+| L38 Sunspots | parry 2 of 3 | own | 0/20 | 0/30 |
+
+"Before": the review's 30 humanDial players at HEAD 38735c9; * this round's own 6-stream baseline.
+L38 is the one lesson the bake cannot open: humanDial does not read the flare telegraph, and the keep
+test requires the shade to move (its parry arcs cover 10-46% of the teal before each flare), so a
+dial-follower parries by luck on any world; the soft-fail stays its net.
+
 ---
 
 ## 7. What the skeptics changed (merge log)
