@@ -77,7 +77,8 @@ out every screen, control, sheet, toast and dialog inside it.
 - **Toasts** (`banners.ts showToast`): a card under the HUD band, clear of the pause column, never
   over Nubs or his dial; they wait while a card or stamp holds the top. A mission goes ahead of a
   waiting tip (and a tip shown 1.5 s steps aside), a new tip replaces a waiting one, the run's end
-  drops the queue.
+  drops the queue. An urgent toast (the first flare's tip) keeps its place once queued: a later tip
+  waits behind it, a mission goes after it, and on screen it never steps aside.
 - **Pause**: `UiCallbacks.runStatus()` (and the test hook's `runStatus()`) gives the Pause card the
   run's title, goal (with its count or progress), the time reached and, on a level, the star rules
   with their state so far.

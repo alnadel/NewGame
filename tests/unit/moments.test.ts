@@ -7,7 +7,7 @@ import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } fro
 import { createMoments, LEVEL_TIPS, MECH_TIPS } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
-import { createBanners, endToasts, showToast, updateBanners } from '../../src/render/banners.ts';
+import { createBanners, endToast, endToasts, showToast, updateBanners } from '../../src/render/banners.ts';
 
 const stats = (flakes: number, snow: number, litTotal: number, minChill: number) => ({ flakes, snow, litTotal, minChill });
 
@@ -86,6 +86,27 @@ describe('toast queue', () => {
     expect(b.toasts.map((x) => x.text)).toEqual(['one', 'now']);
     run(b, 0.4);
     expect(b.toasts[0]!.text).toBe('now');
+  });
+  it('an urgent tip waiting behind a leaving toast is never replaced, overtaken or cut short (merge, fix round 3)', () => {
+    // e2e: the first flare's tip queued behind a leaving tip, then the deep-shade tip arrived in the
+    // same 0.3 s and replaced it, so a new player never read it.
+    const b = createBanners();
+    showToast(b, 'tip', 'TIP', 'bud', 'drag', 4);
+    updateBanners(b, 0.1, false);
+    showToast(b, 'tip', 'TIP', 'soon', 'flare', 30, true);
+    showToast(b, 'tip', 'TIP', 'deep', 'deep', 4);
+    showToast(b, 'mission', 'MISSION ✓ 1/3', 'm1', null, 2);
+    expect(b.toasts.map((x) => x.text)).toEqual(['bud', 'soon', 'm1', 'deep']);
+    run(b, 0.6);
+    expect(b.toasts[0]!.text).toBe('soon');
+    // On screen past TIP_YIELD_S, a mission does not make it step aside: it holds until it is ended.
+    run(b, 2);
+    showToast(b, 'mission', 'MISSION ✓ 2/3', 'm2', null, 2);
+    run(b, 1);
+    expect(b.toasts[0]!.text).toBe('soon');
+    endToast(b, 'soon');
+    run(b, 0.4);
+    expect(b.toasts.map((x) => x.text)).toEqual(['m1', 'm2', 'deep']);
   });
   it('the run ending drops what waits', () => {
     const b = createBanners();

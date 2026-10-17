@@ -108,6 +108,8 @@ export interface Toast {
   /** Glyph in the icon disc (drawGlyph id); null draws a check mark. */
   glyph: string | null;
   hold: number;
+  /** Shown with `urgent` (showToast): no ordinary toast replaces it, goes ahead of it or cuts it short. */
+  urgent: boolean;
 }
 
 export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost';
@@ -261,10 +263,12 @@ const TIP_YIELD_S = 1.5;
  * Queues an in-run toast (see Banners.toasts). A mission goes ahead of waiting tips (and a tip that
  * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one, so tips never pile up.
  * An `urgent` toast (a cue about to happen, the first Heat Flare) goes next at once: whatever waits
- * is dropped and the toast on screen starts to leave now.
+ * is dropped and the toast on screen starts to leave now. Once queued it keeps its place: a later
+ * tip waits behind it instead of replacing it, a mission goes after it, and on screen it does not
+ * step aside (it leaves when its hold runs out or endToast ends it).
  */
 export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number, urgent = false): void {
-  const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold };
+  const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold, urgent };
   const q = b.toasts;
   const first = b.toastT >= 0 ? 1 : 0;
   if (urgent) {
@@ -274,16 +278,17 @@ export function showToast(b: Banners, kind: ToastKind, kicker: string, text: str
     return;
   }
   if (kind === 'tip') {
-    for (let i = q.length - 1; i >= first; i--) if ((q[i] as Toast).kind === 'tip') q.splice(i, 1);
+    // A waiting urgent tip is kept (the new one waits behind it); other waiting tips are replaced.
+    for (let i = q.length - 1; i >= first; i--) if ((q[i] as Toast).kind === 'tip' && !(q[i] as Toast).urgent) q.splice(i, 1);
     if (q.length < TOAST_QUEUE) q.push(t);
     return;
   }
   let at = first;
-  while (at < q.length && (q[at] as Toast).kind === 'mission') at++;
+  while (at < q.length && ((q[at] as Toast).kind === 'mission' || (q[at] as Toast).urgent)) at++;
   if (q.length >= TOAST_QUEUE) q.pop();
   q.splice(at, 0, t);
   const shown = q[0] as Toast;
-  if (first === 1 && shown.kind === 'tip' && b.toastT > TOAST_IN + TIP_YIELD_S) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
+  if (first === 1 && shown.kind === 'tip' && !shown.urgent && b.toastT > TOAST_IN + TIP_YIELD_S) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
 }
 
 /** Ends the toast saying `text`: on screen it starts to leave now; still waiting, it is dropped. */
