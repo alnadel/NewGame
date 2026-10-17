@@ -9,13 +9,14 @@
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ } from '../clock.ts';
 import { tanD } from '../dmath.ts';
-import { liftElevation, worldElevation, worldYAtDayTick, worldYAtTick } from '../gen/plan.ts';
+import { liftElevation, liftingFlare, worldElevation, worldYAtDayTick, worldYAtTick } from '../gen/plan.ts';
 import { gatherScene, lowerBound } from '../gen/store.ts';
 import { eclipseAt } from '../gen/world.ts';
 import { BINS, createMaskScene, glareMask, litMask, shadeMask } from '../intervals.ts';
 import { PICKUP_ALIVE, SNAP_ID_BASE, type Flare, type Pickup } from '../objects.ts';
 import { trailX } from '../trail.ts';
 import { updateBudGuide, updateLandGuide } from './mechanics.ts';
+import { meltBudgetOf } from './pickups.ts';
 import type { SimState } from './types.ts';
 
 const scene = createMaskScene();
@@ -128,17 +129,73 @@ export function glassInWindow(s: SimState): Pickup | null {
   return null;
 }
 
-/** guide.flake (§2.3): the bins that shade the nearest alive glass flake in its melt window, glare bins removed; else all 0. */
+/** guide.flake's steps: the validator's grid, as many as a flake's melt window holds. */
+const FLAKE_STEP = TUNING.validator.stepTicks;
+const FLAKE_MAX_STEPS = Math.ceil((P.meltAheadSec * TICK_HZ) / FLAKE_STEP) + 2;
+/** The glass flake's lit weight (0 shaded, 1 lit, 2 glare) per bin at each step of its window ahead, and the flare melt rate per step. */
+const flakeRows = new Uint8Array(FLAKE_MAX_STEPS * BINS);
+const flakeMul = new Float64Array(FLAKE_MAX_STEPS);
+/** guide.flake's cache: the flake (−1: none), the tick of its first row, its rows, and the world and bloom count they were made with. */
+let flakeFor = -1;
+let flakeAt = 0;
+let flakeN = 0;
+let flakeBlooms = -1;
+let flakeWorld: object | null = null;
+
+/**
+ * guide.flake (§2.3): for the nearest alive glass flake in its melt window, the bins where the sun,
+ * held from now until Nubs reaches it, leaves it lit for less than its remaining melt budget (glare
+ * ×2, a flare's rise and hold ×meltMul, as updatePickups melts it): the angles that save it, not
+ * just the ones that shade it this instant (fix round 2: a one-step point mask flickered and its
+ * detours often lost the flake anyway). Else all 0. The flake's rows are computed once (one point
+ * mask a step of its window) and again only when a sunflower blooms.
+ */
 function flakeGuide(s: SimState): void {
   const g = s.guide;
   g.flake.fill(0);
   if (s.eclipseOn) return;
   const p = glassInWindow(s);
-  if (!p) return;
-  gatherScene(s.world, pointScene, p.x, p.y, 1, s.tAbs, s.eps, s.cot);
-  shadeMask(pointScene, p.x, p.y, false, g.flake);
-  glareMask(pointScene, p.x, p.y, tmp);
-  for (let b = 0; b < BINS; b++) if (tmp[b] === 1) g.flake[b] = 0;
+  if (!p) {
+    flakeFor = -1;
+    return;
+  }
+  const w = s.world;
+  const blooms = s.stats.blooms ?? 0;
+  if (p.id !== flakeFor || blooms !== flakeBlooms || w !== flakeWorld) {
+    flakeFor = p.id;
+    flakeBlooms = blooms;
+    flakeWorld = w;
+    flakeAt = s.tickAbs;
+    flakeN = 0;
+    for (let k = 0; k < FLAKE_MAX_STEPS; k++) {
+      const t = flakeAt + k * FLAKE_STEP;
+      if (p.y - worldYAtTick(w, t) <= COLLECT) break;
+      const row = flakeRows.subarray(k * BINS, (k + 1) * BINS);
+      const eps = worldElevation(w, t);
+      if (eps <= 0) {
+        row.fill(0);
+      } else {
+        gatherScene(w, pointScene, p.x, p.y, 1, t / TICK_HZ, eps, 1 / tanD(eps));
+        shadeMask(pointScene, p.x, p.y, false, tmp);
+        for (let b = 0; b < BINS; b++) row[b] = tmp[b] === 1 ? 0 : 1;
+        if (pointScene.glareOn && pointScene.nBalls > 0) {
+          glareMask(pointScene, p.x, p.y, tmp);
+          for (let b = 0; b < BINS; b++) if (tmp[b] === 1) row[b] = 2;
+        }
+      }
+      const f = liftingFlare(w, t);
+      flakeMul[k] = f !== null && t >= f.riseTick && t < f.fallTick ? TUNING.flare.meltMul : 1;
+      flakeN = k + 1;
+    }
+  }
+  const k0 = Math.max(0, Math.round((s.tickAbs - flakeAt) / FLAKE_STEP));
+  const left = meltBudgetOf(s, p) - p.melt;
+  const dt = FLAKE_STEP / TICK_HZ;
+  for (let b = 0; b < BINS; b++) {
+    let lit = 0;
+    for (let k = k0; k < flakeN && lit < left; k++) lit += (flakeRows[k * BINS + b] as number) * (flakeMul[k] as number) * dt;
+    g.flake[b] = lit < left ? 1 : 0;
+  }
 }
 
 const FL = TUNING.flare;

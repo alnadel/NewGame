@@ -7,7 +7,11 @@ import { TUNING } from '../../src/config/tuning.ts';
 import { dayStartTick, dayStartY, dayTicks, elevation } from '../../src/core/clock.ts';
 import { clusterEligible, contestCluster, contestStats, glassQuota } from '../../src/core/gen/contest.ts';
 import { flareLift, liftOf, noonHeatAt, paramsAt, worldElevation } from '../../src/core/gen/plan.ts';
-import { insertCaster, insertPickup } from '../../src/core/gen/store.ts';
+import { gatherScene, insertCaster, insertPickup } from '../../src/core/gen/store.ts';
+import { addCloud } from '../../src/core/gen/placer.ts';
+import { BINS, createMaskScene, shadeMask } from '../../src/core/intervals.ts';
+import { cloudOffset } from '../../src/core/shadows.ts';
+import { updateGuide } from '../../src/core/sim/guide.ts';
 import { chillDeltaTable, deltaForSlot, keepRows, keepVerdict, slotDeltaAt, validatorDrain } from '../../src/core/gen/validator.ts';
 import { createWorld, ensureGenerated, generateSome, type World } from '../../src/core/gen/world.ts';
 import { makeCaster, makePrism } from '../../src/core/gen/catalog.ts';
@@ -451,6 +455,32 @@ describe('glass clusters (§2.3, T7)', () => {
       }
       expect(s.clusterTaken).toBe(-1);
     }
+  });
+});
+
+describe('guide.flake (fix round 2)', () => {
+  it('names only the angles that save the glass flake: a cloud over it for a moment shades it now but saves nothing; lasting shade does', () => {
+    const s = started({ ...headlessConfig(1), brittleShare: 1, lesson: true });
+    strip(s);
+    const v = s.params.v;
+    const fy = s.nubs.y + 1.5 * v;
+    const fx = trailX(s.world.trail, fy);
+    insertPickup(s.world, { id: FLAKE_ID_BASE + 7000, kind: 'flake', x: fx, y: fy, day: 1, melt: 0, state: PICKUP_ALIVE, cluster: FLAKE_ID_BASE + 7000, ci: 0, cn: 1, brittle: true });
+    // A cloud whose shadow covers the flake with the sun in the north (θ 90°), racing east: gone in ~0.3 s.
+    const R = cloudOffset(TUNING.shadow.cloudZ, s.cot);
+    addCloud(s.world, 'overtaker', s.tAbs - 0.5, 5, fx - 400 * 0.5, fy + R, 400, 0, 60);
+    updateGuide(s);
+    const scene = createMaskScene();
+    const now = new Uint8Array(BINS);
+    gatherScene(s.world, scene, fx, fy, 1, s.tAbs, s.eps, s.cot);
+    shadeMask(scene, fx, fy, false, now);
+    expect(now[90]).toBe(1);
+    expect(s.guide.flake.includes(1)).toBe(false);
+    // Lasting shade over the flake: the angles it covers save it.
+    shadeAll(s, fy - 60, fy + 60);
+    s.stats.blooms = (s.stats.blooms ?? 0) + 1; // the cache refreshes when shade is added (a bloom)
+    updateGuide(s);
+    expect(s.guide.flake.filter((x) => x === 1).length).toBeGreaterThan(30);
   });
 });
 
