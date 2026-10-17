@@ -170,7 +170,7 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   sunset: concept('sunset', 'Sunset', 'Sunset Run', 'sun', 'From 3 PM into dusk: the shadows grow as you go.', 'sunset', undefined, { startMinute: 540, lengthMinutes: 180, cost: -16 }),
   moonlit: concept('moonlit', 'Moon Sun', 'Moonlit', 'sun', 'A night walk under a moon sun. Low light, gentle drain.', 'moon', { epsNoon: 30, drainMul: 0.7 }, { cost: 5 }),
   marathon: concept('marathon', 'Marathon', 'The Long Walk', 'sun', 'A day and a half. Chill refills through the night.', 'marathon', undefined, { lengthMinutes: 1080, cost: 9 }),
-  brittle: concept('brittle', 'Glass Flakes', 'Sugar Glass', 'goal', 'Glass flakes melt fast. The white glint saves them; out on a white arc it costs you sun.', 'glass', { clusterGap: 0.6 }, { cost: 3 }),
+  brittle: concept('brittle', 'Glass Flakes', 'Sugar Glass', 'goal', 'Glass flakes melt fast. The white glint saves them; out on a dotted arc it costs you sun.', 'glass', { clusterGap: 0.6 }, { cost: 3 }),
   flare: concept('flare', 'Solar Flare', 'Sunspots', 'sky', 'Before the orange rim runs out, move the sun to the frost-rimmed teal.', 'flare', undefined, { cost: 4 }),
   boss: concept('boss', 'Heat Dome', 'Into the Dome', 'sun', 'The sun stands almost overhead. Shade is scarce.', 'boss', { epsNoon: 80 }, { startMinute: 180, lengthMinutes: 360, cost: 12 }),
 } satisfies Record<ConceptId, Concept>);

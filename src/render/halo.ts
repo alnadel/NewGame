@@ -15,12 +15,14 @@
 // few frost sparkles circling it.
 // v1.6 layers (docs/V1_6_PLAN.md §4, drawn only when their mask has something): a darker teal band
 // inside the lasting teal where shade is deep (runs ≥ 3° wide); for a glass flake in its melt window
-// a glint on the teal where a safe angle saves it, else a thin frost-white arc outside the ring (the
-// detour off the teal, at most two runs near the pointer) with the glint running along it
-// (glassDecision); during a snap a frost band
-// says "covered", the teal on it is the shade Nubs will land in when it ends, and the dashed arcs
-// hide; during a Heat Flare's warning an orange rim counts down to the rise and frost-rimmed teal
-// marks the shade that holds through it (the glass arc hides).
+// a twinkling glint on the glass rim (R + GLASS_R, outside the sun pointer's rays) where a safe angle
+// saves it, else a beaded ice-blue arc on that rim (the detour off the teal, at most two runs near
+// the pointer; the drag arrow dims beside it) with the glint running along it (glassDecision);
+// during a snap a frost band says "covered", the teal on it is the shade Nubs will land in when it
+// ends, and the dashed arcs hide; during a Heat Flare's warning twelve white-hot ticks on an orange
+// edge (the sun's own flare cue) count down to the rise round the outside, the ring's hot glow
+// rests, and frost-rimmed teal marks the shade that holds through it, a run under 8° wearing a
+// target dot (the glass layer hides).
 
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
@@ -41,7 +43,11 @@ const ICE = hex('#DDF4FF');
 const DEEP_TEAL = hex('#0B5F5A');
 const ICE_LINE = hex('#7FC4F0');
 const FLARE = hex('#FF6A3D');
+const WHITE_HOT = hex('#FFF4D6');
+const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
+/** Round-capped dots 5 px apart (the glass arc's beads). */
+const BEADS = [0.1, 5];
 const NO_DASH: number[] = [];
 
 export interface HaloState {
@@ -253,10 +259,13 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   if (heat > 0.01) {
     // In the sun the ring burns: a hot rim with a glow that beats like a heart (steady under
     // reduced motion), so "Nubs is melting" reads at a glance, before any number does.
+    // During a flare's warning the glow rests (the countdown outside is the one hot thing to read).
     const k = inp.reducedMotion ? 0.6 : Math.max(0, Math.sin(h.beat * TAU)) ** 3;
-    g.lineWidth = 12 + 6 * k;
-    g.strokeStyle = cssa(HOT, (0.14 + 0.2 * k) * heat);
-    g.stroke();
+    if (inp.mech?.flarePhase !== 1) {
+      g.lineWidth = 12 + 6 * k;
+      g.strokeStyle = cssa(HOT, (0.14 + 0.2 * k) * heat);
+      g.stroke();
+    }
     g.lineWidth = 2.5;
     g.strokeStyle = cssa(HOT, 0.9 * heat);
     g.stroke();
@@ -422,7 +431,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
 
-  if (inp.sunUp && inp.mech) drawV16(g, inp, inp.mech, A, h);
+  const glassArc = inp.sunUp && inp.mech ? drawV16(g, inp, inp.mech, A, h) : false;
 
   if (inp.sunUp && !inp.blind) drawHint(g, inp, A);
 
@@ -492,12 +501,14 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.stroke();
     }
     if (h.arrowA > 0.01 && h.arrow !== 0) {
-      // A curved arrow trailing the sun pointer, pointing the way it turns.
+      // A curved arrow trailing the sun pointer, pointing the way it turns (dimmed beside a glass
+      // detour arc, 6 px further out, so the two never read as one white arc).
       const dir = h.arrow;
       const rr = R + 18;
       const end = inp.theta;
       const start = end - dir * 38;
-      g.strokeStyle = cssa(0xffffff, 0.9 * h.arrowA);
+      const aa = h.arrowA * (glassArc ? 0.45 : 1);
+      g.strokeStyle = cssa(0xffffff, 0.9 * aa);
       g.lineWidth = 3;
       g.lineCap = 'round';
       g.beginPath();
@@ -513,7 +524,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       const tanY = Math.cos(-tip) * -dir;
       const nX = Math.cos(-tip);
       const nY = Math.sin(-tip);
-      g.fillStyle = cssa(0xffffff, 0.95 * h.arrowA);
+      g.fillStyle = cssa(0xffffff, 0.95 * aa);
       g.beginPath();
       g.moveTo(tx + tanX * 7, ty + tanY * 7);
       g.lineTo(tx - tanX * 3 + nX * 5, ty - tanY * 3 + nY * 5);
@@ -558,8 +569,12 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 }
 
-/** The glass arc's rim (px outside R, clear of the bud glow at R + 11) and the narrowest run it draws (°). */
-const GLASS_R = 21;
+/**
+ * The glass rim (px outside R): clear of the bud glow at R + 11, 6 px outside the drag arrow at
+ * R + 18 and outside the sun pointer's rays (R + 10.5), so a glint at the pointer's angle still
+ * shows; and the narrowest run it draws (°).
+ */
+const GLASS_R = 24;
 const GLASS_MIN_DEG = 4;
 /** Runs of the glass decision closer than this (°) merge into one arc. */
 const GLASS_MERGE_DEG = 8;
@@ -568,7 +583,7 @@ const GLASS_MAX_SHARE = 0.35;
 /** A second detour arc is drawn only within this of the sun pointer (°). */
 const GLASS_SECOND_DEG = 90;
 
-/** What the glass layer draws (glassDecision): 0 nothing, 1 detour arcs (the angles that save the glass flake but leave the safe teal), 2 a glint on the teal (the safe angles already save it). */
+/** What the glass layer draws (glassDecision): 0 nothing, 1 detour arcs (the angles that save the glass flake but leave the safe teal), 2 a glint by the teal (the safe angles already save it). */
 export interface GlassDraw {
   mode: 0 | 1 | 2;
   /** Detour arcs as [b0, b1] (°, b1 > b0, b1 may pass 360), at most two, the nearest the pointer first. */
@@ -680,13 +695,17 @@ export function glassDecision(flake: Uint8Array, now: Uint8Array, theta: number,
 
 const glassDraw = createGlassDraw();
 
+/** Flare parry runs narrower than this (°) wear a target dot (a 4° run is an 11 px pill on a phone). */
+const FLARE_DOT_DEG = 8;
+
 /**
  * The v1.6 rims outside the ring (see the header): a flare's countdown and its shade (they take the
- * glass arc's place), else the glass arc and its glint.
+ * glass layer's place), else the glass arc and its glint. True when a glass detour arc was drawn.
  */
-function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: number, h: HaloState): void {
+function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: number, h: HaloState): boolean {
   const { cx, cy, R } = inp;
   const f = Math.max(0.7, A) * inp.fade;
+  let arc = false;
   g.lineCap = 'round';
   const ph = m.flarePhase;
   if (ph === 1) {
@@ -702,55 +721,104 @@ function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: nu
       g.lineWidth = 3.5;
       g.strokeStyle = cssa(TEAL, f);
       g.stroke();
+      // A narrow run is a target, not a pill: a teal dot in a white disc with a soft teal halo.
+      for (let i = 0; i < n; i++) {
+        const b0 = runBuf[2 * i] as number;
+        const b1 = runBuf[2 * i + 1] as number;
+        if (b1 - b0 >= FLARE_DOT_DEG) continue;
+        const a = -((b0 + b1) / 2) * DEG;
+        const x = cx + Math.cos(a) * (R + 17);
+        const y = cy + Math.sin(a) * (R + 17);
+        g.fillStyle = cssa(TEAL, 0.3 * f);
+        g.beginPath();
+        g.arc(x, y, 9, 0, TAU);
+        g.fill();
+        g.fillStyle = cssa(0xffffff, 0.95 * f);
+        g.beginPath();
+        g.arc(x, y, 5.5, 0, TAU);
+        g.fill();
+        g.fillStyle = cssa(TEAL, f);
+        g.beginPath();
+        g.arc(x, y, 3, 0, TAU);
+        g.fill();
+      }
     }
+    // The countdown: the sun cue's twelve white-hot ticks on an orange edge, going out one by one
+    // from the end of the clockwise sweep, over a faint ink track; not the hot ring's solid orange.
+    const rr = R + 25;
     g.lineWidth = 2;
-    g.strokeStyle = cssa(FLARE, 0.2 * f);
+    g.strokeStyle = cssa(INK, 0.16 * f);
     g.beginPath();
-    g.arc(cx, cy, R + 25, 0, TAU);
+    g.arc(cx, cy, rr, 0, TAU);
     g.stroke();
-    g.lineWidth = 3.5;
-    g.strokeStyle = cssa(FLARE, 0.95 * f);
+    const lit = m.flareLeft * 12;
     g.beginPath();
-    g.arc(cx, cy, R + 25, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.005, m.flareLeft));
+    for (let i = 0; i < lit; i++) {
+      const a0 = -Math.PI / 2 + (i * TAU) / 12 + 0.09;
+      const a1 = -Math.PI / 2 + ((Math.min(lit, i + 1) * TAU) / 12) - 0.09;
+      if (a1 <= a0) break;
+      g.moveTo(cx + Math.cos(a0) * rr, cy + Math.sin(a0) * rr);
+      g.arc(cx, cy, rr, a0, a1);
+    }
+    g.lineWidth = 6.5;
+    g.strokeStyle = cssa(FLARE, 0.95 * f);
+    g.stroke();
+    g.lineWidth = 3;
+    g.strokeStyle = cssa(WHITE_HOT, f);
     g.stroke();
   } else if (m.glass && !inp.blind) {
-    // The decision, not the mask (glassDecision): a thin frost-white detour arc on its own rim
-    // (R + GLASS_R, clear of the gold bud glow) with a glint running along it, or, when the teal
-    // already saves the flake, just a glint on the teal.
+    // The decision, not the mask (glassDecision): a beaded ice-blue detour arc on the glass rim with
+    // a glint running along it, or, when the teal already saves the flake, a glint on the rim just
+    // outside the teal that does it (never under the sun pointer's disc).
     const gd = glassDecision(m.glass, inp.now, inp.theta, glassDraw);
     const u = inp.reducedMotion ? 0.5 : (h.deepSpin * 3) % 1;
-    let ga = 0;
-    let gr = R;
+    const gr = R + GLASS_R;
+    let ga = gd.glint;
     if (gd.mode === 1) {
+      arc = true;
       g.beginPath();
-      for (let i = 0; i < gd.n; i++) arcPath(g, cx, cy, R + GLASS_R, (gd.arcs[2 * i] as number) + 0.5, (gd.arcs[2 * i + 1] as number) - 0.5);
+      for (let i = 0; i < gd.n; i++) arcPath(g, cx, cy, gr, (gd.arcs[2 * i] as number) + 0.5, (gd.arcs[2 * i + 1] as number) - 0.5);
+      g.setLineDash(BEADS);
       g.lineWidth = 6.5;
-      g.strokeStyle = cssa(INK, 0.35 * f);
+      g.strokeStyle = cssa(INK, 0.45 * f);
       g.stroke();
-      g.lineWidth = 3;
-      g.strokeStyle = cssa(0xffffff, f);
+      g.lineWidth = 3.5;
+      g.strokeStyle = cssa(GLASS_ICE, f);
       g.stroke();
+      g.setLineDash(NO_DASH);
       // The glint runs along the nearest arc (resting at its middle under reduced motion).
       const b0 = gd.arcs[0] as number;
       ga = b0 + ((gd.arcs[1] as number) - b0) * u;
-      gr = R + GLASS_R;
-    } else if (gd.mode === 2) {
-      ga = gd.glint;
     }
     if (gd.mode !== 0) {
+      // A four-point sparkle over a dark-rimmed disc in an ice glow; it twinkles (still under reduced motion).
       const a = -ga * DEG;
       const x = cx + Math.cos(a) * gr;
       const y = cy + Math.sin(a) * gr;
-      g.fillStyle = cssa(0xffffff, f);
-      g.strokeStyle = cssa(INK, 0.4 * f);
-      g.lineWidth = 1;
+      const k = inp.reducedMotion ? 1 : 0.9 + 0.2 * Math.sin(inp.time * 9);
+      g.fillStyle = cssa(GLASS_ICE, 0.55 * f);
       g.beginPath();
-      g.arc(x, y, gd.mode === 2 ? 4.5 : 3.5, 0, TAU);
-      g.stroke();
+      g.arc(x, y, 8.5 * k, 0, TAU);
       g.fill();
+      g.fillStyle = cssa(0xffffff, f);
+      g.strokeStyle = cssa(INK, 0.45 * f);
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.arc(x, y, 4 * k, 0, TAU);
+      g.fill();
+      g.stroke();
+      g.strokeStyle = cssa(0xffffff, f);
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(x - 11 * k, y);
+      g.lineTo(x + 11 * k, y);
+      g.moveTo(x, y - 11 * k);
+      g.lineTo(x, y + 11 * k);
+      g.stroke();
     }
   }
   g.lineCap = 'butt';
+  return arc;
 }
 
 /** The little sun on the ring at θ (rays, disc, an inward notch). `ghost` draws a pale copy. */
