@@ -1,23 +1,26 @@
 // v1.6 Dares and the soft-fail (docs/V1_6_PLAN.md §2.6; CORE-2): what each Dare counts, the `feat`
 // and `featMet` events, star 2, the relaxed goal after two misses, and the Dare table's shape.
 import { describe, expect, it } from 'vitest';
-import { LEVEL_BAKE } from '../../src/config/levelBake.gen.ts';
 import {
   CAMPAIGN_LEVELS,
   DARE_OF,
+  dareFloor,
   featMet,
   featValue,
   goalValue,
-  isBossFinale,
   levelDef,
   relaxedGoalFor,
   SOFT_FAIL_MISSES,
   softFailMisses,
+  sizeDare,
   starsFor,
+  type DareMeasure,
   type FeatKind,
   type LevelDef,
   type LevelStats,
 } from '../../src/config/campaign.ts';
+import { TUNING } from '../../src/config/tuning.ts';
+import { createWorld } from '../../src/core/gen/world.ts';
 import { campaignConfig, levelOutcome } from '../../src/core/level.ts';
 import { createBot } from '../../src/core/sim/bots.ts';
 import { DARE_TERMS } from '../../src/core/sim/bots/dares.ts';
@@ -58,39 +61,54 @@ describe('Dares (§2.6)', () => {
     expect(goalValue('gate', { ...base, gateShaded: 1 } as LevelStats)).toBe(1);
   });
 
-  it('every level carries one Dare (finales two, boss finales a parry); star 2 is a Dare met', () => {
+  it('every level carries one Dare (a finale up to two); star 2 is a Dare met', () => {
     for (const l of CAMPAIGN_LEVELS) {
       expect(l.feats.length, `level ${l.id}`).toBeGreaterThanOrEqual(1);
-      expect(l.feats.length, `level ${l.id}`).toBeLessThanOrEqual(2);
+      expect(l.feats.length, `level ${l.id}`).toBeLessThanOrEqual(l.id % 10 === 0 ? 2 : 1);
       for (const f of l.feats) expect(f.target, `level ${l.id} ${f.kind}`).toBeGreaterThanOrEqual(1);
-      // A boss finale dares a parry wherever a fixed angle parries one of its flares (the bake's stillFlares).
-      if (isBossFinale(l.id) && (LEVEL_BAKE[l.id]?.stillFlares ?? 0) > 0) expect(l.feats.map((f) => f.kind), `level ${l.id}`).toContain('parry');
+      if (l.feats.length === 2) expect(l.feats[0]?.kind).not.toBe(l.feats[1]?.kind);
     }
-    // A teaching level's Dare is its concept's when the level offers it, else a core verb it has taught
-    // (SWINGs from L7), else a last resort it offers (flakes, clean, ride); the verb teaching levels
-    // dare their own verb. No level before the deep shade lesson dares the ring (fix round 2).
+    // A teaching level dares a verb its concepts, the core verbs it has taught (SWINGs from L7) or the
+    // shade verbs offer (fix round 3: the first that needs its verb there). No level before the deep
+    // shade lesson dares the ring (fix round 2).
     for (const l of CAMPAIGN_LEVELS.slice(0, 40)) {
       const k = l.introduces ? DARE_OF[l.introduces] : undefined;
-      if (k && l.feats[0]) expect([k, 'blooms', ...(l.id >= 7 ? ['swings'] : []), 'deep', 'snapSave', 'flakes', 'clean', 'ride'], `level ${l.id}`).toContain(l.feats[0].kind);
+      if (k && l.feats[0]) expect([k, 'blooms', ...(l.id >= 7 ? ['swings'] : []), 'snapSave', 'flakes', 'deep'], `level ${l.id}`).toContain(l.feats[0].kind);
     }
     for (const l of CAMPAIGN_LEVELS.slice(0, 4)) expect(l.feats.map((f) => f.kind), `level ${l.id}`).not.toContain('ring');
-    for (const id of [5, 7, 8, 13, 21, 36, 38]) {
-      const l = levelDef(id) as LevelDef;
-      expect(l.feats[0]?.kind, `level ${id}`).toBe(DARE_OF[l.introduces as keyof typeof DARE_OF]);
-    }
+    // A Dare that asks for what the level's goal counts asks for more than the goal.
+    for (const l of CAMPAIGN_LEVELS) for (const f of l.feats) expect(f.target, `level ${l.id}`).toBeGreaterThanOrEqual(dareFloor(l, f.kind));
     const l = levelDef(8) as LevelDef;
     const f = l.feats[0] as { kind: FeatKind; target: number };
     const goal = goalValue(l.goal.kind, base) >= l.goal.target ? {} : { blooms: l.goal.target };
-    const met = { ...base, ...goal, [statOf(f.kind)]: f.target, minChill: 0 } as LevelStats;
+    const met = { ...base, ...goal, [statOf(f.kind)]: Math.max(f.target, (goal as { blooms?: number }).blooms ?? 0), minChill: 0 } as LevelStats;
     expect(featMet(l, met)).toBe(true);
     expect(starsFor(l, met)).toBe(2);
     expect(featMet(l, { ...met, [statOf(f.kind)]: f.target - 1 } as LevelStats)).toBe(featValue(f.kind, { ...met, [statOf(f.kind)]: f.target - 1 } as LevelStats) >= f.target);
   });
 
+  it('sizeDare: just above the players who do not seek a Dare, where its seekers reach it (fix round 3)', () => {
+    // [reactive, oracle, humanDial × 10] / [Feat-seeking oracle, humanFeat × 10]
+    const m = (not: number[], seek: number[]): DareMeasure => ({ kind: 'blooms', not, seek });
+    const quiet = [1, 2, 0, 0, 1, 2, 3, 0, 0, 1, 0, 1];
+    // Above the reactive bot, the oracle and all but DARE_NOT_MAX (2) of the humanDial players: 3.
+    expect(sizeDare('blooms', m(quiet, [5, 3, 4, 3, 5, 3, 3, 4, 2, 2, 2]), 1)).toEqual({ target: 3, tier: 3, met: 7 });
+    // Too few humanFeat players reach it: tier 2 (the same target).
+    expect(sizeDare('blooms', m(quiet, [5, 3, 1, 3, 1, 1, 3, 2, 2, 2, 2]), 1)).toEqual({ target: 3, tier: 2, met: 3 });
+    // The Feat-seeking oracle short of it: no verb needed here, so what the seekers reach (tier 1).
+    expect(sizeDare('blooms', m([4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]), 1)).toMatchObject({ target: 4, tier: 1 });
+    // Ticks: clear by 12 ticks and 10%, in whole tenths of a second, at least the floor.
+    const ticks: DareMeasure = { kind: 'snapSave', not: [0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seek: [170, 150, 150, 150, 150, 150, 150, 150, 0, 0, 0] };
+    expect(sizeDare('snapSave', ticks, 60)).toEqual({ target: 114, tier: 3, met: 7 });
+    // A melted run (−1) never meets it.
+    expect(sizeDare('blooms', m(quiet, [5, -1, -1, -1, -1, 3, 3, 4, 3, 3, 3]), 1).met).toBe(6);
+  });
   it('feat events: a live count when the Dare value moves (tick counters every 6 ticks) and featMet once at the target', () => {
-    const id = CAMPAIGN_LEVELS.find((l) => l.feats[0]?.kind === 'deep')?.id as number;
-    expect(id).toBeGreaterThan(0);
-    const s = createRun(campaignConfig(id));
+    // A level with a deep Dare (no level dares deep since fix round 3's sizing, so one is made up).
+    const lv: LevelDef = Object.freeze({ ...(levelDef(12) as LevelDef), feats: Object.freeze([{ kind: 'deep' as FeatKind, target: 90 }]) });
+    const cfg = campaignConfig(12);
+    const world = createWorld(cfg, lv);
+    const s = createRun(cfg, { cfg, world, targetY: world.startY + TUNING.world.hardAhead });
     const f = (s.level as LevelDef).feats[0] as { kind: FeatKind; target: number };
     const seen: SimEvent[] = [];
     const tickWith = (v: number): void => {
@@ -112,6 +130,23 @@ describe('Dares (§2.6)', () => {
     expect(met).toEqual([{ e: 'featMet', kind: 'deep' }]);
     expect(seen).toContainEqual({ e: 'feat', kind: 'deep', value: f.target, target: f.target });
   });
+
+  it('a snap cast into an eclipse saves nothing: its ticks are not snap-saved (the eclipse already shades every angle)', () => {
+    const id = CAMPAIGN_LEVELS.find((l) => l.concepts.includes('eclipse') && l.id > 10)?.id as number;
+    const s = createRun({ ...campaignConfig(id), startFrost: 1 });
+    const bot = createBot('reactive', 0, false);
+    const ecl = s.world.eclipseTick;
+    let inEclipse = 0;
+    while (s.phase !== 'dead' && s.phase !== 'won' && s.tickAbs < ecl + 6 * 60) {
+      const f = { ...bot.next(s) };
+      if ((s.stats.snaps ?? 0) === 0 && s.tickAbs + 1 >= ecl && s.ready === 0 && s.phase === 'day') f.snap = true;
+      const before = s.stats.snapSavedTicks ?? 0;
+      step(s, f);
+      if (s.eclipseOn) inEclipse += (s.stats.snapSavedTicks ?? 0) - before;
+    }
+    expect(s.stats.snaps).toBe(1);
+    expect(inEclipse).toBe(0);
+  }, 30_000);
 
   it('a played level reports its Dare events in step order (a count event for every Dare value change of a count Dare)', () => {
     const id = CAMPAIGN_LEVELS.find((l) => l.feats[0]?.kind === 'flakes' || l.feats[0]?.kind === 'clean')?.id ?? 2;

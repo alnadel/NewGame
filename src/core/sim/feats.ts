@@ -37,10 +37,14 @@ export function snapshotFeats(s: SimState): void {
   for (let i = 0; i < lv.feats.length && i < 2; i++) before[i] = featValue((lv.feats[i] as FeatSpec).kind, s.stats);
 }
 
-/** True when the Cold Snap's cloud is the only source of shade over Nubs' center sample this tick. */
+/**
+ * True when the Cold Snap's cloud is the only source of shade over Nubs' center sample this tick.
+ * Never during an eclipse: it shades every angle already (computeCoverage clears the shader), so a
+ * snap cast into it saves nothing (fix round 3: L192/L199/L200's snapSave Dare was free there).
+ */
 function snapAlone(s: SimState): boolean {
   const nb = s.nubs;
-  if (s.snapTicks <= 0 || nb.shaderId >= 0 || nb.w[0] !== 0) return false;
+  if (s.snapTicks <= 0 || s.eclipseOn || nb.shaderId >= 0 || nb.w[0] !== 0) return false;
   const x = nb.x;
   const y = nb.y;
   let snap = false;

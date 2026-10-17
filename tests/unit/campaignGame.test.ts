@@ -45,13 +45,14 @@ describe('level table (core)', () => {
   });
 
   it('awards stars for the pass, the Dare and the lowest Chill', () => {
-    // v1.6 (docs/V1_6_PLAN.md §2.6): star 2 is the level's Dare (First Shade: 4 flakes; no verb pumps
-    // the ring there yet, so its 'reach x4' was out of every bot's reach: fix round 2).
+    // v1.6 (docs/V1_6_PLAN.md §2.6): star 2 is the level's Dare (First Shade: flakes, sized by the bake;
+    // no verb is taught before it, fix round 3).
     const l = levelDef(1)!;
-    expect(l.feats).toEqual([{ kind: 'flakes', target: 4 }]);
-    expect(starsFor(l, { flakes: 3, snow: 0, minChill: 0, maxMult: 5 })).toBe(1);
-    expect(starsFor(l, { flakes: 4, snow: 0, minChill: 0 })).toBe(2);
-    expect(starsFor(l, { flakes: 4, snow: 0, minChill: l.stars.minChill })).toBe(3);
+    const d = l.feats[0]!;
+    expect(d.kind).toBe('flakes');
+    expect(starsFor(l, { flakes: d.target - 1, snow: 0, minChill: 0, maxMult: 5 })).toBe(1);
+    expect(starsFor(l, { flakes: d.target, snow: 0, minChill: 0 })).toBe(2);
+    expect(starsFor(l, { flakes: d.target, snow: 0, minChill: l.stars.minChill })).toBe(3);
     // A goal level short of its goal earns nothing.
     const f = levelDef(2)!;
     expect(starsFor(f, { flakes: f.goal.target - 1, snow: 0, minChill: 100 })).toBe(0);
@@ -113,7 +114,7 @@ describe('the words', () => {
     expect(goalLine(flakes, { flakes: 5, snow: 12 }, false)).toBe(`Not enough flakes: 5/${ft}`);
     expect(goalLine(swing, { flakes: 5, snow: st + 4.7 }, true).startsWith(`Scored ${st + 4}/${st} Snow`)).toBe(true);
     // A pass short of three stars names the next star: the Dare first (v1.6; here a reach ×4 Dare on a finish level), then the cool run.
-    expect(finish.feats).toEqual([{ kind: 'flakes', target: 4 }]);
+    expect(finish.feats[0]?.kind).toBe('flakes');
     const ringy = { ...finish, feats: [{ kind: 'ring' as const, target: 4 }] };
     expect(goalLine(ringy, { flakes: 0, snow: 0, litTotal: 0, minChill: 100, maxMult: 1 }, true)).toBe('Reached the finish · Next ★: Reach ×4 (1/4)');
     expect(goalLine(ringy, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 5, minChill: 100, maxMult: 4 }, true)).toMatch(/^Reached the finish · Next ★: under \d+ s in the sun \(\d+ s\)$/);
@@ -128,9 +129,9 @@ describe('the words', () => {
   });
   it('HUD goal pill: flakes/target, a verb goal, the Dare, or plain Snow', () => {
     expect(hudGoal(levelDef(2)!, { flakes: 3, snow: 7 })).toMatchObject({ value: 3, target: levelDef(2)!.goal.target, flakes: true, glyph: null });
-    // v1.6: L7's goal is 1 SWING; a finish level counts its Dare (L1: 4 flakes; a reach ×4 Dare its level).
+    // v1.6: L7's goal is 1 SWING; a finish level counts its Dare (L1: flakes; a reach ×4 Dare its level).
     expect(hudGoal(levelDef(7)!, { flakes: 3, snow: 7.9 })).toMatchObject({ value: 0, target: levelDef(7)!.goal.target, flakes: false, glyph: 'swing' });
-    expect(hudGoal(levelDef(1)!, { flakes: 3, snow: 7, maxMult: 2 })).toMatchObject({ value: 3, target: 4 });
+    expect(hudGoal(levelDef(1)!, { flakes: 3, snow: 7, maxMult: 2 })).toMatchObject({ value: 3, target: levelDef(1)!.feats[0]!.target });
     expect(hudGoal({ ...levelDef(1)!, feats: [{ kind: 'ring', target: 4 }] }, { flakes: 3, snow: 7, maxMult: 2 })).toMatchObject({ value: 2, target: 4, flakes: false, glyph: 'ring' });
     expect(hudGoal({ ...levelDef(1)!, feats: [] }, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });
     expect(hudGoal(null, { flakes: 3, snow: 7 })).toMatchObject({ value: 7, target: -1, flakes: false });

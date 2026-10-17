@@ -730,41 +730,59 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
 - **Dares (§2.6).** `sim/feats.ts` keeps the integer counters (`deepTicks`, `snapSavedTicks`,
   `earnedSnapSavedTicks` (a snap beyond the level's starting charges, alone over the center; a
   record only: the snapSave Dare counts every snap-alone tick, as its goal does, because a level
-  that dares a snap starts with one ready),
+  that dares a snap starts with one ready; never during an eclipse, which shades every angle
+  already: fix round 3, L192/L199/L200's snapSave was free there),
   `cloudsRidden`, `gateShaded`, `gateDeep`, `flipTicks`, `lockWindows/Held`, `gustWindows/Held`)
   and emits `feat {kind, value, target}` when a Dare's value moves (deep and snapSave every 6
   ticks) and `featMet {kind}` once. config/campaign.ts: `featValue`, `featMet`, `goalValue`,
   `goalMet(…, relaxed)`, `starsFor(…, relaxed)` (★1 goal, ★2 a Dare, ★3 the cool run), `DARE_OF`
-  (one Dare per concept), verb goals on the teaching levels (L5 deep 90 ticks, L6 clean balls − 1,
-  L7 1 SWING, L8 1 bloom, L10 60 snap ticks, L13 the arch shaded, L21 1 glass cluster, L36 shaded ≤
-  60 ticks after the flip, L38 parry 2); 'snow' stays in `GoalKind` only for GAME's compile.
-  **Soft-fail**: `SOFT_FAIL_MISSES` 2, one on levels 1-10 (`softFailMisses(level)`),
-  `relaxedGoalFor(level, misses)`, `RunConfig.relaxedGoal`
+  (each concept's own Dare, its first candidate), verb goals on the teaching levels (L5 deep 90
+  ticks, L6 clean balls − 1, L7 1 SWING, L8 1 bloom, L10 60 snap ticks, L13 the arch shaded, L21 1
+  glass cluster, L36 shaded ≤ 60 ticks after the flip, L38 parry 2); 'snow' stays in `GoalKind`
+  only for GAME's compile. **Soft-fail**: `SOFT_FAIL_MISSES` 2, one on levels 1-10
+  (`softFailMisses(level)`), `relaxedGoalFor(level, misses)`, `RunConfig.relaxedGoal`
   (read by `levelOutcome`: the goal scores as 'finish'; GAME keeps the miss count in the save).
-- **Bake** (`node scripts/sim.ts --bake` → `src/config/levelBake.gen.ts`; tests/unit/levelBake.test.ts
-  checks it is current). The game reads only `LEVEL_BAKE_RUN` (one short string: each level's Dares,
-  kept flares and bake-sized goal target, decoded by campaign.ts `bakeRun`); `LEVEL_BAKE` (tooling
-  only, so the bundler drops it, keyed by `levelBakeKey` incl. `BAKE_VERSION`) holds per level the
-  kept flares and what it offers: buds, balls with a glare-free line passed before the line,
-  glass clusters, lock/gust windows and the holdable ones, plain flakes, deep-shade ticks, the
-  longest one-cloud ride and the clouds ridable ≥ 1 s, SWING hand-offs (lit gaps of 42-60° between
-  two sources, one per 2 s), the longest fully shaded turn-limited stretch. A concept's Dare is
-  assigned only where it fits the offer (else the next concept's, else a seeded core verb) and is
-  sized from it (deep 16% of the level's daylight and ≤ offer/4, at least 90 ticks; flakes 80% of
-  min(expected, 85% offered); ring the first level that plain steady shade (85% of the level's
-  daylight in full shade) does not reach, x3-x5, and only where a verb pumps the ring (deep shade,
-  buds, glass or a kept flare: fix round 2, L1's "reach x4" was met by no bot); snapSave wherever
-  the snap is on; parry where a kept flare is parried from a fixed angle (`stillFlares`, every kept
-  flare since fix round 2); still half the holdable windows; swings 4 hand-offs per SWING asked).
-  The core-verb fallback offers SWINGs only from their lesson (L7) on and, when none fits, the
-  first of flakes / clean / ride the level offers (L1 and L4 dare 4 flakes). The bake keeps a
-  level's flares only at their data positions, each kept in its own job and all of them together
-  (teaching levels try 0.1 s shifts and need every flare parried from a fixed angle,
-  `stillParryable`; boss levels try 0.5 s shifts within ±6 s, then fill each of `BOSS_PHASES`);
-  `BAKE_VERSION` 3.
-  `bakeRunEntry(level, bake)` turns the offers into the run entry. The world never depends on the
-  Dares (a level's glass share reads its concepts), so the bake is a fixed point. Boss finales (50,
-  60, …, 200) carry `flare` (HP = kept flares) and a parry Dare (all 16 since fix round 2). On the
+- **Bake** (`node scripts/sim.ts --bake [--level N,…]` → `src/config/levelBake.gen.ts`;
+  tests/unit/levelBake.test.ts checks it is current; ~10 minutes on 3 workers). The game reads only
+  `LEVEL_BAKE_RUN` (one short string: each level's Dares, kept flares, bake-sized goal target and a
+  teaching level's world variant, decoded by campaign.ts `bakeRun`); `LEVEL_BAKE` (tooling only, so
+  the bundler drops it, keyed by `levelBakeKey` incl. `BAKE_VERSION` 4) holds per level the kept
+  flares, what it offers (buds, balls with a glare-free line passed before the line, glass
+  clusters, lock/gust windows and the holdable ones, plain flakes, deep-shade ticks, the longest
+  one-cloud ride and the clouds ridable ≥ 1 s, SWING hand-offs, the longest fully shaded
+  turn-limited stretch: `dareFits` reads them to prefilter the candidates), its world `variant` and
+  its Dare candidates as the bots measured them (`dares`, `dares2`). Fix round 3 (scripts/sim16/
+  dares.ts, bake.ts; review r3 "Dares need their verb", "teaching levels fail first tries"):
+  - **Dares are sized from bots, not offers.** For each candidate (`dareCandidates`: the level's
+    concepts' Dares, then blooms / SWINGs / snapSave in a seeded order, then flakes and deep; SWINGs
+    from L7; the ring Dare is retired: on none of the 52 levels that offered it did it need its
+    verb) the bake plays, to the finish line, the players who do not seek it (reactive, the oracle
+    playing the verb goal, humanDial) and those who do (the Feat-seeking oracle, humanFeat), the
+    human models on 10 training streams (`SIZE_SALTS` 101-110) that the campaign sim never plays.
+    `sizeDare` puts the target just above the non-seekers (the reactive bot and the oracle under it,
+    at most 2 of the 10 humanDial players at it; ticks clear by 12 and 10%, in whole tenths of a
+    second; more than the goal when the goal counts the same thing, `dareFloor`) and grades it:
+    tier 3 when the Feat-seeking oracle and ≥ 7 of 10 humanFeat players reach it (8 for the minor
+    kinds), tier 2 when only the oracle does, tier 1 when no target needs the verb (the seekers'
+    own level). `pickDare` takes the first tier-3 candidate, else blooms / snapSave / SWINGs at tier
+    2, else flakes, else the best fit; a finale's second Dare only at tier 3 (either earns the star).
+    The bake measures candidates one by one until the pick is settled, so `bakeRunEntry` re-derives
+    the Dares from the file. A level that dares a snap starts with one ready, so snapSave (and a
+    finale's second Dare after it) is measured that way.
+  - **Teaching without walls.** A teaching level whose own world walls its lesson plays the first
+    world variant (`levelSeed(id, v)` = hashString(`journey-${id}-${v}`)) on which `lessonReads`:
+    humanDial passes on its first try on 80% of the 10 training streams (`LESSON_SHARE`), the oracle
+    passes and the reactive bot finishes; confirmed on 20 fresh streams (`CONFIRM_SALTS` 201-220,
+    80% again), since a search over many worlds with one set of streams finds worlds that suit
+    those streams by luck. 14 lessons
+    play a variant; L38 (the flare lesson) keeps its own world: humanDial does not read the flare
+    telegraph and the keep test makes the shade move, so no world makes its parry a dial-follower's.
+  The bake keeps a level's flares only at their data positions, each kept in its own job and all of
+  them together (teaching levels try 0.1 s shifts and need every flare parried from a fixed angle,
+  `stillParryable`; boss levels try 0.5 s shifts within ±6 s, then fill each of `BOSS_PHASES`).
+  The world never depends on the Dares (a level's glass share reads its concepts), so the bake is a
+  fixed point. Boss finales (50, 60, …, 200) carry `flare` (HP = kept flares); a parry Dare only
+  where it needs its verb (the oracle's parry plan parries most flares by itself). On the
   Sunflowers lesson (L8) the placer turns each bud to the face whose ±8° are safe on the most steps
   while it is in reach (`tealFace`, from the finished job's rows), so following the dial grows it.
 - **Hash**: `hashState` reads the flare state (`flareIdx/Id/Phase/Lit/Ticks`, kept flares within
@@ -778,7 +796,14 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   the game never imports it) the oracle plays the level's unmet verb goal and `BotOptions.feats` (the
   Feat-seeking oracle) adds each unmet Dare's term (pulls toward bud, deep, glass, cloud-ride, gate-deep,
   flip and window-hold bins, a committed SWING aim over a lit gap, glare lookahead, and a charged
-  snap cast for snapSave); `humanFeat` aims at its first unmet Dare in a seeded half of its decisions.
+  snap cast for snapSave). `humanFeat` focuses on an unmet Dare in a seeded half of its decisions
+  (fix round 3: every kind has a focus): the Dare whose moment is now (a flare's warning and hold,
+  its own snap, the eclipse's last seconds, a lock or gust ahead), else its first; it aims at the
+  gold, the deep band, the glass arc, the flare's telegraphed angle (held through the hold), a
+  SWING's turn, the shade over the next alive flake, ≥ 14° clear of a ball's glare, under a cloud,
+  the shade the flip lands in, a shade that holds through the window, or lasting (deep) shade; it
+  casts a ready snap in the sun for a snapSave Dare (`dareHumanSnap`, bots.ts's one hook line) and
+  holds still under it.
 
 ### 16.3 Calibration (docs/V1_6_PLAN.md §11 Steps 2-3, §6)
 
@@ -949,3 +974,14 @@ chase − plain and the two Bank rows:
 - **Cost (W4).** Generation 2.18 → 2.32-2.50 ms a chunk (40 seeds × 8 days, Node, serial, a loaded
   machine; gate ≤ 3.5); idle slices (`bench-step.ts --gen`, against HEAD 38735c9) p50 0.15 ms, p99 1.14
   ms (0.93), frames over 2 ms 0.34 a minute (0.32).
+
+**Fix round 3, Journey** (review r3: "many Dares are met without the verb", "teaching levels fail
+first tries"; §16.2 Bake, docs/CAMPAIGN_PLAN.md §8, docs/V1_6_PLAN.md §6.1). `sim --campaign --bot
+all --tries 3`: oracle 200/200, reactive 100% of 1-100, the Feat-seeking oracle ★2 on 100% (it was
+91.5%); per Dare kind (`--tries 10`) the bots that do not seek it meet it on 0-33% of its levels,
+humanFeat on 50-67% (blooms 122 levels, snapSave 32, SWINGs 28, flakes 18, still 1); humanDial's
+first try on 1-40 is 93.6% over 20 held-out streams (81.7% before; L38, the flare lesson, stays a
+wall for a dial-follower). A snap cast into an eclipse no longer counts as saving (L192/L199/L200's
+free snapSave), and the finale Dare pill keeps the met Dare. The bake (`BAKE_VERSION` 4) plays bots,
+~10 minutes on 3 workers; a change to the generator or the bots makes it stale (the bake vitest
+re-derives a sample of levels and re-measures one Dare, so it notices).

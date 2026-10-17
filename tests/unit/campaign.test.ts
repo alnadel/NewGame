@@ -13,8 +13,10 @@ import {
   isBossFinale,
   LEVEL_COUNT,
   levelDef,
+  levelSeed,
   mechanicsOf,
   starsFor,
+  startsWithSnap,
   TEACH_LEVELS,
   teachLevel,
   type ConceptId,
@@ -108,14 +110,17 @@ describe('the level table', () => {
     CAMPAIGN_LEVELS.forEach((l, i) => {
       expect(l.id).toBe(i + 1);
       expect(l.chapter).toBe(Math.ceil(l.id / 10));
-      expect(l.seed).toBe(hashString(`journey-${l.id}`));
+      // A teaching level may play a world variant of its seed (fix round 3, the bake's lessonReads).
+      expect(l.seed).toBe(levelSeed(l.id, LEVEL_BAKE[l.id]?.variant ?? 0));
+      if (l.id > 40) expect(l.seed).toBe(hashString(`journey-${l.id}`));
       expect(l.name.length).toBeGreaterThan(2);
       expect(l.concepts.length).toBeGreaterThanOrEqual(1);
       // v1.6: a boss finale (50, 60, …, 200) carries the Solar Flare on top of its three.
       expect(l.concepts.length).toBeLessThanOrEqual(isBossFinale(l.id) ? 4 : 3);
       expect(l.concepts.includes('flare')).toBe(isBossFinale(l.id) || l.introduces === 'flare');
-      // v1.6 Dares: one, two on finales, each with a positive target.
-      expect(l.feats.length).toBe(l.id % 10 === 0 ? 2 : 1);
+      // v1.6 Dares: one, up to two on finales, each with a positive target.
+      expect(l.feats.length).toBeGreaterThanOrEqual(1);
+      expect(l.feats.length).toBeLessThanOrEqual(l.id % 10 === 0 ? 2 : 1);
       for (const f of l.feats) expect(f.target).toBeGreaterThan(0);
       expect(new Set(l.concepts).size).toBe(l.concepts.length);
       expect(l.lengthMinutes).toBeGreaterThan(0);
@@ -190,7 +195,11 @@ describe('the level table', () => {
     expect(w8.buds.filter((b) => b.y > w8.startY && b.y < w8.finishY).length).toBeGreaterThanOrEqual(2);
     expect(createRun(campaignConfig(10)).nubs.frost).toBe(1);
     expect(createRun(campaignConfig(9)).nubs.frost).toBe(0);
-    expect(createRun(campaignConfig(11)).nubs.frost).toBe(0.5);
+    // Later levels start at half a meter, full where they dare a snap (startsWithSnap).
+    const half = CAMPAIGN_LEVELS.find((l) => l.id > 10 && !startsWithSnap(l)) as LevelDef;
+    const full = CAMPAIGN_LEVELS.find((l) => l.id > 10 && startsWithSnap(l)) as LevelDef;
+    expect(createRun(campaignConfig(half.id)).nubs.frost).toBe(0.5);
+    expect(createRun(campaignConfig(full.id)).nubs.frost).toBe(1);
   });
 
   it('follows the plan rows: level 1, 2, 4, 25, 37, 39 and 40', () => {
@@ -246,8 +255,6 @@ describe('the level table', () => {
         expect(l.concepts).toHaveLength(4);
         expect(l.concepts[3]).toBe('flare');
         expect(l.flares.length).toBeGreaterThanOrEqual(1);
-        // Its parry Dare, wherever a fixed angle parries a kept flare (the bake's stillFlares).
-        if ((LEVEL_BAKE[id]?.stillFlares ?? 0) > 0) expect(l.feats.map((f) => f.kind)).toContain('parry');
         expect(l.concepts[0]).toBe(ch.concepts[0]);
       }
       // Forecast concepts only where they fit; 'oldtown'/'market' force Old Town, 'dazzle' the Meadow.
@@ -268,19 +275,21 @@ describe('the level table', () => {
 
   it('scores: goalMet and starsFor', () => {
     const l = levelDef(2) as LevelDef;
-    // v1.6: Flake Trail's Dare is the flakes Dare (80% of the flakes offered): the old flake star.
-    expect(l.feats).toEqual([{ kind: 'flakes', target: l.stars.flakes }]);
+    // v1.6: Flake Trail dares flakes (fix round 3: sized above what the players who do not seek them collect).
+    const dare = (l.feats[0] as { kind: string; target: number }).target;
+    expect(l.feats).toEqual([{ kind: 'flakes', target: dare }]);
+    expect(dare).toBeGreaterThan(l.goal.target);
     expect(goalMet(l, { flakes: l.goal.target, snow: 0, minChill: 0 })).toBe(true);
     expect(goalMet(l, { flakes: l.goal.target - 1, snow: 0, minChill: 0 })).toBe(false);
     expect(starsFor(l, { flakes: l.goal.target - 1, snow: 0, minChill: 100 })).toBe(0);
     expect(starsFor(l, { flakes: l.goal.target, snow: 0, minChill: 0 })).toBe(1);
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: 0 })).toBe(2);
+    expect(starsFor(l, { flakes: dare, snow: 0, minChill: 0 })).toBe(2);
     expect(starsFor(l, { flakes: l.goal.target, snow: 0, minChill: l.stars.minChill })).toBe(2);
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill })).toBe(3);
+    expect(starsFor(l, { flakes: dare, snow: 0, minChill: l.stars.minChill })).toBe(3);
     // The cool-run star needs both: little sun (litTotal ≤ sunSec) and a safe lowest Chill.
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec })).toBe(3);
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec + 0.1 })).toBe(2);
-    expect(starsFor(l, { flakes: l.stars.flakes, snow: 0, minChill: l.stars.minChill - 1, litTotal: 0 })).toBe(2);
+    expect(starsFor(l, { flakes: dare, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec })).toBe(3);
+    expect(starsFor(l, { flakes: dare, snow: 0, minChill: l.stars.minChill, litTotal: l.stars.sunSec + 0.1 })).toBe(2);
+    expect(starsFor(l, { flakes: dare, snow: 0, minChill: l.stars.minChill - 1, litTotal: 0 })).toBe(2);
     const s7 = levelDef(7) as LevelDef;
     expect(goalMet(s7, { flakes: 0, snow: 99, minChill: 0 })).toBe(false);
     expect(goalMet(s7, { flakes: 0, snow: 0, minChill: 0, swings: 1 })).toBe(true);

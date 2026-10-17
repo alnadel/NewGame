@@ -148,6 +148,17 @@ describe('Dares (game/campaign.ts)', () => {
     expect(hudGoal(deep, st, undefined, false, new Map([['deep', 30]]))).toMatchObject({ value: 30, target: 90, glyph: 'deep', sec: true });
   });
 
+  it('a finale keeps the met Dare on the pill (either earns star 2) and never shows a count past its target', () => {
+    const lv = withFeats(200, [{ kind: 'snapSave', target: 60 }, { kind: 'parry', target: 2 }]);
+    const st = { flakes: 0, snow: 0, litTotal: 0, minChill: 100 };
+    // Before either is met: the first unmet one.
+    expect(hudGoal(lv, { ...st, snapSavedTicks: 30 })).toMatchObject({ value: 30, target: 60, glyph: 'coldsnap' });
+    expect(hudGoal(lv, { ...st, snapSavedTicks: 60, parries: 0 })).toMatchObject({ value: 60, target: 60, glyph: 'coldsnap' });
+    expect(hudGoal(lv, { ...st, snapSavedTicks: 130, parries: 1 })).toMatchObject({ value: 60, target: 60, glyph: 'coldsnap' });
+    // The second Dare met first: the pill stays on it.
+    expect(hudGoal(lv, { ...st, snapSavedTicks: 10, parries: 3 })).toMatchObject({ value: 2, target: 2, glyph: 'flare' });
+  });
+
   it('a verb goal counts until it is met, then the pill moves on to the Dare', () => {
     const lv: LevelDef = { ...withFeats(8, [{ kind: 'blooms', target: 3 }]), goal: { kind: 'swings', target: 1 } };
     const st = { flakes: 0, snow: 0, litTotal: 0, minChill: 100 };

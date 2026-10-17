@@ -448,13 +448,18 @@ function flipAim(s: SimState): void {
  * the edges are eroded by STILL_EDGE° for it), pulled toward from up to W.stillReach°.
  */
 function windowHold(s: SimState): void {
+  if (windowMask(s)) pullTo(mask, 0, W.still, W.stillReach);
+}
+
+/** `mask`: the bins fully shaded through the next lock or gust window within W.stillLead ticks; false when none is. */
+function windowMask(s: SimState): boolean {
   const lock = s.mods.has('lock');
   const gust = s.mods.has('gusts');
-  if (!lock && !gust) return;
+  if (!lock && !gust) return false;
   const d = s.dayTick;
   let a = -1;
   for (let k = 0; k <= W.stillLead && a < 0; k++) if ((lock && sunLockedAt(d + k)) || (gust && sunGustAt(d + k) >= 0)) a = k;
-  if (a < 0) return;
+  if (a < 0) return false;
   let e = a;
   while (e < a + 200 && ((lock && sunLockedAt(d + e)) || (gust && sunGustAt(d + e) >= 0))) e++;
   mask.fill(1);
@@ -469,7 +474,7 @@ function windowHold(s: SimState): void {
       for (let k = -STILL_EDGE; k <= STILL_EDGE; k++) if (tmp[(b + k + BINS) % BINS] !== 1) mask[b] = 0;
     }
   }
-  pullTo(mask, 0, W.still, W.stillReach);
+  return true;
 }
 const STILL_EDGE = 4;
 
@@ -504,27 +509,93 @@ export function dareBonus(s: SimState, b: number, slack: number, feats: boolean)
   return v;
 }
 
-/** humanFeat's focus target for the level's first unmet Dare, or −1 (keep humanDial's pick). */
+/** The nearest bin of `m` to θ (−1 when `m` is empty). */
+function nearestOf(m: Uint8Array, theta: number): number {
+  let best = -1;
+  let bestD = Infinity;
+  for (let b = 0; b < BINS; b++) {
+    if (m[b] !== 1) continue;
+    const d = Math.abs(angleDiff(b, theta));
+    if (d < bestD) {
+      bestD = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+/** humanFeat's Chill floor for leaving the safe teal to seek a Dare (blooms, flakes, rides). */
+const FEAT_CHILL = 50;
+/** humanFeat keeps this far (°) from a ball's glare while it seeks a clean pass. */
+const CLEAN_MARGIN = 14;
+
+/**
+ * The Dare humanFeat focuses on: a Dare whose moment is now (a flare's warning or hold, the
+ * eclipse's last seconds, a lock or gust ahead, its own snap) first, else the first unmet one.
+ */
+function focusKind(s: SimState, n: number): FeatKind {
+  for (let i = 0; i < n; i++) {
+    const k = kinds[i] as FeatKind;
+    if (k === 'parry' && s.flarePhase >= 1 && s.flarePhase <= 3) return k;
+    if (k === 'snapSave' && s.snapTicks > 0) return k;
+    if (k === 'flip' && flipLeft(s) >= 0) return k;
+    if (k === 'still' && windowAhead(s)) return k;
+  }
+  return kinds[0] as FeatKind;
+}
+
+/** Ticks to the eclipse's flip while it is within W.flipLead, else −1. */
+function flipLeft(s: SimState): number {
+  const w = s.world;
+  if (w.eclipseTick < 0) return -1;
+  const left = w.eclipseTick + ECLIPSE_SEC * 60 - s.tickAbs;
+  return left >= 0 && left <= W.flipLead ? left : -1;
+}
+
+/** True when a lock or gust window starts within W.stillLead ticks (or is on). */
+function windowAhead(s: SimState): boolean {
+  const lock = s.mods.has('lock');
+  const gust = s.mods.has('gusts');
+  if (!lock && !gust) return false;
+  for (let k = 0; k <= W.stillLead; k += 6) if ((lock && sunLockedAt(s.dayTick + k)) || (gust && sunGustAt(s.dayTick + k) >= 0)) return true;
+  return false;
+}
+
+/**
+ * humanFeat's focus target for the level's unmet Dare (focusKind), or −1 (keep humanDial's pick).
+ * Each kind aims where a player who reads the dial and the scene would: the gold, the deep band,
+ * the glass arc, the flare's telegraph, a SWING's turn, the shade over the next flake, clear of a
+ * ball's glare, under a cloud, the shade the flip will land in, a shade that holds through a lock or
+ * gust, lasting (deep) shade for the ring; under its own snap it holds still.
+ */
 export function dareTarget(s: SimState, theta: number): number {
-  if (unmet(s, kinds, false, true) === 0) return -1;
+  const n = unmet(s, kinds, false, true);
+  if (n === 0) return -1;
   const g = s.guide;
-  let mask: Uint8Array | null = null;
-  switch (kinds[0]) {
+  const nb = s.nubs;
+  const here = binOf(theta);
+  switch (focusKind(s, n)) {
     case 'blooms':
-      if (s.nubs.chill >= 50) mask = g.bud;
-      break;
+      return nb.chill >= FEAT_CHILL ? nearestOf(g.bud, theta) : -1;
     case 'deep':
     case 'gates':
-      mask = g.deep;
-      break;
+      return nearestOf(g.deep, theta);
     case 'brittle':
-      mask = g.flake;
-      break;
-    case 'parry':
+      return nearestOf(g.flake, theta);
+    case 'parry': {
       // Aim at the telegraphed angle during the warning, then hold it through the rise and hold.
-      if (s.flarePhase === 1) mask = g.flare;
-      else if ((s.flarePhase === 2 || s.flarePhase === 3) && parryFor === s && parryFlare === s.flareId) return parryBin;
-      break;
+      if (s.flarePhase === 1) {
+        const b = nearestOf(g.flare, theta);
+        if (b >= 0) {
+          parryFor = s;
+          parryFlare = s.flareId;
+          parryBin = b;
+        }
+        return b;
+      }
+      if ((s.flarePhase === 2 || s.flarePhase === 3) && parryFor === s && parryFlare === s.flareId) return parryBin;
+      return -1;
+    }
     case 'swings': {
       // Any lasting shade at least a SWING's turn away.
       let best = -1;
@@ -539,26 +610,102 @@ export function dareTarget(s: SimState, theta: number): number {
       }
       return best;
     }
+    case 'snapSave':
+      // Under its own snap: stay put (it was cast in the sun, so the snap is what shades Nubs).
+      return s.snapTicks > 0 ? here : -1;
+    case 'flakes': {
+      if (nb.chill < FEAT_CHILL) return -1;
+      // The shade over the next alive flake ahead, the part that also shades Nubs first.
+      flakeMask(s);
+      for (let b = 0; b < BINS; b++) row[b] = mask[b] === 1 && g.now[b] === 1 ? 1 : 0;
+      const b = nearestOf(row, theta);
+      return b >= 0 ? b : nearestOf(mask, theta);
+    }
+    case 'clean': {
+      // Keep CLEAN_MARGIN° clear of glare: move only when glare is that close, to the nearest safe bin clear of it.
+      let close = false;
+      for (let k = -CLEAN_MARGIN; k <= CLEAN_MARGIN && !close; k++) if (g.glare[(here + k + BINS) % BINS] === 1) close = true;
+      if (!close) return -1;
+      for (let b = 0; b < BINS; b++) {
+        let ok = g.now[b] === 1;
+        for (let k = -CLEAN_MARGIN; k <= CLEAN_MARGIN && ok; k++) if (g.glare[(b + k + BINS) % BINS] === 1) ok = false;
+        row[b] = ok ? 1 : 0;
+      }
+      return nearestOf(row, theta);
+    }
+    case 'ride':
+      if (nb.chill < FEAT_CHILL && nb.cloudId < 0) return -1;
+      rideMask(s);
+      return nearestOf(mask, theta);
+    case 'flip': {
+      if (flipLeft(s) < 0) return -1;
+      const w = s.world;
+      stepLit(w, Math.ceil((w.eclipseTick + ECLIPSE_SEC * 60) / STEP) + 1, row);
+      for (let b = 0; b < BINS; b++) mask[b] = row[(b + 180) % BINS] === 0 ? 1 : 0;
+      return nearestOf(mask, theta);
+    }
+    case 'still':
+      if (!windowAhead(s)) return -1;
+      windowMask(s);
+      return nearestOf(mask, theta);
+    case 'ring': {
+      // Lasting shade (deep where it is), never the flicker at an arc's edge.
+      for (let b = 0; b < BINS; b++) row[b] = g.deep[b] === 1 && g.next[b] === 1 ? 1 : 0;
+      const b = nearestOf(row, theta);
+      if (b >= 0) return b;
+      if (g.now[here] === 1 && g.next[here] === 1) return -1;
+      for (let k = 0; k < BINS; k++) row[k] = g.now[k] === 1 && g.next[k] === 1 ? 1 : 0;
+      return nearestOf(row, theta);
+    }
     default:
       return -1;
   }
-  if (!mask) return -1;
-  let best = -1;
-  let bestD = Infinity;
-  for (let b = 0; b < BINS; b++) {
-    if (mask[b] !== 1) continue;
-    const d = Math.abs(angleDiff(b, theta));
-    if (d < bestD) {
-      bestD = d;
-      best = b;
+}
+
+/**
+ * humanFeat's Cold Snap for an unmet snapSave Dare: a ready snap cast as soon as Nubs is in the sun
+ * (`snap` is its panic rule's decision).
+ */
+export function dareHumanSnap(s: SimState, snap: boolean): boolean {
+  if (snap || !s.level || s.nubs.f <= 0) return snap;
+  const n = unmet(s, kinds, false, true);
+  for (let i = 0; i < n; i++) if (kinds[i] === 'snapSave') return true;
+  return false;
+}
+
+/** `mask`: the bins that shade the next alive flake in its melt window (casters only). */
+function flakeMask(s: SimState): void {
+  mask.fill(0);
+  const ps = s.world.pickups;
+  const y = s.nubs.y;
+  const ahead = TUNING.pickups.meltAheadSec * s.params.v;
+  for (let i = lowerBound(ps, y + TUNING.nubs.collectRadius); i < ps.length; i++) {
+    const p = ps[i] as Pickup;
+    if (p.y - y > ahead) break;
+    if (p.kind !== 'flake' || p.state !== PICKUP_ALIVE) continue;
+    gatherScene(s.world, scene, p.x, p.y, 1, s.tAbs, s.eps, s.cot);
+    for (let k = 0; k < scene.nCasters; k++) markCaster(mask, scene.casters[k] as Caster, p.x, p.y, scene.cot);
+    return;
+  }
+}
+
+/** `mask`: the bins where one cloud covers all five of Nubs' samples (a ride; glare excluded). */
+function rideMask(s: SimState): void {
+  mask.fill(0);
+  const nb = s.nubs;
+  gatherScene(s.world, scene, nb.x, nb.y, TUNING.nubs.sampleOffset + 1, s.tAbs, s.eps, s.cot);
+  const cl = scene.clouds;
+  for (let i = 0; i < scene.nClouds; i++) {
+    const o = i * CLOUD_STRIDE;
+    if ((cl[o + 4] as number) >= SNAP_ID_BASE) continue;
+    cover.fill(0);
+    for (let k = 0; k < SAMPLES; k++) {
+      tmp.fill(0);
+      markEllipse(tmp, nb.x + (SAMPLE_DX[k] as number), nb.y + (SAMPLE_DY[k] as number), cl[o + 5] as number, cl[o] as number, cl[o + 1] as number, cl[o + 2] as number, cl[o + 3] as number);
+      for (let b = 0; b < BINS; b++) cover[b] = (cover[b] as number) + (tmp[b] as number);
     }
+    for (let b = 0; b < BINS; b++) if (cover[b] === SAMPLES && s.guide.glare[b] !== 1) mask[b] = 1;
   }
-  if (kinds[0] === 'parry' && best >= 0) {
-    parryFor = s;
-    parryFlare = s.flareId;
-    parryBin = best;
-  }
-  return best;
 }
 
 /** humanFeat's parry aim: the angle it picked from the warning's telegraph, held through that flare. */
@@ -571,5 +718,5 @@ let parryBin = -1;
  * with `feats`, its Dares) and humanFeat aims at a Dare only when given these. Tooling passes them
  * (scripts/sim.ts --campaign, the tests); the game never does, so this module stays out of its bundle.
  */
-export const DARE_TERMS = Object.freeze({ bonus: dareBonus, snap: dareSnap, target: dareTarget });
+export const DARE_TERMS = Object.freeze({ bonus: dareBonus, snap: dareSnap, target: dareTarget, humanSnap: dareHumanSnap });
 export type DareTerms = typeof DARE_TERMS;
