@@ -96,6 +96,20 @@ test('Guide Auto never hides the deep band: a veteran save (30 runs) still draws
   expect(errors).toEqual([]);
 });
 
+test('boss finales keep the level bar at 360x640, where their HP marks ride', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 360, height: 640 });
+  // L190 and L200 offer a seconds Dare (snapSave) on top of the boss: the widest goal pills.
+  for (const id of [50, 190, 200]) {
+    await page.goto(`/?level=${id}&test=1`);
+    await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+    await waitForScreen(page, 'play');
+    await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.hud())).ruler, { message: `level ${id}` }).toBe(true);
+    expect((await page.evaluate(() => window.__SHADY_TEST__!.hud())).rulerW, `level ${id}`).toBeGreaterThanOrEqual(48);
+  }
+  expect(errors).toEqual([]);
+});
+
 test('a Heat Flare counts down on the dial and a parry marks it on the ruler', async ({ page }) => {
   const errors = watchErrors(page);
   // The shipped rules: the Frost Bank off, so the meter is one gauge; the ring is on.
