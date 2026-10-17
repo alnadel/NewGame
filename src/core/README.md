@@ -283,16 +283,23 @@ Every 20 u of y the sim records `(x, y, chill, f)`. `historyLength(s)` (≤ 1024
 ## 9. Generation, idle work and performance
 
 The world is a fixed job sequence — place(−1), place(0), place(1), validate(0), place(2),
-validate(1), … — drawing only from streams keyed by (seed, purpose, index), so it is a pure function
-of (seed, profile, tutorial): generating early, late, in one go or in slices yields the same world
-(tested, including live-play hashes).
+pickups(0), validate(1), place(3), pickups(1), … — drawing only from streams keyed by (seed,
+purpose, index), so it is a pure function of (seed, profile, tutorial): generating early, late, in
+one go or in slices yields the same world (tested, including live-play hashes). place(k) puts chunk
+k's casters; pickups(k − 2) then places chunk k − 2's flakes (and v1.6 glass, from that chunk's
+finished validation job) and buds as a resumable job (v1.6 fix round 2: `placer.ts` beginPickups /
+stepPickups; `placeChunk` still runs both at once for tools).
 
 - `step()` guarantees the world is validated through `nubs.y + 1600` (`ensureGenerated`) — a
   fallback that can cost a whole chunk in one tick.
 - **Call `generateSome(world, nubs.y + TUNING.world.idleAhead, budget)` in idle time every frame**
   (returns true when caught up). `budget` is in work units: 1 unit ≈ one validator step
-  (~0.02 ms in Node, ~0.05 ms on a mid phone); placing a chunk costs 8. A budget of 8-16 per frame
-  keeps slices under ~1 ms; a chunk is ~60 units (p99 ~150).
+  (~0.02 ms in Node, ~0.05 ms on a mid phone); placing a chunk's casters costs 8, a validation
+  rescue 8, a glass contest stage its lit rows plus its Chill-DP slot-layers / 25 (a stage starts
+  only as a slice's first work or when it fits the budget left). A chunk is ~60 units (p99 ~150).
+  Measured (fix round 2, `node scripts/bench-step.ts --gen`: generateSome(w, y + 2400, 12) a frame
+  at walking pace, Node): slices p50 0.14 ms, p99 ~1.2 ms, max ~3-5 ms (one rescue), as v1.5
+  (p99 1.08, max 3.3 ms); before the round a placement ran up to six glass contests at once (20 ms).
 - `validatedY(world)` and `world.stats` (`chunksPlaced/Validated`, `rescues`, `rescuesPerChunk`,
   `parkedClouds`, `unresolved`, `dropped`, `work`) feed the debug overlay.
 
@@ -441,7 +448,8 @@ identity). Code: `sim/mechanics.ts` (buds, frost, snap), `computeCoverage`/`appl
   shadow lies right under it at any θ, rx 64, ry 42) that starts on Nubs and rides the trail's chord
   with him for `SNAP_TICKS` (3 s); `s.snapTicks` counts down, `s.snapCloudId` names it (−1 none),
   the meter empties. It never counts as a cloud ride or a SWING source, and the death line never
-  blames it. Journey levels start at 0.5 (1.0 on the Cold Snap's own level); endless at 0.
+  blames it. Journey levels start at 0.5 (1.0 on the Cold Snap's own level); endless at 0 (v1.6 fix
+  round 2: half a meter, §16.1).
 - **Deep shade.** `nubs.deep`: fully shaded with two or more sources (casters or clouds, the snap's
   included) over the center sample. Chill regen ×2, multiplier charge ×2, frost ×4; `deepEnter`
   after ≥ 1 s out of it; `stats.deepSeconds`.
@@ -532,8 +540,10 @@ telegraph (each layer lights up once its owner fills the body).
 Every rule keys off `World.v16` (`ring`, `bank`, `garden`); with all three off the v1.5 multiplier,
 meter and snap return. **Shipped: ring and garden on, the Frost Bank off** (`V16_SHIP`, §16.3): the
 v1.5 meter fills (shade, flakes, SWINGs, blooms, and the parries and saved glass clusters of
-`payTrick`) and a snap empties it; a snap does not cash the ring in, and the landing and the
-Garden's banking pay no frost. Everything below still runs with `v16: { bank: true }`. Code:
+`payTrick`), starts at `TUNING.frost.runStart` 0.5 in Endless, Daily and challenge runs, and a snap
+empties it and then cashes the ring in on it (fix round 2: `cashPerLevelH` hundredths of a meter per
+level above x1, the ring back to x1); the landing and the Garden's banking pay no frost. Everything
+below still runs with `v16: { bank: true }`. Code:
 `sim/nubs.ts` (ring, freshness, PHEW, landing), `sim/mechanics.ts` (bank, cash-in, garden, re-aim,
 guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
 `sim/bots/econ.ts`, `scripts/sim16/econ.ts`; values in `TUNING.ring/.bank/.garden`.
@@ -557,10 +567,10 @@ guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
   (`isFreshSource`; `nubs.swFresh` keeps the last 8 endpoints as (id, tick); `nubs.swPendFrom` is the
   source a pending hand-off leaves). A non-fresh SWING still chains and pays Snow.
 - **PHEW** sets `mult = max(mult, nubs.litStartMult)` (the level at the stretch's first lit tick;
-  `multUp {reason: 'phew'}`), never above it. **Snow (T2)**: with the Bank on, flakes pay
+  `multUp {reason: 'phew'}`), never above it. **Snow (T2)**: with the ring on, flakes pay
   `round(min(m, 3)·snowMult)` and crystals 5× that, because x4 and x5 pay through the snap's
-  cash-in. With the Bank off (shipped) a snap cashes nothing in, so they pay `round(m·snowMult)`.
-  The `flake`/`crystal` events still carry the true `mult`.
+  cash-in (on the Bank, or on the shipped v1.5 meter). The `flake`/`crystal` events still carry the
+  true `mult`.
 - **Frost Bank.** `nubs.frostH` 0..200 integer hundredths is the meter; `nubs.frost = frostH / 100`
   (0..2) mirrors it, so `frost ≥ 1` still means "a snap is ready". Income only from
   `addFrostH(s, source, h)` (mechanics.ts; CORE-2 calls it for 'cluster' and 'parry'): bloom
@@ -578,7 +588,10 @@ guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
   Snap's own level, a snapSave goal or Dare) `teachStartH` 100; `RunConfig.startFrost` (charges
   0..2) overrides. `runStartH` is **0**: measured, the starting charge alone added +683 min (mean,
   80 seeds) to the reactive bot, over the plan's 120-minute bar (§2.2). With the Bank off (shipped)
-  the v1.5 start applies: 0 in Endless, 0.5 on a Journey level, full on a level that dares a snap.
+  the v1.5 meter starts at `TUNING.frost.runStart` 0.5 in Endless, Daily and challenge runs (fix
+  round 2; lesson runs, and every v1.6 economy rule off, start at 0), 0.5 on a Journey level, full
+  on a level that dares a snap: the half meter alone adds +75 ± 38 min (mean, 240 seeds) to the
+  reactive bot, under the 120-minute bar.
 - **Frost Garden** (while `s.snapTicks > 0`): buds within [y − 30, y + `reach` 420] grow ×`growMul`
   2 (guide.bud uses the same reach; a flare's rise and hold use `TUNING.flare.budMul` instead when
   larger, never the product, once CORE-2's `s.flarePhase` runs). A bloom under the snap adds
@@ -650,10 +663,13 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   `rngFor(seed, 'flares', day)` (count `DayParams.flareCount`: none on Day 1 of profile 3, one on Day
   2, two from Day 3; one per window of `TUNING.flare.windows`, `gapSec` 8 apart), PENDING with a
   120-tick warning. Journey: `LevelDef.flares` (minute, d) with `warnTicksJourney` 72. The validator
-  decides each pending flare in the job that covers it (`keepStep`): kept when a parry path is
-  shaded (3-step rule) on every one of the 7 hold steps (`keepShadedShare` 1, so a kept flare can
-  be parried under the sim's `parryMaxLit` rule; the plan's 0.85 left 1-2 lit steps) and fewer
-  than `keepMovedShare` 0.5 of the bins safe without it stay safe (none safe counts as moved); else
+  decides each pending flare in the job that covers it (`keepStep`): kept when a fixed sun angle,
+  held through the hold, leaves Nubs lit on at most `parryMaxLit` 4 of its 42 ticks, counted tick
+  by tick at his scheduled position (validator rules: clouds as circles, the run's own objects
+  left out; fix round 2, so guide.flare can name exactly that parry: the plan's turn-limited path,
+  then fix round 1's path on all 7 steps, kept flares that no telegraphed angle parried), and fewer
+  than `keepMovedShare` 0.5 of the bins safe without it stay safe at the first hold tick (none safe
+  counts as moved; a candidate stops at the first row that settles it); else
   it is shifted by `shiftsSec` (±0.5 … ±5 s; an Endless rise never leaves its window of `windows`;
   a shift needing more forward room than the job's re-run prefix is skipped; clear of eclipses,
   locks, other flares and, in Endless, the Noon Heat window) and re-tested; else DROPPED (never
@@ -665,11 +681,14 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   (holdTick, fallTick]: `slotDeltaAt`) → `flareParry {id, snow}` (≤ `parryMaxLit` 4 lit ticks:
   `stats.parries`, +5 Snow, `payTrick(s, 'parry')`) or `flareMiss`, then `flareEnd`;
   `s.flarePhase` 0..4 for the renderer and `flareMeltMul` (flakes melt ×2 over the rise and hold).
-  guide.flare: during the warning, the bins fully shaded on every hold step (the intersection of
-  their masks, else the hold's first tick when it is empty; cached per flare), and
-  `guide.flareTicks` counts down.
-- **Glass (§2.3).** Plain and glass flakes are placed two chunks behind the casters
-  (`placeFlakes(w, k − 2)`, from the finished validation job of that chunk). A cluster turns glass
+  guide.flare: during the warning, the bins where the sun held through the hold leaves Nubs lit on
+  at most `parryMaxLit` hold ticks (tick by tick at his scheduled position, the lifted elevation,
+  this run's sunflowers in, the Cold Snap's re-aiming cloud out; computed once per flare and again
+  when a sunflower blooms): never empty for a kept flare, and holding any of them parries (unit
+  test). `guide.flareTicks` counts down.
+- **Glass (§2.3).** Plain and glass flakes are placed two chunks behind the casters (the pickups
+  job of chunk k − 2 after placing chunk k, from the finished validation job of that chunk; a
+  contest runs in stages, `contest.ts` ContestRun, so idle generation slices it). A cluster turns glass
   when `contestCluster` says it is contested (S_free ≤ need − 2, cost C0 − C1 in [12, 40], never a
   trap, the first flake savable; see contest.ts) and the day's quota (`glassQuota`: 25% of eligible
   clusters on Day 1 of profile 3, 35% later, half on profile 2, none on profiles 0-1, Quick Melt,
@@ -679,8 +698,12 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   `sim/glass.ts` tracks the cluster under Nubs (`s.clusterId/Taken/Broken`): all of it collected →
   `clusterSaved {cluster, n}`, `stats.clustersSaved`, `stats.brittleSaved`, `payTrick(s,
   'cluster')` and `TUNING.brittle.saveChill` 10 Chill at once (below the contest's `costMin`, so
-  glass is never free; with the Bank off its frost often lands on a full meter). guide.flake: the
-  bins that shade the nearest alive glass flake in its melt window, glare removed. **T7**: `hashState` reads pickups only to 600 u ahead.
+  glass is never free; with the Bank off its frost often lands on a full meter). guide.flake: for
+  the nearest alive glass flake in its melt window, the bins where the sun held from now until Nubs
+  reaches it leaves it lit for less than its remaining melt budget (glare ×2, a flare ×meltMul; fix
+  round 2: one step's point mask named angles that then lost it), computed once per flake. The dial
+  draws the decision (render/halo.ts glassDecision): a glint on the teal where a safe angle saves
+  it, else the detour off the teal. **T7**: `hashState` reads pickups only to 600 u ahead.
 - **guide.deep**: the part of guide.now where ≥ 2 sources (snap excluded, T3) cover the center
   sample. It is counted every other refresh (`DEEP_EVERY` 12 ticks, in `litMask`'s own pass: its
   counts stop at 2); between counts it is kept inside guide.now (`deep &= now`).
@@ -712,16 +735,21 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   assigned only where it fits the offer (else the next concept's, else a seeded core verb) and is
   sized from it (deep 16% of the level's daylight and ≤ offer/4, at least 90 ticks; flakes 80% of
   min(expected, 85% offered); ring the first level that plain steady shade (85% of the level's
-  daylight in full shade) does not reach, x3-x5; snapSave wherever the snap is on; parry only
-  where a kept flare is parried from a fixed angle (`stillFlares`); still half the holdable
-  windows; swings 4 hand-offs per SWING asked). The bake keeps a level's flares only at their data
-  positions, each kept in its own job and all of them together (teaching levels try 0.1 s shifts
-  and need every flare parried from a fixed angle, `stillParryable`; boss levels try 0.5 s shifts
-  within ±6 s, then fill each of `BOSS_PHASES`); `BAKE_VERSION` 2.
+  daylight in full shade) does not reach, x3-x5, and only where a verb pumps the ring (deep shade,
+  buds, glass or a kept flare: fix round 2, L1's "reach x4" was met by no bot); snapSave wherever
+  the snap is on; parry where a kept flare is parried from a fixed angle (`stillFlares`, every kept
+  flare since fix round 2); still half the holdable windows; swings 4 hand-offs per SWING asked).
+  The core-verb fallback offers SWINGs only from their lesson (L7) on and, when none fits, the
+  first of flakes / clean / ride the level offers (L1 and L4 dare 4 flakes). The bake keeps a
+  level's flares only at their data positions, each kept in its own job and all of them together
+  (teaching levels try 0.1 s shifts and need every flare parried from a fixed angle,
+  `stillParryable`; boss levels try 0.5 s shifts within ±6 s, then fill each of `BOSS_PHASES`);
+  `BAKE_VERSION` 3.
   `bakeRunEntry(level, bake)` turns the offers into the run entry. The world never depends on the
   Dares (a level's glass share reads its concepts), so the bake is a fixed point. Boss finales (50,
-  60, …, 200) carry `flare` (HP = kept flares) and a parry Dare where one of their flares is parried
-  from a fixed angle (15 of 16; L190's one kept flare is not, so it gets its concepts' Dares).
+  60, …, 200) carry `flare` (HP = kept flares) and a parry Dare (all 16 since fix round 2). On the
+  Sunflowers lesson (L8) the placer turns each bud to the face whose ±8° are safe on the most steps
+  while it is in reach (`tealFace`, from the finished job's rows), so following the dial grows it.
 - **Hash**: `hashState` reads the flare state (`flareIdx/Id/Phase/Lit/Ticks`, kept flares within
   600 u), the cluster state and the world stats above (and, from fix round 1, `budGrewTick`,
   `swPendFrom`, `snapBloomIds` and the snap cloud's path).
@@ -754,39 +782,40 @@ daylight, 0.28-0.30 meters a day passively, as in v1.5) and FAIL unless `--waive
 
 **Tuned** (everything else stays at the builders' values, all inside the ranges: bloomH 25,
 runStartH 0, cashPerLevelH 10, extendCapTicks 60, glass meltBudget 0.8 and quotas 0.25/0.35,
-flare d 10 (Days 2-3) / 8 (Day 4+), holdTicks 42, warnTicks 120, Noon Heat 1.1 (Days 2-3) / 1.2):
+flare d 12 (Days 2-3) / 10 (Day 4+; fix round 2, was 10 / 8), holdTicks 42, warnTicks 120, Noon
+Heat 1.1 (Days 2-3) / 1.2):
 ring `need` +20% (1080/1440/2160/2880) and `bleedK` at x5 24. Without the Bank's cash-in a snap
 leaves the ring as it is and the snap's cover keeps filling it, so the reactive bot sat at x5 20.2%
 of daylight; now 16.1%. Survival does not move (the ring never touches coverage or Chill).
 
-| §6 metric | v1.5 | target | shipped (Bank off), fix round 1 | gate |
+| §6 metric | v1.5 | target | shipped (Bank off), fix round 2 | gate |
 |---|---|---|---|---|
-| Reactive mean multiplier / x5 share | x1.5 / 2% | x2.8-3.8 / ≤ 20% | x3.47 / 16.5% | hard: pass |
-| humanDial R2 Day-1 mean multiplier | x1.0-1.2 | x1.8-2.5 | x2.15 | advisory: pass |
-| Chase − plain (mean, 240 seeds) | +147 | ≥ +150 | +81 (the calibration's +157 was 80 seeds; 240 gave +104 before the round) | hard: **FAIL** |
-| Naive − plain / safe − plain (240 seeds) | – | ≤ 0 / < 0 | −197 / −64 | hard: pass |
-| Plan-snap − panic-snap (240 seeds) | – | ≥ +60 | −15 | advisory: miss |
-| Full meter unspent | 14-36% | ≤ 10% | v1.5 meter 23.4% (`--check`), 25.5% (`--decisions`) | hard: **FAIL** (Bank off; `--waive bank`) |
-| Dial-only meters from income | 0.29 | ≤ 0.15 | v1.5 meter 0.30 (`--check`), 0.28 (`--decisions`) | hard: **FAIL** (Bank off; `--waive bank`) |
-| Reactive snaps a day | 0.37 | 0.5-0.9 | 0.37 | advisory: miss |
-| Glass clusters per daylight minute (Day 1 / 2+) | 0 | ≥ 1.8 / ≥ 2.5 | 0.62 / 1.14 | advisory: miss |
-| Blooms per snap (reactive) | ~0.2 | ≥ 0.8 | 1.84 | advisory: pass |
-| Lit ticks in the 40 after snapEnd (reactive / oracle) | 22 / 32 | ≤ 10 / ≤ 12 | 8.2 / 12.0 | advisory: pass |
-| Kept flares parry-feasible | – | 100% | 100%, on all 7 hold steps (validator test) | hard: pass |
-| Oracle parry rate | – | ≥ 70% | 95.7% | hard: pass |
-| Flare candidates kept, Days 2-4 | – | ≥ 85% | 74.0% (Days 5+ 53.9%; 67.5-74% over 160 seeds) | hard: **FAIL** (`--waive flareKeep`) |
-| PreAim − plain parry rate | – | ≥ +15 points | +15.2 (63.4% vs 48.2%) | advisory: pass |
-| Reactive deaths at 11 AM-1 PM | 12% | ≥ 25% | 40.0% | advisory: pass |
-| Priced moments a daylight minute, Days 2-4 (240 seeds) | – | ≥ +3 over v1.6 all off | 24.46 vs 22.33 (+2.13) | advisory: miss |
-| Reactive dial median | Day 3 · 11:33 AM | Day 2 noon-Day 4 noon | Day 3 · 10:40 AM | hard: pass |
-| Mechanics vs dial (median) | +609 min | ≥ +180 | +165 (Day 3 · 1:25 PM; +202 over 160 seeds) | hard: **FAIL** |
+| Reactive mean multiplier / x5 share | x1.5 / 2% | x2.8-3.8 / ≤ 20% | x3.32 / 13.8% | hard: pass |
+| humanDial R2 Day-1 mean multiplier | x1.0-1.2 | x1.8-2.5 | x2.12 | advisory: pass |
+| Chase − plain (mean) | +147 | ≥ +150 | +25 (80 seeds), +40 (240) | hard: **FAIL** |
+| Naive − plain / safe − plain | – | ≤ 0 / < 0 | −138 / −158 (80 seeds); −152 / +50 (240) | hard: pass (80); safe fails at 240 |
+| Plan-snap − panic-snap | – | ≥ +60 | −53 (80), −17 (240) | advisory: miss |
+| Full meter unspent | 14-36% | ≤ 10% | v1.5 meter 39.4% (`--check`), 41.3% (`--decisions`) | hard: **FAIL** (Bank off; `--waive bank`) |
+| Dial-only meters from income | 0.29 | ≤ 0.15 | v1.5 meter 0.43 (`--check`), 0.43 (`--decisions`) | hard: **FAIL** (Bank off; `--waive bank`) |
+| Reactive snaps a day | 0.37 | 0.5-0.9 | 0.48 (`--check`), 0.50 (`--decisions`) | advisory: miss / pass |
+| Glass clusters per daylight minute (Day 1 / 2+) | 0 | ≥ 1.8 / ≥ 2.5 | 0.62 / 1.11 | advisory: miss |
+| Blooms per snap (reactive) | ~0.2 | ≥ 0.8 | 1.70 | advisory: pass |
+| Lit ticks in the 40 after snapEnd (reactive / oracle) | 22 / 32 | ≤ 10 / ≤ 12 | 9.1 / 13.4 | advisory: pass / miss |
+| Kept flares parry-feasible | – | 100% | 100%, from a fixed angle, tick by tick (validator and guide tests) | hard: pass |
+| Oracle parry rate | – | ≥ 70% | 93.4% | hard: pass |
+| Flare candidates kept, Days 2-4 | – | ≥ 85% | 72.5% (Days 5+ 64.6%) | hard: **FAIL** (`--waive flareKeep`) |
+| PreAim − plain parry rate | – | ≥ +15 points | +18.3 (69.2% vs 50.9%) | advisory: pass |
+| Reactive deaths at 11 AM-1 PM | 12% | ≥ 25% | 35.9% (humanDial R3 15.0%, R4 12.5%) | advisory: pass (humans miss) |
+| Priced moments a daylight minute, Days 2-4 (240 seeds) | – | ≥ +3 over v1.6 all off | 24.41 vs 22.33 (+2.08) | advisory: miss |
+| Reactive dial median | Day 3 · 11:33 AM | Day 2 noon-Day 4 noon | Day 3 · 10:46 AM | hard: pass |
+| Mechanics vs dial (median) | +609 min | ≥ +180 | +649 (Day 4 · 9:35 AM; +653 over 120 seeds) | hard: pass |
 | Novice p3 median / idle / oracle | 11:34 AM / < 8 AM / Day 8 | unchanged windows | Day 1 · 11:34 AM / 100% < 8 AM / 100% Day 8 | hard: pass |
-| Rescues per chunk / unresolved | 0.22-0.25 / 0 | ≤ 0.8, ≤ +0.1 / 0 | 0.570 (heat 0.794), +0.039 / 0 | hard: pass |
-| Generation ms per chunk | 2.37 | ≤ 3.5 | 2.61 | hard: pass |
-| Journey oracle / reactive 1-100 / Feat oracle ★2 | 200 / ≥ 95% / – | 200 / ≥ 95% / ≥ 85% | 200 / 100% / 91.0% | hard: pass |
-| Reactive three stars, 41-200 | 74% | ≤ 50% | 45.6% | advisory: pass |
-| humanDial mean stars, 41-200 | 1.07 | ≥ 0.95 | 0.92 | advisory: miss |
-| Career: humanDial at standard within 20 runs | 88% | ≥ 85% | 93% (calibration; not re-run) | advisory: pass |
+| Rescues per chunk / unresolved | 0.22-0.25 / 0 | ≤ 0.8, ≤ +0.1 / 0 | 0.564 (heat 0.79), +0.038 / 0 | hard: pass |
+| Generation ms per chunk | 2.37 | ≤ 3.5 | 2.59 | hard: pass |
+| Journey oracle / reactive 1-100 / Feat oracle ★2 | 200 / ≥ 95% / – | 200 / ≥ 95% / ≥ 85% | 200 / 100% / 91.5% (levels 1-10: 10/10) | hard: pass |
+| Reactive three stars, 41-200 | 74% | ≤ 50% | 46.3% | advisory: pass |
+| humanDial mean stars, 41-200 | 1.07 | ≥ 0.95 | 0.93 | advisory: miss |
+| Career: humanDial at standard within 20 runs | 88% | ≥ 85% | 93% (missions in runs 31-40: 73%, advisory ≥ 80%) | advisory: pass / miss |
 
 **Fix round 1** (the v1.6 review). The rules it changed, with the numbers behind them:
 - **Flares.** The keep test needs a shaded parry path on all 7 hold steps (`keepShadedShare` 1; the
@@ -827,3 +856,52 @@ plan's 1.8-2.5 a minute is out of reach of their 0.2-0.4 range), humanDial's lev
 (68%, ≥ 85%) and its blooms per snap (0.85, ≥ 1.2), humanDial's stars on 41-200, and the per-Dare
 shares (the non-seeking bots meet the ring, deep, ride and flakes Dares on more than 35% of their
 levels).
+
+**Fix round 2** (the second v1.6 review). With these `sim --check --seeds 40` fails only the three
+rows an integrator waiver names (`--waive bank,flareKeep`), and `--decisions --seeds 80` fails
+chase − plain and the two Bank rows:
+- **Mechanics vs dial** (+165, a non-waivable hard FAIL) → +649. Mechanics runs are bimodal (Day 3
+  or Day 4+) and seeds 1-40 sit in the Day-3 block (+586 / +639 on seeds 41-80 / 81-120). The plan's
+  lever does not move it (Endless flares off: +101 on seeds 1-40; d 8 / 6 lowers the keep rate to
+  65%). The fix is the plan's starting charge on the shipped meter: Endless, Daily and challenge
+  runs start with half a meter (`TUNING.frost.runStart`), +75 ± 38 min for the reactive bot alone
+  (240 seeds; the plan drops a start above +120). It also makes the snap a Day-1 verb for the human
+  models (humanDial snaps 0.71 / 0.65 / 0.12 times a run at R2-R4, was 0.27 / 0.20 / 0.01). It
+  fills the v1.5 meter sooner, so the two Bank rows read worse (a full meter 23.4% → 39.4% of the
+  reactive bot's daylight; the dial-only bot, which never spends, fills its one meter in more runs:
+  0.30 → 0.43 a day).
+- **An honest flare telegraph.** The keep test asks for a fixed sun angle that parries the flare
+  under the sim's own rule (≤ `parryMaxLit` lit hold ticks, counted tick by tick), and guide.flare
+  shows exactly those angles: holding any of them parries (a unit test plays it). Before, a kept
+  flare with no fixed parry (about 1 in 6) telegraphed its first tick's shade and missed. preAim now
+  parries 69% against plain's 51% and outlives it by +63 ± 34 min (240 seeds; +0.9 before). The flare
+  lift is 12° / 10° (range 6-12): with the fixed-angle test the plan's 10 / 8 kept 67.5% of the
+  Days 2-4 candidates, this 72.5% (Days 5+ 64.6%, was 53.9%). No in-range setting reaches 85%: the
+  plan's "the shade moves" condition (`keepMovedShare` 0.5, not a §11 knob) drops most of the rest
+  (with it off, 87.5%), so the row stays the integrator's (`--waive flareKeep`). A miss still burns
+  0.4 Chill a tick: 1.0 made flares cost plain play −25 ± 34 min (240 seeds) but put the gating
+  seeds' mechanics-vs-dial median back on the Day-3 block (+243).
+- **The ring feeds survival again**: a snap cashes the ring in on the shipped meter (`cashPerLevelH`
+  hundredths of a meter per level above x1, the ring to x1), and x4 and x5 pay through it (Snow
+  capped at x3 again). Plain +65 min mean, snaps 1.56 → 1.75 a run; an early snap pays a little but
+  plan − panic stays negative (−17, 240 seeds): the snap is still worth most as late as possible.
+- **Greed (chase − plain)** stays short: +25 (80 seeds) and +40 (240) with the shipped meter, which
+  sits full 40% of the day so greed's frost spills; the review's untested bloom-frost lever (0.35 a
+  bloom outside 11 AM-1 PM, with no start) gave +48 ± 66 (240) and naive − plain +63 at 80 seeds.
+  Like the Bank rows, it needs the Bank or a redesign (an integrator decision).
+- **Generation**: the glass contest runs in stages in its own pickups job, a rescue costs 8 units
+  and the DP stage checks the budget (§9: slices p99 3.99 → 1.2 ms, max 19.5 → ~4.7 ms, frames over
+  2 ms 2.17 → 0.33 a minute; `bench-step.ts --gen`). The worlds are unchanged.
+- **Glass**: guide.flake names the angles that save the glass flake over its window, and the dial
+  draws the decision (a teal glint, or the detour off the teal). None of the review's levers (this
+  guide, meltBudget 0.9, S_free ≤ need − 1) moved the reactive bot's glass saves much (chase 26-28%
+  of clusters, a glass weight of 4 38-41%), so the glass detour stays a priced choice; no tuning
+  changed.
+- **Journey**: L1 and L4 dare 4 flakes (their "reach x4" and "2 SWINGs" were met by no bot), the
+  ring Dare only where a verb pumps the ring, the Feat-seeking oracle tries a SWING after 1.5 s, and
+  L8's buds face the safe teal (humanDial 0/3 → 3/3 there; levels 1-40 79.2% → 81.7%). A hard
+  `--campaign` row checks the Feat-seeking oracle meets every Dare of levels 1-10.
+- **Cost**: step() 1.087× v1.5 (median of 9 reps, min 1.073×; gate ≤ 1.10), the guide refresh
+  1.02× (guide.flare's 42 lit masks run once per flare, guide.flake's point masks once per flake).
+- **build:single** ships no bots (`--mode single`; the Daily par has its own novice bot):
+  681.3 → 669.0 KiB with this round's code, still 27.4 KiB over A3's 641.6 KiB (an integrator call).
