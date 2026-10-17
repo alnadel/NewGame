@@ -218,44 +218,58 @@ docs/V1_6_PLAN.md §2.3, §2.5, §2.6 (CORE-2); the core API is src/core/README.
 - **Verb goals** on the teaching levels: L5 1.5 s of deep shade, L6 every ball with a glare-free line
   passed clean minus one (at least 1), L7 1 SWING, L8 1 bloom, L10 a snap that saves 1 s, L13 the arch
   walked under shaded, L21 1 glass cluster saved, L36 shaded within 1 s of the eclipse flip, L38 parry
-  2 of 3 flares. **Soft-fail**: after 2 misses a level's goal relaxes to 'finish'
-  (`relaxedGoalFor`, `RunConfig.relaxedGoal`; the save keeps the misses, GAME shows a tip).
+  2 of 3 flares. **Soft-fail**: after 2 misses a level's goal relaxes to 'finish', after 1 on
+  levels 1-10 (`softFailMisses`, `relaxedGoalFor`, `RunConfig.relaxedGoal`; the save keeps the
+  misses, GAME shows a tip).
 - **New concepts.** `brittle` (L21) and `flare` (L38) take the places of `lowland` and `moonlit`,
   which compose from chapter 5 on. Every boss finale (50, 60, …, 200) carries `flare`: min(8,
-  floor(level s / 3.2)) flares in three phases (20-40%, 50-68%, 76-92% of the level; d 10, 13, 16);
-  the validator keeps or drops each (the boss's HP is the kept count) and they cost no rescue rocks.
+  floor(level s / 3.2)) flares in three phases (`BOSS_PHASES`: 20-40%, 50-68%, 76-92% of the level;
+  d 10, 13, 16); the validator keeps or drops each (the boss's HP is the kept count) and they cost
+  no rescue rocks. The bake keeps a flare only at its data position, kept in its own job and with
+  every other flare of the level (boss flares try 0.5 s shifts within ±6 s, then a fill pass per
+  phase), and every flare ends at least 1 s before the finish line. L38's three flares (100.1,
+  165.1 and 229.9 s) keep 1.5 s between one's end and the next warning, and each one can be parried
+  from a fixed angle (0.1 s shifts).
 - **Dares.** One per concept (`DARE_OF`); a level takes the first of its concepts' Dares that its
   world offers, else a seeded core verb (blooms, swings, deep, snapSave). `node scripts/sim.ts --bake`
   writes what each level offers to `src/config/levelBake.gen.ts` (a vitest checks it is current; the
   game reads only the resulting Dares and flares, `LEVEL_BAKE_RUN`) and the targets are sized from it: blooms 35% of the buds (1-4), swings 2 (3 over 30 s; needs 4
-  hand-offs on offer per SWING), deep 12% of the daylight (at least 1.5 s, at most a fifth of the deep
-  shade on offer), snapSave 1 s (needs buds to bank a snap), parry 75% of the kept flares, brittle 60%
-  of the glass, flakes 80% of the expected (at most 85% of those offered), clean every passable ball,
-  ride 1 (needs a 3.5 s ride or 4 clouds), gates 1 deep, flip 1, still half the holdable windows,
-  ring x4 (x3 on levels of 25 s or less, or without an 1100-tick shaded stretch on offer).
+  hand-offs on offer per SWING), deep 16% of the daylight (at least 1.5 s, at most a quarter of the
+  deep shade on offer; 12% was met by 90% of non-seeking reactive runs), snapSave 1 s (any level with
+  the snap: such a level starts with one ready and any snap's saved ticks count), parry 75% of the
+  kept flares a fixed angle parries (the bake's `stillFlares`; no parry Dare without one, so L190
+  has none), brittle 60% of the glass, flakes 80% of the expected (at most 85% of those offered),
+  clean every passable ball, ride 1 (needs a 3.5 s ride or 4 clouds), gates 1 deep, flip 1, still
+  half the holdable windows, ring one level past what plain steady shade reaches on the level (85%
+  of its daylight in full shade; x3-x5).
 
 - **The Frost Bank ships off** (calibration, src/core/README.md §16.3), so a level plays the v1.5
-  frost meter: it starts at half a meter (full on the Cold Snap's own level, L10), shade, flakes,
-  SWINGs and blooms fill it. The snapSave Dare and L10's goal still count a snap that saves Nubs; the
-  Dare's fit (`SNAP_BLOOM_SHARE`) is sized for the Bank and stays conservative without it.
+  frost meter: it starts at half a meter (full on a level that dares a snap: L10 and every snapSave
+  Dare, `startsWithSnap`), and shade, flakes, SWINGs and blooms fill it. The snapSave Dare and L10's
+  goal count every tick a snap alone shades Nubs.
 
-`node scripts/sim.ts --campaign --bot all --tries 3` (v1.6 as shipped, after calibration; pass % and
+`node scripts/sim.ts --campaign --bot all --tries 3` (v1.6 as shipped, after fix round 1; pass % and
 mean stars per level over all 200 levels; humanDial and humanFeat × 3 decision streams):
 
 | bot | passed | stars (1-40 / 41-200) | three stars | Dare met |
 |---|---|---|---|---|
-| oracle | 200/200 | 2.35 (2.48 / 2.32) | 91 | 53.0% |
-| reactive | 199/200 (100/100 on 1-100) | 2.43 (2.48 / 2.42) | 99 | 53.0% |
-| Feat-seeking oracle | 200/200 | 2.79 (2.77 / 2.80) | 162 | 94.0% |
-| humanDial | 62.3% of tries (77.5% on 1-40) | 0.96 (1.26 / 0.89) | 34 | 27.3% |
-| humanFeat | 65.0% of tries | 1.14 (1.40 / 1.07) | 34 | 42.0% |
+| oracle | 200/200 | 2.35 (2.38 / 2.34) | 87 | 51.0% |
+| reactive | 199/200 (100/100 on 1-100) | 2.37 (2.30 / 2.38) | 85 | 45.5% |
+| Feat-seeking oracle | 200/200 | 2.79 (2.67 / 2.81) | 159 | 91.0% |
+| humanDial | 64.3% of tries (79.2% on 1-40) | 0.98 (1.21 / 0.92) | 28 | 26.0% |
+| humanFeat | 69.5% of tries | 1.14 (1.30 / 1.10) | 28 | 37.5% |
 
 Hard gates (§2.6): oracle 200/200 with the verb goals and every boss finale, reactive 100% of 1-100
-(teaching verb goals scored as finish), the Feat-seeking oracle ★2 on 94.0% (≥ 85%; it misses 4, 9,
-23, 31, 32, 38, 66, 92, 105, 131, 148, 190). Advisory: reactive three stars on 41-200 50.0% (≤ 50%;
-v1.5 74%); humanDial passes all of levels 1-10 with the soft-fail (76.7% of its tries) and 77.5% of
-1-40, but earns 0.89 stars on 41-200 (target ≥ 0.95). Per Dare kind the non-seeking bots meet most
-kinds on more than 35% of their levels (ring 100%, deep 90% reactive, ride 56-61%, flakes 55-64%):
-those Dares are sized from what the level offers, not against the bots; swings (6-12%) and still
-(33-58%) are the real asks. With the Bank switched on (`--on bank`) the Journey gates pass as well
-(oracle 200/200, reactive 100% of 1-100, Feat-seeking oracle 94.5%).
+(teaching verb goals scored as finish), the Feat-seeking oracle ★2 on 91.0% (≥ 85%; it misses 1, 4,
+9, 14, 19, 24, 27, 29, 31, 32, 66, 92, 105, 109, 131, 148, 154, 187). Advisory: reactive three stars
+on 41-200 45.6% (≤ 50%; v1.5 74%); humanDial passes all of levels 1-10 with the soft-fail (76.7% of
+its tries; one miss now relaxes a goal there) and 79.2% of 1-40, but earns 0.92 stars on 41-200
+(target ≥ 0.95). Per Dare kind (non-seeking reactive / Feat-seeking oracle / humanFeat; advisory
+≤ 35% / ≥ 85% / ≥ 50%): ring 60% / 72% / 0%, deep 73% / 82% / 47%, snapSave 29% / 100% / 45%
+(humanFeat 2% before), parry 63% / 100% / 33%, swings 12% / 71% / 43%, ride 61% / 100% / 56%,
+flakes 68% / 95% / 45%. The ring Dare no longer comes for free (reactive 100% before), but the
+human models never reach x4 on a level (their ring rarely holds above x3), so as sized it is out of
+their reach; rewording it as a verb (x4 with three tricks, or before the midpoint) is open for the
+integrator. The single-try run (`--campaign --bot all`, the CI form) gives the same oracle, reactive
+and Feat-seeking numbers; humanDial passes 82.5% of 1-40 and 70% of 1-10 there (the soft-fail
+needs a second try).
