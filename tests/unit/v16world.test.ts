@@ -8,7 +8,7 @@ import { dayStartTick, dayStartY, dayTicks, elevation } from '../../src/core/clo
 import { clusterEligible, contestCluster, glassQuota } from '../../src/core/gen/contest.ts';
 import { flareLift, liftOf, noonHeatAt, paramsAt, worldElevation } from '../../src/core/gen/plan.ts';
 import { insertCaster, insertPickup } from '../../src/core/gen/store.ts';
-import { chillDeltaTable, deltaForSlot, keepRows, keepVerdict, validatorDrain } from '../../src/core/gen/validator.ts';
+import { chillDeltaTable, deltaForSlot, keepRows, keepVerdict, slotDeltaAt, validatorDrain } from '../../src/core/gen/validator.ts';
 import { createWorld, ensureGenerated, generateSome, type World } from '../../src/core/gen/world.ts';
 import { makeCaster, makePrism } from '../../src/core/gen/catalog.ts';
 import { rectPoly } from '../../src/core/geom.ts';
@@ -242,6 +242,37 @@ describe('Heat Flares (§2.5)', () => {
     // The share kept is a sim --check row (§2.5's ≥ 85% of Days 2-4); here only that flares are kept at all.
     expect(kept / decided).toBeGreaterThan(0.5);
   }, 60_000);
+
+  it("a lit hold tick burns TUNING.flare.burnPerLitTick on top of the drain; the validator's DP charges it on the hold's steps", () => {
+    const burn = TUNING.flare.burnPerLitTick;
+    expect(burn).toBeGreaterThan(0);
+    // The sim: in full sun the first burning tick drops Chill by the burn more than the tick before the hold.
+    const s = started();
+    strip(s);
+    const f = debugFlare(s, 6, 10);
+    const drop = new Map<number, number>();
+    for (let i = 0; i < 300 && s.tickAbs <= f.fallTick; i++) {
+      s.nubs.chill = 60;
+      step(s, NO_INPUT);
+      drop.set(s.tickAbs, 60 - s.nubs.chill);
+    }
+    const before = drop.get(f.holdTick - 1) as number;
+    expect(before).toBeGreaterThan(0);
+    expect((drop.get(f.holdTick + 1) as number) - before).toBeCloseTo(burn, 1);
+    expect((drop.get(f.fallTick) as number) - before).toBeGreaterThan(0.9 * burn);
+    // The validator: the steps ending in (holdTick, fallTick] of a kept flare burn STEP × burn a lit count.
+    const w = createWorld(headlessConfig(2));
+    ensureGenerated(w, dayStartY(4));
+    const k = w.flares.find((x) => x.state === FLARE_KEPT) as Flare;
+    const STEP = TUNING.validator.stepTicks;
+    const plain = (t: number): Float64Array => deltaForSlot(w, k.day, t - dayStartTick(k.day));
+    for (const [t, burns] of [[k.holdTick, false], [k.holdTick + STEP, true], [k.fallTick, true], [k.fallTick + STEP, false]] as const) {
+      const d = slotDeltaAt(w, t);
+      const p0 = plain(t);
+      expect(d[0], `tick ${t}`).toBe(p0[0]);
+      expect((p0[STEP] as number) - (d[STEP] as number), `tick ${t}`).toBeCloseTo(burns ? STEP * burn : 0, 9);
+    }
+  });
 
   it('dropped flares never lift the sun; no flares with the rule off', () => {
     const w = createWorld(headlessConfig(3));

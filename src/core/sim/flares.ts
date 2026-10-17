@@ -79,8 +79,12 @@ export function updateFlare(s: SimState): void {
   const t = s.tickAbs;
   if (s.flarePhase > 0) {
     const f = fl[s.flareIdx] as Flare;
-    // Lit ticks of the hold: the tick before was a hold tick.
-    if (t > f.holdTick && t <= f.fallTick && s.nubs.f > 0) s.flareLit++;
+    // Lit ticks of the hold: the tick before was a hold tick. Each burns TUNING.flare.burnPerLitTick
+    // Chill (the validator charges it on the steps (holdTick, fallTick]: validator.ts slotDeltaAt).
+    if (t > f.holdTick && t <= f.fallTick && s.nubs.f > 0) {
+      s.flareLit++;
+      s.nubs.chill = Math.max(0, s.nubs.chill - FL.burnPerLitTick);
+    }
     const nk = nextKept(fl, s.flareIdx + 1);
     const nx = nk >= 0 ? (fl[nk] as Flare) : null;
     if (t >= f.endTick || (nx !== null && t >= nx.warnTick)) {

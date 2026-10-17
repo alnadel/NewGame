@@ -335,6 +335,11 @@ const tuning = {
     snow: 5,
     budMul: 3,
     meltMul: 2,
+    /**
+     * Chill a lit tick of a flare's hold costs on top of the drain (a miss bites; the validator's DP
+     * charges it on the hold's steps, so every world stays survivable with it).
+     */
+    burnPerLitTick: 0.4,
   },
 
   /** Pickups (V1_PLAN §5.4). */

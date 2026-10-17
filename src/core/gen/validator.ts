@@ -14,7 +14,7 @@ import { sunLockedAt } from '../sim/sun.ts';
 import { cloudOffset, distToCasterBounds, shadowLength } from '../shadows.ts';
 import { trailX } from '../trail.ts';
 import { rockHeight } from './catalog.ts';
-import { flareEps, liftElevation, noonHeatAt, paramsAt, worldElevation, worldYAtTick } from './plan.ts';
+import { flareEps, liftElevation, liftingFlare, noonHeatAt, paramsAt, worldElevation, worldYAtTick } from './plan.ts';
 import { addCloud, commitRescue, findSpot, type Spot } from './placer.ts';
 import { gatherScene, lowerBound, type ChunkLit, type World } from './store.ts';
 
@@ -128,17 +128,18 @@ export function validatorDrain(w: World): number {
   return w.validatorDrain * paramsAt(w, 1).drainMul;
 }
 
-/** Per world: Chill-delta tables per (day, inside the Noon Heat window), index 2·day + window. */
+/** Per world: Chill-delta tables per (day, inside the Noon Heat window, a flare's burn), index 4·day + 2·burn + window. */
 const slotDeltas = new WeakMap<World, (Float64Array | undefined)[]>();
 
 /**
  * v1.6 Noon Heat (docs/V1_6_PLAN.md §2.5, T1): the DP's Chill-delta table for the slot at (day,
  * dayTick), chillDeltaTable(validatorDrain(w) · noonHeatAt(…), regen), cached per (day, in window).
- * Outside the window (and on worlds without Noon Heat) it is the plain table.
+ * Outside the window (and on worlds without Noon Heat) it is the plain table. `burn` (a kept
+ * flare's hold step, slotDeltaAt) also charges TUNING.flare.burnPerLitTick a tick on every lit count.
  */
-export function deltaForSlot(w: World, day: number, dayTick: number): Float64Array {
+export function deltaForSlot(w: World, day: number, dayTick: number, burn = false): Float64Array {
   const h = noonHeatAt(w, day, dayTick);
-  const key = 2 * day + (h !== 1 ? 1 : 0);
+  const key = 4 * day + (burn ? 2 : 0) + (h !== 1 ? 1 : 0);
   let memo = slotDeltas.get(w);
   if (!memo) {
     memo = [];
@@ -147,15 +148,37 @@ export function deltaForSlot(w: World, day: number, dayTick: number): Float64Arr
   let t = memo[key];
   if (!t) {
     t = chillDeltaTable(validatorDrain(w) * h, paramsAt(w, 1).regen);
+    if (burn) {
+      const b = new Float64Array(t);
+      for (let c = 1; c < b.length; c++) b[c] = (b[c] as number) - STEP * FL_BURN;
+      t = b;
+    }
     memo[key] = t;
   }
   return t;
 }
 
-/** deltaForSlot of job slot s (its day and the dayTick of its absolute time). */
+/** Chill a lit hold tick of a flare burns (TUNING.flare.burnPerLitTick). */
+const FL_BURN = TUNING.flare.burnPerLitTick;
+
+/**
+ * The DP's table for the step ending at absolute tick `tick` (it covers ticks (tick − 6, tick]):
+ * deltaForSlot, burning when the step lies in a kept flare's (holdTick, fallTick], the ticks whose
+ * previous tick was a hold tick (sim/flares.ts burns there). The hold's edges are on the step grid.
+ */
+export function slotDeltaAt(w: World, tick: number): Float64Array {
+  const day = dayAtTick(tick);
+  let burn = false;
+  if (FL_BURN > 0 && w.flares.length > 0) {
+    const f = liftingFlare(w, tick - 1);
+    burn = f !== null && tick > f.holdTick && tick <= f.fallTick;
+  }
+  return deltaForSlot(w, day, tick - dayStartTick(day), burn);
+}
+
+/** deltaForSlot of job slot s (its day and the dayTick of its absolute time), with a flare's burn. */
 function slotDelta(w: World, job: ValidationJob, s: number): Float64Array {
-  const day = job.sDay[s] as number;
-  return deltaForSlot(w, day, Math.round((job.sT[s] as number) * TICK_HZ) - dayStartTick(day));
+  return slotDeltaAt(w, Math.round((job.sT[s] as number) * TICK_HZ));
 }
 
 /**
