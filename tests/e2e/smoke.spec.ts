@@ -99,7 +99,8 @@ test.describe('smoke', () => {
     await waitForScreen(page, 'play');
     await page.waitForTimeout(500);
     await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
-    await waitForScreen(page, 'results', 3000);
+    // The death beat runs 1.1 s of game time; under load that can take longer than 3 s of wall time.
+    await waitForScreen(page, 'results');
     await expect(page.locator('.res-sheet')).toContainText(/Melted by You|Glared by/);
     const retry = page.locator('.res-retry');
     await expect(retry).toBeEnabled();

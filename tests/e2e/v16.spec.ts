@@ -54,6 +54,48 @@ test('the ring, the pips and the dial layers show their demos without errors', a
   expect(errors).toEqual([]);
 });
 
+test('Guide Auto never hides the deep band: a veteran save (30 runs) still draws it on the dial', async ({ page }) => {
+  const errors = watchErrors(page);
+  // 30 lifetime runs: Guide Auto has faded the teal guide away (game/assist.ts guideAlpha 0).
+  await seedSave(page, { ...OPEN_SAVE, stats: { runs: 30 } });
+  await page.goto('/?test=1&seed=42&profile=3&t=08:30');
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'title');
+  await keepAlive(page);
+  const box = (await page.locator('canvas#game').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.45);
+  await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.state().phase)).toBe('day');
+  await page.waitForTimeout(1600);
+  await demo(page, 'deepBand');
+  await expect.poll(async () => (await mech(page)).deepBins).toBeGreaterThan(0);
+  // The demo's band sits at the sun's angle, under the sun's knob: turn the sun away from it by hand.
+  await page.evaluate(() => window.__SHADY_TEST__!.bot(null));
+  const th0 = await page.evaluate(() => window.__SHADY_TEST__!.state().theta);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.7);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + 12 * i, box.y + box.height * 0.7);
+  await page.mouse.up();
+  await expect.poll(async () => Math.abs((((await page.evaluate(() => window.__SHADY_TEST__!.state().theta)) - th0 + 540) % 360) - 180)).toBeGreaterThan(25);
+  await page.waitForTimeout(150);
+  // Dark teal pixels on the ring (the deep band's colour, #0B5F5A, over its own teal track).
+  const teal = await page.evaluate(() => {
+    const m = window.__SHADY_TEST__!.mech();
+    const c = document.querySelector('canvas#game') as HTMLCanvasElement;
+    const k = c.width / c.getBoundingClientRect().width;
+    const g = c.getContext('2d')!;
+    let n = 0;
+    for (let a = 0; a < 360; a += 2) {
+      const x = Math.round((m.dialX + Math.cos((-a * Math.PI) / 180) * m.dialR) * k);
+      const y = Math.round((m.dialY + Math.sin((-a * Math.PI) / 180) * m.dialR) * k);
+      const [r, gg, b] = g.getImageData(x, y, 1, 1).data as unknown as number[];
+      if ((gg as number) > (r as number) + 30 && (b as number) > (r as number) + 25 && (gg as number) < 150) n++;
+    }
+    return n;
+  });
+  expect(teal).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
 test('a Heat Flare counts down on the dial and a parry marks it on the ruler', async ({ page }) => {
   const errors = watchErrors(page);
   // The shipped rules: the Frost Bank off, so the meter is one gauge; the ring is on.

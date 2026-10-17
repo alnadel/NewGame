@@ -113,6 +113,10 @@ export interface ShadyTestHook {
     noonHeat: number;
     badgeX: number;
     badgeY: number;
+    /** The dial's centre and radius (CSS px on the canvas). */
+    dialX: number;
+    dialY: number;
+    dialR: number;
   };
 }
 
@@ -208,6 +212,9 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
         noonHeat: m.noonHeat,
         badgeX: h.badgeX,
         badgeY: h.cy,
+        dialX: session.renderer.scene.haloIn.cx,
+        dialY: session.renderer.scene.haloIn.cy,
+        dialR: session.renderer.scene.haloIn.R,
       };
     },
   };

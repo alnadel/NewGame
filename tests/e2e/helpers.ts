@@ -249,6 +249,10 @@ export interface ShadyMech {
   noonHeat: number;
   badgeX: number;
   badgeY: number;
+  /** The dial's centre and radius (CSS px on the canvas). */
+  dialX: number;
+  dialY: number;
+  dialR: number;
 }
 
 export async function mech(page: Page): Promise<ShadyMech> {
