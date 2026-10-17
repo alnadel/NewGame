@@ -520,6 +520,8 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
     next(s: SimState): InputFrame {
       const out = decide(s);
       out.snap = snaps && snapReady(s) && s.nubs.f > 0 && s.nubs.chill < HUMAN_SNAP_CHILL;
+      // humanFeat (v1.6): a snapSave Dare casts a ready snap in the sun (bots/dares.ts).
+      if (feat && !out.snap && snapReady(s) && ctx.opts.dares) out.snap = ctx.opts.dares.humanSnap(s, false);
       return out;
     },
   };
