@@ -87,10 +87,13 @@ export interface Banners {
   /**
    * In-run toasts under the HUD (v1.4): a mission done ("MISSION ✓ 2/3"), a level tip. They queue
    * (at most TOAST_QUEUE) and wait while a card or stamp holds the top of the screen, so they never
-   * cover those, Nubs or his dial. toastT: seconds the first one has shown (−1 none showing).
+   * cover those, Nubs or his dial. toastT: seconds the first one has shown (−1 none showing). A card
+   * or stamp arriving over a toast on screen (PARRY!, a Day card) hides it (toastHide, eased 0..1)
+   * and holds its clock until it has gone, so no half-legible text shows through.
    */
   toasts: Toast[];
   toastT: number;
+  toastHide: number;
   toastLines: string[];
   toastWrapW: number;
   toastFont: string;
@@ -181,6 +184,7 @@ export function createBanners(): Banners {
     starFont: '',
     toasts: [],
     toastT: -1,
+    toastHide: 0,
     toastLines: [],
     toastWrapW: 0,
     toastFont: '',
@@ -256,11 +260,19 @@ const TIP_YIELD_S = 1.5;
 /**
  * Queues an in-run toast (see Banners.toasts). A mission goes ahead of waiting tips (and a tip that
  * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one, so tips never pile up.
+ * An `urgent` toast (a cue about to happen, the first Heat Flare) goes next at once: whatever waits
+ * is dropped and the toast on screen starts to leave now.
  */
-export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number): void {
+export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number, urgent = false): void {
   const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold };
   const q = b.toasts;
   const first = b.toastT >= 0 ? 1 : 0;
+  if (urgent) {
+    q.length = first;
+    q.push(t);
+    if (first) b.toastT = Math.max(b.toastT, TOAST_IN + (q[0] as Toast).hold);
+    return;
+  }
   if (kind === 'tip') {
     for (let i = q.length - 1; i >= first; i--) if ((q[i] as Toast).kind === 'tip') q.splice(i, 1);
     if (q.length < TOAST_QUEUE) q.push(t);
@@ -284,6 +296,7 @@ export function endToasts(b: Banners): void {
 export function resetBanners(b: Banners): void {
   b.toasts.length = 0;
   b.toastT = -1;
+  b.toastHide = 0;
   b.night = -1;
   b.day = -1;
   b.coolPulse = 0;
@@ -328,14 +341,16 @@ export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
       }
     }
   }
-  if (b.toastT >= 0) {
+  const covered = b.stamp >= 0 || b.day >= 0 || b.level >= 0 || b.night >= 0;
+  b.toastHide += ((covered ? 1 : 0) - b.toastHide) * Math.min(1, dt * 12);
+  if (b.toastT >= 0 && !covered) {
     b.toastT += dt;
     if (b.toastT > TOAST_IN + (b.toasts[0]?.hold ?? 0) + TOAST_OUT) {
       b.toasts.shift();
       b.toastT = -1;
     }
   }
-  if (b.toastT < 0 && b.toasts.length > 0 && b.stamp < 0 && b.day < 0 && b.level < 0 && b.night < 0) {
+  if (b.toastT < 0 && b.toasts.length > 0 && !covered) {
     b.toastT = 0;
     b.toastWrapW = 0;
   }
@@ -374,8 +389,8 @@ function fonts(b: Banners, scale: number): void {
 export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, top: number, scale: number, reducedMotion: boolean): void {
   const cx = v.vx + v.vw / 2;
   fonts(b, scale);
-  // A toast already showing stays under a card or stamp that arrives after it (PARRY!, a Day card).
-  const toast = b.toastT >= 0 ? b.toasts[0] : undefined;
+  // A toast already showing fades away under a card or stamp that arrives after it (PARRY!, a Day card).
+  const toast = b.toastT >= 0 && b.toastHide < 0.99 ? b.toasts[0] : undefined;
   if (toast) drawToast(g, b, toast, v, cx, top, scale, reducedMotion);
   if (b.night >= 0) {
     const t = b.night;
@@ -427,7 +442,7 @@ const TOAST_LOOK: Readonly<Record<ToastKind, readonly [string, string, string, s
 function drawToast(g: CanvasRenderingContext2D, b: Banners, t: Toast, v: View, cx: number, top: number, scale: number, reducedMotion: boolean): void {
   const u = b.toastT;
   const outT = u - TOAST_IN - t.hold;
-  let a = Math.min(1, u / TOAST_IN);
+  let a = Math.min(1, u / TOAST_IN) * (1 - b.toastHide);
   let dy = reducedMotion ? 0 : -14 * (1 - easeOutBack(Math.min(1, u / TOAST_IN)));
   if (outT > 0) {
     const k = Math.min(1, outT / TOAST_OUT);

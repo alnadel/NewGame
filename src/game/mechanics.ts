@@ -10,7 +10,8 @@
 //
 // Demos stage a plausible moment for visual review (v1.5: 'bud', 'bloom', 'snapReady', 'snap',
 // 'deep'; v1.6: 'ring', 'bleed', 'trick', 'pips', 'spill', 'cash', 'bank', 'deepBand', 'glass',
-// 'land', 'landing', 'flare', 'parry', 'noonHeat'). They put objects into the run's world (a bud, its
+// 'land', 'landing', 'flare', 'flareSoon' (a kept flare 5 s ahead: the sim plays it), 'parry',
+// 'noonHeat'). They put objects into the run's world (a bud, its
 // sunflower, a low cloud, a kept flare through the core's debugFlare, a ring level through
 // debugRing), stand in for the sim's masks and meters while they last and send the events to fx,
 // audio and haptics, but never change a rule of the sim.
@@ -362,6 +363,11 @@ export function createMechanics(): Mechanics {
           }
           return true;
         }
+        case 'flareSoon':
+          // A kept flare whose warning starts in 5 s: the sim plays it (a new player's tip comes first).
+          flareDemo = debugFlare(s, 300, 10);
+          arcMask(theta + 40, 16, demoMask);
+          return true;
         case 'flare':
         case 'parry': {
           if (name === 'flare' || !flareDemo) {

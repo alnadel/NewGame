@@ -12,9 +12,12 @@
 // Cold Snap's level (a pip full, a snap with a bud in reach, the first cash-in), glass flakes on
 // their level (the first glass window on the dial) and Heat Flares on theirs (the first warning).
 // A new player's endless runs get the ring's first drop from ×3 or more, the Garden, the cash-in,
-// the glass and the flare tips too. A level whose goal was relaxed (the soft-fail) says so at go.
+// the glass and the flare tips too; the flare's comes FLARE_LEAD before the first kept flare's
+// warning (it is on the ruler long before), goes ahead of any other toast and leaves at the rise,
+// so it is read before the countdown runs and never after it. A level whose goal was relaxed (the
+// soft-fail) says so at go.
 
-import { levelProgress, queryBuds, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
+import { FLARE_KEPT, levelProgress, queryBuds, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import type { Save } from '../meta/saveTypes.ts';
@@ -23,7 +26,7 @@ import { goalMetLive } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
-export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'snapBud' | 'glass' | 'warn';
+export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'snapBud' | 'glass' | 'soon';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -50,6 +53,10 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
 
 /** The Heat Flare tip (three lines at 360 px): the real cue, the orange rim, and where to go. */
 const FLARE_TIP = 'Heat Flare! Before the orange rim runs out, swing to the frost-rimmed teal.';
+/** The first endless flare's tip, read before its warning (three lines at 360 px, like FLARE_TIP). */
+const FLARE_SOON_TIP = 'Heat Flare soon! Before its orange rim runs out, swing to the frost-rimmed teal.';
+/** The flare tip shows this long (ticks) before the warning: a tip's read (TIP_HOLD) ahead of a 2 s countdown. */
+const FLARE_LEAD = 240;
 
 /**
  * v1.5: the tips of the level that teaches each mechanic. 'bud' shows when a closed bud comes into
@@ -72,7 +79,7 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
     ['go', 'Two shadows over Nubs at once is deep shade: Chill and the ring fill twice as fast.'],
     ['deep', 'Deep shade! The dark band on the teal means double cool. Hunt the overlaps.'],
   ],
-  glass: [['glass', 'Glass flakes melt fast. The white glint saves them; out on a white arc it costs you sun.']],
+  glass: [['glass', 'Glass flakes melt fast. The white glint saves them; out on a dotted arc it costs you sun.']],
   // The Solar Flare's level says it at go, before its first 1.2 s warning (too short to read a tip in).
   flare: [['go', FLARE_TIP]],
 };
@@ -92,7 +99,7 @@ const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
   [...(MECH_TIPS.snap[2] as readonly [TipOn, string]), 'coldsnap'],
   [...(MECH_TIPS.snap[3] as readonly [TipOn, string]), 'coldsnap'],
   [...(MECH_TIPS.glass[0] as readonly [TipOn, string]), 'brittle'],
-  ['warn', FLARE_TIP, 'flare'],
+  ['soon', FLARE_SOON_TIP, 'flare'],
 ];
 /** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
 const NEW_PLAYER_RUNS = 12;
@@ -157,13 +164,16 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let spent = false;
   let shadeAt = -1;
 
-  /** Shows the level's tip for `on`, once per run. */
-  const tip = (on: TipOn): void => {
+  /** The first flare's tip is still to show (a new player's endless run). */
+  let soonTip = false;
+
+  /** Shows the level's tip for `on`, once per run (an `urgent` one ahead of any other toast). */
+  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false): void => {
     for (let i = 0; i < tips.length; i++) {
       const t = tips[i] as readonly [TipOn, string, string?];
       if (t[0] !== on || (tipsShown & (1 << i)) !== 0) continue;
       tipsShown |= 1 << i;
-      showToast(banners, 'tip', 'TIP', t[1], t[2] ?? tipGlyph, TIP_HOLD);
+      showToast(banners, 'tip', 'TIP', t[1], t[2] ?? tipGlyph, hold, urgent);
     }
   };
 
@@ -185,6 +195,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       budTip = tips.some((t) => t[0] === 'bud');
       snapBudTip = tips.some((t) => t[0] === 'snapBud');
       glassTip = tips.some((t) => t[0] === 'glass');
+      soonTip = tips.some((t) => t[0] === 'soon');
       budAt = -1e9;
       tipGlyph = lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
       if (!scored) return;
@@ -252,9 +263,6 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'snapCash':
           if (ev.refundH > 0) tip('cash');
           break;
-        case 'flareWarn':
-          tip('warn');
-          break;
         default:
           break;
       }
@@ -275,6 +283,19 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           if (glassTip && s.guide.flake?.includes(1)) {
             glassTip = false;
             tip('glass');
+          }
+        }
+        if (soonTip) {
+          // The first kept flare ahead: its tip FLARE_LEAD before the warning, held to the rise.
+          const fl = s.world.flares;
+          for (let i = Math.max(0, s.flareIdx); i < fl.length; i++) {
+            const f = fl[i];
+            if (!f || f.state !== FLARE_KEPT || f.riseTick <= s.tickAbs) continue;
+            if (f.warnTick - s.tickAbs <= FLARE_LEAD) {
+              soonTip = false;
+              tip('soon', Math.max(1, (f.riseTick - s.tickAbs) / 60 - 0.25), true);
+            }
+            break;
           }
         }
         if (budTip && s.tick - budAt >= MISSION_EVERY && s.world.buds) {
