@@ -17,7 +17,8 @@ describe('starState', () => {
     const goal = l2.goal.target;
     expect(starState(l2, stats(0, 0, 0, 100), false)).toBe(0);
     expect(starState(l2, stats(goal, 0, 0, 100), false)).toBe(STAR_GOAL);
-    expect(starState(l2, stats(l2.stars.flakes, 0, 0, 100), false)).toBe(STAR_GOAL | STAR_FLAKES);
+    // Star 2 is L2's flakes Dare (sized by the bake).
+    expect(starState(l2, stats(l2.feats[0]!.target, 0, 0, 100), false)).toBe(STAR_GOAL | STAR_FLAKES);
     expect(starState(l2, stats(0, 0, l2.stars.sunSec + 0.1, 100), false)).toBe(STAR_COOL_LOST);
     expect(starState(l2, stats(0, 0, 0, l2.stars.minChill - 1), false)).toBe(STAR_COOL_LOST);
     // A finish goal is met only at the line.

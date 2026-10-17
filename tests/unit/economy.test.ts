@@ -17,6 +17,7 @@ import { createRun } from '../../src/core/sim/create.ts';
 import type { SimEvent } from '../../src/core/sim/events.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
+import { CAMPAIGN_LEVELS, startsWithSnap } from '../../src/config/campaign.ts';
 import { campaignConfig } from '../../src/core/level.ts';
 import { debugBloom, SNAP_TICKS } from '../../src/core/sim/mechanics.ts';
 import { applyDaylight, debugRing } from '../../src/core/sim/nubs.ts';
@@ -286,7 +287,9 @@ describe('Frost Bank (§2.2)', () => {
     expect(createRun(on(headlessConfig(1))).nubs.frostH).toBe(BK.runStartH);
     expect(createRun(on({ ...headlessConfig(1), mode: 'daily', dailyDate: '2026-10-16' })).nubs.frostH).toBe(BK.runStartH);
     expect(createRun(on(headlessConfig(1, 0))).nubs.frostH).toBe(0);
-    expect(createRun(on(campaignConfig(11))).nubs.frostH).toBe(BK.campaignStartH);
+    // A Journey level that does not dare a snap (one that does starts with it ready, as L10 does).
+    const plain = CAMPAIGN_LEVELS.find((l) => l.id > 10 && !startsWithSnap(l))!.id;
+    expect(createRun(on(campaignConfig(plain))).nubs.frostH).toBe(BK.campaignStartH);
     expect(createRun(on(campaignConfig(10))).nubs.frostH).toBe(BK.teachStartH);
     const two = createRun(on({ ...headlessConfig(1), startFrost: 2 }));
     expect([two.nubs.frostH, two.nubs.frost]).toEqual([200, 2]);

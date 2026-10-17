@@ -2,8 +2,9 @@
 // one concept of the catalog (config/concepts.ts) in teaching order; levels 41-200 compose two or
 // three concepts per level around the chapter's theme, with drain and length rising by a chapter
 // curve and star thresholds scaling with the level's length. Everything is a pure function of the
-// level id (seed = hashString(`journey-${id}`); composition draws from rngFor(seed, 'campaign', id)),
-// so buildCampaign() is deterministic and the table is data.
+// level id and the bake's data (seed = hashString(`journey-${id}`), or a teaching level's world
+// variant of it, levelSeed; composition draws from rngFor(seed, 'campaign', id)), so
+// buildCampaign() is deterministic and the table is data.
 
 import { CONCEPT_IDS, CONCEPTS, conceptsCompatible, foldTuning, MECHANIC_CONCEPTS, TEACH_LEVELS, type ConceptId } from './concepts.ts';
 import { dayParams, dayPlan, type BiomeId } from './days.ts';
@@ -69,6 +70,30 @@ export interface LevelBake {
   readonly stillFlares: number;
   /** The level's flares after the keep test (the kept ones; the boss's HP is their count). */
   readonly flares: readonly LevelFlare[];
+  /**
+   * The world variant a teaching level plays (its seed, `levelSeed`): the first on which a
+   * dial-following player meets its verb goal (`lessonReads`); 0 (the level's own seed) elsewhere.
+   */
+  readonly variant: number;
+  /** The Dare candidates measured for the level's (first) Dare, in candidate order (`dareCandidates`). */
+  readonly dares: readonly DareMeasure[];
+  /** A finale's second Dare: candidates measured beyond `dares` (or under the snap its first Dare starts with). */
+  readonly dares2: readonly DareMeasure[];
+}
+
+/**
+ * What the bake measured of one Dare kind on a level (scripts/sim16/dares.ts): the kind's value at
+ * the finish line for the players who do not seek it (the reactive bot, the oracle and humanDial on
+ * DARE_PLAYERS training decision streams) and for those who seek it (the Feat-seeking oracle and
+ * humanFeat on the same streams), −1 for a run that melted. The Dare's target is sized from it
+ * (`sizeDare`): just above what the non-seekers reach, where the seekers reach it.
+ */
+export interface DareMeasure {
+  readonly kind: FeatKind;
+  /** [reactive, oracle, humanDial × DARE_PLAYERS] */
+  readonly not: readonly number[];
+  /** [Feat-seeking oracle, humanFeat × DARE_PLAYERS] */
+  readonly seek: readonly number[];
 }
 
 export interface LevelDef {
@@ -78,7 +103,7 @@ export interface LevelDef {
   readonly chapter: number;
   /** Short, playful: "First Shade", "Glass Garden". */
   readonly name: string;
-  /** hashString(`journey-${id}`). */
+  /** hashString(`journey-${id}`), or a teaching level's world variant of it (levelSeed, the bake's lessonReads). */
   readonly seed: number;
   readonly biome: BiomeId;
   /** 'clear' unless a forecast concept is active. */
@@ -347,7 +372,10 @@ function composeConcepts(id: number, seed: number, chapter: Chapter): ConceptId[
  * caps; goals and star 2 scale with the flakes the level offers.
  */
 function makeLevel(id: number): LevelDef {
-  const seed = hashString(`journey-${id}`);
+  // The Dares, kept flares, bake-sized goal target and a teaching level's world variant come from
+  // the bake's result (LEVEL_BAKE_RUN).
+  const run = bakeRun(id);
+  const seed = levelSeed(id, run?.variant ?? 0);
   const chapter = CHAPTERS[chapterOf(id) - 1] as Chapter;
   const introduces: ConceptId | null = id <= TEACH_LEVELS ? (CONCEPT_IDS[id - 1] as ConceptId) : null;
   // v1.6: every boss finale of chapters 5-20 also carries the Solar Flare, appended after the draw
@@ -387,8 +415,6 @@ function makeLevel(id: number): LevelDef {
     starFlakes = Math.max(target + 1, Math.round(0.8 * flakes));
   }
   // v1.6 verb goals (§2.6): a teaching level asks for the verb it teaches, kept small.
-  // The Dares, kept flares and bake-sized goal targets come from the bake's result (LEVEL_BAKE_RUN).
-  const run = bakeRun(id);
   const teach = introduces ? TEACH_GOALS[introduces] : undefined;
   if (teach) {
     goal = teach;
@@ -451,11 +477,6 @@ export const DARE_OF: Readonly<Record<ConceptId, FeatKind>> = Object.freeze({
   drag: 'ring', long: 'ring', stroll: 'ring', sunset: 'ring', frosty: 'ring', marathon: 'ring', moonlit: 'ring', heavy: 'ring', hardy: 'ring',
 } satisfies Record<ConceptId, FeatKind>);
 
-/** The fallback Dares (core verbs), drawn from (seed, 'dare', id) when no concept's Dare can be played. */
-const FALLBACK_DARES: readonly FeatKind[] = Object.freeze(['blooms', 'swings', 'deep', 'snapSave'] as FeatKind[]);
-/** When no core verb fits (the first levels), the first of these the level offers. */
-const LAST_DARES: readonly FeatKind[] = Object.freeze(['flakes', 'clean', 'ride'] as FeatKind[]);
-
 /** True for the boss finales of chapters 5-20 (levels 50, 60, …, 200): they carry the Solar Flare. */
 export function isBossFinale(id: number): boolean {
   return id > TEACH_LEVELS && id % LEVELS_PER_CHAPTER === 0;
@@ -501,48 +522,59 @@ export function levelBakeKey(seed: number, concepts: readonly ConceptId[], drain
 }
 
 /** Bump when the generator changes what a level offers (every bake entry goes stale). */
-export const BAKE_VERSION = 3;
+export const BAKE_VERSION = 4;
+
+/**
+ * Level `id`'s seed: hashString(`journey-${id}`), or for world variant `variant` > 0 (a teaching
+ * level whose own world walls its lesson off, LevelBake.variant) hashString(`journey-${id}-${variant}`).
+ */
+export function levelSeed(id: number, variant: number): number {
+  return hashString(variant > 0 ? `journey-${id}-${variant}` : `journey-${id}`);
+}
 
 const NO_FLARES: readonly LevelFlare[] = Object.freeze([]);
 const NO_FEATS: readonly FeatSpec[] = Object.freeze([]);
-/** LEVEL_BAKE_RUN's Dare letters: a = blooms … m = ring. */
-const FEAT_CODES: readonly FeatKind[] = ['blooms', 'swings', 'deep', 'snapSave', 'parry', 'brittle', 'flakes', 'clean', 'ride', 'gates', 'flip', 'still', 'ring'];
+/** Every Dare kind; LEVEL_BAKE_RUN's Dare letters are their indices: a = blooms … m = ring. */
+export const FEAT_KINDS: readonly FeatKind[] = Object.freeze(['blooms', 'swings', 'deep', 'snapSave', 'parry', 'brittle', 'flakes', 'clean', 'ride', 'gates', 'flip', 'still', 'ring'] as FeatKind[]);
 let runEntries: string[] | null = null;
 
 /**
  * Level `id`'s bake result (LEVEL_BAKE_RUN, entry id − 1 of the ';'-separated list): its Dares
- * (letter + target each), its kept flares (minute:d, ','-separated) and a bake-sized goal target
- * ('/'-separated fields), or null when the bake has no entry for it.
+ * (letter + target each), its kept flares (minute:d, ','-separated), a bake-sized goal target and a
+ * teaching level's world variant ('/'-separated fields; the last two may be left out), or null when
+ * the bake has no entry for it.
  */
-function bakeRun(id: number): { feats: readonly FeatSpec[]; flares: readonly LevelFlare[]; goal: number | null } | null {
+function bakeRun(id: number): { feats: readonly FeatSpec[]; flares: readonly LevelFlare[]; goal: number | null; variant: number } | null {
   const entries = (runEntries ??= LEVEL_BAKE_RUN.split(';'));
   const e = entries[id - 1];
   if (e === undefined || e === '') return null;
-  const [fs = '', fl = '', g = ''] = e.split('/');
+  const [fs = '', fl = '', g = '', v = ''] = e.split('/');
   const feats: FeatSpec[] = [];
-  for (const m of fs.matchAll(/([a-m])(\d+)/g)) feats.push(Object.freeze({ kind: FEAT_CODES[(m[1] as string).charCodeAt(0) - 97] as FeatKind, target: Number(m[2]) }));
+  for (const m of fs.matchAll(/([a-m])(\d+)/g)) feats.push(Object.freeze({ kind: FEAT_KINDS[(m[1] as string).charCodeAt(0) - 97] as FeatKind, target: Number(m[2]) }));
   const flares: LevelFlare[] = [];
   for (const x of fl === '' ? [] : fl.split(',')) {
     const [minute, d] = x.split(':');
     flares.push(Object.freeze({ minute: Number(minute), d: Number(d) }));
   }
-  return { feats: Object.freeze(feats), flares: Object.freeze(flares), goal: g === '' ? null : Number(g) };
+  return { feats: Object.freeze(feats), flares: Object.freeze(flares), goal: g === '' ? null : Number(g), variant: v === '' ? 0 : Number(v) };
 }
 
 /**
  * Tooling (scripts/sim16/bake.ts, the bake test): level `l`'s LEVEL_BAKE_RUN entry from what the bake
- * measured: its Dares (assignFeats over the offers), its kept flares and, for the glare lesson, the
- * clean goal (every ball with a glare-free line, minus one, at least 1).
+ * measured: its Dares (assignFeats), its kept flares, for the glare lesson the clean goal (every ball
+ * with a glare-free line, minus one, at least 1), and a teaching level's world variant.
  */
 export function bakeRunEntry(l: LevelDef, bake: LevelBake): string {
-  const p = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts);
-  const flakes = expectedFlakes(l.startMinute, l.lengthMinutes, l.concepts, l.biome, l.forecast);
-  const daylightTicks = Math.round((l.lengthMinutes / 720) * p.dayLen * 60);
-  const feats = assignFeats(l.id, l.seed, l.concepts, l.lengthMinutes, p.dayLen, daylightTicks, flakes, bake.flares.length, bake);
-  const fs = feats.map((f) => String.fromCharCode(97 + FEAT_CODES.indexOf(f.kind)) + f.target).join('');
+  const feats = assignFeats(l, bake);
+  const fs = feats.map((f) => String.fromCharCode(97 + FEAT_KINDS.indexOf(f.kind)) + f.target).join('');
   const fl = bake.flares.map((f) => `${f.minute}:${f.d}`).join(',');
-  const g = l.introduces && TEACH_GOALS[l.introduces] === 'clean' ? String(Math.max(1, bake.balls - 1)) : '';
-  return `${fs}/${fl}/${g}`;
+  const g = String(bakedGoal(l, bake) ?? '');
+  return `${fs}/${fl}/${g}${bake.variant > 0 ? `/${bake.variant}` : ''}`;
+}
+
+/** A teaching goal the bake sizes from the world (the glare lesson: every ball with a glare-free line, minus one, at least 1), else null. */
+export function bakedGoal(l: LevelDef, bake: Pick<LevelBake, 'balls'>): number | null {
+  return l.introduces && TEACH_GOALS[l.introduces] === 'clean' ? Math.max(1, bake.balls - 1) : null;
 }
 
 /** The concepts a level carries that set a mechanic or world feature a Dare needs. */
@@ -571,10 +603,10 @@ function dareFits(kind: FeatKind, id: number, concepts: readonly ConceptId[], ke
     case 'swings':
       return bake === null || bake.swings >= SWING_OFFER_PER * (sec > 30 ? 3 : 2);
     case 'ring':
-      // Only where a verb pumps the ring past what plain shade reaches (its target is the first level
-      // plain shade does not reach): deep shade, blooms, glass or parries. Fix round 2: on the first
-      // levels (no pump yet) 'reach x4' was met by no bot, the Feat-seeking oracle included.
-      return (m.deep || m.buds || m.brittle || keptFlares > 0) && (bake === null || bake.shadeRun >= RING_RUN_X3);
+      // Retired (fix round 3): measured on every level that offered it (52), the ring never needed its
+      // verb (good shade play reaches the same level, and the human models seldom pass x3), so its
+      // concepts dare their other candidates (FeatKind keeps it for older saves and the HUD).
+      return false;
     case 'ride': {
       // A ride the level offers with room to spare: one cloud for RIDE_OFFER_SEC, or RIDE_OFFER_CLOUDS clouds for ≥ 1 s.
       const t = foldTuning(concepts);
@@ -602,8 +634,6 @@ const FLAKES_OFFER_MIN = 5;
 const FLAKES_EXPECTED = 0.85;
 /** The swings Dare needs this many SWING hand-offs offered per SWING asked. */
 const SWING_OFFER_PER = 4;
-/** The ring Dare needs a fully shaded stretch of this many ticks on offer. */
-const RING_RUN_X3 = 600;
 /** The share of a level's daylight a steady player keeps Nubs in full shade (the reactive bot's ~84%). */
 const RING_PLAIN_SHADE = 0.85;
 
@@ -620,7 +650,7 @@ function ringTarget(daylightTicks: number): number {
   return Math.max(3, Math.min(5, m + 1));
 }
 
-/** A Dare's target on a level (§2.6 table), sized from what the level offers. */
+/** A Dare's target sized from the level's offers alone (a bake without measured Dares: `offerFeats`). */
 function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): number {
   const sec = (lengthMinutes / 720) * dayLen;
   switch (kind) {
@@ -650,37 +680,224 @@ function dareTarget(kind: FeatKind, lengthMinutes: number, dayLen: number, dayli
 }
 
 /**
- * A level's Dares: the first of its concepts whose Dare fits the level (the mechanic it needs is on,
- * the level offers it), else a core verb drawn from (seed, 'dare', id); finales offer a second: a boss
- * finale the parry Dare, a teaching finale another core verb.
+ * The Dares sized from the offers alone (a bake that measured no Dares, e.g. a level built in a
+ * test): the first of its concepts whose Dare fits the level (the mechanic it needs is on, the level
+ * offers it), else a core verb drawn from (seed, 'dare', id); finales offer a second.
  */
-function assignFeats(id: number, seed: number, concepts: readonly ConceptId[], lengthMinutes: number, dayLen: number, daylightTicks: number, flakes: number, keptFlares: number, bake: LevelBake | null): readonly FeatSpec[] {
-  const fits = (k: FeatKind): boolean => dareFits(k, id, concepts, keptFlares, bake, (lengthMinutes / 720) * dayLen);
-  const spec = (k: FeatKind): FeatSpec => Object.freeze({ kind: k, target: dareTarget(k, lengthMinutes, dayLen, daylightTicks, flakes, keptFlares, bake) });
-  const rng = rngFor(seed, 'dare', id);
-  // A core verb the level has taught (SWINGs from their own lesson on), else a last resort the level
-  // offers (fix round 2: L4 used to fall back to an unplayable 'swings'), else 'swings'.
-  const taught = (k: FeatKind): boolean => k !== 'swings' || id >= teachLevel('swing');
+function offerFeats(l: LevelDef, bake: LevelBake | null): readonly FeatSpec[] {
+  const p = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts);
+  const flakes = expectedFlakes(l.startMinute, l.lengthMinutes, l.concepts, l.biome, l.forecast);
+  const daylightTicks = Math.round((l.lengthMinutes / 720) * p.dayLen * 60);
+  const keptFlares = bake ? bake.flares.length : l.flares.length;
+  const fits = (k: FeatKind): boolean => dareFits(k, l.id, l.concepts, keptFlares, bake, (l.lengthMinutes / 720) * p.dayLen);
+  const spec = (k: FeatKind): FeatSpec => Object.freeze({ kind: k, target: dareTarget(k, l.lengthMinutes, p.dayLen, daylightTicks, flakes, keptFlares, bake) });
+  const rng = rngFor(l.seed, 'dare', l.id);
+  const taught = (k: FeatKind): boolean => k !== 'swings' || l.id >= teachLevel('swing');
   const fallback = (not: FeatKind | null): FeatKind => {
-    const pool = FALLBACK_DARES.filter((k) => k !== not && taught(k) && fits(k));
+    const pool = CORE_DARES.filter((k) => k !== not && taught(k) && fits(k));
     if (pool.length > 0) return rng.pick(pool);
-    return LAST_DARES.find((k) => k !== not && fits(k)) ?? 'swings';
+    return SHADE_DARES.find((k) => k !== not && fits(k)) ?? 'flakes';
   };
   let first: FeatKind | null = null;
-  for (const c of concepts) {
+  for (const c of l.concepts) {
     const k = DARE_OF[c];
     if (c !== 'flare' && fits(k)) {
       first = k;
       break;
     }
   }
-  if (first === null) first = concepts.includes('flare') && fits('parry') && !isBossFinale(id) ? 'parry' : fallback(null);
+  if (first === null) first = l.concepts.includes('flare') && fits('parry') && !isBossFinale(l.id) ? 'parry' : fallback(null);
   const out = [spec(first)];
-  if (id % LEVELS_PER_CHAPTER === 0) {
-    const second = isBossFinale(id) && fits('parry') && first !== 'parry' ? 'parry' : fallback(first);
+  if (l.id % LEVELS_PER_CHAPTER === 0) {
+    const second = isBossFinale(l.id) && fits('parry') && first !== 'parry' ? 'parry' : fallback(first);
     if (second !== first) out.push(spec(second));
   }
   return Object.freeze(out);
+}
+
+/**
+ * The core verbs a level falls back to when none of its concepts' Dares needs its verb there (in an
+ * order drawn from (seed, 'dare', id)), then the shade verbs. Fix round 3: blooms, SWINGs and the
+ * snap are the verbs the players who seek them reach and the others do not; the other kinds come
+ * to good shade play by themselves on most levels (a measured Dare is sized above that, `sizeDare`).
+ */
+const CORE_DARES: readonly FeatKind[] = Object.freeze(['blooms', 'swings', 'snapSave'] as FeatKind[]);
+const SHADE_DARES: readonly FeatKind[] = Object.freeze(['flakes', 'deep'] as FeatKind[]);
+
+/** The bake's training decision streams per human model (humanDial, humanFeat): scripts/sim16/dares.ts SIZE_SALTS. */
+export const DARE_PLAYERS = 10;
+/** Of the DARE_PLAYERS humanDial players (who do not seek the Dare), at most this many may meet it. */
+const DARE_NOT_MAX = 2;
+/** Of the DARE_PLAYERS humanFeat players (who seek it), at least this many must meet it. */
+const DARE_SEEK_MIN = 7;
+/** …and for the minor kinds (beyond the core verbs and flakes), which dare a few levels each: this many. */
+const DARE_SEEK_MIN_MINOR = 8;
+/** Each kind's least target (deep and snapSave in ticks). */
+const DARE_FLOOR: Readonly<Record<FeatKind, number>> = Object.freeze({
+  blooms: 1, swings: 1, deep: DEEP_MIN_TICKS, snapSave: 60, parry: 1, brittle: 1, flakes: 3, clean: 1, ride: 1, gates: 1, flip: 1, still: 1, ring: 3,
+});
+/** Dares counted in ticks: sized in whole tenths of a second, clear of the non-seekers by 12 ticks and 10%. */
+const tickDare = (k: FeatKind): boolean => k === 'deep' || k === 'snapSave';
+/** Dares met or not (their value is 0 or 1). */
+const binaryDare = (k: FeatKind): boolean => k === 'ride' || k === 'flip';
+/** The goal kinds whose counter is a Dare kind's (the gate goal counts the arch shaded, the Dare deep; flip within 60 ticks, the Dare 12). */
+const GOAL_COUNTS_AS: Readonly<Partial<Record<GoalKind, FeatKind>>> = Object.freeze({
+  deep: 'deep', clean: 'clean', swings: 'swings', blooms: 'blooms', snapSave: 'snapSave', brittle: 'brittle', parry: 'parry', flakes: 'flakes',
+});
+
+/** A Dare sized from a DareMeasure: its target, how well it fits (3 best, `sizeDare`) and how many humanFeat players met it. */
+export interface DareSize {
+  readonly target: number;
+  readonly tier: 0 | 1 | 2 | 3;
+  readonly met: number;
+}
+
+/** A Dare's least target on level `l`: its kind's floor, and more than the goal when the goal counts the same thing. */
+export function dareFloor(l: LevelDef, kind: FeatKind): number {
+  const floor = DARE_FLOOR[kind];
+  return GOAL_COUNTS_AS[l.goal.kind] === kind ? Math.max(floor, l.goal.target + (tickDare(kind) ? 6 : 1)) : floor;
+}
+
+/**
+ * A Dare of `kind` sized from what the bake measured, at least `floor` (fix round 3: "Dares need
+ * their verb"). Tier 3: it needs its verb there: the target is just above what the players who do
+ * not seek it reach (the reactive bot and the oracle stay under it, at most DARE_NOT_MAX of the
+ * humanDial players reach it; ticks clear by 12 and 10%), and the seekers reach it (the Feat-seeking
+ * oracle, and at least DARE_SEEK_MIN of the humanFeat players). Tier 2: that target, which the
+ * Feat-seeking oracle meets but fewer humanFeat players. Tier 1: no target needs the verb here, so it
+ * is what the Feat-seeking oracle reaches (the others may meet it too). Tier 0: not even that.
+ */
+export function sizeDare(kind: FeatKind, m: DareMeasure, floor: number): DareSize {
+  const [r = -1, o = -1, ...hd] = m.not;
+  const [f = -1, ...hf] = m.seek;
+  const top = hd.slice().sort((a, b) => b - a);
+  const base = Math.max(r, o, top[DARE_NOT_MAX] ?? -1, 0);
+  const above = binaryDare(kind) ? 1 : tickDare(kind) ? 6 * Math.ceil(Math.max(base + 12, Math.ceil(1.1 * base)) / 6) : base + 1;
+  const target = Math.max(above, floor);
+  const metBy = (t: number): number => hf.filter((v) => v >= t).length;
+  const quiet = r < target && o < target && hd.filter((v) => v >= target).length <= DARE_NOT_MAX;
+  if (quiet && f >= target) {
+    const met = metBy(target);
+    return { target, tier: met >= (CORE_DARES.includes(kind) || kind === 'flakes' ? DARE_SEEK_MIN : DARE_SEEK_MIN_MINOR) ? 3 : 2, met };
+  }
+  const own = Math.max(floor, tickDare(kind) ? 6 * Math.floor(f / 6) : f);
+  return f >= own ? { target: own, tier: 1, met: metBy(own) } : { target, tier: 0, met: 0 };
+}
+
+/** True when level `l` starts with a snap ready whatever its Dares (the Cold Snap's lesson, a snapSave goal). */
+export function snapByGoal(l: LevelDef): boolean {
+  return l.introduces === 'snap' || l.goal.kind === 'snapSave';
+}
+
+/**
+ * Level `l`'s Dare candidates, in order: its concepts' Dares, then the core verbs in an order drawn
+ * from (seed, 'dare', id), then the shade verbs; each only where the level offers it (dareFits) and
+ * SWINGs from their lesson on. A finale's second Dare (`first` set) is another kind, and the
+ * snapSave Dare only where the level starts with a snap anyway (its first Dare was measured that way).
+ */
+export function dareCandidates(l: LevelDef, bake: LevelBake | null, first: FeatKind | null): FeatKind[] {
+  const p = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts);
+  const sec = (l.lengthMinutes / 720) * p.dayLen;
+  const keptFlares = bake ? bake.flares.length : l.flares.length;
+  const snapStart = snapByGoal(l) || first === 'snapSave';
+  const out: FeatKind[] = [];
+  const add = (k: FeatKind): void => {
+    if (out.includes(k) || k === first) return;
+    if (k === 'swings' && l.id < teachLevel('swing')) return;
+    if (first !== null && k === 'snapSave' && !snapStart) return;
+    if (dareFits(k, l.id, l.concepts, keptFlares, bake, sec)) out.push(k);
+  };
+  for (const c of l.concepts) add(DARE_OF[c]);
+  const rng = rngFor(l.seed, 'dare', l.id);
+  const core = CORE_DARES.slice();
+  for (let i = core.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1));
+    const t = core[i] as FeatKind;
+    core[i] = core[j] as FeatKind;
+    core[j] = t;
+  }
+  for (const k of core) add(k);
+  for (const k of SHADE_DARES) add(k);
+  return out;
+}
+
+/**
+ * Where no candidate needs its verb with enough seekers (mostly the late levels the human models
+ * rarely finish, and the first levels before any verb is taught), the level dares the first of these
+ * at the least tier given, in this order: a core verb the players who do not seek it stay under and
+ * the Feat-seeking oracle meets (tier 2), else flakes, which every level offers (tier 1: on the first
+ * levels every player collects the flakes, so that Dare is a plain one). This keeps the kinds that
+ * dare only a few levels to the levels where they need their verb.
+ */
+const FALLBACK_DARES: readonly (readonly [FeatKind, number])[] = Object.freeze([
+  ['blooms', 2],
+  ['snapSave', 2],
+  ['swings', 2],
+  ['flakes', 1],
+] as [FeatKind, number][]);
+
+/**
+ * The Dare among `cands` (in order) given what was measured (`measured(kind)`): the first that needs
+ * its verb (sizeDare tier 3), else the first FALLBACK_DARES entry it reaches, else the best fit (tier,
+ * then humanFeat players); none below tier `least`. `next` is the first candidate not measured yet
+ * when the pick depends on it (the bake measures it and asks again).
+ */
+export function pickDare(l: LevelDef, cands: readonly FeatKind[], measured: (k: FeatKind) => DareMeasure | undefined, least = 0): { spec: FeatSpec | null; next: FeatKind | null } {
+  let best: { kind: FeatKind; size: DareSize } | null = null;
+  const sizes = new Map<FeatKind, DareSize>();
+  for (const k of cands) {
+    const m = measured(k);
+    if (!m) return { spec: null, next: k };
+    const size = sizeDare(k, m, dareFloor(l, k));
+    if (size.tier === 3) return { spec: Object.freeze({ kind: k, target: size.target }), next: null };
+    sizes.set(k, size);
+    if (!best || size.tier > best.size.tier || (size.tier === best.size.tier && size.met > best.size.met)) best = { kind: k, size };
+  }
+  for (const [k, tier] of FALLBACK_DARES) {
+    const size = sizes.get(k);
+    if (size && size.tier >= tier && size.tier >= least) return { spec: Object.freeze({ kind: k, target: size.target }), next: null };
+  }
+  return { spec: best && best.size.tier >= least ? Object.freeze({ kind: best.kind, target: best.size.target }) : null, next: null };
+}
+
+/** Where a finale's second Dare's measures are looked up: its own (dares2), then the first Dare's when measured the same way. */
+export function secondMeasures(l: LevelDef, bake: LevelBake, first: FeatKind): (k: FeatKind) => DareMeasure | undefined {
+  const same = snapByGoal(l) || first !== 'snapSave';
+  return (k) => bake.dares2.find((m) => m.kind === k) ?? (same ? bake.dares.find((m) => m.kind === k) : undefined);
+}
+
+/** A finale's second Dare must need its verb too (sizeDare tier 3): either Dare earns the star, so a weaker one would void the first. */
+const SECOND_DARE_TIER = 3;
+
+/**
+ * A level's Dares from what the bake measured (fix round 3): `pickDare` over its candidates, and on
+ * a finale a second Dare of another kind unless that would be free (below SECOND_DARE_TIER: either
+ * Dare earns the star, so a free one would void the first); the offer-sized Dares (`offerFeats`)
+ * when nothing was measured.
+ */
+function assignFeats(l: LevelDef, bake: LevelBake): readonly FeatSpec[] {
+  if (bake.dares.length === 0) return offerFeats(l, bake);
+  const first = pickDare(l, dareCandidates(l, bake, null), (k) => bake.dares.find((m) => m.kind === k)).spec;
+  if (!first) return offerFeats(l, bake);
+  const out: FeatSpec[] = [first];
+  if (l.id % LEVELS_PER_CHAPTER === 0) {
+    const second = pickDare(l, dareCandidates(l, bake, first.kind), secondMeasures(l, bake, first.kind), SECOND_DARE_TIER).spec;
+    if (second) out.push(second);
+  }
+  return Object.freeze(out);
+}
+
+/** The share of humanDial players who must pass a teaching level on their first try (`lessonReads`). */
+export const LESSON_SHARE = 0.8;
+
+/**
+ * Fix round 3 (teaching without walls): a teaching level's world reads when a dial-following player
+ * meets its verb goal (and finishes) on the first try: humanDial on LESSON_SHARE of the `players`
+ * streams played, the oracle passes and the reactive bot finishes. The bake plays world variants
+ * (`levelSeed`) until one reads on its training streams, then confirms it on fresh ones.
+ */
+export function lessonReads(humanPasses: number, players: number, oraclePassed: boolean, reactiveWon: boolean): boolean {
+  return humanPasses >= LESSON_SHARE * players && oraclePassed && reactiveWon;
 }
 
 /** Goal misses (a finish reached without the goal) after which the level's goal relaxes to 'finish' (§2.6 soft-fail). */

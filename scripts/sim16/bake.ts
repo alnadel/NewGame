@@ -14,7 +14,34 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BOSS_PHASES, bakeRunEntry, CAMPAIGN_LEVELS, isBossFinale, levelBakeKey, levelDef, nominalFlares, type LevelBake, type LevelDef, type LevelFlare } from '../../src/config/campaign.ts';
+import { isMainThread, parentPort, workerData } from 'node:worker_threads';
+import {
+  BOSS_PHASES,
+  bakedGoal,
+  bakeRunEntry,
+  CAMPAIGN_LEVELS,
+  dareCandidates,
+  dareFloor,
+  FEAT_KINDS,
+  isBossFinale,
+  LESSON_SHARE,
+  lessonReads,
+  levelBakeKey,
+  levelDef,
+  levelSeed,
+  nominalFlares,
+  pickDare,
+  secondMeasures,
+  sizeDare,
+  snapByGoal,
+  type DareMeasure,
+  type FeatKind,
+  type FeatSpec,
+  type LevelBake,
+  type LevelDef,
+  type LevelFlare,
+} from '../../src/config/campaign.ts';
+import { LEVEL_BAKE } from '../../src/config/levelBake.gen.ts';
 import { TUNING } from '../../src/config/tuning.ts';
 import { dayAtTick, dayStartTick, dayTicks, tickAtMinute, TICK_HZ } from '../../src/core/clock.ts';
 import { tanD } from '../../src/core/dmath.ts';
@@ -28,6 +55,7 @@ import { glareOffset } from '../../src/core/shadows.ts';
 import { campaignConfig } from '../../src/core/level.ts';
 import { sunGustAt, sunLockedAt } from '../../src/core/sim/sun.ts';
 import { trailX } from '../../src/core/trail.ts';
+import { CONFIRM_SALTS, measureDare, notRuns, playDareRun, SIZE_SALTS, TaskPool, type DareRunner, type DareRunOut, type DareRunSpec, type DareWorld } from './dares.ts';
 import type { Sim16Ctx } from './registry.ts';
 
 const STEP = TUNING.validator.stepTicks;
@@ -49,7 +77,8 @@ function nominalLevel(l: LevelDef): LevelDef {
 
 /** A level's world built from `def` (its seed, concepts, drain, …; the level's own RunConfig), generated through its finish. */
 function levelWorld(def: LevelDef): World {
-  const w = createWorld(campaignConfig(def.id), def);
+  // The definition's seed (a teaching level's world variant), not the one the level table holds now.
+  const w = createWorld({ ...campaignConfig(def.id), seed: def.seed }, def);
   ensureGenerated(w, w.finishY + TUNING.world.chunkLen);
   return w;
 }
@@ -422,9 +451,15 @@ function bakeFlares(l: LevelDef, nominal: readonly LevelFlare[]): { flares: Leve
   return { flares: decided, dropped };
 }
 
-/** The bake of one level (pure in the level's definition and the generator). */
-export function bakeLevel(id: number): LevelBake & { rescuesFlares: number; dropped: number } {
-  const l = levelDef(id) as LevelDef;
+/** What a level's world offers (the bake's world part; the Dares are measured on it: scripts/sim16/dares.ts). */
+export type LevelWorldBake = Omit<LevelBake, 'dares' | 'dares2'>;
+
+/**
+ * The world part of one level's bake on world variant `variant` (its seed: levelSeed; the variant
+ * the bake file holds by default), pure in the level's definition, the variant and the generator.
+ */
+export function bakeLevel(id: number, variant = LEVEL_BAKE[id]?.variant ?? 0): LevelWorldBake & { rescuesFlares: number; dropped: number } {
+  const l = Object.freeze({ ...(levelDef(id) as LevelDef), seed: levelSeed(id, variant) });
   const nom = nominalLevel(l);
   const key = levelBakeKey(l.seed, l.concepts, l.drain, l.startMinute, l.lengthMinutes, l.biome, l.forecast, nom.flares);
   // Pass 1: the nominal flares, decided one by one (bakeFlares).
@@ -457,16 +492,17 @@ export function bakeLevel(id: number): LevelBake & { rescuesFlares: number; drop
   const flakes = w.pickups.filter((p) => p.kind === 'flake' && !p.brittle && inLevel(p.y)).length;
   const { deep, rideBest, rides, swings, shadeRun } = offersOf(w);
   const { windows, holdable: hold } = windowsOf(w, l);
-  return { key, buds, balls, glass, windows, holdable: hold, flakes, deep, rideBest, rides, swings, shadeRun, flares, stillFlares, rescuesFlares, dropped };
+  return { key, buds, balls, glass, windows, holdable: hold, flakes, deep, rideBest, rides, swings, shadeRun, flares, stillFlares, variant, rescuesFlares, dropped };
 }
 
 /** levelBake.gen.ts's text for these entries. */
 export function bakeFileText(entries: readonly (readonly [number, LevelBake])[]): string {
+  const measures = (ms: readonly DareMeasure[]): string => ms.map((m) => `{ kind: '${m.kind}', not: [${m.not.join(', ')}], seek: [${m.seek.join(', ')}] }`).join(', ');
   const lines = entries.map(([id, b]) => {
     const fl = b.flares.map((f) => `{ minute: ${f.minute}, d: ${f.d} }`).join(', ');
-    return `  ${id}: { key: '${b.key}', buds: ${b.buds}, balls: ${b.balls}, glass: ${b.glass}, windows: ${b.windows}, holdable: ${b.holdable}, flakes: ${b.flakes}, deep: ${b.deep}, rideBest: ${b.rideBest}, rides: ${b.rides}, swings: ${b.swings}, shadeRun: ${b.shadeRun}, flares: [${fl}], stillFlares: ${b.stillFlares} },`;
+    return `  ${id}: { key: '${b.key}', buds: ${b.buds}, balls: ${b.balls}, glass: ${b.glass}, windows: ${b.windows}, holdable: ${b.holdable}, flakes: ${b.flakes}, deep: ${b.deep}, rideBest: ${b.rideBest}, rides: ${b.rides}, swings: ${b.swings}, shadeRun: ${b.shadeRun}, flares: [${fl}], stillFlares: ${b.stillFlares}, variant: ${b.variant},\n    dares: [${measures(b.dares)}],\n    dares2: [${measures(b.dares2)}] },`;
   });
-  const run = entries.map(([id, b]) => bakeRunEntry(levelDef(id) as LevelDef, b)).join(';');
+  const run = entries.map(([id, b]) => bakeRunEntry(bakedLevel(levelDef(id) as LevelDef, b), b)).join(';');
   return `// GENERATED by \`node scripts/sim.ts --bake\` (docs/V1_6_PLAN.md §2.5, §2.6). Do not edit by hand.
 // tests/unit/levelBake.test.ts checks that it is current.
 
@@ -474,13 +510,15 @@ import type { LevelBake } from './campaign.ts';
 
 /**
  * The game's part (config/campaign.ts bakeRun): per level, in id order and ';'-separated, its Dares
- * (a letter per kind, then the target), its kept flares (minute:d) and a bake-sized goal target.
+ * (a letter per kind, then the target), its kept flares (minute:d), a bake-sized goal target and a
+ * teaching level's world variant.
  */
 export const LEVEL_BAKE_RUN = '${run}';
 
 /**
  * Tooling only (never read by the game, so the bundler drops it): what each Journey level offers on
- * its fixed seed, keyed by its world identity, and its flares after the keep test.
+ * its fixed seed, keyed by its world identity, its flares after the keep test, and its Dare
+ * candidates as the bots measured them (scripts/sim16/dares.ts).
  */
 export const LEVEL_BAKE: Readonly<Record<number, LevelBake>> = {
 ${lines.join('\n')}
@@ -488,24 +526,153 @@ ${lines.join('\n')}
 `;
 }
 
-/** `sim --bake [--level N,…]`: bakes every level (in the worker pool's absence: in this process) and writes the file. */
-export async function bakeMain(ctx: Sim16Ctx): Promise<void> {
-  const t0 = performance.now();
-  const entries: [number, LevelBake][] = [];
-  let worst = 0;
-  for (const l of CAMPAIGN_LEVELS) {
-    const b = bakeLevel(l.id);
-    const { rescuesFlares, dropped, ...entry } = b;
-    entries.push([l.id, entry]);
-    if (l.flares.length > 0 || entry.flares.length > 0 || dropped > 0) {
-      console.log(`  L${l.id} ${l.name.padEnd(18)} flares kept ${entry.flares.length} (a fixed angle parries ${entry.stillFlares}), dropped ${dropped}, rescues for them ${rescuesFlares >= 0 ? '+' : ''}${rescuesFlares}`);
-      if (l.id % 10 === 0 && l.id > 40) worst = Math.max(worst, rescuesFlares);
+/** Level `l` as the bake made it: its world variant's seed and its kept flares (what dareCandidates and the runs read). */
+function bakedLevel(l: LevelDef, b: LevelWorldBake): LevelDef {
+  const g = bakedGoal(l, b);
+  return Object.freeze({ ...l, seed: levelSeed(l.id, b.variant), flares: b.flares, goal: g === null ? l.goal : Object.freeze({ kind: l.goal.kind, target: g }) });
+}
+
+/** The world a level's sizing runs play: its seed and flares, and a goal target the world sized. */
+function dareWorld(lv: LevelDef): DareWorld {
+  const own = levelDef(lv.id) as LevelDef;
+  return { id: lv.id, seed: lv.seed, flares: lv.flares, ...(lv.goal.target !== own.goal.target ? { goal: lv.goal.target } : {}) };
+}
+
+/** A task of the bake's worker pool: a sizing run, or the world part of a level's bake. */
+type BakeTask = { readonly t: 'run'; readonly spec: DareRunSpec } | { readonly t: 'world'; readonly id: number; readonly variant: number };
+type WorldOut = LevelWorldBake & { rescuesFlares: number; dropped: number };
+
+/** How many world variants of a teaching level the bake tries before keeping the best one. */
+const TEACH_VARIANTS_MAX = 40;
+
+/**
+ * Teaching without walls (fix round 3): the first world variant of teaching level `l` whose lesson
+ * reads (campaign.ts lessonReads: humanDial passes on its first try on LESSON_SHARE of the training
+ * streams, the oracle passes, the reactive bot finishes), keeping every flare it asks for; variant 0,
+ * the level's own seed, when it does, and when none of TEACH_VARIANTS_MAX does (the Solar Flare's
+ * lesson: humanDial does not read the flare telegraph, and the keep test makes the shade move, so a
+ * dial-follower parries by luck on any world; its soft-fail stays its net).
+ */
+async function lessonVariant(pool: TaskPool<BakeTask, unknown>, l: LevelDef): Promise<{ variant: number; passes: number; tried: number }> {
+  const run: DareRunner = (spec) => pool.run({ t: 'run', spec }) as Promise<DareRunOut>;
+  const nominal = nominalFlares(l.id, l.startMinute, l.lengthMinutes).length;
+  // The world bake first where the world sets what the lesson plays: its flares, the glare lesson's goal.
+  const sized = nominal > 0 || bakedGoal(l, { balls: 0 }) !== null;
+  let own = -1;
+  for (let v = 0; v <= TEACH_VARIANTS_MAX; v++) {
+    const world = sized ? ((await pool.run({ t: 'world', id: l.id, variant: v })) as WorldOut) : null;
+    if (world && world.flares.length < nominal) continue;
+    const lv = world ? bakedLevel(l, world) : Object.freeze({ ...l, seed: levelSeed(l.id, v) });
+    const [r, o, ...hd] = await notRuns(run, dareWorld(lv), snapByGoal(l));
+    const passes = hd.filter((x) => x.passed).length;
+    if (v === 0) own = passes;
+    if (!lessonReads(passes, hd.length, (o as DareRunOut).passed, (r as DareRunOut).won)) continue;
+    // Confirmed on fresh streams (the search would otherwise find worlds that suit its streams by luck).
+    const [, , ...fresh] = await notRuns(run, dareWorld(lv), snapByGoal(l), CONFIRM_SALTS);
+    if (lessonReads(fresh.filter((x) => x.passed).length, fresh.length, true, true)) return { variant: v, passes, tried: v + 1 };
+  }
+  return { variant: 0, passes: own, tried: TEACH_VARIANTS_MAX + 1 };
+}
+
+/**
+ * Fix round 3 (Dares need their verb): measures level `l`'s Dare candidates (campaign.ts
+ * dareCandidates) one at a time until campaign.ts pickDare has its pick, the first Dare and, on a
+ * finale, the second (under the snap the first starts the level with).
+ */
+async function measureDares(pool: TaskPool<BakeTask, unknown>, l: LevelDef, world: LevelWorldBake): Promise<{ dares: DareMeasure[]; dares2: DareMeasure[] }> {
+  const run: DareRunner = (spec) => pool.run({ t: 'run', spec }) as Promise<DareRunOut>;
+  const lv = bakedLevel(l, world);
+  const at = dareWorld(lv);
+  const dares: DareMeasure[] = [];
+  const dares2: DareMeasure[] = [];
+  const bake: LevelBake = { ...world, dares, dares2 };
+  const cands = dareCandidates(lv, bake, null);
+  let pick = pickDare(lv, cands, (k) => dares.find((m) => m.kind === k));
+  while (pick.next !== null) {
+    dares.push(await measureDare(run, at, pick.next, snapByGoal(lv) || pick.next === 'snapSave'));
+    pick = pickDare(lv, cands, (k) => dares.find((m) => m.kind === k));
+  }
+  const first = pick.spec;
+  if (first && l.id % 10 === 0) {
+    const cands2 = dareCandidates(lv, bake, first.kind);
+    const look = secondMeasures(lv, bake, first.kind);
+    let pick2 = pickDare(lv, cands2, look);
+    while (pick2.next !== null) {
+      dares2.push(await measureDare(run, at, pick2.next, snapByGoal(lv) || first.kind === 'snapSave' || pick2.next === 'snapSave'));
+      pick2 = pickDare(lv, cands2, look);
     }
   }
-  const out = join(dirname(fileURLToPath(import.meta.url)), '../../src/config/levelBake.gen.ts');
-  writeFileSync(out, bakeFileText(entries));
-  console.log(`\nsim --bake: ${entries.length} levels in ${((performance.now() - t0) / 1000).toFixed(1)} s, wrote ${out}`);
-  const ok = worst <= 3;
-  console.log(`  ${ok ? 'PASS' : 'MISS'}  boss levels' flares cost ≤ 3 rescue rocks each (advisory): worst +${worst}`);
-  void ctx;
+  return { dares, dares2 };
+}
+
+/**
+ * `sim --bake`: every level's world variant, offers, flares and measured Dares, in the worker pool;
+ * writes the file. `--level N,…` bakes only those levels and prints their Dares (the file is kept).
+ */
+export async function bakeMain(ctx: Sim16Ctx): Promise<void> {
+  const t0 = performance.now();
+  const i = process.argv.indexOf('--level');
+  const only = i >= 0 ? (process.argv[i + 1] ?? '').split(',').map(Number) : null;
+  const pool = new TaskPool<BakeTask, unknown>(new URL(import.meta.url), 'bake', ctx.workers);
+  const entries: [number, LevelBake][] = [];
+  try {
+    const out = await Promise.all(
+      CAMPAIGN_LEVELS.filter((l) => !only || only.includes(l.id)).map(async (l) => {
+        const lesson = l.introduces ? await lessonVariant(pool, l) : null;
+        const world = (await pool.run({ t: 'world', id: l.id, variant: lesson?.variant ?? 0 })) as WorldOut;
+        const { rescuesFlares, dropped, ...entry } = world;
+        const { dares, dares2 } = await measureDares(pool, l, entry);
+        return { l, lesson, entry: { ...entry, dares, dares2 } as LevelBake, rescuesFlares, dropped };
+      }),
+    );
+    let worst = 0;
+    for (const { l, lesson, entry, rescuesFlares, dropped } of out) {
+      entries.push([l.id, entry]);
+      if (lesson && (lesson.variant > 0 || lesson.passes < LESSON_SHARE * SIZE_SALTS.length)) console.log(`  L${l.id} ${l.name.padEnd(18)} world variant ${lesson.variant} (humanDial passes ${lesson.passes}/${SIZE_SALTS.length} on its first try; ${lesson.tried} tried)`);
+      if (l.flares.length > 0 || entry.flares.length > 0 || dropped > 0) {
+        console.log(`  L${l.id} ${l.name.padEnd(18)} flares kept ${entry.flares.length} (a fixed angle parries ${entry.stillFlares}), dropped ${dropped}, rescues for them ${rescuesFlares >= 0 ? '+' : ''}${rescuesFlares}`);
+        if (l.id % 10 === 0 && l.id > 40) worst = Math.max(worst, rescuesFlares);
+      }
+    }
+    if (only) {
+      for (const [id, b] of entries) {
+        const lv = bakedLevel(levelDef(id) as LevelDef, b);
+        const dares = bakeFeats(lv, b).map((f) => `${f.kind} ${f.target}`).join(' | ');
+        const ms = [...b.dares, ...b.dares2].map((m) => `${m.kind} not[${m.not.join(',')}] seek[${m.seek.join(',')}]`).join('; ');
+        console.log(`  L${id} variant ${b.variant} goal ${lv.goal.kind} ${lv.goal.target}: ${dares}   (${ms})`);
+      }
+      console.log(`\nsim --bake --level: ${entries.length} levels in ${((performance.now() - t0) / 1000).toFixed(1)} s (${pool.played} tasks); the file is unchanged`);
+      return;
+    }
+    const out2 = join(dirname(fileURLToPath(import.meta.url)), '../../src/config/levelBake.gen.ts');
+    writeFileSync(out2, bakeFileText(entries));
+    console.log(`\nsim --bake: ${entries.length} levels in ${((performance.now() - t0) / 1000).toFixed(1)} s (${pool.played} tasks), wrote ${out2}`);
+    const ok = worst <= 3;
+    console.log(`  ${ok ? 'PASS' : 'MISS'}  boss levels' flares cost ≤ 3 rescue rocks each (advisory): worst +${worst}`);
+    // The Dares as sized (campaign.ts sizeDare tiers: 3 needs its verb, 2 short of humanFeat players, 1 no verb needed).
+    const tiers = [0, 0, 0, 0];
+    for (const [id, b] of entries) {
+      const lv = bakedLevel(levelDef(id) as LevelDef, b);
+      for (const f of bakeFeats(lv, b)) {
+        const m = (f === bakeFeats(lv, b)[0] ? b.dares : [...b.dares2, ...b.dares]).find((x) => x.kind === f.kind);
+        if (m) tiers[sizeDare(f.kind, m, dareFloor(lv, f.kind)).tier]++;
+      }
+    }
+    console.log(`  Dares by fit: needs its verb ${tiers[3]}, short of humanFeat players ${tiers[2]}, no verb needed ${tiers[1]}, unmet by the seekers ${tiers[0]}`);
+  } finally {
+    await pool.close();
+  }
+}
+
+/** The Dares bakeRunEntry gives a level (parsed back from its entry). */
+function bakeFeats(l: LevelDef, b: LevelBake): FeatSpec[] {
+  const fs = bakeRunEntry(l, b).split('/')[0] ?? '';
+  return [...fs.matchAll(/([a-m])(\d+)/g)].map((m) => ({ kind: FEAT_KINDS[(m[1] as string).charCodeAt(0) - 97] as FeatKind, target: Number(m[2]) }));
+}
+
+if (!isMainThread && workerData === 'bake') {
+  parentPort?.on('message', (task: BakeTask) => {
+    if (task.t === 'run') parentPort?.postMessage(playDareRun(task.spec));
+    else parentPort?.postMessage(bakeLevel(task.id, task.variant));
+  });
 }

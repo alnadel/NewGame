@@ -45,7 +45,7 @@
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
-import { CAMPAIGN_LEVELS, featMet, LEVEL_COUNT, SOFT_FAIL_MISSES, type LevelDef } from '../src/config/campaign.ts';
+import { CAMPAIGN_LEVELS, featMet, featValue, LEVEL_COUNT, SOFT_FAIL_MISSES, type LevelDef } from '../src/config/campaign.ts';
 import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
@@ -189,6 +189,8 @@ interface LevelOut {
   /** v1.6: a Dare of the level met at the finish (star 2), and its first Dare's kind. */
   featMet: boolean;
   dare: string;
+  /** The kinds of the level's Dares met at the finish, each on its own (a finale has two). */
+  metKinds: string[];
   /** The bot's seed salt (the try). */
   salt: number;
   flakes: number;
@@ -222,7 +224,8 @@ function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: P
   const { rescues, chunks, unresolved } = worldStats(s);
   const lv = CAMPAIGN_LEVELS[id - 1] as LevelDef;
   const met = s.phase === 'won' && featMet(lv, s.stats);
-  return { id, bot: label ?? kind, phase: s.phase, passed: r?.passed ?? false, stars: r?.stars ?? 0, featMet: met, dare: lv.feats[0]?.kind ?? '', salt, flakes, snow, minChill, progress: levelProgress(s), ms: performance.now() - t0, rescues, chunks, unresolved };
+  const metKinds = s.phase === 'won' ? lv.feats.filter((f) => featValue(f.kind, s.stats) >= f.target).map((f) => f.kind as string) : [];
+  return { id, bot: label ?? kind, phase: s.phase, passed: r?.passed ?? false, stars: r?.stars ?? 0, featMet: met, dare: lv.feats[0]?.kind ?? '', metKinds, salt, flakes, snow, minChill, progress: levelProgress(s), ms: performance.now() - t0, rescues, chunks, unresolved };
 }
 
 /** True when level `l`'s goal is a teaching verb goal (the reactive bot scores it as 'finish'). */
@@ -659,16 +662,19 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
     if (!ids.some((id) => Math.ceil(id / 10) === c)) continue;
     console.log(`  ${String(c).padEnd(8)} ${bots.map((b) => `${pct(of(b, c * 10 - 9, c * 10)).toFixed(0)}% ${meanStars(of(b, c * 10 - 9, c * 10)).toFixed(2)}`.padEnd(20)).join(' ')}`);
   }
-  // v1.6 Dares by kind (a level counts under its first Dare's kind): met share per bot.
-  const dareKinds = [...new Set(ids.map((id) => String((CAMPAIGN_LEVELS[id - 1] as LevelDef).feats[0]?.kind ?? '')))].filter((k) => k !== '');
-  console.log(`\n  Dares met by kind (levels whose first Dare it is): ${bots.map((b) => b.padEnd(13)).join(' ')}`);
+  // v1.6 Dares by kind (fix round 3: each Dare of a level counts under its own kind, met on its own;
+  // a finale's two used to share "either met"): met share per bot over the levels that dare it.
+  const dareKinds = [...new Set(ids.flatMap((id) => (CAMPAIGN_LEVELS[id - 1] as LevelDef).feats.map((f) => f.kind as string)))];
+  const kindLevels = (k: string): number[] => ids.filter((id) => (CAMPAIGN_LEVELS[id - 1] as LevelDef).feats.some((f) => f.kind === k));
+  const kindShare = (b: string, k: string): number => {
+    const levels = kindLevels(k);
+    const rs = outs.filter((o) => o.bot === b && levels.includes(o.id));
+    return rs.length ? rs.filter((o) => o.metKinds.includes(k)).length / rs.length : NaN;
+  };
+  console.log(`\n  Dares met by kind (each Dare on its own, over the levels that dare it): ${bots.map((b) => b.padEnd(13)).join(' ')}`);
   for (const k of dareKinds) {
-    const levels = ids.filter((id) => (CAMPAIGN_LEVELS[id - 1] as LevelDef).feats[0]?.kind === k);
-    const cellK = (b: string): string => {
-      const rs = outs.filter((o) => o.bot === b && levels.includes(o.id));
-      return `${((100 * rs.filter((o) => o.featMet).length) / Math.max(1, rs.length)).toFixed(0)}%`.padEnd(13);
-    };
-    console.log(`  ${k.padEnd(10)} ${String(levels.length).padStart(3)} levels                          ${bots.map(cellK).join(' ')}`);
+    const cellK = (b: string): string => `${Number.isNaN(kindShare(b, k)) ? '-' : (100 * kindShare(b, k)).toFixed(0) + '%'}`.padEnd(13);
+    console.log(`  ${k.padEnd(10)} ${String(kindLevels(k).length).padStart(3)} levels                          ${bots.map(cellK).join(' ')}`);
   }
   const worlds = new Map<number, LevelOut>();
   for (const o of outs) if (!worlds.has(o.id) || o.chunks > (worlds.get(o.id) as LevelOut).chunks) worlds.set(o.id, o);
@@ -702,7 +708,17 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
     const earlyMissed = early.filter((o) => !o.featMet).map((o) => o.id);
     if (early.length) line(true, earlyMissed.length === 0, "the Feat-seeking oracle meets every Dare of levels 1-10", earlyMissed.length ? `missed: ${earlyMissed.join(', ')}` : `${early.length} of ${early.length}`);
   }
-  gate(false, 'humanDial passes ≥ 75% of levels 1-40 (advisory)', 'humanDial', 40, 0.75);
+  // Every humanDial try is another player's first (the soft-fail relaxes nothing here). Fix round 3:
+  // the bar is v1.5's level (88.3%) less a little, ≥ 85% (it was ≥ 75%).
+  gate(false, 'humanDial passes ≥ 85% of levels 1-40 on its first try (advisory)', 'humanDial', 40, 0.85);
+  if (bots.includes('humanDial')) {
+    const teach = ids.filter((id) => id <= 40 && (CAMPAIGN_LEVELS[id - 1] as LevelDef).goal.kind !== 'finish');
+    const cellT = (id: number): string => {
+      const rs = of('humanDial', id, id);
+      return `L${id} ${(CAMPAIGN_LEVELS[id - 1] as LevelDef).goal.kind} ${rs.filter((o) => o.passed).length}/${rs.length}`;
+    };
+    if (teach.length) console.log(`        first try on the levels with a goal: ${teach.map(cellT).join(', ')}`);
+  }
   if (bots.includes('humanDial')) {
     // The soft-fail: the player retries the level (the tries in order); a try after two goal misses
     // on it scores its goal as 'finish'. A level counts as passed when one of its tries passes.
@@ -733,24 +749,25 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
     const three = rs.filter((o) => o.stars === 3).length / Math.max(1, rs.length);
     line(false, three <= 0.5, 'reactive three-star share on 41-200 ≤ 50% (advisory)', `${(100 * three).toFixed(1)}%`);
   }
-  // Per Dare kind (advisory): non-seeking reactive and oracle ≤ 35%, the seeking oracle ≥ 85%, humanFeat ≥ 50%.
+  // Per Dare kind (§2.6 advisory; fix round 3's J1): the bots that do not seek it (reactive, oracle)
+  // meet it on ≤ 35% of the levels that dare it, the Feat-seeking oracle on ≥ 85%, humanFeat on ≥ 50%.
+  // humanDial (who does not seek it either, on streams the bake never sized from) is shown alongside.
+  let kindsOk = 0;
   for (const k of dareKinds) {
-    const levels = ids.filter((id) => (CAMPAIGN_LEVELS[id - 1] as LevelDef).feats.some((f) => f.kind === k));
-    const share = (b: string): number => {
-      const rs = outs.filter((o) => o.bot === b && levels.includes(o.id));
-      return rs.length ? rs.filter((o) => o.featMet).length / rs.length : NaN;
-    };
     const parts = [
-      ['reactive', share('reactive'), (v: number) => v <= 0.35],
-      ['oracle', share('oracle'), (v: number) => v <= 0.35],
-      ['oracle+feats', share('oracle+feats'), (v: number) => v >= 0.85],
-      ['humanFeat', share('humanFeat'), (v: number) => v >= 0.5],
+      ['reactive', kindShare('reactive', k), (v: number) => v <= 0.35],
+      ['oracle', kindShare('oracle', k), (v: number) => v <= 0.35],
+      ['oracle+feats', kindShare('oracle+feats', k), (v: number) => v >= 0.85],
+      ['humanFeat', kindShare('humanFeat', k), (v: number) => v >= 0.5],
     ] as const;
     const shown = parts.filter(([, v]) => !Number.isNaN(v));
     if (shown.length === 0) continue;
     const ok = shown.every(([, v, f]) => f(v));
-    console.log(`  ${ok ? 'PASS' : 'MISS'}  Dare '${k}' (${levels.length} levels; advisory): ${shown.map(([b, v]) => `${b} ${(100 * v).toFixed(0)}%`).join(', ')}`);
+    if (ok) kindsOk++;
+    const hd = kindShare('humanDial', k);
+    console.log(`  ${ok ? 'PASS' : 'MISS'}  Dare '${k}' (${kindLevels(k).length} levels; advisory): ${shown.map(([b, v]) => `${b} ${(100 * v).toFixed(0)}%`).join(', ')}${Number.isNaN(hd) ? '' : ` (humanDial ${(100 * hd).toFixed(0)}%)`}`);
   }
+  if (dareKinds.length) console.log(`  ${kindsOk === dareKinds.length ? 'PASS' : 'MISS'}  every Dare kind needs its verb (advisory): ${kindsOk} of ${dareKinds.length} kinds`);
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
     process.exit(1);
