@@ -5,7 +5,7 @@
 
 import { createAudio } from './audio/index.ts';
 import { showBootFailure } from './game/crash.ts';
-import { installDebugOverlay, installTestHook } from './game/debug.ts';
+import { installDebugOverlay, installTestHook, type ShadyTestHook } from './game/debug.ts';
 import { parseParams } from './game/params.ts';
 import { Session } from './game/session.ts';
 import { SAVE_BAK_KEY, SAVE_KEY, SaveStore } from './meta/save.ts';
@@ -51,11 +51,16 @@ function boot(): void {
 
   const session = new Session({ canvas, uiRoot, params, store, audio, haptics, version: VERSION });
   if (store.degraded) session.ui.notifyStorageDegraded();
-  if (params.test) installTestHook(session, audio);
-  if (params.debug) {
-    const draw: DebugDraw = { testPoints: true, masks: false, outlines: false };
-    session.setDebugDraw(draw);
-    installDebugOverlay(session, draw);
+  if (import.meta.env.MODE === 'single') {
+    // The single-file build ships no tooling (A3 budget): its hook is what single.spec drives.
+    if (params.test) window.__SHADY_TEST__ = { screen: () => session.ui.current(), forceDeath: () => session.forceDeath() } as Partial<ShadyTestHook> as ShadyTestHook;
+  } else {
+    if (params.test) installTestHook(session, audio);
+    if (params.debug) {
+      const draw: DebugDraw = { testPoints: true, masks: false, outlines: false };
+      session.setDebugDraw(draw);
+      installDebugOverlay(session, draw);
+    }
   }
   session.start(() => {
     const splash = document.getElementById('boot');
@@ -66,7 +71,8 @@ function boot(): void {
       window.setTimeout(() => splash.remove(), 220);
     }
   });
-  void registerServiceWorker();
+  // The single-file build has no sw.js (pwa.ts skips it there too): leave the registration out of it.
+  if (import.meta.env.MODE !== 'single') void registerServiceWorker();
   prepareHostDownloads();
 }
 

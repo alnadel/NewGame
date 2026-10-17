@@ -200,7 +200,7 @@ test.describe('in-run moments (v1.4)', () => {
     expect(st!.stars.map((s) => s.label)).toEqual([
       expect.stringMatching(/^\d+ flakes$/),
       expect.stringMatching(dareOpen ? /^\d+ flakes · \d+\/\d+$/ : /^\d+ flakes$/),
-      expect.stringMatching(/^≤ \d+ s in sun$/),
+      expect.stringMatching(/^≤ \d+(\.\d)? s in sun$/),
     ]);
     expect(st!.stars[0]!.state).toBe('earned');
     expect(errors).toEqual([]);

@@ -164,7 +164,12 @@ export function starRules(level: LevelDef, relaxed = false): [string, string, st
   const verb = goalFeat(g.kind);
   const pass = relaxed || g.kind === 'finish' ? 'Finish' : g.kind === 'snow' ? `${g.target} Snow` : verb ? verbGoalLabel(level, verb) : 'Finish';
   const two = level.feats.length > 0 ? (level.feats.length > 1 ? 'A Dare' : featLabel(level.feats[0] as FeatSpec, level)) : `${level.stars.flakes} flakes`;
-  return [pass, two, `≤ ${Math.ceil(level.stars.sunSec)} s in sun`];
+  return [pass, two, `≤ ${tenths(level.stars.sunSec)} s in sun`];
+}
+
+/** Seconds to a tenth, without a trailing ".0" (stars.sunSec is in tenths: the card shows the rule, not a rounding of it). */
+function tenths(x: number): string {
+  return String(Math.round(x * 10) / 10);
 }
 
 /**
@@ -256,7 +261,8 @@ export function nextStarHint(level: LevelDef, stats: Stats, seen: FeatSeen = NON
     }
   } else if (stats.flakes < st.flakes) return ` · Next ★: ${st.flakes} flakes`;
   if (stats.litTotal === undefined || stats.minChill === undefined) return '';
-  if (stats.litTotal > st.sunSec) return ` · Next ★: under ${Math.ceil(st.sunSec)} s in the sun (${Math.round(stats.litTotal)} s)`;
+  // The time spent rounds up to a tenth, so it never reads as the limit it went over ("≤ 6 s (6 s)").
+  if (stats.litTotal > st.sunSec) return ` · Next ★: ≤ ${tenths(st.sunSec)} s in the sun (${tenths(Math.max(Math.ceil(stats.litTotal * 10), Math.round(st.sunSec * 10) + 1) / 10)} s)`;
   if (stats.minChill < st.minChill) return ` · Next ★: keep Chill above ${st.minChill}`;
   return '';
 }

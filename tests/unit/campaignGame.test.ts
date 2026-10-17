@@ -16,7 +16,7 @@ import {
   type InputFrame,
   type SimEvent,
 } from '../../src/core/index.ts';
-import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine } from '../../src/game/campaign.ts';
+import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint } from '../../src/game/campaign.ts';
 import { isDebugRun, parseParams } from '../../src/game/params.ts';
 import { campaignShareText } from '../../src/meta/share.ts';
 import { createBanners, dismissLevelCard, resetBanners, showLevelCard, showStamp, updateBanners } from '../../src/render/banners.ts';
@@ -90,7 +90,7 @@ describe('the words', () => {
     expect(conceptLabel({ name: 'Glare' }, 'glare')).toBe('New concept');
     expect(c.blurb).toContain('Gazing balls');
     // The three star rules: the goal, the level's Dare (v1.6; the flakes without one), a cool run (lit at most sunSec, rounded up).
-    expect(c.stars).toEqual([clean(l6.goal.target), featLabel(l6.feats[0]!, l6), `≤ ${Math.ceil(l6.stars.sunSec)} s in sun`]);
+    expect(c.stars).toEqual([clean(l6.goal.target), featLabel(l6.feats[0]!, l6), `≤ ${Math.round(l6.stars.sunSec * 10) / 10} s in sun`]);
     expect(introCard({ ...l6, feats: [] }).stars[1]).toBe(`${l6.stars.flakes} flakes`);
     expect(introCard(levelDef(2)!).stars[0]).toBe(`${levelDef(2)!.goal.target} flakes`);
     // v1.6 (T6): no level has a Snow goal any more; the words still read one.
@@ -117,7 +117,12 @@ describe('the words', () => {
     expect(finish.feats[0]?.kind).toBe('flakes');
     const ringy = { ...finish, feats: [{ kind: 'ring' as const, target: 4 }] };
     expect(goalLine(ringy, { flakes: 0, snow: 0, litTotal: 0, minChill: 100, maxMult: 1 }, true)).toBe('Reached the finish · Next ★: Reach ×4 (1/4)');
-    expect(goalLine(ringy, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 5, minChill: 100, maxMult: 4 }, true)).toMatch(/^Reached the finish · Next ★: under \d+ s in the sun \(\d+ s\)$/);
+    expect(goalLine(ringy, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 5, minChill: 100, maxMult: 4 }, true)).toMatch(/^Reached the finish · Next ★: ≤ \d+(\.\d)? s in the sun \(\d+(\.\d)? s\)$/);
+    // Over the limit by a hair still reads as over it, to the tenth (it used to read "under 6 s (6 s)").
+    const lim = Math.round(finish.stars.sunSec * 10);
+    expect(nextStarHint(finish, { flakes: 99, snow: 0, litTotal: finish.stars.sunSec + 0.04, minChill: 100, maxMult: 1 })).toBe(
+      ` · Next ★: ≤ ${lim / 10} s in the sun (${(lim + 1) / 10} s)`,
+    );
     expect(goalLine(ringy, { flakes: 99, snow: 0, litTotal: 0, minChill: 0, maxMult: 4 }, true)).toBe(`Reached the finish · Next ★: keep Chill above ${finish.stars.minChill}`);
     expect(goalLine(ringy, { flakes: 99, snow: 0, litTotal: 0, minChill: 100, maxMult: 4 }, true)).toBe('Reached the finish');
     // A level without Dares names its flakes star first.

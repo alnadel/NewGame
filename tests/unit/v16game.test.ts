@@ -31,7 +31,7 @@ import { applyRunResult } from '../../src/meta/progression.ts';
 import { defaults, migrate } from '../../src/meta/save.ts';
 import { mergeSaves } from '../../src/meta/saveMerge.ts';
 import { hapticForEvent } from '../../src/platform/haptics.ts';
-import { createBanners } from '../../src/render/banners.ts';
+import { createBanners, showToast } from '../../src/render/banners.ts';
 import { snapsText } from '../../src/render/hud.ts';
 
 const endless = (): SimState => createRun({ seed: 7, mode: 'endless', profile: 3, tutorial: false, reducedMotion: false });
@@ -293,7 +293,8 @@ describe('v1.6 events: audio, haptics, tips', () => {
     expect(texts()).toEqual([MECH_TIPS.glass[0]![1]]);
     s.guide.flake[40] = 0;
     // A level teaching flares: at go, before the first (1.2 s) warning; a new player's endless run
-    // on the first warning, with the flare glyph (an endless tip names its mechanic's glyph).
+    // 4 s before the first kept flare's warning (not on the warning: a tip read through a 2 s
+    // countdown ends after it), ahead of the tip on screen, held to the rise, with the flare glyph.
     b.toasts.length = 0;
     m.begin(defaults(0), { ...levelDef(12)!, introduces: 'flare' as never }, true);
     m.onEvent({ e: 'flareWarn', id: 1, ticks: 72, d: 10 }, s);
@@ -301,10 +302,30 @@ describe('v1.6 events: audio, haptics, tips', () => {
     m.onEvent({ e: 'go' }, s);
     expect(texts()).toEqual([MECH_TIPS.flare[0]![1]]);
     b.toasts.length = 0;
+    b.toastT = -1;
+    const en = endless();
+    en.phase = 'day';
     m.begin(defaults(0), null, true);
-    m.onEvent({ e: 'flareWarn', id: 1, ticks: 120, d: 10 }, endless());
-    expect(texts()).toEqual([MECH_TIPS.flare[0]![1]]);
-    expect(b.toasts[0]?.glyph).toBe('flare');
+    showToast(b, 'tip', 'TIP', 'Another tip.', null, 3.6);
+    b.toastT = 1;
+    const fl = debugFlare(en, 300, 10);
+    m.onEvent({ e: 'flareWarn', id: fl.id, ticks: 120, d: 10 }, en);
+    m.update(en);
+    expect(texts()).toEqual(['Another tip.']);
+    en.tickAbs += 60;
+    m.update(en);
+    expect(texts()).toEqual(['Another tip.', expect.stringMatching(/^Heat Flare soon!/)]);
+    expect(b.toasts[1]?.glyph).toBe('flare');
+    expect(b.toastT).toBeGreaterThan(3.6);
+    // It holds on game time, to the rise (not on the toast's real-time clock), then starts to leave.
+    b.toasts.shift();
+    b.toastT = 1;
+    en.tickAbs = fl.riseTick - 1;
+    m.update(en);
+    expect(b.toastT).toBe(1);
+    en.tickAbs = fl.riseTick;
+    m.update(en);
+    expect(b.toastT).toBeGreaterThanOrEqual(0.25 + b.toasts[0]!.hold);
     // A new player's endless run: the ring's first drop from ×3 or more (not a snap's cash-in).
     b.toasts.length = 0;
     const e = endless();

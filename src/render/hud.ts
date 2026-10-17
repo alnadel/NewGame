@@ -534,13 +534,14 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       const head = h.head as Canvas2D;
       const hw = head.width / dpr;
       g.drawImage(head, px - hw / 2, cy + 1 - hw / 2, hw, hw);
-      // v1.6 Noon Heat: the head covers the hot band from 11 to 1, so while it bites the head glows hot.
+      // v1.6 Noon Heat: the head covers the hot band from 11 to 1, so while it bites its ring turns
+      // hot (hugging it, clear of the band's underline below the bar).
       const m = inp.mech;
       if (!c && m && m.noonHeat > 1 && 12 * s.dayTick >= 5 * dl && 12 * s.dayTick < 7 * dl) {
-        g.strokeStyle = cssa(0xff3d2b, 0.9);
-        g.lineWidth = 2;
+        g.strokeStyle = cssa(0xff3d2b, 0.95);
+        g.lineWidth = 2.5;
         g.beginPath();
-        g.arc(px, cy + 1, hw / 2 + 1.5, 0, TAU);
+        g.arc(px, cy + 1, hw / 2 - 2, 0, TAU);
         g.stroke();
       }
     }
@@ -1013,8 +1014,11 @@ function drawProgressStatic(g: CanvasRenderingContext2D, h: HudState, c: HudCamp
 
 /**
  * The kept Heat Flares over the bar from x0 to x1 (top at y), at their rise: on a level's progress
- * (`level`), else on today's ruler. Each is white-hot in an orange ring while it waits (the noon
- * boss is solid orange), teal once parried, grey once missed.
+ * (`level`), else on today's ruler. On the ruler each is white-hot in an orange ring while it waits
+ * (the noon boss is solid orange), teal once parried, grey once missed, its ring clear of the
+ * progress head (no "8" when they meet). On a level: a 3 px tick, orange while it waits, teal once
+ * parried, a red ✕ once missed; and the boss's HP, the flares not parried yet (a miss does not hurt
+ * the boss), on a hot disc at the bar's start.
  */
 function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null, level: boolean, x0: number, x1: number, y: number, k: number): void {
   const w = s.world;
@@ -1027,12 +1031,24 @@ function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null
     const x = x0 + (x1 - x0) * p;
     const out = m.flareOut.get(f.id) ?? 0;
     if (level) {
-      // A level's bar can be short (48 px) with up to 8 flares: a 2 px tick each, coloured by outcome.
-      if (out === 0) left++;
-      g.fillStyle = out === 0 ? '#FF6A3D' : out === 1 ? '#13857C' : '#B5ABC4';
-      g.fillRect(x - k, y - 7 * k, 2 * k, 7 * k);
+      // A level's bar can be short (48 px) with up to 8 flares: a 3 px tick each, a ✕ for a miss.
+      if (out !== 1) left++;
+      if (out === 2) {
+        g.strokeStyle = '#E0322B';
+        g.lineWidth = 1.8 * k;
+        g.beginPath();
+        g.moveTo(x - 2.5 * k, y - 7 * k);
+        g.lineTo(x + 2.5 * k, y - 2 * k);
+        g.moveTo(x + 2.5 * k, y - 7 * k);
+        g.lineTo(x - 2.5 * k, y - 2 * k);
+        g.stroke();
+      } else {
+        g.fillStyle = out === 0 ? '#FF6A3D' : '#13857C';
+        g.fillRect(x - 1.5 * k, y - 7 * k, 3 * k, 7 * k);
+      }
       continue;
     }
+    // The ring sits 9 k over the bar (the head, r 5 k on the bar's middle, stays 2 px clear of it).
     g.strokeStyle = cssa(INK, 0.3);
     g.lineWidth = 1;
     g.beginPath();
@@ -1041,14 +1057,14 @@ function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null
     g.stroke();
     g.fillStyle = out === 0 ? '#FFF4D6' : out === 1 ? '#2EC4B6' : '#B5ABC4';
     g.strokeStyle = out === 0 ? '#FF6A3D' : '#FFFFFF';
-    g.lineWidth = 2 * k;
+    g.lineWidth = 1.6 * k;
     g.beginPath();
-    g.arc(x, y - 6 * k, 3.6 * k, 0, TAU);
+    g.arc(x, y - 9 * k, 3.2 * k, 0, TAU);
     g.fill();
     g.stroke();
   }
   if (level && left > 0) {
-    // The flares still to come (a boss finale's HP): a hot disc with the count at the bar's start.
+    // The boss's HP (the flares not parried yet): a hot disc with the count at the bar's start.
     const hx = x0 + 2 * k;
     const hy = y - 8 * k;
     g.fillStyle = '#FF6A3D';
@@ -1141,6 +1157,9 @@ function drawRulerStatic(
     g.fillStyle = bg.fillStyle = cssa(0xff3d2b, 0.6);
     g.fillRect(hx, y, hw, hgt);
     bg.fillRect(hx, y, hw, hgt);
+    // An underline below the bar too: the band is narrower than the head, which hides it at noon.
+    g.fillStyle = cssa(0xff3d2b, 0.9);
+    g.fillRect(hx, y + hgt + 3 * k, hw, 1.8 * k);
   }
 
   // Progress head sprite (a white dot with an ink ring).

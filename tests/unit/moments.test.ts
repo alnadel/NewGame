@@ -61,6 +61,32 @@ describe('toast queue', () => {
     run(b, 0.4);
     expect(b.toasts[0]!.text).toBe('m1');
   });
+  it('a stamp or card over a toast on screen hides it and holds its clock until it has gone (fix round 3)', () => {
+    const b = createBanners();
+    showToast(b, 'tip', 'TIP', 'one', 'drag', 3);
+    run(b, 1);
+    const t = b.toastT;
+    b.stamp = 0;
+    b.stampHold = 0.6;
+    run(b, 0.5);
+    expect(b.toastT).toBe(t);
+    expect(b.toastHide).toBeGreaterThan(0.9);
+    run(b, 1);
+    expect(b.stamp).toBe(-1);
+    expect(b.toastHide).toBeLessThan(0.1);
+    expect(b.toastT).toBeGreaterThan(t);
+    expect(b.toasts.map((x) => x.text)).toEqual(['one']);
+  });
+  it('an urgent toast drops what waits and the one on screen starts to leave', () => {
+    const b = createBanners();
+    showToast(b, 'tip', 'TIP', 'one', 'drag', 4);
+    updateBanners(b, 0.1, false);
+    showToast(b, 'mission', 'MISSION ✓ 1/3', 'm1', null, 2);
+    showToast(b, 'tip', 'TIP', 'now', 'flare', 3, true);
+    expect(b.toasts.map((x) => x.text)).toEqual(['one', 'now']);
+    run(b, 0.4);
+    expect(b.toasts[0]!.text).toBe('now');
+  });
   it('the run ending drops what waits', () => {
     const b = createBanners();
     showToast(b, 'tip', 'TIP', 'one', 'drag', 4);

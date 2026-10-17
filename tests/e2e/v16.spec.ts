@@ -145,6 +145,24 @@ test('a Heat Flare counts down on the dial and a parry marks it on the ruler', a
   expect(errors).toEqual([]);
 });
 
+test("a new player's first Heat Flare: its tip comes before the countdown, leads the toasts and leaves at the rise", async ({ page }) => {
+  const errors = watchErrors(page);
+  const texts = () => page.evaluate(() => window.__SHADY_TEST__!.toasts().map((t) => t.text));
+  const soon = expect.stringMatching(/^Heat Flare soon!/);
+  // OPEN_SAVE has no runs: a new player's endless run gets the mechanics' first tips.
+  await playEndless(page, '');
+  await demo(page, 'flareSoon');
+  // The warning is 5 s away and the tip comes 4 s ahead of it: read before the rim runs, not during.
+  await expect.poll(texts, { timeout: 4000 }).toContainEqual(soon);
+  expect((await mech(page)).flarePhase).toBe(0);
+  await expect.poll(async () => (await mech(page)).flarePhase, { timeout: 8000 }).toBe(1);
+  expect((await texts())[0]).toMatch(/^Heat Flare soon!/);
+  // Once the rim has run out the tip leaves (it is never read after its cue is gone).
+  await expect.poll(async () => (await mech(page)).flarePhase, { timeout: 5000 }).toBeGreaterThanOrEqual(2);
+  await expect.poll(texts, { timeout: 1500 }).not.toContainEqual(soon);
+  expect(errors).toEqual([]);
+});
+
 test('a tap on the two-pip meter asks for a Cold Snap while a pip is full', async ({ page }) => {
   await playEndless(page);
   await demo(page, 'pips');

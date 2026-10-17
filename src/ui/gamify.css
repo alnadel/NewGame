@@ -198,7 +198,8 @@
 .rv.is-out { opacity: 0; }
 .rv[data-tier='rare'] { --tier: var(--r-rare); }
 .rv[data-tier='epic'] { --tier: var(--r-epic); }
-.rv:is([data-tier='legendary'], [data-tier='snow']) { --tier: var(--r-legendary); }
+.rv[data-tier='legendary'],
+.rv[data-tier='snow'] { --tier: var(--r-legendary); }
 
 .rv-scrim {
   position: fixed;
@@ -353,12 +354,18 @@
 
 .rv-sub { color: color-mix(in srgb, var(--tier) 55%, #fff); font-weight: 800; }
 .rv-count { color: rgba(255, 255, 255, 0.7); }
-.rv :is(.rv-name, .rv-sub, .rv-count) { min-height: 1.35em; }
+.rv .rv-name,
+.rv .rv-sub,
+.rv .rv-count { min-height: 1.35em; }
 
 .sui .rv-next { min-width: 200px; margin-top: 6px; }
 
-.rv:not(.is-open) :is(.rv-name, .rv-sub, .rv-next) { opacity: 0; pointer-events: none; }
-.rv.is-open :is(.rv-name, .rv-sub, .rv-next) { transition: opacity 260ms 140ms; }
+.rv:not(.is-open) .rv-name,
+.rv:not(.is-open) .rv-sub,
+.rv:not(.is-open) .rv-next { opacity: 0; pointer-events: none; }
+.rv.is-open .rv-name,
+.rv.is-open .rv-sub,
+.rv.is-open .rv-next { transition: opacity 260ms 140ms; }
 
 /* ===== Daily streak card ===== */
 
