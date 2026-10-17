@@ -236,21 +236,21 @@ describe('Heat Flares (§2.5)', () => {
         decided++;
         if (f.state !== FLARE_KEPT) continue;
         kept++;
-        // Never at night, in the Noon Heat window or straddling a day; the rise stays in its window of
-        // TUNING.flare.windows (the keep test's shifts never move it out).
+        // Never at night, in the Noon Heat window or straddling a day; the rise stays in its keep band
+        // of TUNING.flare.keepWindows (fix round 3: a candidate that fails moves on in time, never out of it).
         const t0 = dayStartTick(f.day);
         expect(f.warnTick).toBeGreaterThanOrEqual(t0);
         expect(f.endTick).toBeLessThanOrEqual(t0 + dayTicks(f.day));
         expect(12 * (f.endTick - t0) <= 5 * dayTicks(f.day) || 12 * (f.riseTick - t0) >= 7 * dayTicks(f.day)).toBe(true);
         const u = (f.riseTick - t0) / dayTicks(f.day);
         const half = TUNING.validator.stepTicks / 2 / dayTicks(f.day);
-        expect(TUNING.flare.windows.some(([a, b]) => u >= a - half && u <= b + half), `seed ${seed} flare ${f.id} rises at ${u}`).toBe(true);
+        expect(TUNING.flare.keepWindows.some(([a, b]) => u >= a - half && u <= b + half), `seed ${seed} flare ${f.id} rises at ${u}`).toBe(true);
       }
       expect(perDay.slice(1)).toEqual([0, 1, 2, 2]);
       for (let i = 1; i < w.flares.length; i++) expect((w.flares[i] as Flare).riseTick).toBeGreaterThan((w.flares[i - 1] as Flare).riseTick);
     }
-    // The share kept is a sim --check row (§2.5's ≥ 85% of Days 2-4); here only that flares are kept at all.
-    expect(kept / decided).toBeGreaterThan(0.5);
+    // §2.5's ≥ 85% of the Days 2-4 candidates (fix round 3: 93% on these seeds; also a sim --check row).
+    expect(kept / decided).toBeGreaterThanOrEqual(0.85);
   }, 60_000);
 
   it("a lit hold tick burns TUNING.flare.burnPerLitTick on top of the drain; the validator's DP charges it on the hold's steps", () => {

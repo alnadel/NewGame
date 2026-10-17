@@ -319,13 +319,13 @@ const tuning = {
    * lit on at most parryMaxLit of the hold's ticks (counted tick by tick, the sim's parry rule, so
    * the telegraph names a parry that holds; fix round 2: the plan's turn-limited path on 85% of the
    * steps, then on all of them, kept flares that no telegraphed angle parried), and fewer than
-   * keepMovedShare of the safe bins stay safe; otherwise shifted by shiftsSec, then dropped.
-   * shiftsSec runs to ±5 s, past the plan's ±1 s (a deviation awaiting the integrator; core README
-   * §16.3), but an Endless rise never leaves its window of `windows`, so the list amounts to
-   * "anywhere in the window, nearest the drawn rise first". A Journey flare ends finishMarginSec
-   * before the finish line; on a teaching level the next warning waits teachGapSec after a flare's
-   * end. A parry is ≤ parryMaxLit lit hold ticks (+snow Snow); during the rise and hold buds grow ×
-   * budMul and flakes melt × meltMul.
+   * keepMovedShare of the safe bins stay safe; otherwise shifted by shiftsSec within its job (an
+   * Endless rise within its band of keepWindows; fix round 3), then, in Endless, moved on in time to
+   * the next job while its rise stays in that band, and dropped only when the band runs out (a
+   * Journey flare is dropped after its shifts). Endless rises are drawn in `windows`. A Journey
+   * flare ends finishMarginSec before the finish line; on a teaching level the next warning waits
+   * teachGapSec after a flare's end. A parry is ≤ parryMaxLit lit hold ticks (+snow Snow); during
+   * the rise and hold buds grow × budMul and flakes melt × meltMul.
    */
   flare: {
     warnTicks: 120,
@@ -336,6 +336,16 @@ const tuning = {
     windows: [
       [0.2, 0.32],
       [0.68, 0.8],
+    ],
+    /**
+     * Where the keep test may move an Endless rise (shares of the day): the morning flare anywhere
+     * that ends before the Noon Heat window, the afternoon one anywhere after it and before dusk. A
+     * candidate that fails everywhere in its job moves on in time to the next job (forward only)
+     * while its rise stays in its band, instead of being dropped.
+     */
+    keepWindows: [
+      [0.12, 0.38],
+      [0.62, 0.88],
     ],
     gapSec: 8,
     epsMargin: 2,

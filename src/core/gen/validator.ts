@@ -627,14 +627,35 @@ function lockTouches(w: World, a: number, b: number): boolean {
   return false;
 }
 
-/** True when an Endless flare's rise (absolute tick, day start t0, day length dl ticks) lies in one of TUNING.flare.windows (edges on the step grid, as drawn). */
-function inRiseWindow(rise: number, t0: number, dl: number): boolean {
-  for (const win of FL.windows) {
+/**
+ * The keep band (TUNING.flare.keepWindows, edges on the step grid) holding an Endless flare's rise
+ * (absolute tick, day start t0, day length dl ticks): its index, or −1.
+ */
+function keepBand(rise: number, t0: number, dl: number): number {
+  for (let i = 0; i < FL.keepWindows.length; i++) {
+    const win = FL.keepWindows[i] as readonly number[];
     const lo = STEP * Math.round(((win[0] as number) * dl) / STEP);
     const hi = STEP * Math.round(((win[1] as number) * dl) / STEP);
-    if (rise - t0 >= lo && rise - t0 <= hi) return true;
+    if (rise - t0 >= lo && rise - t0 <= hi) return i;
   }
-  return false;
+  return -1;
+}
+
+/**
+ * An Endless flare that failed every candidate of its job moves on in time instead of being
+ * dropped: to the first rise the next job decides (its window just past this job's own steps),
+ * while the rise stays in the keep band it was drawn in. Returns false when it cannot.
+ */
+function deferFlare(w: World, job: ValidationJob, f: Flare): boolean {
+  if (w.level) return false;
+  const day = dayAtTick(f.riseTick);
+  const t0 = dayStartTick(day);
+  const dl = Math.round(paramsAt(w, day).dayLen * TICK_HZ);
+  const band = keepBand(f.riseTick, t0, dl);
+  const rise = ownLast(job) + STEP - (f.endTick - f.riseTick);
+  if (band < 0 || rise <= f.riseTick || keepBand(rise, t0, dl) !== band) return false;
+  shiftFlare(f, rise - f.riseTick);
+  return true;
 }
 
 /** Ticks a Journey flare must end before Nubs reaches the finish line (its countdown and flash resolve in the level). */
@@ -658,7 +679,7 @@ function candidateFits(w: World, job: ValidationJob, i: number, c: Flare): boole
   if (c.warnTick < t0 || c.endTick > t0 + dl) return false;
   // Endless flares avoid noon (the Noon Heat window 11 AM-1 PM, [5/12, 7/12) of the day); a boss's middle phase may not.
   if (!w.level && 12 * (c.endTick - t0) > 5 * dl && 12 * (c.riseTick - t0) < 7 * dl) return false;
-  if (!w.level && !inRiseWindow(c.riseTick, t0, dl)) return false;
+  if (!w.level && keepBand(c.riseTick, t0, dl) < 0) return false;
   if (w.level && worldYAtTick(w, c.endTick + FINISH_MARGIN) >= w.finishY) return false;
   const fl = w.flares;
   const gap = Math.round(FL.gapSec * TICK_HZ);
@@ -754,7 +775,7 @@ function keepStep(w: World, job: ValidationJob): number {
     for (;;) {
       if (job.flareTry >= FLARE_TRIES.length) {
         shiftFlare(f, job.flareRise0 - f.riseTick);
-        f.state = FLARE_DROPPED;
+        if (!deferFlare(w, job, f)) f.state = FLARE_DROPPED;
         resortFlare(w, job.flareQ);
         startFlareTest(w, job, findFlareTest(w, job));
         return 0;
