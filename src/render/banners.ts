@@ -286,6 +286,17 @@ export function showToast(b: Banners, kind: ToastKind, kicker: string, text: str
   if (first === 1 && shown.kind === 'tip' && b.toastT > TOAST_IN + TIP_YIELD_S) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
 }
 
+/** Ends the toast saying `text`: on screen it starts to leave now; still waiting, it is dropped. */
+export function endToast(b: Banners, text: string): void {
+  const q = b.toasts;
+  for (let i = q.length - 1; i >= 0; i--) {
+    const t = q[i] as Toast;
+    if (t.text !== text) continue;
+    if (i === 0 && b.toastT >= 0) b.toastT = Math.max(b.toastT, TOAST_IN + t.hold);
+    else q.splice(i, 1);
+  }
+}
+
 /** The run ended: drop what waits (the Results take over); the toast on screen fades out. */
 export function endToasts(b: Banners): void {
   b.toasts.length = Math.min(b.toasts.length, b.toastT >= 0 ? 1 : 0);

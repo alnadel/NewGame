@@ -306,7 +306,15 @@ describe('v1.6 events: audio, haptics, tips', () => {
     expect(texts()).toEqual(['Another tip.', expect.stringMatching(/^Heat Flare soon!/)]);
     expect(b.toasts[1]?.glyph).toBe('flare');
     expect(b.toastT).toBeGreaterThan(3.6);
-    expect(b.toasts[1]?.hold).toBeCloseTo((fl.riseTick - en.tickAbs) / 60 - 0.25, 5);
+    // It holds on game time, to the rise (not on the toast's real-time clock), then starts to leave.
+    b.toasts.shift();
+    b.toastT = 1;
+    en.tickAbs = fl.riseTick - 1;
+    m.update(en);
+    expect(b.toastT).toBe(1);
+    en.tickAbs = fl.riseTick;
+    m.update(en);
+    expect(b.toastT).toBeGreaterThanOrEqual(0.25 + b.toasts[0]!.hold);
     // A new player's endless run: the ring's first drop from ×3 or more (not a snap's cash-in).
     b.toasts.length = 0;
     const e = endless();

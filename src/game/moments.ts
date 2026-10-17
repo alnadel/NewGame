@@ -21,7 +21,7 @@ import { FLARE_KEPT, levelProgress, queryBuds, type Bud, type LevelDef, type Run
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import type { Save } from '../meta/saveTypes.ts';
-import { endToasts, showToast, type Banners } from '../render/banners.ts';
+import { endToast, endToasts, showToast, type Banners } from '../render/banners.ts';
 import { goalMetLive } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
@@ -57,6 +57,11 @@ const FLARE_TIP = 'Heat Flare! Before the orange rim runs out, swing to the fros
 const FLARE_SOON_TIP = 'Heat Flare soon! Before its orange rim runs out, swing to the frost-rimmed teal.';
 /** The flare tip shows this long (ticks) before the warning: a tip's read (TIP_HOLD) ahead of a 2 s countdown. */
 const FLARE_LEAD = 240;
+/**
+ * The flare tip's toast hold (s): a ceiling only. It leaves when the game reaches the rise (the
+ * toast clock runs on real time, the flare on game time, which lags it on a loaded device).
+ */
+const FLARE_TIP_MAX_S = 30;
 
 /**
  * v1.5: the tips of the level that teaches each mechanic. 'bud' shows when a closed bud comes into
@@ -164,8 +169,9 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let spent = false;
   let shadeAt = -1;
 
-  /** The first flare's tip is still to show (a new player's endless run). */
+  /** The first flare's tip is still to show (a new player's endless run); the rise that ends it (−1 none). */
   let soonTip = false;
+  let soonRise = -1;
 
   /** Shows the level's tip for `on`, once per run (an `urgent` one ahead of any other toast). */
   const tip = (on: TipOn, hold = TIP_HOLD, urgent = false): void => {
@@ -196,6 +202,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       snapBudTip = tips.some((t) => t[0] === 'snapBud');
       glassTip = tips.some((t) => t[0] === 'glass');
       soonTip = tips.some((t) => t[0] === 'soon');
+      soonRise = -1;
       budAt = -1e9;
       tipGlyph = lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
       if (!scored) return;
@@ -270,6 +277,11 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
 
     update(s) {
       if (s.phase !== 'day') return;
+      if (soonRise >= 0 && s.tickAbs >= soonRise) {
+        // The rim has run out: the flare tip leaves now.
+        soonRise = -1;
+        endToast(banners, FLARE_SOON_TIP);
+      }
       if (tips.length > 0) {
         const p = levelProgress(s);
         if (p >= 0.25) tip('p25');
@@ -293,7 +305,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
             if (!f || f.state !== FLARE_KEPT || f.riseTick <= s.tickAbs) continue;
             if (f.warnTick - s.tickAbs <= FLARE_LEAD) {
               soonTip = false;
-              tip('soon', Math.max(1, (f.riseTick - s.tickAbs) / 60 - 0.25), true);
+              soonRise = f.riseTick;
+              tip('soon', FLARE_TIP_MAX_S, true);
             }
             break;
           }
