@@ -781,6 +781,23 @@ All runs use profile 3 unless noted.
 | Career: humanDial reaching standard within 20 runs | 88% | ≥ 85% | advisory | `sim --career 40` |
 | Ruleset 15 | — | identical to v1.5 output and goldens | hard | `sim --rules 15 --check --seeds 40`, vitest |
 
+### 6.1 Fix round 3, world: rule changes and gate notes
+
+No §6 gate was re-specified in this round. The `flareKeep` waiver (fix rounds 1-2) is no longer
+needed: the Days 2-4 keep row passes as written. Rule changes against §2.3 and §2.5, each with its
+measurement (`sim --check --seeds 40` unless noted; full numbers in core/README.md §16.3):
+
+| Rule (section) | Plan | Now | Why |
+|---|---|---|---|
+| A miss (§2.5) | "Otherwise the sim emits flareMiss" (later: a Chill burn per lit tick) | Endless: the tank is scorched by 4 Chill a lit hold tick past the parry's 4 (≤ 80) until nightfall or a Cold Snap | Flares on against off moved the dial-only bot's median death by −2 min (120 seeds): the burn refills within a second of shade. New `sim --flares --seeds 120` rows (hard there): the dial-only bot loses 82 min (≥ 60), the preAim bot 4 (≤ half), the oracle parries 94.8% (≥ 70%) |
+| Validator (§2.5) | Flares exact in the validator (the lift and the burn) | Also: through each kept Endless hold the DP holds its path on a parry bin, so the proof never needs a scorched tank; a kept flare whose parry cannot stay above the floor is dropped | The scorch is path-dependent; proving a parrying path keeps the proof exact (unresolved 0 on every world kind) |
+| Keep shifts (§2.5) | ±0.5, ±1 s, then dropped | Shifts within the job (±5 s, fix round 1), then the flare moves on in time to the next job while its rise stays in its band (`keepWindows` [0.12, 0.38] / [0.62, 0.88] of the day); rises are still drawn in [0.20, 0.32] / [0.68, 0.80] | 94% of the Days 2-4 candidates had a keepable rise in their draw window, but one job tries only ~4 s of rises. Kept 72.5% → 92.0% (Days 5+ 84.4%), rescues per chunk +0.038 as before |
+| Glass contest (§2.3) | Last flake: need = \|W\| − 8 steps; glare bins removed from M; "the first flake is savable too" | Every flake checked (a window that cannot be checked rejects the shift); a flake survives at most 7 weighted lit steps (a lit step 1, a glare step 2), so one lit exactly its 0.8 s budget is melted, as in the sim, which now compares whole weighted ticks | Review: 9% of glass clusters skipped the first flake, an exact-budget path counted as a save, glare's ×2 was ignored |
+
+The §6 row "Generation ms per chunk ≤ 3.5" holds: 2.18 → 2.32-2.50 ms (40 seeds × 8 days, serial,
+Node, against HEAD 38735c9 on the same loaded machine; `sim --check` under load prints 4.57 for its
+own concurrent timing); idle slices p99 1.14 ms (`bench-step.ts --gen`, gate ≤ 1.5).
+
 ---
 
 ## 7. What the skeptics changed (merge log)
