@@ -5,7 +5,7 @@
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick } from '../clock.ts';
 import { generateSome } from '../gen/world.ts';
-import { createBot } from './bots.ts';
+import { createNoviceBot } from './bots.ts';
 import { createRun, prepareRun, prepareSome, type RunBuild } from './create.ts';
 import { headlessConfig } from './headless.ts';
 import { step } from './step.ts';
@@ -32,7 +32,7 @@ export interface ParJob {
  */
 export function createParJob(dateSeed: number, plan = true): ParJob {
   const cfg = { ...headlessConfig(dateSeed, 3), mode: 'daily' as const, plan };
-  const bot = createBot('novice');
+  const bot = createNoviceBot();
   let build: RunBuild | null = prepareRun(cfg);
   let s: SimState | null = null;
   const done = (r: SimState): boolean => r.phase === 'dead' || r.tickAbs >= END_TICK;

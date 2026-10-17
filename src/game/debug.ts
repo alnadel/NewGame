@@ -131,7 +131,8 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     screen: () => session.ui.current(),
     state: () => session.testState(),
     forceDeath: () => session.forceDeath(),
-    runHeadless: (seed, ticks, bot) => runHeadless(seed, ticks, bot as BotKind),
+    // The single-file build ships no bots (session.ts makeBot): there it reports no hash.
+    runHeadless: (seed, ticks, bot) => (import.meta.env.MODE === 'single' ? '' : runHeadless(seed, ticks, bot as BotKind)),
     setTimeScale: (n) => {
       session.clock.debugScale = Number.isFinite(n) && n >= 0 ? n : 1;
     },

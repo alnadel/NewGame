@@ -581,6 +581,11 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
  * novice and the human models never use them. `opts` (v1.6) picks the reactive policy and snap
  * rule, preAim and the Feat-seeking oracle (unset: today's bots).
  */
+/** The novice bot alone (the Daily par's Snowbot): a build that needs no other bot keeps none of their code. */
+export function createNoviceBot(): Bot {
+  return noviceBot();
+}
+
 export function createBot(kind: BotKind, salt = 0, mechanics = true, opts: BotOptions = {}): Bot {
   const ctx: BotHookCtx = { kind, mech: mechanics, opts, salt };
   switch (kind) {

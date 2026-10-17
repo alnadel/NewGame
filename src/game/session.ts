@@ -153,6 +153,14 @@ const PAR_MS = 3;
 const PAR_TICKS = 6;
 
 /** Runs `fn` in idle time (a frame later where requestIdleCallback is missing). */
+/**
+ * A core bot for ?bot= and the test hook. The single-file build (`--mode single`) ships no bots
+ * (A3 budget; the Daily par has its own novice bot), so there both fall back to the player's input.
+ */
+function makeBot(kind: BotKind): Bot | null {
+  return import.meta.env.MODE === 'single' ? null : createBot(kind);
+}
+
 function idle(fn: () => void): void {
   const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
   if (ric) ric(fn, { timeout: 400 });
@@ -702,7 +710,7 @@ export class Session {
           this.ui.show('play');
           this.startRun('campaign', undefined, this.params.level);
         } else if (this.params.bot) {
-          this.bot = createBot(this.params.bot);
+          this.bot = makeBot(this.params.bot);
           this.ui.show('play');
           this.beginRun(this.s);
         } else {
@@ -1305,7 +1313,7 @@ export class Session {
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     const botKind = this.params.bot ?? this.testBot;
-    this.bot = botKind ? createBot(botKind) : null;
+    this.bot = botKind ? makeBot(botKind) : null;
     this.d.audio.resetRun();
     this.melody = [];
     this.hints.reset();
@@ -2439,7 +2447,7 @@ export class Session {
   /** Test hook: a core bot plays this run and the next ones (null: hands back to the input). */
   setTestBot(kind: BotKind | null): void {
     this.testBot = kind;
-    this.bot = kind ? createBot(kind) : this.params.bot ? createBot(this.params.bot) : null;
+    this.bot = kind ? makeBot(kind) : this.params.bot ? makeBot(this.params.bot) : null;
   }
 
   /**
