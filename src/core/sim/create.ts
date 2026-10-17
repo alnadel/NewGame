@@ -70,11 +70,12 @@ function freshStats(day: number, chill: number): RunStats {
 
 /**
  * v1.5 frost meter (the Frost Bank off) at the start: full on a level that dares a snap (the Cold
- * Snap's teaching level, a snapSave Dare: campaign.ts startsWithSnap), half on other levels, else
- * empty.
+ * Snap's teaching level, a snapSave Dare: campaign.ts startsWithSnap), half on other levels;
+ * Endless, Daily and challenge runs at TUNING.frost.runStart (fix round 2), lesson runs empty, and
+ * empty as in v1.5 with every v1.6 economy rule (ring, bank, garden) off.
  */
-function startFrost(w: World): number {
-  if (!w.level) return 0;
+function startFrost(w: World, cfg: RunConfig): number {
+  if (!w.level) return cfg.lesson === true || cfg.tutorial || !(w.v16.ring || w.v16.garden) ? 0 : TUNING.frost.runStart;
   return startsWithSnap(w.level) ? 1 : TUNING.frost.campaignStart;
 }
 
@@ -145,8 +146,8 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
   const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? maxChill));
   const theta0 = world.theta0;
   const bank = world.v16.bank;
-  const frostH = !world.mech.snap ? 0 : bank ? startFrostH(world, cfg) : Math.floor(100 * Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world))));
-  const frost = !world.mech.snap ? 0 : bank ? frostH / TUNING.bank.costH : Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world)));
+  const frostH = !world.mech.snap ? 0 : bank ? startFrostH(world, cfg) : Math.floor(100 * Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world, cfg))));
+  const frost = !world.mech.snap ? 0 : bank ? frostH / TUNING.bank.costH : Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world, cfg)));
   const s: SimState = {
     cfg: { ...cfg },
     params,

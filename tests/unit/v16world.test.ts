@@ -181,9 +181,11 @@ describe('Heat Flares (§2.5)', () => {
     }
     // With the Bank and the ring off, the v1.5 meter takes the frost and the ring is untouched.
     const off = started({ ...headlessConfig(1), v16: { bank: false, ring: false } });
+    const meter = off.nubs.frost;
+    expect(meter).toBe(TUNING.frost.runStart);
     off.events.length = 0;
     payTrick(off, 'parry');
-    expect(off.nubs.frost).toBeCloseTo(TUNING.bank.parryH / 100, 12);
+    expect(off.nubs.frost).toBeCloseTo(meter + TUNING.bank.parryH / 100, 12);
     expect(off.events.some((e) => e.e === 'ringTrick')).toBe(false);
   });
 

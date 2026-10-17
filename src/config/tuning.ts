@@ -198,6 +198,14 @@ const tuning = {
      * each level starts with the meter at campaignStart.
      */
     campaignStart: 0.5,
+    /**
+     * v1.6 fix round 2: while the Frost Bank ships off, Endless, Daily and challenge runs start with
+     * this much of the meter (lesson runs empty): the plan's starting charge (§2.2) on the v1.5
+     * meter. Measured (reactive p3, 240 seeds): +75 ± 38 min mean against an empty start, under the
+     * plan's 120-minute bar; humanDial snaps 0.71 / 0.65 / 0.12 times a run at R2-R4 (0.27 / 0.20 /
+     * 0.01 empty).
+     */
+    runStart: 0.5,
     /** The snap cloud's radii (ry = rx · cloud.ryRatio). */
     snapRx: 64,
   },
