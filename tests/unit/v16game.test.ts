@@ -3,7 +3,9 @@
 // counts, the soft-fail's miss count in the save, the missions retargeted (T8 is in content.test),
 // and the new events' audio, haptics and tips.
 import { describe, expect, it } from 'vitest';
-import { buildRunResult, createRun, debugFlare, levelDef, softFailMisses, TUNING, type LevelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { buildRunResult, createBot, createRun, debugFlare, levelDef, softFailMisses, step, TUNING, type LevelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { campaignConfig as coreCampaignConfig } from '../../src/core/level.ts';
+import { createGlassDraw, glassDecision } from '../../src/render/halo.ts';
 import type { SfxName } from '../../src/audio/recipes.ts';
 import { createAudioView } from '../../src/audio/scene.ts';
 import { SfxRouter } from '../../src/audio/sfxRouter.ts';
@@ -308,5 +310,50 @@ describe('v1.6 events: audio, haptics, tips', () => {
     expect(TUNING.ring.need).toHaveLength(4);
     expect(TUNING.bank.capH).toBe(200);
     expect(TUNING.brittle.meltBudget).toBeLessThan(TUNING.pickups.meltBudget);
+  });
+});
+
+describe('the glass layer draws the decision (render/halo.ts glassDecision; fix round 2)', () => {
+  const mask = (...runs: [number, number][]): Uint8Array => {
+    const m = new Uint8Array(360);
+    for (const [a, b] of runs) for (let x = a; x <= b; x++) m[((x % 360) + 360) % 360] = 1;
+    return m;
+  };
+  it('a glint on the teal when a safe angle saves the flake; else the detour nearest the pointer, merged, at most two arcs, none past 35% of the dial', () => {
+    const gd = createGlassDraw();
+    // The teal already saves it: no arc, a glint on the overlap nearest the pointer.
+    expect(glassDecision(mask([40, 80]), mask([70, 120]), 100, gd)).toMatchObject({ mode: 2, n: 0, glint: 80 });
+    // A detour: runs 5° apart merge; the far one (> 90° away) is not drawn.
+    const d = glassDecision(mask([10, 30], [36, 50], [200, 230]), mask([100, 140]), 60, gd);
+    expect(d.mode).toBe(1);
+    expect(d.n).toBe(1);
+    expect([d.arcs[0], d.arcs[1]]).toEqual([9.5, 50.5]);
+    // Two runs within ±90° of the pointer: both, the nearest first.
+    const two = glassDecision(mask([10, 30], [120, 140]), mask([200, 220]), 60, gd);
+    expect(two.n).toBe(2);
+    expect(two.arcs[0]).toBe(9.5);
+    // Most of the dial: nothing.
+    expect(glassDecision(mask([0, 200]), mask([300, 320]), 60, gd).mode).toBe(0);
+  });
+
+  it('on the Glass Flakes level (L21) the drawn arcs stay under 90° in at most two runs', () => {
+    const s = createRun(coreCampaignConfig(21));
+    const bot = createBot('reactive');
+    const gd = createGlassDraw();
+    let windows = 0;
+    let lastTick = -1;
+    for (let i = 0; i < 40_000 && s.phase !== 'dead' && s.phase !== 'won'; i++) {
+      step(s, bot.next(s));
+      const g = s.guide;
+      if (g.tick === lastTick || !g.flake.includes(1)) continue;
+      lastTick = g.tick;
+      windows++;
+      const d = glassDecision(g.flake, g.now, s.sun.theta, gd);
+      expect(d.n).toBeLessThanOrEqual(2);
+      let deg = 0;
+      for (let k = 0; k < d.n; k++) deg += (d.arcs[2 * k + 1] as number) - (d.arcs[2 * k] as number);
+      expect(deg, `tick ${s.tick}`).toBeLessThanOrEqual(90);
+    }
+    expect(windows).toBeGreaterThan(5);
   });
 });

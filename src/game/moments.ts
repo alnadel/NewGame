@@ -72,7 +72,7 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
     ['go', 'Two shadows over Nubs at once is deep shade: Chill and the ring fill twice as fast.'],
     ['deep', 'Deep shade! The dark band on the teal means double cool. Hunt the overlaps.'],
   ],
-  glass: [['glass', 'Glass flakes melt fast. The white arc saves them, if you can spare the sun.']],
+  glass: [['glass', 'Glass flakes melt fast. The white glint saves them; out on a white arc it costs you sun.']],
   // The Solar Flare's level says it at go, before its first 1.2 s warning (too short to read a tip in).
   flare: [['go', FLARE_TIP]],
 };

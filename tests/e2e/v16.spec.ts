@@ -106,6 +106,23 @@ test('boss finales keep the level bar at 360x640, where their HP marks ride', as
     await waitForScreen(page, 'play');
     await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.hud())).ruler, { message: `level ${id}` }).toBe(true);
     expect((await page.evaluate(() => window.__SHADY_TEST__!.hud())).rulerW, `level ${id}`).toBeGreaterThanOrEqual(48);
+    // The goal pill keeps its glyph (fix round 2: it used to drop first, leaving a bare count).
+    expect((await page.evaluate(() => window.__SHADY_TEST__!.hud())).icon, `level ${id}`).toBe(true);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('the deep shade and Cold Snap lessons keep their goal glyph on the pill at 390x844', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const id of [5, 10]) {
+    await page.goto(`/?level=${id}&test=1`);
+    await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+    await waitForScreen(page, 'play');
+    await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.hud())).ruler, { message: `level ${id}` }).toBe(true);
+    const hud = await page.evaluate(() => window.__SHADY_TEST__!.hud());
+    expect(hud.icon, `level ${id}`).toBe(true);
+    expect(hud.rulerW, `level ${id}`).toBeGreaterThanOrEqual(48);
   }
   expect(errors).toEqual([]);
 });

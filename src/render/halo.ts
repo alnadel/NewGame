@@ -14,8 +14,10 @@
 // where gold meets teal, one angle does both), and deep shade darkens the ring to indigo with a
 // few frost sparkles circling it.
 // v1.6 layers (docs/V1_6_PLAN.md §4, drawn only when their mask has something): a darker teal band
-// inside the lasting teal where shade is deep (runs ≥ 3° wide); a thin frost-white arc outside the
-// ring with a glint running along it where the sun saves a glass flake; during a snap a frost band
+// inside the lasting teal where shade is deep (runs ≥ 3° wide); for a glass flake in its melt window
+// a glint on the teal where a safe angle saves it, else a thin frost-white arc outside the ring (the
+// detour off the teal, at most two runs near the pointer) with the glint running along it
+// (glassDecision); during a snap a frost band
 // says "covered", the teal on it is the shade Nubs will land in when it ends, and the dashed arcs
 // hide; during a Heat Flare's warning an orange rim counts down to the rise and frost-rimmed teal
 // marks the shade that holds through it (the glass arc hides).
@@ -559,6 +561,124 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
 /** The glass arc's rim (px outside R, clear of the bud glow at R + 11) and the narrowest run it draws (°). */
 const GLASS_R = 21;
 const GLASS_MIN_DEG = 4;
+/** Runs of the glass decision closer than this (°) merge into one arc. */
+const GLASS_MERGE_DEG = 8;
+/** At most this share of the dial in glass detours: wider, the arc says nothing (behind dense casters most angles shade one point). */
+const GLASS_MAX_SHARE = 0.35;
+/** A second detour arc is drawn only within this of the sun pointer (°). */
+const GLASS_SECOND_DEG = 90;
+
+/** What the glass layer draws (glassDecision): 0 nothing, 1 detour arcs (the angles that save the glass flake but leave the safe teal), 2 a glint on the teal (the safe angles already save it). */
+export interface GlassDraw {
+  mode: 0 | 1 | 2;
+  /** Detour arcs as [b0, b1] (°, b1 > b0, b1 may pass 360), at most two, the nearest the pointer first. */
+  readonly arcs: Float32Array;
+  n: number;
+  /** Where the glint sits (°). */
+  glint: number;
+}
+
+export function createGlassDraw(): GlassDraw {
+  return { mode: 0, arcs: new Float32Array(4), n: 0, glint: 0 };
+}
+
+const glassCost = new Uint8Array(360);
+const glassRuns = new Float32Array(2 * 181);
+
+/** Circular distance (°) from angle a to the run [b0, b1]. */
+function runDist(a: number, b0: number, b1: number): number {
+  const d = (x: number): number => Math.abs(((((x - a) % 360) + 540) % 360) - 180);
+  const mid = (b0 + b1) / 2;
+  if (d(mid) <= (b1 - b0) / 2) return 0;
+  return Math.min(d(b0), d(b1));
+}
+
+/**
+ * The glass layer's decision (fix round 2: the whole flake mask read as a broken white ring over
+ * the teal): when a safe angle (guide.now) already saves the glass flake, a glint on the teal there
+ * and no arc; else the detour, guide.flake AND NOT guide.now, its runs merged across gaps under
+ * GLASS_MERGE_DEG, slivers under GLASS_MIN_DEG dropped, nothing when it covers over GLASS_MAX_SHARE
+ * of the dial, and only the run nearest the sun pointer plus at most one more within
+ * GLASS_SECOND_DEG of it.
+ */
+export function glassDecision(flake: Uint8Array, now: Uint8Array, theta: number, out: GlassDraw): GlassDraw {
+  out.mode = 0;
+  out.n = 0;
+  let cost = 0;
+  let both = -1;
+  let bothD = Infinity;
+  for (let b = 0; b < 360; b++) {
+    const f = flake[b] !== 0;
+    const c = f && now[b] === 0 ? 1 : 0;
+    glassCost[b] = c;
+    cost += c;
+    if (f && now[b] !== 0) {
+      const d = Math.abs(((((b - theta) % 360) + 540) % 360) - 180);
+      if (d < bothD) {
+        bothD = d;
+        both = b;
+      }
+    }
+  }
+  if (both >= 0) {
+    out.mode = 2;
+    out.glint = both;
+    return out;
+  }
+  if (cost === 0 || cost > GLASS_MAX_SHARE * 360) return out;
+  let n = runs(glassCost);
+  for (let i = 0; i < 2 * n; i++) glassRuns[i] = runBuf[i] as number;
+  // Merge neighbours across short gaps (the last run wraps onto the first).
+  let m = 0;
+  for (let i = 0; i < n; i++) {
+    const b0 = glassRuns[2 * i] as number;
+    const b1 = glassRuns[2 * i + 1] as number;
+    if (m > 0 && b0 - (glassRuns[2 * m - 1] as number) < GLASS_MERGE_DEG) glassRuns[2 * m - 1] = b1;
+    else {
+      glassRuns[2 * m] = b0;
+      glassRuns[2 * m + 1] = b1;
+      m++;
+    }
+  }
+  if (m > 1 && (glassRuns[0] as number) + 360 - (glassRuns[2 * m - 1] as number) < GLASS_MERGE_DEG) {
+    glassRuns[2 * m - 1] = (glassRuns[1] as number) + 360;
+    glassRuns[0] = glassRuns[2 * m - 2] as number;
+    glassRuns[1] = glassRuns[2 * m - 1] as number;
+    m--;
+  }
+  n = m;
+  // The nearest run to the pointer, then the next nearest within GLASS_SECOND_DEG.
+  let i0 = -1;
+  let d0 = Infinity;
+  let i1 = -1;
+  let d1 = Infinity;
+  for (let i = 0; i < n; i++) {
+    const b0 = glassRuns[2 * i] as number;
+    const b1 = glassRuns[2 * i + 1] as number;
+    if (b1 - b0 < GLASS_MIN_DEG) continue;
+    const d = runDist(theta, b0, b1);
+    if (d < d0) {
+      i1 = i0;
+      d1 = d0;
+      i0 = i;
+      d0 = d;
+    } else if (d < d1) {
+      i1 = i;
+      d1 = d;
+    }
+  }
+  if (i0 < 0) return out;
+  out.mode = 1;
+  for (const i of i1 >= 0 && d1 <= GLASS_SECOND_DEG ? [i0, i1] : [i0]) {
+    out.arcs[2 * out.n] = glassRuns[2 * i] as number;
+    out.arcs[2 * out.n + 1] = glassRuns[2 * i + 1] as number;
+    out.n++;
+  }
+  out.glint = ((glassRuns[2 * i0] as number) + (glassRuns[2 * i0 + 1] as number)) / 2;
+  return out;
+}
+
+const glassDraw = createGlassDraw();
 
 /**
  * The v1.6 rims outside the ring (see the header): a flare's countdown and its shade (they take the
@@ -594,42 +714,38 @@ function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: nu
     g.arc(cx, cy, R + 25, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.005, m.flareLeft));
     g.stroke();
   } else if (m.glass && !inp.blind) {
-    const n = runs(m.glass);
-    // A thin frost-white arc on its own rim (R + GLASS_R, clear of the gold bud glow), without the
-    // slivers under GLASS_MIN_DEG, and one glint: on the run nearest the sun pointer.
-    let near = -1;
-    let nearD = Infinity;
-    g.beginPath();
-    for (let i = 0; i < n; i++) {
-      const b0 = runBuf[2 * i] as number;
-      const b1 = runBuf[2 * i + 1] as number;
-      if (b1 - b0 < GLASS_MIN_DEG) continue;
-      arcPath(g, cx, cy, R + GLASS_R, b0 + 0.5, b1 - 0.5);
-      const mid = (b0 + b1) / 2;
-      const d = Math.abs(((((mid - inp.theta) % 360) + 540) % 360) - 180);
-      if (d < nearD) {
-        nearD = d;
-        near = i;
-      }
-    }
-    if (near >= 0) {
+    // The decision, not the mask (glassDecision): a thin frost-white detour arc on its own rim
+    // (R + GLASS_R, clear of the gold bud glow) with a glint running along it, or, when the teal
+    // already saves the flake, just a glint on the teal.
+    const gd = glassDecision(m.glass, inp.now, inp.theta, glassDraw);
+    const u = inp.reducedMotion ? 0.5 : (h.deepSpin * 3) % 1;
+    let ga = 0;
+    let gr = R;
+    if (gd.mode === 1) {
+      g.beginPath();
+      for (let i = 0; i < gd.n; i++) arcPath(g, cx, cy, R + GLASS_R, (gd.arcs[2 * i] as number) + 0.5, (gd.arcs[2 * i + 1] as number) - 0.5);
       g.lineWidth = 6.5;
       g.strokeStyle = cssa(INK, 0.35 * f);
       g.stroke();
       g.lineWidth = 3;
       g.strokeStyle = cssa(0xffffff, f);
       g.stroke();
-      // The glint runs along that arc (resting at its middle under reduced motion).
-      const u = inp.reducedMotion ? 0.5 : (h.deepSpin * 3) % 1;
-      const b0 = runBuf[2 * near] as number;
-      const a = -(b0 + ((runBuf[2 * near + 1] as number) - b0) * u) * DEG;
-      const x = cx + Math.cos(a) * (R + GLASS_R);
-      const y = cy + Math.sin(a) * (R + GLASS_R);
+      // The glint runs along the nearest arc (resting at its middle under reduced motion).
+      const b0 = gd.arcs[0] as number;
+      ga = b0 + ((gd.arcs[1] as number) - b0) * u;
+      gr = R + GLASS_R;
+    } else if (gd.mode === 2) {
+      ga = gd.glint;
+    }
+    if (gd.mode !== 0) {
+      const a = -ga * DEG;
+      const x = cx + Math.cos(a) * gr;
+      const y = cy + Math.sin(a) * gr;
       g.fillStyle = cssa(0xffffff, f);
       g.strokeStyle = cssa(INK, 0.4 * f);
       g.lineWidth = 1;
       g.beginPath();
-      g.arc(x, y, 3.5, 0, TAU);
+      g.arc(x, y, gd.mode === 2 ? 4.5 : 3.5, 0, TAU);
       g.stroke();
       g.fill();
     }

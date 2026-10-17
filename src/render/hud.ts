@@ -788,11 +788,14 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   // it keeps at least RULER_MIN px: the forecast glyph rides on the D-badge (no width of its own),
   // the clock reserves the widest clock of a day, and when the row is still tight the clock font
   // shrinks a little (to 90 %), then the Snow pill drops its flake icon and the clock may shrink to 70 %.
+  // A level's pill keeps its glyph (on a verb goal or a Dare it is the only label of the count): the
+  // seconds text shortens, then the star pips close up, and only then the glyph shrinks (fix round 2;
+  // it used to go first, leaving a bare "0/1s").
   let snowText = h.snowText;
   let snowW = tabularWidth(g, h, h.snowFont, snowText);
   // The badge is sized for one digit ("×5"), as the multiplier never exceeds 5.
   const multW = tabularWidth(g, h, h.multFont, '×5');
-  const iconS = 18 * k;
+  let iconS = 18 * k;
   const badgeW = multW + 14 * k;
   const badgeH = 24 * k;
   if (badgeW !== h.badgeW || badgeH !== h.badgeH) h.badgeKey = -1;
@@ -813,21 +816,26 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
       clockW = widestClock(g, h, clockFont);
     }
   };
-  fit(0.9);
-  if (rulerOf(rightOf(true), clockW) < RULER_MIN) {
-    icon = false;
-    clockFont = h.clockFont;
-    if (!c) clockW = widestClock(g, h, clockFont);
-    fit(0.7);
-  }
-  // A level keeps its progress bar too: a seconds goal drops its tenths, then the star pips close up.
-  if (c && rulerOf(rightOf(icon), clockW) < RULER_MIN && h.snowShort !== snowText) {
-    snowText = h.snowShort;
-    snowW = tabularWidth(g, h, h.snowFont, snowText);
-  }
-  if (c && rulerOf(rightOf(icon), clockW) < RULER_MIN) {
-    pipStep = PIP_STEP_TIGHT;
-    clockW = 3 * pipStep * k;
+  if (c) {
+    // A level keeps its progress bar too: a seconds goal drops its tenths, the star pips close up,
+    // then the goal's glyph shrinks to ICON_TIGHT (never dropped).
+    if (rulerOf(rightOf(icon), clockW) < RULER_MIN && h.snowShort !== snowText) {
+      snowText = h.snowShort;
+      snowW = tabularWidth(g, h, h.snowFont, snowText);
+    }
+    if (rulerOf(rightOf(icon), clockW) < RULER_MIN) {
+      pipStep = PIP_STEP_TIGHT;
+      clockW = 3 * pipStep * k;
+    }
+    if (rulerOf(rightOf(icon), clockW) < RULER_MIN) iconS = ICON_TIGHT * k;
+  } else {
+    fit(0.9);
+    if (rulerOf(rightOf(true), clockW) < RULER_MIN) {
+      icon = false;
+      clockFont = h.clockFont;
+      clockW = widestClock(g, h, clockFont);
+      fit(0.7);
+    }
   }
 
   // --- Right: Snow + multiplier ---------------------------------------------------------------
@@ -1061,6 +1069,8 @@ function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null
 /** Spacing of the campaign star pips (× the HUD scale), and in a tight row. */
 const PIP_STEP = 19;
 const PIP_STEP_TIGHT = 15;
+/** A level's goal glyph at its smallest (CSS px at k = 1) when the row is tight. */
+const ICON_TIGHT = 12;
 
 /** The ruler keeps at least this width (CSS px) whenever the left panel shows. */
 const RULER_MIN = 48;
