@@ -165,6 +165,13 @@ export const WORLD: Sim16Module = {
     if (rea) {
       const [n, d] = noonShare(rea.runs);
       gate(false, n >= 0.25 * d, `${rea.name} deaths in 11 AM-1 PM ≥ 25% (advisory)`, `${pct(n, d)} of ${d}`);
+      // Fix round 2 (review): noon is the boss for the human models at the standard rungs too.
+      for (const rung of [3, 4]) {
+        const hd = find(rows, (j) => j.bot === 'humanDial' && j.rung === rung && j.forecast === undefined);
+        if (!hd) continue;
+        const [hn, hdd] = noonShare(hd.runs);
+        gate(false, hn >= 0.25 * hdd, `${hd.name} deaths in 11 AM-1 PM ≥ 25% (advisory)`, `${pct(hn, hdd)} of ${hdd}`);
+      }
       const meet = total(rea.runs, 'fParry') + total(rea.runs, 'fMiss');
       const p = meet > 0 ? total(rea.runs, 'fParry') / meet : 0;
       gate(false, p >= 0.25 && p <= 0.55, `${rea.name} parries 25-55% (advisory)`, pct(total(rea.runs, 'fParry'), meet));
