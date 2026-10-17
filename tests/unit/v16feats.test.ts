@@ -113,6 +113,23 @@ describe('Dares (§2.6)', () => {
     expect(seen).toContainEqual({ e: 'feat', kind: 'deep', value: f.target, target: f.target });
   });
 
+  it('a snap cast into an eclipse saves nothing: its ticks are not snap-saved (the eclipse already shades every angle)', () => {
+    const id = CAMPAIGN_LEVELS.find((l) => l.concepts.includes('eclipse') && l.id > 10)?.id as number;
+    const s = createRun({ ...campaignConfig(id), startFrost: 1 });
+    const bot = createBot('reactive', 0, false);
+    const ecl = s.world.eclipseTick;
+    let inEclipse = 0;
+    while (s.phase !== 'dead' && s.phase !== 'won' && s.tickAbs < ecl + 6 * 60) {
+      const f = { ...bot.next(s) };
+      if ((s.stats.snaps ?? 0) === 0 && s.tickAbs + 1 >= ecl && s.ready === 0 && s.phase === 'day') f.snap = true;
+      const before = s.stats.snapSavedTicks ?? 0;
+      step(s, f);
+      if (s.eclipseOn) inEclipse += (s.stats.snapSavedTicks ?? 0) - before;
+    }
+    expect(s.stats.snaps).toBe(1);
+    expect(inEclipse).toBe(0);
+  }, 30_000);
+
   it('a played level reports its Dare events in step order (a count event for every Dare value change of a count Dare)', () => {
     const id = CAMPAIGN_LEVELS.find((l) => l.feats[0]?.kind === 'flakes' || l.feats[0]?.kind === 'clean')?.id ?? 2;
     const s = createRun(campaignConfig(id));
