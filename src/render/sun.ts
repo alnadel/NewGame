@@ -424,8 +424,8 @@ function sweatDrop(g: CanvasRenderingContext2D, u: number, time: number): void {
  */
 let flareGlow: CanvasImageSource | null = null;
 
-export function drawFlareCue(g: CanvasRenderingContext2D, s: SunGlyph, scale: number, phase: number, left: number, t: number, time: number, rm: boolean): void {
-  const a = 1 - s.night;
+export function drawFlareCue(g: CanvasRenderingContext2D, s: SunGlyph, scale: number, phase: number, left: number, t: number, time: number, rm: boolean, alpha = 1): void {
+  const a = (1 - s.night) * alpha;
   if (a <= 0.05) return;
   const r = 20 * scale;
   g.beginPath();

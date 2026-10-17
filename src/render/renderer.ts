@@ -298,6 +298,10 @@ export interface RenderScene {
   relief: number;
   /** Seconds left of the sun's worried look after noon has passed. */
   sunWorried: number;
+  /** The text pops' eased lift (CSS px): during a flare's warning they rise clear of the dial's rims. */
+  popLift: number;
+  /** The edge sun's eased alpha: 0.4 while it sits over the dial's rims (Nubs by a screen edge). */
+  sunAlpha: number;
   /** The biome the ground shows (1 Old Town) for day `townDay` of world `townWorld`. */
   town: number;
   townDay: number;
@@ -370,6 +374,8 @@ export function createScene(): RenderScene {
     sunMood: 'smug',
     relief: 0,
     sunWorried: 0,
+    popLift: 0,
+    sunAlpha: 1,
     town: 0,
     townDay: -1,
     townWorld: null,
@@ -920,7 +926,11 @@ export class Renderer {
     }
     g.restore();
 
-    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion));
+    // During a flare's warning the pops (lowest at z 120, 30 u up) rise clear of the countdown at
+    // R + 25 (their centres from R + 40), so a +5 never sits on the parry arc.
+    const lift = inp.mech.flarePhase === 1 && inp.screen !== 'title' ? 10 * v.S + 40 : 0;
+    sc.popLift += (lift - sc.popLift) * Math.min(1, adt * 12);
+    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion), sc.popLift);
 
     // Edge sun mascot (decoration), kept below the HUD band.
     if (inp.mapT < 0 && inp.screen !== 'title' && inp.screen !== 'menu') {
@@ -930,6 +940,10 @@ export class Renderer {
       if (dying >= 0) sc.sun.guilty = Math.min(1, sc.sun.guilty + adt * 3);
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);
+      // Over the dial (its rims reach R + 30; Nubs by a screen edge) the sun steps back to 40 %, so
+      // it never hides the sun pointer or the flare arc under it.
+      const over = Math.hypot(sc.sun.x - pose.x, sc.sun.y - pose.y) < 40 * v.S + 30 + 24 * scale;
+      sc.sunAlpha += ((over ? 0.4 : 1) - sc.sunAlpha) * Math.min(1, adt * 8);
       // Around noon the sun is the boss (unless Nubs is nearly gone: then it is horrified).
       const boss = sunUp && night === 0 && !moonlit ? bossWeight(dayFrac, s.params.forecast === 'heat') : 0;
       let mood: SunMood;
@@ -940,8 +954,8 @@ export class Renderer {
       else if (boss > 0.6) mood = 'boss';
       else mood = snap.chill >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
-      drawSun(g, sc.sun, mood, time, scale, 1, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades, moonlit, eclipse);
-      if (inp.mech.flarePhase > 0) drawFlareCue(g, sc.sun, scale, inp.mech.flarePhase, inp.mech.flareLeft, inp.mech.flareT, time, inp.reducedMotion);
+      drawSun(g, sc.sun, mood, time, scale, sc.sunAlpha, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades, moonlit, eclipse);
+      if (inp.mech.flarePhase > 0) drawFlareCue(g, sc.sun, scale, inp.mech.flarePhase, inp.mech.flareLeft, inp.mech.flareT, time, inp.reducedMotion, sc.sunAlpha);
     }
 
     // HUD.

@@ -673,9 +673,10 @@ export function addPlus(p: Pops, n: number): void {
 export function addHeadline(p: Pops, text: string, style: number, dur: number, minRow = 0): void {
   let taken = 0;
   for (let i = 0; i < POP_CAP; i++) {
-    const s = p.style[i];
     if (p.dur[i]! <= 0) continue;
-    if (s === POP_PHEW || s === POP_SWING || s === POP_SNAP) {
+    // Any headline holds its row whatever its look (BLOOM! wears the ×N gold, DEEP the frost), so
+    // two arriving together stack in rows instead of on one anchor.
+    if (p.z[i]! >= HEADLINE_Z) {
       taken |= 1 << Math.round((p.z[i]! - HEADLINE_Z) / HEADLINE_ROW_Z);
       continue;
     }
@@ -723,8 +724,8 @@ function popScale(t: number, inDur: number, peak: number): number {
 
 const POP_FONT = "800 20px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
-/** Text pops in screen space, riding with Nubs at (nx, ny) — his hop included — rising as they fade. */
-export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale: number, nx: number, ny: number): void {
+/** Text pops in screen space, riding with Nubs at (nx, ny) — his hop included — rising as they fade, `lift` CSS px higher. */
+export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale: number, nx: number, ny: number, lift = 0): void {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
@@ -735,7 +736,7 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     const style = p.style[i]!;
     const rise = style === POP_PHEW || style === POP_SWING || style === POP_SNAP ? 10 : 20;
     const sx = v.ox + (nx + p.dx[i]!) * v.S;
-    const sy = v.oy - (ny + OBLIQUE * p.z[i]!) * v.S - rise * Math.min(1, t / 0.55) * v.S * 0.9;
+    const sy = v.oy - (ny + OBLIQUE * p.z[i]!) * v.S - rise * Math.min(1, t / 0.55) * v.S * 0.9 - lift;
     let scale: number;
     let size: number;
     let fill: string;

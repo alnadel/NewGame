@@ -295,17 +295,24 @@ over the shipped ones (a debug run), and the e2e of the Bank's layers use `?on=b
   `SNAP_TICKS + snapExt`) and a chip shows `snapBankH` ("+0.3"). `snapCash` pours a stream of frost
   from the badge into the meter; frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap").
 - **Dial layers** (`halo.ts`, §4 priority): the deep band (`guide.deep`, runs ≥ 3°) darker inside the
-  lasting teal; the glass arc (`guide.flake`) thin and frost-white outside the ring with a glint
+  lasting teal; the glass layer (`guide.flake`, `glassDecision`) on its own rim at R + 24 (outside
+  the sun pointer's rays and 6 px outside the drag arrow, which dims beside it): a twinkling glint
+  where the safe teal already saves the flake, else a beaded ice-blue detour arc with the glint
   running along it; during a snap (`guide.land`) a frost band says "covered", the teal on it is the
-  shade at the snap's end and the dashed arcs hide; during a flare's warning (`guide.flare`,
-  the flare's ticks) an orange rim counts down and frost-rimmed teal marks the shade that holds (the
-  glass arc hides).
+  shade at the snap's end and the dashed arcs hide; during a flare's warning (`guide.flare`, the
+  flare's ticks) twelve white-hot ticks on an orange edge count down at R + 25 (the sun cue's look,
+  not the hot ring's solid orange, whose glow rests meanwhile), frost-rimmed teal marks the shade
+  that holds (a run under 8° wears a target dot) and the glass layer hides. Text pops rise clear of
+  the rims while a warning runs (`RenderScene.popLift`); headlines arriving together take rows.
 - **Heat Flares**: the sun mascot's twelve white-hot ticks go out one by one through the warning
   while a white glow gathers (no swell, no flash; reduced motion: the ring only), a steady white-hot
   ring through the rise and hold; PARRY! (an ice stamp), a miss's hot ring; the ruler marks the
-  day's kept flares at their rise (white-hot, teal once parried, grey once missed) and a level's
-  progress bar its flares (a boss finale's HP notches). **Noon Heat**: a hot band over 11-1 on the
-  ruler (`noonHeatAt`) and a line on the Day card of the day it rises.
+  day's kept flares at their rise (white-hot, teal once parried, grey once missed; clear of the
+  progress head) and a level's progress bar its flares (3 px ticks, teal once parried, a red ✕ once
+  missed; a boss finale's HP is the flares not parried yet). The edge sun steps back to 40 % while
+  it sits over the dial. **Noon Heat**: a hot band over 11-1 on the ruler (`noonHeatAt`) with an
+  underline below the bar (the progress head, wider than the band, hides it at noon; its ring turns
+  hot meanwhile) and a line on the Day card of the day it rises.
 - **Glass flakes** (`pickups.ts`): `Pickup.brittle` flakes sit in a pale faceted diamond and melt on
   `TUNING.brittle.meltBudget`. GLASS SAVED! on `clusterSaved`; LANDING! on `snapLand`.
 - **Dares** (`campaign.ts`): a level's `feats` (star 2 when it has any, else the flakes star) are
@@ -320,8 +327,10 @@ over the shipped ones (a debug run), and the e2e of the Bank's layers use `?on=b
   says the next try eases.
 - **Tips** (`moments.ts` `MECH_TIPS`): the ring on L2, the Bank and Garden on the Cold Snap's level
   (a pip full, a bud in reach under the snap, the first cash-in), glass and flare levels at their
-  first window and warning; a new player's endless runs also get the ring's first drop from ×3,
-  the Garden, the cash-in, glass and flare tips.
+  first window and at go; a new player's endless runs also get the ring's first drop from ×3,
+  the Garden, the cash-in and glass tips, and the flare's 4 s before the first kept flare's warning
+  (urgent: it goes ahead of any toast; held to the rise). A stamp or card arriving over a toast on
+  screen hides it and holds its clock until it has gone (`Banners.toastHide`).
 - **Audio and haptics**: a flare's warning hum and the parry's crack and bells are new; a ring
   trick, the cash-in, a spill, an extension, a landing, glass saved and a miss reuse existing cues
   and patterns (only losing ×5 sounds).
