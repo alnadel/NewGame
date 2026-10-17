@@ -267,6 +267,8 @@ export function createMechanics(): Mechanics {
       return view;
     },
     demo(name, s, snap, time) {
+      // The single-file build has no demo hook (main.ts): the staging below compiles away there.
+      if (import.meta.env.MODE === 'single') return false;
       const nb = s.nubs;
       const gd = s.guide;
       const theta = Math.round(snap.theta);

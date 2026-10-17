@@ -888,7 +888,7 @@ export class Renderer {
     }
 
     // Debug geometry.
-    if (inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
+    if (import.meta.env.MODE !== 'single' && inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 
     // Halo dial (play/title; fades out on death and under the map).
     const showHalo = inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'title' || inp.screen === 'dying');

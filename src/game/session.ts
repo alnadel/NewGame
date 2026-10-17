@@ -144,6 +144,11 @@ const TICK_HAPTIC_MS = 90;
 const MELODY_MAX = 32;
 const IDLE_BUDGET = 12;
 /**
+ * The single-file build (`--mode single`): its test hook is only screen() and forceDeath() (main.ts),
+ * so the tooling-only methods below (state, demos, pixel and map probes) compile away there.
+ */
+const SINGLE = import.meta.env.MODE === 'single';
+/**
  * World built before the Title's first frame: the view above Nubs plus the 540 u shadow reach, with
  * margin (GR19). Idle frames generate the rest; a tap at once pays the remainder on the first tick.
  */
@@ -2397,6 +2402,7 @@ export class Session {
    * concept fields the renderer reads (eclipse, gust, lock, moonlit).
    */
   testState() {
+    if (SINGLE) throw new Error('test hook');
     const s = this.s;
     return {
       phase: s.phase,
@@ -2431,6 +2437,7 @@ export class Session {
 
   /** Test hook: the config of the current run (the Title's held run between runs). */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
+    if (SINGLE) throw new Error('test hook');
     const s = this.s;
     const c = s.cfg;
     return {
@@ -2456,6 +2463,7 @@ export class Session {
    * more than 3 and 8 levels apart, and the largest |Δ|. The next frame draws as usual.
    */
   pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null {
+    if (SINGLE) throw new Error('test hook');
     const canvas = this.d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
@@ -2523,6 +2531,7 @@ export class Session {
    * below the sheet's top edge. The next frame draws as usual.
    */
   mapProbe(mapT: number): MapProbe | null {
+    if (SINGLE) throw new Error('test hook');
     const sheetTop = this.ui.current() === 'results' ? this.ui.resultsSheetTop() : null;
     if (sheetTop === null || this.resultsAt < 0) return null;
     const rr = this.renderer;
@@ -2581,6 +2590,7 @@ export class Session {
 
   /** Test hook: the ghost hint's state. */
   hintState(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number } {
+    if (SINGLE) throw new Error('test hook');
     const h = this.hints;
     return { mode: this.ghost, target: h.target, width: h.targetW, turn: h.turn, lesson: h.lesson, shown: h.shown };
   }
@@ -2591,6 +2601,7 @@ export class Session {
    * bloom, snapReady, snap and deep stage their objects in the run's world (game/mechanics.ts).
    */
   demo(name: string): void {
+    if (SINGLE) throw new Error('test hook');
     const s = this.s;
     // v1.5: bud, bloom, snapReady, snap, deep (game/mechanics.ts).
     if (this.mech.demo(name, s, this.snap, this.time)) return;

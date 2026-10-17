@@ -354,11 +354,18 @@ boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`)
 meter's centre and the snaps input asked for) and the demos above. v1.6: `mech()` adds the pips, the
 banked chip, the ring (on, fill, bleeding), each dial layer's bins, the flare's phase, share left and
 outcomes, Noon Heat and the badge's centre; demos `ring`, `bleed`, `trick`, `pips`, `spill`, `cash`,
-`bank`, `land`, `landing`, `deepBand`, `glass`, `flare`, `parry`, `noonHeat` (game/mechanics.ts, with
+`bank`, `land`, `landing`, `deepBand`, `glass`, `flare`, `flareSoon` (a kept flare 5 s ahead, played
+by the sim), `parry`, `noonHeat` (game/mechanics.ts, with
 the core's `debugRing` and `debugFlare`) and, on a level, `dare` and `dares` (one Dare, a finale's two). `demo('noon')` is an alias of
 `'highnoon'`, and `demo('postcard')` shares without user activation (the download path).
 `forceDeath()` also ends the first-run lesson, whose Chill floor would keep Nubs alive. URL
 parameters are in V1_PLAN §14.
+
+The single-file build (`--mode single`, amendment A3's budget) ships no tooling: its hook is only
+`screen()` and `forceDeath()` (what tests/e2e/single.spec.ts drives), `?debug=1` draws nothing, no
+bot or demo exists, and the Session's tooling-only methods (`testState`, `runCfg`, `pixelAB`,
+`mapProbe`, `hintState`, `demo`) compile away behind `import.meta.env.MODE === 'single'`, as does
+the service-worker registration (no sw.js exists there).
 
 Decisions that differ from the GDD or V1_PLAN (the first lesson, the hint's target, the Title sway,
 the start beat, Nubs' size, x-ray, heat squiggles, crisp shadows) are listed in V1_PLAN §15.
