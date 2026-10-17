@@ -18,7 +18,11 @@ const STEP = TUNING.validator.stepTicks;
 /** The oracle weighs a lit step in a kept flare's hold this many times (§2.5 "weights lit hold steps x3"). */
 const HOLD_WEIGHT = 3;
 
-/** Reactive glass term (§2.3): the chase and naive policies add this on guide.flake bins while Chill ≥ GLASS_CHILL. */
+/**
+ * Reactive glass term (§2.3): the chase and naive policies add this on guide.flake bins while Chill ≥
+ * GLASS_CHILL. Measured (240 seeds): 4, enough to outweigh a safe bin (3), cost chase 30 min mean
+ * against plain (+47 vs +79): the glass detour costs more than it pays, so the policy keeps 1.5.
+ */
 const GLASS_WEIGHT = 1.5;
 const GLASS_CHILL = 45;
 /** The chase policy's calm hours: it chases outside 9:20 AM-2:40 PM (minutes after 6:00 AM). */

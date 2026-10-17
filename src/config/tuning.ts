@@ -297,6 +297,12 @@ const tuning = {
     costAim: 25,
     tailSec: 1.5,
     minGapSec: 3,
+    /**
+     * Chill a glass cluster saved whole gives back at once (on top of its flakes' own): a reward that
+     * matters for survival while the Frost Bank ships off (its +clusterH frost lands on a meter that
+     * is often full). Below the contest's least detour cost (costMin), so glass is never free.
+     */
+    saveChill: 10,
   },
   /**
    * v1.6 Heat Flares (§2.5; CORE-2). Shape in ticks (warning, rise with a 3x² − 2x³ smoothstep,

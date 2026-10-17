@@ -274,8 +274,10 @@ describe('forecast tuning', () => {
     for (let i = 0; i < 60 * 40 && s.phase !== 'dead'; i++) {
       step(s, bot.next(s));
       for (const e of s.events) if (e.e === 'flake') {
-        // v1.6 T2: flake Snow uses min(mult, ring.snowCap).
-        expect(e.snow).toBe(Math.round(Math.min(e.mult, TUNING.ring.snowCap) * 1.5));
+        // v1.6 T2: flake Snow uses min(mult, ring.snowCap) while the Frost Bank is on; as it ships
+        // (off) a snap cashes nothing in, so ×4 and ×5 pay their level.
+        const cap = s.world.v16.ring && s.world.v16.bank ? TUNING.ring.snowCap : Infinity;
+        expect(e.snow).toBe(Math.round(Math.min(e.mult, cap) * 1.5));
         paid++;
       }
     }

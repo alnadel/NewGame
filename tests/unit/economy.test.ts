@@ -199,8 +199,8 @@ describe('Flow Ring (§2.1)', () => {
     expect(s.stats.ringTricks).toBe(3);
   });
 
-  it('every 3rd flake or crystal in a row pays a streak trick; a melt resets it; flake and crystal Snow cap at x3 (T2)', () => {
-    const s = createRun({ ...headlessConfig(1), plan: false });
+  it('every 3rd flake or crystal in a row pays a streak trick; a melt resets it; flake and crystal Snow cap at x3 with the Bank on (T2)', () => {
+    const s = createRun({ ...headlessConfig(1), plan: false, ...bankOn() });
     const w = s.world;
     w.casters.length = 0;
     w.byId.clear();

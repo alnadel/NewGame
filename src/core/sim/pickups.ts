@@ -97,11 +97,13 @@ export function updatePickups(s: SimState, daylight: boolean): void {
 }
 
 /**
- * The multiplier flake and crystal Snow pays: v1.6 (T2, the ring on) caps it at
- * TUNING.ring.snowCap (×4 and ×5 pay through the snap's cash-in instead).
+ * The multiplier flake and crystal Snow pays: v1.6 (T2, the ring and the Frost Bank on) caps it at
+ * TUNING.ring.snowCap, as ×4 and ×5 pay through the snap's cash-in instead. With the Bank off (as
+ * it ships) a snap cashes nothing in, so the cap goes too and ×4 and ×5 pay their level in Snow.
  */
 function snowMult(s: SimState): number {
-  return s.world.v16.ring ? Math.min(s.nubs.mult, RING.snowCap) : s.nubs.mult;
+  const v = s.world.v16;
+  return v.ring && v.bank ? Math.min(s.nubs.mult, RING.snowCap) : s.nubs.mult;
 }
 
 /** v1.6 ring: every streakEvery-th flake or crystal taken in a row without a melt pays a streak trick. */
