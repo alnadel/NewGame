@@ -107,6 +107,13 @@ export interface World {
    * level's baked table (Journey bosses), kept or dropped by the validator. Empty until CORE-2.
    */
   readonly flares: Flare[];
+  /**
+   * The parry of each kept Endless flare (flare id → 360 bins, validator rules): 1 where the sun held
+   * at that bin through the hold leaves Nubs lit on at most TUNING.flare.parryMaxLit hold ticks. The
+   * validator's DP holds its path on one of these bins through the hold (a miss scorches the tank,
+   * which the DP does not model, so the proven path parries); written by the keep test.
+   */
+  readonly flareParry: Map<number, Uint8Array>;
   /** v1.6 debug (RunConfig.brittleShare): the glass quota forced to this share 0..1, or null for the profile/day quota. */
   readonly brittleShare: number | null;
   /** Largest caster height so far (for reach culling). */

@@ -138,6 +138,7 @@ export function hashState(s: SimState): string {
     s.flarePhase,
     s.flareLit,
     s.flareTicks,
+    s.flareScorch,
     s.clusterId,
     s.clusterTaken,
     s.clusterBroken ? 1 : 0,

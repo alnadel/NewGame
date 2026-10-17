@@ -1,6 +1,7 @@
 // v1.6 world and Journey report (docs/V1_6_PLAN.md §2.3, §2.5, §2.6; CORE-2 owns this file): glass,
 // flare and Noon Heat metrics and gates for `sim --check`, deaths by hour (`--hours`) and the
-// `--bake` mode (levelBake.gen.ts: offers and boss flares). See registry.ts for the hooks.
+// `--bake` mode (levelBake.gen.ts: offers and boss flares) and the `--flares` mode (the Heat Flare
+// threat, flares on against off: fix round 3). See registry.ts for the hooks.
 //
 // Hard gates (under --check): the oracle parries ≥ 70% of the kept flares it meets; ≥ 85% of the
 // flare candidates of Days 2-4 are kept (plan mix, profile 3); rescues per chunk within +0.1 of the
@@ -127,6 +128,69 @@ function rescueDelta(seeds: number, days: number): { on: number; off: number } {
   return { on: one(false), off: one(true) };
 }
 
+/** Death minute of a run (Infinity for a survivor). */
+const deathMin = (r: Sim16Run): number => (r.died ? r.minutes : Infinity);
+
+/** The median death minute of a row (survivors last). */
+function medianDeath(rs: readonly Sim16Run[]): number {
+  const v = rs.map(deathMin).sort((a, b) => a - b);
+  return v[Math.floor(v.length / 2)] as number;
+}
+
+const clockOf = (m: number, days: number): string => (m === Infinity ? `≥ Day ${days}` : formatScore(m));
+
+/**
+ * --flares [--seeds 120]: the Heat Flare threat (fix round 3, WORLD W1). Flares on against off,
+ * seed by seed: the dial-only reactive bot (no telegraph reading) must lose ≥ 60 min of median
+ * survival, the anticipating bot (reactive with the mechanics and preAim) at most half of what the
+ * dial-only bot loses, and the oracle still parries ≥ 70% of the kept flares it meets. Plain
+ * reactive with the mechanics is reported. Medians flip on a few seeds below about 120 seeds (deaths
+ * cluster by day), so run it with at least 120.
+ */
+async function flaresMain(ctx: Sim16Ctx): Promise<void> {
+  const t0 = performance.now();
+  const off = { flares: false };
+  const jobs: Sim16Job[] = [
+    { bot: 'reactive', profile: 3, noMech: true, label: 'reactive p3 dial' },
+    { bot: 'reactive', profile: 3, noMech: true, v16: off, label: 'reactive p3 dial, flares off' },
+    { bot: 'reactive', profile: 3, opts: { preAim: true }, label: 'reactive p3 preAim' },
+    { bot: 'reactive', profile: 3, opts: { preAim: true }, v16: off, label: 'reactive p3 preAim, flares off' },
+    { bot: 'reactive', profile: 3, label: 'reactive p3' },
+    { bot: 'reactive', profile: 3, v16: off, label: 'reactive p3, flares off' },
+    { bot: 'oracle', profile: 3, label: 'oracle p3' },
+  ];
+  const rows = await ctx.run(jobs);
+  const wall = (performance.now() - t0) / 1000;
+  console.log(`SHADY sim --flares: ${ctx.seeds} seeds, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s\n`);
+  console.log(`${'row'.padEnd(32)} ${'median death'.padEnd(17)} parried  flares met/run`);
+  for (const r of rows) {
+    const meet = total(r.runs, 'fParry') + total(r.runs, 'fMiss');
+    console.log(`${r.name.padEnd(32)} ${clockOf(medianDeath(r.runs), ctx.days).padEnd(17)} ${pct(total(r.runs, 'fParry'), meet).padStart(7)}  ${(meet / Math.max(1, r.runs.length)).toFixed(2)}`);
+  }
+  const loss = (on: Sim16Row, offRow: Sim16Row): { med: number; mean: number } => {
+    const a = medianDeath(offRow.runs);
+    const b = medianDeath(on.runs);
+    const cap = ctx.days * 720;
+    let sum = 0;
+    for (let i = 0; i < on.runs.length; i++) sum += Math.min(cap, deathMin(offRow.runs[i] as Sim16Run)) - Math.min(cap, deathMin(on.runs[i] as Sim16Run));
+    return { med: a === Infinity && b === Infinity ? 0 : Math.min(cap, a) - Math.min(cap, b), mean: sum / Math.max(1, on.runs.length) };
+  };
+  const [dial, dialOff, pre, preOff, plain, plainOff, oracle] = rows as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
+  const d = loss(dial, dialOff);
+  const p = loss(pre, preOff);
+  const q = loss(plain, plainOff);
+  const line = (hard: boolean, ok: boolean, what: string, got: string): void => {
+    if (hard && !ok) ctx.fail(what);
+    console.log(`  ${ok ? 'PASS' : hard ? 'FAIL' : 'MISS'}  ${what}: ${got}`);
+  };
+  console.log('\nHeat Flare threat (flares on against off; loss = minutes of survival lost):');
+  line(true, d.med >= 60, 'the dial-only reactive bot loses ≥ 60 min of median survival', `${d.med.toFixed(0)} min (mean ${d.mean.toFixed(0)})`);
+  line(true, p.med <= Math.max(0, d.med) / 2, 'the anticipating (preAim) bot loses at most half of that', `${p.med.toFixed(0)} min (mean ${p.mean.toFixed(0)})`);
+  const meet = total(oracle.runs, 'fParry') + total(oracle.runs, 'fMiss');
+  line(true, meet === 0 || total(oracle.runs, 'fParry') >= 0.7 * meet, 'the oracle parries ≥ 70% of the kept flares it meets', pct(total(oracle.runs, 'fParry'), meet));
+  console.log(`  (row) reactive p3 (mechanics, no preAim) loses ${q.med.toFixed(0)} min of median survival (mean ${q.mean.toFixed(0)})`);
+}
+
 export const WORLD: Sim16Module = {
   name: 'world',
   collector,
@@ -217,5 +281,6 @@ export const WORLD: Sim16Module = {
   },
   modes: {
     bake: bakeMain,
+    flares: flaresMain,
   },
 };

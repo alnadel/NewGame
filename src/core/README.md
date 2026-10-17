@@ -670,10 +670,13 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   then fix round 1's path on all 7 steps, kept flares that no telegraphed angle parried), and fewer
   than `keepMovedShare` 0.5 of the bins safe without it stay safe at the first hold tick (none safe
   counts as moved; a candidate stops at the first row that settles it); else
-  it is shifted by `shiftsSec` (±0.5 … ±5 s; an Endless rise never leaves its window of `windows`;
-  a shift needing more forward room than the job's re-run prefix is skipped; clear of eclipses,
-  locks, other flares and, in Endless, the Noon Heat window) and re-tested; else DROPPED (never
-  lifts the sun). A Journey flare ends `finishMarginSec` 1 before the finish line; on a teaching
+  it is shifted by `shiftsSec` (±0.5 … ±5 s; an Endless rise stays in its band of `keepWindows`,
+  [0.12, 0.38] or [0.62, 0.88] of the day; a shift needing more forward room than the job's re-run
+  prefix is skipped; clear of eclipses, locks, other flares and, in Endless, the Noon Heat window)
+  and re-tested. Fix round 3: an Endless flare that fails every shift of its job is not dropped but
+  moved on in time (`deferFlare`, forward only) to the first rise the next job decides, while its
+  rise stays in its band; only a Journey flare, or one whose band runs out, is DROPPED (never lifts
+  the sun). A Journey flare ends `finishMarginSec` 1 before the finish line; on a teaching
   level (L38) the next warning starts `teachGapSec` 1.5 after a flare ends. Keeping one recomputes
   the job's geometry from its first touched step. `sim/flares.ts` runs the kept ones: `flareWarn
   {id, inTicks, d}` → `flareRise` → hold (`s.flareLit` counts lit hold ticks, and each burns
@@ -681,6 +684,13 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   (holdTick, fallTick]: `slotDeltaAt`) → `flareParry {id, snow}` (≤ `parryMaxLit` 4 lit ticks:
   `stats.parries`, +5 Snow, `payTrick(s, 'parry')`) or `flareMiss`, then `flareEnd`;
   `s.flarePhase` 0..4 for the renderer and `flareMeltMul` (flakes melt ×2 over the rise and hold).
+  **Scorch** (Endless, fix round 3): a miss also scorches the tank by `scorchPerLitTick` 4 Chill for
+  each lit hold tick past `parryMaxLit` (at most `scorchMax` 80 in all, `s.flareScorch`): Chill stays
+  at most `maxChill − flareScorch` (the Chill line, flakes and saved glass clamp to it) until
+  nightfall or a Cold Snap heals it. The validator never models a scorched tank: from a kept Endless
+  flare's first hold step to its fall step its DP holds the path on one bin of the flare's parry
+  (`w.flareParry`, the keep test's fixed angles, validator rules; `parryAt`, no turning), so the
+  proven path parries every flare.
   guide.flare: during the warning, the bins where the sun held through the hold leaves Nubs lit on
   at most `parryMaxLit` hold ticks (tick by tick at his scheduled position, the lifted elevation,
   this run's sunflowers in, the Cold Snap's re-aiming cloud out; computed once per flare and again
@@ -689,12 +699,19 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
 - **Glass (§2.3).** Plain and glass flakes are placed two chunks behind the casters (the pickups
   job of chunk k − 2 after placing chunk k, from the finished validation job of that chunk; a
   contest runs in stages, `contest.ts` ContestRun, so idle generation slices it). A cluster turns glass
-  when `contestCluster` says it is contested (S_free ≤ need − 2, cost C0 − C1 in [12, 40], never a
-  trap, the first flake savable; see contest.ts) and the day's quota (`glassQuota`: 25% of eligible
+  when `contestCluster` says it is contested (the safe line's melt ≥ safe + 2, cost C0 − C1 in
+  [12, 40], never a trap, and every other flake of the cluster savable on its own; see contest.ts)
+  and the day's quota (`glassQuota`: 25% of eligible
   clusters on Day 1 of profile 3, 35% later, half on profile 2, none on profiles 0-1, Quick Melt,
   Hardy, the tutorial or with the rule off; `RunConfig.brittleShare` forces it; a Journey level
   `levelGlassShare`) allows; shifts of ±0.5/±1 s are tried. The brittle level (L21) falls back to
   savable-only glass when nothing contests. A glass flake melts after `meltBudget` 0.8 lit s.
+  Fix round 3 (fairness): melt is counted in whole weighted lit ticks everywhere: the sim melts a
+  flake once `round(p.melt · 60)` reaches `round(budget · 60)` (48 for glass, whatever order its
+  plain, glare ×2 and flare ×2 ticks came in), guide.flake compares integer ticks, and the contest
+  saves a flake only on paths that melt it at most `safeSteps` = 7 weighted steps (a lit step 1, a
+  glare step 2: `meltRows`), so a flake lit exactly its budget counts as melted in all three. The
+  contest checks every flake of the cluster (a window it cannot check rejects the shift).
   `sim/glass.ts` tracks the cluster under Nubs (`s.clusterId/Taken/Broken`): all of it collected →
   `clusterSaved {cluster, n}`, `stats.clustersSaved`, `stats.brittleSaved`, `payTrick(s,
   'cluster')` and `TUNING.brittle.saveChill` 10 Chill at once (below the contest's `costMin`, so
@@ -802,8 +819,8 @@ of daylight; now 16.1%. Survival does not move (the ring never touches coverage 
 | Blooms per snap (reactive) | ~0.2 | ≥ 0.8 | 1.70 | advisory: pass |
 | Lit ticks in the 40 after snapEnd (reactive / oracle) | 22 / 32 | ≤ 10 / ≤ 12 | 9.1 / 13.4 | advisory: pass / miss |
 | Kept flares parry-feasible | – | 100% | 100%, from a fixed angle, tick by tick (validator and guide tests) | hard: pass |
-| Oracle parry rate | – | ≥ 70% | 93.4% | hard: pass |
-| Flare candidates kept, Days 2-4 | – | ≥ 85% | 72.5% (Days 5+ 64.6%) | hard: **FAIL** (`--waive flareKeep`) |
+| Oracle parry rate | – | ≥ 70% | 93.0% (fix round 3; 94.8% over 120 seeds) | hard: pass |
+| Flare candidates kept, Days 2-4 | – | ≥ 85% | 92.0% (Days 5+ 84.4%; fix round 3, was 72.5%) | hard: pass (no waiver) |
 | PreAim − plain parry rate | – | ≥ +15 points | +18.3 (69.2% vs 50.9%) | advisory: pass |
 | Reactive deaths at 11 AM-1 PM | 12% | ≥ 25% | 35.9% (humanDial R3 15.0%, R4 12.5%) | advisory: pass (humans miss) |
 | Priced moments a daylight minute, Days 2-4 (240 seeds) | – | ≥ +3 over v1.6 all off | 24.41 vs 22.33 (+2.08) | advisory: miss |
@@ -905,3 +922,30 @@ chase − plain and the two Bank rows:
   1.02× (guide.flare's 42 lit masks run once per flare, guide.flake's point masks once per flake).
 - **build:single** ships no bots (`--mode single`; the Daily par has its own novice bot):
   681.3 → 669.0 KiB with this round's code, still 27.4 KiB over A3's 641.6 KiB (an integrator call).
+
+**Fix round 3, world** (WORLD: the core and gameplay reviews of HEAD 38735c9). `sim --check --seeds
+40` now fails only the two Bank rows (`--waive bank`); the flare keep row passes without its waiver.
+- **Flares are a threat that anticipation answers (W1).** Flares on against off moved the dial-only
+  reactive bot's median death by −2 min (120 seeds): a miss cost Chill, which shade refills within a
+  second, so runs re-converged before noon. A miss now scorches the tank (§16.2, Endless only): 4
+  Chill a lit hold tick past the parry's 4, at most 80, healed at nightfall or by a Cold Snap. The
+  validator proves a parrying path (the DP holds a parry bin through each kept hold; a flare whose
+  parry cannot stay above the floor is dropped). `node scripts/sim.ts --flares --seeds 120` (new
+  mode, hard rows): the dial-only bot loses 82 min of median survival (mean 186), the preAim bot 4
+  (mean 12; it parries 72.5%), the oracle parries 94.8% and reaches Day 8 on 100%; plain reactive with
+  the mechanics, which reads no telegraph, loses 492 min median (mean 251), and mechanics vs dial is
+  +227 on the gating seeds. Scorch 3 / 60 gave the dial bot only −37; a scorch that only a parry
+  heals made the preAim bot lose more than the dial bot (it meets more flares).
+- **The flare plan is honoured (W2).** 94% of the Days 2-4 candidates had a keepable rise somewhere
+  in their draw window, but the keep test only tried the ~4 s one job decides. A candidate that fails
+  every shift now moves on in time to the next job within its keep band: Days 2-4 kept 72.5% → 92.0%,
+  Days 5+ 64.6% → 84.4% (40 seeds; through Day 8 83.3%); rescues per chunk on Days 1-4 0.242 against
+  0.205 without flares and Noon Heat (+0.038, as before), unresolved 0 on every world kind.
+- **Glass fairness (W3).** The contest checks every flake of a cluster (9% of glass clusters had an
+  unchecked first flake; seed 1's middle flake saved at C1 41.8 < floor + margin 60), counts melt in
+  whole weighted ticks with a flake lit exactly its budget melted (the sim's float sum let 24 glare
+  ticks, 0.7999999999999999 s, survive), and weighs glare ×2. Unit tests for each fail on the old code.
+  The Journey bake moved glass on 16 composed levels (re-baked).
+- **Cost (W4).** Generation 2.18 → 2.32-2.50 ms a chunk (40 seeds × 8 days, Node, serial, a loaded
+  machine; gate ≤ 3.5); idle slices (`bench-step.ts --gen`, against HEAD 38735c9) p50 0.15 ms, p99 1.14
+  ms (0.93), frames over 2 ms 0.34 a minute (0.32).

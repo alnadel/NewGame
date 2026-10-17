@@ -299,12 +299,12 @@ function markDirtyCloud(job: ValidationJob, cl: Cloud): number {
 function dpSlot(w: World, job: ValidationJob, i: number, delta: Float64Array, maxC: number): number {
   const c = job.c;
   const o = i * BINS;
+  const tick = Math.round((job.sT[i] as number) * TICK_HZ);
   if ((job.sEps[i] as number) <= 0 || (job.sy[i] as number) > w.finishY) {
     c.fill(maxC, o, o + BINS); // night (or before the run): Chill refills, the sun can be anywhere
     return maxC;
   }
   if (w.startTick > 0) {
-    const tick = Math.round((job.sT[i] as number) * TICK_HZ);
     if (tick < w.startTick) {
       c.fill(maxC, o, o + BINS);
       return maxC;
@@ -315,13 +315,21 @@ function dpSlot(w: World, job: ValidationJob, i: number, delta: Float64Array, ma
       return maxC;
     }
   }
-  slidingMaxCircular(c, TURN, win, (i - 1) * BINS);
+  // v1.6 Endless flares: from a kept flare's first hold step to its fall step the path holds one
+  // bin of its parry (w.flareParry), so the proven path parries it and is never scorched.
+  const parry = w.flareParry.size > 0 ? parryAt(w, tick) : null;
+  if (parry !== null && parryHeld) win.set(c.subarray((i - 1) * BINS, i * BINS));
+  else slidingMaxCircular(c, TURN, win, (i - 1) * BINS);
   const lit = job.lit;
   const a = (i - 1) * BINS;
   const b0 = i * BINS;
   const c0 = (i + 1) * BINS;
   let best = DEAD;
   for (let b = 0; b < BINS; b++) {
+    if (parry !== null && parry[b] === 0) {
+      c[o + b] = DEAD;
+      continue;
+    }
     let lh = lit[a + b] as number;
     const l1 = lit[b0 + b] as number;
     const l2 = lit[c0 + b] as number;
@@ -334,6 +342,23 @@ function dpSlot(w: World, job: ValidationJob, i: number, delta: Float64Array, ma
     if (v > best) best = v;
   }
   return best;
+}
+
+/** Set by parryAt: the step lies after the flare's first hold step (the bin is held, no turn). */
+let parryHeld = false;
+
+/**
+ * The parry mask (w.flareParry) of the kept Endless flare whose hold steps [holdTick, fallTick]
+ * hold absolute tick `tick` (a step instant), or null; parryHeld tells whether the path already
+ * holds its bin (any step after holdTick).
+ */
+export function parryAt(w: World, tick: number): Uint8Array | null {
+  const f = liftingFlare(w, tick);
+  if (f === null || tick < f.holdTick || tick > f.fallTick) return null;
+  const m = w.flareParry.get(f.id);
+  if (m === undefined) return null;
+  parryHeld = tick > f.holdTick;
+  return m;
 }
 
 function argmaxSlot(job: ValidationJob, i: number): number {
@@ -451,8 +476,33 @@ function resumeSlot(i: number, first: number): number {
   return Math.max(1, Math.min(i, first - 1));
 }
 
+/**
+ * A kept Endless flare whose parry the DP cannot hold above the floor (a failure on one of its hold
+ * steps) is dropped after all (the flare that decided it is this job's: its whole window lies in the
+ * job's range): its lift leaves the job's geometry, the rows it touched are recomputed and the DP
+ * resumes before them. Returns that slot, or −1 when slot i is no forced hold step.
+ */
+function revokeFlare(w: World, job: ValidationJob, i: number): number {
+  if (w.flareParry.size === 0) return -1;
+  const tick = Math.round((job.sT[i] as number) * TICK_HZ);
+  const f = liftingFlare(w, tick);
+  if (f === null || tick < f.holdTick || tick > f.fallTick || !w.flareParry.delete(f.id)) return -1;
+  f.state = FLARE_DROPPED;
+  let first = -1;
+  for (let s = 1; s <= job.pre + job.n + 1; s++) {
+    const t = (job.j0 + s - 1 - job.pre) * STEP;
+    if (t < f.riseTick || t >= f.endTick) continue;
+    stepGeometry(w, job.j0 + s - 1 - job.pre, job, s);
+    job.need[s] = 1;
+    if (first < 0) first = s;
+  }
+  return resumeSlot(i, first);
+}
+
 /** Handles a failure at slot i; returns the DP slot to resume from. */
 function onFailure(w: World, job: ValidationJob, i: number, floor: number, maxC: number): number {
+  const revoked = revokeFlare(w, job, i);
+  if (revoked >= 0) return revoked;
   if (job.rescues < TUNING.rescue.maxPerChunk) {
     job.rescues++;
     w.stats.rescues++;
@@ -627,14 +677,35 @@ function lockTouches(w: World, a: number, b: number): boolean {
   return false;
 }
 
-/** True when an Endless flare's rise (absolute tick, day start t0, day length dl ticks) lies in one of TUNING.flare.windows (edges on the step grid, as drawn). */
-function inRiseWindow(rise: number, t0: number, dl: number): boolean {
-  for (const win of FL.windows) {
+/**
+ * The keep band (TUNING.flare.keepWindows, edges on the step grid) holding an Endless flare's rise
+ * (absolute tick, day start t0, day length dl ticks): its index, or −1.
+ */
+function keepBand(rise: number, t0: number, dl: number): number {
+  for (let i = 0; i < FL.keepWindows.length; i++) {
+    const win = FL.keepWindows[i] as readonly number[];
     const lo = STEP * Math.round(((win[0] as number) * dl) / STEP);
     const hi = STEP * Math.round(((win[1] as number) * dl) / STEP);
-    if (rise - t0 >= lo && rise - t0 <= hi) return true;
+    if (rise - t0 >= lo && rise - t0 <= hi) return i;
   }
-  return false;
+  return -1;
+}
+
+/**
+ * An Endless flare that failed every candidate of its job moves on in time instead of being
+ * dropped: to the first rise the next job decides (its window just past this job's own steps),
+ * while the rise stays in the keep band it was drawn in. Returns false when it cannot.
+ */
+function deferFlare(w: World, job: ValidationJob, f: Flare): boolean {
+  if (w.level) return false;
+  const day = dayAtTick(f.riseTick);
+  const t0 = dayStartTick(day);
+  const dl = Math.round(paramsAt(w, day).dayLen * TICK_HZ);
+  const band = keepBand(f.riseTick, t0, dl);
+  const rise = ownLast(job) + STEP - (f.endTick - f.riseTick);
+  if (band < 0 || rise <= f.riseTick || keepBand(rise, t0, dl) !== band) return false;
+  shiftFlare(f, rise - f.riseTick);
+  return true;
 }
 
 /** Ticks a Journey flare must end before Nubs reaches the finish line (its countdown and flash resolve in the level). */
@@ -658,7 +729,7 @@ function candidateFits(w: World, job: ValidationJob, i: number, c: Flare): boole
   if (c.warnTick < t0 || c.endTick > t0 + dl) return false;
   // Endless flares avoid noon (the Noon Heat window 11 AM-1 PM, [5/12, 7/12) of the day); a boss's middle phase may not.
   if (!w.level && 12 * (c.endTick - t0) > 5 * dl && 12 * (c.riseTick - t0) < 7 * dl) return false;
-  if (!w.level && !inRiseWindow(c.riseTick, t0, dl)) return false;
+  if (!w.level && keepBand(c.riseTick, t0, dl) < 0) return false;
   if (w.level && worldYAtTick(w, c.endTick + FINISH_MARGIN) >= w.finishY) return false;
   const fl = w.flares;
   const gap = Math.round(FL.gapSec * TICK_HZ);
@@ -754,7 +825,7 @@ function keepStep(w: World, job: ValidationJob): number {
     for (;;) {
       if (job.flareTry >= FLARE_TRIES.length) {
         shiftFlare(f, job.flareRise0 - f.riseTick);
-        f.state = FLARE_DROPPED;
+        if (!deferFlare(w, job, f)) f.state = FLARE_DROPPED;
         resortFlare(w, job.flareQ);
         startFlareTest(w, job, findFlareTest(w, job));
         return 0;
@@ -790,6 +861,12 @@ function keepStep(w: World, job: ValidationJob): number {
   job.flareRows = 0;
   shiftFlare(f, keepCand.riseTick - f.riseTick);
   f.state = FLARE_KEPT;
+  if (w.level === null) {
+    // Endless: a miss scorches the tank (sim/flares.ts), so the DP proves a path that parries.
+    const pm = new Uint8Array(BINS);
+    for (let b = 0; b < BINS; b++) pm[b] = (keepCnt[b] as number) <= FL.parryMaxLit ? 1 : 0;
+    w.flareParry.set(f.id, pm);
+  }
   resortFlare(w, job.flareQ);
   // The chunk's geometry now carries the lift. Its own lit rows are computed after the test; rows of
   // the re-run prefix inside the window are recomputed, and the DP re-runs from the step before them.

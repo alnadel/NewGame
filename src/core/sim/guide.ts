@@ -9,6 +9,7 @@
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ } from '../clock.ts';
 import { tanD } from '../dmath.ts';
+import { meltTicksOf } from '../gen/contest.ts';
 import { liftElevation, liftingFlare, worldElevation, worldYAtDayTick, worldYAtTick } from '../gen/plan.ts';
 import { gatherScene, lowerBound } from '../gen/store.ts';
 import { eclipseAt } from '../gen/world.ts';
@@ -189,11 +190,12 @@ function flakeGuide(s: SimState): void {
     }
   }
   const k0 = Math.max(0, Math.round((s.tickAbs - flakeAt) / FLAKE_STEP));
-  const left = meltBudgetOf(s, p) - p.melt;
-  const dt = FLAKE_STEP / TICK_HZ;
+  // In whole weighted lit ticks, as the sim melts it (pickups.ts): the flake is lost once they reach
+  // its budget, so an angle that lights it for exactly the ticks it has left does not save it.
+  const left = meltTicksOf(meltBudgetOf(s, p)) - Math.round(p.melt * TICK_HZ);
   for (let b = 0; b < BINS; b++) {
     let lit = 0;
-    for (let k = k0; k < flakeN && lit < left; k++) lit += (flakeRows[k * BINS + b] as number) * (flakeMul[k] as number) * dt;
+    for (let k = k0; k < flakeN && lit < left; k++) lit += (flakeRows[k * BINS + b] as number) * (flakeMul[k] as number) * FLAKE_STEP;
     g.flake[b] = lit < left ? 1 : 0;
   }
 }
