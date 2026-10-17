@@ -985,3 +985,15 @@ wall for a dial-follower). A snap cast into an eclipse no longer counts as savin
 free snapSave), and the finale Dare pill keeps the met Dare. The bake (`BAKE_VERSION` 4) plays bots,
 ~10 minutes on 3 workers; a change to the generator or the bots makes it stale (the bake vitest
 re-derives a sample of levels and re-measures one Dare, so it notices).
+
+**Fix round 3, merged** (WORLD, Journey and UX on one tree). The Journey was re-baked on the merged
+tree (WORLD's glass contest and whole-tick melt move the Dare measures): against Journey's own bake,
+9 levels' Dares moved (L53, L93, L121, L147, L151, L170, L182, L194, L197; L170 lost its second Dare),
+the lesson variants did not. `sim --check --seeds 40` fails only the two Bank rows (`--waive bank`),
+the other rows as in the WORLD paragraph above (flare keep Days 2-4 92.0%, gen 3.11 ms a chunk under
+load). `sim --flares --seeds 120`: dial-only −82 min, preAim −4, oracle parries 94.8% (unchanged).
+`sim --campaign --bot all --tries 10`: every hard row passes; humanDial's first try on 1-40 92.8% of
+400; per Dare kind (reactive / oracle / Feat-seeking oracle / humanFeat / humanDial) blooms 122 levels
+1 / 0 / 100 / 56 / 4%, snapSave 31 0 / 0 / 100 / 67 / 4%, SWINGs 29 0 / 0 / 100 / 54 / 16%, flakes 17
+29 / 24 / 100 / 55 / 32%, still 1 0 / 0 / 100 / 50 / 0%, all five kinds pass; humanDial mean stars on
+41-200 0.71 (MISS, see V1_6_PLAN §6.1). build:single 659.6 KiB, 18.0 KiB over A3.

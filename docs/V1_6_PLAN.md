@@ -851,6 +851,13 @@ L38 is the one lesson the bake cannot open: humanDial does not read the flare te
 test requires the shade to move (its parry arcs cover 10-46% of the teal before each flare), so a
 dial-follower parries by luck on any world; the soft-fail stays its net.
 
+#### Merged tree
+
+No gate was re-specified at the merge. On the merged, re-baked tree (`sim --campaign --bot all
+--tries 10`) the per-kind bars still hold for all five kinds (humanFeat 54-67%, the non-seekers
+0-29%), humanDial's first try on 1-40 is 92.8% of 400, and "humanDial mean stars on 41-200" reads
+MISS at 0.71; full numbers in src/core/README.md §16.3 ("Fix round 3, merged").
+
 ---
 
 ## 7. What the skeptics changed (merge log)
