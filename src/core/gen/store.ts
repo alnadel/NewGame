@@ -274,7 +274,8 @@ export function queryClouds(w: World, tAbs: number, out: Cloud[]): number {
  * Gathers every occluder that could affect points within `margin` of (px, py) at absolute time
  * tAbs and elevation eps (cot = 1/tan ε) into `scene`. Clouds are stored at their tAbs position.
  * `live` false (the validator and its lit cache) leaves out what the run made (sunflowers, the snap
- * cloud), so the world stays a pure function of its config.
+ * cloud), so the world stays a pure function of its config. Clouds with an id ≥ `cloudsBelow` are
+ * left out too (guide.flare leaves out the Cold Snap's cloud, whose path re-aims as it goes).
  */
 export function gatherScene(
   w: World,
@@ -286,6 +287,7 @@ export function gatherScene(
   eps: number,
   cot: number,
   live = true,
+  cloudsBelow = Infinity,
 ): void {
   sceneBegin(scene, eps, cot);
   if (!scene.sunUp) return;
@@ -300,7 +302,7 @@ export function gatherScene(
   const R0 = cloudOffset(TUNING.shadow.cloudZ, cot);
   for (const cl of w.clouds) {
     if (!cloudAlive(cl, tAbs)) continue;
-    if (!live && cl.id >= RUNTIME_ID_BASE) continue;
+    if ((!live && cl.id >= RUNTIME_ID_BASE) || cl.id >= cloudsBelow) continue;
     const R = cl.z === TUNING.shadow.cloudZ ? R0 : cloudOffset(cl.z, cot);
     const dt = tAbs - cl.t0;
     const cx = cl.x0 + cl.vx * dt;

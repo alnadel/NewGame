@@ -307,9 +307,10 @@ const tuning = {
   /**
    * v1.6 Heat Flares (§2.5; CORE-2). Shape in ticks (warning, rise with a 3x² − 2x³ smoothstep,
    * hold, fall); rise windows as shares of the day (t/Dl), gapSec apart; ε_world clamped to
-   * εnoon − epsMargin (Endless) or journeyEpsCap (Journey). Keep test: a parry path shaded on
-   * keepShadedShare of the hold steps (1: every step, so a kept flare is parried under the sim's
-   * parryMaxLit rule), a fixed angle on keepStillShare of them (0: not asked), and fewer than
+   * εnoon − epsMargin (Endless) or journeyEpsCap (Journey). Keep test: a fixed sun angle leaves Nubs
+   * lit on at most parryMaxLit of the hold's ticks (counted tick by tick, the sim's parry rule, so
+   * the telegraph names a parry that holds; fix round 2: the plan's turn-limited path on 85% of the
+   * steps, then on all of them, kept flares that no telegraphed angle parried), and fewer than
    * keepMovedShare of the safe bins stay safe; otherwise shifted by shiftsSec, then dropped.
    * shiftsSec runs to ±5 s, past the plan's ±1 s (a deviation awaiting the integrator; core README
    * §16.3), but an Endless rise never leaves its window of `windows`, so the list amounts to
@@ -332,8 +333,6 @@ const tuning = {
     epsMargin: 2,
     journeyEpsCap: 78,
     parryMaxLit: 4,
-    keepShadedShare: 1,
-    keepStillShare: 0,
     keepMovedShare: 0.5,
     finishMarginSec: 1,
     teachGapSec: 1.5,

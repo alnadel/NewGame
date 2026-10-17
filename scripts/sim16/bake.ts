@@ -317,7 +317,6 @@ function windowsOf(w: World, l: LevelDef): { windows: number; holdable: number }
 }
 
 /** Hold steps a single fixed angle must shade (3-step rule) for a flare to count as statically parryable: 6 of 7. */
-const STILL_STEPS = Math.ceil(0.85 * Math.round(TUNING.flare.holdTicks / STEP) - 1e-9);
 /**
  * How far (s, nearest first) the bake moves a nominal flare in data looking for a place it is kept:
  * in 0.5 s steps on a boss finale, in 0.1 s steps (the validator's grid) on the teaching level, whose
@@ -332,9 +331,9 @@ function shiftsOf(stepTicks: number): readonly number[] {
 const BOSS_SHIFTS = shiftsOf(TICK_HZ / 2);
 const TEACH_SHIFTS = shiftsOf(STEP);
 
-/** True when a fixed angle shades the kept flare f on ≥ STILL_STEPS of its hold steps (the parry a telegraph can name). */
+/** True when a fixed angle parries the kept flare f (≤ parryMaxLit lit hold ticks: the parry guide.flare names). */
 export function stillParryable(w: World, f: Flare): boolean {
-  return keepVerdict(keepRows(w, f)).still >= STILL_STEPS;
+  return keepVerdict(keepRows(w, f)).still;
 }
 
 /**

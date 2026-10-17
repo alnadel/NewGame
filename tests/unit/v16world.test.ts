@@ -274,6 +274,55 @@ describe('Heat Flares (§2.5)', () => {
     }
   });
 
+  it('guide.flare is honest: every kept flare telegraphs angles, and holding any telegraphed angle through the hold parries it (fix round 2)', () => {
+    let flares = 0;
+    let holds = 0;
+    for (const seed of [1, 2]) {
+      const w = createWorld(headlessConfig(seed));
+      ensureGenerated(w, dayStartY(4));
+      for (const f of w.flares) {
+        if (f.state !== FLARE_KEPT || f.day > 3) continue;
+        const cfg = { ...headlessConfig(seed), startDay: f.day, startT: (f.warnTick - 90 - dayStartTick(f.day)) / 60, startChill: 100 };
+        // Read the telegraph on the warning's last guide refresh (Chill pinned: only the parry counts).
+        const s0 = createRun(cfg);
+        step(s0, TAP);
+        let mask: Uint8Array | null = null;
+        while (s0.tickAbs < f.riseTick - 1) {
+          step(s0, NO_INPUT);
+          s0.nubs.chill = 100;
+          if (s0.flarePhase === 1 && s0.guide.tick === s0.tick) mask = s0.guide.flare.slice();
+        }
+        expect(mask, `seed ${seed} flare ${f.id}: no warning`).not.toBeNull();
+        const bins: number[] = [];
+        (mask as Uint8Array).forEach((v, b) => {
+          if (v === 1) bins.push(b);
+        });
+        expect(bins.length, `seed ${seed} flare ${f.id}: empty telegraph`).toBeGreaterThan(0);
+        flares++;
+        // The first, middle and last telegraphed bins, held from before the rise to the end.
+        for (const b of new Set([bins[0], bins[bins.length >> 1], bins[bins.length - 1]] as number[])) {
+          const s = createRun(cfg);
+          step(s, TAP);
+          let out = '';
+          while (s.tickAbs < f.endTick + 2 && s.phase !== 'dead') {
+            if (s.tickAbs >= f.riseTick - 30) {
+              s.sun.theta = b;
+              s.sun.lag = 0;
+              s.sun.omega = 0;
+            }
+            step(s, NO_INPUT);
+            s.nubs.chill = 100;
+            for (const e of s.events) if (e.e === 'flareParry' || e.e === 'flareMiss') out = e.e === 'flareMiss' ? `miss ${e.lit}` : 'parry';
+          }
+          expect(out, `seed ${seed} flare ${f.id} held at ${b}°`).toBe('parry');
+          holds++;
+        }
+      }
+    }
+    expect(flares).toBeGreaterThanOrEqual(4);
+    expect(holds).toBeGreaterThanOrEqual(flares);
+  }, 60_000);
+
   it('dropped flares never lift the sun; no flares with the rule off', () => {
     const w = createWorld(headlessConfig(3));
     ensureGenerated(w, dayStartY(5));

@@ -517,23 +517,25 @@ function finish(w: World, job: ValidationJob): void {
 // A pending flare is decided by the job of the chunk whose own steps hold its window [rise − 1
 // step, end] (a flare straddling the chunk's end moves the least way into one chunk), before that
 // chunk's lit rows are computed, so the rows, the DP, its rescues and the stepLit cache all see the
-// lift. It is kept only if (a) a parry exists: some path turning ≤ turnBins per step, starting
-// anywhere at rise − 1 step, is shaded (3-step rule) on ≥ keepShadedShare of the hold steps; and
-// (b) the shade moves: fewer than keepMovedShare of the bins safe at the first hold step without the
-// flare stay safe with it. Otherwise it is shifted by TUNING.flare.shiftsSec and retested, then
-// dropped. One lit row is one work unit (KEEP_ROWS per candidate).
+// lift. It is kept only if (a) a parry exists from a fixed angle: some sun bin held through the whole
+// hold leaves Nubs lit on at most TUNING.flare.parryMaxLit of its ticks, counted tick by tick at his
+// scheduled position (the sim's own parry rule, so guide.flare can telegraph exactly the angles
+// that parry it: fix round 2); and (b) the shade moves: fewer than keepMovedShare of the bins safe
+// at the first hold tick without the flare stay safe with it. Otherwise it is shifted by
+// TUNING.flare.shiftsSec and retested, then dropped. One lit row is one work unit: the row without
+// the flare, then the lifted rows tick by tick, and a candidate stops as soon as (b) fails or every
+// bin has more than parryMaxLit lit ticks.
 
 const FL = TUNING.flare;
 /** Candidate offsets of a flare's rise (ticks): where it stands, then the shifts. */
 const FLARE_TRIES: readonly number[] = [0, ...FL.shiftsSec.map((sec) => Math.round(sec * TICK_HZ))];
-const HOLD_STEPS = Math.round(FL.holdTicks / STEP);
-/** Lifted rows from the step before the hold to the step after it, then the hold's first step without the flare. */
-export const KEEP_ROWS = HOLD_STEPS + 3;
-const keepLit = new Uint8Array(KEEP_ROWS * BINS);
+const HOLD_TICKS = FL.holdTicks;
+/** Keep-test rows: the hold's first tick without the flare, then every hold tick with it. */
+export const KEEP_ROWS = HOLD_TICKS + 1;
+const keepBase = new Uint8Array(BINS);
+const keepRowBuf = new Uint8Array(BINS);
+const keepCnt = new Uint8Array(BINS);
 const keepScene = createMaskScene();
-const keepG = new Float64Array(BINS);
-const keepWin = new Float64Array(BINS);
-const keepS = new Uint8Array(BINS);
 const keepCand: { -readonly [K in keyof Flare]: Flare[K] } = { id: 0, day: 0, d: 0, warnTick: 0, riseTick: 0, holdTick: 0, fallTick: 0, endTick: 0, state: FLARE_PENDING };
 /** Eclipse window length (ticks; gen/world.ts ECLIPSE_SEC, not imported to keep the module graph acyclic). */
 const ECLIPSE_TICKS = 6 * TICK_HZ;
@@ -694,53 +696,57 @@ function keepRow(w: World, c: Flare | null, tick: number, out: Uint8Array): void
   litMask(keepScene, x, y, true, out, null);
 }
 
-/**
- * The keep test's verdict over a candidate's rows (keepRows: the lifted rows from the step before
- * the hold to the step after it, then the hold's first step without the flare): the most shaded
- * hold steps a turn-limited path gets (a), the most a single fixed angle gets (`still`, the parry
- * the telegraph can name), the share of the bins safe without the flare that stay safe with it
- * (b), and whether the flare is kept.
- */
-export function keepVerdict(rows: Uint8Array): { parry: number; still: number; moved: number; kept: boolean } {
-  keepG.fill(0);
-  keepS.fill(0);
-  for (let r = 1; r <= HOLD_STEPS; r++) {
-    slidingMaxCircular(keepG, TURN, keepWin);
-    const a = (r - 1) * BINS;
-    for (let b = 0; b < BINS; b++) {
-      const lh = Math.max(rows[a + b] as number, rows[a + BINS + b] as number, rows[a + 2 * BINS + b] as number);
-      keepG[b] = (keepWin[b] as number) + (lh === 0 ? 1 : 0);
-      if (lh === 0) keepS[b] = (keepS[b] as number) + 1;
-    }
-  }
-  let parry = 0;
-  let still = 0;
-  for (let b = 0; b < BINS; b++) {
-    if ((keepG[b] as number) > parry) parry = keepG[b] as number;
-    if ((keepS[b] as number) > still) still = keepS[b] as number;
-  }
-  const base = (KEEP_ROWS - 1) * BINS;
+/** The share of the bins safe in `base` (the hold's first tick without the flare) that stay safe in `lifted` (with it); 0 when none is safe. */
+function movedShare(base: Uint8Array, baseOff: number, lifted: Uint8Array, liftedOff: number): number {
   let safe0 = 0;
   let stay = 0;
   for (let b = 0; b < BINS; b++) {
-    if (rows[base + b] !== 0) continue;
+    if (base[baseOff + b] !== 0) continue;
     safe0++;
-    if (rows[BINS + b] === 0) stay++;
+    if (lifted[liftedOff + b] === 0) stay++;
   }
   // Nothing safe without the flare: whatever shade the flare offers is new, so it moved.
-  const moved = safe0 > 0 ? stay / safe0 : 0;
-  const kept = parry >= Math.ceil(FL.keepShadedShare * HOLD_STEPS - 1e-9) && still >= Math.ceil(FL.keepStillShare * HOLD_STEPS - 1e-9) && moved < FL.keepMovedShare;
-  return { parry, still, moved, kept };
+  return safe0 > 0 ? stay / safe0 : 0;
+}
+
+/**
+ * The keep test's verdict over a candidate's rows (keepRows: the hold's first tick without the
+ * flare, then the lifted hold ticks): `lit`, the fewest lit hold ticks of a fixed sun bin; `still`,
+ * whether that parries (≤ parryMaxLit, the parry guide.flare names); `moved`, the share of the bins
+ * safe without the flare that stay safe with it (b); and whether the flare is kept.
+ */
+export function keepVerdict(rows: Uint8Array): { lit: number; still: boolean; moved: number; kept: boolean } {
+  let lit = HOLD_TICKS;
+  for (let b = 0; b < BINS; b++) {
+    let n = 0;
+    for (let r = 1; r <= HOLD_TICKS && n < lit; r++) if ((rows[r * BINS + b] as number) > 0) n++;
+    if (n < lit) lit = n;
+  }
+  const moved = movedShare(rows, 0, rows, BINS);
+  const still = lit <= FL.parryMaxLit;
+  return { lit, still, moved, kept: still && moved < FL.keepMovedShare };
 }
 
 /** Every keep-test row of flare f where it stands, into `out` (KEEP_ROWS × 360; tests and tools). */
 export function keepRows(w: World, f: Flare, out: Uint8Array = new Uint8Array(KEEP_ROWS * BINS)): Uint8Array {
-  for (let r = 0; r < KEEP_ROWS - 1; r++) keepRow(w, f, f.holdTick + (r - 1) * STEP, out.subarray(r * BINS, (r + 1) * BINS));
-  keepRow(w, null, f.holdTick, out.subarray((KEEP_ROWS - 1) * BINS, KEEP_ROWS * BINS));
+  keepRow(w, null, f.holdTick, out.subarray(0, BINS));
+  for (let r = 1; r < KEEP_ROWS; r++) keepRow(w, f, f.holdTick + r - 1, out.subarray(r * BINS, (r + 1) * BINS));
   return out;
 }
 
-/** One unit of the keep test: a lit row of the current candidate, or (free) a verdict and the next candidate or flare. */
+/** Rejects the current candidate: the next shift is tried from the next keepStep. */
+function rejectCandidate(job: ValidationJob): number {
+  job.flareRows = 0;
+  job.flareTry++;
+  return 0;
+}
+
+/**
+ * One unit of the keep test: a lit row of the current candidate (row 0: the hold's first tick
+ * without the flare; row r ≥ 1: hold tick r − 1 with it), or (free) a verdict and the next
+ * candidate or flare. A candidate is rejected as soon as the shade does not move (b) or no fixed bin
+ * can stay within parryMaxLit lit ticks (a); it is kept after its last hold tick.
+ */
 function keepStep(w: World, job: ValidationJob): number {
   const f = w.flares[job.flareQ] as Flare;
   if (job.flareRows === 0) {
@@ -763,19 +769,25 @@ function keepStep(w: World, job: ValidationJob): number {
       if (candidateFits(w, job, job.flareQ, keepCand)) break;
       job.flareTry++;
     }
+    keepRow(w, null, keepCand.holdTick, keepBase);
+    job.flareRows = 1;
+    return 1;
   }
   if (job.flareRows < KEEP_ROWS) {
     const r = job.flareRows;
-    const lifted = r < KEEP_ROWS - 1;
-    keepRow(w, lifted ? keepCand : null, lifted ? keepCand.holdTick + (r - 1) * STEP : keepCand.holdTick, keepLit.subarray(r * BINS, (r + 1) * BINS));
+    keepRow(w, keepCand, keepCand.holdTick + r - 1, keepRowBuf);
     job.flareRows++;
+    let best = HOLD_TICKS;
+    for (let b = 0; b < BINS; b++) {
+      const n = (r === 1 ? 0 : (keepCnt[b] as number)) + ((keepRowBuf[b] as number) > 0 ? 1 : 0);
+      keepCnt[b] = n;
+      if (n < best) best = n;
+    }
+    if (r === 1 && movedShare(keepBase, 0, keepRowBuf, 0) >= FL.keepMovedShare) return 1 + rejectCandidate(job);
+    if (best > FL.parryMaxLit) return 1 + rejectCandidate(job);
     return 1;
   }
   job.flareRows = 0;
-  if (!keepVerdict(keepLit).kept) {
-    job.flareTry++;
-    return 0;
-  }
   shiftFlare(f, keepCand.riseTick - f.riseTick);
   f.state = FLARE_KEPT;
   resortFlare(w, job.flareQ);

@@ -109,7 +109,11 @@ export interface DayParams {
   readonly noonHeat: number;
   /** Heat Flares drawn for the day (profile 3: 0, 1, then 2 from Day 3; profiles 0-2: 1 from Day 3). */
   readonly flareCount: number;
-  /** A flare's elevation lift d (°): 10 on Days 2-3, 8 from Day 4 (0 when the day has none). */
+  /**
+   * A flare's elevation lift d (°): 12 on Days 2-3, 10 from Day 4 (0 when the day has none). Fix round
+   * 2 raised it from the plan's 10 / 8 (§11 range 6-12): with the keep test's fixed-angle parry the
+   * shade must still move, and 10 / 8 kept 67.5% of the Days 2-4 candidates, 12 / 10 72.5% (40 seeds).
+   */
   readonly flareD: number;
 }
 
@@ -441,7 +445,7 @@ export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legac
     walkMul,
     noonHeat: noonHeatOf(d, profile),
     flareCount: flareCountOf(d, profile),
-    flareD: flareCountOf(d, profile) === 0 ? 0 : d >= 4 ? 8 : 10,
+    flareD: flareCountOf(d, profile) === 0 ? 0 : d >= 4 ? 10 : 12,
   });
   if (tune) modCache.set(mkey, params);
   else cache.set(key, params);
