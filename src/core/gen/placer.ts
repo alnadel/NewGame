@@ -33,6 +33,8 @@ import type { ValidationJob } from './validator.ts';
 
 const WT = TUNING.world;
 const CH = WT.chunkLen;
+/** The validator's step (ticks). */
+const WT_STEP = TUNING.validator.stepTicks;
 const yt: YTime = { day: 1, dayTick: 0, night: false };
 
 /** Casters within this distance (y) avoid sharing a name, so death lines can tell them apart. */
@@ -591,16 +593,57 @@ function placeBuds(w: World, k: number): void {
     // θ0 (± faceTol + avoidTheta0: an idle sun can't grow a bud): then the other side of the trail.
     const yT = y - aimBack;
     const tx = trailX(w.trail, yT);
-    for (let k = 0; k < 2; k++) {
-      const x = budSpot(w, y, (k === 0 ? side : -side) as -1 | 1, lat, false);
+    for (let t = 0; t < 2; t++) {
+      const x = budSpot(w, y, (t === 0 ? side : -side) as -1 | 1, lat, false);
       if (x === null) continue;
       let face = Math.round(wrapDeg(atan2D(y - yT, x - tx) + jitter));
       if (face === 360) face = 0;
       if (Math.abs(angleDiff(face, w.theta0)) < avoid) continue;
+      // The Sunflowers lesson: a face inside the safe teal, so following the dial grows it.
+      if (w.level?.introduces === 'bloom' && w.lastJob && w.lastJob.k === k) face = tealFace(w, w.lastJob, y, face, avoid) ?? face;
       insertBud(w, { id: BUD_ID_BASE + w.budCount++, x, y, face, grow: 0, state: 0, casterId: -1 });
       break;
     }
   }
+}
+
+/** Bins either side of a lesson bud's face that must be safe on a step for it to count (the bud grows within ±faceTol). */
+const TEACH_FACE_HALF = 8;
+const faceSafe = new Uint8Array(360);
+const faceScore = new Int32Array(360);
+
+/**
+ * The Sunflowers lesson (L8; fix round 2: the dial-following human models grew no bud there): the
+ * whole-degree face whose ±TEACH_FACE_HALF bins are all safe (the validator's rows, 3-step rule)
+ * on the most steps while the bud at y is in reach (Nubs within [y − reachAhead, y + reachBehind]),
+ * at least growSec of them, ties to the drawn face, never within `avoid` of θ0; null when none.
+ */
+function tealFace(w: World, job: ValidationJob, y: number, drawn: number, avoid: number): number | null {
+  const B = TUNING.buds;
+  const lit = job.lit;
+  faceScore.fill(0);
+  for (let s = 1; s <= job.pre + job.n; s++) {
+    const sy = job.sy[s] as number;
+    if (sy < y - B.reachAhead || sy > y + B.reachBehind || (job.sEps[s] as number) <= 0) continue;
+    for (let b = 0; b < 360; b++) faceSafe[b] = lit[(s - 1) * 360 + b] === 0 && lit[s * 360 + b] === 0 && lit[(s + 1) * 360 + b] === 0 ? 1 : 0;
+    for (let f = 0; f < 360; f++) {
+      let ok = 1;
+      for (let d = -TEACH_FACE_HALF; d <= TEACH_FACE_HALF && ok; d++) ok = faceSafe[(f + d + 360) % 360] as number;
+      faceScore[f] = (faceScore[f] as number) + ok;
+    }
+  }
+  const need = Math.round((B.growSec * TICK_HZ) / WT_STEP);
+  let best: number | null = null;
+  let bestV = need - 1;
+  for (let f = 0; f < 360; f++) {
+    const v = faceScore[f] as number;
+    if (v < need || Math.abs(angleDiff(f, w.theta0)) < avoid) continue;
+    if (v > bestV || (v === bestV && best !== null && Math.abs(angleDiff(f, drawn)) < Math.abs(angleDiff(best, drawn)))) {
+      bestV = v;
+      best = f;
+    }
+  }
+  return best;
 }
 
 /**
