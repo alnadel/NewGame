@@ -348,6 +348,27 @@ export function castSnap(s: SimState): boolean {
   } else {
     nb.frost = 0;
     nb.frostH = 0;
+    if (w.v16.ring) {
+      // Fix round 2: with the Bank off the snap still cashes the ring in, on the v1.5 meter
+      // (cashPerLevelH hundredths of a meter per level above x1, the ring back to x1), so precision
+      // feeds snaps and so survival (§0's frost story; without it the ring paid only Snow).
+      const m = nb.mult;
+      const refundH = Math.min(CHARGE_H, BANK.cashPerLevelH * (m - 1));
+      if (m > 1) {
+        st.multDowns = (st.multDowns as number) + 1;
+        s.events.push({ e: 'multDown', from: m, to: 1, cause: 'snap' });
+      }
+      nb.mult = 1;
+      nb.ringCharge = 0;
+      nb.shadeTicks = 0;
+      s.events.push({ e: 'snapCash', level: m, refundH });
+      if (refundH > 0) {
+        st.snapCashH = (st.snapCashH as number) + refundH;
+        nb.frostH = refundH;
+        nb.frost = refundH / CHARGE_H;
+        s.events.push({ e: 'frostGain', source: 'cash', amountH: refundH, charges: 0 });
+      }
+    }
   }
   s.snapTicks = SNAP_TICKS;
   s.snapCloudId = id;
