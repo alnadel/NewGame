@@ -324,8 +324,10 @@ const tuning = {
    * the next job while its rise stays in that band, and dropped only when the band runs out (a
    * Journey flare is dropped after its shifts). Endless rises are drawn in `windows`. A Journey
    * flare ends finishMarginSec before the finish line; on a teaching level the next warning waits
-   * teachGapSec after a flare's end. A parry is ≤ parryMaxLit lit hold ticks (+snow Snow); during
-   * the rise and hold buds grow × budMul and flakes melt × meltMul.
+   * teachGapSec after a flare's end. A parry is ≤ parryMaxLit lit hold ticks (+snow Snow); a miss
+   * burns burnPerLitTick a lit tick and, in Endless, scorches the tank (scorchPerLitTick, scorchMax;
+   * the validator's DP proves a path that parries). During the rise and hold buds grow × budMul
+   * and flakes melt × meltMul.
    */
   flare: {
     warnTicks: 120,
@@ -363,6 +365,16 @@ const tuning = {
      * charges it on the hold's steps, so every world stays survivable with it).
      */
     burnPerLitTick: 0.4,
+    /**
+     * Scorch (Endless, fix round 3): a missed flare scorches the tank by scorchPerLitTick Chill for
+     * each lit hold tick past parryMaxLit (at most scorchMax in all, s.flareScorch); Chill stays at
+     * most maxChill − scorch until nightfall or a Cold Snap heals it. The validator's DP holds its
+     * path on a parry through every kept hold, so the proof never needs a scorched tank. Measured
+     * (120 seeds, flares on vs off): the dial-only reactive bot's median death −81 min, the
+     * anticipating (preAim) bot +161 min; 3 / 60 gave the dial bot only −37.
+     */
+    scorchPerLitTick: 4,
+    scorchMax: 80,
   },
 
   /** Pickups (V1_PLAN §5.4). */

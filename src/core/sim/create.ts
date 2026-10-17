@@ -237,6 +237,7 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     flarePhase: 0,
     flareLit: 0,
     flareTicks: -1,
+    flareScorch: 0,
     guide: {
       now: new Uint8Array(360),
       next: new Uint8Array(360),

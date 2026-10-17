@@ -113,6 +113,7 @@ export function createWorld(cfg: WorldConfig, levelOverride?: LevelDef): World {
     mech: worldMechanics(cfg, level),
     v16: worldRules(cfg),
     flares: [],
+    flareParry: new Map(),
     brittleShare: cfg.brittleShare === undefined ? null : Math.min(1, Math.max(0, cfg.brittleShare)),
     maxZ: 0,
     nextId: 1,

@@ -124,7 +124,7 @@ function collect(s: SimState, p: Pickup): void {
     const snow = Math.round(snowMult(s) * s.params.snowMult);
     st.flakes++;
     st.snow += snow;
-    nb.chill = Math.min(nb.maxChill, nb.chill + P.flakeChill);
+    nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + P.flakeChill);
     s.events.push({ e: 'flake', mult: nb.mult, degree: (s.flakesToday + nb.mult) % 10, x: p.x, y: p.y, snow });
     s.flakesToday++;
     addFrost(s, TUNING.frost.perFlake);
@@ -133,7 +133,7 @@ function collect(s: SimState, p: Pickup): void {
     const snow = Math.round(P.crystalSnowMult * snowMult(s) * s.params.snowMult);
     st.crystals++;
     st.snow += snow;
-    nb.chill = Math.min(nb.maxChill, nb.chill + P.crystalChill);
+    nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + P.crystalChill);
     s.events.push({ e: 'crystal', mult: nb.mult, x: p.x, y: p.y, snow });
     addFrost(s, TUNING.frost.perFlake);
     streak(s);

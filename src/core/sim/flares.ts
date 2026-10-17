@@ -1,5 +1,6 @@
 // v1.6 Heat Flares in the sim (docs/V1_6_PLAN.md §2.5; CORE-2 owns this file): the flare state
-// machine (warning, rise, hold, fall), parry and miss, the flare's melt multiplier and the debug
+// machine (warning, rise, hold, fall), parry and miss (in Endless a miss scorches the tank until
+// nightfall: s.flareScorch, fix round 3), the flare's melt multiplier and the debug
 // hook (the buds' ×TUNING.flare.budMul in the rise and hold is CORE-1's updateBuds). The schedule
 // and the keep test live in generation (world.flares, gen/placer.ts and the validator); the sun's
 // lift in gen/plan.ts (worldElevation, liftElevation). Per-tick work is allocation-free (events
@@ -47,7 +48,19 @@ function settle(s: SimState, f: Flare): void {
     payTrick(s, 'parry');
   } else {
     s.events.push({ e: 'flareMiss', id: f.id, lit: s.flareLit });
+    // Scorch (Endless): the flash scorches the tank, the more the longer Nubs stood in it, until
+    // nightfall or a Cold Snap. The validator never needs it: its DP's path parries every kept flare.
+    if (s.world.level === null && FL.scorchPerLitTick > 0) {
+      s.flareScorch = Math.min(FL.scorchMax, s.flareScorch + FL.scorchPerLitTick * (s.flareLit - FL.parryMaxLit));
+      clampScorch(s);
+    }
   }
+}
+
+/** Keeps Chill within the scorched tank (maxChill − s.flareScorch). */
+function clampScorch(s: SimState): void {
+  const cap = s.nubs.maxChill - s.flareScorch;
+  if (s.nubs.chill > cap) s.nubs.chill = cap;
 }
 
 /** Moves the current flare's phase to `ph`, firing every transition passed on the way. */
@@ -74,6 +87,12 @@ function advance(s: SimState, f: Flare, ph: 0 | 1 | 2 | 3 | 4, t: number): void 
  */
 export function updateFlare(s: SimState): void {
   snapshotFeats(s);
+  if (s.flareScorch > 0) {
+    // The scorch heals at nightfall or under a Cold Snap; until then Chill stays under the scorched
+    // cap (the Chill line, flakes and saved glass clamp to it too: nubs.ts, pickups.ts, glass.ts).
+    if (s.phase === 'night' || s.snapTicks > 0) s.flareScorch = 0;
+    else clampScorch(s);
+  }
   const fl = s.world.flares;
   if (fl.length === 0) return;
   const t = s.tickAbs;

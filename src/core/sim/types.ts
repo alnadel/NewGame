@@ -371,6 +371,11 @@ export interface SimState {
   /** Lit ticks during the current flare's hold, and ticks to its rise during the warning (−1 otherwise). */
   flareLit: number;
   flareTicks: number;
+  /**
+   * Chill of the tank a missed flare scorched (Endless): Chill stays at most maxChill − flareScorch
+   * until nightfall, when it heals (sim/flares.ts). 0 otherwise.
+   */
+  flareScorch: number;
   readonly guide: GuideState;
   readonly world: World;
   readonly stats: RunStats;

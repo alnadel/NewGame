@@ -245,6 +245,8 @@ describe('Heat Flares (§2.5)', () => {
         const u = (f.riseTick - t0) / dayTicks(f.day);
         const half = TUNING.validator.stepTicks / 2 / dayTicks(f.day);
         expect(TUNING.flare.keepWindows.some(([a, b]) => u >= a - half && u <= b + half), `seed ${seed} flare ${f.id} rises at ${u}`).toBe(true);
+        // Its parry is recorded for the validator's DP (Endless).
+        expect(w.flareParry.get(f.id)?.some((v) => v === 1), `seed ${seed} flare ${f.id}: no parry mask`).toBe(true);
       }
       expect(perDay.slice(1)).toEqual([0, 1, 2, 2]);
       for (let i = 1; i < w.flares.length; i++) expect((w.flares[i] as Flare).riseTick).toBeGreaterThan((w.flares[i - 1] as Flare).riseTick);
@@ -252,6 +254,87 @@ describe('Heat Flares (§2.5)', () => {
     // §2.5's ≥ 85% of the Days 2-4 candidates (fix round 3: 93% on these seeds; also a sim --check row).
     expect(kept / decided).toBeGreaterThanOrEqual(0.85);
   }, 60_000);
+
+  it("the validator's DP proves a path that parries every kept Endless flare: from the first hold step to the fall step it holds one bin of the flare's parry (fix round 3)", () => {
+    const STEP = TUNING.validator.stepTicks;
+    let checked = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const w = createWorld(headlessConfig(seed));
+      let last: unknown = null;
+      while (!generateSome(w, dayStartY(4), 1)) {
+        const job = w.lastJob;
+        if (!job || job === last || !job.done) continue;
+        last = job;
+        const slots = job.pre + job.n + 1;
+        const tick0 = (job.j0 - 1 - job.pre) * STEP;
+        for (const f of w.flares) {
+          const mask = w.flareParry.get(f.id);
+          if (f.state !== FLARE_KEPT || !mask) continue;
+          const s0 = (f.holdTick - tick0) / STEP;
+          const s1 = (f.fallTick - tick0) / STEP;
+          if (s0 < 1 || s1 >= slots) continue;
+          for (let i = s0; i <= s1; i++) {
+            for (let b = 0; b < BINS; b++) {
+              const v = job.c[i * BINS + b] as number;
+              if (v <= 0) continue;
+              // Alive only on a parry bin, and (after the first hold step) only where it was alive a step before.
+              expect(mask[b], `seed ${seed} flare ${f.id} slot ${i} bin ${b}`).toBe(1);
+              if (i > s0) expect(job.c[(i - 1) * BINS + b] as number, `seed ${seed} flare ${f.id} slot ${i} bin ${b} turned`).toBeGreaterThan(0);
+            }
+          }
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(8);
+    // A kept flare whose parry the DP cannot hold above the floor is dropped after all (seed 20's
+    // Day-8 morning flare on clear days): no unresolved failure, and every kept flare has its parry.
+    const w20 = createWorld({ ...headlessConfig(20), forecast: 'clear' });
+    ensureGenerated(w20, dayStartY(9));
+    expect(w20.stats.unresolved).toBe(0);
+    for (const f of w20.flares) expect(f.state !== FLARE_KEPT || w20.flareParry.has(f.id), `flare ${f.id}`).toBe(true);
+  }, 60_000);
+
+  it('a missed Endless flare scorches the tank until nightfall or a snap; a parry never does; the Journey never scorches (fix round 3)', () => {
+    const FL = TUNING.flare;
+    const miss = (cfg: ReturnType<typeof headlessConfig>, lit: boolean): SimState => {
+      const s = started(cfg);
+      strip(s);
+      if (!lit) shadeAll(s, s.nubs.y - 200, s.nubs.y + 900);
+      const f = debugFlare(s, 6, 10);
+      while (s.tickAbs <= f.fallTick + 1) {
+        s.nubs.chill = 100;
+        step(s, NO_INPUT);
+      }
+      return s;
+    };
+    // Full sun: lit on every hold tick, a miss; the scorch is per lit tick past the parry's allowance, capped.
+    const s = miss({ ...headlessConfig(1), lesson: true }, true);
+    const scorch = Math.min(FL.scorchMax, FL.scorchPerLitTick * (FL.holdTicks - FL.parryMaxLit));
+    expect(s.flareScorch).toBe(scorch);
+    expect(s.nubs.chill).toBeLessThanOrEqual(s.nubs.maxChill - scorch);
+    for (let i = 0; i < 30; i++) {
+      s.nubs.chill = s.nubs.maxChill;
+      step(s, NO_INPUT);
+      expect(s.nubs.chill).toBeLessThanOrEqual(s.nubs.maxChill - scorch + 1e-9);
+    }
+    // A Cold Snap heals it.
+    s.snapTicks = 30;
+    step(s, NO_INPUT);
+    expect(s.flareScorch).toBe(0);
+    // Nightfall heals it.
+    const n = miss({ ...headlessConfig(1), lesson: true }, true);
+    expect(n.flareScorch).toBe(scorch);
+    jumpTo(n, n.day, dayTicks(n.day));
+    n.phase = 'night';
+    step(n, NO_INPUT);
+    expect(n.flareScorch).toBe(0);
+    // A parry: no scorch.
+    expect(miss(headlessConfig(1), false).flareScorch).toBe(0);
+    // A campaign level: the miss costs no scorch.
+    const lv = miss({ ...campaignConfig(38), lesson: true }, true);
+    expect(lv.flareScorch).toBe(0);
+  });
 
   it("a lit hold tick burns TUNING.flare.burnPerLitTick on top of the drain; the validator's DP charges it on the hold's steps", () => {
     const burn = TUNING.flare.burnPerLitTick;

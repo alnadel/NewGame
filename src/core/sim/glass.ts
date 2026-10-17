@@ -92,7 +92,7 @@ export function updateClusters(s: SimState): void {
     payTrick(s, 'cluster');
     // A saved glass cluster cools Nubs at once (TUNING.brittle.saveChill).
     const nb = s.nubs;
-    nb.chill = Math.min(nb.maxChill, nb.chill + TUNING.brittle.saveChill);
+    nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + TUNING.brittle.saveChill);
   }
   s.events.push({ e: 'clusterSaved', cluster: s.clusterId, brittle: first.brittle, n: first.cn, x: s.nubs.x, y: s.nubs.y });
 }
