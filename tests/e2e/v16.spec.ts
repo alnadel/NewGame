@@ -11,7 +11,7 @@ const demo = (page: Page, name: string) => page.evaluate((n) => window.__SHADY_T
 
 /**
  * An endless run at profile 3 (a debug run: nothing is saved), past its start beat. The Frost Bank
- * ships off (V16_SHIP); `rules` '&on=bank' switches it on for its own layers.
+ * ships on (V16_SHIP, economy iteration 1); `rules` '&on=bank' keeps it explicit for its own layers.
  */
 async function playEndless(page: Page, rules = '&on=bank'): Promise<void> {
   await seedSave(page, OPEN_SAVE);
@@ -129,9 +129,9 @@ test('the deep shade and Cold Snap lessons keep their goal glyph on the pill at 
 
 test('a Heat Flare counts down on the dial and a parry marks it on the ruler', async ({ page }) => {
   const errors = watchErrors(page);
-  // The shipped rules: the Frost Bank off, so the meter is one gauge; the ring is on.
+  // The shipped rules: every rule on (the Frost Bank since economy iteration 1), so the meter is two pips; the ring is on.
   await playEndless(page, '');
-  expect((await mech(page)).pips).toBe(1);
+  expect((await mech(page)).pips).toBe(2);
   expect((await mech(page)).ring).toBe(true);
   await demo(page, 'flare');
   await expect.poll(async () => (await mech(page)).flarePhase).toBe(1);
