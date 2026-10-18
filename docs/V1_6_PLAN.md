@@ -858,6 +858,65 @@ No gate was re-specified at the merge. On the merged, re-baked tree (`sim --camp
 0-29%), humanDial's first try on 1-40 is 92.8% of 400, and "humanDial mean stars on 41-200" reads
 MISS at 0.71; full numbers in src/core/README.md §16.3 ("Fix round 3, merged").
 
+### 6.2 Economy iteration 1: the Frost Bank ships
+
+The economy's intent, each measured over at least 240 seeds with `scripts/sim.ts`, profile 3, the
+shipped rules:
+- **E1** planning beats hoarding: plan-snap − panic-snap ≥ +30 min mean, and the reactive bot's meter
+  sits full ≤ 15% of daylight;
+- **E2** greed is priced and paid: chase − plain ≥ +150, naive − plain < 0, safe − plain < 0;
+- **E3** glass is a choice, not a tax: a glass-seeking policy outlives a glass-ignoring one (same skill
+  otherwise), and the oracle saves ≥ 70% of glass;
+- **E4** no economy double count (a panic snap's same-tick PHEW restored the ring the cash-in reset),
+  and the shipped meter pays what the plan pays (parries under a snap, own landings);
+- **E5** unchanged: mechanics vs dial ≥ +180, the dial median window, novice / idle / oracle windows,
+  the rescue gates, onboarding (career humanDial at standard within 20 runs ≥ 85%);
+- **E6** the Frost Bank ships on only if E1-E5 hold with it on.
+
+**Rules** (src/core/README.md §16.4 has the measurements and the rejected levers):
+1. Frost freezes only on a cool Nubs (Chill ≥ 40; the dial's Chill gauge turns amber below it): a
+   sunflower banks its frost (25) when it blooms with Nubs fully shaded and cool, never in the Noon
+   Heat.
+2. A snap cast while cool cashes the ring in, 25 a level above x1 (a x5 snap refunds itself); a hot,
+   panic snap pours nothing, and no pour fills the meter past one and a half snaps.
+3. A fresh SWING pumps the ring and pays no frost; a parry pays 5, each glass flake caught 3, a whole
+   glass cluster 25.
+4. Endless, Daily and challenge runs start with one snap.
+5. E4: the cash-in's ring reset also resets the stretch's PHEW level; the v1.5 meter (Bank off) holds a
+   snap's trick income for its end and pays own landings.
+6. **E6: the Frost Bank ships on** (`TUNING.bank.ships`); `--waive bank` is no longer needed.
+
+**Gates.** No §6 gate was re-specified. Two hard rows were added to `sim --decisions` for the intent
+above: plan-snap − panic-snap ≥ +30 (E1; the §6 advisory ≥ +60 row stays) and glass-seeking −
+glass-ignoring > 0 (E3; the seeker is plain play plus the chase policy's glass term, `BotOptions.glass`).
+The Bank's two §6 hard rows (a full meter ≤ 10%, stricter than E1's 15%; dial-only income ≤ 0.15)
+now measure the Bank and pass with no waiver.
+
+| Gate | 103e965 | Iteration 1 (seeds 1-240) | seeds 241-480 |
+|---|---|---|---|
+| chase − plain (hard ≥ +150) | +26 | +218 | +169 |
+| naive − plain (hard < 0) | −200 | −74 | −81 |
+| safe − plain (hard < 0) | −14 | −142 | −81 |
+| plan-snap − panic-snap (hard ≥ +30; advisory ≥ +60) | −9 | +162 | +85 |
+| glass-seeking − glass-ignoring (hard > 0) | +6 ± 22 | +5 | +13 |
+| full meter (hard ≤ 10%) | 39.0% (v1.5 meter, waived) | 2.1% (`--check` 1.3%) | – |
+| dial-only income (hard ≤ 0.15 a day) | 0.44 (v1.5 meter, waived) | 0.14 | – |
+| humanDial snaps a run R2 / R3 / R4 (advisory ≥ 0.8) | 0.71 / 0.64 / 0.13 | 1.11 / 1.11 / 1.01 | – |
+
+`sim --check --seeds 40`: every target met (mechanics vs dial +373, the dial median Day 3 · 9:33 AM,
+the oracle to Day 8 on 100%, its glass saves 76.3%, rescues 0.570 a chunk, +0.038). `sim --campaign
+--bot all`: every hard row passes (the Journey re-baked: the bake sizes Dares from bots that now play
+the Bank). `sim --career 40 --meta`: 100% of careers reach the standard rung within 20 runs.
+
+**Open, the integrator's call.**
+- The starting charge (§2.2: "drop it to 0 if it alone adds more than 120 min to the reactive bot")
+  adds +476 ± 49 min alone. It stays: without it mechanics vs dial is +21 (E5's hard ≥ +180 fails),
+  with half a pip +237 and +63. The 120-minute bar is not a §6 gate and was not re-specified; it is
+  exceeded.
+- E3's first half passes thinly: glass windows are about 1.5 s of a 50 s day, the reactive seeker
+  saves 8.3% of glass clusters against 6.5%, so its edge (+5 / +13) is inside a 240-seed block's
+  chaos (±15-25). A larger glass reward lifts it but puts the dial-only bot over 0.15.
+
 ---
 
 ## 7. What the skeptics changed (merge log)
