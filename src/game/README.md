@@ -281,10 +281,12 @@ See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it r
 See docs/V1_6_PLAN.md §4 and §9; CORE fills the rules, the game makes them readable. Every layer
 reads the sim defensively (`game/mechanics.ts` fills the renderer's `MechView`): absent or zero state
 shows nothing new (a run with every v1.6 rule off plays like v1.5), and each `World.v16` kill switch turns its
-layer off (`ring` off: no charge ring; `bank` off: one gauge, as in v1.5). v1.6 ships with the
-Frost Bank off (`V16_SHIP`, calibration: see src/core/README.md §16.3), so the meter is one gauge
-unless a run switches it on; the debug URL parameters `?on=bank,…` and `?off=flares,…` switch rules
-over the shipped ones (a debug run), and the e2e of the Bank's layers use `?on=bank`.
+layer off (`ring` off: no charge ring; `bank` off: one gauge, as in v1.5). v1.6 ships with every
+rule on, the Frost Bank too since economy iteration 1 (`V16_SHIP`; src/core/README.md §16.4), so the
+meter is two pips unless a run switches the Bank off; the debug URL parameters `?on=bank,…` and
+`?off=bank,flares,…` switch rules over the shipped ones (a debug run). Frost freezes only on a cool
+Nubs (`TUNING.bank.coolChill`): the halo's Chill gauge is frost-white at or above it and amber below,
+so the gauge says whether a bloom banks frost and a snap cashes the ring.
 
 - **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the
   pill's own outline dashed on (`ringCharge` over `TUNING.ring.need` of the level; at ×5 the gold

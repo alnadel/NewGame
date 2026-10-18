@@ -6,7 +6,8 @@
 //   - ending (shaded now, lit in 0.6 s): thin;
 //   - coming (lit now, shaded in 0.6 s): a thin dashed arc just outside the ring;
 //   - when nothing lasts, the now-arcs are drawn medium-thick, so the dial is never blank.
-// The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below 50 and hot, dashed and
+// The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below TUNING.bank.coolChill (40:
+// frost freezes only on a cool Nubs, economy iteration 1) and hot, dashed and
 // pulsing below 25. In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
 // (V1_PLAN §6.2) the dial shows where to put the sun: the target arc pulses, dots mark the way
 // round, and a ghost sun glides from the sun pointer into the arc in step with the ghost thumb.
@@ -24,6 +25,7 @@
 // rests, and frost-rimmed teal marks the shade that holds through it, a run under 8° wearing a
 // target dot (the glass layer hides).
 
+import { TUNING } from '../config/tuning.ts';
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
@@ -461,7 +463,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.lineCap = 'butt';
   }
 
-  // Chill gauge inside the ring, clockwise from the top: frost-white, amber below 50, dashed and
+  // Chill gauge inside the ring, clockwise from the top: frost-white while Nubs is cool (frost freezes:
+  // blooms bank it, a snap cashes the ring; TUNING.bank.coolChill), amber below it, dashed and
   // pulsing below 25; hidden while Chill is full (the teal arcs lead then).
   const chill = Math.max(0, Math.min(100, inp.chill));
   if (chill < 99) {
@@ -476,7 +479,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       if (chill < 25) g.setLineDash([4, 3]);
       g.lineCap = 'round';
       const pulse = chill < 25 ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      g.strokeStyle = cssa(chill < 25 ? HOT : chill < 50 ? AMBER : FROST, gA * pulse);
+      g.strokeStyle = cssa(chill < 25 ? HOT : chill < TUNING.bank.coolChill ? AMBER : FROST, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
       g.stroke();

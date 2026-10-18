@@ -71,11 +71,11 @@ const FLARE_TIP_MAX_S = 30;
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
     ['bud', 'A bud! Shine the sun from its gold mark to grow it. Gold on the dial grows it too.'],
-    ['bloom', 'Bloomed! Frost toward a snap, and shade for the rest of the run.'],
+    ['bloom', 'Bloomed! Shade for the rest of the run. Grown from cool shade, it banks frost too.'],
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],
   snap: [
-    ['go', 'Sunflowers fill the frost. Full? Swipe down.'],
+    ['go', 'Sunflowers grown from cool shade fill the frost. Full? Swipe down.'],
     ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
     ['cash', 'Your ring poured into the frost.'],

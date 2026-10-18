@@ -181,7 +181,7 @@ async function dialPixels(page: Page): Promise<{ teal: number; tealRun: number; 
 test.describe('dial v2 (GR6)', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 
-  test('thick teal for lasting shade, no gauge at full Chill, amber below 50', async ({ page }, info) => {
+  test('thick teal for lasting shade, no gauge at full Chill, amber below the cool line (40)', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one DPR-2 run is enough');
     // Full Chill at the start: no gauge ring (and never the old blue one).
     await seedSave(page, OPEN_SAVE);
@@ -201,8 +201,8 @@ test.describe('dial v2 (GR6)', () => {
       thick = Math.max(thick, (await dialPixels(page)).tealRun);
     }
     expect(thick).toBeGreaterThanOrEqual(6);
-    // Chill 40: an amber gauge.
-    await openGame(page, 'test=1&seed=42&day=1&t=9:00&perf=0&plan=0&chill=40');
+    // Chill 35, under the cool line (TUNING.bank.coolChill 40): an amber gauge.
+    await openGame(page, 'test=1&seed=42&day=1&t=9:00&perf=0&plan=0&chill=35');
     await page.mouse.click(195, 340);
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
     await page.waitForTimeout(200);
@@ -210,7 +210,7 @@ test.describe('dial v2 (GR6)', () => {
     expect(low.amber).toBeGreaterThan(20);
     expect(low.blue).toBe(0);
     const n = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
-    await info.attach('dial-chill40', { body: await page.screenshot({ clip: { x: n.x - 110, y: n.y - 110, width: 220, height: 220 } }), contentType: 'image/png' });
+    await info.attach('dial-chill35', { body: await page.screenshot({ clip: { x: n.x - 110, y: n.y - 110, width: 220, height: 220 } }), contentType: 'image/png' });
   });
 });
 

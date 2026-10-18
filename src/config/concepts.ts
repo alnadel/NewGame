@@ -130,7 +130,7 @@ const SLIPPERY_FRICTION = 0.994183647521183;
 export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   deep: concept('deep', 'Deep Shade', 'Double Shade', 'teach', 'Where two shadows overlap the shade runs deep: Chill, the multiplier and the frost meter fill twice as fast.', 'deep'),
   bloom: concept('bloom', 'Sunflowers', 'Sun Garden', 'teach', 'Buds face the sun. Shine from their side (gold on the dial) and they bloom into tall sunflowers: new shade.', 'bloom'),
-  snap: concept('snap', 'Cold Snap', 'Frost Cloud', 'teach', 'Shade, flakes and SWINGs fill the frost meter. Full? Swipe down: a frosty cloud rides over Nubs.', 'snap', undefined, { cost: 3 }),
+  snap: concept('snap', 'Cold Snap', 'Frost Cloud', 'teach', 'Sunflowers grown from cool shade fill the frost meter. Full? Swipe down: a frosty cloud rides over Nubs.', 'snap', undefined, { cost: 3 }),
   drag: concept('drag', 'Sun Drag', 'First Shade', 'teach', 'Drag anywhere: you are the sun. Every shadow swings with you.', 'drag', { cloudCount: 0 }),
   flakes: concept('flakes', 'Snowflakes', 'Flake Trail', 'goal', 'Collect the flakes before the sun melts them. Shade keeps them whole.', 'flake', { flakesPerCluster: 4 }, { goal: 'flakes', cost: 3 }),
   cloud: concept('cloud', 'Clouds', 'Umbrella', 'sky', 'Clouds are moving shade. Ride one while it lasts.', 'cloud', { waitersOnly: true }, { cost: -2 }),
