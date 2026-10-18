@@ -239,7 +239,7 @@ function updateSwing(s: SimState): void {
       addFrostH(s, 'swing', BANK.swingH);
     }
   } else {
-    addFrost(s, FROST.perSwing);
+    addFrost(s, FROST.perSwing, true);
   }
   if (fresh) ringTrick(s, 'swing', RING.trick);
 }
@@ -571,7 +571,9 @@ function land(s: SimState): void {
   }
   s.events.push({ e: 'snapLand', chain, own, x: nb.x, y: nb.y });
   if (own) {
-    addFrostH(s, 'land', BANK.landH);
+    // A fresh SWING's frost: the Bank's landH, or the v1.5 meter's perSwing (iteration 1, E4).
+    if (s.world.v16.bank) addFrostH(s, 'land', BANK.landH);
+    else addFrost(s, FROST.perSwing, true);
     ringTrick(s, 'land', RING.trick);
   }
   s.landTicks = -1;

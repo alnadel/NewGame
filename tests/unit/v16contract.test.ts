@@ -18,11 +18,11 @@ import { step } from '../../src/core/sim/step.ts';
 import { V16_ALL, V16_NONE, V16_RULES, V16_SHIP } from '../../src/core/sim/types.ts';
 
 describe('v1.6 contract', () => {
-  it('worlds carry their v1.6 rules (the shipped V16_SHIP by default: every rule but the Frost Bank; RunConfig.v16 switches single rules)', () => {
+  it('worlds carry their v1.6 rules (the shipped V16_SHIP by default: every rule, the Frost Bank too since economy iteration 1; RunConfig.v16 switches single rules)', () => {
     expect(createWorld(headlessConfig(1)).v16).toBe(V16_SHIP);
-    expect(V16_SHIP).toEqual({ ...V16_ALL, bank: false });
-    expect(createWorld({ ...headlessConfig(1), v16: { bank: false } }).v16).toBe(V16_SHIP);
-    expect(createWorld({ ...headlessConfig(1), v16: { bank: true } }).v16).toBe(V16_ALL);
+    expect(V16_SHIP).toEqual(V16_ALL);
+    expect(createWorld({ ...headlessConfig(1), v16: { bank: true } }).v16).toEqual(V16_SHIP);
+    expect(createWorld({ ...headlessConfig(1), v16: { bank: false } }).v16).toEqual({ ...V16_ALL, bank: false });
     const some = createWorld({ ...headlessConfig(1), v16: { ring: false, flares: false } });
     expect(some.v16).toEqual({ ...V16_SHIP, ring: false, flares: false });
     const none = createWorld({ ...headlessConfig(1), v16: Object.fromEntries(V16_RULES.map((r) => [r, false])) });

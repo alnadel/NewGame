@@ -20,6 +20,7 @@ import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { CAMPAIGN_LEVELS, startsWithSnap } from '../../src/config/campaign.ts';
 import { campaignConfig } from '../../src/core/level.ts';
 import { debugBloom, SNAP_TICKS } from '../../src/core/sim/mechanics.ts';
+import { payTrick } from '../../src/core/sim/tricks.ts';
 import { applyDaylight, debugRing } from '../../src/core/sim/nubs.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT, type InputFrame, type RunConfig, type SimState } from '../../src/core/sim/types.ts';
@@ -38,7 +39,7 @@ const only = <K extends SimEvent['e']>(ev: SimEvent[], k: K): Ev<K>[] => ev.filt
 // ---------------------------------------------------------------------------------------------
 // Scripted daylight ticks (coverage set by hand), as in swing.test.ts.
 
-/** The Frost Bank ships off (V16_SHIP); these tests measure the economy with it on unless a test switches it. */
+/** The Frost Bank ships on (V16_SHIP, economy iteration 1); these tests pin it on unless a test switches it off. */
 const bankOn = (cfg: Partial<RunConfig> = {}): Partial<RunConfig> => ({ ...cfg, v16: { bank: true, ...cfg.v16 } });
 
 function rig(cfg: Partial<RunConfig> = {}): SimState {
@@ -328,15 +329,20 @@ describe('Frost Bank (§2.2)', () => {
     debugRing(s, 4, 700);
     step(s, SNAP);
     const ev = s.events;
+    const cash = 3 * BK.cashPerLevelH;
+    const after = 150 - BK.costH + cash;
+    expect(after).toBeLessThanOrEqual(BK.cashCapH);
     expect(ev.find((e) => e.e === 'snap')).toBeDefined();
     expect(only(ev, 'multDown')).toEqual([{ e: 'multDown', from: 4, to: 1, cause: 'snap' }]);
-    expect(only(ev, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: 3 * BK.cashPerLevelH }]);
-    expect(only(ev, 'frostGain')).toEqual([{ e: 'frostGain', source: 'cash', amountH: 3 * BK.cashPerLevelH, charges: 0 }]);
+    expect(only(ev, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: cash }]);
+    expect(only(ev, 'frostGain')).toEqual([{ e: 'frostGain', source: 'cash', amountH: cash, charges: Math.floor(after / BK.costH) }]);
     // The snap's own cover is full shade: the ring refills from x1 at once.
-    expect([s.nubs.frostH, s.nubs.mult, s.nubs.ringCharge, s.stats.snapCashH]).toEqual([150 - BK.costH + 3 * BK.cashPerLevelH, 1, R.shadeUnits, 3 * BK.cashPerLevelH]);
+    expect([s.nubs.frostH, s.nubs.mult, s.nubs.ringCharge, s.stats.snapCashH]).toEqual([after, 1, R.shadeUnits, cash]);
     // No second snap while one is on, and none below a full charge.
     run(s, SNAP_TICKS + 2);
     expect(s.stats.snaps).toBe(1);
+    s.nubs.frostH = BK.costH - 1;
+    s.nubs.frost = s.nubs.frostH / BK.costH;
     step(s, SNAP);
     expect(s.stats.snaps).toBe(1);
   });
@@ -371,7 +377,7 @@ describe('Frost Bank (§2.2)', () => {
     expect([s.nubs.frostH, s.snapBankH, s.stats.frostEarnedH]).toEqual([G.bankCapH, 0, G.bankCapH]);
   });
 
-  it('a fresh SWING pays swingH at most once per swingEveryTicks', () => {
+  it('a fresh SWING pays swingH (0 since economy iteration 1: it pumps the ring only) at most once per swingEveryTicks', () => {
     const s = rig({ startFrost: 0 });
     swing(s, 1, 2, 100);
     expect(s.nubs.frostH).toBe(BK.swingH);
@@ -380,6 +386,91 @@ describe('Frost Bank (§2.2)', () => {
     ticks(s, BK.swingEveryTicks, 3, 100);
     swing(s, 3, 4, 100);
     expect(s.nubs.frostH).toBe(2 * BK.swingH);
+  });
+});
+
+describe('Frost freezes only on a cool Nubs (economy iteration 1, core README §16.4)', () => {
+  it('a bloom banks bloomH only when Nubs is fully shaded and cool as it blooms, and nothing in the Noon Heat', () => {
+    // In the sun: nothing (the bloom still pumps the ring and plants shade).
+    const lit = lab({ startFrost: 0 });
+    lit.nubs.chill = 100;
+    debugBloom(lit, bud(lit, 100, 0).id);
+    expect(lit.nubs.f).toBeGreaterThan(0);
+    expect(lit.nubs.frostH).toBe(0);
+    expect(only(lit.events, 'ringTrick').filter((e) => e.kind === 'bloom')).toHaveLength(1);
+    // In full shade: bloomH while cool (at coolChill exactly), nothing below it.
+    const sh = lab({ startFrost: 0 });
+    for (let dy = 40; dy <= 900; dy += 25) block(sh, sh.nubs.y + dy);
+    for (let i = 0; i < 400 && sh.nubs.f > 0; i++) step(sh, NO_INPUT);
+    expect(sh.nubs.f).toBe(0);
+    sh.nubs.chill = BK.coolChill;
+    debugBloom(sh, bud(sh, 100, 0).id);
+    expect(sh.nubs.frostH).toBe(BK.bloomH);
+    sh.nubs.chill = BK.coolChill - 1;
+    debugBloom(sh, bud(sh, 110, 0).id);
+    expect(sh.nubs.frostH).toBe(BK.bloomH);
+    // The Noon Heat (Day 2 at noon, profile 3): nothing, shaded and cool.
+    const noon = lab({ startFrost: 0, startDay: 2, startT: dayTicks(2) / 120 });
+    for (let dy = 40; dy <= 900; dy += 25) block(noon, noon.nubs.y + dy);
+    for (let i = 0; i < 400 && noon.nubs.f > 0; i++) step(noon, NO_INPUT);
+    noon.nubs.chill = 100;
+    debugBloom(noon, bud(noon, 100, 0).id);
+    expect([noon.nubs.f, noon.nubs.frostH]).toEqual([0, 0]);
+  });
+
+  it('a hot snap (below coolChill) cashes nothing; a cool one never fills the meter past cashCapH', () => {
+    const hot = lab({ startFrost: 1 });
+    debugRing(hot, 5, 0);
+    hot.nubs.chill = BK.coolChill - 5;
+    step(hot, SNAP);
+    expect(only(hot.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 5, refundH: 0 }]);
+    expect([hot.nubs.frostH, hot.nubs.mult]).toEqual([0, 1]);
+    // From two charges a x5 snap pours only up to cashCapH.
+    const full = lab({ startFrost: 2 });
+    debugRing(full, 5, 0);
+    full.nubs.chill = 100;
+    step(full, SNAP);
+    expect(only(full.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 5, refundH: BK.cashCapH - BK.costH }]);
+    expect(full.nubs.frostH).toBe(BK.cashCapH);
+  });
+
+  it('E4: a panic snap’s same-tick PHEW keeps the ring the snap reset (no double count)', () => {
+    const s = lab({ startFrost: 1 });
+    debugRing(s, 4, 0);
+    // Lit and low, PHEW armed (Chill was ≥ 40 within the last 3 s): the snap cloud is the shade it finds.
+    s.nubs.phewOpen = true;
+    s.nubs.chill = s.params.phewT - 2;
+    s.nubs.highChillTick = s.tick;
+    step(s, NO_INPUT);
+    expect(s.nubs.f).toBeGreaterThan(0);
+    s.nubs.chill = s.params.phewT - 2;
+    step(s, SNAP);
+    expect(s.events.some((e) => e.e === 'phew')).toBe(true);
+    expect(s.events.some((e) => e.e === 'multUp')).toBe(false);
+    expect(only(s.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: 0 }]);
+    expect(s.nubs.mult).toBe(1);
+  });
+
+  it('every glass flake caught pays glassFlakeH; a plain flake pays nothing', () => {
+    const s = lab({ startFrost: 0 });
+    const y0 = s.nubs.y;
+    insertPickup(s.world, { id: 9_300_000, kind: 'flake', x: trailX(s.world.trail, y0 + 8), y: y0 + 8, day: 1, melt: 0, state: 0, cluster: -1, ci: 0, cn: 1, brittle: true });
+    insertPickup(s.world, { id: 9_300_001, kind: 'flake', x: trailX(s.world.trail, y0 + 30), y: y0 + 30, day: 1, melt: 0, state: 0, cluster: -1, ci: 0, cn: 1, brittle: false });
+    const ev = run(s, 40, NO_INPUT, 100);
+    expect(only(ev, 'flake')).toHaveLength(2);
+    expect(only(ev, 'frostGain')).toEqual([{ e: 'frostGain', source: 'cluster', amountH: BK.glassFlakeH, charges: 0 }]);
+  });
+
+  it('E4, the v1.5 meter (Bank off): a trick under a snap is held and paid at snapEnd, as the Bank does', () => {
+    const s = lab({ startFrost: 1, v16: { bank: false } });
+    step(s, SNAP);
+    expect(s.nubs.frost).toBe(0);
+    payTrick(s, 'parry');
+    expect([s.nubs.frost, s.snapBankH]).toEqual([0, BK.parryH]);
+    const ev: SimEvent[] = [];
+    while (s.snapTicks > 0) ev.push(...run(s, 1, NO_INPUT, 100));
+    expect(ev.some((e) => e.e === 'snapEnd')).toBe(true);
+    expect([s.snapBankH, s.nubs.frostH]).toEqual([0, BK.parryH]);
   });
 });
 
@@ -512,8 +603,8 @@ describe('Frost Garden and Landing (§2.4)', () => {
    * unless `bloom` is false), then the sun put where that sunflower shades Nubs (own) or onto a rock
    * over the trail there (not own), played until the landing window closes.
    */
-  function landing(own: boolean, bloom = true): { s: SimState; ev: SimEvent[] } {
-    const s = lab({ startFrost: 1, startT: 22 });
+  function landing(own: boolean, bloom = true, cfg: Partial<RunConfig> = {}): { s: SimState; ev: SimEvent[] } {
+    const s = lab({ startFrost: 1, startT: 22, ...cfg });
     const w = s.world;
     step(s, SNAP);
     s.nubs.swChain = 1;
@@ -562,6 +653,10 @@ describe('Frost Garden and Landing (§2.4)', () => {
     expect(only(ev, 'ringTrick').filter((e) => e.kind === 'land')).toEqual([{ e: 'ringTrick', kind: 'land', units: R.trick }]);
     expect(only(ev, 'frostGain').filter((e) => e.source === 'land')).toEqual([{ e: 'frostGain', source: 'land', amountH: BK.landH, charges: expect.any(Number) }]);
     expect([s.stats.snapLandsOwn, s.stats.swings]).toEqual([1, 1]);
+    // E4: on the v1.5 meter (Bank off) an own landing pays a fresh SWING's frost too.
+    const v15 = landing(true, true, { v16: { bank: false } });
+    expect(only(v15.ev, 'snapLand').map((e) => e.own)).toEqual([true]);
+    expect(v15.s.nubs.frost).toBeGreaterThanOrEqual(TUNING.frost.perSwing);
   });
 
   it('a landing needs its hold to start within landWindowTicks of snapEnd', () => {

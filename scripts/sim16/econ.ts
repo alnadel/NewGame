@@ -128,6 +128,8 @@ function collector(): Sim16Collector {
       out.frostEarnedH = st.frostEarnedH ?? 0;
       out.frostSpilledH = st.frostSpilledH ?? 0;
       out.snapCashH = st.snapCashH ?? 0;
+      out.brittleSeen = st.brittleSeen ?? 0;
+      out.brittleSaved = st.brittleSaved ?? 0;
       out.snaps = st.snaps ?? 0;
       out.blooms = st.blooms ?? 0;
       out.gardenBlooms = st.gardenBlooms ?? 0;
@@ -162,6 +164,10 @@ const fullShare = (row: Sim16Row): number => per(total(row, 'fullTicks'), daylig
 const metersPerDay = (row: Sim16Row): number => per(total(row, 'frostEarnedH') / BANK.costH, daysPlayed(row));
 /** Meters filled a day (frostReady events: the v1.5 meter reaching full, or the Bank crossing a charge). */
 const fillsPerDay = (row: Sim16Row): number => per(total(row, 'frostFills'), daysPlayed(row));
+/** Whether a row plays the Frost Bank (its job's rules over V16_SHIP). */
+const bankOf = (row: Sim16Row): boolean => row.job.v16?.bank ?? V16_SHIP.bank;
+/** The meters/d column: the Bank's income, or the v1.5 meter's fills (it reports no income by source). */
+const metersCol = (row: Sim16Row): number => (bankOf(row) ? metersPerDay(row) : fillsPerDay(row));
 const snapsPerDay = (row: Sim16Row): number => per(total(row, 'snaps'), daysPlayed(row));
 const changesPerMin = (row: Sim16Row): number => per(total(row, 'levelChanges'), daylight(row) / 3600);
 const trickShare = (row: Sim16Row): number => per(total(row, 'trickUnits'), total(row, 'trickUnits') + total(row, 'shadeUnits'));
@@ -198,7 +204,7 @@ function table(rows: readonly Sim16Row[], days: number): void {
   console.log(`${'row'.padEnd(30)} mean×  x5%    chg/min trick%  full%  meters/d snaps/d bl/snap own%   lit40  noonSnap% priced/min  mean death`);
   for (const r of rows) {
     console.log(
-      `${r.name.padEnd(30)} ${f2(meanMult(r)).padStart(5)} ${pct(x5Share(r)).padStart(6)} ${changesPerMin(r).toFixed(1).padStart(7)} ${pct(trickShare(r)).padStart(7)} ${pct(fullShare(r)).padStart(6)} ${f2(metersPerDay(r)).padStart(8)} ${f2(snapsPerDay(r)).padStart(7)} ${f2(bloomsPerSnap(r)).padStart(7)} ${pct(ownLandShare(r)).padStart(6)} ${litAfterSnap(r).toFixed(1).padStart(6)} ${pct(noonSnapShare(r)).padStart(9)} ${pricedPerMin(r).toFixed(2).padStart(10)}  ${clock(meanMinutes(r), days)}`,
+      `${r.name.padEnd(30)} ${f2(meanMult(r)).padStart(5)} ${pct(x5Share(r)).padStart(6)} ${changesPerMin(r).toFixed(1).padStart(7)} ${pct(trickShare(r)).padStart(7)} ${pct(fullShare(r)).padStart(6)} ${f2(metersCol(r)).padStart(8)} ${f2(snapsPerDay(r)).padStart(7)} ${f2(bloomsPerSnap(r)).padStart(7)} ${pct(ownLandShare(r)).padStart(6)} ${litAfterSnap(r).toFixed(1).padStart(6)} ${pct(noonSnapShare(r)).padStart(9)} ${pricedPerMin(r).toFixed(2).padStart(10)}  ${clock(meanMinutes(r), days)}`,
     );
   }
 }
@@ -293,6 +299,7 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     rea('reactive safe', { policy: 'safe' }),
     rea('reactive plain plan-snap', { policy: 'plain', snap: 'plan' }),
     rea('reactive dial (dial-only)', undefined, { noMech: true }),
+    rea('reactive plain glass-seeking', { policy: 'plain', glass: true }),
     rung(2),
     rung(3),
     rung(4),
@@ -309,7 +316,7 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   console.log('');
   table(rows, ctx.days);
   incomeTable(rows);
-  const [plain, chase, naive, safe, plan, dial, h2, h3, h4, none] = rows as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
+  const [plain, chase, naive, safe, plan, dial, glass, h2, h3, h4, none] = rows as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
   const d = (a: Sim16Row, b: Sim16Row): number => meanMinutes(a) - meanMinutes(b);
   const sgn = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(0)} min`;
   const line = liner(ctx);
@@ -326,6 +333,9 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full meter ≤ 10% of daylight (Bank off: the v1.5 meter)', pct(fullShare(plain)), 'bank');
     line(fillsPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day (Bank off: the v1.5 meter fills passively)', f2(fillsPerDay(dial)), 'bank');
   }
+  // Economy iteration 1 (docs/V1_6_PLAN.md §6.2): planning beats hoarding (E1) and glass is a choice (E3).
+  line(d(plan, plain) >= 30, true, 'plan-snap outlives panic-snap by ≥ 30 min (mean; E1)', sgn(d(plan, plain)));
+  line(d(glass, plain) > 0, true, 'glass-seeking outlives glass-ignoring, same skill otherwise (mean; E3)', `${sgn(d(glass, plain))} (glass clusters saved ${pct(per(total(glass, 'brittleSaved'), total(glass, 'brittleSeen')))} vs ${pct(per(total(plain, 'brittleSaved'), total(plain, 'brittleSeen')))})`);
   const spd = snapsPerDay(plain);
   line(spd >= 0.5 && spd <= 0.9, false, 'reactive plain 0.5-0.9 snaps a day', f2(spd));
   for (const h of [h2, h3, h4]) {

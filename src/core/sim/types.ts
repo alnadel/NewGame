@@ -60,10 +60,11 @@ export interface V16Rules {
 /** Every v1.6 rule on. */
 export const V16_ALL: V16Rules = Object.freeze({ ring: true, bank: true, garden: true, brittle: true, flares: true, noonHeat: true });
 /**
- * The rules v1.6 ships with (the default when RunConfig.v16 leaves a rule unset). Calibration
- * (docs/V1_6_PLAN.md §11-§12) ships the Frost Bank off: at the bottom of its bloom-frost range
- * (25) the dial-only bot still filled 0.23 meters a day from income (gate ≤ 0.15) and naive greed
- * outlived plain play by +1336 min (gate ≤ 0), so the v1.5 meter plays instead. Every other rule is on.
+ * The rules v1.6 ships with (the default when RunConfig.v16 leaves a rule unset): every rule on
+ * (TUNING.bank.ships). Calibration (docs/V1_6_PLAN.md §11-§12) had shipped the Frost Bank off (the
+ * dial-only bot filled 0.23 meters a day from income, naive greed outlived plain play by +1336 min);
+ * economy iteration 1 (core README §16.4) prices its income (frost freezes only on a cool Nubs) and
+ * ships it on.
  */
 export const V16_SHIP: V16Rules = Object.freeze({ ring: true, bank: TUNING.bank.ships, garden: true, brittle: true, flares: true, noonHeat: true });
 /** Every v1.6 rule off: plays like v1.5. */

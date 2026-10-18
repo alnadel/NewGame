@@ -49,6 +49,12 @@ export interface BotOptions {
   snap?: 'panic' | 'plan';
   /** Reactive (mechanics on): slide to guide.flare in a warning's last 18 ticks. CORE-2. */
   preAim?: boolean;
+  /**
+   * Reactive (mechanics on): seek glass as the chase policy does (its guide.flake term, in its calm
+   * hours and Chill), with the policy's own gold (`sim --decisions` E3 row: glass-seeking against
+   * glass-ignoring, same skill otherwise). CORE-1.
+   */
+  glass?: boolean;
   /** Oracle: weights for the level's Dare (the Feat-seeking oracle). CORE-2. */
   feats?: boolean;
   /**

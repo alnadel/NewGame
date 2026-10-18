@@ -6,12 +6,15 @@
 // v1.6 economy (docs/V1_6_PLAN.md §2.2, §2.4; CORE-1): the Frost Bank (integer hundredths, income
 // only from risky acts, banked under a snap, the snap's cash-in), the Frost Garden (×2 growth and a
 // longer reach under the snap, blooms extend it, the cloud re-aims every 30 ticks) and guide.land.
+// Economy iteration 1 (core README §16.4): frost freezes only on a cool Nubs (coolFrost), a hot snap
+// cashes nothing, the cash-in stops at cashCapH, and the v1.5 meter (Bank off) holds a snap's trick
+// income and pays own landings, as the Bank does.
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, DT, TICK_HZ } from '../clock.ts';
 import { angleDiff, tanD } from '../dmath.ts';
 import { sunflowerParts, makeCaster } from '../gen/catalog.ts';
-import { biomeAtY, worldElevation, worldYAtDayTick } from '../gen/plan.ts';
+import { biomeAtY, noonHeatAt, worldElevation, worldYAtDayTick } from '../gen/plan.ts';
 import { cloudLumps } from '../gen/placer.ts';
 import { gatherScene, insertCaster, lowerBound } from '../gen/store.ts';
 import { BINS, createMaskScene, litMask, markRange } from '../intervals.ts';
@@ -42,17 +45,44 @@ export function budFacing(b: Bud, theta: number): boolean {
 }
 
 /**
- * v1.5 frost meter (the Frost Bank off): adds to the 0..1 meter (Cold Snap on, no snap running);
- * fires frostReady when it fills. frostH mirrors floor(100 · frost).
+ * v1.5 frost meter (the Frost Bank off): adds to the 0..1 meter (Cold Snap on); fires frostReady
+ * when it fills. frostH mirrors floor(100 · frost). Under a snap the passive income ('shade', flakes)
+ * pays nothing, as in v1.5, and a trick's (`held`: a bloom, a SWING, a parry, a glass cluster, an own
+ * landing) is held in s.snapBankH (at most TUNING.garden.bankCapH) and paid when the snap ends, as
+ * the Bank does (iteration 1, E4).
  */
-export function addFrost(s: SimState, amount: number): void {
-  if (!s.world.mech.snap || s.snapTicks > 0 || s.world.v16.bank) return;
+export function addFrost(s: SimState, amount: number, held = false): void {
+  if (!s.world.mech.snap || s.world.v16.bank) return;
+  if (s.snapTicks > 0) {
+    if (!held) return;
+    const h = Math.min(Math.round(amount * CHARGE_H), GARDEN.bankCapH - s.snapBankH);
+    if (h > 0) s.snapBankH += h;
+    return;
+  }
   const nb = s.nubs;
   if (nb.frost >= 1) return;
   const v = nb.frost + amount;
   nb.frost = v >= 1 ? 1 : v;
   nb.frostH = Math.floor(100 * nb.frost);
   if (v >= 1) s.events.push({ e: 'frostReady' });
+}
+
+/**
+ * Iteration 1: frost freezes only on a cool Nubs, at TUNING.bank.coolChill or more (the halo's gauge
+ * is white there, amber below).
+ */
+export function coolNubs(s: SimState): boolean {
+  return s.nubs.chill >= BANK.coolChill;
+}
+
+/**
+ * The frost a bloom banks now (hundredths; Bank on): bloomH when Nubs is fully shaded and cool as it
+ * blooms (a snap's cover counts), nothing in the Noon Heat. Greed in the sun, by a sweating Nubs or
+ * at noon grows shade and pumps the ring but banks no snap.
+ */
+function bloomFrostH(s: SimState): number {
+  if (s.nubs.f > 0 || !coolNubs(s) || noonHeatAt(s.world, s.day, s.dayTick) > 1) return 0;
+  return BANK.bloomH;
 }
 
 /** Frost income sources (the frostGain event's `source`). */
@@ -126,8 +156,8 @@ export function bloom(s: SimState, b: Bud): void {
   st.blooms = (st.blooms ?? 0) + 1;
   st.snow += B.snow;
   s.events.push({ e: 'bloom', id: b.id, x: b.x, y: b.y, snow: B.snow });
-  if (w.v16.bank) addFrostH(s, 'bloom', BANK.bloomH);
-  else addFrost(s, F.perBloom);
+  if (w.v16.bank) addFrostH(s, 'bloom', bloomFrostH(s));
+  else addFrost(s, F.perBloom, true);
   ringTrick(s, 'bloom', TUNING.ring.trick);
   if (s.snapTicks > 0 && w.v16.garden) gardenBloom(s, id);
 }
@@ -284,6 +314,28 @@ export function updateLandGuide(s: SimState): void {
 }
 
 /**
+ * The cash-in a snap cast at ring level `m` pays (hundredths): cashPerLevelH per level above x1 when
+ * Nubs is cool (a hot, panic snap pours nothing), never past `capH` in the meter (iteration 1).
+ */
+function cashInH(s: SimState, m: number, capH: number): number {
+  if (!coolNubs(s)) return 0;
+  return Math.max(0, Math.min(BANK.cashPerLevelH * (m - 1), capH - s.nubs.frostH));
+}
+
+/**
+ * The snap's cash-in resets the ring to x1 at 0. A PHEW on the snap's own tick (the snap cloud is the
+ * shade a panic snap finds) restores only up to this, never the ring just cashed (E4: the stretch's
+ * first level is the cashed ring's now).
+ */
+function resetRing(s: SimState): void {
+  const nb = s.nubs;
+  nb.mult = 1;
+  nb.ringCharge = 0;
+  nb.shadeTicks = 0;
+  nb.litStartMult = 1;
+}
+
+/**
  * Casts a Cold Snap now: a frosty cloud at z 0 (its shadow lies right under it whatever θ is) that
  * starts on Nubs and rides with him for snapSec (it follows the trail's chord over that time). The
  * meter empties. Returns false when no snap can be cast (meter not full, a snap on, no sun).
@@ -328,18 +380,17 @@ export function castSnap(s: SimState): boolean {
   s.landHold = 0;
   s.landSrc = -1;
   if (bank) {
-    // v1.6 Frost Bank: one charge, then the cash-in pours the ring into the frost (10 per level above x1).
+    // v1.6 Frost Bank: one charge, then the cash-in pours the ring into the frost (cashPerLevelH per
+    // level above x1) when Nubs is cool, never past cashCapH (iteration 1).
     nb.frostH -= BANK.costH;
     nb.frost = nb.frostH / CHARGE_H;
     const m = nb.mult;
-    const refundH = BANK.cashPerLevelH * (m - 1);
+    const refundH = cashInH(s, m, BANK.cashCapH);
     if (m > 1) {
       st.multDowns = (st.multDowns as number) + 1;
       s.events.push({ e: 'multDown', from: m, to: 1, cause: 'snap' });
     }
-    nb.mult = 1;
-    nb.ringCharge = 0;
-    nb.shadeTicks = 0;
+    resetRing(s);
     s.events.push({ e: 'snapCash', level: m, refundH });
     if (refundH > 0) {
       st.snapCashH = (st.snapCashH as number) + refundH;
@@ -353,14 +404,12 @@ export function castSnap(s: SimState): boolean {
       // (cashPerLevelH hundredths of a meter per level above x1, the ring back to x1), so precision
       // feeds snaps and so survival (§0's frost story; without it the ring paid only Snow).
       const m = nb.mult;
-      const refundH = Math.min(CHARGE_H, BANK.cashPerLevelH * (m - 1));
+      const refundH = cashInH(s, m, CHARGE_H);
       if (m > 1) {
         st.multDowns = (st.multDowns as number) + 1;
         s.events.push({ e: 'multDown', from: m, to: 1, cause: 'snap' });
       }
-      nb.mult = 1;
-      nb.ringCharge = 0;
-      nb.shadeTicks = 0;
+      resetRing(s);
       s.events.push({ e: 'snapCash', level: m, refundH });
       if (refundH > 0) {
         st.snapCashH = (st.snapCashH as number) + refundH;
@@ -387,7 +436,8 @@ export function updateSnap(s: SimState, inp: InputFrame): void {
     if (s.snapBankH > 0) {
       const h = s.snapBankH;
       s.snapBankH = 0;
-      creditFrostH(s, 'garden', h);
+      if (s.world.v16.bank) creditFrostH(s, 'garden', h);
+      else addFrost(s, h / CHARGE_H);
     }
     if (s.world.v16.garden && s.snapBlooms > 0) {
       s.landTicks = GARDEN.landWindowTicks;

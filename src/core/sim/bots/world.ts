@@ -42,8 +42,10 @@ const ORACLE_GLASS_SLACK = 10;
 /** Reactive bot, each guide refresh: add world terms to `score` (360 bins, already holding now/next/gold). */
 export function worldReactiveScore(ctx: BotHookCtx, s: SimState, score: Float64Array): void {
   const pol = ctx.opts.policy;
-  if (!ctx.mech || (pol !== 'chase' && pol !== 'naive') || s.nubs.chill < GLASS_CHILL) return;
-  if (pol === 'chase') {
+  // BotOptions.glass (CORE-1's E3 row): chase's glass term on any policy, at chase's hours.
+  const glass = ctx.opts.glass === true && pol !== 'naive';
+  if (!ctx.mech || (pol !== 'chase' && pol !== 'naive' && !glass) || s.nubs.chill < GLASS_CHILL) return;
+  if (pol === 'chase' || glass) {
     const m = minutesOfDay(s.day, s.dayTick);
     if (m >= CHASE_FROM && m <= CHASE_TO) return;
   }

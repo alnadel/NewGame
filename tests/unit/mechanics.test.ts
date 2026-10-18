@@ -148,10 +148,11 @@ describe('Sunflower buds', () => {
     expect(s.world.casters).toContain(c);
     expect(s.stats.blooms).toBe(1);
     expect(s.stats.snow).toBe(snow0 + B.snow);
-    // The Frost Bank ships off (V16_SHIP): the v1.5 meter takes perBloom (economy.test.ts covers the
-    // Bank's bloomH with the Bank on).
-    expect(s.world.v16.bank).toBe(false);
-    expect([s.nubs.frostH, s.nubs.frost]).toEqual([Math.floor(100 * TUNING.frost.perBloom), TUNING.frost.perBloom]);
+    // The Frost Bank ships on (V16_SHIP): a bloom grown in the sun (as here, on an emptied world)
+    // banks no frost (economy.test.ts covers bloomH from cool shade).
+    expect(s.world.v16.bank).toBe(true);
+    expect(s.nubs.f).toBeGreaterThan(0);
+    expect([s.nubs.frostH, s.nubs.frost]).toEqual([0, 0]);
     // A bloomed bud never grows again.
     expect(run(s, 60).some((e) => e.e === 'bloom')).toBe(false);
   });

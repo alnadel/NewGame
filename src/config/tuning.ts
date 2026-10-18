@@ -247,27 +247,39 @@ const tuning = {
   },
   /**
    * v1.6 Frost Bank (§2.2; CORE-1). The meter in integer hundredths, 0..capH (two snaps); a snap
-   * costs costH; income per act (bloom, fresh SWING at most once per swingEveryTicks, glass cluster
-   * saved, own landing, flare parry); the cash-in pays cashPerLevelH per ring level above x1. Start:
-   * runStartH (Endless, Daily, challenge), campaignStartH (Journey), teachStartH (the Cold Snap's
-   * teaching level); lesson runs start at 0.
+   * costs costH; income per act (bloom, fresh SWING at most once per swingEveryTicks, glass flake
+   * caught, glass cluster saved, own landing, flare parry); the cash-in pays cashPerLevelH per ring
+   * level above x1. Start: runStartH (Endless, Daily, challenge), campaignStartH (Journey),
+   * teachStartH (the Cold Snap's teaching level); lesson runs start at 0.
+   *
+   * Economy iteration 1 (core README §16.4): frost freezes only on a cool Nubs. A bloom pays bloomH
+   * when Nubs is fully shaded and at coolChill or more as it blooms, and nothing in the Noon Heat; a
+   * snap cast at coolChill or more cashes the ring in (a hot, panic snap pours nothing), never past
+   * cashCapH in the meter.
    */
   bank: {
     /**
      * Whether the Frost Bank ships (core V16_SHIP.bank reads it; the Journey's snapSave Dare is
-     * sized from the meter that ships). Off since the v1.6 calibration (core README §16.3).
+     * sized from the meter that ships). On since economy iteration 1 (core README §16.4).
      */
-    ships: false,
+    ships: true,
     capH: 200,
     costH: 100,
     bloomH: 25,
-    swingH: 5,
+    /** A fresh SWING pumps the ring and pays no frost (iteration 1: 5 made a dial-follower's meter fill). */
+    swingH: 0,
     swingEveryTicks: 180,
-    clusterH: 10,
+    clusterH: 25,
+    /** Each glass flake caught (iteration 1): partial glass saves pay too, so the white arc is a choice. */
+    glassFlakeH: 3,
     landH: 5,
-    parryH: 10,
-    cashPerLevelH: 10,
-    runStartH: 0,
+    parryH: 5,
+    cashPerLevelH: 25,
+    /** Chill at or above which frost freezes: blooms bank it and a snap cashes the ring (the halo's gauge turns amber below it). */
+    coolChill: 40,
+    /** A cash-in never fills the meter past this (one and a half snaps): an overflow snap pours at most half a pip. */
+    cashCapH: 150,
+    runStartH: 100,
     campaignStartH: 50,
     teachStartH: 100,
   },
