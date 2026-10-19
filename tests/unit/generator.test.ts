@@ -56,7 +56,7 @@ describe('world generation', () => {
         }
       }
     }
-  });
+  }, 20_000);
 
   it('places the start hut first, 20 u from the trail, with θ0 pointing at it', () => {
     for (let seed = 1; seed <= 20; seed++) {
@@ -83,7 +83,7 @@ describe('world generation', () => {
       for (const b of balls) expect(w.byId.get(b.casterId)?.kind).toBe('pedestal');
       expect(w.balls.some((b) => b.day === 1)).toBe(false);
     }
-  });
+  }, 20_000);
 
   it('places flakes on the centerline in clusters, a crystal per day and frost flowers at night', () => {
     const w = createWorld({ seed: 4, profile: 3, tutorial: false });

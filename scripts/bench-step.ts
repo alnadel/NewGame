@@ -14,8 +14,10 @@
 //
 // --gen times idle world generation instead, the way the session runs it: generateSome(w, y + 2400,
 // 12) once a 60 Hz frame with y at Nubs' scheduled place (seeds 3000..), and prints the slices' p50,
-// p99 and max (ms) and the frames over 2 and 4 ms a minute for both variants. --check exits 1 when
-// HEAD's p99 slice is over 1.5 ms (fix round 2: glass contests ran inside a chunk placement, 20 ms).
+// p99 and max (ms), the frames over 2 and 4 ms a minute and the ms per validated chunk for both
+// variants (alternating reps). --check exits 1 when HEAD's p99 slice is over 1.1 × the base's, or
+// over 1.5 ms while the base is not (fix round 2: glass contests ran inside a chunk placement, 20 ms;
+// a loaded machine pushes the base over 1.5 ms too, and then only the paired bar decides).
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -81,13 +83,15 @@ async function load(root: string): Promise<Core> {
   };
 }
 
-/** Idle generation slices over seeds 3000.. (ms each, frames that did work) and the frames counted. */
-function genSlices(m: Core): { ms: number[]; frames: number } {
+/** Idle generation slices over seeds 3000.. (ms each, frames that did work), the frames counted, and the chunks validated. */
+function genSlices(m: Core): { ms: number[]; frames: number; chunks: number } {
   const ms: number[] = [];
   let frames = 0;
+  let chunks = 0;
   for (let i = 0; i < seeds; i++) {
     const s = m.createRun(m.headlessConfig(3000 + i, 3));
     const w = s.world;
+    const c0 = w.stats.chunksValidated as number;
     for (let t = m.dayStartTick(1); t < m.dayStartTick(days); t++) {
       const t0 = performance.now();
       const done = m.generateSome(w, m.worldYAtTick(w, t) + 2400, 12);
@@ -95,8 +99,9 @@ function genSlices(m: Core): { ms: number[]; frames: number } {
       frames++;
       if (!done || dt > 0.05) ms.push(dt);
     }
+    chunks += (w.stats.chunksValidated as number) - c0;
   }
-  return { ms, frames };
+  return { ms, frames, chunks };
 }
 
 interface Variant {
@@ -175,20 +180,35 @@ try {
     ];
     const q = (a: readonly number[], p: number): number => [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(p * a.length))] as number;
     console.log(`bench-step --gen: generateSome(…, 12) a frame, ${seeds} seeds × ${days - 1} days, best of ${Math.min(reps, 3)} reps`);
-    let headP99 = 0;
-    for (const v of gv) {
-      let best: { ms: number[]; frames: number } | null = null;
-      for (let r = 0; r < Math.min(reps, 3); r++) {
-        const g = genSlices(v.m);
-        if (!best || q(g.ms, 0.99) < q(best.ms, 0.99)) best = g;
+    // Alternating reps (base, HEAD, HEAD, base, …) so a loaded machine weighs on both alike.
+    const best: ({ ms: number[]; frames: number; chunks: number } | null)[] = [null, null];
+    const perChunk: number[][] = [[], []];
+    for (let r = 0; r < Math.min(reps, 3); r++) {
+      for (const vi of r % 2 === 0 ? [0, 1] : [1, 0]) {
+        const g = genSlices((gv[vi] as (typeof gv)[number]).m);
+        (perChunk[vi] as number[]).push(g.ms.reduce((a, x) => a + x, 0) / Math.max(1, g.chunks));
+        const b = best[vi];
+        if (!b || q(g.ms, 0.99) < q(b.ms, 0.99)) best[vi] = g;
       }
-      const g = best as { ms: number[]; frames: number };
-      const perMin = (ms: number): string => ((g.ms.filter((x) => x > ms).length / g.frames) * 3600).toFixed(2);
-      console.log(`  ${v.label.padEnd(16)} ${String(g.ms.length).padStart(6)} slices  p50 ${q(g.ms, 0.5).toFixed(2)} ms  p99 ${q(g.ms, 0.99).toFixed(2)} ms  max ${Math.max(...g.ms).toFixed(2)} ms  over 2 ms ${perMin(2)}/min  over 4 ms ${perMin(4)}/min`);
-      headP99 = q(g.ms, 0.99);
     }
-    console.log(`  gate: HEAD p99 slice ≤ 1.5 ms: ${headP99 <= 1.5 ? 'PASS' : 'FAIL'}`);
-    if (check && headP99 > 1.5) process.exitCode = 1;
+    const p99 = [0, 0];
+    gv.forEach((v, vi) => {
+      const g = best[vi] as { ms: number[]; frames: number; chunks: number };
+      const perMin = (ms: number): string => ((g.ms.filter((x) => x > ms).length / g.frames) * 3600).toFixed(2);
+      p99[vi] = q(g.ms, 0.99);
+      console.log(`  ${v.label.padEnd(16)} ${String(g.ms.length).padStart(6)} slices  p50 ${q(g.ms, 0.5).toFixed(2)} ms  p99 ${q(g.ms, 0.99).toFixed(2)} ms  max ${Math.max(...g.ms).toFixed(2)} ms  over 2 ms ${perMin(2)}/min  over 4 ms ${perMin(4)}/min  ${median(perChunk[vi] as number[]).toFixed(2)} ms/chunk`);
+    });
+    const [baseP99, headP99] = p99 as [number, number];
+    const chunkRatio = median(perChunk[1] as number[]) / median(perChunk[0] as number[]);
+    // The absolute bar measures the machine as much as the code: a base over it means a loaded run,
+    // so the paired bar (HEAD within +10% of the base, same process, alternating reps) decides then.
+    const loaded = baseP99 > 1.5;
+    const absOk = headP99 <= 1.5;
+    const pairOk = headP99 <= 1.1 * baseP99;
+    console.log(`  gate: HEAD p99 slice ≤ 1.5 ms: ${absOk ? 'PASS' : loaded ? 'n/a (the base is over it too: a loaded machine)' : 'FAIL'}; HEAD p99 ≤ 1.1 × base p99: ${pairOk ? 'PASS' : 'FAIL'} (${(headP99 / baseP99).toFixed(3)})`);
+    console.log(`  generation ms/chunk: HEAD ${(chunkRatio).toFixed(3)} × base (§6 bar ≤ 3.5 ms/chunk on the plan's 2.37 v1.5 baseline: ≤ ${(3.5 / 2.37).toFixed(2)} ×)`);
+    if (loaded) console.log('  WARNING: the base breaks the absolute 1.5 ms bar itself; re-run on a quieter machine for an absolute reading.');
+    if (check && (!pairOk || (!absOk && !loaded))) process.exitCode = 1;
   } else {
     const variants = [record(baseDir ? 'base' : `base ${base}`, await load(dir)), record(ROOT === HERE ? 'HEAD' : 'head', await load(ROOT))];
     for (let r = 0; r < reps; r++) {

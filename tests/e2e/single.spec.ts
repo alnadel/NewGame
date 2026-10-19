@@ -2,7 +2,7 @@
 // file://, plays a run to Results without console errors, requests no service worker, manifest or
 // ./assets/ file, and its share text links to the hosted game (VITE_SHARE_URL in .env), never file:.
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { waitForScreen, watchErrors } from './helpers.ts';
@@ -20,8 +20,21 @@ function shareUrlFromEnv(): string {
 
 test.skip(({ isMobile }) => isMobile, 'one browser is enough for a file:// build (and one build:single at a time)');
 
+/** The newest modification time (ms) of a file under `dir`. */
+function newest(dir: string): number {
+  let t = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    t = Math.max(t, e.isDirectory() ? newest(p) : statSync(p).mtimeMs);
+  }
+  return t;
+}
+
 test.beforeAll(() => {
-  if (!existsSync(html)) execSync('npm run build:single', { cwd: root, stdio: 'inherit' });
+  // Rebuilt whenever a source is newer than the build, so file:// coverage plays the code under test
+  // (a build left from an earlier commit was played before).
+  const src = Math.max(newest(`${root}src`), ...['index.html', 'vite.config.ts', '.env', 'scripts/inline-build.mjs'].map((f) => statSync(`${root}${f}`).mtimeMs));
+  if (!existsSync(html) || statSync(html).mtimeMs < src) execSync('npm run build:single', { cwd: root, stdio: 'inherit' });
 });
 
 test('the single-file build plays from file:// and shares the hosted link', async ({ page }) => {

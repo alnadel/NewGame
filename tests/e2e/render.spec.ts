@@ -269,8 +269,17 @@ test.describe('draw-call budget', () => {
     await keepAlive(page);
     await page.mouse.click(195, 380);
     await waitForScreen(page, 'play');
-    await page.waitForTimeout(1000);
-    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
+    // Frozen at a game time, not a wall-clock wait: under CPU load a fixed wait froze an earlier,
+    // different scene (86 strokes against 74). 9:12 AM, 12 game minutes after the start.
+    const m0 = await page.evaluate(() => window.__SHADY_TEST__!.state().minutes);
+    await page.waitForFunction((m) => {
+      const h = window.__SHADY_TEST__!;
+      if (h.state().minutes < m + 12) return false;
+      h.setTimeScale(0);
+      return true;
+    }, m0, { polling: 'raf', timeout: 20_000 });
+    const frozenAt = await page.evaluate(() => window.__SHADY_TEST__!.state().minutes);
+    expect(frozenAt - m0).toBeLessThanOrEqual(13);
     await page.waitForTimeout(300);
     const per = await page.evaluate(async () => {
       const w = window as unknown as { __calls: Record<string, number> };

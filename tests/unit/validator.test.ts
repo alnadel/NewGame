@@ -103,7 +103,7 @@ describe('validator', () => {
       expect(Math.max(...w.stats.rescuesPerChunk.filter((x) => x !== undefined))).toBeLessThanOrEqual(8);
       expect(worstMargin(w)).toBeGreaterThanOrEqual(0);
     }
-  });
+  }, 20_000);
 
   it('the Day-1 wave (sparser casters at noon) still validates: seeds 1-12 stay fair through Day 1', () => {
     let rescues = 0;

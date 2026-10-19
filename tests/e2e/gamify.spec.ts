@@ -214,6 +214,9 @@ test('Settings > Unlock all levels (testing) opens every feature for a new playe
 });
 
 test('Results: the stars, then the XP meter settles, then the reveal, then the actions arm', async ({ page }) => {
+  // Its animations run on wall-clock time end to end (stars, the meter's roll-over, the reveal); a
+  // loaded machine stretches them past the default test budget, never the order checked below.
+  test.slow();
   // 5 XP short of Rank 5, whose reward is a Snow Globe.
   await seedSave(page, v4({ xp: 695 }));
   await openGame(page);
