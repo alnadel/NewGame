@@ -207,11 +207,12 @@ export interface NubsState {
   /** v1.5: the last tick Nubs was in deep shade (deepEnter needs TUNING.deep.reenterTicks out of it). */
   deepTick: number;
   /**
-   * v1.6 (economy iteration 2): the center sample is shaded this tick by something other than the
-   * Cold Snap's cloud (a caster, another cloud, the eclipse, or no sun): a snap's cooling cap
-   * (SimState.snapChillCap) holds only while it is false.
+   * v1.6: the lit fraction `f` with the Cold Snap's cloud left out (glare weighted 2, as in `f`; 0
+   * with no sun or in the eclipse), and deep shade on the same terms. A snap's cooling cap
+   * (SimState.snapChillCap) never holds Chill below what this shade alone would give it.
    */
-  realShade: boolean;
+  fReal: number;
+  deepReal: boolean;
   shadeTicks: number;
   litTicks: number;
   x5Ticks: number;

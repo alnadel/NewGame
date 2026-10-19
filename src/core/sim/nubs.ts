@@ -62,12 +62,12 @@ export function computeCoverage(s: SimState): void {
   nb.cloudId = -1;
   nb.glareBallId = -1;
   nb.deep = false;
-  nb.realShade = false;
+  nb.deepReal = false;
   if (!s.sunUp || s.eclipseOn) {
     nb.w.fill(0);
     nb.f = 0;
+    nb.fReal = 0;
     nb.glare = 0;
-    nb.realShade = true;
     return;
   }
   const { ux, uy, cot } = s;
@@ -116,21 +116,26 @@ export function computeCoverage(s: SimState): void {
 
   const snapNotDeep = w.v16.garden;
   let sum = 0;
+  /** The same weights with the Cold Snap's cloud left out (its cooling cap reads them). */
+  let sumReal = 0;
   let glare = 0;
   let bestShaderD = Infinity;
-  /** Shadow sources (casters and clouds) over the center sample. */
+  /** Shadow sources (casters and clouds) over the center sample; and those that are not the snap. */
   let centerSources = 0;
+  let centerReal = 0;
   for (let k = 0; k < SAMPLES; k++) {
     const px = x + (SAMPLE_DX[k] as number);
     const py = y + (SAMPLE_DY[k] as number);
     let shaded = false;
+    let real = false;
     for (let i = 0; i < nc; i++) {
       const c = cand[i] as Caster;
       if (!casterShades(c, px, py, ux, uy, cot)) continue;
       shaded = true;
+      real = true;
       if (k !== 0) break;
       centerSources++;
-      nb.realShade = true;
+      centerReal++;
       // Center sample: remember the nearest caster providing its shade (death line, Melt Map).
       const d = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
       if (d < bestShaderD) {
@@ -145,7 +150,10 @@ export function computeCoverage(s: SimState): void {
         cloudHits[i] = (cloudHits[i] as number) + 1;
         // v1.6 T3 (Garden on): the Cold Snap's cloud is not a deep-shade source.
         if (k === 0 && !(snapNotDeep && cl.kind === 'snap')) centerSources++;
-        if (k === 0 && cl.kind !== 'snap') nb.realShade = true;
+        if (cl.kind !== 'snap') {
+          real = true;
+          if (k === 0) centerReal++;
+        }
       }
     }
     let inG = false;
@@ -160,11 +168,14 @@ export function computeCoverage(s: SimState): void {
     const wk = inG ? 2 : shaded ? 0 : 1;
     nb.w[k] = wk;
     sum += wk;
+    sumReal += inG ? 2 : real ? 0 : 1;
     if (inG) glare++;
   }
   nb.f = sum / SAMPLES;
+  nb.fReal = sumReal / SAMPLES;
   nb.glare = glare;
   nb.deep = sum === 0 && centerSources >= 2 && w.mech.deep;
+  nb.deepReal = sumReal === 0 && centerReal >= 2 && w.mech.deep;
   for (let i = 0; i < ncl; i++) {
     const cl = candClouds[i] as Cloud;
     if (cloudHits[i] === SAMPLES && cl.kind !== 'snap') {
@@ -387,13 +398,21 @@ export function applyDaylight(s: SimState): void {
   const deep = nb.deep;
   const regen = deep ? s.params.regen * DEEP.regenMul : s.params.regen;
   // v1.6 Noon Heat (CORE-2, T1): the drain × noonHeatAt between 11 AM and 1 PM, as the validator's DP charges it.
-  let c = nb.chill + (-effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * f + regen * Math.max(0, 1 - f)) * DT;
+  const drain = effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick);
+  let c = nb.chill + (-drain * f + regen * Math.max(0, 1 - f)) * DT;
   // v1.6 (fix round 3): a missed Endless flare's scorch caps the tank until nightfall (sim/flares.ts).
   let cap = nb.maxChill - s.flareScorch;
   // Economy iteration 2: a snap cools Nubs only up to s.snapChillCap (the gauge it was cast at; it
-  // never takes Chill away), and only while its cloud is his only shade: real shade under it (a
-  // caster or another cloud over his center) refills Chill as it would without the snap.
-  if (s.snapTicks > 0 && !nb.realShade && s.snapChillCap < cap) cap = Math.max(s.snapChillCap, nb.chill);
+  // never takes Chill away). Real shade under it refills Chill exactly as it would without the snap
+  // (fix round 2 of the iteration-2 review): the cap is at least the Chill this tick would reach
+  // with the snap's cloud left out (nb.fReal, nb.deepReal), so a shadow over his center alone
+  // refills what it would refill, not the snap's full cover.
+  if (s.snapTicks > 0 && s.snapChillCap < cap) {
+    const fr = nb.fReal;
+    const regenReal = nb.deepReal ? s.params.regen * DEEP.regenMul : s.params.regen;
+    const cReal = nb.chill + (-drain * fr + regenReal * Math.max(0, 1 - fr)) * DT;
+    cap = Math.max(s.snapChillCap, nb.chill, Math.min(cReal, cap));
+  }
   if (c > cap) c = cap;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
   if (s.lessonOn || s.lessonGrace > 0) {

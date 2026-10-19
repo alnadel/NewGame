@@ -511,6 +511,51 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     expect(after(true, true)).toBeCloseTo(plain, 6);
   });
 
+  it("under a red-hot snap, shade over part of Nubs refills Chill as it would without the snap, never the snap's full cover", () => {
+    // A 0.1-high pad under Nubs, re-laid every tick (he walks off it): its shadow covers the samples
+    // in [dx0, dx1] × [dy0, dy1] around him and no other (review r5: a shadow over his center alone
+    // lifted the cap and the snap's cover refilled at the full 30 a second).
+    const laid = (snap: boolean, dx0: number, dx1: number, dy0: number, dy1: number): { chill: number; fReal: number; f: number } => {
+      const s = lab({ startFrost: 1 });
+      s.nubs.chill = 20;
+      step(s, snap ? SNAP : NO_INPUT);
+      if (snap) expect(s.snapTicks).toBeGreaterThan(0);
+      let fReal = -1;
+      let f = -1;
+      for (let i = 0; i < 30; i++) {
+        s.world.casters.length = 0;
+        s.world.byId.clear();
+        const cx = s.nubs.x + (dx0 + dx1) / 2;
+        const cy = s.nubs.y + (dy0 + dy1) / 2;
+        insertCaster(s.world, makeCaster({ id: 5_000_000 + i, kind: 'rock', name: 'the Test Rock', biome: 'meadow', x: cx, y: cy, rot: 0, parts: [makePrism(rectPoly(cx, cy, dx1 - dx0, dy1 - dy0, 1, 0), 0.1)], side: 1, rescue: false, gate: false, ballId: -1, chunk: 0 }));
+        if (i === 0) s.nubs.chill = 20;
+        step(s, NO_INPUT);
+        if (i === 0) {
+          fReal = s.nubs.fReal;
+          f = s.nubs.f;
+        } else {
+          expect(s.nubs.fReal).toBe(fReal);
+        }
+      }
+      return { chill: s.nubs.chill, fReal, f };
+    };
+    // The pad covers the center sample only: lit 0.8 without the snap, and Chill drains. Under the
+    // red-hot snap it only shades: Chill stays where it was cast (it never takes Chill away).
+    const centreOff = laid(false, -2, 2, -1.5, 2.5);
+    expect([centreOff.f, centreOff.fReal]).toEqual([0.8, 0.8]);
+    expect(centreOff.chill).toBeLessThan(15);
+    const centreOn = laid(true, -2, 2, -1.5, 2.5);
+    expect([centreOn.f, centreOn.fReal]).toEqual([0, 0.8]);
+    expect(centreOn.chill).toBeCloseTo(20, 6);
+    // Four of five samples covered: the shade refills on its own, and with the snap it refills the same.
+    const fourOff = laid(false, -7, 7, -1.5, 7.5);
+    expect(fourOff.fReal).toBeCloseTo(0.2, 9);
+    expect(fourOff.chill).toBeGreaterThan(21);
+    const fourOn = laid(true, -7, 7, -1.5, 7.5);
+    expect([fourOn.f, fourOn.fReal]).toEqual([0, fourOff.fReal]);
+    expect(fourOn.chill).toBeCloseTo(fourOff.chill, 9);
+  });
+
   it('frost does not freeze in the Noon Heat: a snap there pours nothing (snapCash.noon), the ring is cashed all the same', () => {
     const noon = lab({ startFrost: 1, startDay: 2, startT: dayTicks(2) / 120 });
     debugRing(noon, 4, 0);

@@ -112,7 +112,8 @@ export function hashState(s: SimState): string {
   feed(st.snapCashH ?? 0);
   feed(st.gardenBlooms ?? 0);
   feed(st.snapLandsOwn ?? 0);
-  feed(nb.realShade ? 1 : 0);
+  feed(nb.fReal);
+  feed(nb.deepReal ? 1 : 0);
   // State that steers the next ticks: the bleed exemption after a bud grew, the endpoint a pending
   // hand-off will record, this snap's own sunflowers (the landing) and the snap cloud's re-aimed path.
   feed(nb.budGrewTick);
