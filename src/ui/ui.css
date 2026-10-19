@@ -1177,7 +1177,8 @@
 
 .sui:not([data-screen='play']) .cue { display: none; }
 
-.sui.is-rm .cue { transform: translate(-50%, 0); }
+/* Reduced motion: no slide, the same bottom anchor (a top anchor hung the cue over the dial). */
+.sui.is-rm .cue { transform: translate(-50%, -100%); }
 
 /* ===== Play ===== */
 

@@ -67,6 +67,31 @@ test.describe('comfort ladder (A2)', () => {
 });
 
 test.describe('first-run lesson (A5)', () => {
+  test('the cue line sits above the dial\'s outer rims, with reduced motion on and off', async ({ browser }) => {
+    // Its bottom edge is anchored 8 px above the R + 25 rims (the glass and flare rims); a
+    // reduced-motion rule that anchored its top instead hung it over the ring (review r5).
+    for (const reducedMotion of ['on', 'off'] as const) {
+      const ctx = await browser.newContext({ viewport: { width: 360, height: 640 } });
+      const page = await ctx.newPage();
+      await seedSave(page, { ...OPEN_SAVE, settings: { ...OPEN_SAVE.settings, reducedMotion } });
+      await openGame(page, 'test=1&seed=42');
+      const v = page.viewportSize()!;
+      await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+      await waitForScreen(page, 'play');
+      await expect.poll(() => page.evaluate(() => document.querySelector('.cue')?.classList.contains('is-on') ?? false), { timeout: 10_000 }).toBe(true);
+      await page.waitForTimeout(300);
+      const g = await page.evaluate(() => {
+        const cue = document.querySelector('.cue')!.getBoundingClientRect();
+        const canvas = document.querySelector('canvas#game')!.getBoundingClientRect();
+        const m = window.__SHADY_TEST__!.mech();
+        return { rm: document.querySelector('.sui')!.classList.contains('is-rm'), bottom: cue.bottom, rims: canvas.top + m.dialY - m.dialR - 25 };
+      });
+      expect(g.rm, reducedMotion).toBe(reducedMotion === 'on');
+      expect(g.bottom, `reduced motion ${reducedMotion}`).toBeLessThanOrEqual(g.rims - 8 + 0.5);
+      await ctx.close();
+    }
+  });
+
   test('a fresh first run cannot melt inside the lesson; the cues say keep shade, then drag, always the hint\'s way', async ({ page }) => {
     const errors = watchErrors(page);
     await recordCues(page);
