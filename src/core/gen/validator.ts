@@ -61,6 +61,28 @@ export interface ValidationJob {
   flareTry: number;
   flareRows: number;
   flareRise0: number;
+  /**
+   * The keep test's candidate and rows (one world's: generation slices of different worlds may
+   * interleave, so nothing of a test in progress lives at module level). Reused across a world's jobs.
+   */
+  readonly keep: KeepScratch;
+}
+
+/** A keep test in progress (keepStep): the candidate, its rows without and with the lift, and its per-bin lit counts. */
+interface KeepScratch {
+  readonly base: Uint8Array;
+  readonly row: Uint8Array;
+  readonly cnt: Uint8Array;
+  readonly cand: { -readonly [K in keyof Flare]: Flare[K] };
+}
+
+function keepScratch(): KeepScratch {
+  return {
+    base: new Uint8Array(BINS),
+    row: new Uint8Array(BINS),
+    cnt: new Uint8Array(BINS),
+    cand: { id: 0, day: 0, d: 0, warnTick: 0, riseTick: 0, holdTick: 0, fallTick: 0, endTick: 0, state: FLARE_PENDING },
+  };
 }
 
 const scene = createMaskScene();
@@ -240,6 +262,7 @@ export function beginValidation(w: World, k: number): ValidationJob {
     flareTry: 0,
     flareRows: 0,
     flareRise0: 0,
+    keep: w.lastJob ? w.lastJob.keep : keepScratch(),
   };
   for (let s = 0; s < slots; s++) stepGeometry(w, j0 + s - 1 - pre, job, s);
   if (w.flares.length > 0) startFlareTest(w, job, findFlareTest(w, job));
@@ -582,11 +605,8 @@ const FLARE_TRIES: readonly number[] = [0, ...FL.shiftsSec.map((sec) => Math.rou
 const HOLD_TICKS = FL.holdTicks;
 /** Keep-test rows: the hold's first tick without the flare, then every hold tick with it. */
 export const KEEP_ROWS = HOLD_TICKS + 1;
-const keepBase = new Uint8Array(BINS);
-const keepRowBuf = new Uint8Array(BINS);
-const keepCnt = new Uint8Array(BINS);
+/** keepRow's mask scene (filled and read within one call, so it can be shared). */
 const keepScene = createMaskScene();
-const keepCand: { -readonly [K in keyof Flare]: Flare[K] } = { id: 0, day: 0, d: 0, warnTick: 0, riseTick: 0, holdTick: 0, fallTick: 0, endTick: 0, state: FLARE_PENDING };
 /** Eclipse window length (ticks; gen/world.ts ECLIPSE_SEC, not imported to keep the module graph acyclic). */
 const ECLIPSE_TICKS = 6 * TICK_HZ;
 
@@ -820,6 +840,7 @@ function rejectCandidate(job: ValidationJob): number {
  */
 function keepStep(w: World, job: ValidationJob): number {
   const f = w.flares[job.flareQ] as Flare;
+  const { base: keepBase, row: keepRowBuf, cnt: keepCnt, cand: keepCand } = job.keep;
   if (job.flareRows === 0) {
     // Set up the next candidate that fits; none left: drop the flare where it stood.
     for (;;) {

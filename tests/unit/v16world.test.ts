@@ -298,6 +298,39 @@ describe('Heat Flares (§2.5)', () => {
     for (const f of w20.flares) expect(f.state !== FLARE_KEPT || w20.flareParry.has(f.id), `flare ${f.id}`).toBe(true);
   }, 60_000);
 
+  it('two flare worlds generated in alternating small slices equal each one generated alone (the keep test keeps no state between slices outside its world)', () => {
+    const digest = (w: World): string =>
+      JSON.stringify({
+        flares: w.flares.map((f) => [f.id, f.state, f.warnTick, f.riseTick, f.holdTick, f.fallTick, f.endTick]),
+        parry: [...w.flareParry].map(([id, m]) => [id, Array.from(m).join('')]),
+        casters: w.casters.map((c) => [c.id, c.x, c.y, c.rescue]),
+        pickups: w.pickups.map((p) => [p.id, p.x, p.y, p.brittle, p.cluster]),
+      });
+    const yT = dayStartY(4);
+    for (const [a, b] of [
+      [3, 103],
+      [6, 106],
+    ] as const) {
+      const cfgA = headlessConfig(a);
+      const cfgB = { ...headlessConfig(b), mode: 'daily' as const };
+      const soloA = createWorld(cfgA);
+      while (!generateSome(soloA, yT, 3));
+      const soloB = createWorld(cfgB);
+      while (!generateSome(soloB, yT, 3));
+      const wa = createWorld(cfgA);
+      const wb = createWorld(cfgB);
+      let da = false;
+      let db = false;
+      while (!da || !db) {
+        if (!da) da = generateSome(wa, yT, 3);
+        if (!db) db = generateSome(wb, yT, 3);
+      }
+      expect(soloA.flares.some((f) => f.state === FLARE_KEPT), `seed ${a}: a kept flare`).toBe(true);
+      expect(digest(wa), `seed ${a}`).toBe(digest(soloA));
+      expect(digest(wb), `seed ${b}`).toBe(digest(soloB));
+    }
+  }, 60_000);
+
   it('a missed Endless flare scorches the tank until nightfall or a snap; a parry never does; the Journey never scorches (fix round 3)', () => {
     const FL = TUNING.flare;
     const miss = (cfg: ReturnType<typeof headlessConfig>, lit: boolean): SimState => {
