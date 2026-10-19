@@ -53,7 +53,7 @@ const AFTER_SNAP = 40;
 /** Oracle, Bank and flares on: holding two charges, it keeps one for a kept flare of lift ≥ FLARE_D and casts it in the rise or hold when lit. */
 const FLARE_D = 8;
 /** Oracle, Bank on, outside the Journey: its lit-and-low snap waits for a plan slack under ORACLE_TIGHT, unless it holds two charges. */
-const ORACLE_TIGHT = 20;
+const ORACLE_TIGHT = 25;
 
 /** True when a Cold Snap can be cast this tick (same rule as bots.ts). */
 function snapReady(s: SimState): boolean {
@@ -272,7 +272,8 @@ export function econOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slac
   // Chill under snapChill, where the gauge is white or high amber and a snap pours and cools in full),
   // but frost is earned, so a lone charge waits for a tight plan: snapping whenever lit and low emptied
   // the meter by Day 7 (seed 181), and iteration 1's last-steps-before-the-red snap only shades under
-  // the gauge rule (seeds 97 and 64 heat died with a charge spent red-hot).
+  // the gauge rule (seeds 97 and 64 heat died with a charge spent red-hot). Slack 25: 20 left seed 9
+  // (long) snapping at Chill 22 on Day 7; 30 and 40 lost seeds 181 and 64 (heat) again.
   if (s.level === null) snap = snap && (slack < ORACLE_TIGHT || s.nubs.frostH >= 2 * TUNING.bank.costH);
   if (snap) return true;
   if (s.nubs.f === 0) return false;
