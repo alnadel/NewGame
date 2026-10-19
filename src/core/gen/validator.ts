@@ -98,12 +98,11 @@ const win = new Float64Array(BINS);
 export function slidingMaxCircular(src: Float64Array, r: number, out: Float64Array, srcOff = 0): void {
   const m = 2 * r + 1;
   const len = BINS + 2 * r;
-  for (let i = 0; i < len; i++) {
-    let s = i - r;
-    if (s < 0) s += BINS;
-    else if (s >= BINS) s -= BINS;
-    ext[i] = src[srcOff + s] as number;
-  }
+  // The row extended circularly by r bins each side (three straight copies: no per-bin wrap test).
+  const tail = srcOff + BINS - r;
+  for (let i = 0; i < r; i++) ext[i] = src[tail + i] as number;
+  for (let i = 0; i < BINS; i++) ext[r + i] = src[srcOff + i] as number;
+  for (let i = 0; i < r; i++) ext[r + BINS + i] = src[srcOff + i] as number;
   for (let start = 0; start < len; start += m) {
     const end = start + m < len ? start + m : len;
     let acc = ext[start] as number;
@@ -926,10 +925,12 @@ function keepStep(w: World, job: ValidationJob): number {
 
 /** Work units charged for a rescue (gen/world.ts charges 8 for placing a chunk). */
 const RESCUE_COST = 8;
+/** DP slots a work unit pays for (a slot's DP costs about a third of a lit row). */
+const DP_SLOTS_PER_UNIT = 3;
 
 /**
- * Advances a validation job by at most `budget` work units (one per lit computation; the DP is
- * cheap and runs in the same call). Returns the units used.
+ * Advances a validation job by about `budget` work units (one per lit computation, one per
+ * DP_SLOTS_PER_UNIT DP slots, RESCUE_COST a rescue). Returns the units used.
  */
 export function stepValidation(w: World, job: ValidationJob, budget: number): number {
   const maxC = paramsAt(w, 1).maxChill;
@@ -961,7 +962,16 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
     if (used >= budget) return used;
     let i = job.dpFrom;
     let resume = -1;
+    let paused = false;
     for (; i <= job.pre + job.n; i++) {
+      // The DP is charged too (DP_SLOTS_PER_UNIT slots a unit) and pauses at the budget: it resumes
+      // at slot i from the rows it wrote (review r5: a chunk's whole DP in one slice was most of the
+      // generation frames over 1 ms). Where it pauses never changes the result.
+      if (i > job.dpFrom && (i - job.dpFrom) % DP_SLOTS_PER_UNIT === 0 && ++used >= budget) {
+        job.dpFrom = i;
+        paused = true;
+        break;
+      }
       const best = dpSlot(w, job, i, slotDelta(w, job, i), maxC);
       // The floor scales with the level's tank (ration: 50 of 100 at Day 1 keeps the ratio).
       const floor = (paramsAt(w, job.sDay[i] as number).floor * maxC) / TUNING.nubs.maxChill;
@@ -977,6 +987,7 @@ export function stepValidation(w: World, job: ValidationJob, budget: number): nu
         break;
       }
     }
+    if (paused) break;
     if (resume < 0) {
       finish(w, job);
       break;

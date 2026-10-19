@@ -67,9 +67,6 @@ const glare = new Uint8Array(BINS);
 const mRows = new Uint8Array(MAX_W * BINS);
 const fRow = new Float64Array(BINS);
 const fWin = new Float64Array(BINS);
-/** C1 layers: (safe + 1) × 360, current and next (safe < MAX_W: a budget never exceeds the window). */
-const layA = new Float64Array((MAX_W + 1) * BINS);
-const layB = new Float64Array((MAX_W + 1) * BINS);
 const win = new Float64Array(BINS);
 /** The Chill delta of each bin at the current step (3-step lit count looked up once). */
 const dRow = new Float64Array(BINS);
@@ -98,8 +95,6 @@ interface MeltWin {
 }
 
 const out: FlakeContest = { eligible: false, w0: 0, w1: 0, safe: 0, freeMelt: 0, c0: 0, c1: 0, floor: 0 };
-/** The window of a cluster's other flake under test (stage 3). */
-const flakeWin: MeltWin = { w0: 0, w1: 0, safe: 0, floor: 0 };
 
 /** Slot s's absolute tick. */
 function slotTick(job: ValidationJob, s: number): number {
@@ -204,22 +199,56 @@ function freeMelt(job: ValidationJob, mw: MeltWin, m: Uint8Array): number {
 }
 
 /**
- * The Chill DP over window `mw` plus tailSec, seeded with the job's row before the window. `save`
- * tracks the flake's melt so far (layers 0..safe; a step past safe loses it) and returns the best
- * Chill at the end with the flake saved (C1); without it, the best Chill at the end (C0). `capped`
- * clamps at the tank like the validator; uncapped it sums the Chill deltas (the true price of a
- * detour even when the tank is full).
+ * A Chill DP over a melt window plus tailSec in progress (fix round 2 of the iteration-2 review:
+ * resumable, so generation slices it by steps; review r5 measured an 8-layer DP in one piece as most
+ * of the frames over 1 ms). Layers (safe + 1) × 360, current and next, swapped each step.
  */
-function chillDP(w: World, job: ValidationJob, mw: MeltWin, m: Uint8Array, save: boolean, capped: boolean): number {
-  const layers = save ? mw.safe + 1 : 1;
-  const maxC = capped ? paramsAt(w, 1).maxChill : Infinity;
-  let cur = layA;
-  let nxt = layB;
-  cur.fill(DEAD, 0, layers * BINS);
-  cur.set(job.c.subarray((mw.w0 - 1) * BINS, mw.w0 * BINS), 0);
+interface ChillDP {
+  readonly a: Float64Array;
+  readonly b: Float64Array;
+  /** The current layers are `a` (else `b`). */
+  curA: boolean;
+  /** The next step to run and the last one (w1 + TAIL). */
+  s: number;
+  end: number;
+  /** The top live layer, the layer count, the tank (Infinity uncapped), and whether the flake's melt is tracked. */
+  hi: number;
+  layers: number;
+  maxC: number;
+  save: boolean;
+}
+
+function newChillDP(): ChillDP {
+  return { a: new Float64Array((MAX_W + 1) * BINS), b: new Float64Array((MAX_W + 1) * BINS), curA: true, s: 0, end: -1, hi: 0, layers: 1, maxC: 0, save: false };
+}
+
+/**
+ * Starts the Chill DP over window `mw` plus tailSec, seeded with the job's row before the window.
+ * `save` tracks the flake's melt so far (layers 0..safe; a step past safe loses it): its best Chill
+ * at the end is C1 with the flake saved, without it C0. `capped` clamps at the tank like the
+ * validator; uncapped it sums the Chill deltas (the true price of a detour even when the tank is full).
+ */
+function dpStart(w: World, job: ValidationJob, mw: MeltWin, save: boolean, capped: boolean, dp: ChillDP): void {
+  dp.layers = save ? mw.safe + 1 : 1;
+  dp.maxC = capped ? paramsAt(w, 1).maxChill : Infinity;
+  dp.save = save;
+  dp.curA = true;
+  dp.a.fill(DEAD, 0, dp.layers * BINS);
+  dp.a.set(job.c.subarray((mw.w0 - 1) * BINS, mw.w0 * BINS), 0);
   // Layer k can only be alive after k / 2 steps of the window (a step melts at most 2): hi is the top live layer.
-  let hi = 0;
-  for (let s = mw.w0; s <= mw.w1 + TAIL; s++) {
+  dp.hi = 0;
+  dp.s = mw.w0;
+  dp.end = mw.w1 + TAIL;
+}
+
+/** Runs at most `maxSteps` steps of `dp` (melt rows `m` of window `mw`); true once it is done. */
+function dpAdvance(w: World, job: ValidationJob, mw: MeltWin, m: Uint8Array, dp: ChillDP, maxSteps: number): boolean {
+  let cur = dp.curA ? dp.a : dp.b;
+  let nxt = dp.curA ? dp.b : dp.a;
+  let hi = dp.hi;
+  const { layers, maxC, save } = dp;
+  let s = dp.s;
+  for (let n = 0; s <= dp.end && n < maxSteps; s++, n++) {
     const inW = save && s <= mw.w1;
     if (s === mw.w1 + 1 && hi > 0) {
       // Past the window every live layer has saved the flake: one layer carries on through the tail.
@@ -251,19 +280,47 @@ function chillDP(w: World, job: ValidationJob, mw: MeltWin, m: Uint8Array, save:
     cur = nxt;
     nxt = t;
   }
+  dp.s = s;
+  dp.hi = hi;
+  dp.curA = cur === dp.a;
+  return s > dp.end;
+}
+
+/** The best Chill at the end of a finished DP. */
+function dpBest(dp: ChillDP): number {
+  const cur = dp.curA ? dp.a : dp.b;
   let best = DEAD;
-  for (let o = 0; o < (hi + 1) * BINS; o++) if ((cur[o] as number) > best) best = cur[o] as number;
+  for (let o = 0; o < (dp.hi + 1) * BINS; o++) if ((cur[o] as number) > best) best = cur[o] as number;
   return best;
 }
 
+/** The DP of the one-call helpers (contestFlake, contestCluster's C0): started and finished within one call. */
+const dp0 = newChillDP();
+
+/** The whole Chill DP over window `mw` in one call (see dpStart). */
+function chillDP(w: World, job: ValidationJob, mw: MeltWin, m: Uint8Array, save: boolean, capped: boolean, dp: ChillDP = dp0): number {
+  dpStart(w, job, mw, save, capped, dp);
+  dpAdvance(w, job, mw, m, dp, Infinity);
+  return dpBest(dp);
+}
+
 /**
- * Work units of a chillDP over window `mw` with `layers` layers (a unit ≈ one validator lit row):
- * about DP_LAYER_STEPS slot-layers each (measured in Node: a 13-layer DP over 35 slots ≈ 0.35 ms);
+ * Work units of DP steps (a unit ≈ one validator lit row ≈ DP_LAYER_STEPS slot-layers; review r5
+ * measured about 2.5 µs a slot-layer, so the old 25 charged a contest DP a third of its cost);
  * the tail runs one layer.
  */
-const DP_LAYER_STEPS = 25;
+const DP_LAYER_STEPS = 10;
 function dpUnits(mw: MeltWin, layers: number): number {
   return Math.ceil(((mw.w1 - mw.w0 + 1) * layers + TAIL) / DP_LAYER_STEPS);
+}
+/** Slot-layers a resumable DP runs per contest stage call (about one 12-unit idle slice). */
+const DP_CALL = 96;
+/** Steps the next call of `dp` runs, and their units. */
+function dpCallSteps(dp: ChillDP): number {
+  return Math.min(dp.end - dp.s + 1, Math.max(1, Math.floor(DP_CALL / dp.layers)));
+}
+function dpCallUnits(dp: ChillDP): number {
+  return Math.max(1, Math.ceil((dpCallSteps(dp) * dp.layers) / DP_LAYER_STEPS));
 }
 
 /**
@@ -311,11 +368,19 @@ export interface ContestRun extends ClusterContest, MeltWin {
   done: boolean;
   /** Melt rows of the flake under test (MAX_W × 360), owned by the run (runs of different worlds may interleave). */
   readonly m: Uint8Array;
+  /** The Chill DP under way (resumable across stage calls) and the window of the other flake under test. */
+  readonly dp: ChillDP;
+  readonly fw: MeltWin;
+  /** The last flake's C0 (stage 1), for its cost once its C1 is done. */
+  c0: number;
 }
 
-/** A contest run with its own melt rows (one per world; reused cluster after cluster). */
+/** A contest run with its own melt rows and DP (one per world; reused cluster after cluster). */
 export function newContestRun(): ContestRun {
-  return { x0: 0, y0: 0, x1: 0, y1: 0, n: 1, savableOnly: false, stage: 0, flake: 0, done: true, eligible: false, contested: false, cost: 0, w0: 0, w1: 0, safe: 0, floor: 0, m: new Uint8Array(MAX_W * BINS) };
+  return {
+    x0: 0, y0: 0, x1: 0, y1: 0, n: 1, savableOnly: false, stage: 0, flake: 0, done: true, eligible: false, contested: false, cost: 0,
+    w0: 0, w1: 0, safe: 0, floor: 0, m: new Uint8Array(MAX_W * BINS), dp: newChillDP(), fw: { w0: 0, w1: 0, safe: 0, floor: 0 }, c0: 0,
+  };
 }
 
 /** (Re)starts `run` on the cluster of `n` flakes whose first flake is at (x0, y0) and last at (x1, y1). */
@@ -335,13 +400,22 @@ export function startContest(run: ContestRun, x0: number, y0: number, x1: number
   return run;
 }
 
+// Stages: 0 the last flake's window, melt rows and safe line; 1 its C0 (one layer); 11 its uncapped C1,
+// a DP_CALL slice of it a call (then the detour cost C0 − C1); 2 its capped C1, sliced alike; 3 the
+// next other flake's window and melt rows; 31 its capped C1, sliced alike. The DPs keep their state in
+// the run, so where a slice ends never changes a verdict.
+const S_C0 = 1;
+const S_C1 = 11;
+const S_CAP = 2;
+const S_OTHER = 3;
+const S_OTHER_CAP = 31;
+
 /** The work units the next stage of `run` will cost about (0 when done). */
 export function contestStageUnits(run: ContestRun): number {
   if (run.done) return 0;
-  if (run.stage === 0) return MAX_W + 1;
-  if (run.stage === 1) return dpUnits(run, 1) + dpUnits(run, run.safe + 1);
-  if (run.stage === 2) return dpUnits(run, run.safe + 1);
-  return MAX_W + dpUnits(run, run.safe + 1);
+  if (run.stage === 0 || run.stage === S_OTHER) return MAX_W + 1;
+  if (run.stage === S_C0) return dpUnits(run, 1);
+  return dpCallUnits(run.dp);
 }
 
 /** Contest stages run so far and their work units (tests: how generation slices them). */
@@ -360,7 +434,7 @@ function nextFlake(run: ContestRun): void {
   if (run.flake < 0) {
     run.contested = true;
     run.done = true;
-  } else run.stage = 3;
+  } else run.stage = S_OTHER;
 }
 
 function stageOf(w: World, job: ValidationJob, run: ContestRun): number {
@@ -375,32 +449,50 @@ function stageOf(w: World, job: ValidationJob, run: ContestRun): number {
       meltRows(w, job, run.x1, run.y1, run.w0, run.w1, run.m);
       const units = run.w1 - run.w0 + 2;
       if (!run.savableOnly && freeMelt(job, run, run.m) < run.safe + 2) return fail(units);
-      run.stage = run.savableOnly ? 2 : 1;
+      if (run.savableOnly) {
+        dpStart(w, job, run, true, true, run.dp);
+        run.stage = S_CAP;
+      } else run.stage = S_C0;
       return units;
     }
-    case 1: {
-      run.cost = chillDP(w, job, run, run.m, false, false) - chillDP(w, job, run, run.m, true, false);
-      const units = dpUnits(run, 1) + dpUnits(run, run.safe + 1);
+    case S_C0: {
+      run.c0 = chillDP(w, job, run, run.m, false, false, run.dp);
+      dpStart(w, job, run, true, false, run.dp);
+      run.stage = S_C1;
+      return dpUnits(run, 1);
+    }
+    case S_C1: {
+      const units = dpCallUnits(run.dp);
+      if (!dpAdvance(w, job, run, run.m, run.dp, dpCallSteps(run.dp))) return units;
+      run.cost = run.c0 - dpBest(run.dp);
       if (run.cost < B.costMin || run.cost > B.costMax) return fail(units);
-      run.stage = 2;
+      dpStart(w, job, run, true, true, run.dp);
+      run.stage = S_CAP;
       return units;
     }
-    case 2: {
-      const units = dpUnits(run, run.safe + 1);
-      if (chillDP(w, job, run, run.m, true, true) < run.floor + B.marginChill) return fail(units);
+    case S_CAP: {
+      const units = dpCallUnits(run.dp);
+      if (!dpAdvance(w, job, run, run.m, run.dp, dpCallSteps(run.dp))) return units;
+      if (dpBest(run.dp) < run.floor + B.marginChill) return fail(units);
       run.flake = run.n - 2;
       nextFlake(run);
       return units;
     }
-    default: {
+    case S_OTHER: {
       // Every other flake must be savable too: its own window checkable in the job, and a path that
       // saves it ending at least marginChill above its floor.
       const i = run.flake;
       const y = run.n > 1 ? run.y0 + ((run.y1 - run.y0) * i) / (run.n - 1) : run.y1;
-      if (!meltWindow(w, job, y, B.meltBudget, flakeWin, 1)) return fail(1);
-      meltRows(w, job, trailX(w.trail, y), y, flakeWin.w0, flakeWin.w1, run.m);
-      const units = flakeWin.w1 - flakeWin.w0 + 1 + dpUnits(flakeWin, flakeWin.safe + 1);
-      if (chillDP(w, job, flakeWin, run.m, true, true) < flakeWin.floor + B.marginChill) return fail(units);
+      if (!meltWindow(w, job, y, B.meltBudget, run.fw, 1)) return fail(1);
+      meltRows(w, job, trailX(w.trail, y), y, run.fw.w0, run.fw.w1, run.m);
+      dpStart(w, job, run.fw, true, true, run.dp);
+      run.stage = S_OTHER_CAP;
+      return run.fw.w1 - run.fw.w0 + 1;
+    }
+    default: {
+      const units = dpCallUnits(run.dp);
+      if (!dpAdvance(w, job, run.fw, run.m, run.dp, dpCallSteps(run.dp))) return units;
+      if (dpBest(run.dp) < run.fw.floor + B.marginChill) return fail(units);
       run.flake--;
       nextFlake(run);
       return units;
