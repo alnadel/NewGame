@@ -1383,7 +1383,7 @@ that did not read the gauge. The economy loop's design is unchanged: one gauge p
 | E2: naive − plain | −181 ± 32 | −122 ± 35 | −94 ± 70 | hard < 0: pass |
 | E2: naive − plain, strongest rule | −128 ± 38 (plan@80) | −76 ± 40 (plan@80) | −22 ± 80 (plan@70) | hard < 0: pass |
 | E2: safe − plain | −154 ± 25 | −218 ± 27 | −120 ± 61 | hard < 0: pass |
-| E2 on hop@2: chase / naive / safe − hop@2 | – | +193 ± 35 / −283 ± 38 / −405 ± 31 (hop@2 − plain +419 ± 33) | +235 ± 68 / −217 ± 80 / −463 ± 64 (hop@2 − plain +461 ± 74) | advisory (≥ +150 / < 0 / < 0): pass |
+| E2 on hop@2: chase / naive / safe − hop@2 | – | +193 ± 35 / −283 ± 38 / −405 ± 31 (hop@2 − plain +419 ± 33) | +235 ± 68 / −217 ± 80 / −463 ± 64 (hop@2 − plain +461 ± 74) | advisory (≥ +150 / < 0 / < 0): pass; on seeds 1-240 alone chase reads +107 ± 67 (MISS) |
 | x5 farm − panic@45 | −145 ± 21 | −156 ± 24 | −162 ± 49 | hard < 0: pass |
 | E3: the near seeker − plain | – | +38 ± 17 (bound +21; clusters saved 13.5% vs 7.5%) | +25 ± 32 (13.5% vs 8.0%) | hard bound > 0 at 960: pass |
 | E3: chase's-hours seeker − plain | +13 ± 9 | +10 ± 10 | +0 ± 17 | advisory mean > −1 SE: pass |
@@ -1394,7 +1394,7 @@ that did not read the gauge. The economy loop's design is unchanged: one gauge p
 | the starting charge alone | +446 ± 25 | +500 ± 27 | +527 ± 57 | advisory ≤ 120: MISS |
 | priced moments a daylight minute, Days 2-4, over v1.6 off | – | +1.88 | +2.27 | advisory ≥ +3: MISS |
 
-`sim --decisions --seeds 960` exits 0 (2576 s on 4 workers). Chase − plain rose from +231 to
+`sim --decisions --seeds 960` exits 0 (2576 s on 4 workers), and so does `--seeds 240`. Chase − plain rose from +231 to
 +269 and naive − plain from −181 to −122. Two of this round's rules move Endless play: real
 shade under a snap, and a Heat Wave without Noon Heat. They were not measured apart.
 

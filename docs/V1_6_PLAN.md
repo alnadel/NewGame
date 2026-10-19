@@ -1075,7 +1075,7 @@ src/core/README.md §16.6 has every row):
 | E2: chase − plain (hard bound ≥ +150) | +269 ± 31 (bound 238) | +261 ± 71 | pass |
 | E2: naive − plain; under the strongest rule (hard < 0) | −122 ± 35; −76 ± 40 (plan@80) | −94 ± 70; −22 ± 80 (plan@70) | pass |
 | E2: safe − plain (hard < 0) | −218 ± 27 | −120 ± 61 | pass |
-| E2 on hop@2: chase / naive / safe − hop@2 (advisory) | +193 ± 35 / −283 ± 38 / −405 ± 31 | +235 ± 68 / −217 ± 80 / −463 ± 64 | pass |
+| E2 on hop@2: chase / naive / safe − hop@2 (advisory) | +193 ± 35 / −283 ± 38 / −405 ± 31 | +235 ± 68 / −217 ± 80 / −463 ± 64 | pass (seeds 1-240 alone: chase +107 ± 67, MISS) |
 | E3: the near seeker − plain (hard bound > 0) | +38 ± 17 (bound +21; clusters saved 13.5% vs 7.5%) | +25 ± 32 (13.5% vs 8.0%) | pass |
 | E3: never a tax, chase's hours / weight 4 / no-glass control (advisory) | +10 ± 10 / +17 ± 19 / +50 ± 11 | +0 ± 17 / −1 ± 38 / +58 ± 28 | pass |
 | x5 farm − panic@45 (hard < 0) | −156 ± 24 | −162 ± 49 | pass |
@@ -1084,7 +1084,7 @@ src/core/README.md §16.6 has every row):
 | `sim --flares`: dial-only loses ≥ 60; preAim ≤ half; oracle parries ≥ 70% | seeds 1-120: 84; −103 (a gain); 94.8% | 96; −41 (a gain; it was 76 against 109, FAIL); 94.9% | pass |
 | p3 heat rescues a chunk (hard ≤ 0.8) | `--check --seeds 40` 0.749; generation only, 240 seeds: 0.763 | 0.779 | pass |
 
-`sim --check --seeds 40`: every target met. Mechanics vs dial is +736; the dial median is Day 3 · 9:50 AM; the oracle reaches Day 8 on 100%, parries 93.2% and saves 78.1% of glass flakes; flare keep on Days 2-4 is 92.0%. `sim --campaign --bot all`: every hard row passes; the Journey has 13 parry Dares and 10 two-Dare levels (0 and 0 before).
+`sim --decisions --seeds 240` (seeds 1-240) exits 0: every hard row passes, and the advisory rows miss only where noted. `sim --check --seeds 40`: every target met. Mechanics vs dial is +736; the dial median is Day 3 · 9:50 AM; the oracle reaches Day 8 on 100%, parries 93.2% and saves 78.1% of glass flakes; flare keep on Days 2-4 is 92.0%. `sim --campaign --bot all`: every hard row passes; the Journey has 13 parry Dares and 10 two-Dare levels (0 and 0 before).
 
 **Open, the integrator's call.**
 - **A3, build:single**: 665.0 KiB against 641.6 (+23.4), so the hard bar fails. The shipped JS
