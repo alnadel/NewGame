@@ -267,19 +267,29 @@ test.describe('draw-call budget', () => {
     });
     await openGame(page, 'test=1&perf=0&seed=42&day=1&t=9:00&plan=0');
     await keepAlive(page);
+    // Frozen on one sim tick, not after a wall-clock wait: under CPU load a fixed wait froze an
+    // earlier scene (86 strokes against 74), and freezing on the first frame past a game minute
+    // froze a few ticks later, with Nubs half in the sun (f 0.2 against 0: 86 strokes again). The
+    // run plays at a third of its speed, and at a twentieth over its last two minutes, so no frame
+    // runs more than one tick there: the freeze lands on the first tick of 9:12 AM.
+    const T = 192;
+    await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0.3));
     await page.mouse.click(195, 380);
     await waitForScreen(page, 'play');
-    // Frozen at a game time, not a wall-clock wait: under CPU load a fixed wait froze an earlier,
-    // different scene (86 strokes against 74). 9:12 AM, 12 game minutes after the start.
     const m0 = await page.evaluate(() => window.__SHADY_TEST__!.state().minutes);
-    await page.waitForFunction((m) => {
+    expect(m0, 'the run starts at 9:00 AM').toBeLessThanOrEqual(T - 4);
+    await page.waitForFunction((t) => {
       const h = window.__SHADY_TEST__!;
-      if (h.state().minutes < m + 12) return false;
-      h.setTimeScale(0);
-      return true;
-    }, m0, { polling: 'raf', timeout: 20_000 });
+      const m = h.state().minutes;
+      if (m >= t) {
+        h.setTimeScale(0);
+        return true;
+      }
+      if (m >= t - 2) h.setTimeScale(0.05);
+      return false;
+    }, T, { polling: 'raf', timeout: 30_000 });
     const frozenAt = await page.evaluate(() => window.__SHADY_TEST__!.state().minutes);
-    expect(frozenAt - m0).toBeLessThanOrEqual(13);
+    expect(frozenAt).toBe(T);
     await page.waitForTimeout(300);
     const per = await page.evaluate(async () => {
       const w = window as unknown as { __calls: Record<string, number> };
@@ -295,7 +305,8 @@ test.describe('draw-call budget', () => {
     expect(per.frames).toBeGreaterThan(10);
     expect(per.drawImage, JSON.stringify(per)).toBeLessThanOrEqual(190);
     // 190 and 77: the frame shows the first bud tip, whose icon disc now draws its glyph (v1.6 fix
-    // round 1; it was blank): +3 fills and +1 stroke over the 185 and 75 measured before.
+    // round 1; it was blank): +3 fills and +1 stroke over the 185 and 75 measured before. On the
+    // exact tick (review of economy iteration 2) it measures 148-150 / 175 / 71, loaded or not.
     expect(per.fill, JSON.stringify(per)).toBeLessThanOrEqual(190);
     expect(per.stroke, JSON.stringify(per)).toBeLessThanOrEqual(77);
   });
