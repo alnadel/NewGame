@@ -72,9 +72,10 @@ export type SimEvent =
   | { e: 'frostSpill'; lostH: number }
   /**
    * A snap's cash-in (economy iteration 2, Bank on: `hot`, cast red-hot: it pours nothing and refills
-   * no Chill; `noon`, cast in the Noon Heat: it pours nothing).
+   * no Chill; `noon`, cast in the Noon Heat: it pours nothing; `amber`, cast in the amber: it pours
+   * and cools only part of the way).
    */
-  | { e: 'snapCash'; level: number; refundH: number; hot?: true; noon?: true }
+  | { e: 'snapCash'; level: number; refundH: number; hot?: true; noon?: true; amber?: true }
   // Frost Garden and Landing (CORE-1).
   | { e: 'snapExtend'; ticks: number }
   | { e: 'snapLand'; chain: number; own: boolean; x: number; y: number }

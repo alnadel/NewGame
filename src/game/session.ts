@@ -1681,13 +1681,18 @@ export class Session {
         this.cue('shade-found');
         break;
       case 'frostReady':
-        // v1.5: the meter is full; until the player has snapped twice this session, say how.
-        if (this.snapsSeen < 2) this.cue('snap-ready');
+        // v1.5: the meter is full; until the player has snapped twice this session, say how (not
+        // under a snap, which no swipe can cast: the cast's own pour often refills a charge).
+        if (this.snapsSeen < 2 && this.s.snapTicks === 0) this.cue('snap-ready');
         break;
       case 'snap':
         this.snapsSeen++;
         // The "Frost full! Swipe ↓" line has done its job: clear it so it never covers the snap.
         if (this.cueShown?.id === 'snap-ready') this.cue(null);
+        break;
+      case 'snapEnd':
+        // A charge filled under the snap: now it can be cast.
+        if (this.snapsSeen < 2 && this.s.nubs.frost >= 1) this.cue('snap-ready');
         break;
       case 'swing':
         // The first SWING of a lifetime explains itself once (nothing else in the game names it).

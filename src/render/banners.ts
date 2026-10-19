@@ -94,6 +94,8 @@ export interface Banners {
   toasts: Toast[];
   toastT: number;
   toastHide: number;
+  /** Seconds since the banners were made (updateBanners): when each toast was queued (Toast.at). */
+  toastClock: number;
   toastLines: string[];
   toastWrapW: number;
   toastFont: string;
@@ -110,6 +112,8 @@ export interface Toast {
   hold: number;
   /** Shown with `urgent` (showToast): no ordinary toast replaces it, goes ahead of it or cuts it short. */
   urgent: boolean;
+  /** Banners.toastClock when it was queued. */
+  at: number;
 }
 
 export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost';
@@ -187,6 +191,7 @@ export function createBanners(): Banners {
     toasts: [],
     toastT: -1,
     toastHide: 0,
+    toastClock: 0,
     toastLines: [],
     toastWrapW: 0,
     toastFont: '',
@@ -258,17 +263,23 @@ const TOAST_OUT = 0.3;
 
 /** A tip on screen at least this long (s) steps aside for a mission. */
 const TIP_YIELD_S = 1.5;
+/**
+ * A waiting tip queued this recently (s) is never replaced by a newer one: the newer waits behind it
+ * (two tips of one moment, such as a snap's gauge tip and the bud under it, both show).
+ */
+const TIP_KEEP_S = 1;
 
 /**
  * Queues an in-run toast (see Banners.toasts). A mission goes ahead of waiting tips (and a tip that
- * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one, so tips never pile up.
+ * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one queued at least TIP_KEEP_S
+ * ago, so tips never pile up and none of one moment is lost.
  * An `urgent` toast (a cue about to happen, the first Heat Flare) goes next at once: whatever waits
  * is dropped and the toast on screen starts to leave now. Once queued it keeps its place: a later
  * tip waits behind it instead of replacing it, a mission goes after it, and on screen it does not
  * step aside (it leaves when its hold runs out or endToast ends it).
  */
 export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number, urgent = false): void {
-  const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold, urgent };
+  const t: Toast = { kind, kicker: noLigatures(kicker), text, glyph, hold, urgent, at: b.toastClock };
   const q = b.toasts;
   const first = b.toastT >= 0 ? 1 : 0;
   if (urgent) {
@@ -278,8 +289,11 @@ export function showToast(b: Banners, kind: ToastKind, kicker: string, text: str
     return;
   }
   if (kind === 'tip') {
-    // A waiting urgent tip is kept (the new one waits behind it); other waiting tips are replaced.
-    for (let i = q.length - 1; i >= first; i--) if ((q[i] as Toast).kind === 'tip' && !(q[i] as Toast).urgent) q.splice(i, 1);
+    // A waiting urgent or recent tip is kept (the new one waits behind it); other waiting tips are replaced.
+    for (let i = q.length - 1; i >= first; i--) {
+      const w = q[i] as Toast;
+      if (w.kind === 'tip' && !w.urgent && b.toastClock - w.at >= TIP_KEEP_S) q.splice(i, 1);
+    }
     if (q.length < TOAST_QUEUE) q.push(t);
     return;
   }
@@ -344,6 +358,7 @@ export function showDayCard(b: Banners, day: number, biome: BiomeId, forecast: F
 }
 
 export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
+  b.toastClock += dt;
   if (b.night >= 0) b.night = b.night + dt > 2.4 ? -1 : b.night + dt;
   if (b.day >= 0) b.day = b.day + dt > DAY_S ? -1 : b.day + dt;
   if (b.stamp >= 0) b.stamp = b.stamp + dt > STAMP_IN + b.stampHold + STAMP_OUT ? -1 : b.stamp + dt;

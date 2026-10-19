@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
 import { createRun, levelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { createMoments, LEVEL_TIPS, MECH_TIPS } from '../../src/game/moments.ts';
+import { createMoments, LEVEL_TIPS, MECH_TIPS, withDare } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToast, endToasts, showToast, updateBanners } from '../../src/render/banners.ts';
@@ -50,6 +50,8 @@ describe('toast queue', () => {
     showToast(b, 'tip', 'TIP', 'one', 'drag', 4);
     updateBanners(b, 0.1, false);
     showToast(b, 'tip', 'TIP', 'two', 'drag', 4);
+    // 'two' has waited a second: the next tip takes its place.
+    b.toastClock += 1;
     showToast(b, 'tip', 'TIP', 'three', 'drag', 4);
     expect(b.toasts.map((t) => t.text)).toEqual(['one', 'three']);
     showToast(b, 'mission', 'MISSION ✓ 1/3', 'm1', null, 2);
@@ -61,6 +63,14 @@ describe('toast queue', () => {
     expect(b.toastT).toBeGreaterThan(4);
     run(b, 0.4);
     expect(b.toasts[0]!.text).toBe('m1');
+  });
+  it('two tips of one moment both show: a tip queued under a second ago is never replaced, nothing on screen or not', () => {
+    const b = createBanners();
+    showToast(b, 'tip', 'TIP', 'cash', 'coldsnap', 4);
+    showToast(b, 'tip', 'TIP', 'snapBud', 'coldsnap', 4);
+    expect(b.toasts.map((t) => t.text)).toEqual(['cash', 'snapBud']);
+    run(b, 5);
+    expect(b.toasts.map((t) => t.text)).toEqual(['snapBud']);
   });
   it('a stamp or card over a toast on screen hides it and holds its clock until it has gone (fix round 3)', () => {
     const b = createBanners();
@@ -166,6 +176,20 @@ describe('RunMoments', () => {
     expect(log).toHaveLength(2);
   });
 
+  it('a tip that names a count reads it from the level (L1: its flakes Dare); a level daring another verb drops that sentence', () => {
+    for (const [id, tips] of Object.entries(LEVEL_TIPS)) {
+      const lv = levelDef(Number(id))!;
+      const f = lv.feats.find((x) => x.kind === 'flakes');
+      for (const [, text] of tips) {
+        const t = withDare(text, lv);
+        expect(t).not.toContain('{n}');
+        if (text.includes('{n}') && f) expect(t).toContain(`Collect ${f.target} `);
+      }
+    }
+    expect(levelDef(1)!.feats.some((x) => x.kind === 'flakes')).toBe(true);
+    expect(withDare('Flakes are Snow. Collect {n} for the second star!', { ...levelDef(1)!, feats: [{ kind: 'blooms', target: 1 }] })).toBe('Flakes are Snow.');
+  });
+
   it('shows a level tip once per run, and none once the level is passed', () => {
     const save = defaults(0);
     const b = createBanners();
@@ -192,7 +216,20 @@ describe('RunMoments', () => {
     // Found by the concept's id (the core names it); a stand-in level teaching Cold Snap.
     m.begin(save, { ...levelDef(12)!, introduces: 'snap' as never }, true);
     const seen: string[] = [];
-    for (const ev of [{ e: 'go' }, { e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 1 }, { e: 'snapCash', level: 4, refundH: 30 }, { e: 'snapCash', level: 3, refundH: 0, hot: true }] as SimEvent[]) {
+    const evs = [
+      { e: 'go' },
+      { e: 'frostReady' },
+      { e: 'snap', x: 0, y: 0, cloudId: 1 },
+      { e: 'snapCash', level: 4, refundH: 30 },
+      { e: 'snapCash', level: 3, refundH: 0, hot: true },
+      // Economy iteration 2: an amber snap at ×1 pours nothing and still teaches the gauge.
+      { e: 'snapCash', level: 1, refundH: 0, amber: true },
+      // A missed flare scorched the tank: the next snap heals it, and says so.
+      { e: 'flareMiss', id: 1, lit: 30 },
+      { e: 'snapCash', level: 1, refundH: 0, hot: true },
+    ] as SimEvent[];
+    for (const ev of evs) {
+      s.flareScorch = ev.e === 'flareMiss' ? 40 : 0;
       m.onEvent(ev, s);
       if (ev.e === 'snap') {
         // v1.6: a bud in reach while the snap lasts (the dial's gold) brings the Garden's tip.

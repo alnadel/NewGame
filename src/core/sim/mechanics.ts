@@ -460,6 +460,7 @@ export function castSnap(s: SimState): boolean {
     const ev: Extract<SimEvent, { e: 'snapCash' }> = { e: 'snapCash', level: m, refundH };
     if (hot) ev.hot = true;
     else if (noonPour(s)) ev.noon = true;
+    else if (s.snapChillCap < nb.maxChill) ev.amber = true;
     s.events.push(ev);
     if (refundH > 0) {
       st.snapCashH = (st.snapCashH as number) + refundH;

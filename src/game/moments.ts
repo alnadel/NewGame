@@ -26,7 +26,9 @@ import { goalMetLive } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
-export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'hot' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon';
+export type TipOn =
+  | 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop'
+  | 'cash' | 'hot' | 'amber' | 'heal' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon' | 'scorch';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -35,7 +37,8 @@ export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' |
 export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, string])[]>> = {
   1: [
     ['p25', 'The bar up top fills as Nubs nears the finish flag.'],
-    ['flake', 'Flakes are Snow. Three of them earn the second star!'],
+    // {n}: the level's flakes Dare (begin() fills it in, or drops the sentence when it dares another verb).
+    ['flake', 'Flakes are Snow. Collect {n} for the second star!'],
     ['p60', 'Little time in the sun earns the third star: a cool run.'],
   ],
   2: [
@@ -50,6 +53,9 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
     ['p60', 'No shade close by? Swing the sun to reach the next shadow.'],
   ],
 };
+
+/** A saved glass cluster's frost waits for the next snap (the meter's ghost chip). */
+const GLASS_SAVED_TIP = 'Glass saved! Its frost waits on the meter: your next snap pours it in.';
 
 /** The Heat Flare tip (three lines at 360 px): the real cue, the orange rim, and where to go. */
 const FLARE_TIP = 'Heat Flare! Before the orange rim runs out, swing to the frost-rimmed teal.';
@@ -70,25 +76,41 @@ const FLARE_TIP_MAX_S = 30;
  */
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
-    ['bud', 'A bud! Gold on the dial grows it: fast while the gauge is white, slower in the amber.'],
-    ['bloom', 'Bloomed! Shade for the rest of the run. Grown from cool shade, it banks frost too.'],
+    ['bud', 'A bud! Gold on the dial grows it: fast while the gauge is white, slower in the amber, never in the red.'],
+    // The bud's level comes before the frost meter: its bloom banks nothing yet.
+    ['bloom', 'Bloomed! Shade for the rest of the run.'],
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],
   snap: [
     ['go', 'Sunflowers grown from cool shade fill the frost. Full? Swipe down.'],
-    ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter.'],
+    ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter, best while the gauge is white.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
-    ['cash', 'Your ring poured into the frost. Snap while the gauge is white: it pours it all and cools you full.'],
+    ['cash', 'A white snap pours your ring (up to 0.6 of a snap) and cools you full.'],
     ['hot', 'A red-hot snap only shades you: no Chill back, no ring poured. Snap before the gauge turns red.'],
+    ['amber', 'An amber snap pours less and cools you part way. Snap while the gauge is white.'],
+    ['heal', 'The snap healed the scorch: shade fills your whole tank again.'],
   ],
   deep: [
     ['go', 'Two shadows over Nubs at once is deep shade: Chill and the ring fill twice as fast.'],
     ['deep', 'Deep shade! The dark band on the teal means double cool. Hunt the overlaps.'],
   ],
-  glass: [['glass', 'Glass flakes melt fast. The white glint saves them; out on a dotted arc it costs you sun.']],
+  glass: [
+    ['glass', 'Glass flakes melt fast. The white glint saves them; out on a dotted arc it costs you sun.'],
+    ['glassSaved', GLASS_SAVED_TIP],
+  ],
   // The Solar Flare's level says it at go, before its first 1.2 s warning (too short to read a tip in).
   flare: [['go', FLARE_TIP]],
 };
+
+/**
+ * A tip's '{n}' is the level's flakes Dare target ("Collect 6 for the second star!"); on a level that
+ * dares another verb the sentence holding it is dropped, so a tip never names a count the level lacks.
+ */
+export function withDare(text: string, lv: LevelDef): string {
+  if (!text.includes('{n}')) return text;
+  const f = lv.feats.find((x) => x.kind === 'flakes');
+  return f ? text.replace('{n}', String(f.target)) : text.replace(/\s*[^.!?]*\{n\}[^.!?]*[.!?]/, '');
+}
 
 /** The soft-fail's tip at go (a level whose goal was missed twice). */
 export const SOFT_FAIL_TIP = 'Goal eased: just reach the finish. The Dare still earns its star.';
@@ -102,13 +124,12 @@ const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
   [...(MECH_TIPS.bud[0] as readonly [TipOn, string]), 'sunflower'],
   [...(MECH_TIPS.deep[1] as readonly [TipOn, string]), 'deep'],
   ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.', 'ring'],
-  [...(MECH_TIPS.snap[2] as readonly [TipOn, string]), 'coldsnap'],
-  [...(MECH_TIPS.snap[3] as readonly [TipOn, string]), 'coldsnap'],
-  [...(MECH_TIPS.snap[4] as readonly [TipOn, string]), 'coldsnap'],
+  ...MECH_TIPS.snap.slice(2).map((t) => [...t, 'coldsnap'] as const),
   ['noon', 'In the Noon Heat a snap pours nothing: cash your ring before 11 or after 1.', 'coldsnap'],
-  ['glassSaved', 'Glass saved! Its frost waits on the meter: your next snap pours it in.', 'brittle'],
+  ['glassSaved', GLASS_SAVED_TIP, 'brittle'],
   [...(MECH_TIPS.glass[0] as readonly [TipOn, string]), 'brittle'],
   ['soon', FLARE_SOON_TIP, 'flare'],
+  ['scorch', 'Missed! The flare scorched your tank until night. A Cold Snap heals it.', 'flare'],
 ];
 /** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
 const NEW_PLAYER_RUNS = 12;
@@ -176,6 +197,9 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   /** The first flare's tip is still to show (a new player's endless run); the rise that ends it (−1 none). */
   let soonTip = false;
   let soonRise = -1;
+  /** A missed flare scorched the tank (a snap or nightfall heals it); a charge filled under a snap (its tip waits for the end). */
+  let scorched = false;
+  let frostLater = false;
 
   /** Shows the level's tip for `on`, once per run (an `urgent` one ahead of any other toast). */
   const tip = (on: TipOn, hold = TIP_HOLD, urgent = false): void => {
@@ -195,8 +219,9 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       shadeAt = -1;
       level = relaxed ? null : lv;
       tips.length = 0;
+      scorched = frostLater = false;
       const fresh = lv !== null && (save.campaign.stars[lv.id - 1] ?? 0) === 0;
-      if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []));
+      if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
       const mech = fresh ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
       else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...FIRST_TIPS);
@@ -257,7 +282,22 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           tip('bloom');
           break;
         case 'frostReady':
-          tip('frost');
+          // Under a snap no swipe casts: the tip waits for its end.
+          if (s.snapTicks > 0) frostLater = true;
+          else tip('frost');
+          break;
+        case 'snapEnd':
+          if (frostLater && s.nubs.frost >= 1) tip('frost');
+          frostLater = false;
+          break;
+        case 'flareMiss':
+          if (s.flareScorch > 0) {
+            scorched = true;
+            tip('scorch');
+          }
+          break;
+        case 'nightStart':
+          scorched = false;
           break;
         case 'snap':
           tip('snap');
@@ -272,9 +312,9 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           if (ev.cause === 'bleed' && ev.from >= 3) tip('drop');
           break;
         case 'snapCash':
-          if (ev.hot === true) tip('hot');
-          else if (ev.noon === true) tip('noon');
-          else if (ev.refundH > 0) tip('cash');
+          // The gauge's tip on the first snap whatever it pours (a snap heals a scorch first of all).
+          tip(scorched ? 'heal' : ev.hot === true ? 'hot' : ev.noon === true ? 'noon' : ev.amber === true ? 'amber' : 'cash');
+          scorched = false;
           break;
         case 'clusterSaved':
           // Economy iteration 2: a saved glass cluster's frost waits for the next snap (the meter's chip).
