@@ -51,7 +51,7 @@ export interface BotOptions {
    * spends an overflow charge). CORE-1.
    */
   snap?: 'panic' | 'plan' | 'hoard';
-  /** Reactive (mechanics on): the panic rule's Chill bar (default TUNING.bots.reactive.snapChill), the plan's (default 50) or the hoarder's. CORE-1. */
+  /** Reactive (mechanics on): the panic rule's Chill bar (default TUNING.bots.reactive.snapChill), the plan's (default 60, bots/econ.ts PLAN_CHILL) or the hoarder's. CORE-1. */
   snapChill?: number;
   /**
    * Reactive (mechanics on): also snap whenever cool at ring level ≥ farm with a bud in reach, needed

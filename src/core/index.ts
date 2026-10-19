@@ -198,7 +198,7 @@ export type {
 } from './sim/events.ts';
 export { sunMaxRate } from './sim/sun.ts';
 export { debugRing, effectiveDrain } from './sim/nubs.ts';
-export { budFacing, debugBloom, SNAP_TICKS } from './sim/mechanics.ts';
+export { budFacing, coolLine, debugBloom, SNAP_TICKS, snapGauge, whiteLine } from './sim/mechanics.ts';
 export { meltBudgetOf } from './sim/pickups.ts';
 export { debugFlare, flarePhaseAt } from './sim/flares.ts';
 export { glassInWindow } from './sim/guide.ts';

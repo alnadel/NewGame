@@ -487,6 +487,30 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     expect(at(BK.cashFullChill)).toBe(max);
   });
 
+  it("a snap's cooling cap holds only while its cloud is Nubs' only shade: real shade under it refills Chill as without the snap", () => {
+    const after = (shade: boolean, snap: boolean): number => {
+      const s = lab({ startFrost: 1 });
+      if (shade) {
+        // Tall blocks over the trail ahead: Nubs stands in a caster's shade whatever the sun does.
+        for (let y = s.nubs.y - 40; y <= s.nubs.y + 400; y += 40) {
+          const x = trailX(s.world.trail, y);
+          insertCaster(s.world, makeCaster({ id: 4_000_000 + y, kind: 'rock', name: 'the Test Rock', biome: 'meadow', x, y, rot: 0, parts: [makePrism(rectPoly(x, y, 80, 80, 1, 0), 100)], side: 1, rescue: false, gate: false, ballId: -1, chunk: 0 }));
+        }
+      }
+      s.nubs.chill = 20;
+      step(s, snap ? SNAP : NO_INPUT);
+      if (snap) expect(s.snapTicks).toBeGreaterThan(0);
+      run(s, 30);
+      return s.nubs.chill;
+    };
+    // Red-hot in the open: the snap only shades (Chill stays where it was cast).
+    expect(after(false, true)).toBeCloseTo(20, 6);
+    // Red-hot in a caster's shade: it refills exactly as it does with no snap.
+    const plain = after(true, false);
+    expect(plain).toBeGreaterThan(30);
+    expect(after(true, true)).toBeCloseTo(plain, 6);
+  });
+
   it('frost does not freeze in the Noon Heat: a snap there pours nothing (snapCash.noon), the ring is cashed all the same', () => {
     const noon = lab({ startFrost: 1, startDay: 2, startT: dayTicks(2) / 120 });
     debugRing(noon, 4, 0);
@@ -539,6 +563,14 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     step(s, SNAP);
     expect(only(s.events, 'frostGain')).toEqual([{ e: 'frostGain', source: 'cluster', amountH: BK.clusterH, charges: 0 }]);
     expect([s.nubs.frostH, s.glassBankH]).toEqual([BK.clusterH, 0]);
+    // Banked glass holds at most capH; the rest spills now, counted and announced (frostSpill).
+    const spilled0 = s.stats.frostSpilledH as number;
+    const n = Math.ceil(BK.capH / BK.clusterH) + 1;
+    s.events.length = 0;
+    for (let i = 0; i < n; i++) payTrick(s, 'cluster');
+    expect(s.glassBankH).toBe(BK.capH);
+    expect((s.stats.frostSpilledH as number) - spilled0).toBe(n * BK.clusterH - BK.capH);
+    expect(only(s.events, 'frostSpill').reduce((a, e) => a + e.lostH, 0)).toBe(n * BK.clusterH - BK.capH);
   });
 
   it('E4, the v1.5 meter (Bank off): a trick under a snap is held and paid at snapEnd, as the Bank does', () => {
@@ -551,6 +583,18 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     while (s.snapTicks > 0) ev.push(...run(s, 1, NO_INPUT, 100));
     expect(ev.some((e) => e.e === 'snapEnd')).toBe(true);
     expect([s.snapBankH, s.nubs.frostH]).toEqual([0, BK.parryH]);
+  });
+
+  it('with the Bank off none of the gauge applies: an amber or red-hot snap pours the whole ring and cools in full', () => {
+    for (const chill of [BK.coolChill - 5, (BK.coolChill + BK.cashFullChill) / 2]) {
+      const s = lab({ startFrost: 1, v16: { bank: false } });
+      debugRing(s, 3, 0);
+      s.nubs.chill = chill;
+      step(s, SNAP);
+      expect(only(s.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 3, refundH: 2 * BK.cashPerLevelH }]);
+      run(s, 60);
+      expect(s.nubs.chill, `cast at ${chill}`).toBeCloseTo(Math.min(TUNING.nubs.maxChill, chill + (61 * s.params.regen) / 60), 6); // the cast tick and 60 more
+    }
   });
 });
 

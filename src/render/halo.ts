@@ -25,7 +25,7 @@
 // rests, and frost-rimmed teal marks the shade that holds through it, a run under 8° wearing a
 // target dot (the glass layer hides).
 
-import { TUNING } from '../config/tuning.ts';
+import { coolLine, whiteLine } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
@@ -87,6 +87,8 @@ export interface HaloInput {
   /** Signed θ change this frame (°), for the arrow. */
   dTheta: number;
   chill: number;
+  /** The tank (100; a 'ration' level's 50): the gauge's white and red lines scale with it. */
+  maxChill: number;
   sunUp: boolean;
   guideAlpha: number;
   now: Uint8Array;
@@ -122,7 +124,7 @@ export interface HaloInput {
 export function createHaloIn(): HaloInput {
   const none = new Uint8Array(360);
   return {
-    cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
+    cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, maxChill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
     hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
     bud: null, deep: false, mech: null,
   };
@@ -477,11 +479,11 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.arc(cx, cy, gR, 0, TAU);
     g.stroke();
     if (chill > 0.5) {
-      const red = chill < TUNING.bank.coolChill;
+      const red = chill < coolLine(inp.maxChill);
       if (red) g.setLineDash([4, 3]);
       g.lineCap = 'round';
       const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      g.strokeStyle = cssa(red ? HOT : chill < TUNING.bank.cashFullChill ? AMBER : FROST, gA * pulse);
+      g.strokeStyle = cssa(red ? HOT : chill < whiteLine(inp.maxChill) ? AMBER : FROST, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
       g.stroke();

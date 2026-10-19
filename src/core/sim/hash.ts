@@ -106,6 +106,13 @@ export function hashState(s: SimState): string {
   feed(st.ringTricks ?? 0);
   feed(st.frostEarnedH ?? 0);
   feed(st.snapLands ?? 0);
+  feed(st.x5Ticks ?? 0);
+  feed(st.multDowns ?? 0);
+  feed(st.frostSpilledH ?? 0);
+  feed(st.snapCashH ?? 0);
+  feed(st.gardenBlooms ?? 0);
+  feed(st.snapLandsOwn ?? 0);
+  feed(nb.realShade ? 1 : 0);
   // State that steers the next ticks: the bleed exemption after a bud grew, the endpoint a pending
   // hand-off will record, this snap's own sunflowers (the landing) and the snap cloud's re-aimed path.
   feed(nb.budGrewTick);
@@ -186,6 +193,9 @@ export function hashState(s: SimState): string {
   pickups.sort((a, b) => a.id - b.id);
   for (const p of pickups) {
     feed(p.id);
+    feed(p.x);
+    feed(p.y);
+    feed(p.cluster);
     feed(p.state);
     feed(p.melt);
     feed(p.brittle ? 1 : 0);

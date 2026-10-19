@@ -62,10 +62,12 @@ export function computeCoverage(s: SimState): void {
   nb.cloudId = -1;
   nb.glareBallId = -1;
   nb.deep = false;
+  nb.realShade = false;
   if (!s.sunUp || s.eclipseOn) {
     nb.w.fill(0);
     nb.f = 0;
     nb.glare = 0;
+    nb.realShade = true;
     return;
   }
   const { ux, uy, cot } = s;
@@ -128,6 +130,7 @@ export function computeCoverage(s: SimState): void {
       shaded = true;
       if (k !== 0) break;
       centerSources++;
+      nb.realShade = true;
       // Center sample: remember the nearest caster providing its shade (death line, Melt Map).
       const d = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
       if (d < bestShaderD) {
@@ -142,6 +145,7 @@ export function computeCoverage(s: SimState): void {
         cloudHits[i] = (cloudHits[i] as number) + 1;
         // v1.6 T3 (Garden on): the Cold Snap's cloud is not a deep-shade source.
         if (k === 0 && !(snapNotDeep && cl.kind === 'snap')) centerSources++;
+        if (k === 0 && cl.kind !== 'snap') nb.realShade = true;
       }
     }
     let inG = false;
@@ -386,8 +390,10 @@ export function applyDaylight(s: SimState): void {
   let c = nb.chill + (-effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * f + regen * Math.max(0, 1 - f)) * DT;
   // v1.6 (fix round 3): a missed Endless flare's scorch caps the tank until nightfall (sim/flares.ts).
   let cap = nb.maxChill - s.flareScorch;
-  // Economy iteration 2: a snap cools Nubs only up to s.snapChillCap (the gauge it was cast at; it never takes Chill away).
-  if (s.snapTicks > 0 && s.snapChillCap < cap) cap = Math.max(s.snapChillCap, nb.chill);
+  // Economy iteration 2: a snap cools Nubs only up to s.snapChillCap (the gauge it was cast at; it
+  // never takes Chill away), and only while its cloud is his only shade: real shade under it (a
+  // caster or another cloud over his center) refills Chill as it would without the snap.
+  if (s.snapTicks > 0 && !nb.realShade && s.snapChillCap < cap) cap = Math.max(s.snapChillCap, nb.chill);
   if (c > cap) c = cap;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
   if (s.lessonOn || s.lessonGrace > 0) {

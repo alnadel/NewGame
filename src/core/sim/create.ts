@@ -185,6 +185,7 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
       frost,
       deep: false,
       deepTick: -1e9,
+      realShade: false,
       shadeTicks: 0,
       litTicks: 0,
       x5Ticks: 0,

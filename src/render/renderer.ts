@@ -902,6 +902,7 @@ export class Renderer {
       hi.dragging = inp.dragging;
       hi.dTheta = s.sun.dTheta;
       hi.chill = snap.chill;
+      hi.maxChill = s.nubs.maxChill;
       hi.sunUp = sunUp;
       hi.guideAlpha = inp.guideAlpha;
       hi.now = s.guide.now;

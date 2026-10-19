@@ -75,7 +75,20 @@ export function addFrost(s: SimState, amount: number, held = false): void {
  * grow and blooms bank frost (Bank on), and a snap pour the ring in and refill Chill.
  */
 export function coolNubs(s: SimState): boolean {
-  return s.nubs.chill >= BANK.coolChill;
+  return s.nubs.chill >= coolLine(s.nubs.maxChill);
+}
+
+/**
+ * The gauge's lines scale with the tank: a 'ration' level's half tank (maxChill 50) turns amber at
+ * 25 and red at 12.5, as the validator scales its floor (Chill under coolLine is red-hot; from
+ * whiteLine a snap pours the whole ring and cools in full).
+ */
+export function coolLine(maxChill: number): number {
+  return (BANK.coolChill * maxChill) / TUNING.nubs.maxChill;
+}
+
+export function whiteLine(maxChill: number): number {
+  return (BANK.cashFullChill * maxChill) / TUNING.nubs.maxChill;
 }
 
 /**
@@ -96,7 +109,14 @@ function bloomFrostH(s: SimState): number {
  */
 export function bankGlassH(s: SimState, amountH: number): void {
   if (!s.world.mech.snap || !s.world.v16.bank || amountH <= 0) return;
-  s.glassBankH = Math.min(BANK.capH, s.glassBankH + amountH);
+  // The bank holds at most two charges' worth; the rest spills now, visibly, as the meter's does.
+  const v = s.glassBankH + amountH;
+  if (v > BANK.capH) {
+    const lostH = v - BANK.capH;
+    s.stats.frostSpilledH = (s.stats.frostSpilledH as number) + lostH;
+    s.events.push({ e: 'frostSpill', lostH });
+  }
+  s.glassBankH = v > BANK.capH ? BANK.capH : v;
 }
 
 /** Frost income sources (the frostGain event's `source`). */
@@ -256,7 +276,7 @@ export function updateBuds(s: SimState): void {
   const theta = s.sun.theta;
   const emit = s.tick % B.eventTicks === 0;
   const reach = budReach(s);
-  const grow = GROW * growMul(s) * (w.v16.bank ? snapGauge(s.nubs.chill) : 1);
+  const grow = GROW * growMul(s) * (w.v16.bank ? snapGauge(s.nubs.chill, s.nubs.maxChill) : 1);
   for (let i = lowerBound(bs, y - B.reachBehind); i < bs.length; i++) {
     const b = bs[i] as Bud;
     if (b.y > y + reach) break;
@@ -335,20 +355,24 @@ export function updateLandGuide(s: SimState): void {
  * Economy iteration 2, the Chill gauge sets what a snap does (0..1): 1 from cashFullChill (the gauge's
  * white), falling across the amber to 0 at coolChill and below (red-hot).
  */
-export function snapGauge(chill: number): number {
-  if (chill >= BANK.cashFullChill) return 1;
-  if (chill <= BANK.coolChill) return 0;
-  return (chill - BANK.coolChill) / (BANK.cashFullChill - BANK.coolChill);
+export function snapGauge(chill: number, maxChill: number = TUNING.nubs.maxChill): number {
+  const hi = whiteLine(maxChill);
+  const lo = coolLine(maxChill);
+  if (chill >= hi) return 1;
+  if (chill <= lo) return 0;
+  return (chill - lo) / (hi - lo);
 }
 
 /**
  * The cash-in a snap cast at ring level `m` pays (hundredths): cashPerLevelH per level above x1, at
- * most cashMaxH (a snap never refunds itself), × snapGauge (all of it from the white, less in the
- * amber, nothing red-hot), nothing in the Noon Heat (Bank on), never past `capH` in the meter
- * (iterations 1-2).
+ * most cashMaxH (a snap never refunds itself), × snapGauge with the Bank on (all of it from the
+ * white, less in the amber, nothing red-hot), nothing in the Noon Heat (Bank on), never past `capH`
+ * in the meter (iterations 1-2).
  */
 function cashInH(s: SimState, m: number, capH: number): number {
-  const k = snapGauge(s.nubs.chill);
+  // The gauge belongs to the Frost Bank: with the Bank off (`--off bank`) none of it applies (the
+  // cash-in is whole at any Chill, the snap cools in full, buds grow at full speed whenever lit).
+  const k = s.world.v16.bank ? snapGauge(s.nubs.chill, s.nubs.maxChill) : 1;
   if (k <= 0 || noonPour(s)) return 0;
   const h = Math.round(k * Math.min(BANK.cashMaxH, BANK.cashPerLevelH * (m - 1)));
   return Math.max(0, Math.min(h, capH - s.nubs.frostH));
@@ -423,7 +447,7 @@ export function castSnap(s: SimState): boolean {
     // cashCapH. Iteration 2: the snap cools Nubs × snapGauge of the way to full (all of it from the
     // white, less in the amber); red-hot it only shades: Chill stays where it was cast.
     const hot = !coolNubs(s);
-    s.snapChillCap = nb.chill + (nb.maxChill - nb.chill) * snapGauge(nb.chill);
+    s.snapChillCap = nb.chill + (nb.maxChill - nb.chill) * snapGauge(nb.chill, nb.maxChill);
     nb.frostH -= BANK.costH;
     nb.frost = nb.frostH / CHARGE_H;
     const m = nb.mult;
