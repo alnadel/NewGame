@@ -437,8 +437,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       arcRuns(g, inp.bud, cx, cy, R + 11, 0.5);
       if (red) {
         g.setLineDash(BUD_DASH);
-        g.lineWidth = 3;
-        g.strokeStyle = cssa(BUD_PALE, 0.3 * ba);
+        g.lineWidth = 3.5;
+        g.strokeStyle = cssa(BUD_PALE, 0.6 * ba);
         g.stroke();
         g.setLineDash([]);
       } else {

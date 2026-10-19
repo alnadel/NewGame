@@ -352,15 +352,19 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     // E3's gate (review of iteration 2): the cheap-detour seeker, and plain play on worlds without glass.
     rea('reactive plain glass near', { policy: 'plain', glass: 'near' }),
     rea('reactive plain, no glass', { policy: 'plain' }, { v16: { brittle: false } }),
-    // E2's stronger shade baseline (advisory): plain play that hops to another caster's shade.
+    // E2 on a stronger shade baseline (advisory, review of iteration 2): play that hops to another
+    // caster's shade, with each greed policy layered on it.
     rea('reactive plain hop@2', { policy: 'plain', hop: 2 }),
+    rea('reactive chase hop@2', { policy: 'chase', hop: 2 }),
+    rea('reactive naive hop@2', { policy: 'naive', hop: 2 }),
+    rea('reactive safe hop@2', { policy: 'safe', hop: 2 }),
   ];
-  const EXTRA = 3;
+  const EXTRA = 6;
   const rows = await ctx.run(jobs);
   const [plain, chase, naive, safe, plan, dial, glass, strong, h2, h3, h4, none, noStart] = rows as Sim16Row[] as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
   const sweep = rows.slice(13, 13 + PANIC_BARS.length + PLAN_BARS.length + HOARD_BARS.length);
   const farm = rows[rows.length - 1 - EXTRA] as Sim16Row;
-  const [near, noGlass, hop] = rows.slice(rows.length - EXTRA) as [Sim16Row, Sim16Row, Sim16Row];
+  const [near, noGlass, hop, chaseHop, naiveHop, safeHop] = rows.slice(rows.length - EXTRA) as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
   const panic45 = rows[13 + PANIC_BARS.indexOf(45)] as Sim16Row;
   // The strongest snap rule for plain play: greed is gated under it too (review of iteration 1).
   const candidates = [plain, plan, ...sweep];
@@ -418,12 +422,11 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   line(nb.mean < 0, true, `E2: naive does not beat plain under the strongest snap rule (${best.name.replace('reactive ', '')})`, pm(nb));
   line(paired(chaseBest, best).mean > 0, false, `chase outlives plain under the strongest snap rule`, pm(paired(chaseBest, best)));
   line(paired(safe, plain).mean < 0, true, 'E2: safe trails plain (mean)', pm(paired(safe, plain)));
-  // E2 against a stronger shade baseline (advisory, review of iteration 2): the better of plain and the SWING hopper.
-  const base2 = meanMinutes(hop) > meanMinutes(plain) ? hop : plain;
-  const b2 = base2.name.replace('reactive ', '');
-  line(paired(chase, base2).mean >= 150, false, `chase outlives the better of plain and hop@2 (${b2}) by ≥ 150 min (mean)`, `${pm(paired(chase, base2))}; hop@2 − plain ${pm(paired(hop, plain))}`);
-  line(paired(naive, base2).mean < 0, false, `naive does not beat the better of plain and hop@2 (${b2})`, pm(paired(naive, base2)));
-  line(paired(safe, base2).mean < 0, false, `safe trails the better of plain and hop@2 (${b2})`, pm(paired(safe, base2)));
+  // E2 on a stronger shade baseline (advisory, review of iteration 2): each greed policy layered on
+  // the SWING hopper, against the hopper (is greed's payoff more than the weak baseline's?).
+  line(paired(chaseHop, hop).mean >= 150, false, `E2 on hop@2: chase outlives its baseline by ≥ 150 min (mean)`, `${pm(paired(chaseHop, hop))}; hop@2 − plain ${pm(paired(hop, plain))}`);
+  line(paired(naiveHop, hop).mean < 0, false, 'E2 on hop@2: naive does not beat its baseline', pm(paired(naiveHop, hop)));
+  line(paired(safeHop, hop).mean < 0, false, 'E2 on hop@2: safe trails its baseline', pm(paired(safeHop, hop)));
   const gp = paired(glass, plain);
   const sp = paired(strong, plain);
   const np = paired(near, plain);
