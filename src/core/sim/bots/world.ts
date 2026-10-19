@@ -250,7 +250,10 @@ export function worldHumanTarget(ctx: BotHookCtx, s: SimState, target: number): 
   if (!s.level) return target;
   const key = (s.cfg.seed ^ Math.imul(Math.floor(s.tick / FOCUS_TICKS) + 1, 0x9e3779b1) ^ Math.imul(ctx.salt, 0x85ebca6b)) >>> 0;
   const coin = (splitmix32(key) >>> 0) / 4294967296;
-  if (coin >= FEAT_FOCUS) return target;
+  // A parry Dare's moment (a flare announced, rising or holding) has the seeker's whole attention: it
+  // pre-aims at the telegraph and holds that angle (review of economy iteration 2: on the coin alone
+  // it met a boss's parry Dare 0-3 times in 6).
+  if (coin >= FEAT_FOCUS && !(ctx.opts.dares?.moment(s) ?? false)) return target;
   const t = ctx.opts.dares ? ctx.opts.dares.target(s, s.sun.theta) : -1;
   return t >= 0 ? t : target;
 }

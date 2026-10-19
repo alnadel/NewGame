@@ -708,6 +708,16 @@ function rideMask(s: SimState): void {
   }
 }
 
+/**
+ * True while a flare is announced, rising or holding and the level dares an unmet parry: a player who
+ * seeks that Dare watches every flare (humanFeat's focus coin does not apply to it: bots/world.ts).
+ */
+export function dareMoment(s: SimState): boolean {
+  if (s.flarePhase < 1 || s.flarePhase > 3) return false;
+  const n = unmet(s, kinds, false, true);
+  return n > 0 && focusKind(s, n) === 'parry';
+}
+
 /** humanFeat's parry aim: the angle it picked from the warning's telegraph, held through that flare. */
 let parryFor: SimState | null = null;
 let parryFlare = -1;
@@ -718,5 +728,5 @@ let parryBin = -1;
  * with `feats`, its Dares) and humanFeat aims at a Dare only when given these. Tooling passes them
  * (scripts/sim.ts --campaign, the tests); the game never does, so this module stays out of its bundle.
  */
-export const DARE_TERMS = Object.freeze({ bonus: dareBonus, snap: dareSnap, target: dareTarget, humanSnap: dareHumanSnap });
+export const DARE_TERMS = Object.freeze({ bonus: dareBonus, snap: dareSnap, target: dareTarget, humanSnap: dareHumanSnap, moment: dareMoment });
 export type DareTerms = typeof DARE_TERMS;

@@ -18,6 +18,7 @@ import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import {
   BOSS_PHASES,
   bakedGoal,
+  bossParry,
   bakeRunEntry,
   CAMPAIGN_LEVELS,
   dareCandidates,
@@ -596,9 +597,12 @@ async function measureDares(pool: TaskPool<BakeTask, unknown>, l: LevelDef, worl
   if (first && l.id % 10 === 0) {
     const cands2 = dareCandidates(lv, bake, first.kind);
     const look = secondMeasures(lv, bake, first.kind);
-    let pick2 = pickDare(lv, cands2, look);
+    const snap2 = (k: FeatKind): boolean => snapByGoal(lv) || first.kind === 'snapSave' || k === 'snapSave';
+    // A boss offers parry beside its first Dare where it needs its verb (campaign.ts bossParry): measured first.
+    if (isBossFinale(l.id) && first.kind !== 'parry' && cands2.includes('parry') && !look('parry')) dares2.push(await measureDare(run, at, 'parry', snap2('parry')));
+    let pick2 = bossParry(lv, bake, first.kind, look) ? { next: null } : pickDare(lv, cands2, look);
     while (pick2.next !== null) {
-      dares2.push(await measureDare(run, at, pick2.next, snapByGoal(lv) || first.kind === 'snapSave' || pick2.next === 'snapSave'));
+      dares2.push(await measureDare(run, at, pick2.next, snap2(pick2.next)));
       pick2 = pickDare(lv, cands2, look);
     }
   }

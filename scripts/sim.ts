@@ -45,7 +45,7 @@
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
-import { CAMPAIGN_LEVELS, featMet, featValue, LEVEL_COUNT, SOFT_FAIL_MISSES, type LevelDef } from '../src/config/campaign.ts';
+import { CAMPAIGN_LEVELS, featMet, featValue, isBossFinale, LEVEL_COUNT, ORACLE_PLANS, SOFT_FAIL_MISSES, type FeatKind, type LevelDef } from '../src/config/campaign.ts';
 import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
@@ -753,11 +753,14 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   // Per Dare kind (§2.6 advisory; fix round 3's J1): the bots that do not seek it (reactive, oracle)
   // meet it on ≤ 35% of the levels that dare it, the Feat-seeking oracle on ≥ 85%, humanFeat on ≥ 50%.
   // humanDial (who does not seek it either, on streams the bake never sized from) is shown alongside.
+  // The oracle plays the flares and the glass by plan (campaign.ts ORACLE_PLANS): for those kinds it is
+  // a seeker, so its share is shown but not judged.
   let kindsOk = 0;
   for (const k of dareKinds) {
+    const planned = ORACLE_PLANS.includes(k as FeatKind);
     const parts = [
       ['reactive', kindShare('reactive', k), (v: number) => v <= 0.35],
-      ['oracle', kindShare('oracle', k), (v: number) => v <= 0.35],
+      [planned ? 'oracle (plans it)' : 'oracle', kindShare('oracle', k), (v: number) => planned || v <= 0.35],
       ['oracle+feats', kindShare('oracle+feats', k), (v: number) => v >= 0.85],
       ['humanFeat', kindShare('humanFeat', k), (v: number) => v >= 0.5],
     ] as const;
@@ -769,6 +772,15 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
     console.log(`  ${ok ? 'PASS' : 'MISS'}  Dare '${k}' (${kindLevels(k).length} levels; advisory): ${shown.map(([b, v]) => `${b} ${(100 * v).toFixed(0)}%`).join(', ')}${Number.isNaN(hd) ? '' : ` (humanDial ${(100 * hd).toFixed(0)}%)`}`);
   }
   if (dareKinds.length) console.log(`  ${kindsOk === dareKinds.length ? 'PASS' : 'MISS'}  every Dare kind needs its verb (advisory): ${kindsOk} of ${dareKinds.length} kinds`);
+  // Review of economy iteration 2: the Dares are more than blooms, and every boss offers a parry.
+  const daring = ids.map((id) => CAMPAIGN_LEVELS[id - 1] as LevelDef);
+  const notBlooms = daring.filter((l) => l.feats.some((f) => f.kind !== 'blooms')).length;
+  if (daring.length) line(false, notBlooms >= 0.25 * daring.length, 'at least 25% of levels dare a verb other than blooms (advisory)', `${notBlooms} of ${daring.length} (${((100 * notBlooms) / daring.length).toFixed(0)}%)`);
+  const bosses = daring.filter((l) => isBossFinale(l.id));
+  const parryBosses = bosses.filter((l) => l.feats.some((f) => f.kind === 'parry'));
+  if (bosses.length) line(false, parryBosses.length === bosses.length, 'every boss finale offers a parry Dare (advisory)', `${parryBosses.length} of ${bosses.length}${parryBosses.length < bosses.length ? ` (without: ${bosses.filter((l) => !parryBosses.includes(l)).map((l) => `L${l.id}`).join(', ')})` : ''}`);
+  const two = daring.filter((l) => l.feats.length >= 2).length;
+  console.log(`  (row) levels with two Dares: ${two}`);
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
     process.exit(1);

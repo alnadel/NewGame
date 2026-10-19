@@ -736,6 +736,13 @@ const DARE_SEEK_MIN_MINOR = 8;
 const DARE_FLOOR: Readonly<Record<FeatKind, number>> = Object.freeze({
   blooms: 1, swings: 1, deep: DEEP_MIN_TICKS, snapSave: 60, parry: 1, brittle: 1, flakes: 3, clean: 1, ride: 1, gates: 1, flip: 1, still: 1, ring: 3,
 });
+/**
+ * The kinds the oracle plays by plan on every level (its parry and glass plans, bots/world.ts): it
+ * is not a player who does not seek them, so their Dares are sized above the reactive bot and
+ * humanDial only (review of economy iteration 2: on every boss it parried every kept flare, so no
+ * parry target could sit above it).
+ */
+export const ORACLE_PLANS: readonly FeatKind[] = Object.freeze(['parry', 'brittle'] as FeatKind[]);
 /** Dares counted in ticks: sized in whole tenths of a second, clear of the non-seekers by 12 ticks and 10%. */
 const tickDare = (k: FeatKind): boolean => k === 'deep' || k === 'snapSave';
 /** Dares met or not (their value is 0 or 1). */
@@ -768,7 +775,10 @@ export function dareFloor(l: LevelDef, kind: FeatKind): number {
  * is what the Feat-seeking oracle reaches (the others may meet it too). Tier 0: not even that.
  */
 export function sizeDare(kind: FeatKind, m: DareMeasure, floor: number): DareSize {
-  const [r = -1, o = -1, ...hd] = m.not;
+  const [r = -1, o0 = -1, ...hd] = m.not;
+  // The oracle plays the flares and the glass by plan (bots/world.ts): for those kinds it seeks the
+  // verb whatever its Dare, so only the reactive bot and humanDial are the players who do not.
+  const o = ORACLE_PLANS.includes(kind) ? -1 : o0;
   const [f = -1, ...hf] = m.seek;
   const top = hd.slice().sort((a, b) => b - a);
   const base = Math.max(r, o, top[DARE_NOT_MAX] ?? -1, 0);
@@ -881,10 +891,24 @@ function assignFeats(l: LevelDef, bake: LevelBake): readonly FeatSpec[] {
   if (!first) return offerFeats(l, bake);
   const out: FeatSpec[] = [first];
   if (l.id % LEVELS_PER_CHAPTER === 0) {
-    const second = pickDare(l, dareCandidates(l, bake, first.kind), secondMeasures(l, bake, first.kind), SECOND_DARE_TIER).spec;
+    const look = secondMeasures(l, bake, first.kind);
+    const second = bossParry(l, bake, first.kind, look) ?? pickDare(l, dareCandidates(l, bake, first.kind), look, SECOND_DARE_TIER).spec;
     if (second) out.push(second);
   }
   return Object.freeze(out);
+}
+
+/**
+ * A boss finale (the Solar Flare's) offers a parry Dare beside its first one whenever parry needs
+ * its verb there (sizeDare tier 2 or 3: the players who do not seek it stay under it, so it is not
+ * free and cannot void the first Dare); null otherwise.
+ */
+export function bossParry(l: LevelDef, bake: LevelBake, first: FeatKind, look: (k: FeatKind) => DareMeasure | undefined): FeatSpec | null {
+  if (!isBossFinale(l.id) || first === 'parry' || !dareCandidates(l, bake, first).includes('parry')) return null;
+  const m = look('parry');
+  if (!m) return null;
+  const size = sizeDare('parry', m, dareFloor(l, 'parry'));
+  return size.tier >= 2 ? Object.freeze({ kind: 'parry', target: size.target }) : null;
 }
 
 /** The share of humanDial players who must pass a teaching level on their first try (`lessonReads`). */
