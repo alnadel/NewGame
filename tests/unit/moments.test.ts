@@ -217,6 +217,10 @@ describe('RunMoments', () => {
     m.update(e);
     expect(b.toasts).toHaveLength(1);
     expect(b.toasts[0]!.text).toMatch(/^A bud!/);
+    // Economy iteration 2: a snap in the Noon Heat pours nothing, and says so once.
+    b.toasts.length = 0;
+    m.onEvent({ e: 'snapCash', level: 3, refundH: 0, noon: true }, e);
+    expect(b.toasts.map((t) => t.text)).toEqual(['In the Noon Heat a snap pours nothing: cash your ring before 11 or after 1.']);
     // A seasoned player gets none.
     save.stats.runs = 50;
     b.toasts.length = 0;
