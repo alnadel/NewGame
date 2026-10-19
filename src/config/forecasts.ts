@@ -76,8 +76,10 @@ export const FORECAST_TUNING: Readonly<Record<ForecastId, ForecastTuning>> = Obj
   breezy: { clouds: 1.5, cloudDrift: 30, overtake: [1.35, 1.6], wait: [0.5, 0.65] },
   overcast: { clouds: 1.5, cloudRx: [80, 100], spacing: 1.4 },
   // A Heat Wave's higher sun is its noon threat: it has no Noon Heat (the validator's rescues on heat
-  // days stayed over 0.8 a chunk with it: V1_6_PLAN §6.4).
-  heat: { epsNoon: 3, flakes: 1, spacing: 0.92, snow: 1.5, noonHeat: 0 },
+  // days stayed over 0.8 a chunk with it: V1_6_PLAN §6.4). Its sun stands 2° higher (was 3°): at 3°
+  // the validator's rescues were 0.808 a chunk on held-out seeds 80001-80240 in v1.5 already and with
+  // v1.6's flares off, 0.798 with them on, against the hard ≤ 0.8 (review r5); at 2° they are 0.714.
+  heat: { epsNoon: 2, flakes: 1, spacing: 0.92, snow: 1.5, noonHeat: 0 },
   long: { epsNoon: -10, spacing: 1.15, latMax: 10 },
   dazzle: { balls: [6, 12] },
   market: { balls: [0, 0], stalls: 3, gateChance: 0.35 },

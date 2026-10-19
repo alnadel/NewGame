@@ -189,7 +189,7 @@ describe('forecast tuning', () => {
     const clear = dayParams(3, 3, dayPlan('meadow', 'clear'));
     const at = (f: ForecastId, biome: BiomeId = 'meadow') => dayParams(3, 3, dayPlan(biome, f));
     expect(clear).toBe(dayParams(3, 3)); // the legacy Day 3 is a clear Meadow day
-    expect(at('heat').epsNoon).toBe(clear.epsNoon + 3);
+    expect(at('heat').epsNoon).toBe(clear.epsNoon + 2);
     expect(at('heat').flakesPerCluster).toBe(clear.flakesPerCluster + 1);
     expect(at('heat').spacing).toBeCloseTo(clear.spacing * 0.92, 9);
     expect(at('heat').snowMult).toBe(1.5);

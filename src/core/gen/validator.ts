@@ -500,16 +500,33 @@ function resumeSlot(i: number, first: number): number {
 }
 
 /**
- * A kept Endless flare whose parry the DP cannot hold above the floor (a failure on one of its hold
- * steps) is dropped after all (the flare that decided it is this job's: its whole window lies in the
- * job's range): its lift leaves the job's geometry, the rows it touched are recomputed and the DP
- * resumes before them. Returns that slot, or −1 when slot i is no forced hold step.
+ * A kept Endless flare the DP cannot survive above the floor is dropped after all, before any rescue
+ * is spent on it: a failure on one of its lifted steps (rise, hold or fall; the hold's path is forced
+ * onto its parry), or, with `before` set, the job's last kept flare that ended before slot i when the
+ * chunk would otherwise end in an accepted failure (its forced parry left the path too low for the
+ * rescues). Its lift leaves the job's geometry, the rows it touched are recomputed and the DP
+ * resumes before them. Returns that slot, or −1 when there is no such flare. Review r5 (seed 80139,
+ * heat): a failure in a rise used up the chunk's eight rescues and a parked cloud before its hold
+ * step revoked the flare, and the chunk ended in an unresolved failure at Day 8's dawn.
  */
-function revokeFlare(w: World, job: ValidationJob, i: number): number {
+function revokeFlare(w: World, job: ValidationJob, i: number, before: boolean): number {
   if (w.flareParry.size === 0) return -1;
   const tick = Math.round((job.sT[i] as number) * TICK_HZ);
-  const f = liftingFlare(w, tick);
-  if (f === null || tick < f.holdTick || tick > f.fallTick || !w.flareParry.delete(f.id)) return -1;
+  let f = liftingFlare(w, tick);
+  if (f !== null && !w.flareParry.has(f.id)) f = null;
+  if (f === null && before) {
+    const A = rangeFirst(job);
+    for (let k = w.flares.length - 1; k >= 0; k--) {
+      const c = w.flares[k] as Flare;
+      if (c.riseTick > tick) continue;
+      if (c.riseTick < A) break;
+      if (c.state === FLARE_KEPT && w.flareParry.has(c.id)) {
+        f = c;
+        break;
+      }
+    }
+  }
+  if (f === null || !w.flareParry.delete(f.id)) return -1;
   f.state = FLARE_DROPPED;
   let first = -1;
   for (let s = 1; s <= job.pre + job.n + 1; s++) {
@@ -524,7 +541,7 @@ function revokeFlare(w: World, job: ValidationJob, i: number): number {
 
 /** Handles a failure at slot i; returns the DP slot to resume from. */
 function onFailure(w: World, job: ValidationJob, i: number, floor: number, maxC: number): number {
-  const revoked = revokeFlare(w, job, i);
+  const revoked = revokeFlare(w, job, i, false);
   if (revoked >= 0) return revoked;
   if (job.rescues < TUNING.rescue.maxPerChunk) {
     job.rescues++;
@@ -550,6 +567,9 @@ function onFailure(w: World, job: ValidationJob, i: number, floor: number, maxC:
     const first = markDirtyCloud(job, cl);
     return resumeSlot(i, first);
   }
+  // A flare of this job that left the path too low: drop it rather than accept the failure.
+  const late = revokeFlare(w, job, i, true);
+  if (late >= 0) return late;
   // Accept: count it, lift the frontier to the floor so the rest of the chunk is still checked.
   w.stats.unresolved++;
   job.accepting = true;
