@@ -102,17 +102,23 @@ export interface DayParams {
   // v1.6 (docs/V1_6_PLAN.md §2.5; CORE-2 owns the values and their readers).
   /**
    * Noon Heat: the drain × this between 11:00 AM and 1:00 PM (Endless and Daily; the Journey reads
-   * it as 1 through noonHeatAt). 1 on Day 1, 1.1 on Days 2-3, 1.2 from Day 4 (profile 3; profiles
+   * it as 1 through noonHeatAt). 1.05 on Day 1, 1.1 on Days 2-3, 1.2 from Day 4 (profile 3; profiles
    * 0-2 one day later). Calibrated down from the plan's 1.15 / 1.25, which put the heat forecast's
-   * rescues per chunk at 0.80 (40 seeds).
+   * rescues per chunk at 0.80 (40 seeds). Day 1's step (review r5): the standard rung's runs end on
+   * Day 1 (humanDial R4 median 11:56 AM), so with none there it never met the noon boss (2% of runs).
    */
   readonly noonHeat: number;
-  /** Heat Flares drawn for the day (profile 3: 0, 1, then 2 from Day 3; profiles 0-2: 1 from Day 3). */
+  /**
+   * Heat Flares drawn for the day (profile 3: 1 on Days 1-2, then 2 from Day 3; profiles 0-2: 1 from
+   * Day 3). Day 1's is a morning flare (review r5: the standard rung's runs end on Day 1, so with its
+   * first flare on Day 2 afternoon humanDial R4 met one on 1% of runs).
+   */
   readonly flareCount: number;
   /**
-   * A flare's elevation lift d (°): 12 on Days 2-3, 10 from Day 4 (0 when the day has none). Fix round
-   * 2 raised it from the plan's 10 / 8 (§11 range 6-12): with the keep test's fixed-angle parry the
-   * shade must still move, and 10 / 8 kept 67.5% of the Days 2-4 candidates, 12 / 10 72.5% (40 seeds).
+   * A flare's elevation lift d (°): 6 on Day 1, 12 on Days 2-3, 10 from Day 4 (0 when the day has
+   * none). Fix round 2 raised Days 2+ from the plan's 10 / 8 (§11 range 6-12): with the keep test's
+   * fixed-angle parry the shade must still move, and 10 / 8 kept 67.5% of the Days 2-4 candidates,
+   * 12 / 10 72.5% (40 seeds). Day 1's first flare is the range's gentlest.
    */
   readonly flareD: number;
 }
@@ -298,13 +304,13 @@ function rampRow(day: number): Row {
  */
 function noonHeatOf(d: number, profile: ProfileId, share = 1): number {
   const k = profile === 3 ? d : d - 1;
-  const h = k >= 4 ? 1.2 : k >= 2 ? 1.1 : 1;
+  const h = k >= 4 ? 1.2 : k >= 2 ? 1.1 : k === 1 ? 1.05 : 1;
   return 1 + (h - 1) * share;
 }
 
-/** v1.6 Heat Flares of day d: how many, and their lift (°). */
+/** v1.6 Heat Flares of day d (profile 3: Day 1's in the morning, placer.ts addDayFlares). */
 function flareCountOf(d: number, profile: ProfileId): number {
-  if (profile === 3) return d >= 3 ? 2 : d === 2 ? 1 : 0;
+  if (profile === 3) return d >= 3 ? 2 : 1;
   return d >= 3 ? 1 : 0;
 }
 
@@ -450,7 +456,7 @@ export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legac
     walkMul,
     noonHeat: noonHeatOf(d, profile, ft.noonHeat),
     flareCount: flareCountOf(d, profile),
-    flareD: flareCountOf(d, profile) === 0 ? 0 : d >= 4 ? 10 : 12,
+    flareD: flareCountOf(d, profile) === 0 ? 0 : d >= 4 ? 10 : d === 1 ? 6 : 12,
   });
   if (tune) modCache.set(mkey, params);
   else cache.set(key, params);

@@ -413,7 +413,7 @@ export function makeFlare(id: number, day: number, d: number, riseTick: number, 
 /**
  * v1.6 Heat Flares of an Endless day (docs/V1_6_PLAN.md §2.5; World.v16.flares, never on a campaign
  * level, whose bosses bring their own): DayParams.flareCount rises (2: one in each of
- * TUNING.flare.windows, 1: the afternoon one), each at t/Dl drawn from (seed, 'flares', day) and
+ * TUNING.flare.windows, 1: the afternoon one, or the morning one on Day 1), each at t/Dl drawn from (seed, 'flares', day) and
  * snapped to the validator's step grid, lift DayParams.flareD. They wait, pending, for the keep test
  * of the validation job that reaches them.
  */
@@ -424,7 +424,8 @@ function addDayFlares(w: World, day: number, p: DayParams): void {
   const t0 = dayStartTick(day);
   const am = r.range(FL.windows[0][0], FL.windows[0][1]);
   const pm = r.range(FL.windows[1][0], FL.windows[1][1]);
-  const at = p.flareCount >= 2 ? [am, pm] : [pm];
+  // One flare: Day 1's in the morning (the standard rung's runs end on Day 1), a later day's in the afternoon.
+  const at = p.flareCount >= 2 ? [am, pm] : day === 1 ? [am] : [pm];
   for (const u of at) {
     const rise = t0 + STEP * Math.round((u * dl) / STEP);
     w.flares.push(makeFlare(w.flares.length + 1, day, p.flareD, rise, FL.warnTicks));

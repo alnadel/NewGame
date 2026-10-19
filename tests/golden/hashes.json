@@ -26,26 +26,26 @@
     "8ecbbe8017545859"
   ],
   "oracle3min": [
-    "159083eef6e90216",
-    "9afb3db65a122b02",
-    "f7d9fb5de8b7f1d4",
-    "045d8dd519c3ccb0",
-    "fdad94db4d9a4a73",
-    "504aaa04497e5c07",
-    "e20b54085c69a6c5",
-    "ab893587ef8fa89e",
-    "843101bfe1da7ffe",
-    "52dd36f0316a9706",
-    "506c4a5fb55a10d0",
-    "f8b289621d7b6814",
-    "ac80406c4a2ffb7e",
-    "de631df547f48d8b",
-    "bea02a536a9c508b",
-    "3a71b7daf07097a1",
-    "7923abc6a84040a5",
-    "3940f775a1d0f6ff"
+    "08eb6b53ff9fd3b0",
+    "f96b6643f81ca2d8",
+    "2a306a0847f8a52a",
+    "7bf0eea5f79c94b5",
+    "65dc43cc0cba9d9d",
+    "478578c4db74b03b",
+    "6742222c7dcaba30",
+    "789d53ebd9a2e116",
+    "aece04083bfa3e88",
+    "6999acb153d35d6d",
+    "9a604abdabe2aaa7",
+    "fb7e74e3705bc03e",
+    "a0e751a0405e9fad",
+    "b0474667452ccebd",
+    "ba4b4e33987c443d",
+    "1eb9365cdea383ae",
+    "2272364dfdb990c3",
+    "2aca059956600a2b"
   ],
-  "headless_7_3600_reactive": "39df01cf391285f7",
+  "headless_7_3600_reactive": "f1d7622b356835b5",
   "chunks": {
     "1": [
       "98adb812",
@@ -128,20 +128,20 @@
     "3": "7012e483"
   },
   "forecasts": {
-    "clear": "f823d167d094f8fd",
-    "breezy": "5abf821c40aacef4",
-    "overcast": "851d382549eb6de5",
-    "heat": "348d0bc6fd177980",
-    "long": "bd8c4de7e8b25341",
-    "dazzle": "32d3922a8529a02b",
-    "market": "b6cf67b5eccec30b"
+    "clear": "c39164480c6e74b6",
+    "breezy": "885fbe1fec914b9d",
+    "overcast": "a678ee6a9d1ff909",
+    "heat": "dbeda0c920b764c3",
+    "long": "3ca9298077c0ff0d",
+    "dazzle": "455a74d81e748afd",
+    "market": "0a8a27ceaf1dcf86"
   },
   "rungs": [
     "f6662dc3a88ad07d",
     "6d72dc4d595c2bc8",
     "d948f7f26d9d0abc",
-    "b6e94dfb05b4cb0a",
-    "c59d03c182618923"
+    "2e743a209389fb2d",
+    "a7b4e72be2cd7134"
   ],
   "campaign": {
     "1": "won:938d709bc173f9f2",

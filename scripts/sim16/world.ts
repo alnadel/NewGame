@@ -240,6 +240,13 @@ export const WORLD: Sim16Module = {
         // is the one that says whether the Noon Heat is the day's boss (an extra line, same bar).
         const [h2, h2d] = noonShare(hd.runs, 2);
         gate(false, h2 >= 0.25 * h2d, `${hd.name} deaths in 11 AM-1 PM from Day 2 ≥ 25% (advisory)`, `${pct(h2, h2d)} of ${h2d}`);
+        // Review r5: the threat layer reaches the standard rung (its runs end on Day 1, where profile 3
+        // now meets a morning flare and the Noon Heat). Beside it, the shares the change must not move
+        // by more than 5 points (seeds 1-240 before it: R4 70% reach 11 AM, 12% the first night).
+        const met = hd.runs.filter((r) => (r.m.fWarn ?? 0) > 0).length;
+        const at11 = hd.runs.filter((r) => r.minutes >= 300).length;
+        const night = hd.runs.filter((r) => r.minutes >= 720).length;
+        gate(false, met >= 0.5 * hd.runs.length, `${hd.name} meets a flare warning on ≥ 50% of runs (advisory)`, `${pct(met, hd.runs.length)}; reach 11 AM ${pct(at11, hd.runs.length)}, the first night ${pct(night, hd.runs.length)}`);
       }
       const meet = total(rea.runs, 'fParry') + total(rea.runs, 'fMiss');
       const p = meet > 0 ? total(rea.runs, 'fParry') / meet : 0;

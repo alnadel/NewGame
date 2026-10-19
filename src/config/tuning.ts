@@ -410,6 +410,12 @@ const tuning = {
      */
     scorchPerLitTick: 4,
     scorchMax: 80,
+    /**
+     * The scorch of Day 1's flare at most (profile 3's morning flare, review r5): at the full 80 a
+     * dial-follower who misses it melts before noon (humanDial R4 reaching 11 AM 70% → 63%); at 20,
+     * 68%, inside the ±5-point bar.
+     */
+    scorchMaxDay1: 20,
   },
 
   /** Pickups (V1_PLAN §5.4). */

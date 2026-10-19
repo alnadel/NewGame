@@ -53,7 +53,8 @@ describe('MechView (game/mechanics.ts)', () => {
     expect(v.flarePhase).toBe(0);
     expect(v.flare).toBeNull();
     expect(v.land).toBeNull();
-    expect(v.noonHeat).toBe(1);
+    // Day 1's Noon Heat at profile 3 (review r5).
+    expect(v.noonHeat).toBe(1.05);
     // The meter's fill is the Bank's hundredths (or the v1.5 meter, whichever says more).
     s.nubs.frostH = 160;
     expect(m.fill(s, 0).frost).toBeCloseTo(1.6);

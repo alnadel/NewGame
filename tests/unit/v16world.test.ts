@@ -73,10 +73,10 @@ function jumpTo(s: SimState, day: number, dayTick: number): void {
 }
 
 describe('Noon Heat (T1)', () => {
-  it('multiplies the drain between 11 AM and 1 PM from Day 2 (profile 3), Endless only', () => {
+  it('multiplies the drain between 11 AM and 1 PM, ×1.05 on Day 1 (profile 3), Endless only', () => {
     const w = createWorld(headlessConfig(1));
     const dl = dayTicks(2);
-    expect(noonHeatAt(w, 1, Math.round(dl / 2))).toBe(1);
+    expect(noonHeatAt(w, 1, Math.round(dl / 2))).toBe(1.05);
     expect(noonHeatAt(w, 2, Math.round(dl / 2))).toBe(1.1);
     const STEP = TUNING.validator.stepTicks;
     expect(noonHeatAt(w, 2, Math.floor((5 * dl) / 12) - 2 * STEP)).toBe(1);
@@ -99,7 +99,8 @@ describe('Noon Heat (T1)', () => {
     // A Heat Wave day has none (its higher sun is its noon threat; V1_6_PLAN §6.4).
     expect(noonHeatAt(createWorld({ ...headlessConfig(1), forecast: 'heat' }), 4, Math.round(dl / 2))).toBe(1);
     // Profiles 0-2 one day later; off with the rule switched off and on every campaign level.
-    expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 2, Math.round(dl / 2))).toBe(1);
+    expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 1, Math.round(dl / 2))).toBe(1);
+    expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 2, Math.round(dl / 2))).toBe(1.05);
     expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 3, Math.round(dl / 2))).toBe(1.1);
     expect(noonHeatAt(createWorld({ ...headlessConfig(1), v16: { noonHeat: false } }), 4, Math.round(dl / 2))).toBe(1);
     expect(noonHeatAt(createWorld(campaignConfig(100)), 1, Math.round(dl / 2))).toBe(1);
@@ -218,7 +219,7 @@ describe('Heat Flares (§2.5)', () => {
     expect(meltBudgetOf(s, p)).toBe(s.params.meltBudget);
   });
 
-  it('schedule and keep test (40 seeds × Days 1-4): p3 has none on Day 1, one on Day 2, two from Day 3; every kept flare passes both conditions', () => {
+  it('schedule and keep test (40 seeds × Days 1-4): p3 has a morning one on Day 1, one on Day 2, two from Day 3; every kept flare passes both conditions', () => {
     let kept = 0;
     let decided = 0;
     for (let seed = 1; seed <= 40; seed++) {
@@ -237,10 +238,12 @@ describe('Heat Flares (§2.5)', () => {
       const perDay = [0, 0, 0, 0, 0];
       for (const f of w.flares) {
         if (f.day <= 4) perDay[f.day] = (perDay[f.day] as number) + 1;
+        // Day 1's morning flare (review r5): its rise in the morning keep band.
+        if (f.day === 1) expect((f.riseTick - dayStartTick(1)) / dayTicks(1)).toBeLessThan(0.5);
         if (f.day > 4 || f.state === 0) continue;
-        decided++;
+        if (f.day >= 2) decided++;
         if (f.state !== FLARE_KEPT) continue;
-        kept++;
+        if (f.day >= 2) kept++;
         // Never at night, in the Noon Heat window or straddling a day; the rise stays in its keep band
         // of TUNING.flare.keepWindows (fix round 3: a candidate that fails moves on in time, never out of it).
         const t0 = dayStartTick(f.day);
@@ -253,7 +256,7 @@ describe('Heat Flares (§2.5)', () => {
         // Its parry is recorded for the validator's DP (Endless).
         expect(w.flareParry.get(f.id)?.some((v) => v === 1), `seed ${seed} flare ${f.id}: no parry mask`).toBe(true);
       }
-      expect(perDay.slice(1)).toEqual([0, 1, 2, 2]);
+      expect(perDay.slice(1)).toEqual([1, 1, 2, 2]);
       for (let i = 1; i < w.flares.length; i++) expect((w.flares[i] as Flare).riseTick).toBeGreaterThan((w.flares[i - 1] as Flare).riseTick);
     }
     // §2.5's ≥ 85% of the Days 2-4 candidates (fix round 3: 93% on these seeds; also a sim --check row).
@@ -348,7 +351,10 @@ describe('Heat Flares (§2.5)', () => {
     };
     // Full sun: lit on every hold tick, a miss; the scorch is per lit tick past the parry's allowance, capped.
     const s = miss({ ...headlessConfig(1), lesson: true }, true);
-    const scorch = Math.min(FL.scorchMax, FL.scorchPerLitTick * (FL.holdTicks - FL.parryMaxLit));
+    // Day 1's flare scorches at most scorchMaxDay1 (review r5: the first flare a player meets), later days scorchMax.
+    expect(s.day).toBe(1);
+    expect(FL.scorchMaxDay1).toBeLessThan(FL.scorchMax);
+    const scorch = Math.min(FL.scorchMaxDay1, FL.scorchPerLitTick * (FL.holdTicks - FL.parryMaxLit));
     expect(s.flareScorch).toBe(scorch);
     expect(s.nubs.chill).toBeLessThanOrEqual(s.nubs.maxChill - scorch);
     for (let i = 0; i < 30; i++) {

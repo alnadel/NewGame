@@ -89,7 +89,8 @@ describe('v1.6 contract', () => {
   });
 
   it('debug hooks: debugRing sets the level and charge; debugFlare adds a kept flare on the TUNING.flare shape', () => {
-    const s = createRun(headlessConfig(1));
+    // Profile 2: no flare of its own on Day 1 (profile 3 draws a morning one), so the list holds only the debug flares.
+    const s = createRun(headlessConfig(1, 2));
     debugRing(s, 9, 1234.4);
     expect([s.nubs.mult, s.nubs.ringCharge]).toEqual([5, 1234]);
     const late = debugFlare(s, 600, 10);

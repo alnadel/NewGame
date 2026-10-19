@@ -51,7 +51,9 @@ function settle(s: SimState, f: Flare): void {
     // Scorch (Endless): the flash scorches the tank, the more the longer Nubs stood in it, until
     // nightfall or a Cold Snap. The validator never needs it: its DP's path parries every kept flare.
     if (s.world.level === null && FL.scorchPerLitTick > 0) {
-      s.flareScorch = Math.min(FL.scorchMax, s.flareScorch + FL.scorchPerLitTick * (s.flareLit - FL.parryMaxLit));
+      // Day 1's flare (profile 3) is the first a player meets: its scorch stays small.
+      const max = s.day === 1 ? FL.scorchMaxDay1 : FL.scorchMax;
+      s.flareScorch = Math.min(max, s.flareScorch + FL.scorchPerLitTick * (s.flareLit - FL.parryMaxLit));
       clampScorch(s);
     }
   }
