@@ -239,7 +239,9 @@ function budReach(s: SimState): number {
  * Daylight tick: every unbloomed bud within [Nubs − reachBehind, Nubs + reachAhead] grows while the
  * sun shines from within ±faceTol of its face (budGrow every eventTicks while growing) and blooms
  * at 1; otherwise its growth fades. Nothing grows while the sun is down or eclipsed, or (Bank on,
- * economy iteration 2) while Nubs is red-hot.
+ * economy iteration 2) while Nubs is red-hot; with the Bank on buds grow at the gauge's pace
+ * (× snapGauge: full speed from the white, slower across the amber, none at the red line), so greed
+ * that runs Nubs hot grows its own buds slowly.
  */
 export function updateBuds(s: SimState): void {
   const w = s.world;
@@ -251,7 +253,7 @@ export function updateBuds(s: SimState): void {
   const theta = s.sun.theta;
   const emit = s.tick % B.eventTicks === 0;
   const reach = budReach(s);
-  const grow = GROW * growMul(s);
+  const grow = GROW * growMul(s) * (w.v16.bank ? snapGauge(s.nubs.chill) : 1);
   for (let i = lowerBound(bs, y - B.reachBehind); i < bs.length; i++) {
     const b = bs[i] as Bud;
     if (b.y > y + reach) break;

@@ -255,9 +255,10 @@ const tuning = {
    * Economy iteration 2 (core README §16.5): the Chill gauge sets what a snap does: from cashFullChill
    * (white) it pours the whole ring (cashPerLevelH a level above x1, at most cashMaxH, never past
    * cashCapH in the meter) and cools Nubs to full; in the amber both shrink to nothing at coolChill;
-   * red-hot (below coolChill) it only shades, and Nubs grows no buds and freezes no frost. In the
-   * Noon Heat frost does not freeze: no bloom banks any and a snap pours none. A bloom pays bloomH when
-   * Nubs is fully shaded and cool as it blooms.
+   * red-hot (below coolChill) it only shades, and Nubs grows no buds and freezes no frost. Buds grow
+   * at the same pace (full speed in the white, slower across the amber). In the Noon Heat frost does
+   * not freeze: no bloom banks any and a snap pours none. A bloom pays bloomH when Nubs is fully
+   * shaded and cool as it blooms.
    */
   bank: {
     /**
@@ -267,14 +268,19 @@ const tuning = {
     ships: true,
     capH: 200,
     costH: 100,
-    /** Iteration 2: 25 → 30 (the plan's value), paid for by the parry's 5 (a dial-follower parries by luck). */
-    bloomH: 30,
+    /**
+     * Iteration 2: 25 → 32, paid for by the parry's 5 (a dial-follower parries by luck); buds grow at
+     * the gauge's pace (mechanics.ts updateBuds), so the timed greed that grows them cool earns it.
+     */
+    bloomH: 32,
     /** A fresh SWING pumps the ring and pays no frost (iteration 1: 5 made a dial-follower's meter fill). */
     swingH: 0,
     swingEveryTicks: 180,
     /**
-     * A glass cluster saved whole (iteration 2: 25 → 80, and a single glass flake pays nothing, so the
-     * dial-follower's lucky flakes pay no frost): as much as the dial-only bot's 0.15 a day allows.
+     * A glass cluster saved whole banks this for the next snap (iteration 2: 25 → 80, mechanics.ts
+     * bankGlassH, the meter's chip shows it): it is poured in as that snap is cast, after its cost and
+     * cash-in, so a lucky dial-follower who never snaps never collects it and it never spills. A single
+     * glass flake pays nothing.
      */
     clusterH: 80,
     landH: 5,

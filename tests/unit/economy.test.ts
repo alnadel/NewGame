@@ -502,7 +502,7 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     expect(only(am.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: Math.min(BK.cashMaxH, 3 * BK.cashPerLevelH) }]);
   });
 
-  it('a red-hot Nubs grows no buds (the sun on its face or not)', () => {
+  it('buds grow at the gauge\'s pace: full speed in the white, slower across the amber, none red-hot (the sun on its face or not)', () => {
     const grow = (chill: number): number => {
       const s = lab({ startFrost: 0 });
       const b = bud(s, 100, wrapDeg(s.sun.theta));
@@ -510,7 +510,15 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
       return b.grow;
     };
     // Chill is set before each tick and the sun drains it first (updateBuds runs after applyDaylight).
+    const full = grow(100);
+    expect(full).toBeGreaterThan(0.5);
+    expect(full).toBeLessThan(1);
+    expect(grow(BK.cashFullChill + 5)).toBeCloseTo(full, 9);
+    const mid = grow((BK.coolChill + BK.cashFullChill) / 2);
+    expect(mid).toBeGreaterThan(0.4 * full);
+    expect(mid).toBeLessThan(0.5 * full);
     expect(grow(BK.coolChill + 5)).toBeGreaterThan(0);
+    expect(grow(BK.coolChill + 5)).toBeLessThan(0.2 * full);
     expect(grow(BK.coolChill - 1)).toBe(0);
   });
 
