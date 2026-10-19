@@ -252,11 +252,12 @@ const tuning = {
    * level above x1. Start: runStartH (Endless, Daily, challenge), campaignStartH (Journey),
    * teachStartH (the Cold Snap's teaching level); lesson runs start at 0.
    *
-   * Economy iteration 2 (core README §16.5): a red-hot Nubs (Chill under coolChill, the halo's red)
-   * grows no buds and freezes no frost; a bloom pays bloomH when Nubs is fully shaded and cool as it
-   * blooms, and nothing in the Noon Heat; a snap pours the ring in, cashPerLevelH a level above x1,
-   * at most cashMaxH, in full from cashFullChill and scaled down to nothing at coolChill, never past
-   * cashCapH in the meter; a snap cast red-hot only shades (it refills no Chill).
+   * Economy iteration 2 (core README §16.5): the Chill gauge sets what a snap does: from cashFullChill
+   * (white) it pours the whole ring (cashPerLevelH a level above x1, at most cashMaxH, never past
+   * cashCapH in the meter) and cools Nubs to full; in the amber both shrink to nothing at coolChill;
+   * red-hot (below coolChill) it only shades, and Nubs grows no buds and freezes no frost. In the
+   * Noon Heat frost does not freeze: no bloom banks any and a snap pours none. A bloom pays bloomH when
+   * Nubs is fully shaded and cool as it blooms.
    */
   bank: {
     /**
@@ -266,7 +267,8 @@ const tuning = {
     ships: true,
     capH: 200,
     costH: 100,
-    bloomH: 25,
+    /** Iteration 2: 25 → 30 (the plan's value), paid for by the parry's 5 (a dial-follower parries by luck). */
+    bloomH: 30,
     /** A fresh SWING pumps the ring and pays no frost (iteration 1: 5 made a dial-follower's meter fill). */
     swingH: 0,
     swingEveryTicks: 180,
@@ -276,16 +278,20 @@ const tuning = {
      */
     clusterH: 80,
     landH: 5,
-    parryH: 5,
+    /** A parry spares the tank the scorch and pumps the ring; iteration 2: it banks no frost (5 → 0). */
+    parryH: 0,
     /** The cash-in: per ring level above x1, at most cashMaxH (x3 and up), so no snap ever refunds itself. */
     cashPerLevelH: 30,
     cashMaxH: 60,
     /**
-     * Chill at or above which Nubs is cool: buds grow, blooms bank frost, a snap pours the ring and
-     * refills Chill (the halo's gauge is red below it; iteration 2: 40 → 25, TUNING.nubs.lowChill).
+     * Chill at or above which Nubs is cool: buds grow and blooms bank frost; below it a snap only
+     * shades (the halo's gauge is red below it; iteration 2: 40 → 25, TUNING.nubs.lowChill).
      */
     coolChill: 25,
-    /** The cash-in pours in full from this Chill and scales down to nothing at coolChill (the gauge is amber between them). */
+    /**
+     * From this Chill a snap pours the whole ring and cools Nubs to full; both scale down to nothing at
+     * coolChill (the gauge is amber between them; mechanics.ts snapGauge).
+     */
     cashFullChill: 50,
     /** A cash-in never fills the meter past this (one and a half snaps): an overflow snap pours at most half a pip. */
     cashCapH: 150,

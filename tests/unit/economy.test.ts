@@ -471,7 +471,7 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     expect(BK.cashMaxH + G.bankCapH).toBeLessThan(BK.costH);
   });
 
-  it('a red-hot snap only shades: Chill stays where it was cast (a cool snap refills to full)', () => {
+  it('the gauge sets how far a snap cools Nubs: full from the white, part of the way in the amber, red-hot only shade', () => {
     const at = (chill: number): number => {
       const s = lab({ startFrost: 1 });
       s.nubs.chill = chill;
@@ -479,8 +479,27 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
       run(s, SNAP_TICKS - 2);
       return s.nubs.chill;
     };
+    const max = TUNING.nubs.maxChill;
     expect(at(BK.coolChill - 5)).toBeCloseTo(BK.coolChill - 5, 6);
-    expect(at(BK.coolChill)).toBe(TUNING.nubs.maxChill);
+    expect(at(BK.coolChill)).toBeCloseTo(BK.coolChill, 6);
+    const mid = (BK.coolChill + BK.cashFullChill) / 2;
+    expect(at(mid)).toBeCloseTo(mid + (max - mid) / 2, 6);
+    expect(at(BK.cashFullChill)).toBe(max);
+  });
+
+  it('frost does not freeze in the Noon Heat: a snap there pours nothing (snapCash.noon), the ring is cashed all the same', () => {
+    const noon = lab({ startFrost: 1, startDay: 2, startT: dayTicks(2) / 120 });
+    debugRing(noon, 4, 0);
+    noon.nubs.chill = 100;
+    step(noon, SNAP);
+    expect(only(noon.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: 0, noon: true }]);
+    expect([noon.nubs.frostH, noon.nubs.mult]).toEqual([0, 1]);
+    // The same snap outside it pours the ring.
+    const am = lab({ startFrost: 1, startDay: 2 });
+    debugRing(am, 4, 0);
+    am.nubs.chill = 100;
+    step(am, SNAP);
+    expect(only(am.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: Math.min(BK.cashMaxH, 3 * BK.cashPerLevelH) }]);
   });
 
   it('a red-hot Nubs grows no buds (the sun on its face or not)', () => {

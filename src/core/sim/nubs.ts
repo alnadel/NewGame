@@ -386,7 +386,7 @@ export function applyDaylight(s: SimState): void {
   let c = nb.chill + (-effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * f + regen * Math.max(0, 1 - f)) * DT;
   // v1.6 (fix round 3): a missed Endless flare's scorch caps the tank until nightfall (sim/flares.ts).
   let cap = nb.maxChill - s.flareScorch;
-  // Economy iteration 2: a red-hot snap refills nothing (s.snapChillCap; it never takes Chill away).
+  // Economy iteration 2: a snap cools Nubs only up to s.snapChillCap (the gauge it was cast at; it never takes Chill away).
   if (s.snapTicks > 0 && s.snapChillCap < cap) cap = Math.max(s.snapChillCap, nb.chill);
   if (c > cap) c = cap;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.

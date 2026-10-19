@@ -317,16 +317,31 @@ export function updateLandGuide(s: SimState): void {
 }
 
 /**
+ * Economy iteration 2, the Chill gauge sets what a snap does (0..1): 1 from cashFullChill (the gauge's
+ * white), falling across the amber to 0 at coolChill and below (red-hot).
+ */
+export function snapGauge(chill: number): number {
+  if (chill >= BANK.cashFullChill) return 1;
+  if (chill <= BANK.coolChill) return 0;
+  return (chill - BANK.coolChill) / (BANK.cashFullChill - BANK.coolChill);
+}
+
+/**
  * The cash-in a snap cast at ring level `m` pays (hundredths): cashPerLevelH per level above x1, at
- * most cashMaxH (a snap never refunds itself), in full from cashFullChill and scaled down to nothing
- * at coolChill (the gauge's amber), never past `capH` in the meter (iterations 1-2).
+ * most cashMaxH (a snap never refunds itself), × snapGauge (all of it from the white, less in the
+ * amber, nothing red-hot), nothing in the Noon Heat (Bank on), never past `capH` in the meter
+ * (iterations 1-2).
  */
 function cashInH(s: SimState, m: number, capH: number): number {
-  const c = s.nubs.chill;
-  if (c <= BANK.coolChill) return 0;
-  const k = c >= BANK.cashFullChill ? 1 : (c - BANK.coolChill) / (BANK.cashFullChill - BANK.coolChill);
+  const k = snapGauge(s.nubs.chill);
+  if (k <= 0 || noonPour(s)) return 0;
   const h = Math.round(k * Math.min(BANK.cashMaxH, BANK.cashPerLevelH * (m - 1)));
   return Math.max(0, Math.min(h, capH - s.nubs.frostH));
+}
+
+/** Iteration 2: frost does not freeze in the Noon Heat (Bank on): a snap cast there pours nothing. */
+function noonPour(s: SimState): boolean {
+  return s.world.v16.bank && noonHeatAt(s.world, s.day, s.dayTick) > 1;
 }
 
 /**
@@ -390,10 +405,10 @@ export function castSnap(s: SimState): boolean {
   s.landSrc = -1;
   if (bank) {
     // v1.6 Frost Bank: one charge, then the cash-in pours the ring into the frost (cashInH), never past
-    // cashCapH.
-    // Iteration 2: a red-hot snap only shades: Chill stays where it was cast.
+    // cashCapH. Iteration 2: the snap cools Nubs × snapGauge of the way to full (all of it from the
+    // white, less in the amber); red-hot it only shades: Chill stays where it was cast.
     const hot = !coolNubs(s);
-    s.snapChillCap = hot ? nb.chill : nb.maxChill;
+    s.snapChillCap = nb.chill + (nb.maxChill - nb.chill) * snapGauge(nb.chill);
     nb.frostH -= BANK.costH;
     nb.frost = nb.frostH / CHARGE_H;
     const m = nb.mult;
@@ -403,7 +418,10 @@ export function castSnap(s: SimState): boolean {
       s.events.push({ e: 'multDown', from: m, to: 1, cause: 'snap' });
     }
     resetRing(s);
-    s.events.push(hot ? { e: 'snapCash', level: m, refundH, hot: true } : { e: 'snapCash', level: m, refundH });
+    const ev: Extract<SimEvent, { e: 'snapCash' }> = { e: 'snapCash', level: m, refundH };
+    if (hot) ev.hot = true;
+    else if (noonPour(s)) ev.noon = true;
+    s.events.push(ev);
     if (refundH > 0) {
       st.snapCashH = (st.snapCashH as number) + refundH;
       creditFrostH(s, 'cash', refundH);

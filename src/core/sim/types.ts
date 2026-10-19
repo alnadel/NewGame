@@ -353,7 +353,10 @@ export interface SimState {
   /** Ticks this snap was extended by blooms (≤ TUNING.garden.extendCapTicks), and the blooms under it. */
   snapExt: number;
   snapBlooms: number;
-  /** Economy iteration 2: the Chill this snap refills Nubs to at most (maxChill; a red-hot snap's: the Chill it was cast at). */
+  /**
+   * Economy iteration 2: the Chill this snap cools Nubs to at most (Bank on: maxChill from the gauge's
+   * white, less in the amber, the Chill it was cast at when red-hot; mechanics.ts snapGauge).
+   */
   snapChillCap: number;
   /** Landing: ticks left of the window after snapEnd (−1 none), ticks held so far, the source holding Nubs (−1 none). */
   landTicks: number;
