@@ -809,7 +809,8 @@ v1.5 world returns (the Dares and the bake are Journey data and always on). Code
   600 u), the cluster state and the world stats above (and, from fix round 1, `budGrewTick`,
   `swPendFrom`, `snapBloomIds` and the snap cloud's path).
 - **Bots** (`sim/bots/world.ts`, `sim/bots/glassplan.ts`, `sim/bots/dares.ts`): reactive preAim (the last 18 ticks of a
-  warning toward guide.flare), chase/naive +1.5 on guide.flake; oracle: per-step Noon Heat and
+  warning toward guide.flare, that bin held through the rise and the hold since the review of
+  economy iteration 2, §16.6), chase/naive +1.5 on guide.flake; oracle: per-step Noon Heat and
   hold deltas, a parry plan (×6 on bins whose hold path stays shaded), a glass plan with slack ≥ 10
   (`glassValue`: a 1.6 s turn-limited DP over every glass flake in its melt window, the most urgent
   weighted up, ×45). With `BotOptions.dares` (`DARE_TERMS` from bots/dares.ts; tooling passes it,
@@ -965,6 +966,7 @@ chase − plain and the two Bank rows:
   `--campaign` row checks the Feat-seeking oracle meets every Dare of levels 1-10.
 - **Cost**: step() 1.087× v1.5 (median of 9 reps, min 1.073×; gate ≤ 1.10), the guide refresh
   1.02× (guide.flare's 42 lit masks run once per flare, guide.flake's point masks once per flake).
+  (Fix round 2's measure; after fix round 3 and the economy iterations it read 1.09-1.15×: §16.6.)
 - **build:single** ships no bots (`--mode single`; the Daily par has its own novice bot):
   681.3 → 669.0 KiB with this round's code, still 27.4 KiB over A3's 641.6 KiB (an integrator call).
 
@@ -977,7 +979,8 @@ chase − plain and the two Bank rows:
   validator proves a parrying path (the DP holds a parry bin through each kept hold; a flare whose
   parry cannot stay above the floor is dropped). `node scripts/sim.ts --flares --seeds 120` (new
   mode, hard rows): the dial-only bot loses 82 min of median survival (mean 186), the preAim bot 4
-  (mean 12; it parries 72.5%), the oracle parries 94.8% and reaches Day 8 on 100%; plain reactive with
+  (mean 12; it parries 72.5%; at that commit: after the economy iterations it lost 59, so the gate
+  failed, and the preAim bot now holds its parry bin: §16.6), the oracle parries 94.8% and reaches Day 8 on 100%; plain reactive with
   the mechanics, which reads no telegraph, loses 492 min median (mean 251), and mechanics vs dial is
   +227 on the gating seeds. Scorch 3 / 60 gave the dial bot only −37; a scorch that only a parry
   heals made the preAim bot lose more than the dial bot (it meets more flares).
@@ -1011,7 +1014,8 @@ tree (WORLD's glass contest and whole-tick melt move the Dare measures): against
 9 levels' Dares moved (L53, L93, L121, L147, L151, L170, L182, L194, L197; L170 lost its second Dare),
 the lesson variants did not. `sim --check --seeds 40` fails only the two Bank rows (`--waive bank`),
 the other rows as in the WORLD paragraph above (flare keep Days 2-4 92.0%, gen 3.11 ms a chunk under
-load). `sim --flares --seeds 120`: dial-only −82 min, preAim −4, oracle parries 94.8% (unchanged).
+load). `sim --flares --seeds 120`: dial-only −82 min, preAim −4, oracle parries 94.8% (unchanged;
+at that commit, §16.6 has today's).
 `sim --campaign --bot all --tries 10`: every hard row passes; humanDial's first try on 1-40 92.8% of
 400; per Dare kind (reactive / oracle / Feat-seeking oracle / humanFeat / humanDial) blooms 122 levels
 1 / 0 / 100 / 56 / 4%, snapSave 31 0 / 0 / 100 / 67 / 4%, SWINGs 29 0 / 0 / 100 / 54 / 16%, flakes 17

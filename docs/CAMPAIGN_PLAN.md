@@ -268,12 +268,23 @@ docs/V1_6_PLAN.md §2.3, §2.5, §2.6 (CORE-2); the core API is src/core/README.
   the net there.
 - **The Sunflowers lesson (L8)** turns its buds to faces inside the safe teal (fix round 2), so a
   player following the dial grows one.
-- **The Frost Bank ships off** (calibration, src/core/README.md §16.3), so a level plays the v1.5
-  frost meter: it starts at half a meter (full on a level that dares a snap: L10 and every snapSave
-  Dare, `startsWithSnap`), and shade, flakes, SWINGs and blooms fill it; a snap cashes the ring in on
-  it (fix round 2: 0.1 of a meter per level above x1, the ring back to x1). The snapSave Dare and
-  L10's goal count every tick a snap alone shades Nubs, never during an eclipse (fix round 3: a
-  snap cast into L192/L199/L200's eclipse used to earn the Dare for free).
+- **The Frost Bank ships on** (economy iteration 1, src/core/README.md §16.4-§16.5), in the Journey
+  as in Endless: the meter holds two snaps (`TUNING.bank.capH`). A level starts with half a snap
+  (`campaignStartH` 50), one snap on a level that dares a snap (L10 and every snapSave Dare,
+  `startsWithSnap`: `teachStartH` 100). Shade pays no frost; only risky play does: a bloom grown on a
+  cool, shaded Nubs banks `bloomH` 32 (nothing red-hot or in the Noon Heat, which no Journey level
+  has), a saved glass cluster banks `clusterH` 80 for the next snap, and a snap cast in the white
+  pours the ring in (30 a level above x1, at most 60), less across the amber, nothing red-hot. The
+  gauge's lines scale with the tank, so a 'ration' level's half tank turns amber at 25 and red at
+  12.5. The snapSave Dare and L10's goal count every tick a snap alone shades Nubs, never during an
+  eclipse (fix round 3: a snap cast into L192/L199/L200's eclipse used to earn the Dare for free).
+- **Bosses dare a parry** (review of economy iteration 2). The oracle plays the flares and the glass
+  by plan, so for parry and glass Dares only the reactive bot and humanDial count as players who do
+  not seek them (`ORACLE_PLANS`); humanFeat watches every flare while a parry Dare is unmet (its
+  focus coin does not apply then). A boss finale offers a parry Dare beside its first one wherever
+  parry needs its verb (tier 2 or 3: not free, so it cannot void the first). Re-baked: 13 of 16
+  bosses offer one (L50, L70 and L200: the reactive bot parries as many as the Feat-seeking oracle),
+  10 finales offer two Dares, and 82 of 200 levels dare a verb other than blooms.
 
 `node scripts/sim.ts --campaign --bot all --tries 3` (fix round 3, bake v4; pass % and mean stars
 over all 200 levels; humanDial and humanFeat × 3 decision streams, none of them a training stream):

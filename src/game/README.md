@@ -76,8 +76,9 @@ out every screen, control, sheet, toast and dialog inside it.
   "≤ 4 s in sun").
 - **Toasts** (`banners.ts showToast`): a card under the HUD band, clear of the pause column, never
   over Nubs or his dial; they wait while a card or stamp holds the top. A mission goes ahead of a
-  waiting tip (and a tip shown 1.5 s steps aside), a new tip replaces a waiting one, the run's end
-  drops the queue. An urgent toast (the first flare's tip) keeps its place once queued: a later tip
+  waiting tip (and a tip shown 1.5 s steps aside), a new tip replaces a waiting one queued at least
+  1 s ago (two tips of one moment, such as a snap's gauge tip and the Garden's bud tip, both show),
+  the run's end drops the queue. An urgent toast (the first flare's tip) keeps its place once queued: a later tip
   waits behind it, a mission goes after it, and on screen it never steps aside.
 - **Pause**: `UiCallbacks.runStatus()` (and the test hook's `runStatus()`) gives the Pause card the
   run's title, goal (with its count or progress), the time reached and, on a level, the star rules
@@ -288,11 +289,22 @@ meter is two pips unless a run switches the Bank off; the debug URL parameters `
 the economy (src/core/README.md §16.5): frost-white from `TUNING.bank.cashFullChill` (a snap pours
 the whole ring and cools Nubs to full; buds grow at full speed), amber below it (it pours and cools
 less, buds grow slower), red and dashed below `TUNING.bank.coolChill` (red-hot: buds stop growing,
-blooms bank no frost, a snap only shades). The bud tip says it ("…fast while the gauge is white,
-slower in the amber"). A new
-player's first red-hot snap (`snapCash.hot`) tips "A red-hot snap only shades you…", the first snap in
-the Noon Heat (`snapCash.noon`, it pours nothing) "In the Noon Heat a snap pours nothing…" and the
-first saved glass cluster (its frost waits for the next snap) "Glass saved! Its frost waits on the meter…".
+blooms bank no frost, a snap only shades); both lines scale with the tank (core `coolLine` /
+`whiteLine`: a 'ration' level's half tank turns amber at 25, red at 12.5) and are notched on the
+gauge's track, and an ink underlay parts the amber from the hot ring. A missed flare's scorch
+(`MechView.scorch`) chars the end of the track it took away, and in the Noon Heat a white gauge is
+hatched hot (`MechView.noonNow`: a snap pours nothing there). While Nubs is red-hot the gold bud arcs
+go pale and dashed and the bud's mark in the world dims (no bud grows; facing one decays it). The
+bud tip says it ("…fast while the gauge is white, slower in the amber, never in the red"). The first
+snap of a new player's run always gets its gauge's tip, whatever it pours: white "A white snap pours
+your ring (up to 0.6 of a snap) and cools you full", amber (`snapCash.amber`) "An amber snap pours
+less…", red-hot (`snapCash.hot`) "A red-hot snap only shades you…", the Noon Heat (`snapCash.noon`)
+"In the Noon Heat a snap pours nothing…", or, while a missed flare's scorch stands, "The snap healed
+the scorch…". A flare miss that scorches pops SCORCHED! and tips "Missed! The flare scorched your
+tank until night. A Cold Snap heals it." The first saved glass cluster (its frost waits for the next
+snap) tips "Glass saved! Its frost waits on the meter…" (in Endless and on the glass's own level). A
+charge filled under a snap waits for snapEnd: the frost tip and the "Frost full! Swipe ↓" cue never
+show while no swipe can cast.
 
 - **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the
   pill's own outline dashed on (`ringCharge` over `TUNING.ring.need` of the level; at ×5 the gold
@@ -301,10 +313,12 @@ first saved glass cluster (its frost waits for the next snap) "Glass saved! Its 
 - **Frost Bank** (`hud.ts`): two pips (`frostH` / 100) fill in turn; a full one glows, breathes, pops
   when it fills and takes the tap (the capsule round both pips); `frostSpill` shakes the second.
   During a snap the pips freeze, the first drains white with the snap (`snapTicks` over
-  `SNAP_TICKS + snapExt`) and a chip shows `snapBankH` ("+0.3"); outside a snap the same chip shows a
-  saved glass cluster's `glassBankH` waiting for the next snap ("+0.8", above the chevron when a snap
-  is ready). `snapCash` pours a stream of frost
-  from the badge into the meter; frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap").
+  `SNAP_TICKS + snapExt`) and a chip shows `snapBankH` ("+0.3"); a saved glass cluster's
+  `glassBankH` has its own ghost chip, "+0.8 next snap", dimmed while no snap is ready to pour it and
+  stacked over the snap's chip during a snap (chips stay on screen). `snapCash` pours a stream of
+  frost from the badge into the meter; a frame's frost gains pop as one beside Nubs, to a tenth of a
+  snap ("+0.3"; none under 0.05; the run's first of 0.1 or more says "+0.3 snap"). Pops stay inside
+  the safe area; the edge sun slides up off the meter.
 - **Dial layers** (`halo.ts`, §4 priority): the deep band (`guide.deep`, runs ≥ 3°) darker inside the
   lasting teal; the glass layer (`guide.flake`, `glassDecision`) on its own rim at R + 24 (outside
   the sun pointer's rays and 6 px outside the drag arrow, which dims beside it): a twinkling glint
