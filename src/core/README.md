@@ -540,8 +540,8 @@ telegraph (each layer lights up once its owner fills the body).
 
 Every rule keys off `World.v16` (`ring`, `bank`, `garden`); with all three off the v1.5 multiplier,
 meter and snap return. **Shipped: all three on** since economy iteration 1 (§16.4 changes the Bank's
-income, the cash-in and the start below, §16.5 the red line, the pour and glass; this section describes
-the mechanism). With the Bank
+income, the cash-in and the start below, §16.5 the gauge rule, the Noon Heat and the glass bank; this
+section describes the mechanism). With the Bank
 switched off the v1.5 meter fills (shade, flakes, SWINGs, blooms, and the parries and saved glass
 clusters of `payTrick`), starts at `TUNING.frost.runStart` 0.5 in Endless, Daily and challenge runs,
 and a snap empties it and then cashes the ring in on it (`cashPerLevelH` hundredths of a meter per
@@ -576,28 +576,36 @@ guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
   true `mult`.
 - **Frost Bank.** `nubs.frostH` 0..200 integer hundredths is the meter; `nubs.frost = frostH / 100`
   (0..2) mirrors it, so `frost ≥ 1` still means "a snap is ready". Income only from
-  `addFrostH(s, source, h)` (mechanics.ts; CORE-2 calls it for 'cluster' and 'parry'): bloom
+  `addFrostH(s, source, h)` (mechanics.ts; CORE-2's sim/tricks.ts calls it for 'parry'): bloom
   `bloomH`, a fresh SWING `swingH` at most once per `swingEveryTicks` (`nubs.swingFrostTick`), an
-  own landing `landH`. No shade, deep, flake, crystal or PHEW income. Each landing on the meter emits
+  own landing `landH`; a saved glass cluster's `clusterH` goes to `bankGlassH` instead
+  (`s.glassBankH`, paid as the next snap is cast, §16.5). No shade, deep, flake, crystal or PHEW income. Each landing on the meter emits
   `frostGain {source, amountH, charges}`; `frostReady {charges}` on crossing 100 and 200; above
   `capH` the rest is lost (`frostSpill {lostH}`). Under a snap income goes to `s.snapBankH` (at most
   `garden.bankCapH` 30 per snap) and lands at snapEnd as `frostGain {source: 'garden'}`.
   Stats: `frostEarnedH` (income, banked included), `frostSpilledH`, `snapCashH`.
 - **castSnap** needs `frostH ≥ costH` and subtracts it, then cashes the ring in: `frostH +=
-  cashPerLevelH·(m − 1)`, the ring back to x1 at 0 (`multDown {cause: 'snap'}` when m > 1, then
-  `snapCash {level, refundH}` and `frostGain {source: 'cash'}`). Charges carry through night and dawn.
+  snapGauge(chill)·min(cashMaxH, cashPerLevelH·(m − 1))`, never past `cashCapH`, nothing in the
+  Noon Heat, the ring back to x1 at 0 (`multDown {cause: 'snap'}` when m > 1, then `snapCash {level,
+  refundH, hot?, noon?}` and `frostGain {source: 'cash'}`); the snap cools Nubs to at most `chill +
+  (maxChill − chill)·snapGauge(chill)` (`s.snapChillCap`, applied in applyDaylight while it lasts).
+  `snapGauge` (mechanics.ts, §16.5) is 1 from `cashFullChill` (the gauge's white), falls across the
+  amber to 0 at `coolChill`, 0 below it (red-hot: the snap only shades). Charges carry through night
+  and dawn.
 - **Start frost** (`createRun`, Bank on): Endless/Daily/challenge `runStartH`, lesson runs 0, Journey
   `campaignStartH` 50, a level that dares a snap (config/campaign.ts `startsWithSnap`: the Cold
   Snap's own level, a snapSave goal or Dare) `teachStartH` 100; `RunConfig.startFrost` (charges
-  0..2) overrides. `runStartH` is 100 since economy iteration 1 (§16.4: one snap in hand; it was 0
-  at calibration, when the charge alone added +683 min over 80 seeds, and adds +476 ± 49 now, over
-  the plan's 120-minute bar, but mechanics vs dial fails without it). With the Bank off the v1.5
+  0..2) overrides. `runStartH` is 100 since economy iteration 1 (§16.4-§16.5: one snap in hand; it
+  was 0 at calibration, when the charge alone added +683 min over 80 seeds; it is over the plan's
+  120-minute bar, but mechanics vs dial fails without it, §16.5). With the Bank off the v1.5
   meter starts at `TUNING.frost.runStart` 0.5 in Endless, Daily and challenge runs (fix round 2;
   lesson runs, and every v1.6 economy rule off, start at 0), 0.5 on a Journey level, full on a level
   that dares a snap.
 - **Frost Garden** (while `s.snapTicks > 0`): buds within [y − 30, y + `reach` 420] grow ×`growMul`
   2 (guide.bud uses the same reach; a flare's rise and hold use `TUNING.flare.budMul` instead when
-  larger, never the product, once CORE-2's `s.flarePhase` runs). A bloom under the snap adds
+  larger, never the product, once CORE-2's `s.flarePhase` runs). Bank on, every bud grows at the
+  gauge's pace (× `snapGauge(chill)`, iteration 2: full speed from the white, none at the red line,
+  §16.5). A bloom under the snap adds
   `extendTicks` 30 to it (`snapExtend {ticks}`, at most `extendCapTicks` 60 per snap, never past the
   day's last daylight tick), records the sunflower in `s.snapBloomIds` (`s.snapBlooms`,
   `stats.gardenBlooms`). **T5**: the snap cloud starts aimed at Nubs' scheduled position
@@ -616,24 +624,25 @@ guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
   `stats.swings`, +`landH` frost, a 'land' trick, `stats.snapLandsOwn`); any other shade: chain + 1
   only. Nightfall or a new snap cancels it.
 - **Hash**: `hashState` reads ringCharge, litStartMult, streak, swFresh(N), frostH, swingFrostTick,
-  snapBankH, snapExt, snapBlooms, the landing fields and the ring/bank stats.
+  snapBankH, snapExt, snapBlooms, snapChillCap, glassBankH, the landing fields and the ring/bank stats.
 - **Bots** (`sim/bots/econ.ts`, its constants at the top; idle, novice and the human models unchanged):
   reactive with mechanics — ring: +0.5 on now-safe bins whose nearest center shader is not an end of
   the last SWING while Chill ≥ 60; policies `plain` (v1.5 gold), `chase` (every gold bin worth 3.5,
   above a safe bin's 3, while Chill ≥ 45 and outside 9:20 AM-2:40 PM; `econChasing` is exported for
   CORE-2's glass term), `naive` (that greed at every hour and any Chill), `safe` (no gold term);
-  snaps `panic` (v1.5) or `plan` (lit, x3+, Chill < 50, no now ∪ next bin within ±45°, else panic),
+  snaps `panic` (v1.5) or `plan` (lit, x3+, Chill < 60, no now ∪ next bin within ±45°, Bank on: not
+  in the Noon Heat, where a snap pours nothing; else panic),
   or `hoard` (only when lit below its bar, never an overflow; iteration 2's sweep, with `snapChill`
   moving the panic, plan or hoard bar and `farm` adding a cool snap at that ring level with a bud in
   reach); bank: spends an overflow charge at frostH ≥ 190 when lit with Chill < 70; Garden: gold only under
   the snap, then in its last 36 ticks guide.land bins (up to 15° deep, +10 where guide.next — already
   past the end — agrees, +8 where this snap's own sunflower shades the landing spot). Oracle: under a
   Garden snap the bud bonus reaches 180°, and in the snap's last 36 ticks (guide.land) and the 40
-  ticks after it (guide.now) a landing pull of up to 12 Chill; overflow snap at frostH ≥ 190 when lit;
+  ticks after it (guide.now) a landing pull of up to 12 Chill; overflow snap at frostH ≥ 190 when lit
+  (outside the Journey only with Chill < 70, as the reactive bot, since iteration 2);
   with flares on, holding two charges, it keeps one for a kept flare of d ≥ 8 and casts it when lit
-  in the flare's rise or hold; Bank on, outside the Journey (iteration 2), it snaps only when its plan
-  is squeezed (slack < snapSlack) or, with its slack under 20, when two plan steps of this drain would
-  take Nubs within 2 Chill of the red line (a red snap refills nothing).
+  in the flare's rise or hold; Bank on, outside the Journey (iteration 2), its v1.5 lit-and-low snap
+  (lit next step, Chill < snapChill 50) waits for a plan slack under 25 unless it holds two charges.
 - **sim** (`scripts/sim16/econ.ts`): `--check` adds the economy table (mean multiplier, x5 share,
   level changes a minute, trick share of ring income, full-bank share, meters a day from income,
   snaps a day, blooms per snap, own-landing share, lit ticks in the 40 after snapEnd, 11 AM-1 PM
@@ -642,9 +651,10 @@ guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
   `--decisions [--seeds 80]` plays reactive plain/chase/naive/safe, plain with plan snaps, dial-only,
   plain seeking glass (`BotOptions.glass`, and `'strong'`), humanDial R2-R4, plain with every v1.6
   rule off and plain with no starting charge, then the snap-rule sweep on plain play (`snapChill`:
-  panic bars 25-50, plan bars 65 and 80; `snap: 'hoard'` at 20, 25, the red line + 2 and + 10; the x5
-  farm, `farm: 5`) and naive and chase under the strongest of those rules, and checks §2.2's gates and
-  iteration 2's E1-E3 rows (§16.5; the pooled rows gate on the lower 1-SE bound at `--seeds 960`). When a run switches the Bank off (`--off bank`) its own rows (full bank, dial-only
+  panic bars 25-70, plan bars 50, 70 and 80; `snap: 'hoard'` at 20, 25, the red line + 2 and + 10 and
+  the panic bar 40; the x5 farm, `farm: 5`) and naive and chase under the strongest of those rules, and
+  checks §2.2's gates and iteration 2's E1-E3 rows (§16.5; the pooled rows gate on the lower 1-SE
+  bound at `--seeds 960`), with mechanics vs dial per 240-seed block as an advisory line. When a run switches the Bank off (`--off bank`) its own rows (full bank, dial-only
   income) measure the v1.5 meter and FAIL unless `--waive bank`; the meters/d column then shows the
   v1.5 meter's fills.
 
@@ -1084,3 +1094,148 @@ capped at one snap (chase +82, +92 on 241-480) or 1.25 (chase +110 on 241-480); 
 the low morning and evening sun (mechanics vs dial +152), the same with Garden blooms paid (naive
 +36), or doubled there (chase +89 on 241-480); SWING frost kept at 5 (dial-only 0.17); glass rewards in Chill (a save lands near full
 Chill: saveChill 40 moved no run) or as whole-cluster frost alone (50: seeking +1 ± 15 over 480).
+
+### 16.5 Economy iteration 2 (CORE-1: one gauge prices the snap and the greed)
+
+The review of iteration 1 (docs/V1_6_PLAN.md §6.3) measured the intent against stronger bots and
+fresh seeds and found it unmet. Over four fresh 240-seed blocks (1-240, 1001-1240, 2001-2240,
+3001-3240; 960 seeds paired by seed, ± one standard error), iteration 1 gave:
+- plan-snap − a hoarder that snaps only when lit below Chill 25: +16 ± 22, while plan − panic read +132 ± 15;
+- a cool x5 snap with a bud in reach, needed or not, against panic@45: +196 ± 35 (the x5 snap refunded itself);
+- chase − plain +165 ± 25, a lower 1-SE bound of 140;
+- naive − plain −45 ± 30;
+- mechanics vs dial 175 on 1001-1240 (median; the hard bar is +180);
+- the weight-4 glass seeker − plain −0 ± 24 (480 seeds).
+
+**What the bots showed.**
+- The best snap sat just above any line. With one binary line (the cash-in and the Chill refill
+  both whole above it, both nothing below it) a hoarder that waited until just above it got a full
+  refill and a full cash-in. With the line at 25, hoard@27 beat hoard@25 by 214 min.
+- A flat cash-in of 25 a level made the x5 snap a free snap (4 × 25 ≥ the 100 it costs).
+- Greed is cheap in exposure. Every policy is lit about 22% of daylight, and the reactive bot's
+  survival tracks its snaps a day. So greed is priced only through what it earns.
+- Glass is rare against what a detour costs. There are about 0.86 glass clusters a day. A detour
+  with no reward costs the seeker −74 ± 22 min. The reactive seeker saves 17% of clusters whole
+  against plain's 7%, and the oracle 51%. Every reward big enough to pay the seeker also pays
+  naive, which seeks glass at every hour.
+
+**Rules** (one sentence each; values in `TUNING.bank`; mechanics.ts):
+1. The Chill gauge sets the snap (`snapGauge`):
+   - In the white (Chill ≥ `cashFullChill` 50), a snap pours the whole ring into the frost
+     (`cashPerLevelH` 30 a level above x1, at most `cashMaxH` 60, so no snap refunds itself) and
+     cools Nubs to full (`s.snapChillCap`).
+   - Across the amber, the pour and the cooling both shrink linearly, to nothing at the red line
+     (`coolChill` 25).
+   - Red-hot, a snap only shades (`snapCash.hot`).
+2. Buds grow at the gauge's pace: full speed in the white, slower across the amber, none red-hot.
+3. In the Noon Heat a snap pours nothing (`snapCash.noon`); a bloom there already banked nothing.
+4. A saved glass cluster's `clusterH` 80 is banked (`s.glassBankH`, `bankGlassH`, called from
+   CORE-2's sim/tricks.ts) and poured in as the next snap is cast, after its cost and cash-in:
+   - a lucky dial-follower who never snaps never collects it;
+   - it lands on a meter a charge has just left, so it spills only past two charges, as any income does;
+   - a single glass flake pays nothing.
+5. Frost values:
+   - a bloom banks `bloomH` 32 (was 25);
+   - a parry banks nothing (was 5: a dial-follower parries by luck);
+   - `runStartH` stays 100.
+
+Bots (`sim/bots/econ.ts`):
+- The plan rule snaps at Chill < 60 (was 50) with a x3+ ring, and not in the Noon Heat when the
+  Bank is on.
+- The oracle's lone-charge snap waits for a plan slack under 25 (`ORACLE_TIGHT`). At 20, seed 9
+  (long) snapped at Chill 22 on Day 7 and missed Day 8; at 30 and 40, seeds 181 and 64 (heat)
+  died again.
+- The oracle's overflow snap waits for Chill < 70, as the reactive bot's does (outside the
+  Journey). Above that Chill, a snap turns a charge into at most half a pip. Under the growth rule
+  seed 181 lost two charges that way and melted on Day 7 (`--check --seeds 240`: Day 8 on 239 of
+  240). With the rule, no oracle run is lost on the plan, long or heat forecasts over seeds 1-240.
+
+`sim --decisions` (scripts/sim16/econ.ts):
+- It sweeps panic bars 25-70, plan bars 50/70/80 and hoarders at 20, 25, 27, 35 and 40.
+- E1 gates against the best hoarder.
+- E2 and E3 gate on the lower 1-SE bound at `--seeds 960`.
+- It prints mechanics vs dial per 240-seed block.
+
+**Measured, shipped** (`sim --decisions --seeds 960` and `--seeds 240`, `sim --check --seeds 40`
+and `--seeds 240`, at the final commit; the scratch rows use the same four blocks as above):
+
+| Row | Iteration 1, four fresh blocks | `--decisions --seeds 960` (seeds 1-960) | Iteration 2, four fresh blocks | Gate |
+|---|---|---|---|---|
+| E1: plan − the best hoarder | +16 ± 22 (hoard@25) | +78 ± 15 (reactive plain; hoard@40 +99, hoard@27 +152) | +92 ± 17 (reactive plain; hoard@40 +133) | hard ≥ +30: pass |
+| E1: plan − panic | +132 ± 15 | +78 ± 15 | +92 ± 17 | hard ≥ +30, advisory ≥ +60: pass |
+| E2: chase − plain | +165 ± 25 (bound 140) | +231 ± 29 (bound 202) | +188 ± 29 (bound 159) | hard bound ≥ +150: pass |
+| E2: naive − plain | −45 ± 30 | −181 ± 32 | −220 ± 33 | hard < 0: pass |
+| E2: naive − plain, strongest rule | – | −128 ± 38 (plan@80) | −96 ± 39 (plan@80) | hard < 0: pass |
+| E2: safe − plain | −102 ± 25 | −154 ± 25 | – | hard < 0: pass |
+| x5 farm − panic@45 | +196 ± 35 (480 seeds) | −145 ± 21 | – | new hard < 0: pass |
+| E3: chase's-hours seeker − plain | −7 ± 7 | +13 ± 9 (bound +4; clusters saved 9.1% vs 7.5%) | −5 ± 9 | hard bound > 0: pass on 1-960 only |
+| E3: weight-4 seeker − plain | −0 ± 24 (480 seeds) | +17 ± 19 (bound −2; saved 17.5%) | +1 ± 19 | hard bound > 0: **FAIL** |
+| reactive plain on a full meter | 2.4% | 2.2% | 2.4% | hard ≤ 10% (E1 ≤ 15%): pass |
+| dial-only income, meters a day | 0.14 | 0.12 | 0.11 | hard ≤ 0.15: pass |
+| mechanics vs dial, median, per 240-seed block | 294 / **175** / 298 / 222 | 389 / 313 / 317 / 214 | 389 / 272 / 365 / 321 | hard ≥ +180 (`--check`): pass |
+| the starting charge alone | – | +446 ± 25 | – | advisory ≤ 120: MISS |
+
+The four fresh blocks are scratch runs of the real sim, paired by seed. The iteration-1 column
+plays iteration 1's rules and plan bot in the same harness.
+
+The plan bot changed with rule 3: it snaps at Chill < 60 (was 50) and holds its snap through the
+Noon Heat. This does not decide E1. On the fresh blocks, iteration 1's plan bot (bar 50, blind to
+the Noon Heat) outlives the best hoarder by +46 ± 13; at `--seeds 960`, the sweep's plan@50 does
+by +37.
+
+The other gates hold:
+- `--seeds 240`: every hard row passes; E2 naive under the strongest rule (plan@70) is −161 ± 72.
+- `sim --check --seeds 40`: every target met. Mechanics vs dial is +414; the dial median is Day 3 ·
+  9:33 AM; the oracle reaches Day 8 on 100% and saves 78.0% of glass flakes.
+- `sim --decisions --seeds 40 --off bank` (E6): with the Bank off, the v1.5 meter fails E1 and E2.
+  Reactive plain sits on a full meter 40.5% of daylight, the dial-only bot fills 0.46 meters a
+  day, and naive − plain is +5 ± 176. The Bank stays on.
+- `sim --check --seeds 240`: every target met but one. The oracle reaches Day 8 on 100% on the plan mix and on all seven forecasts (it lost seed 181 before the overflow rule), and mechanics vs dial is +389. The miss is CORE-2's p3 heat rescue rate, 0.802 a chunk against the hard ≤ 0.8, which no rule here touches.
+- `sim --campaign --bot all`, re-baked: every hard gate met.
+- `sim --career 40 --meta`: 100% of careers reach the standard rung within 20 runs; missions in
+  runs 31-40 70% (advisory ≥ 80%; 73% before).
+
+**Open.**
+- E3's first half fails:
+  - At `--seeds 960`, the weight-4 seeker is +17 ± 19 (bound −2). The chase's-hours seeker is
+    +13 ± 9 (bound +4, a pass).
+  - On the fresh blocks they are +1 ± 19 and −5 ± 9.
+  - The seeker saves 17.5% of glass clusters against plain's 7.5%. Clusters come about 0.72 a
+    daylight minute on Day 1 and 1.19 later (`--check`; the plan's advisory asks 1.8 and 2.5), so
+    the gap is about 0.09 clusters a day.
+  - With no glass reward at all the seeker loses −74 ± 22: the cost of its detours.
+  - A bigger banked reward pays plain's lucky saves about as much as the seeker's. On the shipped
+    rules, on the fresh blocks:
+
+    | clusterH, banked | weight-4 seeker − plain | chase's-hours seeker − plain | plain against the shipped rules |
+    |---|---|---|---|
+    | 80 (shipped) | +1 ± 19 | −5 ± 9 | – |
+    | 120 | +18 ± 20 | −1 ± 9 | +13 ± 5 |
+    | 160 | +19 ± 21 | −5 ± 9 | +23 ± 6 |
+
+  - Paid at once, a reward the seeker can feel also lifts naive (which seeks glass at every hour)
+    and the dial-only bot's income.
+  - The rarity is CORE-2's (§2.3 quotas). The oracle half of E3 holds: it saves 78.0% of glass
+    flakes (`--check --seeds 40`; ≥ 70%).
+- The starting charge alone adds +446 ± 25 min (`--seeds 960`). Without it, mechanics vs dial is +60 and −17
+  (median, two blocks): the Day-2 Noon Heat kills about 20% of runs before the earned economy
+  starts, although the earned economy pays timed greed (chase with no starting charge outlives
+  the dial-only bot by +412 min, mean). It stays: the plan's 120-minute bar is the integrator's
+  call.
+
+**Rejected levers** (the four blocks unless noted, each under the iteration-2 rules of its time):
+
+| Lever | Result |
+|---|---|
+| Cash-in 20 a level (max 40) | plan − hoard@27 −2 |
+| Cash-in 15 a level | plan − hoard@27 −17 |
+| Refill ramped over 0-50 instead of the amber | naive − plain under plan@60 +97 |
+| One binary red line at 25 | a 214-min cliff between hoard@25 and hoard@27 |
+| A start charge of 75 | mechanics vs dial +162 on 1001-1240 |
+| Glass 160 paid at once | spills on a full meter |
+| bloomH 35 | dial-only income 0.17 a day |
+| bloomH 32 without the growth rule | no gain over 30 |
+| clusterH 50, banked | the weight-4 seeker −28 |
+| Buds that grow only in the white | naive under plan@80 −238 ± 36, but chase − plain +151 ± 28 and plain −75 ± 13 |
+| The growth ramp with a half-speed floor in the amber | naive under plan@80 −69 ± 37, chase +180 ± 30 |
+| The growth ramp at bloomH 30 | chase +175 ± 29: lower bound 146 |

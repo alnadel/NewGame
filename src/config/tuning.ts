@@ -279,7 +279,8 @@ const tuning = {
     /**
      * A glass cluster saved whole banks this for the next snap (iteration 2: 25 → 80, mechanics.ts
      * bankGlassH, the meter's chip shows it): it is poured in as that snap is cast, after its cost and
-     * cash-in, so a lucky dial-follower who never snaps never collects it and it never spills. A single
+     * cash-in, so a lucky dial-follower who never snaps never collects it, and it lands on a meter a charge
+     * has just left (past two charges the rest spills, as any income does). A single
      * glass flake pays nothing.
      */
     clusterH: 80,

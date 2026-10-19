@@ -6,10 +6,12 @@
 // v1.6 economy (docs/V1_6_PLAN.md §2.2, §2.4; CORE-1): the Frost Bank (integer hundredths, income
 // only from risky acts, banked under a snap, the snap's cash-in), the Frost Garden (×2 growth and a
 // longer reach under the snap, blooms extend it, the cloud re-aims every 30 ticks) and guide.land.
-// Economy iterations 1-2 (core README §16.4-§16.5): a red-hot Nubs (Chill under coolChill) grows no
-// buds and freezes no frost; the cash-in pours the ring in full from cashFullChill, less the hotter
-// Nubs is, at most cashMaxH and never past cashCapH; a red-hot snap only shades (no Chill refill);
-// the v1.5 meter (Bank off) holds a snap's trick income and pays own landings, as the Bank does.
+// Economy iterations 1-2 (core README §16.4-§16.5): one Chill gauge (snapGauge: 1 from
+// cashFullChill, 0 at coolChill) sets how fast buds grow, how much of the ring a snap pours (at most
+// cashMaxH, never past cashCapH, nothing in the Noon Heat) and how far it cools Nubs; a red-hot Nubs
+// (Chill under coolChill) grows no buds, freezes no frost, and its snap only shades. A saved glass
+// cluster's frost waits for the next snap (bankGlassH). The v1.5 meter (Bank off) holds a snap's
+// trick income and pays own landings, as the Bank does.
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, DT, TICK_HZ } from '../clock.ts';
@@ -89,7 +91,8 @@ function bloomFrostH(s: SimState): number {
 /**
  * Economy iteration 2 (Bank on): a glass cluster saved whole banks its frost for the next snap (the
  * meter's chip shows it), paid as that snap is cast: a lucky dial-follower who never snaps never
- * collects it, and it lands on a meter a charge has just left, so it never spills.
+ * collects it, and it lands on a meter a charge has just left (past two charges the rest spills,
+ * frostSpill, as any income does).
  */
 export function bankGlassH(s: SimState, amountH: number): void {
   if (!s.world.mech.snap || !s.world.v16.bank || amountH <= 0) return;

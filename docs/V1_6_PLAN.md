@@ -917,6 +917,98 @@ the Bank). `sim --career 40 --meta`: 100% of careers reach the standard rung wit
   saves 8.3% of glass clusters against 6.5%, so its edge (+5 / +13) is inside a 240-seed block's
   chaos (±15-25). A larger glass reward lifts it but puts the dial-only bot over 0.15.
 
+### 6.3 Economy iteration 2: one gauge prices the snap
+
+The review of iteration 1 measured E1-E3 against stronger bots and fresh seeds, and found them unmet.
+It asked for seven things:
+1. glass worth seeking, with a reward a lucky dial-follower does not collect;
+2. a priced x5 snap;
+3. E1 against the best hoarder, and the incentive for hot snaps fixed;
+4. E2 pooled over 960 seeds, and under the strongest snap rule;
+5. mechanics vs dial ≥ +180 on every fresh 240-seed block, so the starting charge does not carry it;
+6. the oracle regression fixed;
+7. the hot-snap rule taught in the game.
+
+On ask 3's question, the Chill line drives the cash-in: the gauge scales the pour, and the ring
+only sets how much there is to pour.
+
+**Rules** (one sentence each; src/core/README.md §16.5 has the mechanism, the measurements and the rejected levers):
+1. The Chill gauge sets the snap. In the white (Chill ≥ 50) a snap pours the whole ring into the
+   frost and cools Nubs to full. The pour is 30 a level above x1, at most 60, so no snap refunds
+   itself. Across the amber both shrink to nothing at the red line (25), where a snap only shades.
+2. Buds grow at the same gauge's pace: full speed in the white, slower across the amber, none in the red.
+3. In the Noon Heat a snap pours nothing, as a bloom there already banks nothing.
+4. A saved glass cluster banks 80 for the next snap, poured in as that snap is cast (the meter's
+   chip shows it); a single glass flake pays nothing.
+5. A bloom banks 32 (was 25), a parry nothing (was 5); one snap in hand at the start stays.
+
+The game teaches each rule on the gauge it reads (src/game/README.md):
+- the halo's Chill gauge is white, amber and red;
+- "Snap while the gauge is white: it pours it all and cools you full."
+- "A red-hot snap only shades you…" on the first red-hot snap;
+- "In the Noon Heat a snap pours nothing…";
+- "Glass saved! Its frost waits on the meter…";
+- the bud tip: "…fast while the gauge is white, slower in the amber."
+
+**Gate re-specifications.** Each one below is stricter than, or equal to, the row it replaces, with
+the numbers that show the old row measured the bots. Numbers are paired by seed over the same four
+fresh 240-seed blocks (1-240, 1001-1240, 2001-2240, 3001-3240), ± one standard error.
+
+| Row | Was | Now | Why |
+|---|---|---|---|
+| E1 | plan-snap − panic-snap ≥ +30 (mean) | plan-snap − **the best hoarder** ≥ +30 (mean). The hoarders are reactive plain (the panic bot, bar 40), panic at 25, 30 and 35, and the hoard rule (snaps only when lit below its bar, never an overflow) at 20, 25, 27, 35 and 40. The panic row stays. | The panic bot is one of the hoarders, so the row is at least as strict. It was a weak baseline: under iteration 1, plan − panic was +132 ± 15 while plan − hoard@25 was +16 ± 22. |
+| E1, the plan bot | snaps lit, x3+, Chill < 50 | Chill < 60, and not in the Noon Heat (Bank on) | The plan bot is what E1 measures planning with. Under rule 3 a snap at noon pours nothing, and a bot that ignores the rule plays a plan no player would follow. It does not decide E1: on the fresh blocks the old bot outlives the best hoarder by +46 ± 13, and at `--seeds 960` the sweep's plan@50 does by +37. Bars 50, 70 and 80 stay in the sweep. |
+| E2 chase | chase − plain ≥ +150 (mean, 240 seeds) | the lower 1-SE bound ≥ +150 at `--seeds 960` | Stricter. Iteration 1: +165 ± 25 pooled, bound 140. |
+| E2 naive | naive − plain < 0 | also < 0 under the strongest snap rule of the sweep (the rule that pays plain play best) | Stricter: greed must not pay under the best snap habit either. Under plan@80, iteration 2 without rule 2 gave −4 ± 38. |
+| E3 seeker | glass-seeking − glass-ignoring > 0 (mean) | the lower 1-SE bound > 0 at `--seeds 960`, for both chase's hours seeker and a weight-4 seeker at every hour | Stricter. Iteration 1: +5 / +13 (240 seeds), −7 ± 7 pooled. |
+| x5 snap | – | new hard row: a cool x5 snap with a bud in reach, needed or not (`farm: 5`), does not outlive panic@45 | Iteration 1: +196 ± 35. |
+| mechanics vs dial | ≥ +180 (median, `--check --seeds 40`) | unchanged, and an advisory line in `--decisions` for each 240-seed block | Iteration 1: 175 on 1001-1240. |
+
+**Measured, shipped.** src/core/README.md §16.5 has the full table: iteration 1, `--seeds 960`, and the fresh blocks.
+
+| Gate | `sim --decisions --seeds 960` | Four fresh blocks | Result |
+|---|---|---|---|
+| E1: plan − the best hoarder (hard ≥ +30) | +78 ± 15 (vs reactive plain) | +92 ± 17 | pass |
+| E1: full meter (hard ≤ 15%; §6 ≤ 10%) | 2.2% | 2.4% | pass |
+| E2: chase − plain (hard bound ≥ +150) | +231 ± 29 (bound 202) | +188 ± 29 (bound 159) | pass |
+| E2: naive − plain (hard < 0) | −181 ± 32 | −220 ± 33 | pass |
+| E2: naive − plain, strongest rule (hard < 0) | −128 ± 38 (plan@80) | −96 ± 39 | pass |
+| E2: safe − plain (hard < 0) | −154 ± 25 | – | pass |
+| x5 farm − panic@45 (hard < 0) | −145 ± 21 | – | pass |
+| E3: chase's-hours seeker (hard bound > 0) | +13 ± 9 (bound +4) | −5 ± 9 | pass on 1-960 only |
+| E3: weight-4 seeker (hard bound > 0) | +17 ± 19 (bound −2) | +1 ± 19 | **FAIL** |
+| E3: oracle saves ≥ 70% of glass | 78.0% of glass flakes (`--check --seeds 40`) | – | pass |
+| dial-only income (hard ≤ 0.15 a day) | 0.12 | 0.11 | pass |
+| E5: mechanics vs dial, each 240-seed block (hard ≥ +180) | 389 / 313 / 317 / 214 | 389 / 272 / 365 / 321 | pass |
+
+E5 and the other runs:
+- `sim --check --seeds 40`: every target met. Mechanics vs dial is +414 (Day 3 · 4:27 PM against 9:33 AM); the dial median is Day 3 · 9:33 AM; the oracle reaches Day 8 on 100% and saves 78.0% of glass flakes; rescues hold on every world kind.
+- `sim --check --seeds 240`: every target met but one. The oracle reaches Day 8 on 100% on the plan mix and on all seven forecasts (it lost seed 181 before the overflow rule), and mechanics vs dial is +389. The miss is CORE-2's p3 heat rescue rate, 0.802 a chunk against the hard ≤ 0.8, which no rule here touches.
+- `sim --campaign --bot all` (re-baked): every hard gate met.
+- `sim --career 40 --meta`: humanDial reaches the standard rung within 20 runs in 100% of careers.
+
+**E6.** The Frost Bank stays on. With it off, the v1.5 meter fails E1 and E2
+(`sim --decisions --seeds 40 --off bank`, these rules):
+- reactive plain sits on a full meter 40.5% of daylight (E1 ≤ 15%, §6 ≤ 10%);
+- the dial-only bot fills 0.46 meters a day (≤ 0.15);
+- naive − plain is +5 ± 176.
+
+**Open, the integrator's call.**
+- E3's first half fails: the weight-4 seeker's bound is −2 at `--seeds 960`. On fresh blocks
+  neither seeker gains. Glass windows are rare:
+  - about 0.86 glass clusters a day;
+  - 0.72 / 1.19 a daylight minute, against the plan's advisory 1.8 / 2.5.
+
+  A reactive seeker saves 17.5% of clusters against plain's 7.5%. A bigger banked reward pays
+  plain's lucky saves about as much as the seeker's. On the shipped rules, a banked 120 or 160
+  gives the weight-4 seeker +18 ± 20 or +19 ± 21, and plain +13 or +23. A reward paid at once
+  lifts naive and the dial-only bot too.
+
+  The rarity belongs to CORE-2 (§2.3 quotas).
+- The starting charge alone adds +446 ± 25 min, over §2.2's 120-minute bar. Without it, mechanics vs
+  dial is +60 and −17 (median, two blocks), because the Day-2 Noon Heat kills about 20% of runs.
+- The p3 heat rescue rate (0.788 at `--check --seeds 40`, 0.802 at 240, where its hard ≤ 0.8 fails) belongs to CORE-2.
+
 ---
 
 ## 7. What the skeptics changed (merge log)
