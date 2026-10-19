@@ -28,7 +28,7 @@ export const FORECASTS: Readonly<Record<ForecastId, ForecastInfo>> = Object.free
   clear: info('clear', 'Clear', '☀️', 'Plain sunshine.', null),
   breezy: info('breezy', 'Breezy', '\u{1F32C}️', 'More clouds, moving fast.', null),
   overcast: info('overcast', 'Overcast', '☁️', 'Big slow clouds, sparse cover.', null),
-  heat: info('heat', 'Heat Wave', '\u{1F321}️', 'A higher sun. Extra flakes, Snow ×1.5.', null),
+  heat: info('heat', 'Heat Wave', '\u{1F321}️', 'A higher sun, no Noon Heat. Extra flakes, Snow ×1.5.', null),
   long: info('long', 'Long Shadows', '\u{1F342}', 'A low sun all day.', null),
   dazzle: info('dazzle', 'Dazzle', '✨', 'Gazing balls in the meadow.', 'meadow'),
   market: info('market', 'Market Day', '\u{1F9FA}', 'Stalls and gate arches.', 'oldtown'),
@@ -67,13 +67,17 @@ export interface ForecastTuning {
   /** Old Town stall weight × and gate-arch chance. */
   readonly stalls?: number;
   readonly gateChance?: number;
+  /** v1.6 Noon Heat: the share of the day's extra noon drain (DayParams.noonHeat − 1) this forecast keeps (default 1). */
+  readonly noonHeat?: number;
 }
 
 export const FORECAST_TUNING: Readonly<Record<ForecastId, ForecastTuning>> = Object.freeze({
   clear: {},
   breezy: { clouds: 1.5, cloudDrift: 30, overtake: [1.35, 1.6], wait: [0.5, 0.65] },
   overcast: { clouds: 1.5, cloudRx: [80, 100], spacing: 1.4 },
-  heat: { epsNoon: 3, flakes: 1, spacing: 0.92, snow: 1.5 },
+  // A Heat Wave's higher sun is its noon threat: it has no Noon Heat (the validator's rescues on heat
+  // days stayed over 0.8 a chunk with it: V1_6_PLAN §6.4).
+  heat: { epsNoon: 3, flakes: 1, spacing: 0.92, snow: 1.5, noonHeat: 0 },
   long: { epsNoon: -10, spacing: 1.15, latMax: 10 },
   dazzle: { balls: [6, 12] },
   market: { balls: [0, 0], stalls: 3, gateChance: 0.35 },

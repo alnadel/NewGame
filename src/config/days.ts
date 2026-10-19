@@ -291,10 +291,15 @@ function rampRow(day: number): Row {
   };
 }
 
-/** v1.6 Noon Heat of day d (profile 3; profiles 0-2 take each step one day later). */
-function noonHeatOf(d: number, profile: ProfileId): number {
+/**
+ * v1.6 Noon Heat of day d (profile 3; profiles 0-2 take each step one day later), × the forecast's
+ * share of the extra drain (ForecastTuning.noonHeat: a Heat Wave keeps none, its higher sun already
+ * shortens the noon shade).
+ */
+function noonHeatOf(d: number, profile: ProfileId, share = 1): number {
   const k = profile === 3 ? d : d - 1;
-  return k >= 4 ? 1.2 : k >= 2 ? 1.1 : 1;
+  const h = k >= 4 ? 1.2 : k >= 2 ? 1.1 : 1;
+  return 1 + (h - 1) * share;
 }
 
 /** v1.6 Heat Flares of day d: how many, and their lift (°). */
@@ -443,7 +448,7 @@ export function dayParams(day: number, profile: ProfileId, plan: DayPlan = legac
     sunFollow: tune?.sunFollow ?? 0,
     sunFriction: tune?.sunFriction ?? TUNING.sun.friction,
     walkMul,
-    noonHeat: noonHeatOf(d, profile),
+    noonHeat: noonHeatOf(d, profile, ft.noonHeat),
     flareCount: flareCountOf(d, profile),
     flareD: flareCountOf(d, profile) === 0 ? 0 : d >= 4 ? 10 : 12,
   });

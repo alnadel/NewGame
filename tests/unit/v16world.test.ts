@@ -96,6 +96,8 @@ describe('Noon Heat (T1)', () => {
       expect(Math.abs(heated - d / 6)).toBeLessThanOrEqual(STEP);
     }
     expect(noonHeatAt(w, 4, Math.round(dl / 2))).toBe(1.2);
+    // A Heat Wave day has none (its higher sun is its noon threat; V1_6_PLAN §6.4).
+    expect(noonHeatAt(createWorld({ ...headlessConfig(1), forecast: 'heat' }), 4, Math.round(dl / 2))).toBe(1);
     // Profiles 0-2 one day later; off with the rule switched off and on every campaign level.
     expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 2, Math.round(dl / 2))).toBe(1);
     expect(noonHeatAt(createWorld(headlessConfig(1, 2)), 3, Math.round(dl / 2))).toBe(1.1);
