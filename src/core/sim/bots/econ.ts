@@ -7,10 +7,9 @@
 // bots, never the game) so the bundle inlines them.
 
 import { TUNING } from '../../../config/tuning.ts';
-import { dayStartTick, dayTicks, DT, minutesOfDay } from '../../clock.ts';
+import { dayStartTick, dayTicks, minutesOfDay } from '../../clock.ts';
 import { tanD } from '../../dmath.ts';
 import { keptFlares, noonHeatAt, worldElevation, worldYAtDayTick } from '../../gen/plan.ts';
-import { effectiveDrain } from '../nubs.ts';
 import { lowerBound } from '../../gen/store.ts';
 import { BINS, binOf, markCaster } from '../../intervals.ts';
 import type { Caster, Flare } from '../../objects.ts';
@@ -35,10 +34,10 @@ const CHASE_TO = 520;
 /** Bank on: spend an overflow charge at frostH ≥ OVERFLOW_H, only when lit (reactive: with Chill < OVERFLOW_CHILL). */
 const OVERFLOW_H = 190;
 const OVERFLOW_CHILL = 70;
-/** 'plan' snaps at a gap's mouth: lit, ring ≥ x PLAN_MULT, Chill < PLAN_CHILL, no now ∪ next bin within ±PLAN_NEAR°. */
+/** 'plan' snaps at a gap's mouth: lit, ring ≥ x PLAN_MULT, Chill < PLAN_CHILL, no now ∪ next bin within ±PLAN_NEAR°, outside the Noon Heat (Bank on). */
 const PLAN_NEAR = 45;
 const PLAN_MULT = 3;
-const PLAN_CHILL = 50;
+const PLAN_CHILL = 60;
 /** Garden: under a snap the reactive bot scores gold only, then guide.land for the last LAND_TICKS… */
 const LAND_TICKS = 36;
 /** …up to LAND_DEPTH° inside a land arc, +LAND_NEXT where guide.next agrees, +OWN_LAND where this snap's sunflower shades the spot. */
@@ -53,11 +52,8 @@ const ORACLE_LAND_REACH = 150;
 const AFTER_SNAP = 40;
 /** Oracle, Bank and flares on: holding two charges, it keeps one for a kept flare of lift ≥ FLARE_D and casts it in the rise or hold when lit. */
 const FLARE_D = 8;
-/** Oracle, Bank on, outside the Journey: snaps before the red when this drain would cross coolChill + ORACLE_RED_MARGIN within ORACLE_RED_STEPS plan steps while its slack is under ORACLE_RED_SLACK. */
-const ORACLE_RED_STEPS = 2;
-const ORACLE_RED_SLACK = 20;
-const ORACLE_RED_MARGIN = 2;
-const STEP_TICKS = TUNING.validator.stepTicks;
+/** Oracle, Bank on, outside the Journey: its lit-and-low snap waits for a plan slack under ORACLE_TIGHT, unless it holds two charges. */
+const ORACLE_TIGHT = 20;
 
 /** True when a Cold Snap can be cast this tick (same rule as bots.ts). */
 function snapReady(s: SimState): boolean {
@@ -213,8 +209,9 @@ export function econReactiveSnap(ctx: BotHookCtx, s: SimState, snap: boolean): b
   // The x5 farm (sim --decisions): a cool snap at ring ≥ farm with a bud in reach, needed or not.
   if (o.farm !== undefined && nb.mult >= o.farm && nb.chill >= TUNING.bank.coolChill && nearMask(g.bud, 0, 180)) return true;
   if (nb.f === 0) return false;
-  // 'plan': snap at the mouth of a gap while the ring is worth cashing.
-  if (plan && nb.mult >= PLAN_MULT && nb.chill < (o.snapChill ?? PLAN_CHILL)) {
+  // 'plan': snap at the mouth of a gap while the ring is worth cashing (Bank on: not in the Noon Heat,
+  // where a snap pours nothing; the panic rule still answers there).
+  if (plan && nb.mult >= PLAN_MULT && nb.chill < (o.snapChill ?? PLAN_CHILL) && !(s.world.v16.bank && noonHeatAt(s.world, s.day, s.dayTick) > 1)) {
     let near = false;
     const b0 = binOf(s.sun.theta);
     for (let k = -PLAN_NEAR; k <= PLAN_NEAR; k++) {
@@ -271,15 +268,12 @@ const flareBuf: Flare[] = [];
 /** Oracle, each plan: whether to snap next tick (`snap` is the v1.5 rule's answer). */
 export function econOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slack: number): boolean {
   if (!ctx.mech || !s.world.v16.bank || !snapReady(s)) return snap;
-  // Bank on, outside the Journey (economy iteration 2): frost is earned, so a snap waits for a
-  // squeezed plan (the v1.5 "lit next step below snapChill" spent a meter that refilled itself and
-  // left the oracle empty on Day 7, seed 181), or, with the plan tight, for the last plan steps
-  // before this drain would take Nubs red-hot (a red snap refills nothing: seeds 97, 126).
-  if (s.level === null) {
-    const nb = s.nubs;
-    const drop = ORACLE_RED_STEPS * STEP_TICKS * DT * effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * nb.f;
-    snap = slack < OB.snapSlack || (nb.f > 0 && slack < ORACLE_RED_SLACK && nb.chill - drop < TUNING.bank.coolChill + ORACLE_RED_MARGIN);
-  }
+  // Bank on, outside the Journey (economy iteration 2): the v1.5 rule (squeezed, or lit next step with
+  // Chill under snapChill, where the gauge is white or high amber and a snap pours and cools in full),
+  // but frost is earned, so a lone charge waits for a tight plan: snapping whenever lit and low emptied
+  // the meter by Day 7 (seed 181), and iteration 1's last-steps-before-the-red snap only shades under
+  // the gauge rule (seeds 97 and 64 heat died with a charge spent red-hot).
+  if (s.level === null) snap = snap && (slack < ORACLE_TIGHT || s.nubs.frostH >= 2 * TUNING.bank.costH);
   if (snap) return true;
   if (s.nubs.f === 0) return false;
   // Holding two charges, one is kept for the current big kept flare: cast in its rise or hold.
