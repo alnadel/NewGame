@@ -75,8 +75,11 @@ export interface Sim16Ctx {
   readonly policy: BotPolicy | null;
   /** --hours: print deaths by in-game hour. */
   readonly hours: boolean;
-  /** Plays every job on seeds seedFrom..seedFrom + seeds − 1 in the worker pool (with --off applied); rows in job order. */
-  run(jobs: readonly Sim16Job[]): Promise<Sim16Row[]>;
+  /**
+   * Plays every job on seeds seedFrom..seedFrom + seeds − 1 in the worker pool (with --off applied);
+   * rows in job order. `from` and `n` play another block instead (sim --release's held-out seeds).
+   */
+  run(jobs: readonly Sim16Job[], from?: number, n?: number): Promise<Sim16Row[]>;
   /** Records a hard-gate failure: under --check (and in a mode) the sim exits 1. */
   fail(what: string): void;
   /**

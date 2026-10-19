@@ -5,7 +5,8 @@
 //   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
 //   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] and [--on …] (the
 //   shipped rules are V16_SHIP: the Frost Bank off) on any of the above;
-//   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions and --bake;
+//   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions, --release
+//   (docs/V1_6_PLAN.md §13: --decisions on seeds 1-960, then E2 and E3 on the held-out seeds) and --bake;
 //   [--waive bank,flareKeep]: hard rows an integrator decision waived (they print WAIVED).
 //
 // Runs the real createRun/step with bot input at full speed in a pool of worker threads and prints,
@@ -502,7 +503,7 @@ function sim16Ctx(o: { seedFrom: number; seeds: number; days: number; workers: n
     ...o,
     waived: (key) => waivers.has(key),
     hours: process.argv.includes('--hours'),
-    run: (jobs) => runRows(jobs.map((j) => withOff(j, o.off)), o.seedFrom, o.seeds, o.days, o.workers),
+    run: (jobs, from = o.seedFrom, n = o.seeds) => runRows(jobs.map((j) => withOff(j, o.off)), from, n, o.days, o.workers),
     fail: (what) => {
       failures.push(what);
     },
@@ -1013,8 +1014,10 @@ async function main(): Promise<void> {
     if (rea.length) window(`${label}reactive p3 dial median death in [Day 2 noon, Day 4 noon]`, rea, 1080, 2520);
     const ora = at('oracle', 3);
     if (ora.length) {
-      const ok = ora.filter((r) => !r.died && r.day >= 8).length / ora.length;
-      report(ok === 1 && days >= 8, `${label}oracle p3 reaches Day 8 on 100%`, `${(100 * ok).toFixed(0)}%${days < 8 ? ` (only simulated to Day ${days})` : ''}`);
+      const n8 = ora.filter((r) => !r.died && r.day >= 8).length;
+      const ok = n8 / ora.length;
+      // The count beside the share: 239 of 240 rounds to 100% (review r5, seed 80019).
+      report(ok === 1 && days >= 8, `${label}oracle p3 reaches Day 8 on 100%`, `${(100 * ok).toFixed(1)}% (${n8} of ${ora.length})${days < 8 ? ` (only simulated to Day ${days})` : ''}`);
     }
   };
   gates('', (bot, profile) => of(base.findIndex((j) => j.bot === bot && j.profile === profile)), fc !== undefined);

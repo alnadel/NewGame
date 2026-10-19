@@ -315,9 +315,19 @@ function paired(a: Sim16Row, b: Sim16Row): { mean: number; se: number; n: number
 /** Seeds from which the pooled rows (E2 chase, E3) gate on the lower 1-SE bound instead of the mean. */
 const POOLED_SEEDS = 960;
 
+/**
+ * sim --release's held-out seeds (docs/V1_6_PLAN.md §6.4, §13): two 960-seed blocks no iteration was
+ * tuned on. E2 and E3 gate on the 1920 seeds pooled, with the bars of seeds 1-960.
+ */
+export const HELD_OUT: readonly (readonly [number, number])[] = Object.freeze([
+  [40001, 960],
+  [50001, 960],
+]);
+
+const rea = (label: string, opts: Sim16Job['opts'], extra: Partial<Sim16Job> = {}): Sim16Job => ({ bot: 'reactive', profile: 3, label, ...(opts ? { opts } : {}), ...extra });
+
 async function decisions(ctx: Sim16Ctx): Promise<void> {
   const t0 = performance.now();
-  const rea = (label: string, opts: Sim16Job['opts'], extra: Partial<Sim16Job> = {}): Sim16Job => ({ bot: 'reactive', profile: 3, label, ...(opts ? { opts } : {}), ...extra });
   const rung = (r: number): Sim16Job => {
     const rc = rungConfig(r, { tutorialDone: true });
     return { bot: 'humanDial', profile: rc.profile, drain: rc.drain, noonCloud: rc.noonCloud, lesson: rc.lesson, rung: r, label: `humanDial R${r}` };
@@ -476,9 +486,46 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   line(pmn - pm0 >= 3, false, 'priced moments per daylight minute, Days 2-4 (reactive plain), ≥ +3 over v1.6 all off', `${pmn.toFixed(2)} vs ${pm0.toFixed(2)} (glass ${per(total(plain, 'pricedGlass'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, flares ${per(total(plain, 'pricedFlares'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, squeezes ${per(total(plain, 'pricedSqueezes'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, costly gold ${per(total(plain, 'pricedGold'), total(plain, 'pricedTicks') / 3600).toFixed(2)})`);
 }
 
+/**
+ * --release (docs/V1_6_PLAN.md §13): --decisions on seeds 1-960 (every hard row), then E2 and E3 on
+ * the held-out seeds (HELD_OUT, 1920 seeds pooled): chase − plain's lower 1-SE bound ≥ +150, naive
+ * and safe below plain, and the near glass seeker's lower 1-SE bound above plain. Exits 1 on either.
+ */
+async function release(ctx: Sim16Ctx): Promise<void> {
+  // An explicit --seeds N plays N seeds a block instead (a smoke run of the mode; the gates want 960).
+  const block = process.argv.includes('--seeds') ? ctx.seeds : POOLED_SEEDS;
+  await decisions({ ...ctx, seedFrom: 1, seeds: block, run: (jobs, from = 1, n = block) => ctx.run(jobs, from, n) });
+  const t0 = performance.now();
+  const jobs = [
+    rea('reactive plain', { policy: 'plain' }),
+    rea('reactive chase', { policy: 'chase' }),
+    rea('reactive naive', { policy: 'naive' }),
+    rea('reactive safe', { policy: 'safe' }),
+    rea('reactive plain glass near', { policy: 'plain', glass: 'near' }),
+  ];
+  const blocks: Sim16Row[][] = [];
+  for (const [from, n] of HELD_OUT) blocks.push(await ctx.run(jobs, from, Math.min(n, block)));
+  const pooledRows: Sim16Row[] = jobs.map((job, i) => ({ name: (blocks[0]?.[i] as Sim16Row).name, job, runs: blocks.flatMap((b) => (b[i] as Sim16Row).runs) }));
+  const wall = (performance.now() - t0) / 1000;
+  const n = pooledRows[0]?.runs.length ?? 0;
+  console.log(`\nSHADY sim --release, held out: ${HELD_OUT.map(([a, k]) => `${a}-${a + Math.min(k, block) - 1}`).join(' and ')} (${n} seeds pooled), ${ctx.workers} workers, ${wall.toFixed(1)} s`);
+  const sgn = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(0)} min`;
+  const pm = (p: { mean: number; se: number }): string => `${sgn(p.mean)} ± ${p.se.toFixed(0)}`;
+  const each = (i: number): string => blocks.map((b, k) => `${(HELD_OUT[k] as readonly number[])[0]}: ${pm(paired(b[i] as Sim16Row, b[0] as Sim16Row))}`).join(', ');
+  const [plain, chase, naive, safe, near] = pooledRows as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
+  const line = liner(ctx);
+  const cp = paired(chase, plain);
+  line(cp.mean - cp.se >= 150, true, 'held out, E2: chase outlives plain by ≥ 150 min (lower 1-SE bound, pooled)', `${pm(cp)}; ${each(1)}`);
+  line(paired(naive, plain).mean < 0, true, 'held out, E2: naive does not beat plain (mean, pooled)', `${pm(paired(naive, plain))}; ${each(2)}`);
+  line(paired(safe, plain).mean < 0, true, 'held out, E2: safe trails plain (mean, pooled)', `${pm(paired(safe, plain))}; ${each(3)}`);
+  const np = paired(near, plain);
+  const saved = (r: Sim16Row): string => pct(per(total(r, 'brittleSaved'), total(r, 'brittleSeen')));
+  line(np.mean - np.se > 0, true, 'held out, E3: the cheap-detour glass seeker outlives glass-ignoring (lower 1-SE bound, pooled)', `${pm(np)} (saved ${saved(near)} vs ${saved(plain)}); ${each(4)}`);
+}
+
 export const ECON: Sim16Module = {
   name: 'econ',
   collector,
   report,
-  modes: { decisions },
+  modes: { decisions, release },
 };

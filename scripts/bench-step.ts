@@ -2,7 +2,7 @@
 // ≤ 1.5× v1.5"): HEAD's core against a base revision's, loaded side by side in one process.
 //
 //   node scripts/bench-step.ts [--base c956421 | --base-dir DIR] [--head-dir DIR] [--bot reactive|oracle] [--seeds 12] [--days 4] [--reps 9] [--check]
-//   node scripts/bench-step.ts --gen [--base …] [--seeds 12] [--days 4] [--reps 3] [--check]
+//   node scripts/bench-step.ts --gen [--base …] [--seeds 30] [--days 4] [--reps 3] [--check]
 //
 // Each variant records its own bot's input frames on seeds 1000.. (profile 3, mechanics on), then
 // replays them on fresh runs whose worlds are generated up front, so only step() is timed (the bot
@@ -13,11 +13,14 @@
 // step() is over +10% or the guide refresh over 1.5× (medians).
 //
 // --gen times idle world generation instead, the way the session runs it: generateSome(w, y + 2400,
-// 12) once a 60 Hz frame with y at Nubs' scheduled place (seeds 3000..), and prints the slices' p50,
-// p99 and max (ms), the frames over 2 and 4 ms a minute and the ms per validated chunk for both
-// variants (alternating reps). --check exits 1 when HEAD's p99 slice is over 1.1 × the base's, or
-// over 1.5 ms while the base is not (fix round 2: glass contests ran inside a chunk placement, 20 ms;
-// a loaded machine pushes the base over 1.5 ms too, and then only the paired bar decides).
+// 12) once a 60 Hz frame with y at Nubs' scheduled place (seeds 3000.., default 30 seeds, at least
+// 3 alternating reps; each figure is the median over the reps). Both trees are read on the same
+// population: the p99 slice is the k-th largest slice with k = 1% of the base's working slices (a
+// tree that does work on more frames would otherwise dilute its own p99 with small slices: review
+// r5), beside the frames over 1, 2 and 4 ms a minute and the ms per validated chunk. --check exits 1
+// when HEAD's p99 slice or its frames over 1 or 2 ms a minute are over 1.1 × the base's, or its p99
+// is over 1.5 ms while the base's is not (fix round 2: glass contests ran inside a chunk placement,
+// 20 ms; a loaded machine pushes the base over 1.5 ms too, and then only the paired bars decide).
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -34,9 +37,10 @@ function arg(name: string, def: string): string {
 
 const base = arg('base', 'c956421');
 const botKind = arg('bot', 'reactive');
-const seeds = Number(arg('seeds', '12'));
+const gen = process.argv.includes('--gen');
+const seeds = Number(arg('seeds', gen ? '30' : '12'));
 const days = Number(arg('days', '4'));
-const reps = Number(arg('reps', '9'));
+const reps = Math.max(gen ? 3 : 1, Number(arg('reps', gen ? '3' : '9')));
 const check = process.argv.includes('--check');
 const ROOT = arg('head-dir', HERE);
 const baseDir = arg('base-dir', '');
@@ -173,42 +177,60 @@ const min = (a: readonly number[]): number => Math.min(...a);
 const dir = baseDir || mkdtempSync(join(tmpdir(), 'shady-bench-'));
 try {
   if (!baseDir) execFileSync('sh', ['-c', `git -C '${HERE}' archive ${base} src | tar -x -C '${dir}'`]);
-  if (process.argv.includes('--gen')) {
+  if (gen) {
     const gv = [
       { label: baseDir ? 'base' : `base ${base}`, m: await load(dir) },
       { label: ROOT === HERE ? 'HEAD' : 'head', m: await load(ROOT) },
     ];
-    const q = (a: readonly number[], p: number): number => [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(p * a.length))] as number;
-    console.log(`bench-step --gen: generateSome(…, 12) a frame, ${seeds} seeds × ${days - 1} days, best of ${Math.min(reps, 3)} reps`);
+    console.log(`bench-step --gen: generateSome(…, 12) a frame, ${seeds} seeds × ${days - 1} days, median of ${reps} alternating reps`);
+    /** One rep's figures of a variant (slices sorted from the largest down). */
+    interface GenRep {
+      desc: number[];
+      frames: number;
+      chunks: number;
+    }
+    const runs: GenRep[][] = [[], []];
     // Alternating reps (base, HEAD, HEAD, base, …) so a loaded machine weighs on both alike.
-    const best: ({ ms: number[]; frames: number; chunks: number } | null)[] = [null, null];
-    const perChunk: number[][] = [[], []];
-    for (let r = 0; r < Math.min(reps, 3); r++) {
+    for (let r = 0; r < reps; r++) {
       for (const vi of r % 2 === 0 ? [0, 1] : [1, 0]) {
         const g = genSlices((gv[vi] as (typeof gv)[number]).m);
-        (perChunk[vi] as number[]).push(g.ms.reduce((a, x) => a + x, 0) / Math.max(1, g.chunks));
-        const b = best[vi];
-        if (!b || q(g.ms, 0.99) < q(b.ms, 0.99)) best[vi] = g;
+        (runs[vi] as GenRep[]).push({ desc: [...g.ms].sort((x, y) => y - x), frames: g.frames, chunks: g.chunks });
       }
     }
-    const p99 = [0, 0];
+    // The common population: k = 1% of the base's working slices (deterministic: the budget is in
+    // work units, so the same tree slices the same way every rep).
+    const k = Math.max(1, Math.round(0.01 * ((runs[0] as GenRep[])[0] as GenRep).desc.length));
+    const at = (g: GenRep, i: number): number => g.desc[Math.min(i, g.desc.length - 1)] ?? 0;
+    const perMin = (g: GenRep, ms: number): number => (g.desc.filter((x) => x > ms).length / g.frames) * 3600;
+    const total = (g: GenRep): number => g.desc.reduce((a, x) => a + x, 0);
+    const fig = runs.map((rs) => ({
+      n: median(rs.map((g) => g.desc.length)),
+      p50: median(rs.map((g) => at(g, Math.floor(g.desc.length / 2)))),
+      p99: median(rs.map((g) => at(g, k - 1))),
+      max: median(rs.map((g) => at(g, 0))),
+      over1: median(rs.map((g) => perMin(g, 1))),
+      over2: median(rs.map((g) => perMin(g, 2))),
+      over4: median(rs.map((g) => perMin(g, 4))),
+      perChunk: median(rs.map((g) => total(g) / Math.max(1, g.chunks))),
+      frames: (rs[0] as GenRep).frames,
+    }));
     gv.forEach((v, vi) => {
-      const g = best[vi] as { ms: number[]; frames: number; chunks: number };
-      const perMin = (ms: number): string => ((g.ms.filter((x) => x > ms).length / g.frames) * 3600).toFixed(2);
-      p99[vi] = q(g.ms, 0.99);
-      console.log(`  ${v.label.padEnd(16)} ${String(g.ms.length).padStart(6)} slices  p50 ${q(g.ms, 0.5).toFixed(2)} ms  p99 ${q(g.ms, 0.99).toFixed(2)} ms  max ${Math.max(...g.ms).toFixed(2)} ms  over 2 ms ${perMin(2)}/min  over 4 ms ${perMin(4)}/min  ${median(perChunk[vi] as number[]).toFixed(2)} ms/chunk`);
+      const f = fig[vi] as (typeof fig)[number];
+      console.log(`  ${v.label.padEnd(16)} ${String(f.n).padStart(6)} slices  p50 ${f.p50.toFixed(2)} ms  p99 (${k}th largest) ${f.p99.toFixed(2)} ms  max ${f.max.toFixed(2)} ms  over 1 ms ${f.over1.toFixed(2)}/min  over 2 ms ${f.over2.toFixed(2)}/min  over 4 ms ${f.over4.toFixed(2)}/min  ${f.perChunk.toFixed(2)} ms/chunk`);
     });
-    const [baseP99, headP99] = p99 as [number, number];
-    const chunkRatio = median(perChunk[1] as number[]) / median(perChunk[0] as number[]);
-    // The absolute bar measures the machine as much as the code: a base over it means a loaded run,
-    // so the paired bar (HEAD within +10% of the base, same process, alternating reps) decides then.
-    const loaded = baseP99 > 1.5;
-    const absOk = headP99 <= 1.5;
-    const pairOk = headP99 <= 1.1 * baseP99;
-    console.log(`  gate: HEAD p99 slice ≤ 1.5 ms: ${absOk ? 'PASS' : loaded ? 'n/a (the base is over it too: a loaded machine)' : 'FAIL'}; HEAD p99 ≤ 1.1 × base p99: ${pairOk ? 'PASS' : 'FAIL'} (${(headP99 / baseP99).toFixed(3)})`);
-    console.log(`  generation ms/chunk: HEAD ${(chunkRatio).toFixed(3)} × base (§6 bar ≤ 3.5 ms/chunk on the plan's 2.37 v1.5 baseline: ≤ ${(3.5 / 2.37).toFixed(2)} ×)`);
+    const [b, h] = fig as [(typeof fig)[number], (typeof fig)[number]];
+    // A frame-count bar on a base of (near) zero: allow one frame of the sample over it.
+    const oneFrame = 3600 / Math.max(1, b.frames);
+    const ratio = (x: number, y: number): string => (y > 0 ? (x / y).toFixed(3) : x > 0 ? '∞' : '1.000');
+    const loaded = b.p99 > 1.5;
+    const absOk = h.p99 <= 1.5;
+    const p99Ok = h.p99 <= 1.1 * b.p99;
+    const o1Ok = h.over1 <= 1.1 * b.over1 + oneFrame;
+    const o2Ok = h.over2 <= 1.1 * b.over2 + oneFrame;
+    console.log(`  gate: HEAD p99 slice ≤ 1.5 ms: ${absOk ? 'PASS' : loaded ? 'n/a (the base is over it too: a loaded machine)' : 'FAIL'}; paired ≤ 1.1 × base: p99 ${p99Ok ? 'PASS' : 'FAIL'} (${ratio(h.p99, b.p99)}), over 1 ms ${o1Ok ? 'PASS' : 'FAIL'} (${ratio(h.over1, b.over1)}), over 2 ms ${o2Ok ? 'PASS' : 'FAIL'} (${ratio(h.over2, b.over2)})`);
+    console.log(`  generation ms/chunk: HEAD ${ratio(h.perChunk, b.perChunk)} × base (§6 bar ≤ 3.5 ms/chunk on the plan's 2.37 v1.5 baseline: ≤ ${(3.5 / 2.37).toFixed(2)} ×)`);
     if (loaded) console.log('  WARNING: the base breaks the absolute 1.5 ms bar itself; re-run on a quieter machine for an absolute reading.');
-    if (check && (!pairOk || (!absOk && !loaded))) process.exitCode = 1;
+    if (check && (!p99Ok || !o1Ok || !o2Ok || (!absOk && !loaded))) process.exitCode = 1;
   } else {
     const variants = [record(baseDir ? 'base' : `base ${base}`, await load(dir)), record(ROOT === HERE ? 'HEAD' : 'head', await load(ROOT))];
     for (let r = 0; r < reps; r++) {
