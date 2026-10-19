@@ -286,9 +286,13 @@ rule on, the Frost Bank too since economy iteration 1 (`V16_SHIP`; src/core/READ
 meter is two pips unless a run switches the Bank off; the debug URL parameters `?on=bank,…` and
 `?off=bank,flares,…` switch rules over the shipped ones (a debug run). The halo's Chill gauge reads
 the economy (src/core/README.md §16.5): frost-white from `TUNING.bank.cashFullChill` (a snap pours
-the whole ring), amber below it (it pours less), red and dashed below `TUNING.bank.coolChill`
-(red-hot: buds stop growing, blooms bank no frost, a snap only shades). The first red-hot snap of a
-new player's run (`snapCash.hot`) tips "A red-hot snap only shades you…".
+the whole ring and cools Nubs to full; buds grow at full speed), amber below it (it pours and cools
+less, buds grow slower), red and dashed below `TUNING.bank.coolChill` (red-hot: buds stop growing,
+blooms bank no frost, a snap only shades). The bud tip says it ("…fast while the gauge is white,
+slower in the amber"). A new
+player's first red-hot snap (`snapCash.hot`) tips "A red-hot snap only shades you…", the first snap in
+the Noon Heat (`snapCash.noon`, it pours nothing) "In the Noon Heat a snap pours nothing…" and the
+first saved glass cluster (its frost waits for the next snap) "Glass saved! Its frost waits on the meter…".
 
 - **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the
   pill's own outline dashed on (`ringCharge` over `TUNING.ring.need` of the level; at ×5 the gold
@@ -297,7 +301,9 @@ new player's run (`snapCash.hot`) tips "A red-hot snap only shades you…".
 - **Frost Bank** (`hud.ts`): two pips (`frostH` / 100) fill in turn; a full one glows, breathes, pops
   when it fills and takes the tap (the capsule round both pips); `frostSpill` shakes the second.
   During a snap the pips freeze, the first drains white with the snap (`snapTicks` over
-  `SNAP_TICKS + snapExt`) and a chip shows `snapBankH` ("+0.3"). `snapCash` pours a stream of frost
+  `SNAP_TICKS + snapExt`) and a chip shows `snapBankH` ("+0.3"); outside a snap the same chip shows a
+  saved glass cluster's `glassBankH` waiting for the next snap ("+0.8", above the chevron when a snap
+  is ready). `snapCash` pours a stream of frost
   from the badge into the meter; frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap").
 - **Dial layers** (`halo.ts`, §4 priority): the deep band (`guide.deep`, runs ≥ 3°) darker inside the
   lasting teal; the glass layer (`guide.flake`, `glassDecision`) on its own rim at R + 24 (outside
@@ -333,7 +339,7 @@ new player's run (`snapCash.hot`) tips "A red-hot snap only shades you…".
 - **Tips** (`moments.ts` `MECH_TIPS`): the ring on L2, the Bank and Garden on the Cold Snap's level
   (a pip full, a bud in reach under the snap, the first cash-in, the first red-hot snap), glass and
   flare levels at their first window and at go; a new player's endless runs also get the ring's first
-  drop from ×3, the Garden, the cash-in, red-hot snap and glass tips, and the flare's 4 s before the first kept flare's warning
+  drop from ×3, the Garden, the cash-in, red-hot snap, Noon Heat snap, glass and glass-saved tips, and the flare's 4 s before the first kept flare's warning
   (urgent: it goes ahead of any toast; held to the rise). A stamp or card arriving over a toast on
   screen hides it and holds its clock until it has gone (`Banners.toastHide`).
 - **Audio and haptics**: a flare's warning hum and the parry's crack and bells are new; a ring

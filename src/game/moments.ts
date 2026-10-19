@@ -70,7 +70,7 @@ const FLARE_TIP_MAX_S = 30;
  */
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
-    ['bud', 'A bud! Shine the sun from its gold mark to grow it. Gold on the dial grows it too.'],
+    ['bud', 'A bud! Gold on the dial grows it: fast while the gauge is white, slower in the amber.'],
     ['bloom', 'Bloomed! Shade for the rest of the run. Grown from cool shade, it banks frost too.'],
     ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
   ],

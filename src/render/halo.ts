@@ -7,7 +7,7 @@
 //   - coming (lit now, shaded in 0.6 s): a thin dashed arc just outside the ring;
 //   - when nothing lasts, the now-arcs are drawn medium-thick, so the dial is never blank.
 // The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below TUNING.bank.cashFullChill (50:
-// a snap pours less of the ring and cools Nubs less, economy iteration 2) and hot, dashed and pulsing
+// a snap pours less of the ring and cools Nubs less, buds grow slower, economy iteration 2) and hot, dashed and pulsing
 // below TUNING.bank.coolChill (25: red-hot Nubs grows no buds, freezes no frost and a snap only shades). In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
 // (V1_PLAN §6.2) the dial shows where to put the sun: the target arc pulses, dots mark the way
 // round, and a ghost sun glides from the sun pointer into the arc in step with the ghost thumb.
@@ -464,7 +464,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 
   // Chill gauge inside the ring, clockwise from the top: frost-white while a snap pours the whole ring
-  // and cools Nubs full (TUNING.bank.cashFullChill), amber below it (less of both), red, dashed and pulsing below
+  // and cools Nubs full (TUNING.bank.cashFullChill), amber below it (less of both, buds grow slower), red, dashed and pulsing below
   // TUNING.bank.coolChill (red-hot: no buds grow, no frost freezes, a snap only shades); hidden while
   // Chill is full (the teal arcs lead then).
   const chill = Math.max(0, Math.min(100, inp.chill));
