@@ -21,24 +21,36 @@ export const EPS_DAWN = 6;
 /** Night distance is always NIGHT_WALK·v, whatever the night length. */
 export const NIGHT_WALK = 8;
 
+/**
+ * The clock's day rows (profile 3, the legacy plan: only dayLen, nightLen and v are read, which
+ * depend on the day alone), memoised per whole day: the sim asks for them several times a tick.
+ */
+const rows: DayParams[] = [];
+function row(day: number): DayParams {
+  const d = Math.max(1, Math.floor(day));
+  let p = rows[d];
+  if (p === undefined) rows[d] = p = dayParams(d, 3);
+  return p;
+}
+
 /** Daylight length of `day` in ticks. */
 export function dayTicks(day: number): number {
-  return Math.round(dayParams(day, 3).dayLen * TICK_HZ);
+  return Math.round(row(day).dayLen * TICK_HZ);
 }
 
 /** Night length of `day` in ticks. */
 export function nightTicks(day: number): number {
-  return Math.round(dayParams(day, 3).nightLen * TICK_HZ);
+  return Math.round(row(day).nightLen * TICK_HZ);
 }
 
 /** Daylight length (s). */
 export function dayLength(day: number): number {
-  return dayParams(day, 3).dayLen;
+  return row(day).dayLen;
 }
 
 /** Night length (s). */
 export function nightLength(day: number): number {
-  return dayParams(day, 3).nightLen;
+  return row(day).nightLen;
 }
 
 // Cumulative tables indexed by day (index 0 unused): absolute tick and y at each dawn.
@@ -48,7 +60,7 @@ const startY: number[] = [0, 0];
 function ensureDay(day: number): void {
   while (startTick.length <= day) {
     const d = startTick.length - 1; // last known day
-    const p = dayParams(d, 3);
+    const p = row(d);
     startTick.push((startTick[d] as number) + dayTicks(d) + nightTicks(d));
     startY.push((startY[d] as number) + p.v * p.dayLen + NIGHT_WALK * p.v);
   }
@@ -79,7 +91,7 @@ export function dayAtTick(tickAbs: number): number {
 
 /** Nubs' y at `dayTick` ticks after Day `day` dawn (0 ≤ dayTick ≤ day + night ticks). */
 export function yAtDayTick(day: number, dayTick: number): number {
-  const p = dayParams(day, 3);
+  const p = row(day);
   const dl = dayTicks(day);
   const y0 = dayStartY(day);
   if (dayTick <= dl) return y0 + (p.v * dayTick) / TICK_HZ;
@@ -109,7 +121,7 @@ export function timeAtY(y: number, out: YTime): YTime {
       d++;
     }
   }
-  const p = dayParams(d, 3);
+  const p = row(d);
   const dy = y - dayStartY(d);
   const dayY = p.v * p.dayLen;
   out.day = d;

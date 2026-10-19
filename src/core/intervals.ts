@@ -42,10 +42,12 @@ export function markRange(out: Uint8Array, a0: number, a1: number): void {
   }
   let idx = b0 % BINS;
   if (idx < 0) idx += BINS;
-  for (let k = b0; k <= b1; k++) {
-    out[idx] = 1;
-    idx++;
-    if (idx === BINS) idx = 0;
+  // The same bins as a wrapped walk from idx, in at most two native fills (the guide's hot path).
+  const end = idx + b1 - b0 + 1;
+  if (end <= BINS) out.fill(1, idx, end);
+  else {
+    out.fill(1, idx, BINS);
+    out.fill(1, 0, end - BINS);
   }
 }
 
@@ -271,6 +273,16 @@ export function markEllipse(
 ): void {
   const k = circleInterval(px, py, R, cx, cy, rx > ry ? rx : ry);
   if (k === 0) return;
+  const irx = 1 / rx;
+  const iry = 1 / ry;
+  if (R === 0) {
+    // A cloud on the ground (the Cold Snap's, z 0): its shadow lies under it at every θ, so the
+    // per-bin test below is the same for every bin (the sum adds ±0): one test, all bins.
+    const ex = (px - cx) * irx;
+    const ey = (py - cy) * iry;
+    if (ex * ex + ey * ey <= 1) out.fill(1);
+    return;
+  }
   let b0 = 0;
   let b1 = BINS - 1;
   if (k === 2) {
@@ -279,8 +291,6 @@ export function markEllipse(
   }
   let idx = b0 % BINS;
   if (idx < 0) idx += BINS;
-  const irx = 1 / rx;
-  const iry = 1 / ry;
   for (let b = b0; b <= b1; b++) {
     if (out[idx] === 0) {
       const ex = (px + (SUN_COS[idx] as number) * R - cx) * irx;
