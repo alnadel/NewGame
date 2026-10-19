@@ -336,7 +336,8 @@ export function createMechanics(): Mechanics {
             demoMask.set(gd.now);
             stage('land');
           } else {
-            bankDemo = TUNING.bank.bloomH;
+            // One bloom's frost, as the sim banks it under a snap (at most garden.bankCapH a snap).
+            bankDemo = Math.min(TUNING.bank.bloomH, TUNING.garden.bankCapH);
             frostDemo = 0.6;
             frostEnd = time + TUNING.frost.snapSec;
           }
