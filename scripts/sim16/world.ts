@@ -95,8 +95,9 @@ function deathMinuteOfDay(r: Sim16Run): number {
   return m >= 0 && m < 720 ? m : -1;
 }
 
-function noonShare(rs: readonly Sim16Run[]): [number, number] {
-  const ds = rs.map(deathMinuteOfDay).filter((m) => m >= 0);
+/** Daylight deaths in 11 AM-1 PM, and all daylight deaths (from Day `fromDay` on). */
+function noonShare(rs: readonly Sim16Run[], fromDay = 1): [number, number] {
+  const ds = rs.filter((r) => r.day >= fromDay).map(deathMinuteOfDay).filter((m) => m >= 0);
   return [ds.filter((m) => m >= 300 && m < 420).length, ds.length];
 }
 
@@ -235,6 +236,10 @@ export const WORLD: Sim16Module = {
         if (!hd) continue;
         const [hn, hdd] = noonShare(hd.runs);
         gate(false, hn >= 0.25 * hdd, `${hd.name} deaths in 11 AM-1 PM ≥ 25% (advisory)`, `${pct(hn, hdd)} of ${hdd}`);
+        // Review of economy iteration 2: Day 1 has no Noon Heat, so the Day 2+ share
+        // is the one that says whether the Noon Heat is the day's boss (an extra line, same bar).
+        const [h2, h2d] = noonShare(hd.runs, 2);
+        gate(false, h2 >= 0.25 * h2d, `${hd.name} deaths in 11 AM-1 PM from Day 2 ≥ 25% (advisory)`, `${pct(h2, h2d)} of ${h2d}`);
       }
       const meet = total(rea.runs, 'fParry') + total(rea.runs, 'fMiss');
       const p = meet > 0 ? total(rea.runs, 'fParry') / meet : 0;

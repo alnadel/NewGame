@@ -6,7 +6,7 @@
 //   - ending (shaded now, lit in 0.6 s): thin;
 //   - coming (lit now, shaded in 0.6 s): a thin dashed arc just outside the ring;
 //   - when nothing lasts, the now-arcs are drawn medium-thick, so the dial is never blank.
-// The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below TUNING.bank.cashFullChill (50:
+// The Chill gauge is frost-white, hidden while the tank is full, amber below TUNING.bank.cashFullChill (50:
 // a snap pours less of the ring and cools Nubs less, buds grow slower, economy iteration 2) and hot, dashed and pulsing
 // below TUNING.bank.coolChill (25: red-hot Nubs grows no buds, freezes no frost and a snap only shades),
 // both lines scaled to the tank and notched on its track; a missed flare's scorch chars the track's
@@ -490,10 +490,10 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   // Its marks: a notch where it turns amber (whiteLine: 6 o'clock on a full tank) and red (coolLine:
   // 3 o'clock); an ink underlay keeps the amber apart from the hot ring outside it. A missed flare's
   // scorch chars the end of the track it took away; in the Noon Heat a white gauge is hatched hot
-  // (a snap there pours nothing).
+  // (a snap there pours nothing). A full tank hides it, a ration level's half tank too.
   const chill = Math.max(0, Math.min(100, inp.chill));
   const scorch = inp.mech ? inp.mech.scorch : 0;
-  if (chill < 99 || scorch > 0) {
+  if (chill < Math.min(100, inp.maxChill) - 1 || scorch > 0) {
     const gR = R - 8;
     const gA = Math.max(A, 0.9);
     const top = -Math.PI / 2;

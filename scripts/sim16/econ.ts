@@ -1,8 +1,8 @@
 // v1.6 economy report (docs/V1_6_PLAN.md §2.1, §2.2, §2.4; CORE-1 owns this file): ring, bank and
 // garden metrics and gates for `sim --check`, the `--policy` rows and the `--decisions` mode
 // (policies plain/chase/naive/safe; snaps panic/plan/hoard at a sweep of Chill bars, the x5 farm and
-// greed under the strongest snap rule; the glass seekers; economy iteration 2's gates E1-E3,
-// docs/V1_6_PLAN.md §6.3, pooled over --seeds 960). See registry.ts for the hooks.
+// greed under the strongest snap rule; the glass seekers; the SWING-hop baseline; economy iteration
+// 2's gates E1-E3, docs/V1_6_PLAN.md §6.3-§6.4, pooled over --seeds 960). See registry.ts for the hooks.
 //
 // Per run (collector, in the worker): Σ multiplier and x5 ticks over daylight (from RunStats), level
 // changes, ring income split into shade and tricks, daylight on a full meter, frost income, snaps,
@@ -432,7 +432,7 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   const np = paired(near, plain);
   const ng = paired(plain, noGlass);
   const saved = (r: Sim16Row): string => pct(per(total(r, 'brittleSaved'), total(r, 'brittleSeen')));
-  // E3 (re-specified in the review of iteration 2, V1_6_PLAN §6.3): the gate's seeker takes only the
+  // E3 (re-specified in the review of iteration 2, V1_6_PLAN §6.4): the gate's seeker takes only the
   // cheap detours; the two seekers that pay for detours costing more than glass earns stay as rows
   // that glass is never a tax (mean above −1 SE), with plain play on worlds without glass as the control.
   line(lo(np) > 0, true, `E3: a glass seeker on the cheap detours (weight 4 within 15° of now ∪ next, any hour) outlives glass-ignoring (${loNote})`, `${pm(np)} (glass clusters saved ${saved(near)} vs ${saved(plain)})`);
