@@ -31,7 +31,7 @@ const CHASE_CHILL = 45;
 /** …and outside 9:20 AM-2:40 PM (minutes after 6:00 AM). */
 const CHASE_FROM = 200;
 const CHASE_TO = 520;
-/** Bank on: spend an overflow charge at frostH ≥ OVERFLOW_H, only when lit (reactive: with Chill < OVERFLOW_CHILL). */
+/** Bank on: spend an overflow charge at frostH ≥ OVERFLOW_H, only when lit with Chill < OVERFLOW_CHILL (the oracle: outside the Journey). */
 const OVERFLOW_H = 190;
 const OVERFLOW_CHILL = 70;
 /** 'plan' snaps at a gap's mouth: lit, ring ≥ x PLAN_MULT, Chill < PLAN_CHILL, no now ∪ next bin within ±PLAN_NEAR°, outside the Noon Heat (Bank on). */
@@ -273,7 +273,8 @@ export function econOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slac
   // but frost is earned, so a lone charge waits for a tight plan: snapping whenever lit and low emptied
   // the meter by Day 7 (seed 181), and iteration 1's last-steps-before-the-red snap only shades under
   // the gauge rule (seeds 97 and 64 heat died with a charge spent red-hot). Slack 25: 20 left seed 9
-  // (long) snapping at Chill 22 on Day 7; 30 and 40 lost seeds 181 and 64 (heat) again.
+  // (long) snapping at Chill 22 on Day 7; 30 and 40 lost seeds 181 and 64 (heat) again. With the
+  // overflow rule below, slack 25 loses no oracle run on the plan, long or heat forecasts (seeds 1-240).
   if (s.level === null) snap = snap && (slack < ORACLE_TIGHT || s.nubs.frostH >= 2 * TUNING.bank.costH);
   if (snap) return true;
   if (s.nubs.f === 0) return false;
@@ -285,5 +286,8 @@ export function econOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slac
     flareBuf.length = 0;
     if (big) return true;
   }
-  return s.nubs.frostH >= OVERFLOW_H;
+  // Its overflow snap, like the reactive bot's, only below OVERFLOW_CHILL outside the Journey: above it a
+  // snap cools little and pours at most half a pip (cashCapH), so it turns a charge into half of one;
+  // seed 181 lost two charges that way on Days 2-3 and melted on Day 7 without one.
+  return s.nubs.frostH >= OVERFLOW_H && (s.level !== null || s.nubs.chill < OVERFLOW_CHILL);
 }
