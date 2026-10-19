@@ -226,6 +226,7 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     snapExt: 0,
     snapBlooms: 0,
     snapChillCap: 100,
+    glassBankH: 0,
     landTicks: -1,
     landHold: 0,
     landSrc: -1,

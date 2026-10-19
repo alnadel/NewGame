@@ -3,19 +3,22 @@
 // docs/V1_6_PLAN.md §2.1-§2.3, §2.5). The Frost Bank and the ring belong to CORE-1 (sim/mechanics.ts,
 // sim/nubs.ts); this adapter is the one place the world's tricks reach them.
 //
-// With the Bank on the frost goes through addFrostH, with it off through the v1.5 meter (addFrost,
-// 0..1); either way it is held during a snap and paid when it ends. ringTrick is a no-op with the
-// ring off.
+// With the Bank on a parry's frost goes through addFrostH and a glass cluster's is banked for the next
+// snap (bankGlassH, economy iteration 2); with the Bank off both go to the v1.5 meter (addFrost, 0..1),
+// held during a snap and paid when it ends. ringTrick is a no-op with the ring off.
 
 import { TUNING } from '../../config/tuning.ts';
-import { addFrost, addFrostH } from './mechanics.ts';
+import { addFrost, addFrostH, bankGlassH } from './mechanics.ts';
 import { ringTrick } from './nubs.ts';
 import type { SimState } from './types.ts';
 
 /** Pays a world trick: frost and the ring trick. */
 export function payTrick(s: SimState, kind: 'parry' | 'cluster'): void {
   const h = kind === 'parry' ? TUNING.bank.parryH : TUNING.bank.clusterH;
-  if (s.world.v16.bank) addFrostH(s, kind, h);
-  else addFrost(s, h / 100, true);
+  // Economy iteration 2: a saved glass cluster's frost waits for the next snap (bankGlassH).
+  if (s.world.v16.bank) {
+    if (kind === 'cluster') bankGlassH(s, h);
+    else addFrostH(s, kind, h);
+  } else addFrost(s, h / 100, true);
   ringTrick(s, kind, TUNING.ring.trick);
 }

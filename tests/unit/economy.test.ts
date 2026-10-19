@@ -514,7 +514,7 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     expect(grow(BK.coolChill - 1)).toBe(0);
   });
 
-  it('a single glass flake caught pays no frost (iteration 2: only a whole glass cluster pays, clusterH)', () => {
+  it('a single glass flake caught pays no frost; a whole glass cluster banks clusterH for the next snap, paid as it is cast (iteration 2)', () => {
     const s = lab({ startFrost: 0 });
     const y0 = s.nubs.y;
     insertPickup(s.world, { id: 9_300_000, kind: 'flake', x: trailX(s.world.trail, y0 + 8), y: y0 + 8, day: 1, melt: 0, state: 0, cluster: -1, ci: 0, cn: 1, brittle: true });
@@ -523,7 +523,14 @@ describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README
     expect(only(ev, 'flake')).toHaveLength(2);
     expect(only(ev, 'frostGain')).toEqual([]);
     payTrick(s, 'cluster');
-    expect(s.nubs.frostH).toBe(BK.clusterH);
+    expect([s.nubs.frostH, s.glassBankH]).toEqual([0, BK.clusterH]);
+    // The next snap pays it (after its cost and the cash-in; x1 here: no cash-in).
+    s.nubs.frostH = BK.costH;
+    s.nubs.frost = 1;
+    s.nubs.chill = 100;
+    step(s, SNAP);
+    expect(only(s.events, 'frostGain')).toEqual([{ e: 'frostGain', source: 'cluster', amountH: BK.clusterH, charges: 0 }]);
+    expect([s.nubs.frostH, s.glassBankH]).toEqual([BK.clusterH, 0]);
   });
 
   it('E4, the v1.5 meter (Bank off): a trick under a snap is held and paid at snapEnd, as the Bank does', () => {

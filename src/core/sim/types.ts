@@ -358,6 +358,8 @@ export interface SimState {
    * white, less in the amber, the Chill it was cast at when red-hot; mechanics.ts snapGauge).
    */
   snapChillCap: number;
+  /** Economy iteration 2 (Bank on): frost saved glass clusters banked for the next snap (hundredths, ≤ TUNING.bank.capH), paid as it is cast. */
+  glassBankH: number;
   /** Landing: ticks left of the window after snapEnd (−1 none), ticks held so far, the source holding Nubs (−1 none). */
   landTicks: number;
   landHold: number;

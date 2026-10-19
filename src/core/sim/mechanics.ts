@@ -86,6 +86,16 @@ function bloomFrostH(s: SimState): number {
   return BANK.bloomH;
 }
 
+/**
+ * Economy iteration 2 (Bank on): a glass cluster saved whole banks its frost for the next snap (the
+ * meter's chip shows it), paid as that snap is cast: a lucky dial-follower who never snaps never
+ * collects it, and it lands on a meter a charge has just left, so it never spills.
+ */
+export function bankGlassH(s: SimState, amountH: number): void {
+  if (!s.world.mech.snap || !s.world.v16.bank || amountH <= 0) return;
+  s.glassBankH = Math.min(BANK.capH, s.glassBankH + amountH);
+}
+
 /** Frost income sources (the frostGain event's `source`). */
 export type FrostSource = Extract<SimEvent, { e: 'frostGain' }>['source'];
 
@@ -425,6 +435,13 @@ export function castSnap(s: SimState): boolean {
     if (refundH > 0) {
       st.snapCashH = (st.snapCashH as number) + refundH;
       creditFrostH(s, 'cash', refundH);
+    }
+    // Iteration 2: the glass banked since the last snap lands now (income when it lands).
+    if (s.glassBankH > 0) {
+      const g = s.glassBankH;
+      s.glassBankH = 0;
+      st.frostEarnedH = (st.frostEarnedH as number) + g;
+      creditFrostH(s, 'cluster', g);
     }
   } else {
     nb.frost = 0;

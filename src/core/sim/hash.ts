@@ -98,6 +98,7 @@ export function hashState(s: SimState): string {
   feed(s.snapExt);
   feed(s.snapBlooms);
   feed(s.snapChillCap);
+  feed(s.glassBankH);
   feed(s.landTicks);
   feed(s.landHold);
   feed(s.landSrc);

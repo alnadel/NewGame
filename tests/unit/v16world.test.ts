@@ -182,14 +182,13 @@ describe('Heat Flares (§2.5)', () => {
       const tricks = s.stats.ringTricks ?? 0;
       s.events.length = 0;
       payTrick(s, kind);
-      expect(s.nubs.frostH).toBe(Math.min(TUNING.bank.capH, before + h));
+      // Economy iteration 2: a parry banks no frost (parryH 0) and a glass cluster's waits for the next
+      // snap (s.glassBankH, paid as it is cast); the meter is untouched either way.
+      expect(s.nubs.frostH).toBe(before);
+      expect(s.glassBankH).toBe(kind === 'cluster' ? h : 0);
       expect(s.stats.ringTricks).toBe(tricks + 1);
       expect(s.events).toContainEqual({ e: 'ringTrick', kind, units: TUNING.ring.trick });
-      // What lands (a cluster's frost can fill the meter: the rest spills; a parry banks none since
-      // economy iteration 2, parryH 0).
-      const lands = Math.min(h, TUNING.bank.capH - before);
-      if (lands > 0) expect(s.events).toContainEqual(expect.objectContaining({ e: 'frostGain', source: kind, amountH: lands }));
-      else expect(s.events.some((e) => e.e === 'frostGain')).toBe(false);
+      expect(s.events.some((e) => e.e === 'frostGain')).toBe(false);
     }
     // With the Bank and the ring off, the v1.5 meter takes the frost and the ring is untouched.
     const off = started({ ...headlessConfig(1), v16: { bank: false, ring: false } });
