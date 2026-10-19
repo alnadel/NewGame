@@ -113,10 +113,10 @@ function hoursTable(rows: readonly Sim16Row[]): void {
 }
 
 /** Rescues per chunk of the plan-mix p3 worlds through Day `days`, with and without flares and Noon Heat. */
-function rescueDelta(seeds: number, days: number): { on: number; off: number } {
+function rescueDelta(seedFrom: number, seeds: number, days: number): { on: number; off: number } {
   const one = (off: boolean): number => {
     let rescues = 0, chunks = 0;
-    for (let seed = 1; seed <= seeds; seed++) {
+    for (let seed = seedFrom; seed < seedFrom + seeds; seed++) {
       const w = createWorld({ ...headlessConfig(seed, 3), ...(off ? { v16: { flares: false, noonHeat: false } } : {}) });
       ensureGenerated(w, dayStartY(days));
       const per = w.stats.rescuesPerChunk.filter((r): r is number => r !== undefined);
@@ -161,7 +161,7 @@ async function flaresMain(ctx: Sim16Ctx): Promise<void> {
   ];
   const rows = await ctx.run(jobs);
   const wall = (performance.now() - t0) / 1000;
-  console.log(`SHADY sim --flares: ${ctx.seeds} seeds, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s\n`);
+  console.log(`SHADY sim --flares: ${ctx.seeds} seeds${ctx.seedFrom !== 1 ? ` from ${ctx.seedFrom}` : ''}, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s\n`);
   console.log(`${'row'.padEnd(32)} ${'median death'.padEnd(17)} parried  flares met/run`);
   for (const r of rows) {
     const meet = total(r.runs, 'fParry') + total(r.runs, 'fMiss');
@@ -276,7 +276,7 @@ export const WORLD: Sim16Module = {
       console.log(`  (row) ${row.name.padEnd(24)} median death ${med === Infinity ? `≥ Day ${ctx.days}` : formatScore(med)}, flares parried ${pct(total(row.runs, 'fParry'), total(row.runs, 'fParry') + total(row.runs, 'fMiss'))}, glass flakes saved ${pct(total(row.runs, 'gTaken'), total(row.runs, 'gTaken') + total(row.runs, 'gMelted'))}`);
     }
     const days = Math.min(ctx.days, 5);
-    const rd = rescueDelta(ctx.seeds, days);
+    const rd = rescueDelta(ctx.seedFrom, ctx.seeds, days);
     gate(true, rd.on <= 0.8 && rd.on - rd.off <= 0.1, `rescues per chunk ≤ 0.8 and within +0.1 of the same worlds without flares and Noon Heat (p3 plan mix, Days 1-${days - 1})`, `${rd.on.toFixed(3)} vs ${rd.off.toFixed(3)} (${rd.on - rd.off >= 0 ? '+' : ''}${(rd.on - rd.off).toFixed(3)})`);
   },
   modes: {

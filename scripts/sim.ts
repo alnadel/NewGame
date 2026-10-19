@@ -1,6 +1,6 @@
 // Headless balance simulation, acceptance check and career sim (V1_PLAN §13, V1_1_PLAN §6).
 //
-//   node scripts/sim.ts [--seeds N] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W] [--mech]
+//   node scripts/sim.ts [--seeds N] [--seed-from S] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W] [--mech]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
 //   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
 //   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] and [--on …] (the
@@ -474,11 +474,11 @@ function rowOf(j: Job, rs: RunOut[]): Sim16Row {
   return { name: jobName(j), job: j, runs: rs.map((r) => ({ seed: r.seed, died: r.died, minutes: r.minutes, day: r.day, ticks: r.ticks, daylight: r.daylight, m: r.m })) };
 }
 
-/** Plays every job on seeds 1..seeds in the pool; one row per job, in order. */
-async function runRows(jobs: readonly Job[], seeds: number, days: number, workers: number): Promise<Sim16Row[]> {
+/** Plays every job on seeds seedFrom..seedFrom + seeds − 1 in the pool; one row per job, in order. */
+async function runRows(jobs: readonly Job[], seedFrom: number, seeds: number, days: number, workers: number): Promise<Sim16Row[]> {
   const msgs: WorkerMsg[] = [];
   jobs.forEach((job, ji) => {
-    for (let seed = 1; seed <= seeds; seed++) msgs.push({ kind: 'run', job, task: { job: ji, seed, days, timeGen: job.bot === 'oracle' } });
+    for (let seed = seedFrom; seed < seedFrom + seeds; seed++) msgs.push({ kind: 'run', job, task: { job: ji, seed, days, timeGen: job.bot === 'oracle' } });
   });
   const results = await pool<RunOut>(msgs, workers);
   return jobs.map((j, ji) => rowOf(j, results.filter((r) => r.job === ji)));
@@ -496,13 +496,13 @@ function waiveArg(): ReadonlySet<string> {
 }
 
 /** The v1.6 context handed to the report modules (failures land in `failures`). */
-function sim16Ctx(o: { seeds: number; days: number; workers: number; check: boolean; margin: number; off: Partial<V16Rules>; policy: BotPolicy | null }, failures: string[]): Sim16Ctx {
+function sim16Ctx(o: { seedFrom: number; seeds: number; days: number; workers: number; check: boolean; margin: number; off: Partial<V16Rules>; policy: BotPolicy | null }, failures: string[]): Sim16Ctx {
   const waivers = waiveArg();
   return {
     ...o,
     waived: (key) => waivers.has(key),
     hours: process.argv.includes('--hours'),
-    run: (jobs) => runRows(jobs.map((j) => withOff(j, o.off)), o.seeds, o.days, o.workers),
+    run: (jobs) => runRows(jobs.map((j) => withOff(j, o.off)), o.seedFrom, o.seeds, o.days, o.workers),
     fail: (what) => {
       failures.push(what);
     },
@@ -778,6 +778,8 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
 
 async function main(): Promise<void> {
   const seeds = Number(arg('seeds', '100'));
+  // --seed-from S: play seeds S..S + N − 1 (a held-out block; default 1).
+  const seedFrom = Number(arg('seed-from', '1'));
   const days = Number(arg('days', '8'));
   const workers = Math.max(1, Number(arg('workers', String(Math.min(4, availableParallelism())))));
   const off = offArg();
@@ -789,7 +791,7 @@ async function main(): Promise<void> {
   for (const mod of SIM16) {
     for (const [mode, fn] of Object.entries(mod.modes ?? {})) {
       if (!process.argv.includes(`--${mode}`)) continue;
-      await fn(sim16Ctx({ seeds, days, workers, check, margin, off, policy }, failures));
+      await fn(sim16Ctx({ seedFrom, seeds, days, workers, check, margin, off, policy }, failures));
       if (failures.length) {
         console.log(`\n${failures.length} target(s) failed.`);
         process.exit(1);
@@ -839,7 +841,7 @@ async function main(): Promise<void> {
 
   const msgs: WorkerMsg[] = [];
   jobs.forEach((job, ji) => {
-    for (let seed = 1; seed <= seeds; seed++) msgs.push({ kind: 'run', job, task: { job: ji, seed, days, timeGen: job.bot === 'oracle' } });
+    for (let seed = seedFrom; seed < seedFrom + seeds; seed++) msgs.push({ kind: 'run', job, task: { job: ji, seed, days, timeGen: job.bot === 'oracle' } });
   });
   // Longest first (oracle, then reactive) keeps the pool busy to the end.
   const weight = (m: WorkerMsg): number => (m.kind === 'run' ? { oracle: 4, reactive: 3, novice: 2 }[m.job.bot as 'oracle'] ?? 1 : 1);
@@ -868,7 +870,7 @@ async function main(): Promise<void> {
     report(ok, `${what} (${margin}-point margin)`, `${clockOf(m, days)} (${pts(after)} after the start, ${pts(before)} before the end)`);
   };
 
-  console.log(`SHADY sim: ${seeds} seeds, up to Day ${days}, ${workers} workers, ${wall.toFixed(1)} s${fc ? `, forecast ${fc} forced` : ''}${offNote(off)}\n`);
+  console.log(`SHADY sim: ${seeds} seeds${seedFrom !== 1 ? ` from ${seedFrom}` : ''}, up to Day ${days}, ${workers} workers, ${wall.toFixed(1)} s${fc ? `, forecast ${fc} forced` : ''}${offNote(off)}\n`);
   console.log(`${'row'.padEnd(30)} ${'median'.padEnd(17)} ${'p10'.padEnd(17)} ${'p90'.padEnd(17)} 11AM+  night  run s  melted%  Snow   sw/min  lit%   µs/tick`);
   const rowLine = (ji: number): void => {
     const rs = of(ji);
@@ -972,7 +974,7 @@ async function main(): Promise<void> {
   }
 
   // v1.6 modules: their tables and gates over every row (their failures count under --check).
-  const ctx = sim16Ctx({ seeds, days, workers, check, margin, off, policy }, failures);
+  const ctx = sim16Ctx({ seedFrom, seeds, days, workers, check, margin, off, policy }, failures);
   const rows = jobs.map((j, ji) => rowOf(j, of(ji)));
   for (const mod of SIM16) await mod.report?.(ctx, rows);
 

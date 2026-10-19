@@ -54,6 +54,9 @@ const AFTER_SNAP = 40;
 const FLARE_D = 8;
 /** Oracle, Bank on, outside the Journey: its lit-and-low snap waits for a plan slack under ORACLE_TIGHT, unless it holds two charges. */
 const ORACLE_TIGHT = 25;
+/** BotOptions.hop (a SWING-hopping baseline, review of economy iteration 2): another caster's shade at least HOP_DEG of turn away, while Chill ≥ HOP_CHILL. */
+const HOP_DEG = 42;
+const HOP_CHILL = 50;
 
 /** True when a Cold Snap can be cast this tick (same rule as bots.ts). */
 function snapReady(s: SimState): boolean {
@@ -132,9 +135,24 @@ export function econReactiveScore(ctx: BotHookCtx, s: SimState, score: Float64Ar
       score[b] = (score[b] as number) - (g.now[b] === 1 || spare ? RB.budWeight : 0) + (chase ? CHASE_GOLD : 0);
     }
   }
+  // BotOptions.hop: hop to another caster's shade a SWING's turn away (sim --decisions' baseline).
+  let sourced = false;
+  const hop = ctx.opts.hop ?? 0;
+  if (hop > 0 && nb.chill >= HOP_CHILL && s.snapTicks === 0 && s.sunUp) {
+    binSources(s);
+    sourced = true;
+    const cur = nb.f === 0 ? nb.shaderId : -1;
+    const b0 = binOf(s.sun.theta);
+    for (let b = 0; b < BINS; b++) {
+      const id = src[b] as number;
+      let d = b > b0 ? b - b0 : b0 - b;
+      if (d > 180) d = BINS - d;
+      if (g.now[b] === 1 && id >= 0 && id !== cur && d >= HOP_DEG) score[b] = (score[b] as number) + hop;
+    }
+  }
   // Ring: prefer safe shade from a source that is not an end of the last SWING (a fresh SWING).
   if (w.v16.ring && nb.chill >= FRESH_CHILL && s.sunUp) {
-    binSources(s);
+    if (!sourced) binSources(s);
     const n = nb.swFreshN;
     const slots = TUNING.ring.freshSlots;
     const e0 = n >= 1 ? (nb.swFresh[2 * ((n - 1) % slots)] as number) : -1;

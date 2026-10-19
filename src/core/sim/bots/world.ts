@@ -26,6 +26,12 @@ const HOLD_WEIGHT = 3;
 const GLASS_WEIGHT = 1.5;
 /** BotOptions.glass 'strong' (CORE-1's E3 row, review of economy iteration 1): outweighs a safe bin (3), at any hour. */
 const STRONG_GLASS_WEIGHT = 4;
+/**
+ * BotOptions.glass 'near' (the E3 gate's seeker, review of economy iteration 2): STRONG_GLASS_WEIGHT
+ * on the guide.flake bins within NEAR_GLASS_DEG of a guide.now or guide.next bin, at any hour: the
+ * cheap detours only (the shade it would take anyway is a short turn away).
+ */
+const NEAR_GLASS_DEG = 15;
 const GLASS_CHILL = 45;
 /** The chase policy's calm hours: it chases outside 9:20 AM-2:40 PM (minutes after 6:00 AM). */
 const CHASE_FROM = 200;
@@ -44,34 +50,65 @@ const ORACLE_GLASS_SLACK = 10;
 /** Reactive bot, each guide refresh: add world terms to `score` (360 bins, already holding now/next/gold). */
 export function worldReactiveScore(ctx: BotHookCtx, s: SimState, score: Float64Array): void {
   const pol = ctx.opts.policy;
-  // BotOptions.glass (CORE-1's E3 rows): chase's glass term on any policy, at chase's hours, or
-  // 'strong', a real seeker (STRONG_GLASS_WEIGHT at any hour).
+  // BotOptions.glass (CORE-1's E3 rows): chase's glass term on any policy, at chase's hours,
+  // 'strong', a real seeker (STRONG_GLASS_WEIGHT at any hour), or 'near', the same weight on the
+  // cheap detours only (glass within NEAR_GLASS_DEG of shade it would take).
   const strong = ctx.opts.glass === 'strong';
+  const near = ctx.opts.glass === 'near';
   const glass = ctx.opts.glass === true && pol !== 'naive';
-  if (!ctx.mech || (pol !== 'chase' && pol !== 'naive' && !glass && !strong) || s.nubs.chill < GLASS_CHILL) return;
-  if (!strong && (pol === 'chase' || glass)) {
+  if (!ctx.mech || (pol !== 'chase' && pol !== 'naive' && !glass && !strong && !near) || s.nubs.chill < GLASS_CHILL) return;
+  if (!strong && !near && (pol === 'chase' || glass)) {
     const m = minutesOfDay(s.day, s.dayTick);
     if (m >= CHASE_FROM && m <= CHASE_TO) return;
   }
-  const wgt = strong ? STRONG_GLASS_WEIGHT : GLASS_WEIGHT;
   const g = s.guide.flake;
+  if (near) {
+    const now = s.guide.now;
+    const next = s.guide.next;
+    for (let b = 0; b < BINS; b++) {
+      if (g[b] !== 1) continue;
+      let ok = false;
+      for (let k = -NEAR_GLASS_DEG; k <= NEAR_GLASS_DEG && !ok; k++) {
+        const q = (b + k + BINS) % BINS;
+        if (now[q] === 1 || next[q] === 1) ok = true;
+      }
+      if (ok) score[b] = (score[b] as number) + STRONG_GLASS_WEIGHT;
+    }
+    return;
+  }
+  const wgt = strong ? STRONG_GLASS_WEIGHT : GLASS_WEIGHT;
   for (let b = 0; b < BINS; b++) if (g[b] === 1) score[b] = (score[b] as number) + wgt;
 }
 
+/** preAim's chosen guide.flare bin per bot (−1 none), held from the warning's last ticks through the hold. */
+const preAimLock = new WeakMap<BotHookCtx, Int32Array>();
+
 /**
  * Reactive bot, every tick: the bin to steer to (`target` is the score's pick). preAim (with the
- * mechanics): in a flare warning's last PREAIM_TICKS, if θ's bin is not in guide.flare it targets
- * the nearest guide.flare bin (θ stays put when it already is, unless the pick is too).
+ * mechanics), the taught skill ("slide to the frost-rimmed shade before the flash"): in a flare
+ * warning's last PREAIM_TICKS it locks θ's bin when guide.flare holds it, else the nearest
+ * guide.flare bin (the lock stays while guide.flare still holds it), and it holds that bin through
+ * the rise and the hold (a parry is a fixed sun angle through the hold; under its own snap it plays
+ * as usual). Measured (review of economy iteration 2): sliding to the bin only in the warning and
+ * then following the score again parried 74%; holding it, 90-92.5%.
  */
 export function worldReactiveAim(ctx: BotHookCtx, s: SimState, target: number): number {
-  if (!ctx.opts.preAim || !ctx.mech || s.flarePhase !== 1 || s.flareTicks > PREAIM_TICKS) return target;
-  const g = s.guide.flare;
-  const b0 = binOf(s.sun.theta);
-  if (g[b0] === 1) return g[binOf(target)] === 1 ? target : b0;
-  for (let k = 1; k <= 180; k++) {
-    if (g[(b0 + k) % BINS] === 1) return (b0 + k) % BINS;
-    if (g[(b0 - k + BINS) % BINS] === 1) return (b0 - k + BINS) % BINS;
+  if (!ctx.opts.preAim || !ctx.mech) return target;
+  let st = preAimLock.get(ctx);
+  if (!st) preAimLock.set(ctx, (st = Int32Array.of(-1)));
+  const lock = st[0] as number;
+  if (s.flarePhase === 1 && s.flareTicks <= PREAIM_TICKS) {
+    const g = s.guide.flare;
+    const b0 = lock >= 0 && g[lock] === 1 ? lock : binOf(s.sun.theta);
+    if (g[b0] === 1) return (st[0] = b0);
+    for (let k = 1; k <= 180; k++) {
+      if (g[(b0 + k) % BINS] === 1) return (st[0] = (b0 + k) % BINS);
+      if (g[(b0 - k + BINS) % BINS] === 1) return (st[0] = (b0 - k + BINS) % BINS);
+    }
+    return target;
   }
+  if ((s.flarePhase === 2 || s.flarePhase === 3) && lock >= 0 && s.snapTicks === 0) return lock;
+  st[0] = -1;
   return target;
 }
 

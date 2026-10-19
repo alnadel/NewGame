@@ -56,11 +56,13 @@ export interface Sim16Run {
 export interface Sim16Row {
   readonly name: string;
   readonly job: Sim16Job;
-  /** One run per seed 1..seeds. */
+  /** One run per seed seedFrom..seedFrom + seeds − 1. */
   readonly runs: readonly Sim16Run[];
 }
 
 export interface Sim16Ctx {
+  /** --seed-from: the first seed (default 1); rows play seeds seedFrom..seedFrom + seeds − 1. */
+  readonly seedFrom: number;
   readonly seeds: number;
   readonly days: number;
   readonly workers: number;
@@ -73,7 +75,7 @@ export interface Sim16Ctx {
   readonly policy: BotPolicy | null;
   /** --hours: print deaths by in-game hour. */
   readonly hours: boolean;
-  /** Plays every job on seeds 1..seeds in the worker pool (with --off applied); rows in job order. */
+  /** Plays every job on seeds seedFrom..seedFrom + seeds − 1 in the worker pool (with --off applied); rows in job order. */
   run(jobs: readonly Sim16Job[]): Promise<Sim16Row[]>;
   /** Records a hard-gate failure: under --check (and in a mode) the sim exits 1. */
   fail(what: string): void;

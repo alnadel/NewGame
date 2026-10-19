@@ -58,15 +58,22 @@ export interface BotOptions {
    * or not (`sim --decisions`' x5 farm row: a snap that pays for itself is a dominant strategy). CORE-1.
    */
   farm?: number;
-  /** Reactive (mechanics on): slide to guide.flare in a warning's last 18 ticks. CORE-2. */
+  /** Reactive (mechanics on): slide to a guide.flare bin in a warning's last 18 ticks and hold it through the rise and the hold. CORE-2. */
   preAim?: boolean;
   /**
    * Reactive (mechanics on): seek glass as the chase policy does (its guide.flake term, in its calm
    * hours and Chill), with the policy's own gold (`sim --decisions` E3 row: glass-seeking against
    * glass-ignoring, same skill otherwise). 'strong': a real seeker, weight 4 on guide.flake at any
-   * hour (Chill ≥ 45). CORE-1.
+   * hour (Chill ≥ 45). 'near': weight 4 on the guide.flake bins within 15° of a guide.now or
+   * guide.next bin (the cheap detours), at any hour (Chill ≥ 45): the E3 gate's seeker. CORE-1.
    */
-  glass?: boolean | 'strong';
+  glass?: boolean | 'strong' | 'near';
+  /**
+   * Reactive (mechanics on): `hop` more on now-safe bins shaded by another caster at least 42° of
+   * turn away, while Chill ≥ 50 and no snap is on (a SWING-hopping baseline: `sim --decisions`
+   * reports greed against the better of plain and it). CORE-1.
+   */
+  hop?: number;
   /** Oracle: weights for the level's Dare (the Feat-seeking oracle). CORE-2. */
   feats?: boolean;
   /**
