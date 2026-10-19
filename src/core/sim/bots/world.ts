@@ -148,6 +148,15 @@ const PARRY_HORIZON = TUNING.bots.oracle.horizonSteps * STEP;
 const PARRY_REACH = Math.round(TUNING.bots.oracle.rate * STEP * DT);
 /** Turn per step the parry plan allows inside the hold (bins). */
 const PARRY_HOLD_REACH = 6;
+/**
+ * Turn per step the parry plan allows before the hold (bins): half the oracle's real rate. With
+ * the full rate every bin of the dial could still reach the parry until the last moment, so the plan
+ * valued them all alike and gave no pull toward it; the oracle set out too late and missed (review
+ * r5, seed 80019 heat: 180° away at the warning, 90° short at the hold, a 68-point scorch, melted
+ * two hours later). At half the rate the bins that would arrive late lose the bonus early enough
+ * for the real rate to arrive with time to spare.
+ */
+const PARRY_PLAN_REACH = Math.round(PARRY_REACH / 2);
 const HOLD_STEPS = Math.round(TUNING.flare.holdTicks / STEP);
 const parryRows = new Uint8Array((HOLD_STEPS + 4 + TUNING.bots.oracle.horizonSteps) * BINS);
 const parryRow = new Uint8Array(BINS);
@@ -191,7 +200,7 @@ function planParry(s: SimState): void {
   parryV.fill(0);
   for (let j = jf; j >= j1; j--) {
     // Through the hold the path stays in one moving shade (a hand-off mid-hold costs lit ticks).
-    slidingMaxCircular(parryV, j >= jh ? PARRY_HOLD_REACH : PARRY_REACH, parryWin);
+    slidingMaxCircular(parryV, j >= jh ? PARRY_HOLD_REACH : PARRY_PLAN_REACH, parryWin);
     const o = (j - lo) * BINS;
     if (j >= jh) {
       // Shaded (3-step rule) on the bin and PARRY_CORE bins either side: the middle of the arc, so
