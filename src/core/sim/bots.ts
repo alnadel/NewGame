@@ -45,16 +45,28 @@ export const BOT_POLICIES: readonly BotPolicy[] = Object.freeze(['plain', 'chase
 export interface BotOptions {
   /** Reactive (mechanics on): what it chases (default 'plain'). CORE-1. */
   policy?: BotPolicy;
-  /** Reactive: when it snaps ('panic', the v1.5 rule, by default; 'plan' snaps at a gap's mouth). CORE-1. */
-  snap?: 'panic' | 'plan';
+  /**
+   * Reactive: when it snaps ('panic', the v1.5 rule, by default; 'plan' snaps at a gap's mouth;
+   * 'hoard' only when lit below `snapChill` (default the panic rule's last resort, 25) and never
+   * spends an overflow charge). CORE-1.
+   */
+  snap?: 'panic' | 'plan' | 'hoard';
+  /** Reactive (mechanics on): the panic rule's Chill bar (default TUNING.bots.reactive.snapChill), the plan's (default 50) or the hoarder's. CORE-1. */
+  snapChill?: number;
+  /**
+   * Reactive (mechanics on): also snap whenever cool at ring level ≥ farm with a bud in reach, needed
+   * or not (`sim --decisions`' x5 farm row: a snap that pays for itself is a dominant strategy). CORE-1.
+   */
+  farm?: number;
   /** Reactive (mechanics on): slide to guide.flare in a warning's last 18 ticks. CORE-2. */
   preAim?: boolean;
   /**
    * Reactive (mechanics on): seek glass as the chase policy does (its guide.flake term, in its calm
    * hours and Chill), with the policy's own gold (`sim --decisions` E3 row: glass-seeking against
-   * glass-ignoring, same skill otherwise). CORE-1.
+   * glass-ignoring, same skill otherwise). 'strong': a real seeker, weight 4 on guide.flake at any
+   * hour (Chill ≥ 45). CORE-1.
    */
-  glass?: boolean;
+  glass?: boolean | 'strong';
   /** Oracle: weights for the level's Dare (the Feat-seeking oracle). CORE-2. */
   feats?: boolean;
   /**

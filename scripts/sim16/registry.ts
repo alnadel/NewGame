@@ -26,6 +26,8 @@ export interface Sim16Job {
   opts?: BotOptions;
   /** v1.6 rules switched off on this row, on top of --off. */
   v16?: Partial<V16Rules>;
+  /** RunConfig.startFrost (charges) on this row (economy iteration 2: the starting charge's worth). */
+  startFrost?: number;
   /** The row's printed name (default: bot, profile, rules and options). */
   label?: string;
 }

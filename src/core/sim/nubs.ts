@@ -385,7 +385,9 @@ export function applyDaylight(s: SimState): void {
   // v1.6 Noon Heat (CORE-2, T1): the drain × noonHeatAt between 11 AM and 1 PM, as the validator's DP charges it.
   let c = nb.chill + (-effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * f + regen * Math.max(0, 1 - f)) * DT;
   // v1.6 (fix round 3): a missed Endless flare's scorch caps the tank until nightfall (sim/flares.ts).
-  const cap = nb.maxChill - s.flareScorch;
+  let cap = nb.maxChill - s.flareScorch;
+  // Economy iteration 2: a red-hot snap refills nothing (s.snapChillCap; it never takes Chill away).
+  if (s.snapTicks > 0 && s.snapChillCap < cap) cap = Math.max(s.snapChillCap, nb.chill);
   if (c > cap) c = cap;
   // The first-run lesson's floor: Nubs is small and sweating, but alive.
   if (s.lessonOn || s.lessonGrace > 0) {

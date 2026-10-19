@@ -70,7 +70,8 @@ export type SimEvent =
   // Frost Bank (CORE-1): frostReady gains `charges` (1 or 2).
   | { e: 'frostGain'; source: 'bloom' | 'swing' | 'cluster' | 'land' | 'parry' | 'cash' | 'garden'; amountH: number; charges: number }
   | { e: 'frostSpill'; lostH: number }
-  | { e: 'snapCash'; level: number; refundH: number }
+  /** A snap's cash-in (`hot`: cast red-hot with the Bank on, economy iteration 2: it pours nothing and refills no Chill). */
+  | { e: 'snapCash'; level: number; refundH: number; hot?: true }
   // Frost Garden and Landing (CORE-1).
   | { e: 'snapExtend'; ticks: number }
   | { e: 'snapLand'; chain: number; own: boolean; x: number; y: number }

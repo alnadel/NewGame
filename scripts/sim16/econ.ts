@@ -1,6 +1,8 @@
 // v1.6 economy report (docs/V1_6_PLAN.md §2.1, §2.2, §2.4; CORE-1 owns this file): ring, bank and
 // garden metrics and gates for `sim --check`, the `--policy` rows and the `--decisions` mode
-// (policies plain/chase/naive/safe, snaps panic/plan). See registry.ts for the hooks.
+// (policies plain/chase/naive/safe; snaps panic/plan/hoard at a sweep of Chill bars, the x5 farm and
+// greed under the strongest snap rule; the glass seekers; economy iteration 2's gates E1-E3,
+// docs/V1_6_PLAN.md §6.3, pooled over --seeds 960). See registry.ts for the hooks.
 //
 // Per run (collector, in the worker): Σ multiplier and x5 ticks over daylight (from RunStats), level
 // changes, ring income split into shade and tricks, daylight on a full meter, frost income, snaps,
@@ -283,7 +285,24 @@ function report(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// --decisions: the bank's policies and snap rules (§2.2 acceptance)
+// --decisions: the bank's policies and snap rules (§2.2 acceptance; economy iterations 1-2, V1_6_PLAN §6.2-§6.3)
+
+/** Paired mean difference a − b over the seeds both rows played, with its standard error. */
+function paired(a: Sim16Row, b: Sim16Row): { mean: number; se: number; n: number } {
+  const by = new Map(b.runs.map((r) => [r.seed, r.minutes]));
+  const d: number[] = [];
+  for (const r of a.runs) {
+    const m = by.get(r.seed);
+    if (m !== undefined) d.push(r.minutes - m);
+  }
+  const n = d.length;
+  const mean = n > 0 ? d.reduce((x, y) => x + y, 0) / n : 0;
+  const se = n > 1 ? Math.sqrt(d.reduce((x, y) => x + (y - mean) * (y - mean), 0) / (n - 1) / n) : 0;
+  return { mean, se, n };
+}
+
+/** Seeds from which the pooled rows (E2 chase, E3) gate on the lower 1-SE bound instead of the mean. */
+const POOLED_SEEDS = 960;
 
 async function decisions(ctx: Sim16Ctx): Promise<void> {
   const t0 = performance.now();
@@ -292,6 +311,13 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     const rc = rungConfig(r, { tutorialDone: true });
     return { bot: 'humanDial', profile: rc.profile, drain: rc.drain, noonCloud: rc.noonCloud, lesson: rc.lesson, rung: r, label: `humanDial R${r}` };
   };
+  const L = BANK.coolChill;
+  // The snap-rule sweep on plain play (iteration 2): the panic bar, the plan's bar and the hoarders.
+  // A hoarder snaps only when lit below its bar and never spends an overflow; the E1 family is every
+  // hoarder up to 10 Chill above the red line, and every panic bar at or below it.
+  const PANIC_BARS = [25, 30, 35, 45, 50];
+  const PLAN_BARS = [65, 80];
+  const HOARD_BARS = [20, 25, L + 2, L + 10];
   const jobs: Sim16Job[] = [
     rea('reactive plain', { policy: 'plain' }),
     rea('reactive chase', { policy: 'chase' }),
@@ -300,54 +326,104 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     rea('reactive plain plan-snap', { policy: 'plain', snap: 'plan' }),
     rea('reactive dial (dial-only)', undefined, { noMech: true }),
     rea('reactive plain glass-seeking', { policy: 'plain', glass: true }),
+    rea('reactive plain glass strong', { policy: 'plain', glass: 'strong' }),
     rung(2),
     rung(3),
     rung(4),
     rea('reactive plain, v1.6 all off', { policy: 'plain' }, { v16: { ring: false, bank: false, garden: false, brittle: false, flares: false, noonHeat: false } }),
+    rea('reactive plain, no start charge', { policy: 'plain' }, { startFrost: 0 }),
+    ...PANIC_BARS.map((t) => rea(`plain panic@${t}`, { policy: 'plain', snapChill: t })),
+    ...PLAN_BARS.map((t) => rea(`plain plan@${t}`, { policy: 'plain', snap: 'plan', snapChill: t })),
+    ...HOARD_BARS.map((t) => rea(`plain hoard@${t}`, { policy: 'plain', snap: 'hoard', snapChill: t })),
+    rea('plain panic@45 + x5 farm', { policy: 'plain', snapChill: 45, farm: 5 }),
   ];
   const rows = await ctx.run(jobs);
+  const [plain, chase, naive, safe, plan, dial, glass, strong, h2, h3, h4, none, noStart] = rows as Sim16Row[] as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
+  const sweep = rows.slice(13, 13 + PANIC_BARS.length + PLAN_BARS.length + HOARD_BARS.length);
+  const farm = rows[rows.length - 1] as Sim16Row;
+  const panic45 = rows[13 + PANIC_BARS.indexOf(45)] as Sim16Row;
+  // The strongest snap rule for plain play: greed is gated under it too (review of iteration 1).
+  const candidates = [plain, plan, ...sweep];
+  let best = plain;
+  for (const r of candidates) if (meanMinutes(r) > meanMinutes(best)) best = r;
+  const bestOpts = { ...(best.job.opts ?? {}) };
+  const greedy = await ctx.run([
+    rea(`naive, ${best.name.replace('reactive ', '')} rule`, { ...bestOpts, policy: 'naive' }),
+    rea(`chase, ${best.name.replace('reactive ', '')} rule`, { ...bestOpts, policy: 'chase' }),
+  ]);
+  const [naiveBest, chaseBest] = greedy as [Sim16Row, Sim16Row];
+  const all = [...rows, ...greedy];
   const wall = (performance.now() - t0) / 1000;
   const rule = (k: keyof V16Rules): boolean => ctx.off[k] ?? V16_SHIP[k];
   const offNames = V16_RULES.filter((k) => !rule(k));
   const onNames = V16_RULES.filter((k) => rule(k) && !V16_SHIP[k]);
   console.log(`SHADY sim --decisions: ${ctx.seeds} seeds, profile 3, up to Day ${ctx.days}, ${ctx.workers} workers, ${wall.toFixed(1)} s${offNames.length ? `, v1.6 off: ${offNames.join(', ')}` : ''}${onNames.length ? `, switched on: ${onNames.join(', ')}` : ''}\n`);
-  console.log(`${'row'.padEnd(30)} ${'mean'.padEnd(17)} ${'median'.padEnd(17)} p90`);
-  for (const r of rows) console.log(`${r.name.padEnd(30)} ${clock(meanMinutes(r), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.5), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.9), ctx.days)}`);
+  console.log(`${'row'.padEnd(34)} ${'mean'.padEnd(17)} ${'median'.padEnd(17)} p90`);
+  for (const r of all) console.log(`${r.name.padEnd(34)} ${clock(meanMinutes(r), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.5), ctx.days).padEnd(17)} ${clock(quantileMinutes(r, 0.9), ctx.days)}`);
   console.log('');
-  table(rows, ctx.days);
-  incomeTable(rows);
-  const [plain, chase, naive, safe, plan, dial, glass, h2, h3, h4, none] = rows as [Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row, Sim16Row];
-  const d = (a: Sim16Row, b: Sim16Row): number => meanMinutes(a) - meanMinutes(b);
+  table(all, ctx.days);
+  incomeTable(all.slice(0, 13));
   const sgn = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(0)} min`;
+  const pm = (p: { mean: number; se: number }): string => `${sgn(p.mean)} ± ${p.se.toFixed(0)}`;
+  const pooled = ctx.seeds >= POOLED_SEEDS;
+  /** A pooled row: at ≥ POOLED_SEEDS seeds its lower 1-SE bound must clear `bar`; below that, its mean. */
+  const lo = (p: { mean: number; se: number }): number => (pooled ? p.mean - p.se : p.mean);
+  const loNote = pooled ? 'lower 1-SE bound' : `mean; the lower 1-SE bound gates at --seeds ${POOLED_SEEDS}`;
   const line = liner(ctx);
-  console.log('\nDecision gates (docs/V1_6_PLAN.md §2.2, §6; MISS never fails):');
-  line(d(chase, plain) >= 150, true, 'chase outlives plain by ≥ 150 min (mean)', sgn(d(chase, plain)));
-  line(d(naive, plain) <= 0, true, 'naive does not beat plain (mean)', sgn(d(naive, plain)));
-  line(d(safe, plain) < 0, true, 'safe trails plain (mean)', sgn(d(safe, plain)));
+  console.log(`\nSnap rules on plain play (red line: Chill ${L}; a hoarder never spends an overflow):`);
+  for (const r of [plain, plan, ...sweep]) {
+    const p = paired(r, plan);
+    console.log(`  ${r.name.padEnd(34)} ${clock(meanMinutes(r), ctx.days).padEnd(17)} vs plan ${pm(p).padEnd(16)} snaps/d ${f2(snapsPerDay(r))}${r === best ? '  (strongest)' : ''}`);
+  }
+  console.log('\nDecision gates (docs/V1_6_PLAN.md §2.2, §6, §6.2-§6.3; MISS never fails):');
+  // E1 (re-specified in iteration 2, V1_6_PLAN §6.3): plan beats the best hoarder, and still the panic bot.
+  const hoarders = sweep.filter((r) => (r.job.opts?.snap === 'hoard') || (r.job.opts?.snap === undefined && (r.job.opts?.snapChill ?? 40) <= L));
+  let worst = { mean: Infinity, se: 0, n: 0 };
+  let worstName = '';
+  for (const h of hoarders) {
+    const p = paired(plan, h);
+    if (p.mean < worst.mean) {
+      worst = p;
+      worstName = h.name;
+    }
+  }
+  line(worst.mean >= 30, true, `E1: plan-snap outlives the best hoarder by ≥ 30 min (mean; ${hoarders.map((h) => h.name.replace('plain ', '')).join(', ')})`, `${pm(worst)} vs ${worstName}`);
+  line(paired(plan, plain).mean >= 30, true, 'E1: plan-snap outlives panic-snap by ≥ 30 min (mean; iteration 1)', pm(paired(plan, plain)));
+  line(fullShare(plain) <= 0.15, true, 'E1: reactive plain sits on a full bank ≤ 15% of daylight', pct(fullShare(plain)));
+  const cp = paired(chase, plain);
+  line(lo(cp) >= 150, true, `E2: chase outlives plain by ≥ 150 min (${loNote})`, pm(cp));
+  line(paired(naive, plain).mean < 0, true, 'E2: naive does not beat plain (mean)', pm(paired(naive, plain)));
+  const nb = best === plain ? paired(naive, plain) : paired(naiveBest, best);
+  line(nb.mean < 0, true, `E2: naive does not beat plain under the strongest snap rule (${best.name.replace('reactive ', '')})`, pm(nb));
+  line(paired(chaseBest, best).mean > 0, false, `chase outlives plain under the strongest snap rule`, pm(paired(chaseBest, best)));
+  line(paired(safe, plain).mean < 0, true, 'E2: safe trails plain (mean)', pm(paired(safe, plain)));
+  const gp = paired(glass, plain);
+  const sp = paired(strong, plain);
+  const saved = (r: Sim16Row): string => pct(per(total(r, 'brittleSaved'), total(r, 'brittleSeen')));
+  line(lo(gp) > 0, true, `E3: glass-seeking outlives glass-ignoring, same skill otherwise (${loNote})`, `${pm(gp)} (glass clusters saved ${saved(glass)} vs ${saved(plain)})`);
+  line(lo(sp) > 0, false, `E3: a strong glass seeker (weight 4, any hour) outlives glass-ignoring (${loNote})`, `${pm(sp)} (saved ${saved(strong)})`);
+  line(paired(farm, panic45).mean <= 0, true, 'a cool snap at x5 with a bud in reach, needed or not, does not pay (x5 farm vs panic@45)', pm(paired(farm, panic45)));
   if (rule('bank')) {
     line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full bank ≤ 10% of daylight', pct(fullShare(plain)));
     line(metersPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day from income', f2(metersPerDay(dial)));
   } else {
-    // The Frost Bank ships off (V16_SHIP, §11): diagnosis #4 stays open; the rows measure the v1.5
-    // meter and fail unless an integrator waives them (--waive bank; --on bank measures the Bank).
+    // The Frost Bank switched off: the rows measure the v1.5 meter and fail unless waived.
     line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full meter ≤ 10% of daylight (Bank off: the v1.5 meter)', pct(fullShare(plain)), 'bank');
     line(fillsPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day (Bank off: the v1.5 meter fills passively)', f2(fillsPerDay(dial)), 'bank');
   }
-  // Economy iteration 1 (docs/V1_6_PLAN.md §6.2): planning beats hoarding (E1) and glass is a choice (E3).
-  line(d(plan, plain) >= 30, true, 'plan-snap outlives panic-snap by ≥ 30 min (mean; E1)', sgn(d(plan, plain)));
-  line(d(glass, plain) > 0, true, 'glass-seeking outlives glass-ignoring, same skill otherwise (mean; E3)', `${sgn(d(glass, plain))} (glass clusters saved ${pct(per(total(glass, 'brittleSaved'), total(glass, 'brittleSeen')))} vs ${pct(per(total(plain, 'brittleSaved'), total(plain, 'brittleSeen')))})`);
   const spd = snapsPerDay(plain);
   line(spd >= 0.5 && spd <= 0.9, false, 'reactive plain 0.5-0.9 snaps a day', f2(spd));
   for (const h of [h2, h3, h4]) {
     const n = per(total(h, 'snaps'), h.runs.length);
     line(n >= 0.8, false, `${h.name} ≥ 0.8 snaps per run`, f2(n));
   }
-  line(d(plan, plain) >= 60, false, 'plan-snap outlives panic-snap by ≥ 60 min (mean)', sgn(d(plan, plain)));
+  line(paired(plan, plain).mean >= 60, false, 'plan-snap outlives panic-snap by ≥ 60 min (mean)', pm(paired(plan, plain)));
+  line(paired(plain, noStart).mean <= 120, false, 'the starting charge alone adds ≤ 120 min (§2.2; plain against plain with no charge)', `${pm(paired(plain, noStart))}; without it plain − dial-only ${pm(paired(noStart, dial))}`);
   const p90 = quantileMinutes(chase, 0.9);
   line(p90 <= 7 * 720, false, 'chase p90 ≤ Day 7', clock(p90, ctx.days));
-  const pm = pricedPerMin(plain);
+  const pmn = pricedPerMin(plain);
   const pm0 = pricedPerMin(none);
-  line(pm - pm0 >= 3, false, 'priced moments per daylight minute, Days 2-4 (reactive plain), ≥ +3 over v1.6 all off', `${pm.toFixed(2)} vs ${pm0.toFixed(2)} (glass ${per(total(plain, 'pricedGlass'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, flares ${per(total(plain, 'pricedFlares'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, squeezes ${per(total(plain, 'pricedSqueezes'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, costly gold ${per(total(plain, 'pricedGold'), total(plain, 'pricedTicks') / 3600).toFixed(2)})`);
+  line(pmn - pm0 >= 3, false, 'priced moments per daylight minute, Days 2-4 (reactive plain), ≥ +3 over v1.6 all off', `${pmn.toFixed(2)} vs ${pm0.toFixed(2)} (glass ${per(total(plain, 'pricedGlass'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, flares ${per(total(plain, 'pricedFlares'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, squeezes ${per(total(plain, 'pricedSqueezes'), total(plain, 'pricedTicks') / 3600).toFixed(2)}, costly gold ${per(total(plain, 'pricedGold'), total(plain, 'pricedTicks') / 3600).toFixed(2)})`);
 }
 
 export const ECON: Sim16Module = {

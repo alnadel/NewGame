@@ -52,9 +52,10 @@ function block(s: SimState, y: number, dx = 0): void {
   );
 }
 
-function run(s: SimState, n: number, f: InputFrame = NO_INPUT): SimEvent[] {
+function run(s: SimState, n: number, f: InputFrame = NO_INPUT, chill?: number): SimEvent[] {
   const all: SimEvent[] = [];
   for (let i = 0; i < n && s.phase !== 'dead'; i++) {
+    if (chill !== undefined) s.nubs.chill = chill;
     step(s, f);
     all.push(...s.events);
   }
@@ -120,23 +121,26 @@ describe('Sunflower buds', () => {
   it('grow while the sun shines from within ±faceTol of the face, fade otherwise, and bloom into a sunflower caster', () => {
     const s = lab({ startFrost: 0 });
     const b = bud(s, 120, wrapDeg(s.sun.theta + 90));
+    // Nubs stands in full sun on this emptied world: Chill is held cool (a red-hot Nubs grows no buds,
+    // economy iteration 2; economy.test.ts covers it).
+    const cool = 100;
     // Facing away: nothing grows.
-    run(s, 30);
+    run(s, 30, NO_INPUT, cool);
     expect(b.grow).toBe(0);
     // Turn the sun onto the face (within tolerance) and hold.
     s.sun.theta = wrapDeg(b.face + B.faceTol - 1);
     const n = Math.ceil(B.growSec * 60) - 1;
-    let ev = run(s, n - 10);
+    let ev = run(s, n - 10, NO_INPUT, cool);
     expect(b.grow).toBeGreaterThan(0.6);
     expect(ev.some((e) => e.e === 'budGrow')).toBe(true);
     // Turn away for a moment: growth fades at `decay` per second.
     s.sun.theta = wrapDeg(b.face + 180);
     const g0 = b.grow;
-    run(s, 15);
+    run(s, 15, NO_INPUT, cool);
     expect(b.grow).toBeCloseTo(g0 - (B.decay * 15) / 60, 9);
     s.sun.theta = b.face;
     const snow0 = s.stats.snow;
-    ev = run(s, 60);
+    ev = run(s, 60, NO_INPUT, cool);
     const bloom = ev.find((e) => e.e === 'bloom');
     expect(bloom).toEqual({ e: 'bloom', id: b.id, x: b.x, y: b.y, snow: B.snow });
     expect([b.state, b.grow]).toEqual([1, 1]);

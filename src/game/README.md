@@ -284,9 +284,11 @@ shows nothing new (a run with every v1.6 rule off plays like v1.5), and each `Wo
 layer off (`ring` off: no charge ring; `bank` off: one gauge, as in v1.5). v1.6 ships with every
 rule on, the Frost Bank too since economy iteration 1 (`V16_SHIP`; src/core/README.md §16.4), so the
 meter is two pips unless a run switches the Bank off; the debug URL parameters `?on=bank,…` and
-`?off=bank,flares,…` switch rules over the shipped ones (a debug run). Frost freezes only on a cool
-Nubs (`TUNING.bank.coolChill`): the halo's Chill gauge is frost-white at or above it and amber below,
-so the gauge says whether a bloom banks frost and a snap cashes the ring.
+`?off=bank,flares,…` switch rules over the shipped ones (a debug run). The halo's Chill gauge reads
+the economy (src/core/README.md §16.5): frost-white from `TUNING.bank.cashFullChill` (a snap pours
+the whole ring), amber below it (it pours less), red and dashed below `TUNING.bank.coolChill`
+(red-hot: buds stop growing, blooms bank no frost, a snap only shades). The first red-hot snap of a
+new player's run (`snapCash.hot`) tips "A red-hot snap only shades you…".
 
 - **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the
   pill's own outline dashed on (`ringCharge` over `TUNING.ring.need` of the level; at ×5 the gold
@@ -329,9 +331,9 @@ so the gauge says whether a bloom banks frost and a snap cashes the ring.
   the card, pill and Pause card say "Reach the finish", a tip says so at go and the Results' miss line
   says the next try eases.
 - **Tips** (`moments.ts` `MECH_TIPS`): the ring on L2, the Bank and Garden on the Cold Snap's level
-  (a pip full, a bud in reach under the snap, the first cash-in), glass and flare levels at their
-  first window and at go; a new player's endless runs also get the ring's first drop from ×3,
-  the Garden, the cash-in and glass tips, and the flare's 4 s before the first kept flare's warning
+  (a pip full, a bud in reach under the snap, the first cash-in, the first red-hot snap), glass and
+  flare levels at their first window and at go; a new player's endless runs also get the ring's first
+  drop from ×3, the Garden, the cash-in, red-hot snap and glass tips, and the flare's 4 s before the first kept flare's warning
   (urgent: it goes ahead of any toast; held to the rise). A stamp or card arriving over a toast on
   screen hides it and holds its clock until it has gone (`Banners.toastHide`).
 - **Audio and haptics**: a flare's warning hum and the parry's crack and bells are new; a ring

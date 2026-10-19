@@ -201,7 +201,7 @@ test.describe('dial v2 (GR6)', () => {
       thick = Math.max(thick, (await dialPixels(page)).tealRun);
     }
     expect(thick).toBeGreaterThanOrEqual(6);
-    // Chill 35, under the cool line (TUNING.bank.coolChill 40): an amber gauge.
+    // Chill 35, between the red line and the full pour (TUNING.bank.coolChill 25, cashFullChill 50): an amber gauge.
     await openGame(page, 'test=1&seed=42&day=1&t=9:00&perf=0&plan=0&chill=35');
     await page.mouse.click(195, 340);
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));

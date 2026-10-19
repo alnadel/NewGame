@@ -7,9 +7,10 @@
 // bots, never the game) so the bundle inlines them.
 
 import { TUNING } from '../../../config/tuning.ts';
-import { dayStartTick, dayTicks, minutesOfDay } from '../../clock.ts';
+import { dayStartTick, dayTicks, DT, minutesOfDay } from '../../clock.ts';
 import { tanD } from '../../dmath.ts';
-import { keptFlares, worldElevation, worldYAtDayTick } from '../../gen/plan.ts';
+import { keptFlares, noonHeatAt, worldElevation, worldYAtDayTick } from '../../gen/plan.ts';
+import { effectiveDrain } from '../nubs.ts';
 import { lowerBound } from '../../gen/store.ts';
 import { BINS, binOf, markCaster } from '../../intervals.ts';
 import type { Caster, Flare } from '../../objects.ts';
@@ -52,6 +53,11 @@ const ORACLE_LAND_REACH = 150;
 const AFTER_SNAP = 40;
 /** Oracle, Bank and flares on: holding two charges, it keeps one for a kept flare of lift ≥ FLARE_D and casts it in the rise or hold when lit. */
 const FLARE_D = 8;
+/** Oracle, Bank on, outside the Journey: snaps before the red when this drain would cross coolChill + ORACLE_RED_MARGIN within ORACLE_RED_STEPS plan steps while its slack is under ORACLE_RED_SLACK. */
+const ORACLE_RED_STEPS = 2;
+const ORACLE_RED_SLACK = 20;
+const ORACLE_RED_MARGIN = 2;
+const STEP_TICKS = TUNING.validator.stepTicks;
 
 /** True when a Cold Snap can be cast this tick (same rule as bots.ts). */
 function snapReady(s: SimState): boolean {
@@ -185,14 +191,30 @@ function ownLandBins(s: SimState): void {
   }
 }
 
+/** True when some bin within ±deg of θ is set in `m`. */
+function nearMask(m: Uint8Array, theta: number, deg: number): boolean {
+  const b0 = binOf(theta);
+  for (let k = -deg; k <= deg; k++) if (m[(b0 + k + BINS) % BINS] === 1) return true;
+  return false;
+}
+
 /** Reactive bot, every tick: whether to cast a snap (`snap` is the v1.5 panic rule's answer). */
 export function econReactiveSnap(ctx: BotHookCtx, s: SimState, snap: boolean): boolean {
-  if (!ctx.mech || snap || !snapReady(s)) return snap;
+  if (!ctx.mech || !snapReady(s)) return snap;
+  const o = ctx.opts;
   const nb = s.nubs;
   const g = s.guide;
+  // 'hoard': only when lit below its bar (the panic rule's last resort by default), never an overflow.
+  if (o.snap === 'hoard') return nb.f > 0 && nb.chill < (o.snapChill ?? RB.snapLast);
+  const plan = o.snap === 'plan';
+  // The panic rule at another Chill bar (sim --decisions' snap-bar sweep; for 'plan' it is the plan's bar).
+  if (!plan && o.snapChill !== undefined) snap = nb.f > 0 && (nb.chill < RB.snapLast || (nb.chill < o.snapChill && !nearMask(g.now, s.sun.theta, RB.snapNearDeg)));
+  if (snap) return true;
+  // The x5 farm (sim --decisions): a cool snap at ring ≥ farm with a bud in reach, needed or not.
+  if (o.farm !== undefined && nb.mult >= o.farm && nb.chill >= TUNING.bank.coolChill && nearMask(g.bud, 0, 180)) return true;
   if (nb.f === 0) return false;
   // 'plan': snap at the mouth of a gap while the ring is worth cashing.
-  if (ctx.opts.snap === 'plan' && nb.mult >= PLAN_MULT && nb.chill < PLAN_CHILL) {
+  if (plan && nb.mult >= PLAN_MULT && nb.chill < (o.snapChill ?? PLAN_CHILL)) {
     let near = false;
     const b0 = binOf(s.sun.theta);
     for (let k = -PLAN_NEAR; k <= PLAN_NEAR; k++) {
@@ -247,8 +269,19 @@ export function econOracleBonus(ctx: BotHookCtx, s: SimState, b: number, slack: 
 const flareBuf: Flare[] = [];
 
 /** Oracle, each plan: whether to snap next tick (`snap` is the v1.5 rule's answer). */
-export function econOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, _slack: number): boolean {
-  if (!ctx.mech || snap || !s.world.v16.bank || !snapReady(s) || s.nubs.f === 0) return snap;
+export function econOracleSnap(ctx: BotHookCtx, s: SimState, snap: boolean, slack: number): boolean {
+  if (!ctx.mech || !s.world.v16.bank || !snapReady(s)) return snap;
+  // Bank on, outside the Journey (economy iteration 2): frost is earned, so a snap waits for a
+  // squeezed plan (the v1.5 "lit next step below snapChill" spent a meter that refilled itself and
+  // left the oracle empty on Day 7, seed 181), or, with the plan tight, for the last plan steps
+  // before this drain would take Nubs red-hot (a red snap refills nothing: seeds 97, 126).
+  if (s.level === null) {
+    const nb = s.nubs;
+    const drop = ORACLE_RED_STEPS * STEP_TICKS * DT * effectiveDrain(s) * noonHeatAt(s.world, s.day, s.dayTick) * nb.f;
+    snap = slack < OB.snapSlack || (nb.f > 0 && slack < ORACLE_RED_SLACK && nb.chill - drop < TUNING.bank.coolChill + ORACLE_RED_MARGIN);
+  }
+  if (snap) return true;
+  if (s.nubs.f === 0) return false;
   // Holding two charges, one is kept for the current big kept flare: cast in its rise or hold.
   if (s.world.v16.flares && (s.flarePhase === 2 || s.flarePhase === 3) && s.nubs.frostH >= 2 * TUNING.bank.costH) {
     const n = keptFlares(s.world, s.tickAbs, s.tickAbs + 1, flareBuf);

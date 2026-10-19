@@ -324,8 +324,8 @@ export function createMechanics(): Mechanics {
           ev = { e: 'ringTrick', kind: 'swing', units: TUNING.ring.trick };
           break;
         case 'cash':
-          // A snap at ×4 pours the ring into the frost: +0.3 of a snap.
-          ev = { e: 'snapCash', level: 4, refundH: TUNING.bank.cashPerLevelH * 3 };
+          // A cool snap at ×4 pours the ring into the frost (at most cashMaxH: +0.6 of a snap).
+          ev = { e: 'snapCash', level: 4, refundH: Math.min(TUNING.bank.cashMaxH, TUNING.bank.cashPerLevelH * 3) };
           break;
         case 'bank':
         case 'land':

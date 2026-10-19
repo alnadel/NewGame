@@ -17,7 +17,7 @@ import {
   inGlare,
   shadowLength,
 } from '../shadows.ts';
-import { addFrost, addFrostH } from './mechanics.ts';
+import { addFrost } from './mechanics.ts';
 import { ringTrick } from './nubs.ts';
 import type { SimState } from './types.ts';
 
@@ -128,9 +128,6 @@ function collect(s: SimState, p: Pickup): void {
     s.events.push({ e: 'flake', mult: nb.mult, degree: (s.flakesToday + nb.mult) % 10, x: p.x, y: p.y, snow });
     s.flakesToday++;
     addFrost(s, TUNING.frost.perFlake);
-    // Iteration 1 (E3): every glass flake caught pays a little frost (the Bank), so a partial save of
-    // the white arc pays too; a whole cluster pays clusterH on top (sim/glass.ts).
-    if (p.brittle) addFrostH(s, 'cluster', TUNING.bank.glassFlakeH);
     streak(s);
   } else if (p.kind === 'crystal') {
     const snow = Math.round(P.crystalSnowMult * snowMult(s) * s.params.snowMult);

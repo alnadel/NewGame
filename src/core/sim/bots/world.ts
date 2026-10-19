@@ -24,6 +24,8 @@ const HOLD_WEIGHT = 3;
  * against plain (+47 vs +79): the glass detour costs more than it pays, so the policy keeps 1.5.
  */
 const GLASS_WEIGHT = 1.5;
+/** BotOptions.glass 'strong' (CORE-1's E3 row, review of economy iteration 1): outweighs a safe bin (3), at any hour. */
+const STRONG_GLASS_WEIGHT = 4;
 const GLASS_CHILL = 45;
 /** The chase policy's calm hours: it chases outside 9:20 AM-2:40 PM (minutes after 6:00 AM). */
 const CHASE_FROM = 200;
@@ -42,15 +44,18 @@ const ORACLE_GLASS_SLACK = 10;
 /** Reactive bot, each guide refresh: add world terms to `score` (360 bins, already holding now/next/gold). */
 export function worldReactiveScore(ctx: BotHookCtx, s: SimState, score: Float64Array): void {
   const pol = ctx.opts.policy;
-  // BotOptions.glass (CORE-1's E3 row): chase's glass term on any policy, at chase's hours.
+  // BotOptions.glass (CORE-1's E3 rows): chase's glass term on any policy, at chase's hours, or
+  // 'strong', a real seeker (STRONG_GLASS_WEIGHT at any hour).
+  const strong = ctx.opts.glass === 'strong';
   const glass = ctx.opts.glass === true && pol !== 'naive';
-  if (!ctx.mech || (pol !== 'chase' && pol !== 'naive' && !glass) || s.nubs.chill < GLASS_CHILL) return;
-  if (pol === 'chase' || glass) {
+  if (!ctx.mech || (pol !== 'chase' && pol !== 'naive' && !glass && !strong) || s.nubs.chill < GLASS_CHILL) return;
+  if (!strong && (pol === 'chase' || glass)) {
     const m = minutesOfDay(s.day, s.dayTick);
     if (m >= CHASE_FROM && m <= CHASE_TO) return;
   }
+  const wgt = strong ? STRONG_GLASS_WEIGHT : GLASS_WEIGHT;
   const g = s.guide.flake;
-  for (let b = 0; b < BINS; b++) if (g[b] === 1) score[b] = (score[b] as number) + GLASS_WEIGHT;
+  for (let b = 0; b < BINS; b++) if (g[b] === 1) score[b] = (score[b] as number) + wgt;
 }
 
 /**

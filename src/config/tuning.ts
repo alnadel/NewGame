@@ -247,15 +247,16 @@ const tuning = {
   },
   /**
    * v1.6 Frost Bank (§2.2; CORE-1). The meter in integer hundredths, 0..capH (two snaps); a snap
-   * costs costH; income per act (bloom, fresh SWING at most once per swingEveryTicks, glass flake
-   * caught, glass cluster saved, own landing, flare parry); the cash-in pays cashPerLevelH per ring
+   * costs costH; income per act (bloom, fresh SWING at most once per swingEveryTicks, glass cluster
+   * saved, own landing, flare parry); the cash-in pays cashPerLevelH per ring
    * level above x1. Start: runStartH (Endless, Daily, challenge), campaignStartH (Journey),
    * teachStartH (the Cold Snap's teaching level); lesson runs start at 0.
    *
-   * Economy iteration 1 (core README §16.4): frost freezes only on a cool Nubs. A bloom pays bloomH
-   * when Nubs is fully shaded and at coolChill or more as it blooms, and nothing in the Noon Heat; a
-   * snap cast at coolChill or more cashes the ring in (a hot, panic snap pours nothing), never past
-   * cashCapH in the meter.
+   * Economy iteration 2 (core README §16.5): a red-hot Nubs (Chill under coolChill, the halo's red)
+   * grows no buds and freezes no frost; a bloom pays bloomH when Nubs is fully shaded and cool as it
+   * blooms, and nothing in the Noon Heat; a snap pours the ring in, cashPerLevelH a level above x1,
+   * at most cashMaxH, in full from cashFullChill and scaled down to nothing at coolChill, never past
+   * cashCapH in the meter; a snap cast red-hot only shades (it refills no Chill).
    */
   bank: {
     /**
@@ -269,14 +270,23 @@ const tuning = {
     /** A fresh SWING pumps the ring and pays no frost (iteration 1: 5 made a dial-follower's meter fill). */
     swingH: 0,
     swingEveryTicks: 180,
-    clusterH: 25,
-    /** Each glass flake caught (iteration 1): partial glass saves pay too, so the white arc is a choice. */
-    glassFlakeH: 3,
+    /**
+     * A glass cluster saved whole (iteration 2: 25 → 80, and a single glass flake pays nothing, so the
+     * dial-follower's lucky flakes pay no frost): as much as the dial-only bot's 0.15 a day allows.
+     */
+    clusterH: 80,
     landH: 5,
     parryH: 5,
-    cashPerLevelH: 25,
-    /** Chill at or above which frost freezes: blooms bank it and a snap cashes the ring (the halo's gauge turns amber below it). */
-    coolChill: 40,
+    /** The cash-in: per ring level above x1, at most cashMaxH (x3 and up), so no snap ever refunds itself. */
+    cashPerLevelH: 30,
+    cashMaxH: 60,
+    /**
+     * Chill at or above which Nubs is cool: buds grow, blooms bank frost, a snap pours the ring and
+     * refills Chill (the halo's gauge is red below it; iteration 2: 40 → 25, TUNING.nubs.lowChill).
+     */
+    coolChill: 25,
+    /** The cash-in pours in full from this Chill and scales down to nothing at coolChill (the gauge is amber between them). */
+    cashFullChill: 50,
     /** A cash-in never fills the meter past this (one and a half snaps): an overflow snap pours at most half a pip. */
     cashCapH: 150,
     runStartH: 100,

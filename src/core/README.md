@@ -504,7 +504,7 @@ ruleset 15, `RULES16_DATE`, challenge `r`, dual hashing or `--rules`.
 
 | Shape | Where | Body owner |
 |---|---|---|
-| `V16Rules`, `V16_ALL`, `V16_NONE`, `V16_RULES`, `V16_SHIP` (the shipped default: all but `bank`); `RunConfig.v16` (unset keys take `V16_SHIP`'s) → `World.v16` (world identity) | sim/types.ts, gen/world.ts | shared (kill switches) |
+| `V16Rules`, `V16_ALL`, `V16_NONE`, `V16_RULES`, `V16_SHIP` (the shipped default: every rule on since economy iteration 1); `RunConfig.v16` (unset keys take `V16_SHIP`'s) → `World.v16` (world identity) | sim/types.ts, gen/world.ts | shared (kill switches) |
 | `RunConfig.relaxedGoal` (read by `levelOutcome`), `RunConfig.brittleShare` → `World.brittleShare` | sim/types.ts, level.ts | CORE-2 |
 | NubsState `ringCharge`, `litStartMult`, `budGrewTick`, `streak`, `swFresh` (Int32Array 16), `swFreshN` | sim/types.ts | CORE-1 |
 | NubsState `frostH` (mirrors `floor(100·frost)` until the Bank inverts it), `swingFrostTick` | sim/types.ts, mechanics.ts | CORE-1 |
@@ -540,7 +540,8 @@ telegraph (each layer lights up once its owner fills the body).
 
 Every rule keys off `World.v16` (`ring`, `bank`, `garden`); with all three off the v1.5 multiplier,
 meter and snap return. **Shipped: all three on** since economy iteration 1 (§16.4 changes the Bank's
-income, the cash-in and the start below; this section describes the mechanism). With the Bank
+income, the cash-in and the start below, §16.5 the red line, the pour and glass; this section describes
+the mechanism). With the Bank
 switched off the v1.5 meter fills (shade, flakes, SWINGs, blooms, and the parries and saved glass
 clusters of `payTrick`), starts at `TUNING.frost.runStart` 0.5 in Endless, Daily and challenge runs,
 and a snap empties it and then cashes the ring in on it (`cashPerLevelH` hundredths of a meter per
@@ -621,23 +622,29 @@ guide.land), `sim/pickups.ts` (streak, Snow cap), `sim/create.ts` (start frost),
   the last SWING while Chill ≥ 60; policies `plain` (v1.5 gold), `chase` (every gold bin worth 3.5,
   above a safe bin's 3, while Chill ≥ 45 and outside 9:20 AM-2:40 PM; `econChasing` is exported for
   CORE-2's glass term), `naive` (that greed at every hour and any Chill), `safe` (no gold term);
-  snaps `panic` (v1.5) or `plan` (lit, x3+, Chill < 50, no now ∪ next bin within ±45°, else panic);
-  bank: spends an overflow charge at frostH ≥ 190 when lit with Chill < 70; Garden: gold only under
+  snaps `panic` (v1.5) or `plan` (lit, x3+, Chill < 50, no now ∪ next bin within ±45°, else panic),
+  or `hoard` (only when lit below its bar, never an overflow; iteration 2's sweep, with `snapChill`
+  moving the panic, plan or hoard bar and `farm` adding a cool snap at that ring level with a bud in
+  reach); bank: spends an overflow charge at frostH ≥ 190 when lit with Chill < 70; Garden: gold only under
   the snap, then in its last 36 ticks guide.land bins (up to 15° deep, +10 where guide.next — already
   past the end — agrees, +8 where this snap's own sunflower shades the landing spot). Oracle: under a
   Garden snap the bud bonus reaches 180°, and in the snap's last 36 ticks (guide.land) and the 40
   ticks after it (guide.now) a landing pull of up to 12 Chill; overflow snap at frostH ≥ 190 when lit;
   with flares on, holding two charges, it keeps one for a kept flare of d ≥ 8 and casts it when lit
-  in the flare's rise or hold (inert until CORE-2's flares land).
+  in the flare's rise or hold; Bank on, outside the Journey (iteration 2), it snaps only when its plan
+  is squeezed (slack < snapSlack) or, with its slack under 20, when two plan steps of this drain would
+  take Nubs within 2 Chill of the red line (a red snap refills nothing).
 - **sim** (`scripts/sim16/econ.ts`): `--check` adds the economy table (mean multiplier, x5 share,
   level changes a minute, trick share of ring income, full-bank share, meters a day from income,
   snaps a day, blooms per snap, own-landing share, lit ticks in the 40 after snapEnd, 11 AM-1 PM
   under a snap, priced moments) and frost income by source, with the §2.1/§2.2/§2.4 gates (hard:
   reactive x5 ≤ 20% and mean x2.8-3.8, full bank ≤ 10%, dial-only ≤ 0.15 meters a day).
   `--decisions [--seeds 80]` plays reactive plain/chase/naive/safe, plain with plan snaps, dial-only,
-  plain seeking glass (`BotOptions.glass`), humanDial R2-R4 and plain with every v1.6 rule off, and
-  checks §2.2's gates plus iteration 1's E1 (plan − panic ≥ +30) and E3 (glass-seeking > plain) hard
-  rows (§16.4). When a run switches the Bank off (`--off bank`) its own rows (full bank, dial-only
+  plain seeking glass (`BotOptions.glass`, and `'strong'`), humanDial R2-R4, plain with every v1.6
+  rule off and plain with no starting charge, then the snap-rule sweep on plain play (`snapChill`:
+  panic bars 25-50, plan bars 65 and 80; `snap: 'hoard'` at 20, 25, the red line + 2 and + 10; the x5
+  farm, `farm: 5`) and naive and chase under the strongest of those rules, and checks §2.2's gates and
+  iteration 2's E1-E3 rows (§16.5; the pooled rows gate on the lower 1-SE bound at `--seeds 960`). When a run switches the Bank off (`--off bank`) its own rows (full bank, dial-only
   income) measure the v1.5 meter and FAIL unless `--waive bank`; the meters/d column then shows the
   v1.5 meter's fills.
 

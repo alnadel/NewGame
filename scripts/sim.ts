@@ -238,6 +238,7 @@ function jobConfig(j: Job, seed: number): RunConfig {
   if (j.lesson !== undefined) cfg.lesson = j.lesson;
   if (j.forecast !== undefined) cfg.forecast = j.forecast;
   if (j.v16 !== undefined) cfg.v16 = j.v16;
+  if (j.startFrost !== undefined) cfg.startFrost = j.startFrost;
   return cfg;
 }
 

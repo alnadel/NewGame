@@ -26,7 +26,7 @@ import { goalMetLive } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
-export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'snapBud' | 'glass' | 'soon';
+export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'hot' | 'snapBud' | 'glass' | 'soon';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -78,7 +78,8 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
     ['go', 'Sunflowers grown from cool shade fill the frost. Full? Swipe down.'],
     ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
-    ['cash', 'Your ring poured into the frost.'],
+    ['cash', 'Your ring poured into the frost. Snap while the gauge is white and it pours it all.'],
+    ['hot', 'A red-hot snap only shades you: no Chill back, no ring poured. Snap before the gauge turns red.'],
   ],
   deep: [
     ['go', 'Two shadows over Nubs at once is deep shade: Chill and the ring fill twice as fast.'],
@@ -103,6 +104,7 @@ const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
   ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.', 'ring'],
   [...(MECH_TIPS.snap[2] as readonly [TipOn, string]), 'coldsnap'],
   [...(MECH_TIPS.snap[3] as readonly [TipOn, string]), 'coldsnap'],
+  [...(MECH_TIPS.snap[4] as readonly [TipOn, string]), 'coldsnap'],
   [...(MECH_TIPS.glass[0] as readonly [TipOn, string]), 'brittle'],
   ['soon', FLARE_SOON_TIP, 'flare'],
 ];
@@ -268,7 +270,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           if (ev.cause === 'bleed' && ev.from >= 3) tip('drop');
           break;
         case 'snapCash':
-          if (ev.refundH > 0) tip('cash');
+          if (ev.hot === true) tip('hot');
+          else if (ev.refundH > 0) tip('cash');
           break;
         default:
           break;

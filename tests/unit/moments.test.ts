@@ -191,7 +191,7 @@ describe('RunMoments', () => {
     // Found by the concept's id (the core names it); a stand-in level teaching Cold Snap.
     m.begin(save, { ...levelDef(12)!, introduces: 'snap' as never }, true);
     const seen: string[] = [];
-    for (const ev of [{ e: 'go' }, { e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 1 }, { e: 'snapCash', level: 4, refundH: 30 }] as SimEvent[]) {
+    for (const ev of [{ e: 'go' }, { e: 'frostReady' }, { e: 'snap', x: 0, y: 0, cloudId: 1 }, { e: 'snapCash', level: 4, refundH: 30 }, { e: 'snapCash', level: 3, refundH: 0, hot: true }] as SimEvent[]) {
       m.onEvent(ev, s);
       if (ev.e === 'snap') {
         // v1.6: a bud in reach while the snap lasts (the dial's gold) brings the Garden's tip.

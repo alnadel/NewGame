@@ -6,9 +6,9 @@
 //   - ending (shaded now, lit in 0.6 s): thin;
 //   - coming (lit now, shaded in 0.6 s): a thin dashed arc just outside the ring;
 //   - when nothing lasts, the now-arcs are drawn medium-thick, so the dial is never blank.
-// The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below TUNING.bank.coolChill (40:
-// frost freezes only on a cool Nubs, economy iteration 1) and hot, dashed and
-// pulsing below 25. In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
+// The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below TUNING.bank.cashFullChill (50:
+// a snap pours less of the ring, economy iteration 2) and hot, dashed and pulsing below
+// TUNING.bank.coolChill (25: red-hot Nubs grows no buds, freezes no frost and a snap only shades). In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
 // (V1_PLAN §6.2) the dial shows where to put the sun: the target arc pulses, dots mark the way
 // round, and a ghost sun glides from the sun pointer into the arc in step with the ghost thumb.
 // v1.5: gold arcs just outside the ring mark the angles that grow a Sunflower bud (GuideState.bud;
@@ -463,9 +463,10 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.lineCap = 'butt';
   }
 
-  // Chill gauge inside the ring, clockwise from the top: frost-white while Nubs is cool (frost freezes:
-  // blooms bank it, a snap cashes the ring; TUNING.bank.coolChill), amber below it, dashed and
-  // pulsing below 25; hidden while Chill is full (the teal arcs lead then).
+  // Chill gauge inside the ring, clockwise from the top: frost-white while a snap pours the whole ring
+  // (TUNING.bank.cashFullChill), amber below it (it pours less), red, dashed and pulsing below
+  // TUNING.bank.coolChill (red-hot: no buds grow, no frost freezes, a snap only shades); hidden while
+  // Chill is full (the teal arcs lead then).
   const chill = Math.max(0, Math.min(100, inp.chill));
   if (chill < 99) {
     const gR = R - 8;
@@ -476,10 +477,11 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.arc(cx, cy, gR, 0, TAU);
     g.stroke();
     if (chill > 0.5) {
-      if (chill < 25) g.setLineDash([4, 3]);
+      const red = chill < TUNING.bank.coolChill;
+      if (red) g.setLineDash([4, 3]);
       g.lineCap = 'round';
-      const pulse = chill < 25 ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      g.strokeStyle = cssa(chill < 25 ? HOT : chill < TUNING.bank.coolChill ? AMBER : FROST, gA * pulse);
+      const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
+      g.strokeStyle = cssa(red ? HOT : chill < TUNING.bank.cashFullChill ? AMBER : FROST, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
       g.stroke();

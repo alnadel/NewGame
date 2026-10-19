@@ -6,9 +6,10 @@
 // v1.6 economy (docs/V1_6_PLAN.md §2.2, §2.4; CORE-1): the Frost Bank (integer hundredths, income
 // only from risky acts, banked under a snap, the snap's cash-in), the Frost Garden (×2 growth and a
 // longer reach under the snap, blooms extend it, the cloud re-aims every 30 ticks) and guide.land.
-// Economy iteration 1 (core README §16.4): frost freezes only on a cool Nubs (coolFrost), a hot snap
-// cashes nothing, the cash-in stops at cashCapH, and the v1.5 meter (Bank off) holds a snap's trick
-// income and pays own landings, as the Bank does.
+// Economy iterations 1-2 (core README §16.4-§16.5): a red-hot Nubs (Chill under coolChill) grows no
+// buds and freezes no frost; the cash-in pours the ring in full from cashFullChill, less the hotter
+// Nubs is, at most cashMaxH and never past cashCapH; a red-hot snap only shades (no Chill refill);
+// the v1.5 meter (Bank off) holds a snap's trick income and pays own landings, as the Bank does.
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, DT, TICK_HZ } from '../clock.ts';
@@ -68,8 +69,8 @@ export function addFrost(s: SimState, amount: number, held = false): void {
 }
 
 /**
- * Iteration 1: frost freezes only on a cool Nubs, at TUNING.bank.coolChill or more (the halo's gauge
- * is white there, amber below).
+ * Nubs is cool at TUNING.bank.coolChill or more (the halo's gauge is red below it): only then do buds
+ * grow and blooms bank frost (Bank on), and a snap pour the ring in and refill Chill.
  */
 export function coolNubs(s: SimState): boolean {
   return s.nubs.chill >= BANK.coolChill;
@@ -227,14 +228,16 @@ function budReach(s: SimState): number {
 /**
  * Daylight tick: every unbloomed bud within [Nubs − reachBehind, Nubs + reachAhead] grows while the
  * sun shines from within ±faceTol of its face (budGrow every eventTicks while growing) and blooms
- * at 1; otherwise its growth fades. Nothing grows while the sun is down or eclipsed.
+ * at 1; otherwise its growth fades. Nothing grows while the sun is down or eclipsed, or (Bank on,
+ * economy iteration 2) while Nubs is red-hot.
  */
 export function updateBuds(s: SimState): void {
   const w = s.world;
   if (!w.mech.buds) return;
   const bs = w.buds;
   const y = s.nubs.y;
-  const lit = s.sunUp && !s.eclipseOn;
+  // Iteration 2: a red-hot Nubs grows no buds (Bank on).
+  const grows = s.sunUp && !s.eclipseOn && (!w.v16.bank || coolNubs(s));
   const theta = s.sun.theta;
   const emit = s.tick % B.eventTicks === 0;
   const reach = budReach(s);
@@ -243,7 +246,7 @@ export function updateBuds(s: SimState): void {
     const b = bs[i] as Bud;
     if (b.y > y + reach) break;
     if (b.state !== 0) continue;
-    if (lit && budFacing(b, theta)) {
+    if (grows && budFacing(b, theta)) {
       b.grow += grow;
       // v1.6 ring: the next tick's bleed spares this purposeful exposure.
       s.nubs.budGrewTick = s.tick;
@@ -314,12 +317,16 @@ export function updateLandGuide(s: SimState): void {
 }
 
 /**
- * The cash-in a snap cast at ring level `m` pays (hundredths): cashPerLevelH per level above x1 when
- * Nubs is cool (a hot, panic snap pours nothing), never past `capH` in the meter (iteration 1).
+ * The cash-in a snap cast at ring level `m` pays (hundredths): cashPerLevelH per level above x1, at
+ * most cashMaxH (a snap never refunds itself), in full from cashFullChill and scaled down to nothing
+ * at coolChill (the gauge's amber), never past `capH` in the meter (iterations 1-2).
  */
 function cashInH(s: SimState, m: number, capH: number): number {
-  if (!coolNubs(s)) return 0;
-  return Math.max(0, Math.min(BANK.cashPerLevelH * (m - 1), capH - s.nubs.frostH));
+  const c = s.nubs.chill;
+  if (c <= BANK.coolChill) return 0;
+  const k = c >= BANK.cashFullChill ? 1 : (c - BANK.coolChill) / (BANK.cashFullChill - BANK.coolChill);
+  const h = Math.round(k * Math.min(BANK.cashMaxH, BANK.cashPerLevelH * (m - 1)));
+  return Math.max(0, Math.min(h, capH - s.nubs.frostH));
 }
 
 /**
@@ -338,7 +345,9 @@ function resetRing(s: SimState): void {
 /**
  * Casts a Cold Snap now: a frosty cloud at z 0 (its shadow lies right under it whatever θ is) that
  * starts on Nubs and rides with him for snapSec (it follows the trail's chord over that time). The
- * meter empties. Returns false when no snap can be cast (meter not full, a snap on, no sun).
+ * Bank pays one charge and pours the ring in (cashInH); cast red-hot, the snap only shades (Chill
+ * refills no higher than it was cast). The v1.5 meter (Bank off) empties. Returns false when no snap
+ * can be cast (meter not full, a snap on, no sun).
  */
 export function castSnap(s: SimState): boolean {
   const nb = s.nubs;
@@ -380,8 +389,11 @@ export function castSnap(s: SimState): boolean {
   s.landHold = 0;
   s.landSrc = -1;
   if (bank) {
-    // v1.6 Frost Bank: one charge, then the cash-in pours the ring into the frost (cashPerLevelH per
-    // level above x1) when Nubs is cool, never past cashCapH (iteration 1).
+    // v1.6 Frost Bank: one charge, then the cash-in pours the ring into the frost (cashInH), never past
+    // cashCapH.
+    // Iteration 2: a red-hot snap only shades: Chill stays where it was cast.
+    const hot = !coolNubs(s);
+    s.snapChillCap = hot ? nb.chill : nb.maxChill;
     nb.frostH -= BANK.costH;
     nb.frost = nb.frostH / CHARGE_H;
     const m = nb.mult;
@@ -391,7 +403,7 @@ export function castSnap(s: SimState): boolean {
       s.events.push({ e: 'multDown', from: m, to: 1, cause: 'snap' });
     }
     resetRing(s);
-    s.events.push({ e: 'snapCash', level: m, refundH });
+    s.events.push(hot ? { e: 'snapCash', level: m, refundH, hot: true } : { e: 'snapCash', level: m, refundH });
     if (refundH > 0) {
       st.snapCashH = (st.snapCashH as number) + refundH;
       creditFrostH(s, 'cash', refundH);

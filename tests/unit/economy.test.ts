@@ -324,12 +324,13 @@ describe('Frost Bank (§2.2)', () => {
     expect([s.nubs.frostH, s.stats.frostSpilledH, s.stats.frostEarnedH]).toEqual([BK.capH, 190 + BK.bloomH - BK.capH, 3 * BK.bloomH]);
   });
 
-  it('a snap costs one charge and cashes the ring in: +cashPerLevelH per level above x1, the ring back to x1 at 0', () => {
+  it('a snap costs one charge and cashes the ring in: +cashPerLevelH per level above x1 (at most cashMaxH), the ring back to x1 at 0', () => {
     const s = lab({ startFrost: 1.5 });
     debugRing(s, 4, 700);
+    expect(s.nubs.chill).toBeGreaterThanOrEqual(BK.cashFullChill);
     step(s, SNAP);
     const ev = s.events;
-    const cash = 3 * BK.cashPerLevelH;
+    const cash = Math.min(BK.cashMaxH, 3 * BK.cashPerLevelH);
     const after = 150 - BK.costH + cash;
     expect(after).toBeLessThanOrEqual(BK.cashCapH);
     expect(ev.find((e) => e.e === 'snap')).toBeDefined();
@@ -389,7 +390,7 @@ describe('Frost Bank (§2.2)', () => {
   });
 });
 
-describe('Frost freezes only on a cool Nubs (economy iteration 1, core README §16.4)', () => {
+describe('Frost freezes only on a cool Nubs (economy iterations 1-2, core README §16.4-§16.5)', () => {
   it('a bloom banks bloomH only when Nubs is fully shaded and cool as it blooms, and nothing in the Noon Heat', () => {
     // In the sun: nothing (the bloom still pumps the ring and plants shade).
     const lit = lab({ startFrost: 0 });
@@ -418,12 +419,12 @@ describe('Frost freezes only on a cool Nubs (economy iteration 1, core README §
     expect([noon.nubs.f, noon.nubs.frostH]).toEqual([0, 0]);
   });
 
-  it('a hot snap (below coolChill) cashes nothing; a cool one never fills the meter past cashCapH', () => {
+  it('a red-hot snap (below coolChill) cashes nothing; a cool one never fills the meter past cashCapH', () => {
     const hot = lab({ startFrost: 1 });
     debugRing(hot, 5, 0);
     hot.nubs.chill = BK.coolChill - 5;
     step(hot, SNAP);
-    expect(only(hot.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 5, refundH: 0 }]);
+    expect(only(hot.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 5, refundH: 0, hot: true }]);
     expect([hot.nubs.frostH, hot.nubs.mult]).toEqual([0, 1]);
     // From two charges a x5 snap pours only up to cashCapH.
     const full = lab({ startFrost: 2 });
@@ -447,18 +448,63 @@ describe('Frost freezes only on a cool Nubs (economy iteration 1, core README §
     step(s, SNAP);
     expect(s.events.some((e) => e.e === 'phew')).toBe(true);
     expect(s.events.some((e) => e.e === 'multUp')).toBe(false);
-    expect(only(s.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: 0 }]);
+    expect(only(s.events, 'snapCash')).toEqual([{ e: 'snapCash', level: 4, refundH: 0, hot: true }]);
     expect(s.nubs.mult).toBe(1);
   });
 
-  it('every glass flake caught pays glassFlakeH; a plain flake pays nothing', () => {
+  it('the cash-in scales with Chill: in full from cashFullChill, half way between, nothing at coolChill; no snap refunds itself', () => {
+    const pour = (chill: number, level: number): number => {
+      const s = lab({ startFrost: 1 });
+      debugRing(s, level, 0);
+      s.nubs.chill = chill;
+      step(s, SNAP);
+      return (only(s.events, 'snapCash')[0] as Ev<'snapCash'>).refundH;
+    };
+    const x3 = Math.min(BK.cashMaxH, 2 * BK.cashPerLevelH);
+    expect(pour(100, 3)).toBe(x3);
+    expect(pour(BK.cashFullChill, 3)).toBe(x3);
+    expect(pour((BK.coolChill + BK.cashFullChill) / 2, 3)).toBe(Math.round(x3 / 2));
+    expect(pour(BK.coolChill, 3)).toBe(0);
+    expect(pour(100, 2)).toBe(BK.cashPerLevelH);
+    // x5 at full Chill pours cashMaxH: with a snap's banked income (garden.bankCapH) it still costs.
+    expect(pour(100, 5)).toBe(BK.cashMaxH);
+    expect(BK.cashMaxH + G.bankCapH).toBeLessThan(BK.costH);
+  });
+
+  it('a red-hot snap only shades: Chill stays where it was cast (a cool snap refills to full)', () => {
+    const at = (chill: number): number => {
+      const s = lab({ startFrost: 1 });
+      s.nubs.chill = chill;
+      step(s, SNAP);
+      run(s, SNAP_TICKS - 2);
+      return s.nubs.chill;
+    };
+    expect(at(BK.coolChill - 5)).toBeCloseTo(BK.coolChill - 5, 6);
+    expect(at(BK.coolChill)).toBe(TUNING.nubs.maxChill);
+  });
+
+  it('a red-hot Nubs grows no buds (the sun on its face or not)', () => {
+    const grow = (chill: number): number => {
+      const s = lab({ startFrost: 0 });
+      const b = bud(s, 100, wrapDeg(s.sun.theta));
+      run(s, 30, NO_INPUT, chill);
+      return b.grow;
+    };
+    // Chill is set before each tick and the sun drains it first (updateBuds runs after applyDaylight).
+    expect(grow(BK.coolChill + 5)).toBeGreaterThan(0);
+    expect(grow(BK.coolChill - 1)).toBe(0);
+  });
+
+  it('a single glass flake caught pays no frost (iteration 2: only a whole glass cluster pays, clusterH)', () => {
     const s = lab({ startFrost: 0 });
     const y0 = s.nubs.y;
     insertPickup(s.world, { id: 9_300_000, kind: 'flake', x: trailX(s.world.trail, y0 + 8), y: y0 + 8, day: 1, melt: 0, state: 0, cluster: -1, ci: 0, cn: 1, brittle: true });
     insertPickup(s.world, { id: 9_300_001, kind: 'flake', x: trailX(s.world.trail, y0 + 30), y: y0 + 30, day: 1, melt: 0, state: 0, cluster: -1, ci: 0, cn: 1, brittle: false });
     const ev = run(s, 40, NO_INPUT, 100);
     expect(only(ev, 'flake')).toHaveLength(2);
-    expect(only(ev, 'frostGain')).toEqual([{ e: 'frostGain', source: 'cluster', amountH: BK.glassFlakeH, charges: 0 }]);
+    expect(only(ev, 'frostGain')).toEqual([]);
+    payTrick(s, 'cluster');
+    expect(s.nubs.frostH).toBe(BK.clusterH);
   });
 
   it('E4, the v1.5 meter (Bank off): a trick under a snap is held and paid at snapEnd, as the Bank does', () => {
