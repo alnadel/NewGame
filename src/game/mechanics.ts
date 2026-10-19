@@ -190,8 +190,11 @@ export function createMechanics(): Mechanics {
       const ticks = s.snapTicks ?? 0;
       view.frost = Math.max(nb.frost ?? 0, (nb.frostH ?? 0) / 100);
       view.pips = v16?.bank ? 2 : 1;
-      // The chip over the meter: income banked under the snap, or (economy iteration 2) glass banked for the next one.
-      view.bankH = ticks > 0 ? (s.snapBankH ?? 0) : (s.glassBankH ?? 0);
+      // The chips over the meter: income banked under the snap, and (economy iteration 2) glass banked for the next one.
+      view.bankH = ticks > 0 ? (s.snapBankH ?? 0) : 0;
+      view.glassH = s.glassBankH ?? 0;
+      view.scorch = (s.flareScorch ?? 0) / Math.max(1, nb.maxChill);
+      view.noonNow = s.phase === 'day' && noonHeatAt(w, s.day, s.dayTick) > 1;
       view.deep = nb.deep === true;
       view.snapLeft = ticks > 0 ? Math.min(1, ticks / (SNAP_TICKS + (s.snapExt ?? 0))) : 0;
       // The snap cloud is drawn frosty while it lives (even past snapCloudId, if the sim lets it).

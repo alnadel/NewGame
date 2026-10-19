@@ -1148,10 +1148,12 @@
 
 /* ===== Cue line (ui.showCue): plain words above Nubs for the first runs ===== */
 
+/* Its bottom edge sits 8 px above the dial's outer rims (R + 25: the glass and flare rims), and a
+   wrapped cue grows upward, so it never covers the ring. */
 .cue {
   position: absolute;
   left: 50%;
-  top: calc(var(--nubs-y, 68%) - var(--wt) - var(--halo-r, 44px) - 56px);
+  top: calc(var(--nubs-y, 68%) - var(--wt) - var(--halo-r, 44px) - 33px);
   width: max-content;
   max-width: calc(100% - 32px);
   padding: 7px 16px;
@@ -1164,13 +1166,13 @@
   text-align: center;
   pointer-events: none;
   opacity: 0;
-  transform: translate(-50%, 6px);
+  transform: translate(-50%, calc(6px - 100%));
   transition: opacity 150ms ease, transform 150ms ease;
 }
 
 .cue.is-on {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -100%);
 }
 
 .sui:not([data-screen='play']) .cue { display: none; }

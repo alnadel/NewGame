@@ -223,7 +223,7 @@ export function countText(value: number, target: number, sec: boolean): string {
 }
 
 /**
- * The Results goal line: "Collected 9/8 flakes", "Scored 24/20 Snow", "Reached the finish", or the
+ * The Results goal line: "Collected 9 flakes (goal 8) ✓", "Scored 24 Snow (goal 20) ✓", "Reached the finish", or the
  * miss. A pass short of three stars adds what the next star needs ("Next ★: 12 flakes"). `misses`
  * (the level's goal misses, this one included) tells a missed player when the goal eases.
  */
@@ -243,9 +243,9 @@ export function goalLine(level: LevelDef, stats: Stats, passed: boolean, relaxed
     relaxed || g.kind === 'finish'
       ? 'Reached the finish'
       : g.kind === 'flakes'
-        ? `Collected ${stats.flakes}/${g.target} flakes`
+        ? `Collected ${stats.flakes} flakes (goal ${g.target}) ✓`
         : g.kind === 'snow'
-          ? `Scored ${snow}/${g.target} Snow`
+          ? `Scored ${snow} Snow (goal ${g.target}) ✓`
           : `${goalText(level)} ✓`;
   return line + nextStarHint(level, stats, seen);
 }

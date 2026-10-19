@@ -236,6 +236,8 @@ export interface ShadyMech {
   /** v1.6 (game/debug.ts mech()). */
   pips: number;
   bankH: number;
+  glassH: number;
+  scorch: number;
   ring: boolean;
   ringFill: number;
   bleed: boolean;

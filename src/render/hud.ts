@@ -142,6 +142,8 @@ export interface HudState {
   spill: number;
   lastBankH: number;
   chipText: string;
+  lastGlassH: number;
+  glassText: string;
   pour: number;
   ringFlash: number;
 }
@@ -214,6 +216,8 @@ export function createHud(): HudState {
     spill: 0,
     lastBankH: 0,
     chipText: '',
+    lastGlassH: 0,
+    glassText: '',
     pour: 0,
     ringFlash: 0,
   };
@@ -655,22 +659,23 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.globalAlpha = a;
   }
   const top = y - r - 12 * k;
+  const maxX = v.vx + v.vw - v.safe.right - 4 * k;
+  let cy = full && !snapping ? top - 16 * k : top;
   if (m.bankH > 0) {
-    // The frost banked under the snap, paid when it ends, or (economy iteration 2) a saved glass
-    // cluster's, paid by the next snap: a chip with a snowflake ("+0.3"), above the chevron when a
-    // snap is ready.
+    // The frost banked under the snap, paid when it ends: a chip with a snowflake ("+0.3"), above
+    // the chevron when a snap is ready.
     if (m.bankH !== h.lastBankH) h.chipText = snapsText(m.bankH);
-    g.font = h.chipFont;
-    const w = g.measureText(h.chipText).width + 24 * k;
-    const cy = full && !snapping ? top - 16 * k : top;
-    pill(g, x - w / 2, cy - 11 * k, w, 18 * k, '#FFFFFF', true);
-    g.drawImage(flake(), x - w / 2 + 4 * k, cy - 8 * k, 12 * k, 12 * k);
-    g.fillStyle = '#2B7FD0';
-    g.textAlign = 'left';
-    g.textBaseline = 'middle';
-    g.fillText(h.chipText, x - w / 2 + 18 * k, cy - 1.5 * k);
+    chip(g, h, x, cy, k, h.chipText, 1, maxX);
+    cy -= 22 * k;
   }
   h.lastBankH = m.bankH;
+  if (m.glassH > 0) {
+    // Economy iteration 2: a saved glass cluster's frost waits for the next snap ("+0.8 next snap"),
+    // a ghost chip (dimmed while no snap is ready to pour it), stacked over the snap's own chip.
+    if (m.glassH !== h.lastGlassH) h.glassText = `${snapsText(m.glassH)} next snap`;
+    chip(g, h, x, cy, k, h.glassText, fullN > 0 || snapping ? 0.9 : 0.5, maxX);
+  }
+  h.lastGlassH = m.glassH;
   if (full) {
     // "Swipe down": a chevron bobbing down over the meter.
     const cy = top + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
@@ -703,6 +708,23 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   g.lineCap = 'butt';
 }
 
+/** A chip over the frost meter centred on x (a snowflake and `text` in a white pill) at `alpha` × the HUD's. */
+function chip(g: CanvasRenderingContext2D, h: HudState, x: number, cy: number, k: number, text: string, alpha: number, maxX: number): void {
+  const a0 = g.globalAlpha;
+  g.globalAlpha = a0 * alpha;
+  g.font = h.chipFont;
+  const w = g.measureText(text).width + 24 * k;
+  // Kept on screen: the meter sits at the right edge, a wide chip shifts left.
+  const cx = Math.min(x, maxX - w / 2);
+  pill(g, cx - w / 2, cy - 11 * k, w, 18 * k, '#FFFFFF', true);
+  g.drawImage(flake(), cx - w / 2 + 4 * k, cy - 8 * k, 12 * k, 12 * k);
+  g.fillStyle = '#2B7FD0';
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  g.fillText(text, cx - w / 2 + 18 * k, cy - 1.5 * k);
+  g.globalAlpha = a0;
+}
+
 /** Adds the outline of the badge's charge ring (a pill) with the first `f` of it dashed on, from its top centre clockwise. */
 function ringDash(g: CanvasRenderingContext2D, x: number, y: number, w: number, hgt: number, f: number): void {
   const p = 2 * (w - hgt) + Math.PI * hgt;
@@ -713,9 +735,9 @@ function ringDash(g: CanvasRenderingContext2D, x: number, y: number, w: number, 
   roundRect(g, x - w / 2, y - hgt / 2, w, hgt, hgt / 2);
 }
 
-/** "+0.3": frost hundredths as snaps (cash-ins, gains, the banked chip). */
+/** "+0.3": frost hundredths as snaps, to a tenth (cash-ins, gains, the chips). */
 export function snapsText(h: number): string {
-  return `+${Math.round(h) / 100}`;
+  return `+${Math.round(h / 10) / 10}`;
 }
 
 /** A lit star pip's pop (s) and the pips' outer radius (× the HUD scale). */

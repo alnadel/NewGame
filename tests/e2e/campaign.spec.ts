@@ -103,7 +103,7 @@ test.describe('campaign levels', () => {
     expect(verdict!.passed).toBe(true);
     expect(verdict!.stars).toBeGreaterThanOrEqual(1);
     expect(verdict!.nextId).toBe(3);
-    expect(verdict!.goalLine).toMatch(/^Collected \d+\/\d+ flakes( · Next ★: .+)?$/);
+    expect(verdict!.goalLine).toMatch(/^Collected \d+ flakes \(goal \d+\) ✓( · Next ★: .+)?$/);
     // Next level: the Results' primary button.
     await page.locator('.res-sheet .res-next').click();
     await expect

@@ -3,6 +3,7 @@
 // banners, HUD timers, Nubs' springs) lives in RenderScene and is driven by game/fx.ts.
 
 import {
+  coolLine,
   dayTicks,
   nightTicks,
   PICKUP_ALIVE,
@@ -190,9 +191,18 @@ export interface MechView {
   snapCloud: Cloud | null;
   /** Angles that grow a bud now (GuideState.bud), or null. */
   bud: Uint8Array | null;
-  /** v1.6 Frost Bank: the meter's pips (2 with the Bank, else 1) and the frost pending on the chip (hundredths): banked during a snap, or saved glass waiting for the next one. */
+  /**
+   * v1.6 Frost Bank: the meter's pips (2 with the Bank, else 1), the frost banked under the snap
+   * (hundredths; paid at its end) and the saved glass waiting for the next snap (hundredths; poured
+   * as it is cast). Each has its own chip.
+   */
   pips: number;
   bankH: number;
+  glassH: number;
+  /** A missed flare's scorch: the share of the tank scorched until nightfall or a snap (0..1). */
+  scorch: number;
+  /** The Noon Heat is on now (a snap pours nothing). */
+  noonNow: boolean;
   /** v1.6 Flow Ring: the badge's level (nubs.mult), the badge wears the charge ring, its fill 0..1 toward the next level (×5: its buffer), and it is bleeding now. */
   mult: number;
   ring: boolean;
@@ -219,7 +229,7 @@ export interface MechView {
 
 export function createMechView(): MechView {
   return {
-    meter: false, frost: 0, deep: false, snapLeft: 0, snapCloud: null, bud: null, pips: 1, bankH: 0, mult: 1, ring: false, ringFill: 0, bleed: false,
+    meter: false, frost: 0, deep: false, snapLeft: 0, snapCloud: null, bud: null, pips: 1, bankH: 0, glassH: 0, scorch: 0, noonNow: false, mult: 1, ring: false, ringFill: 0, bleed: false,
     deepBand: null, glass: null, land: null, flare: null, flarePhase: 0, flareLeft: 0, flareT: 0, flareSig: 0, flareOut: new Map(), noonHeat: 1, glassCluster: -1,
   };
 }
@@ -784,9 +794,10 @@ export class Renderer {
     }
     // v1.5 closed buds, with the ground (they are short; a bloomed one is its sunflower caster).
     const budN = s.world.buds ? queryBuds(s.world, v.y0 - 40, v.y1 + 40, budBuf) : 0;
+    const budsGrow = !s.world.v16?.bank || snap.chill >= coolLine(s.nubs.maxChill);
     for (let i = budN - 1; i >= 0; i--) {
       const b = budBuf[i] as Bud;
-      if (b.state === 0 && b.x > v.x0 - 40 && b.x < v.x1 + 40) drawBud(g, v, L, b, night);
+      if (b.state === 0 && b.x > v.x0 - 40 && b.x < v.x1 + 40) drawBud(g, v, L, b, night, budsGrow);
     }
     if (sunUp) drawGlare(g, v, s.world, ux, uy, snap.cot, snap.eps, time);
     drawGroundParticles(g, sc.particles, v);
@@ -941,6 +952,13 @@ export class Renderer {
       if (dying >= 0) sc.sun.guilty = Math.min(1, sc.sun.guilty + adt * 3);
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);
+      // Never over the frost meter (bottom right): the sun slides up above its pips and chips.
+      const hd = sc.hud;
+      if (hd.meterShown) {
+        const mr = 26 * scale;
+        const top = hd.meterY - hd.meterR - 40 * scale - mr;
+        if (sc.sun.y > top && Math.abs(sc.sun.x - hd.meterX) < hd.meterSpan + hd.meterR + mr) sc.sun.y = top;
+      }
       // Over the dial (its rims reach R + 30; Nubs by a screen edge) the sun steps back to 40 %, so
       // it never hides the sun pointer or the flare arc under it.
       const over = Math.hypot(sc.sun.x - pose.x, sc.sun.y - pose.y) < 40 * v.S + 30 + 24 * scale;

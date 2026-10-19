@@ -110,9 +110,9 @@ describe('the words', () => {
     const st = swing.goal.target;
     expect(goalText(flakes)).toBe(`Collect ${ft} flakes`);
     expect(goalText(swing)).toBe(`Score ${st} Snow`);
-    expect(goalLine(flakes, { flakes: ft + 1, snow: 12 }, true).startsWith(`Collected ${ft + 1}/${ft} flakes`)).toBe(true);
+    expect(goalLine(flakes, { flakes: ft + 1, snow: 12 }, true).startsWith(`Collected ${ft + 1} flakes (goal ${ft}) ✓`)).toBe(true);
     expect(goalLine(flakes, { flakes: 5, snow: 12 }, false)).toBe(`Not enough flakes: 5/${ft}`);
-    expect(goalLine(swing, { flakes: 5, snow: st + 4.7 }, true).startsWith(`Scored ${st + 4}/${st} Snow`)).toBe(true);
+    expect(goalLine(swing, { flakes: 5, snow: st + 4.7 }, true).startsWith(`Scored ${st + 4} Snow (goal ${st}) ✓`)).toBe(true);
     // A pass short of three stars names the next star: the Dare first (v1.6; here a reach ×4 Dare on a finish level), then the cool run.
     expect(finish.feats[0]?.kind).toBe('flakes');
     const ringy = { ...finish, feats: [{ kind: 'ring' as const, target: 4 }] };

@@ -73,7 +73,7 @@ function leaf(g: CanvasRenderingContext2D, x: number, y: number, dir: number, le
  * little sun on the ground, the growth ring, then the plant: two leaves, a short stem and the bulb,
  * swelling as it grows, its petal tip going gold, glowing while light reaches it.
  */
-export function drawBud(g: CanvasRenderingContext2D, v: View, L: Light, b: Bud, night: number): void {
+export function drawBud(g: CanvasRenderingContext2D, v: View, L: Light, b: Bud, night: number, grows = true): void {
   const S = v.S;
   const P = S * BUD_K;
   const x = v.ox + b.x * S;
@@ -81,8 +81,9 @@ export function drawBud(g: CanvasRenderingContext2D, v: View, L: Light, b: Bud, 
   const grow = Math.max(0, Math.min(1, b.grow));
   const tol = TUNING.buds.faceTol;
   const off = Math.abs(((((L.theta - b.face) % 360) + 540) % 360) - 180);
-  const aim = L.sunUp && off <= tol ? 1 - off / (tol + 1) : 0;
-  const dim = 1 - 0.55 * night;
+  // A red-hot Nubs grows no bud (economy iteration 2): its mark stays dim while the sun faces it.
+  const aim = L.sunUp && off <= tol ? (1 - off / (tol + 1)) * (grows ? 1 : 0.3) : 0;
+  const dim = (1 - 0.55 * night) * (grows ? 1 : 0.6);
   const k = dim * (aim > 0 ? 0.8 + 0.2 * Math.sin(L.time * 19) : 0.6);
   const a = -b.face * DEG;
   const t = tol * DEG;

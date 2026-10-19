@@ -8,11 +8,13 @@
 //   - when nothing lasts, the now-arcs are drawn medium-thick, so the dial is never blank.
 // The Chill gauge is frost-white, hidden while Chill ≥ 99, amber below TUNING.bank.cashFullChill (50:
 // a snap pours less of the ring and cools Nubs less, buds grow slower, economy iteration 2) and hot, dashed and pulsing
-// below TUNING.bank.coolChill (25: red-hot Nubs grows no buds, freezes no frost and a snap only shades). In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
+// below TUNING.bank.coolChill (25: red-hot Nubs grows no buds, freezes no frost and a snap only shades),
+// both lines scaled to the tank and notched on its track; a missed flare's scorch chars the track's
+// end, and in the Noon Heat a white gauge is hatched hot. In the sun the ring itself burns hot with a heartbeat glow (v1.3). The whole dial fades to 35 % while idle at full Chill. While a ghost-thumb hint plays
 // (V1_PLAN §6.2) the dial shows where to put the sun: the target arc pulses, dots mark the way
 // round, and a ghost sun glides from the sun pointer into the arc in step with the ghost thumb.
 // v1.5: gold arcs just outside the ring mark the angles that grow a Sunflower bud (GuideState.bud;
-// where gold meets teal, one angle does both), and deep shade darkens the ring to indigo with a
+// where gold meets teal, one angle does both; pale and dashed while Nubs is red-hot and grows none), and deep shade darkens the ring to indigo with a
 // few frost sparkles circling it.
 // v1.6 layers (docs/V1_6_PLAN.md §4, drawn only when their mask has something): a darker teal band
 // inside the lasting teal where shade is deep (runs ≥ 3° wide); for a glass flake in its melt window
@@ -40,6 +42,12 @@ const AMBER = hex('#FFA53D');
 const INK = hex('#2B2140');
 const HOT = hex('#FF6A3D');
 const GOLD = hex('#FFC23D');
+/** The gold arcs while Nubs is red-hot (no bud grows): a pale, dashed gold. */
+const BUD_PALE = hex('#E8DDB8');
+const BUD_DASH = [5, 5];
+/** The scorched end of the Chill gauge's track (a missed flare's lowered ceiling). */
+const CHAR = hex('#5A2A1E');
+const NOON_DASH = [2, 5];
 const DEEP = hex('#1F2A66');
 const ICE = hex('#DDF4FF');
 const DEEP_TEAL = hex('#0B5F5A');
@@ -419,18 +427,28 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 
   if (inp.sunUp && inp.bud !== null) {
-    // Bud arcs: gold just outside the ring, a soft glow under a bright line.
+    // Bud arcs: gold just outside the ring, a soft glow under a bright line. A red-hot Nubs grows no
+    // buds (economy iteration 2): the gold goes pale and dashed, a promise for when he cools.
     if (inp.bud.includes(1)) {
       const ba = Math.max(0.7, A) * inp.fade;
+      const red = inp.mech !== null && inp.mech.pips > 1 && inp.chill < coolLine(inp.maxChill);
       g.lineCap = 'round';
       g.beginPath();
       arcRuns(g, inp.bud, cx, cy, R + 11, 0.5);
-      g.lineWidth = 9;
-      g.strokeStyle = cssa(GOLD, 0.28 * ba);
-      g.stroke();
-      g.lineWidth = 3.5;
-      g.strokeStyle = cssa(GOLD, 0.95 * ba);
-      g.stroke();
+      if (red) {
+        g.setLineDash(BUD_DASH);
+        g.lineWidth = 3;
+        g.strokeStyle = cssa(BUD_PALE, 0.3 * ba);
+        g.stroke();
+        g.setLineDash([]);
+      } else {
+        g.lineWidth = 9;
+        g.strokeStyle = cssa(GOLD, 0.28 * ba);
+        g.stroke();
+        g.lineWidth = 3.5;
+        g.strokeStyle = cssa(GOLD, 0.95 * ba);
+        g.stroke();
+      }
       g.lineCap = 'butt';
     }
   }
@@ -469,24 +487,61 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   // and cools Nubs full (TUNING.bank.cashFullChill), amber below it (less of both, buds grow slower), red, dashed and pulsing below
   // TUNING.bank.coolChill (red-hot: no buds grow, no frost freezes, a snap only shades); hidden while
   // Chill is full (the teal arcs lead then).
+  // Its marks: a notch where it turns amber (whiteLine: 6 o'clock on a full tank) and red (coolLine:
+  // 3 o'clock); an ink underlay keeps the amber apart from the hot ring outside it. A missed flare's
+  // scorch chars the end of the track it took away; in the Noon Heat a white gauge is hatched hot
+  // (a snap there pours nothing).
   const chill = Math.max(0, Math.min(100, inp.chill));
-  if (chill < 99) {
+  const scorch = inp.mech ? inp.mech.scorch : 0;
+  if (chill < 99 || scorch > 0) {
     const gR = R - 8;
     const gA = Math.max(A, 0.9);
+    const top = -Math.PI / 2;
     g.lineWidth = 3;
     g.strokeStyle = cssa(INK, 0.15 * gA);
     g.beginPath();
     g.arc(cx, cy, gR, 0, TAU);
     g.stroke();
+    if (scorch > 0) {
+      g.lineWidth = 4;
+      g.setLineDash(BUD_DASH);
+      g.strokeStyle = cssa(CHAR, 0.8 * gA);
+      g.beginPath();
+      g.arc(cx, cy, gR, top + TAU * (1 - scorch) * (inp.maxChill / 100), top + TAU * (inp.maxChill / 100));
+      g.stroke();
+      g.setLineDash([]);
+    }
+    g.lineWidth = 1.5;
+    g.strokeStyle = cssa(INK, 0.45 * gA);
+    g.beginPath();
+    for (const line of [whiteLine(inp.maxChill), coolLine(inp.maxChill)]) {
+      const a = top + (TAU * line) / 100;
+      g.moveTo(cx + Math.cos(a) * (gR - 3), cy + Math.sin(a) * (gR - 3));
+      g.lineTo(cx + Math.cos(a) * (gR + 3), cy + Math.sin(a) * (gR + 3));
+    }
+    g.stroke();
     if (chill > 0.5) {
       const red = chill < coolLine(inp.maxChill);
-      if (red) g.setLineDash([4, 3]);
+      const white = chill >= whiteLine(inp.maxChill);
+      const end = top + (TAU * chill) / 100;
       g.lineCap = 'round';
-      const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      g.strokeStyle = cssa(red ? HOT : chill < whiteLine(inp.maxChill) ? AMBER : FROST, gA * pulse);
+      g.lineWidth = 5;
+      g.strokeStyle = cssa(INK, 0.35 * gA);
       g.beginPath();
-      g.arc(cx, cy, gR, -Math.PI / 2, -Math.PI / 2 + (TAU * chill) / 100);
+      g.arc(cx, cy, gR, top, end);
       g.stroke();
+      g.lineWidth = 3;
+      if (red) g.setLineDash([4, 3]);
+      const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
+      g.strokeStyle = cssa(red ? HOT : white ? FROST : AMBER, gA * pulse);
+      g.beginPath();
+      g.arc(cx, cy, gR, top, end);
+      g.stroke();
+      if (white && inp.mech?.noonNow) {
+        g.setLineDash(NOON_DASH);
+        g.strokeStyle = cssa(HOT, 0.85 * gA);
+        g.stroke();
+      }
       g.setLineDash([]);
       g.lineCap = 'butt';
     }

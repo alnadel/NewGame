@@ -783,9 +783,14 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     const a = left < 0.22 ? left / 0.22 : 1;
     g.globalAlpha = a;
     const s = scale * uiScale;
-    g.setTransform(v.dpr * s, 0, 0, v.dpr * s, sx * v.dpr, sy * v.dpr);
     g.font = POP_FONT;
     const fs = size / 20;
+    // Kept inside the safe area (COLD SNAP! over a Nubs near the edge was cut off).
+    const half = (g.measureText(p.text[i]!).width * fs * s) / 2 + 4;
+    const lo = v.vx + v.safe.left + half;
+    const hi = v.vx + v.vw - v.safe.right - half;
+    const cx = lo < hi ? Math.min(hi, Math.max(lo, sx)) : sx;
+    g.setTransform(v.dpr * s, 0, 0, v.dpr * s, cx * v.dpr, sy * v.dpr);
     g.scale(fs, fs);
     g.lineWidth = 5;
     g.strokeStyle = stroke;

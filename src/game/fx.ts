@@ -135,6 +135,8 @@ export class Fx {
     const sc = this.sc;
     const nx = s.nubs.x;
     const ny = s.nubs.y;
+    // The frame's frost gains pop as one (a snap's pour and the glass it lands come on one tick).
+    let gainH = 0;
     for (const ev of events) {
       switch (ev.e) {
         case 'detent':
@@ -327,11 +329,11 @@ export class Fx {
           sc.hud.ringFlash = RING_FLASH_S;
           // The run's first trick says what charged.
           // Left of and above the Snow pop (+5 of a bloom or a parry, at the same moment) so the two never read as one.
-          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -44, 230, 0.8);
+          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -58, 262, 0.8);
           this.trickSeen = true;
           break;
         case 'frostGain':
-          if (ev.source !== 'cash') this.gain(ev.amountH);
+          if (ev.source !== 'cash') gainH += ev.amountH;
           break;
         case 'frostSpill':
           sc.hud.spill = SPILL_S;
@@ -339,7 +341,7 @@ export class Fx {
         case 'snapCash':
           if (ev.refundH > 0) {
             sc.hud.pour = POUR_S;
-            this.gain(ev.refundH);
+            gainH += ev.refundH;
           }
           break;
         case 'snapExtend':
@@ -369,6 +371,8 @@ export class Fx {
         case 'flareMiss':
           addRing(sc.rings, nx, ny, 36, 56, 0.35, 3, 0.8, HOT);
           sc.nubs.shiver = 0.2;
+          // Endless: the flash scorched the tank (the gauge's charred end says how much).
+          if (s.flareScorch > 0) addHeadline(sc.pops, 'SCORCHED!', POP_BANG, 1);
           break;
         case 'featMet':
           addHeadline(sc.pops, 'DARE ✓', POP_MULT, 1);
@@ -392,6 +396,7 @@ export class Fx {
           break;
       }
     }
+    if (gainH > 0) this.gain(gainH);
   }
 
   /**
@@ -410,10 +415,15 @@ export class Fx {
     this.clock.addHitStop(0.04);
   }
 
-  /** v1.6: frost gained (hundredths) pops beside Nubs in frost blue; the run's first says "snap". */
+  /**
+   * v1.6: frost gained (hundredths) pops beside Nubs in frost blue, to a tenth of a snap (none under
+   * 0.05); the run's first worth a tenth or more says "snap".
+   */
   private gain(h: number): void {
-    addPop(this.sc.pops, this.gainSeen ? snapsText(h) : `${snapsText(h)} snap`, POP_DEEP, 20, 120, 0.9);
-    this.gainSeen = true;
+    if (h < 5) return;
+    const first = !this.gainSeen && h >= 10;
+    addPop(this.sc.pops, first ? `${snapsText(h)} snap` : snapsText(h), POP_DEEP, 20, 120, 0.9);
+    if (h >= 10) this.gainSeen = true;
   }
 
   /** A Cold Snap lands over Nubs (v1.5): COLD SNAP!, an ice ring and shards, a cool wash, a beat. */

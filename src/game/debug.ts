@@ -100,6 +100,8 @@ export interface ShadyTestHook {
     /** v1.6: the meter's pips and banked chip, the ring (on, fill, bleeding), the dial layers' bins, the flare, Noon Heat, the badge's centre (CSS px). */
     pips: number;
     bankH: number;
+    glassH: number;
+    scorch: number;
     ring: boolean;
     ringFill: number;
     bleed: boolean;
@@ -200,6 +202,8 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
         snaps: session.input.snaps,
         pips: m.pips,
         bankH: m.bankH,
+        glassH: m.glassH,
+        scorch: m.scorch,
         ring: m.ring,
         ringFill: m.ringFill,
         bleed: m.bleed,

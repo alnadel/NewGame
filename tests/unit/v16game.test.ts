@@ -64,6 +64,21 @@ describe('MechView (game/mechanics.ts)', () => {
     expect(vo.ring).toBe(false);
   });
 
+  it("carries a missed flare's scorch (the tank's lost share) and keeps the snap's chip apart from the glass waiting for the next snap", () => {
+    const s = createRun({ seed: 7, mode: 'endless', profile: 3, tutorial: false, reducedMotion: false });
+    const m = createMechanics();
+    expect(m.fill(s, 0).scorch).toBe(0);
+    s.flareScorch = 40;
+    expect(m.fill(s, 0).scorch).toBeCloseTo(40 / s.nubs.maxChill);
+    s.glassBankH = 80;
+    let v = m.fill(s, 0);
+    expect([v.bankH, v.glassH]).toEqual([0, 80]);
+    s.snapTicks = 30;
+    s.snapBankH = 30;
+    v = m.fill(s, 0);
+    expect([v.bankH, v.glassH]).toEqual([30, 80]);
+  });
+
   it('follows a kept flare through its phases (the warning counts down), and records parries and misses', () => {
     const s = endless();
     const m = createMechanics();
