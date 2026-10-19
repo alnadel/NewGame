@@ -1243,3 +1243,174 @@ The other gates hold:
 | Buds that grow only in the white | naive under plan@80 −238 ± 36, but chase − plain +151 ± 28 and plain −75 ± 13 |
 | The growth ramp with a half-speed floor in the amber | naive under plan@80 −69 ± 37, chase +180 ± 30 |
 | The growth ramp at bloomH 30 | chase +175 ± 29: lower bound 146 |
+
+### 16.6 Review of economy iteration 2 (the fix round)
+
+The review of iteration 2 (core, gameplay, phone-readability and regression lenses; docs/V1_6_PLAN.md
+§6.4) found three hard rows failing (E3's seeker at `--seeds 960`, `sim --flares`'s preAim row,
+p3 heat rescues at 240 seeds), a validator state leak, two holes in the gauge rules, and a HUD
+that did not read the gauge. The economy loop's design is unchanged: one gauge prices the snap.
+
+**Core rules** (each with what it measured; goldens re-made once, in the commit that changed it):
+- **Real shade refills Chill under a snap.** A red-hot or amber snap's cooling cap
+  (`s.snapChillCap`) applies only on ticks where the snap cloud is Nubs' only shade:
+  `computeCoverage` sets `nb.realShade` when a caster or a cloud other than the snap is over his
+  center sample, or when the sun is down or eclipsed, and `applyDaylight` skips the cap then. Before,
+  a red-hot snap held Chill at 20 for its whole life in a caster's full shade (four spots, 89-90 of
+  90 ticks shaded: 20.0 at 1.5 s against 77-100 without the snap; an amber snap at 35 capped at 61).
+  The rule's sentence ("red-hot, a snap only shades") now holds: it shades, and the shade it bridges
+  to refills as usual.
+- **Glass over the bank spills where you can see it.** `bankGlassH` keeps its cap of two charges,
+  and the excess now goes to `stats.frostSpilledH` with a `frostSpill` event (it was dropped silently).
+- **The gauge scales with the tank.** `whiteLine(maxChill)` and `coolLine(maxChill)` are
+  `cashFullChill` 50 and `coolChill` 25 times `maxChill / 100`; `snapGauge(chill, maxChill)`,
+  `coolNubs` (bud growth) and the halo read them. On the 17 ration levels (a 50 tank) the gauge is
+  white from 25 and red under 12.5, as the validator already scaled its floor. Before, humanDial
+  spent 43.6% of its daylight amber and 9.3% red, with white only at a full tank. Journey re-baked.
+- **A Heat Wave day has no Noon Heat** (`ForecastTuning.noonHeat`, a share of the day's Noon Heat
+  step: 0 on `heat`; `noonHeatOf` in days.ts). Rescues a chunk with the heat forecast forced
+  (generation only, p3, Days 1-8, 240 seeds; the hard bar is 0.8):
+
+  | Noon Heat share on heat days | seeds 1-240 | seeds 30001-30240 |
+  |---|---|---|
+  | 1 (before) | 0.802 | 0.823 |
+  | 0.5 | 0.786 | 0.806 |
+  | 0.25 | 0.781 | 0.790 |
+  | **0 (shipped)** | **0.763** | **0.779** |
+
+  Only 0 keeps a margin on both blocks. The forecast's higher sun (εnoon +3°) and its tighter
+  spacing (×0.92) are that day's heat; its blurb says "no Noon Heat".
+- **The Bank's kill switch is whole.** With `v16.bank` off a snap's cash-in is the v1.5 one
+  (`cashInH` gauge factor 1), it sets no cooling cap, and buds grow at full speed: none of the gauge
+  rules apply, so `--off bank` measures the v1.5 meter (it measured a hybrid).
+- **The Garden's cap stays** (`garden.bankCapH` 30 a snap, below one bloom's 32): a white snap's
+  cash-in (≤ 60) plus its Garden (≤ 30) stays under the 100 a snap costs, so no snap refunds itself
+  (iteration 2's rule 1). At 2 × bloomH a white x3 snap with two Garden blooms would bank 124.
+- **Validator.** The flare keep test's candidate and row buffers live in the `ValidationJob`
+  (`job.keep`, reused from the world's last job), not at module level. Two worlds generated in
+  alternating small slices (the game's live run beside its next-run prebuild or the Daily par) now
+  equal each one generated alone (6 of 6 pairs; 4 of 6 differed, moving or dropping kept flares);
+  a unit test (v16world.test.ts) pins it.
+- **Hash.** `hashState` reads pickup positions and clusters (glass shifts move them), and the
+  counters `x5Ticks`, `multDowns`, `frostSpilledH`, `snapCashH`, `gardenBlooms`, `snapLandsOwn`
+  and `nb.realShade`.
+- `snapCash` gains `amber` (cast in the amber: it pours and cools part of the way), for the tips.
+
+**Bots** (`sim/bots/world.ts`, `sim/bots/econ.ts`, `sim/bots/dares.ts`):
+- **preAim holds its parry.** In the warning's last `PREAIM_TICKS` (18) it locks θ's bin when
+  guide.flare holds it, else the nearest guide.flare bin, and it holds that bin through the rise
+  and the hold unless it is under its own snap (per-bot state in a `WeakMap<BotHookCtx, …>`). It
+  slid to the bin in the warning, then followed its score again, and parried 74%.
+- **`glass: 'near'`**, E3's seeker: `STRONG_GLASS_WEIGHT` (4) on guide.flake bins within 15° of a
+  guide.now or guide.next bin, at any hour, at Chill ≥ 45. These are the cheap detours.
+- **`hop: w`**, a stronger shade baseline for E2: +w on guide.now bins whose source is another
+  caster at least 42° of turn away, at Chill ≥ 50, with no snap on. The bot hops to a SWING's shade.
+- **humanFeat watches every flare** when it dares parry (`dareMoment`: a flare announced, rising
+  or holding, or a parry focus): it does not drop its focus on the coin then. On the coin alone it
+  met a boss's parry Dare 0-3 times in 6.
+
+**Journey** (config/campaign.ts, scripts/sim16/bake.ts, re-baked):
+- The oracle plays parry and glass by plan on every level (`ORACLE_PLANS`). Those Dares are sized
+  above the reactive bot and humanDial only. It parried every kept flare on every boss, so no parry
+  target could sit above it.
+- A boss finale whose parry Dare needs its verb (`sizeDare` tier ≥ 2) offers it as its second Dare
+  (`bossParry`). The bake measures parry first for a boss's second Dare.
+- `sim --campaign` adds advisory rows: ≥ 25% of levels dare a verb other than blooms, every boss
+  finale offers a parry Dare, and a count of the levels with two Dares.
+
+  | Dare kinds (levels) | blooms | snapSave | SWINGs | flakes | parry | still | two Dares | bosses with parry |
+  |---|---|---|---|---|---|---|---|---|
+  | before (review, `--tries 3`) | 127 | 31 | 25 | 16 | 0 | 1 | 0 | 0 of 16 |
+  | now | 127 | 29 | 24 | 16 | 13 | 1 | 10 | 13 of 16 (L50, L70, L200: no parry Dare needs its verb) |
+
+**Tooling.**
+- `sim --seed-from S` plays seeds S…S+n−1 in `--check`, `--decisions` and `--flares`, for held-out
+  blocks.
+- `--decisions` E3 gates the near seeker and keeps the two older seekers as "never a tax" rows,
+  beside a control: plain play on worlds without glass.
+- `--decisions` prints the dial-only bot's income with glass counted at the save, beside the gated
+  number.
+- `--decisions` adds four advisory hop@2 rows: plain, chase, naive and safe, each on the hop
+  baseline and compared against it.
+- `--check` adds a humanDial noon-death share from Day 2.
+- `bench-step.ts --gen` alternates the trees' reps and gates the p99 slice paired: ≤ 1.1 × the
+  base. The absolute 1.5 ms bar decides only while the base meets it too; under load v1.5 broke it
+  itself. It prints ms a chunk for both trees.
+- Tests that measured the machine:
+  - the generator and validator vitests get 20 s timeouts;
+  - gamify.spec is marked slow;
+  - single.spec rebuilds dist-single when a source is newer than it, so it no longer plays a stale
+    build;
+  - the draw-call budget (render.spec) freezes on one sim tick. It plays at a third of its speed,
+    and at a twentieth over its last two minutes. A loaded frame ran several ticks and froze Nubs
+    half in the sun: 86 strokes against 74. Now it reads 71 strokes, loaded or not.
+
+**Cost.**
+- **step()**: the review measured 1.11-1.15× v1.5 (gate ≤ 1.10). The profile showed the shared
+  lit-mask path grown per tick. Three changes:
+  - `markRange` fills with `TypedArray.fill` (one or two calls), not a per-bin loop;
+  - `markEllipse` tests a ground cloud (R = 0) once;
+  - the clock memoises each day's row.
+
+  `bench-step.ts --base-dir <v1.5 worktree>`, 12 seeds × 3 days, 9 alternating reps: reactive
+  0.998 and 1.047 (min 0.999 and 0.989; it was 1.080-1.120 here before the change), oracle 1.015
+  and 1.018. The guide refresh is 0.99-1.02×.
+- **Generation**:
+  - serial and idle, 40 seeds × 8 days: 2.79 ms a chunk against v1.5's 1.68 on the same machine
+    (1.66×);
+  - `bench-step.ts --gen`: 3.10 against 1.79 ms a chunk, p99 slice 1.46 against 1.38 ms (1.06×, a
+    pass).
+
+  The §6 bar (≤ 3.5 absolute) passes on this machine. On the plan's 2.37 ms v1.5 baseline the
+  ratio would give about 3.9. §12's lever (fewer contest shifts) makes glass rarer, and E3 and the
+  glass advisories are already short. This is an integrator call (§6.4).
+- **build:single**: 665.0 KiB (`npm run build:single` at this round's last code commit), 23.4 over
+  A3's 641.6. By source map, the shipped JS grew 542.3 → 585.4 KB over v1.5:
+  - core +27.3 KB: mechanics, contest, validator, nubs, placer, guide, flares, feats, glass;
+  - render +9.7 KB: halo, HUD, banners;
+  - config +7.4 KB: campaign, tuning.
+
+  This round's UX added about 3 KiB. Terser instead of esbuild saves about 7 KiB. This is an
+  integrator call (§6.4).
+
+**Measured** (seeds 1-960 unless noted; ± one SE, paired by seed):
+
+| Row | Iteration 2 (§16.5, seeds 1-960) | Now, seeds 1-960 | Now, held out (30001-30240) | Gate |
+|---|---|---|---|---|
+| E1: plan − the best hoarder | +78 ± 15 (reactive plain) | +81 ± 23 (panic@30; reactive plain +93 ± 16) | +85 ± 46 (reactive plain) | hard ≥ +30: pass |
+| E1: full meter | 2.2% | 2.5% | 1.8% | hard ≤ 10% (E1 ≤ 15%): pass |
+| E2: chase − plain | +231 ± 29 (bound 202) | +269 ± 31 (bound 238) | +261 ± 71 | hard bound ≥ +150 at 960: pass |
+| E2: naive − plain | −181 ± 32 | −122 ± 35 | −94 ± 70 | hard < 0: pass |
+| E2: naive − plain, strongest rule | −128 ± 38 (plan@80) | −76 ± 40 (plan@80) | −22 ± 80 (plan@70) | hard < 0: pass |
+| E2: safe − plain | −154 ± 25 | −218 ± 27 | −120 ± 61 | hard < 0: pass |
+| E2 on hop@2: chase / naive / safe − hop@2 | – | +193 ± 35 / −283 ± 38 / −405 ± 31 (hop@2 − plain +419 ± 33) | +235 ± 68 / −217 ± 80 / −463 ± 64 (hop@2 − plain +461 ± 74) | advisory (≥ +150 / < 0 / < 0): pass |
+| x5 farm − panic@45 | −145 ± 21 | −156 ± 24 | −162 ± 49 | hard < 0: pass |
+| E3: the near seeker − plain | – | +38 ± 17 (bound +21; clusters saved 13.5% vs 7.5%) | +25 ± 32 (13.5% vs 8.0%) | hard bound > 0 at 960: pass |
+| E3: chase's-hours seeker − plain | +13 ± 9 | +10 ± 10 | +0 ± 17 | advisory mean > −1 SE: pass |
+| E3: weight-4 seeker − plain | +17 ± 19 | +17 ± 19 | −1 ± 38 | advisory mean > −1 SE: pass |
+| E3: plain − plain without glass | – | +50 ± 11 | +58 ± 28 | advisory mean > −1 SE: pass |
+| dial-only income, meters a day (with glass at the save) | 0.12 | 0.12 (0.16) | 0.12 (0.17) | hard ≤ 0.15 (the first number): pass |
+| mechanics vs dial, median, per 240-seed block | 389 / 313 / 317 / 214 | 697 / 367 / 383 / 303 | 361 | hard ≥ +180 (`--check`): pass |
+| the starting charge alone | +446 ± 25 | +500 ± 27 | +527 ± 57 | advisory ≤ 120: MISS |
+| priced moments a daylight minute, Days 2-4, over v1.6 off | – | +1.88 | +2.27 | advisory ≥ +3: MISS |
+
+`sim --decisions --seeds 960` exits 0 (2576 s on 4 workers). Chase − plain rose from +231 to
++269 and naive − plain from −181 to −122. Two of this round's rules move Endless play: real
+shade under a snap, and a Heat Wave without Noon Heat. They were not measured apart.
+
+`sim --check --seeds 40` meets every target:
+- mechanics vs dial +736 (Day 4 · 10:06 AM against Day 3 · 9:50 AM);
+- the dial median Day 3 · 9:50 AM;
+- the oracle reaches Day 8 on 100%, parries 93.2% and saves 78.1% of glass flakes;
+- flare keep on Days 2-4 is 92.0%;
+- p3 heat rescues 0.749 a chunk (0.788 before);
+- preAim parries 90.4% against plain's 58.4%.
+
+`sim --flares`:
+
+| Seeds | dial-only loses | preAim loses (bar ≤ half) | oracle parries |
+|---|---|---|---|
+| 1-120 | 84 min median (mean 184) | −103 (mean −134): flares gain it time | 94.8% |
+| 30001-30240 | 96 (mean 249) | −41 (mean −73), parrying 92.2%; before, 76 against the dial bot's 109 (review), a FAIL | 94.9% |
+
+At 1-120 preAim parries 91.1%, against 74% before.

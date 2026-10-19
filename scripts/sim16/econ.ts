@@ -296,7 +296,7 @@ function report(ctx: Sim16Ctx, rows: readonly Sim16Row[]): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// --decisions: the bank's policies and snap rules (§2.2 acceptance; economy iterations 1-2, V1_6_PLAN §6.2-§6.3)
+// --decisions: the bank's policies and snap rules (§2.2 acceptance; economy iterations 1-2, V1_6_PLAN §6.2-§6.4)
 
 /** Paired mean difference a − b over the seeds both rows played, with its standard error. */
 function paired(a: Sim16Row, b: Sim16Row): { mean: number; se: number; n: number } {
@@ -400,7 +400,7 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     const p = paired(r, plan);
     console.log(`  ${r.name.padEnd(34)} ${clock(meanMinutes(r), ctx.days).padEnd(17)} vs plan ${pm(p).padEnd(16)} snaps/d ${f2(snapsPerDay(r))}${r === best ? '  (strongest)' : ''}`);
   }
-  console.log('\nDecision gates (docs/V1_6_PLAN.md §2.2, §6, §6.2-§6.3; MISS never fails):');
+  console.log('\nDecision gates (docs/V1_6_PLAN.md §2.2, §6, §6.2-§6.4; MISS never fails):');
   // E1 (re-specified in iteration 2, V1_6_PLAN §6.3): plan beats the best hoarder, and still the panic bot.
   const hoarders = [plain, ...sweep.filter((r) => r.job.opts?.snap === 'hoard' || (r.job.opts?.snap === undefined && (r.job.opts?.snapChill ?? PANIC) <= PANIC))];
   let worst = { mean: Infinity, se: 0, n: 0 };

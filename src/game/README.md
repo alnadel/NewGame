@@ -286,12 +286,13 @@ layer off (`ring` off: no charge ring; `bank` off: one gauge, as in v1.5). v1.6 
 rule on, the Frost Bank too since economy iteration 1 (`V16_SHIP`; src/core/README.md §16.4), so the
 meter is two pips unless a run switches the Bank off; the debug URL parameters `?on=bank,…` and
 `?off=bank,flares,…` switch rules over the shipped ones (a debug run). The halo's Chill gauge reads
-the economy (src/core/README.md §16.5): frost-white from `TUNING.bank.cashFullChill` (a snap pours
+the economy (src/core/README.md §16.5-§16.6): frost-white from `TUNING.bank.cashFullChill` (a snap pours
 the whole ring and cools Nubs to full; buds grow at full speed), amber below it (it pours and cools
 less, buds grow slower), red and dashed below `TUNING.bank.coolChill` (red-hot: buds stop growing,
 blooms bank no frost, a snap only shades); both lines scale with the tank (core `coolLine` /
 `whiteLine`: a 'ration' level's half tank turns amber at 25, red at 12.5) and are notched on the
-gauge's track, and an ink underlay parts the amber from the hot ring. A missed flare's scorch
+gauge's track, an ink underlay parts the amber from the hot ring, and a full tank of any size hides
+the gauge. A missed flare's scorch
 (`MechView.scorch`) chars the end of the track it took away, and in the Noon Heat a white gauge is
 hatched hot (`MechView.noonNow`: a snap pours nothing there). While Nubs is red-hot the gold bud arcs
 go pale and dashed and the bud's mark in the world dims (no bud grows; facing one decays it). The

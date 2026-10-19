@@ -504,6 +504,8 @@ Telegraph:
 - H = 1.0 on Day 1, 1.15 on Days 2-3, 1.25 from Day 4. Profiles 0-2 get each step one day later.
 - Validator-aware: the DP uses a per-slot delta table, `chillDeltaTable(validatorDrain(w)·H, regen)`, keyed by (day, in window), and the oracle uses the same function.
 - Endless and Daily only. It is off in the Journey, whose concept costs were calibrated without it.
+- A Heat Wave day (forecast `heat`) has none since the review of economy iteration 2: its higher sun is
+  that day's heat, and the two together pushed p3 heat rescues over the hard 0.8 a chunk (§6.4).
 
 **Journey.**
 - L38, concept `flare` ("Solar Flare"). It takes Moon Sun's teaching slot; Moonlit stays a composed concept.
@@ -696,11 +698,14 @@ hardy flakes never melt and sit on the trail, so a flake Dare there would be aut
 **The shape of a day** (Day 3, profile 3):
 1. Dawn to 8:20: long shadows, buds are cheap, the ring builds.
 2. Around 9 AM: a flare.
-3. 11-1: Noon Heat x1.15; spend charges.
+3. 11-1: Noon Heat x1.15, survived on shade and on the cool a snap cast before 11 bought; a snap cast in it
+   only shades (§6.3 rule 3), so charges are cashed before 11 or after 1.
 4. Around 2:50 PM: a flare.
 5. Dusk is calm, and the charges carry into the night.
 
-The plan that already wins in the sim (invest in the morning, spend at noon) becomes visible and paid.
+The plan that already wins in the sim (invest in the morning, cash in before the heat) becomes visible and
+paid. As shipped (§6.4), the Noon Heat costs plain play 430 ± 58 min, but the mechanics bots die more often
+at 9-10 AM than at noon: the hour is a boss for the players who reach Day 2, where it starts.
 
 **How the features feed each other:**
 - Glass clusters, blooms, parries and landings fill the Bank.
@@ -1008,6 +1013,110 @@ E5 and the other runs:
 - The starting charge alone adds +446 ± 25 min, over §2.2's 120-minute bar. Without it, mechanics vs
   dial is +60 and −17 (median, two blocks), because the Day-2 Noon Heat kills about 20% of runs.
 - The p3 heat rescue rate (0.788 at `--check --seeds 40`, 0.802 at 240, where its hard ≤ 0.8 fails) belongs to CORE-2.
+
+### 6.4 Review of economy iteration 2: the fix round
+
+The review of iteration 2 had four lenses: core, gameplay, phone readability and regressions. It found:
+- three hard rows failing: E3's seeker at `--seeds 960`, `sim --flares`'s preAim row, and p3 heat
+  rescues at 240 seeds;
+- a validator state leak;
+- two holes in the gauge rules;
+- a HUD that did not read the gauge.
+
+The economy loop's design is unchanged: one gauge prices the snap. Where a finding met that design,
+the smallest change that satisfies both was taken.
+
+**Rules** (one sentence each; src/core/README.md §16.6 has the mechanism and the numbers):
+1. Real shade refills Chill under any snap: a red-hot or amber snap's cooling cap holds only while
+   its cloud is Nubs' only shade (it held Chill at 20 in a caster's full shade).
+2. Glass frost past two charges spills visibly (`frostSpill`), as other income does.
+3. The gauge's lines are half and a quarter of the tank, so a 50-Chill ration tank reads white
+   from 25.
+4. A Heat Wave day has no Noon Heat: its higher sun is the day's heat.
+5. With the Bank off (`--off bank`) no gauge rule applies, so the kill switch is the v1.5 meter
+   whole.
+6. The Garden still pays at most 30 a snap (below one bloom's 32), so a snap's cash-in and its
+   Garden never refund the snap. This is documented, not changed.
+7. Journey:
+   - the oracle counts as a seeker for parry and glass, the kinds it plans, so their Dares are
+     sized above the reactive bot and humanDial;
+   - a boss finale offers a parry Dare where parry needs its verb;
+   - humanFeat watches every flare when it dares parry.
+
+The game reads the new rules (src/game/README.md):
+- a missed flare's scorch shows on the gauge as a charred segment, with a SCORCHED! headline and its
+  tip;
+- the gauge marks its white and red lines, and hatches the white in the Noon Heat;
+- red-hot buds' gold arcs turn pale and dashed;
+- banked glass is a ghost chip, "+0.8 next snap";
+- tips of one moment queue instead of replacing each other;
+- the snap-ready cue waits for the snap's end;
+- frost pops merge and stay on screen.
+
+**Gate re-specifications and bot changes.** Each keeps its bar or adds rows, with the numbers that
+show the old row measured the bot.
+
+| Row | Was | Now | Why |
+|---|---|---|---|
+| E3 seeker (hard) | lower 1-SE bound > 0 at `--seeds 960` for chase's-hours seeker and a weight-4 seeker at every hour | the same bound for a weight-4 seeker on the cheap detours (`glass: 'near'`: guide.flake bins within 15° of a now or next bin, at any hour). The two old seekers stay as "glass is never a tax" rows (mean > −1 SE, advisory), beside a new control: plain play against plain play on worlds without glass | The old seekers measured their own detours: with no glass reward at all the weight-4 seeker loses −74 ± 22 (§6.3), so the row priced the bot's path, not the glass. The design asks for glass that pays the player who takes it beside the shade. The review measured that seeker at +53 ± 11 over 1920 fresh seeds, every block positive. Same statistic and bar, plus three rows that did not exist. |
+| `sim --flares`: the preAim bot loses at most half the dial-only bot's loss (hard) | preAim slid to guide.flare in the warning's last 18 ticks, then followed its score again | it holds that bin through the rise and the hold, unless it snaps. The bar is unchanged | After the economy iterations the old bot lost 59 min against the dial bot's 82 (bar ≤ 41) and parried 74%. Holding the bin is the taught skill ("slide to the frost-rimmed shade before the flash"); with it the bot parries 91.1%. Pre-aiming earlier is still punished (review: holding 60 ticks −51 min median, 120 ticks −605), so the timing still decides. |
+| Dial-only income (hard ≤ 0.15 a day) | frost earned from income | unchanged, with a second number beside it: income counting glass at the save | Glass is banked for the next snap, and a dial-only player never snaps, so it never reaches their meter. The row's intent, no passive income, is what it gates. With glass counted it reads 0.16 (960 seeds; 0.12 gated). |
+| `bench-step.ts --gen` p99 slice (≤ 1.5 ms) | absolute, one tree after the other | alternating reps; ≤ 1.1 × the base's p99 (new); the absolute bar decides while the base meets it | Under load v1.5 broke 1.5 ms itself (review), so the bar measured the machine. The paired bar is added. The absolute bar stands down only when the base breaks it too. |
+| E2 on a stronger baseline | – | advisory rows: chase, naive and safe layered on the SWING-hop bot (hop@2), against it | The review found hop@2 outlives plain by +456 ± 48, and chase on its own beats it by +71 ± 44. Layered greed is now measured. It stays advisory: hop@2 is not a policy E2 named, and the design does not price SWING-hopping. |
+| humanDial noon deaths (advisory) | 11 AM-1 PM share ≥ 25% | the same, plus the share from Day 2 | Day 1 has no Noon Heat. |
+| Journey (advisory) | – | ≥ 25% of levels dare a verb other than blooms; every boss finale offers a parry Dare; a count of two-Dare levels | Review: 0 parry Dares, 0 two-Dare levels. |
+
+**Measured** (seeds 1-960 and the held-out block 30001-30240, ± one SE, paired by seed;
+src/core/README.md §16.6 has every row):
+
+| Gate | `sim --decisions --seeds 960` | 30001-30240 | Result |
+|---|---|---|---|
+| E1: plan − the best hoarder (hard ≥ +30) | +81 ± 23 (panic@30) | +85 ± 46 (reactive plain) | pass |
+| E2: chase − plain (hard bound ≥ +150) | +269 ± 31 (bound 238) | +261 ± 71 | pass |
+| E2: naive − plain; under the strongest rule (hard < 0) | −122 ± 35; −76 ± 40 (plan@80) | −94 ± 70; −22 ± 80 (plan@70) | pass |
+| E2: safe − plain (hard < 0) | −218 ± 27 | −120 ± 61 | pass |
+| E2 on hop@2: chase / naive / safe − hop@2 (advisory) | +193 ± 35 / −283 ± 38 / −405 ± 31 | +235 ± 68 / −217 ± 80 / −463 ± 64 | pass |
+| E3: the near seeker − plain (hard bound > 0) | +38 ± 17 (bound +21; clusters saved 13.5% vs 7.5%) | +25 ± 32 (13.5% vs 8.0%) | pass |
+| E3: never a tax, chase's hours / weight 4 / no-glass control (advisory) | +10 ± 10 / +17 ± 19 / +50 ± 11 | +0 ± 17 / −1 ± 38 / +58 ± 28 | pass |
+| x5 farm − panic@45 (hard < 0) | −156 ± 24 | −162 ± 49 | pass |
+| full meter (hard ≤ 10%); dial-only income (hard ≤ 0.15) | 2.5%; 0.12 (0.16 with glass at the save) | 1.8%; 0.12 (0.17) | pass |
+| mechanics vs dial, each 240-seed block (hard ≥ +180) | 697 / 367 / 383 / 303 | 361 | pass |
+| `sim --flares`: dial-only loses ≥ 60; preAim ≤ half; oracle parries ≥ 70% | seeds 1-120: 84; −103 (a gain); 94.8% | 96; −41 (a gain; it was 76 against 109, FAIL); 94.9% | pass |
+| p3 heat rescues a chunk (hard ≤ 0.8) | `--check --seeds 40` 0.749; generation only, 240 seeds: 0.763 | 0.779 | pass |
+
+`sim --check --seeds 40`: every target met. Mechanics vs dial is +736; the dial median is Day 3 · 9:50 AM; the oracle reaches Day 8 on 100%, parries 93.2% and saves 78.1% of glass flakes; flare keep on Days 2-4 is 92.0%. `sim --campaign --bot all`: every hard row passes; the Journey has 13 parry Dares and 10 two-Dare levels (0 and 0 before).
+
+**Open, the integrator's call.**
+- **A3, build:single**: 665.0 KiB against 641.6 (+23.4), so the hard bar fails. The shipped JS
+  grew 43 KB over v1.5 by source map: core +27, render +10, config +7. This round's UX added about
+  3 KiB, and a terser build would save about 7. The choice is to amend A3 with this reason or to
+  order a further diet.
+- **Generation ms a chunk** is 2.79 serial and idle (≤ 3.5: pass), but 1.66× v1.5's 1.68 on the
+  same machine. On the plan's 2.37 ms baseline that ratio gives about 3.9. §12's lever (3 contest
+  shifts instead of 5) would make glass rarer, while E3 and the glass advisories are already short.
+- **The starting charge** alone adds +500 ± 27 min, against §2.2's 120-minute bar. Without it,
+  plain − dial-only is +194 ± 26 (mean).
+- **The comfort ladder** is flat. humanDial reaches 11 AM on R1-R4 98 / 100 / 98 / 70% (advisory:
+  falls rung by rung), because one snap in hand carries every rung. The review's lever (half a
+  charge at R3) changes the starting charge the economy loop accepted, so it is left to the
+  integrator.
+- **Journey stars**: humanDial's mean stars on 41-200 are 0.64 (advisory ≥ 0.95; 0.69 in the
+  review). §6.1's proposal stands: re-specify the star curve around humanFeat. The Dare kinds parry
+  (humanFeat 46%) and flakes (humanFeat 44%) read MISS on their ≥ 50% bar. L50, L70 and L200 offer
+  no parry Dare, because no parry Dare there needs its verb.
+- **Noon** is a real threat: it costs plain play 430 ± 58 min (review). But the mechanics bots'
+  death hazard peaks at 9-10 AM, and a snap cast in the Noon Heat pours nothing. §4 now describes that shape:
+  survive noon on shade and on the cool bought before it.
+- **Accepted advisory misses**, with their numbers (`--check --seeds 40` unless noted):
+  - humanDial level changes 16.9 / 16.7 / 16.4 a minute (≤ 14);
+  - oracle blooms per snap 0.71 (≥ 1.2); lit ticks after its snaps 13.8 (≤ 12);
+  - glass clusters a daylight minute 0.72 / 1.15 (≥ 1.8 / 2.5);
+  - oracle glass saves 78.1% (≥ 85%); chase 39.0% (≥ 70%); reactive 27.9% (30-60%);
+  - reactive parries 58.4% (25-55%);
+  - humanDial R3 noon deaths 15.0%, from Day 2 15.6% (≥ 25%);
+  - priced moments +1.88 (`--decisions --seeds 960`; ≥ +3).
+
+  Display hysteresis on the ring badge would answer the level-change row without touching a rule.
 
 ---
 
