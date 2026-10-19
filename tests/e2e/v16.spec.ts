@@ -39,7 +39,7 @@ test('the ring, the pips and the dial layers show their demos without errors', a
   await expect.poll(async () => (await mech(page)).frost).toBeCloseTo(1.6, 5);
   for (const d of ['trick', 'spill', 'cash', 'landing']) await demo(page, d);
   await demo(page, 'bank');
-  // The demo banks one bloom's frost under its snap (TUNING.bank.bloomH; CORE-1 set it to 25).
+  // The demo banks one bloom's frost under its snap (TUNING.bank.bloomH, 30 since economy iteration 2).
   await expect.poll(async () => (await mech(page)).bankH).toBe(TUNING.bank.bloomH);
   expect((await mech(page)).snapLeft).toBeGreaterThan(0);
   await page.waitForTimeout(3300);

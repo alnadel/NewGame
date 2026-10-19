@@ -2,6 +2,7 @@
 // the HUD, mission toasts measured live from the save's active missions, the first levels' tips and
 // the COMEBACK.
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '../../src/config/tuning.ts';
 import { createRun, levelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
 import { createMoments, LEVEL_TIPS, MECH_TIPS } from '../../src/game/moments.ts';
@@ -221,6 +222,12 @@ describe('RunMoments', () => {
     b.toasts.length = 0;
     m.onEvent({ e: 'snapCash', level: 3, refundH: 0, noon: true }, e);
     expect(b.toasts.map((t) => t.text)).toEqual(['In the Noon Heat a snap pours nothing: cash your ring before 11 or after 1.']);
+    // A saved glass cluster's frost waits on the meter for the next snap, and says so once.
+    b.toasts.length = 0;
+    e.glassBankH = TUNING.bank.clusterH;
+    m.onEvent({ e: 'clusterSaved', cluster: 1, brittle: true, n: 5, x: 0, y: 0 }, e);
+    expect(b.toasts.map((t) => t.text)).toEqual(['Glass saved! Its frost waits on the meter: your next snap pours it in.']);
+    e.glassBankH = 0;
     // A seasoned player gets none.
     save.stats.runs = 50;
     b.toasts.length = 0;

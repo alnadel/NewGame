@@ -655,17 +655,20 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.globalAlpha = a;
   }
   const top = y - r - 12 * k;
-  if (snapping && m.bankH > 0) {
-    // The frost banked under the snap, paid when it ends: a chip with a snowflake ("+0.3").
+  if (m.bankH > 0) {
+    // The frost banked under the snap, paid when it ends, or (economy iteration 2) a saved glass
+    // cluster's, paid by the next snap: a chip with a snowflake ("+0.3"), above the chevron when a
+    // snap is ready.
     if (m.bankH !== h.lastBankH) h.chipText = snapsText(m.bankH);
     g.font = h.chipFont;
     const w = g.measureText(h.chipText).width + 24 * k;
-    pill(g, x - w / 2, top - 11 * k, w, 18 * k, '#FFFFFF', true);
-    g.drawImage(flake(), x - w / 2 + 4 * k, top - 8 * k, 12 * k, 12 * k);
+    const cy = full && !snapping ? top - 16 * k : top;
+    pill(g, x - w / 2, cy - 11 * k, w, 18 * k, '#FFFFFF', true);
+    g.drawImage(flake(), x - w / 2 + 4 * k, cy - 8 * k, 12 * k, 12 * k);
     g.fillStyle = '#2B7FD0';
     g.textAlign = 'left';
     g.textBaseline = 'middle';
-    g.fillText(h.chipText, x - w / 2 + 18 * k, top - 1.5 * k);
+    g.fillText(h.chipText, x - w / 2 + 18 * k, cy - 1.5 * k);
   }
   h.lastBankH = m.bankH;
   if (full) {

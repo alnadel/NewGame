@@ -26,7 +26,7 @@ import { goalMetLive } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
-export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'hot' | 'noon' | 'snapBud' | 'glass' | 'soon';
+export type TipOn = 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop' | 'cash' | 'hot' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -106,6 +106,7 @@ const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
   [...(MECH_TIPS.snap[3] as readonly [TipOn, string]), 'coldsnap'],
   [...(MECH_TIPS.snap[4] as readonly [TipOn, string]), 'coldsnap'],
   ['noon', 'In the Noon Heat a snap pours nothing: cash your ring before 11 or after 1.', 'coldsnap'],
+  ['glassSaved', 'Glass saved! Its frost waits on the meter: your next snap pours it in.', 'brittle'],
   [...(MECH_TIPS.glass[0] as readonly [TipOn, string]), 'brittle'],
   ['soon', FLARE_SOON_TIP, 'flare'],
 ];
@@ -274,6 +275,10 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           if (ev.hot === true) tip('hot');
           else if (ev.noon === true) tip('noon');
           else if (ev.refundH > 0) tip('cash');
+          break;
+        case 'clusterSaved':
+          // Economy iteration 2: a saved glass cluster's frost waits for the next snap (the meter's chip).
+          if (ev.brittle && s.glassBankH > 0) tip('glassSaved');
           break;
         default:
           break;

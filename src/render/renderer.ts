@@ -190,7 +190,7 @@ export interface MechView {
   snapCloud: Cloud | null;
   /** Angles that grow a bud now (GuideState.bud), or null. */
   bud: Uint8Array | null;
-  /** v1.6 Frost Bank: the meter's pips (2 with the Bank, else 1) and the income banked during a snap (hundredths: the pending chip). */
+  /** v1.6 Frost Bank: the meter's pips (2 with the Bank, else 1) and the frost pending on the chip (hundredths): banked during a snap, or saved glass waiting for the next one. */
   pips: number;
   bankH: number;
   /** v1.6 Flow Ring: the badge's level (nubs.mult), the badge wears the charge ring, its fill 0..1 toward the next level (×5: its buffer), and it is bleeding now. */

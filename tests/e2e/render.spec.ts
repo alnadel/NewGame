@@ -181,7 +181,7 @@ async function dialPixels(page: Page): Promise<{ teal: number; tealRun: number; 
 test.describe('dial v2 (GR6)', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 
-  test('thick teal for lasting shade, no gauge at full Chill, amber below the cool line (40)', async ({ page }, info) => {
+  test('thick teal for lasting shade, no gauge at full Chill, amber below the white line (50)', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one DPR-2 run is enough');
     // Full Chill at the start: no gauge ring (and never the old blue one).
     await seedSave(page, OPEN_SAVE);
