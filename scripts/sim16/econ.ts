@@ -312,12 +312,14 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     return { bot: 'humanDial', profile: rc.profile, drain: rc.drain, noonCloud: rc.noonCloud, lesson: rc.lesson, rung: r, label: `humanDial R${r}` };
   };
   const L = BANK.coolChill;
+  const PANIC = TUNING.bots.reactive.snapChill;
   // The snap-rule sweep on plain play (iteration 2): the panic bar, the plan's bar and the hoarders.
-  // A hoarder snaps only when lit below its bar and never spends an overflow; the E1 family is every
-  // hoarder up to 10 Chill above the red line, and every panic bar at or below it.
-  const PANIC_BARS = [25, 30, 35, 45, 50];
-  const PLAN_BARS = [65, 80];
-  const HOARD_BARS = [20, 25, L + 2, L + 10];
+  // A hoarder snaps only when lit below its bar and never spends an overflow. The E1 family (every
+  // policy that waits longer than the plan) is the panic rule at its own bar and below it, and every
+  // hoarder up to the panic bar; the bars above it look for the strongest snap rule.
+  const PANIC_BARS = [25, 30, 35, 45, 50, 60, 70];
+  const PLAN_BARS = [50, 70, 80];
+  const HOARD_BARS = [...new Set([20, 25, L + 2, L + 10, PANIC])];
   const jobs: Sim16Job[] = [
     rea('reactive plain', { policy: 'plain' }),
     rea('reactive chase', { policy: 'chase' }),
@@ -377,7 +379,7 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   }
   console.log('\nDecision gates (docs/V1_6_PLAN.md §2.2, §6, §6.2-§6.3; MISS never fails):');
   // E1 (re-specified in iteration 2, V1_6_PLAN §6.3): plan beats the best hoarder, and still the panic bot.
-  const hoarders = sweep.filter((r) => (r.job.opts?.snap === 'hoard') || (r.job.opts?.snap === undefined && (r.job.opts?.snapChill ?? 40) <= L));
+  const hoarders = [plain, ...sweep.filter((r) => r.job.opts?.snap === 'hoard' || (r.job.opts?.snap === undefined && (r.job.opts?.snapChill ?? PANIC) <= PANIC))];
   let worst = { mean: Infinity, se: 0, n: 0 };
   let worstName = '';
   for (const h of hoarders) {
@@ -400,8 +402,8 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
   const gp = paired(glass, plain);
   const sp = paired(strong, plain);
   const saved = (r: Sim16Row): string => pct(per(total(r, 'brittleSaved'), total(r, 'brittleSeen')));
-  line(lo(gp) > 0, true, `E3: glass-seeking outlives glass-ignoring, same skill otherwise (${loNote})`, `${pm(gp)} (glass clusters saved ${saved(glass)} vs ${saved(plain)})`);
-  line(lo(sp) > 0, false, `E3: a strong glass seeker (weight 4, any hour) outlives glass-ignoring (${loNote})`, `${pm(sp)} (saved ${saved(strong)})`);
+  line(lo(gp) > 0, true, `E3: glass-seeking (chase's glass term at its hours) outlives glass-ignoring, same skill otherwise (${loNote})`, `${pm(gp)} (glass clusters saved ${saved(glass)} vs ${saved(plain)})`);
+  line(lo(sp) > 0, true, `E3: a real glass seeker (weight 4, any hour) outlives glass-ignoring (${loNote})`, `${pm(sp)} (saved ${saved(strong)})`);
   line(paired(farm, panic45).mean <= 0, true, 'a cool snap at x5 with a bud in reach, needed or not, does not pay (x5 farm vs panic@45)', pm(paired(farm, panic45)));
   if (rule('bank')) {
     line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full bank ≤ 10% of daylight', pct(fullShare(plain)));
@@ -411,6 +413,19 @@ async function decisions(ctx: Sim16Ctx): Promise<void> {
     line(fullShare(plain) <= 0.1, true, 'reactive plain sits on a full meter ≤ 10% of daylight (Bank off: the v1.5 meter)', pct(fullShare(plain)), 'bank');
     line(fillsPerDay(dial) <= 0.15, true, 'dial-only fills ≤ 0.15 meters a day (Bank off: the v1.5 meter fills passively)', f2(fillsPerDay(dial)), 'bank');
   }
+  // E5 (review of iteration 1): mechanics vs dial on every 240-seed block (hard in --check, which plays seeds 1..N).
+  const med = (r: Sim16Row, a: number, b: number): number => {
+    const xs = r.runs.filter((x) => x.seed >= a && x.seed <= b).map((x) => (x.died ? x.minutes : Infinity)).sort((x, y) => x - y);
+    return xs[Math.min(xs.length - 1, Math.floor(0.5 * xs.length))] as number;
+  };
+  const blocks: string[] = [];
+  let blockOk = true;
+  for (let a = 1; a + 239 <= ctx.seeds; a += 240) {
+    const v = med(plain, a, a + 239) - med(dial, a, a + 239);
+    blockOk &&= v >= 180;
+    blocks.push(`${a}-${a + 239}: ${sgn(v)}`);
+  }
+  if (blocks.length) line(blockOk, false, 'reactive plain outlives dial-only by ≥ 180 min (median) on every 240-seed block (hard in --check)', blocks.join(', '));
   const spd = snapsPerDay(plain);
   line(spd >= 0.5 && spd <= 0.9, false, 'reactive plain 0.5-0.9 snaps a day', f2(spd));
   for (const h of [h2, h3, h4]) {
