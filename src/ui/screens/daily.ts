@@ -1,11 +1,16 @@
 // Daily Solstice (V1_PLAN §11.3, V1_1_PLAN UM9): today's number, weather and place, tries n/3
 // (then Practice), best today, Snowbot's par, Play, and the last 14 days.
+// Look (docs/UI_V2.md §10.6, styles/daily.css): a gold hero panel with the sun mascot on a medal,
+// the tries as ice-gem coins (a used try is an empty socket), the bests in wells, Play as the green
+// XL hero; the recent days are plates, today's gold-tinted.
 
 import { formatScore } from '../../core/format.ts';
 import { beforeSaveStart, DAILY_TRIES, formatDateLabel, localDate, recentDates } from '../../meta/daily.ts';
 import { dailyStatus, type DailyStatus } from '../../meta/progression.ts';
+import { artIcon } from '../art-icons.ts';
+import { sunMascot } from '../art.ts';
 import { dailyPlan, parLine, planText } from '../labels.ts';
-import { h, setChildren } from '../dom.ts';
+import { h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { button, menuHeader, setButtonLabel } from '../widgets.ts';
@@ -34,8 +39,9 @@ export function createDailyScreen(ctx: UiContext): Screen {
     label: 'Play',
     icon: 'play',
     variant: 'primary',
-    size: 'lg',
+    size: 'xl',
     block: true,
+    className: 'daily-play',
     onPress: () => {
       // The clock may have passed midnight while this screen was open: never start yesterday's
       // Daily from a stale screen. Show today's instead and let the player press again.
@@ -54,8 +60,9 @@ export function createDailyScreen(ctx: UiContext): Screen {
 
   const hero = h(
     'div',
-    { class: 'card daily-hero' },
-    h('div', { class: 'daily-sun', 'aria-hidden': 'true' }, icon('sun')),
+    { class: 'card panel--gold daily-hero' },
+    h('div', { class: 'daily-sun medal medal--ice', 'aria-hidden': 'true' },
+      svgFromMarkup(`<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">${sunMascot({ id: 'daily-sun', cx: 50, cy: 50, r: 25 })}</svg>`)),
     h('p', { class: 'kicker' }, 'Daily Solstice'),
     h('h3', { class: 'daily-id' }, h('span', { class: 'daily-title' }, 'Daily ', number), h('span', { class: 'sr-only' }, ' · '), plan),
     date,
@@ -70,7 +77,7 @@ export function createDailyScreen(ctx: UiContext): Screen {
     play,
   );
 
-  const body = h('div', { class: 'menu-body' }, hero, h('section', { class: 'card' }, h('h3', { class: 'card-title' }, 'Recent days'), history));
+  const body = h('div', { class: 'menu-body' }, hero, h('section', { class: 'card daily-recent' }, h('h3', { class: 'card-title' }, 'Recent days'), history));
   const el = h('section', { class: 'scr scr-menu scr-daily', 'aria-label': 'Daily Solstice' }, h('div', { class: 'menu pe' }, menuHeader(ctx, 'Daily'), body));
 
   /** One history row. Days before the save existed read neutrally ("—"), not as missed. */
@@ -81,7 +88,7 @@ export function createDailyScreen(ctx: UiContext): Screen {
     const quiet = before && !s.played;
     return h(
       'li',
-      { class: `drow${isToday ? ' is-today' : ''}${s.played ? '' : ' is-empty'}${quiet ? ' is-before' : ''}` },
+      { class: `drow plate${isToday ? ' is-today' : ''}${s.played ? '' : ' is-empty'}${quiet ? ' is-before' : ''}` },
       h('span', { class: 'drow-when' }, h('span', { class: 'drow-num' }, `#${s.number}`), h('span', { class: 'drow-date' }, isToday ? 'Today' : formatDateLabel(s.date))),
       h(
         'span',
@@ -107,11 +114,14 @@ export function createDailyScreen(ctx: UiContext): Screen {
     shown = today;
     const s = dailyStatus(save, today);
     number.textContent = `#${s.number}`;
-    plan.textContent = planText(dailyPlan(today));
+    // The forecast emoji is not in the display face: it keeps the body font (§2.4).
+    const planWords = planText(dailyPlan(today));
+    const cut = planWords.indexOf(' ');
+    plan.replaceChildren(h('span', { class: 'glyph' }, planWords.slice(0, cut)), planWords.slice(cut));
     date.textContent = formatDateLabel(today);
     par.replaceChildren(icon('bolt'), parLine(s.par));
     par.classList.toggle('is-waiting', s.par === null);
-    setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => h('i', { class: i < s.tries ? 'is-used' : '' })));
+    setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => (i < s.tries ? h('i', { class: 'is-used' }) : h('i', null, artIcon('snow')))));
     tryText.textContent = s.scored ? `${s.tries}/${DAILY_TRIES} used` : 'All used';
     best.textContent = s.bestMinutes > 0 ? formatScore(s.bestMinutes) : '–';
     setButtonLabel(play, s.scored ? `Play · try ${s.tries + 1}/${DAILY_TRIES}` : 'Practice (unscored)');

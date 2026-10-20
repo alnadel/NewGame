@@ -1,96 +1,87 @@
-/* The Daily screen.
-   Owner: B2 Title & co. (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+/* The Daily screen (docs/UI_V2.md §10.6), and the labelled value wells (.cells) it shares with the
+   Profile's records.
+   Owner: the menus builder (Settings, Daily, Missions, Wardrobe, Profile) in the v2 rework; docs/UI_V2.md
+   §14 first listed it under B2. Imported by ui.ts after kit.css and ui.css, in screen order;
    compose the kit's recipes (kit.css), never copy them. */
 
-/* Daily */
+/* ===== The hero: a gold panel ===== */
 
 .daily-hero {
-  position: relative;
   gap: 4px;
-  padding-top: 20px;
   text-align: center;
-  overflow: hidden;
 }
 
-.daily-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 96px;
-  background: linear-gradient(180deg, #ffe7b8, rgba(255, 231, 184, 0));
-}
-
-.daily-hero > * { position: relative; }
-
+/* The sun mascot on a 72 px medal (the sky-blue one, so the sun reads against it). */
 .daily-sun {
-  --d: 60px;
-  --ic: 32px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #ffe27a 0 55%, #ffd36b 56%);
-  color: #b0740a;
-  box-shadow: 0 0 0 8px rgba(255, 211, 107, 0.35);
-  margin-bottom: 6px;
+  --d: 76px;
+  margin: -2px 0 6px;
+  box-shadow: inset 0 -5px 0 var(--ml), inset 0 3px 0 rgba(255, 255, 255, 0.7), var(--drop);
+}
+
+.daily-sun > svg {
+  position: relative;
+  z-index: 1;
+  width: 74px;
+  height: 74px;
+}
+
+.daily-hero > .kicker {
+  font: 400 var(--fs-d-xs)/1.1 var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
 }
 
 .daily-id {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .daily-title {
-  font-size: 2.5rem;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.05;
+  font: 400 var(--fs-d-hero)/1.05 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
 }
 
-.daily-date {
-  font-weight: 800;
-  color: var(--ink-2);
+.daily-title .daily-num {
+  font: inherit;
+  color: var(--t-orange);
 }
 
-.daily-id {
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Day 1's weather and place (the Day Plan; the classic clear Meadow before it started). */
+/* Day 1's weather and place (the Day Plan; the classic clear Meadow before it started): a cream
+   chip, the forecast emoji in the body font. */
 .daily-plan {
-  padding: 3px 12px;
-  border-radius: var(--pill);
-  background: rgba(43, 33, 64, 0.08);
-  font-weight: 800;
-  font-size: var(--fs-md);
-}
-
-/* Snowbot's par: what the novice bot made of today's world. */
-.daily-par {
-  --ic: 18px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  color: var(--ink-2);
-  font-weight: 800;
+  gap: 2px;
+  min-height: 36px;
+  padding: 0 14px 1px 10px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 18px;
+  background: var(--cream);
+  box-shadow: inset 0 -3px 0 var(--cream-3), var(--drop-sm);
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--ink);
+  white-space: nowrap;
 }
 
-.daily-par .ic { color: var(--gold-deep); }
+.daily-plan .glyph { font-size: 1.125rem; }
 
-.daily-par.is-waiting {
-  font-weight: 700;
-  font-style: italic;
+.daily-date {
+  margin-top: 6px;
+  color: var(--ink);
+  font: 800 var(--fs-md)/1.3 var(--font-body);
 }
 
 .daily-blurb {
   max-width: 320px;
   color: var(--ink-2);
-  font-size: var(--fs-md);
-  line-height: 1.4;
+  font: 700 var(--fs-md)/1.4 var(--font-body);
 }
 
-/* Two labeled values side by side (the Daily's tries and best, the Profile's bests). */
+/* ===== Labelled values in wells (the Daily's tries and best, the Profile's bests) ===== */
+
 .cells {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -99,16 +90,21 @@
 }
 
 .cell {
-  gap: 4px;
-  padding: 10px 6px;
-  border-radius: 14px;
-  background: var(--paper);
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 6px 11px;
+  border-radius: 16px;
+  background: var(--cream-2);
+  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
   text-align: center;
 }
 
-.cell .kicker { letter-spacing: 0.04em; }
+.cell .kicker {
+  font: 400 var(--fs-d-xs)/1.15 var(--font-display);
+  letter-spacing: 0.06em;
+}
 
-.daily-hero .cells { margin: 10px 0 8px; }
+.daily-hero .cells { margin: 12px 0 8px; }
 
 .daily-tries {
   display: flex;
@@ -116,59 +112,85 @@
   justify-content: center;
   align-items: center;
   gap: 4px 8px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
 }
 
+/* A try left: an ice gem with its flake; a used one: an empty socket. */
 .try-pips {
   display: inline-flex;
   gap: 4px;
 }
 
 .try-pips i {
-  width: 12px;
-  height: 12px;
+  --ic: 26px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+}
+
+.try-pips i.is-used {
+  width: 24px;
+  height: 24px;
+  margin: 1px;
+  border: var(--bw-sm) solid var(--ink);
   border-radius: 50%;
-  border: 2.5px solid var(--accent);
+  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35);
 }
 
-.try-pips i.is-used { background: var(--accent); }
-
-.daily-tries-text {
-  font-size: var(--fs-md);
-  color: var(--ink-2);
-}
-
+.daily-tries-text,
 .daily-best-val {
-  font-weight: 900;
-  font-size: var(--fs-md);
-  font-variant-numeric: tabular-nums;
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--ink);
 }
+
+/* Snowbot's par: what the novice bot made of today's world. */
+.daily-par {
+  --ic: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--ink);
+  font: 800 var(--fs-md)/1.3 var(--font-body);
+}
+
+.daily-par .ic { color: var(--t-amber); stroke-width: 2.6; }
+
+.daily-par.is-waiting {
+  color: var(--ink-2);
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* Play is the hero: green XL; it steps down a size where the column is narrow. */
+@container menu (max-width: 339.98px) {
+  .daily-play { font-size: var(--fs-d-xl); }
+}
+
+.daily-play.btn--plain { font-size: var(--fs-d-lg); }
+
+/* ===== Recent days: plates, today's gold-tinted ===== */
 
 .daily-list {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .drow {
   display: grid;
-  grid-template-columns: minmax(96px, auto) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 6px 4px;
+  min-height: 52px;
+  padding: 7px 12px 9px;
 }
-
-.drow + .drow { border-top: 1px solid var(--line); }
 
 .drow.is-today {
-  margin: 0 -8px;
-  padding: 6px 12px;
-  border-radius: 12px;
-  background: var(--gold-soft);
+  background: var(--tint-gold);
+  box-shadow: inset 0 -4px 0 var(--gold), var(--drop-sm);
 }
-
-.drow.is-today + .drow { border-top-color: transparent; }
 
 .drow-when {
   display: flex;
@@ -176,29 +198,35 @@
 }
 
 .drow-num {
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--ink);
 }
 
 .drow-date {
-  font-size: var(--fs-md);
   color: var(--ink-2);
-  font-weight: 600;
+  font: 700 var(--fs-sm)/1.25 var(--font-body);
 }
 
 .drow-score {
-  font-weight: 800;
-  font-size: var(--fs-md);
-  font-variant-numeric: tabular-nums;
+  font: 400 var(--fs-d-sm)/1.2 var(--font-display);
+  color: var(--ink);
 }
 
-/* Days before the save existed: muted with a lighter ink, not opacity (text keeps 4.5:1). */
+.drow-tries { font: 400 var(--fs-d-md)/1 var(--font-display); }
+
+/* Days before the save existed: a flat well and a lighter ink, not opacity (text keeps 4.5:1). */
+.drow.is-before {
+  border-color: transparent;
+  background: var(--cream-2);
+  box-shadow: inset 0 0 0 2px rgba(42, 27, 69, 0.12);
+}
+
 .drow.is-before,
-.drow.is-before .drow-date { color: var(--ink-3); }
+.drow.is-before .drow-date { color: var(--ink-2); }
 
 .drow.is-empty .drow-score {
-  font-weight: 600;
-  color: var(--ink-3);
+  color: var(--ink-2);
+  font: 700 var(--fs-sm)/1.25 var(--font-body);
 }
 
 .drow-strip {
@@ -208,3 +236,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* High contrast: flat faces. */
+.sui.is-hc .drow.is-today { background: var(--tint-gold); }
