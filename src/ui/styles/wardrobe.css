@@ -27,7 +27,7 @@
 .stage-spot {
   --d: 184px;
   position: relative;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
   border: var(--bw) solid var(--ink);
   border-radius: 50%;
   background:
@@ -46,7 +46,7 @@
 .wear-ribbon {
   position: absolute;
   left: 50%;
-  bottom: -16px;
+  bottom: -23px;
   translate: -50% 0;
   rotate: -3deg;
   max-width: none;
@@ -111,7 +111,7 @@
   .stage-spot {
     --d: 124px;
     grid-row: 1 / 4;
-    margin: 0 0 12px;
+    margin: 0 0 16px;
   }
 
   .preview-canvas {
@@ -120,7 +120,7 @@
   }
 
   .wear-ribbon {
-    bottom: -12px;
+    bottom: -19px;
     scale: 0.8;
   }
 
@@ -302,6 +302,9 @@
   transform: translateY(3px);
   transition-duration: var(--t-down);
 }
+
+/* Reduced motion: a press never moves the tile. */
+.sui.is-rm .tile-grid > li > .tile:active { transform: none; }
 
 /* Selected: a 4 px green ring outside the frame, outlined in ink. Only --sh changes, so the kit's
    focus ring (var(--sh) + an ink ring) still applies. */

@@ -3,6 +3,9 @@
    Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
    compose the kit's recipes (kit.css), never copy them. */
 
+/* The header's Trophies link is a cloud S button (48 px, like every candy control). */
+.scr-missions .menu-head .menu-link { min-height: var(--h); }
+
 /* ===== The daily streak: a 4-column calendar of candy plates, Day 7 a wide violet plate ===== */
 
 .streak-card .card-count {
