@@ -292,7 +292,7 @@
   60% { transform: scale(0.95) rotate(4deg); }
 }
 
-/* Hover brightens the cream (and keeps the candy stack over a11y.css's generic tile hover). */
+/* Hover brightens the cream (the focus ring keeps its own stack). */
 @media (hover: hover) {
   .tile-grid > li > .tile:hover:not(:focus-visible) {
     background: #fff;
