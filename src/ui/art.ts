@@ -13,9 +13,7 @@ const SUN = {
 } as const;
 
 const INK = '#2B2140';
-const PAPER = '#FFF8EE';
 const INDIGO = '#34306B';
-const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
 function rays(count: number, inner: number, outer: number, halfAngleDeg: number): string {
   let d = '';
@@ -76,23 +74,47 @@ ${p.face}
 /** Title logo geometry: viewBox 360 × 172, the sun at (300, 64) with radius 36. */
 const LOGO = { w: 360, h: 172, sunX: 300, sunY: 64, sunR: 36 } as const;
 
-function logoText(attrs: string): string {
-  return `<text x="180" y="150" text-anchor="middle" font-family="${FONT}" font-weight="900" font-size="94" textLength="300" lengthAdjust="spacingAndGlyphs" rotate="-5 3 -3 4 -4" ${attrs}>SHADY</text>`;
-}
-
-const WORD_ATTRS = `fill="${PAPER}" stroke="${INK}" stroke-width="11" stroke-linejoin="round" paint-order="stroke"`;
-const SHADOW_ATTRS = `fill="${INDIGO}" stroke="${INDIGO}" stroke-width="12" stroke-linejoin="round" opacity="0.45" transform="translate(-9 8)"`;
+/** The wordmark's face (docs/UI_V2.md §10.1): Lilita One, the in-page display face. */
+const DISPLAY = "'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif";
+/** Baseline of the wordmark; the extrusion reaches 12 units below it. */
+const WORD_Y = 150;
+const LOGO_INK = '#2A1B45';
 
 /**
- * The Title logo as one SVG: the SHADY wordmark in paper with an ink outline, casting a soft indigo
- * shadow down-left, away from the sun peeking over its top-right corner. (The Title itself uses
+ * One copy of the wordmark at baseline `y`. Weight 900 with no synthesis: Lilita One (one weight)
+ * renders as itself in the page, and where it isn't available (the postcard draws these layers as
+ * images, which can't see the page's fonts) the fallback is a heavy system face, not a thin one.
+ */
+function logoText(y: number, attrs: string): string {
+  return `<text x="174" y="${y}" text-anchor="middle" font-family="${DISPLAY}" font-weight="900" font-size="98" textLength="300" lengthAdjust="spacingAndGlyphs" rotate="-7 4 -3 5 -4" style="font-synthesis:none" ${attrs}>SHADY</text>`;
+}
+
+/**
+ * The wordmark as stacked copies: an ink silhouette stepped down 12 units (the extrusion's outline),
+ * the orange extrusion inside it, then the face (white into gold with an ink line), plus two
+ * ink-outlined sparkles.
+ */
+const WORD =
+  `<defs><linearGradient id="logo-face" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".46" stop-color="#FFF7CF"/><stop offset=".5" stop-color="#FFE15A"/><stop offset="1" stop-color="#FFB01E"/></linearGradient></defs>` +
+  `<g stroke-linejoin="round"><g fill="${LOGO_INK}" stroke="${LOGO_INK}" stroke-width="15">${[0, 6, 12].map((d) => logoText(WORD_Y + d, '')).join('')}</g>` +
+  `<g fill="#F07E14" stroke="#F07E14" stroke-width="4">${[3, 7].map((d) => logoText(WORD_Y + d, '')).join('')}</g>` +
+  logoText(WORD_Y, `fill="url(#logo-face)" stroke="${LOGO_INK}" stroke-width="4" paint-order="stroke fill"`) +
+  `<g class="logo-sparkle" fill="#fff" stroke="${LOGO_INK}" stroke-width="2.5"><path d="M28 54l4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/><path d="M340 134l3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/></g></g>`;
+
+/** The wordmark's shadow on the ground, in the game's purple shade (it sways with the Title's sun). */
+const SHADOW = logoText(WORD_Y + 6, 'fill="#5A4A78" stroke="#5A4A78" stroke-width="15" stroke-linejoin="round" opacity="0.32" transform="translate(-9 8)"');
+
+/**
+ * The Title logo as one SVG: the SHADY wordmark, a chunky gold face on an ink-outlined orange
+ * extrusion, casting the game's purple shade down-left, away from the sun peeking over its top-right
+ * corner. (The Title itself uses
  * logoLayers(), the same picture split so its motions run on the compositor.)
  */
 export function logoSvg(): string {
   return `<svg class="logo-svg" viewBox="0 0 ${LOGO.w} ${LOGO.h}" role="img" aria-label="SHADY" xmlns="http://www.w3.org/2000/svg">
 ${sunMascot({ id: 'logo-sun', cx: LOGO.sunX, cy: LOGO.sunY, r: LOGO.sunR, animated: true })}
-<g class="logo-shadow">${logoText(SHADOW_ATTRS)}</g>
-${logoText(WORD_ATTRS)}
+<g class="logo-shadow">${SHADOW}</g>
+${WORD}
 </svg>`;
 }
 
@@ -125,8 +147,8 @@ export function logoLayers(): LogoLayers {
     bloom: layer(`${p.defs}${sun(p.bloom)}`),
     rays: layer(sun(p.rays)),
     face: layer(sun(p.face)),
-    shadow: layer(logoText(SHADOW_ATTRS)),
-    word: layer(logoText(WORD_ATTRS), 'SHADY'),
+    shadow: layer(SHADOW),
+    word: layer(WORD, 'SHADY'),
     origin: { x: pct(LOGO.sunX, LOGO.w), y: pct(LOGO.sunY, LOGO.h) },
   };
 }

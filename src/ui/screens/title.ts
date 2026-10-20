@@ -1,4 +1,6 @@
-// Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, v1.3 Journey-first).
+// Title overlay over the live dawn scene (GDD §4-§5, V1_PLAN §8.3-§8.4, v1.3 Journey-first; the v2
+// look is docs/UI_V2.md §10.1: the candy wordmark, a ribbon tagline or Nubs' speech bubble, square
+// candy modes around a big green Play, a neutral cloud tray).
 // The primary action plays the next Journey level ("Level 4"; Space/Enter too); the map and Endless
 // sit beside it, the tray holds Daily, Missions, Wardrobe and Settings. The top bar holds the Sun
 // Rank badge (opens the Profile), the daily reward when one waits, and the Snow wallet (v1.4).
@@ -21,15 +23,15 @@ import {
 } from '../../meta/progression.ts';
 import { claimables, featureHint, featureIsNew, featureName, featureUnlocked, markFeatureSeen, type Feature } from '../../meta/gamify.ts';
 import type { Save } from '../../meta/saveTypes.ts';
-import { artIcon } from '../art-icons.ts';
+import { artIcon, kitShape, type ArtName } from '../art-icons.ts';
 import { logoLayers } from '../art.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
 import { claimDailyReward, claimDot, rankBadge } from '../gamify.ts';
-import { icon, type IconName } from '../icons.ts';
+import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
 import { challengeGoalText, planText } from '../labels.ts';
-import { button, countUp, hide, setButtonLabel } from '../widgets.ts';
+import { button, countUp, hide, ribbon, setButtonLabel } from '../widgets.ts';
 
 /** Travel (px) after which a press is no longer a tap. */
 const TAP_SLOP = 8;
@@ -43,6 +45,14 @@ const TAGLINE = "Don't melt Nubs.";
 /** Shown under the tagline for mouse and keyboard players (the arrows play the level until Endless unlocks). */
 export const KEY_HINT = 'Space: play the level · ← →: Endless · Esc: back';
 const KEY_HINT_LOCKED = 'Space or ← →: play the level · Esc: back';
+/** Nubs' speech bubble (a goal tagline): its tail tip sits this far above the halo (px). */
+const BUBBLE_TIP_GAP = 6;
+/** The bubble's tail height below its box (px, title.css). */
+const BUBBLE_TAIL = 14;
+/** The bubble joins the flow under the logo when it would come this close to the items above (px). */
+const BUBBLE_ROOM = 8;
+/** Play's icon: a green triangle on a white coin. */
+const PLAY_COIN = '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M17 10 38 24 17 38Z" fill="#43B226" stroke="#2A1B45" stroke-width="4.5" stroke-linejoin="round"/></svg>';
 
 /**
  * The logo as stacked layers (art.ts logoLayers): the sun's bob, the rays' spin and the shadow's
@@ -59,15 +69,20 @@ function logo(): HTMLElement {
   return h('h1', { class: 'logo' }, sun, h('span', { class: 'logo-layer logo-drop' }, svgFromMarkup(l.shadow)), svgFromMarkup(l.word));
 }
 
-/** An element's layout box bottom in viewport px, ignoring transforms (the banner pops in with a scale). */
-function layoutBottom(e: HTMLElement): number {
+/** An element's layout box top in viewport px, ignoring transforms (the banner pops in with a scale). */
+function layoutTop(e: HTMLElement): number {
   let y = 0;
   let p: HTMLElement = e;
   for (let next = p.offsetParent as HTMLElement | null; next; next = p.offsetParent as HTMLElement | null) {
     y += p.offsetTop;
     p = next;
   }
-  return p.getBoundingClientRect().top + y + e.offsetHeight;
+  return p.getBoundingClientRect().top + y;
+}
+
+/** An element's layout box bottom in viewport px, ignoring transforms. */
+function layoutBottom(e: HTMLElement): number {
+  return layoutTop(e) + e.offsetHeight;
 }
 
 export interface TitleScreen extends Screen {
@@ -125,24 +140,27 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     });
     return btn;
   };
-  /** A mode pill: icon, label and the press handling above. */
-  const pill = (cls: string, iconName: IconName, label: HTMLElement, onActivate: () => void): HTMLButtonElement =>
-    pressable(h('button', { class: `btn ${cls} pe`, type: 'button' }, icon(iconName), label), onActivate);
+  /** A mode square (§10.1): a candy square with its art icon and a tag hanging under it as its label. */
+  const square = (cls: string, iconName: ArtName, tag: HTMLElement, onActivate: () => void, sound = true, ...extras: HTMLElement[]): HTMLButtonElement =>
+    pressable(h('button', { class: `btn btn--sq mode-sq ${cls} pe`, type: 'button' }, artIcon(iconName), tag, ...extras), onActivate, sound);
 
   // --- Challenge banner ------------------------------------------------------------------------
   // "Sam challenges you:" — the name is isolated (<bdi>) so a right-to-left name can't reorder the line.
   const challengeName = h('bdi', null);
   const challengeGoal = h('strong', { class: 'challenge-goal' });
   const challengeNote = h('span', { class: 'challenge-note' });
-  const challengePlay = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', className: 'challenge-play', onPress: () => run('challenge') });
-  const challengeClose = button(ctx, { label: 'Dismiss challenge', icon: 'close', round: true, sound: 'back', className: 'challenge-close', onPress: () => {
+  // Play is a green candy square (its name stays "Play"), so the goal keeps the banner's width.
+  const challengePlay = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', square: true, className: 'challenge-play', onPress: () => run('challenge') });
+  const challengeClose = button(ctx, { label: 'Dismiss challenge', icon: 'close', variant: 'danger', round: true, sound: 'back', className: 'challenge-close', onPress: () => {
     ctx.clearChallenge();
     ctx.cb.dismissChallenge();
   } });
+  // A panel with a pink "CHALLENGE!" ribbon on its top edge (it only repeats the group's label).
   const challenge = h(
     'div',
-    { class: 'challenge pe', role: 'group', 'aria-label': 'Challenge' },
-    h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, icon('flag')),
+    { class: 'challenge panel pe', role: 'group', 'aria-label': 'Challenge' },
+    ribbon('Challenge!', { tone: 'pink', size: 'sm', tag: 'span', className: 'challenge-ribbon', hidden: true }).el,
+    h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, artIcon('flag')),
     h('div', { class: 'challenge-text' }, h('span', { class: 'challenge-from' }, challengeName, ' challenges you:'), challengeGoal, challengeNote),
     challengePlay,
     challengeClose,
@@ -164,8 +182,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     ctx.sound('tap');
     open();
   };
-  const lockBadge = (): HTMLElement => h('span', { class: 'tray-lock', 'aria-hidden': 'true' }, icon('lock'));
-  const newTag = (): HTMLElement => h('span', { class: 'new-tag', 'aria-hidden': 'true' }, 'New');
+  const lockBadge = (): HTMLElement => h('span', { class: 'tray-lock lock-badge', 'aria-hidden': 'true' }, icon('lock'));
+  const newTag = (): HTMLElement => h('span', { class: 'new-tag sticker', 'aria-hidden': 'true' }, 'New');
 
   // --- Top bar: the Sun Rank, a waiting daily reward, the wallet ----------------------------------
   const badge = rankBadge(ctx);
@@ -180,45 +198,49 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     },
     true,
   );
-  // The daily streak's reward, when one waits: claimed right here (the reveal plays over the Title).
-  const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', className: 'title-reward pe', ariaLabel: 'Claim the daily reward', sound: null, onPress: () => void claimDailyReward(ctx) });
+  // The daily streak's reward, when one waits: a gold gift square on a slow ray burst, claimed right
+  // here (the reveal plays over the Title). Its aria-label names it.
+  const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', square: true, className: 'title-reward pe', ariaLabel: 'Claim the daily reward', sound: null, onPress: () => void claimDailyReward(ctx) });
+  const reward = h('div', { class: 'title-reward-wrap' }, h('span', { class: 'burst', 'aria-hidden': 'true' }), rewardBtn, h('span', { class: 'title-reward-dot', 'aria-hidden': 'true' }));
   const walletValue = h('span', { class: 'num' });
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
-  const hud = h('div', { class: 'title-hud' }, badgeSlot, rewardBtn, h('i', { class: 'title-hud-gap' }), chipSnow);
+  const hud = h('div', { class: 'title-hud' }, badgeSlot, reward, h('i', { class: 'title-hud-gap' }), chipSnow);
 
   // --- Chips -------------------------------------------------------------------------------------
   // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
   const bestDay = h('span', { class: 'day-badge' });
   const bestValue = h('span', { class: 'num' });
-  const chipBest = pressable(h('button', { class: 'chip chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('profile'));
+  const chipBest = pressable(h('button', { class: 'chip chip--dark chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('profile'));
   // The other chips are read as one labeled image each (their aria-label carries the full sentence).
   const pips = h('span', { class: 'pips' });
-  const chipMissions = h('span', { class: 'chip', role: 'img' }, icon('missions'), pips);
+  const chipMissions = h('span', { class: 'chip chip--dark', role: 'img' }, icon('missions'), pips);
   const chips = h('div', { class: 'chips' }, chipBest, chipMissions);
 
   // --- The modes: the map, the next level (primary) and Endless ----------------------------------
-  const starsValue = h('span', { class: 'num' });
-  const mapBtn = pill('journey-pill', 'map', starsValue, () => {
+  // The map's tag reads "71★" (the star in the body font: it isn't in the display face) or "Map".
+  const starsValue = h('span', { class: 'num tag mode-tag' });
+  const mapBtn = square('btn--blue journey-pill', 'map', starsValue, () => {
     ctx.go('journey');
     ctx.cb.openJourney();
   });
-  const playBtn = pill('btn--primary play-pill', 'play', h('span', { class: 'btn-label' }), playLevel);
-  const endlessBtn = pressable(
-    h('button', { class: 'btn endless-pill pe', type: 'button' }, icon('endless'), h('span', { class: 'btn-label' }, 'Endless'), lockBadge(), newTag()),
-    gated('endless', () => run('endless')),
-    false,
+  // The one saturated hero: a green XL pill, "PLAY" (generated) over "Level 38".
+  const playBtn = pressable(
+    h('button', { class: 'btn btn--primary btn--xl play-pill pe', type: 'button' }, h('span', { class: 'play-coin', 'aria-hidden': 'true' }, svgFromMarkup(PLAY_COIN)), h('span', { class: 'btn-label' })),
+    playLevel,
   );
+  const endlessBtn = square('btn--violet endless-pill', 'endless', h('span', { class: 'btn-label tag mode-tag' }, 'Endless'), gated('endless', () => run('endless')), false, lockBadge(), newTag());
   gates.push({ f: 'endless', el: endlessBtn, name: 'Endless run' });
   const modes = h('div', { class: 'modes' }, mapBtn, playBtn, endlessBtn);
 
   // --- Tray --------------------------------------------------------------------------------------
   const dailyDot = h('span', { class: 'tray-dot', 'aria-hidden': 'true' });
-  const trayButton = (label: string, iconName: IconName, onActivate: () => void, f?: Feature, extras: HTMLElement[] = []): HTMLButtonElement => {
+  // Tray squares are all cloud (neutral: Play is the hero), each with its coloured art icon.
+  const trayButton = (label: string, iconName: ArtName, onActivate: () => void, f?: Feature, extras: HTMLElement[] = []): HTMLButtonElement => {
     const btn = pressable(
       h(
         'button',
         { class: 'tray-btn pe', type: 'button', 'aria-label': label },
-        h('span', { class: 'tray-disc' }, icon(iconName), ...extras, ...(f ? [lockBadge(), newTag()] : [])),
+        h('span', { class: 'tray-disc candy f-cloud' }, artIcon(iconName), ...extras, ...(f ? [lockBadge(), newTag()] : [])),
         h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
       ),
       f ? gated(f, onActivate) : onActivate,
@@ -239,18 +261,24 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const tray = h('nav', { class: 'tray', 'aria-label': 'Menu' }, dailyBtn, trayFor.missions, trayFor.wardrobe, trayFor.settings);
 
   // After onboarding the tagline names the next goal; the forecast chip previews the endless run's Day 1.
-  const tagline = h('p', { class: 'tagline' }, TAGLINE);
-  const forecast = h('p', { class: 'forecast-chip', hidden: true });
-  const keys = h('p', { class: 'title-keys' }, KEY_HINT);
+  // The tagline is a small blue ribbon under the logo (the <p> is its band); a goal is Nubs' speech
+  // bubble, its tail pointing down at him (fit() places it, or returns it to the flow).
+  const tagline = h('p', { class: 'tagline ribbon-band' }, TAGLINE);
+  const taglineBox = h(
+    'div',
+    { class: 'tagline-box ribbon ribbon--blue ribbon--sm' },
+    kitShape('tail', 'ribbon-tail ribbon-tail--l'),
+    artIcon('missions', 'ai tagline-ic'),
+    tagline,
+    kitShape('tail', 'ribbon-tail ribbon-tail--r'),
+  );
+  const forecast = h('p', { class: 'chip chip--dark forecast-chip', hidden: true });
+  const keys = h('p', { class: 'chip chip--dark title-keys' }, KEY_HINT);
   const gap = (): HTMLElement => h('i', { class: 'title-gap', 'aria-hidden': 'true' });
   const bottomCluster = h('div', { class: 'title-bottom' }, chips, gap(), modes, gap(), tray);
-  const el = h(
-    'section',
-    { class: 'scr scr-title' },
-    hud,
-    h('div', { class: 'title-top' }, logo(), tagline, forecast, keys, challenge),
-    bottomCluster,
-  );
+  const logoEl = logo();
+  const top = h('div', { class: 'title-top' }, logoEl, taglineBox, forecast, keys, challenge);
+  const el = h('section', { class: 'scr scr-title' }, hud, top, bottomCluster);
   let preview: DayPlan | null = null;
   /** The wallet as last shown (it counts up from there); null before the first render. */
   let shownWallet: number | null = null;
@@ -276,6 +304,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     // --nubs-y is in viewport px, like the rects.
     const nubsY = ctx.rootPx('--nubs-y');
     const haloR = ctx.rootPx('--halo-r');
+    placeBubble(nubsY, haloR);
     if (nubsY !== null && haloR !== null) {
       // The chips are the cluster's top row; when the column can't hold it all they overflow
       // upward, so measure them rather than the (capped) cluster box. 1 px covers the rounding of
@@ -289,6 +318,24 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       const steps = [...(goalTagline ? ['no-tagline'] : []), 'is-compact', 'no-forecast', 'no-tagline'];
       for (const step of steps) if (layoutBottom(challenge) + BANNER_GAP > chips.getBoundingClientRect().top) el.classList.add(step);
     }
+  }
+
+  /**
+   * Nubs' speech bubble (a goal tagline, §10.1): its tail tip just above Nubs' halo, centred on the
+   * column; when that would crowd the last visible item above it (the logo, the forecast chip, the
+   * key line, the challenge banner) it joins the flow under the logo as a plate without a tail.
+   */
+  function placeBubble(nubsY: number | null, haloR: number | null): void {
+    for (const e of [taglineBox, tagline]) e.classList.remove('goal-inline');
+    if (!goalTagline) return;
+    let inline = nubsY === null || haloR === null;
+    if (nubsY !== null && haloR !== null) {
+      const bubbleTop = nubsY - haloR - BUBBLE_TIP_GAP - BUBBLE_TAIL - taglineBox.offsetHeight;
+      taglineBox.style.setProperty('--goal-top', `${Math.round(bubbleTop - layoutTop(top))}px`);
+      const above = [logoEl, forecast, keys, challenge].filter((e) => e.offsetWidth > 0);
+      inline = above.some((e) => bubbleTop < layoutBottom(e) + BUBBLE_ROOM);
+    }
+    for (const e of [taglineBox, tagline]) e.classList.toggle('goal-inline', inline);
   }
 
   function refresh(): void {
@@ -319,6 +366,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     goalTagline = goal !== null;
     tagline.textContent = goal?.text ?? TAGLINE;
     tagline.classList.toggle('is-goal', goalTagline);
+    tagline.classList.toggle('ribbon-band', !goalTagline);
+    taglineBox.classList.toggle('is-goal', goalTagline);
+    for (const c of ['ribbon', 'ribbon--blue', 'ribbon--sm']) taglineBox.classList.toggle(c, !goalTagline);
     renderPreview();
 
     // The wallet counts up to what the last run earned.
@@ -332,7 +382,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     setButtonLabel(playBtn, `Level ${level}`);
     playBtn.setAttribute('aria-label', `Play Level ${level}`);
     const stars = totalStars(save);
-    starsValue.textContent = stars > 0 ? `${stars}★` : 'Map';
+    if (stars > 0) setChildren(starsValue, String(stars), h('span', { class: 'glyph' }, '★'));
+    else starsValue.textContent = 'Map';
     mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
     renderGates(save);
@@ -365,6 +416,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       const on = open[i] as boolean;
       const isNew = on && featureIsNew(save, g.f);
       g.el.classList.toggle('is-locked', !on);
+      // A locked tray square wears the locked face (and its hatch in high contrast).
+      g.el.querySelector('.tray-disc')?.classList.toggle('f-locked', !on);
       g.el.classList.toggle('is-new', isNew);
       hide(g.el, !on && fresh);
       // The name stays the accessible name; "New" is its description.
@@ -380,13 +433,16 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     claimDot(badge.el, c.globes + c.trophies);
     claimDot(trayFor.missions?.firstElementChild as HTMLElement, c.missions);
     claimDot(trayFor.wardrobe?.firstElementChild as HTMLElement, c.wardrobe);
-    // The gold button is the daily's signal itself (a dot would be clipped by the button's rounding).
-    hide(rewardBtn, !c.daily);
+    // The gold square with its dot is the daily's signal itself.
+    hide(reward, !c.daily);
   }
 
+  /** "Forecast: 🌬️ Breezy · Old Town": the emoji in the body font (it isn't in the display face). */
   function renderPreview(): void {
     hide(forecast, preview === null);
-    forecast.textContent = preview ? `Forecast: ${planText(preview)}` : '';
+    if (!preview) return forecast.replaceChildren();
+    const [emoji = '', ...words] = planText(preview).split(' ');
+    setChildren(forecast, 'Forecast: ', h('span', { class: 'glyph' }, emoji), ` ${words.join(' ')}`);
   }
 
   return {
