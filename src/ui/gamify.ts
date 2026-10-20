@@ -30,7 +30,6 @@ import {
 import type { Save } from '../meta/saveTypes.ts';
 import { artIcon, kitShape } from './art-icons.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from './dom.ts';
-import { icon } from './icons.ts';
 import { RARITY_LABEL } from './labels.ts';
 import type { UiContext } from './screen.ts';
 import { cosmeticSwatch } from './swatches.ts';
