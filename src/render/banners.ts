@@ -466,7 +466,7 @@ export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, to
   const cx = v.vx + v.vw / 2;
   // A toast already showing fades away under a card or stamp that arrives after it (PARRY!, a Day card).
   const toast = b.toastT >= 0 && b.toastHide < 0.99 ? b.toasts[0] : undefined;
-  if (toast) drawToast(g, b, toast, v, cx, top, scale, reducedMotion, hc);
+  if (toast) drawToast(g, b, toast, v, top, scale, reducedMotion, hc);
   if (b.night >= 0) {
     const t = b.night;
     const a = Math.min(1, t / 0.5, (2.4 - t) / 0.6);
@@ -514,9 +514,9 @@ const KICKER_INK = { mission: TEXT.green, tip: TEXT.amber, warn: TEXT.orange } a
 /**
  * A toast just under the HUD band, clear of the pause button's column: a cream pill with an icon
  * coin (a white check on green for a mission, the tip's glyph on a cloud coin, gold when urgent), a
- * display-face kicker in its colour and up to three lines of text. Drops in, holds, fades.
+ * display-face kicker in its colour and its text (fitToast). Drops in, holds, fades.
  */
-function drawToast(g: CanvasRenderingContext2D, b: Banners, t: Toast, v: View, cx: number, top: number, k: number, reducedMotion: boolean, hc: boolean): void {
+function drawToast(g: CanvasRenderingContext2D, b: Banners, t: Toast, v: View, top: number, k: number, reducedMotion: boolean, hc: boolean): void {
   const u = b.toastT;
   const outT = u - TOAST_IN - t.hold;
   let a = Math.min(1, u / TOAST_IN) * (1 - b.toastHide);
@@ -527,33 +527,73 @@ function drawToast(g: CanvasRenderingContext2D, b: Banners, t: Toast, v: View, c
     if (!reducedMotion) dy -= 10 * q;
   }
   if (a <= 0.01) return;
-  const w = Math.round(Math.min(v.vw - 112, 340 * k));
+  const [x, w] = toastBox(v.vx, v.vw, v.safe.left, v.safe.right, k);
   const s = b.toastSprite;
   const dpr = spriteDpr(v);
   if (stale(s, dpr, k, hc, w, t) || b.toastWrapW === 0) renderToast(b, t, s, dpr, k, hc, w);
   g.globalAlpha = a;
-  blit(g, s, cx - w / 2, top + 4 + dy);
+  blit(g, s, x, top + 4 + dy);
   g.globalAlpha = 1;
+}
+
+/**
+ * The toast's left edge and width (CSS px) in a column at `vx`, `vw` wide: it hangs under the HUD
+ * row's span, from the pause square's column (8 + 48 + 8, clear of the muted coin under it) to the
+ * row's right end, centred there once it reaches 360k.
+ */
+export function toastBox(vx: number, vw: number, safeL: number, safeR: number, k: number): [x: number, w: number] {
+  const x0 = vx + safeL + 64;
+  const x1 = vx + vw - safeR - 8;
+  const w = Math.round(Math.min(x1 - x0, 360 * k));
+  return [(x0 + x1 - w) / 2, w];
+}
+
+/** What a toast's text looks like once fitted: its lines, face and size (canvas units), and whether it was cut. */
+export interface ToastFit {
+  lines: string[];
+  font: string;
+  px: number;
+  cut: boolean;
+}
+
+/** The text column of a toast `w` wide (CSS px) at HUD scale `k`: right of the icon coin, 14k short of the end. */
+export const toastTextW = (w: number, k: number): number => w - (7 + 2 * 15 + 10) * k - 14 * k;
+
+/**
+ * Wraps a toast's text (g.font is set here). A mission's line is Lilita 16k, up to three lines. A
+ * tip is a sentence the player needs whole: BODY 800 15k on up to four lines, then 14k, then 13k,
+ * and only past that its fourth line ends in an ellipsis (tests/unit/toastfit.test.ts keeps every
+ * tip clear of that at 320, 360 and 390 px).
+ */
+export function fitToast(g: Pick<CanvasRenderingContext2D, 'font' | 'measureText'>, text: string, mission: boolean, textW: number, k: number, out: string[] = []): ToastFit {
+  const max = mission ? 3 : 4;
+  let px = mission ? 16 : 15;
+  let font = '';
+  for (;;) {
+    font = mission ? displayFont(px * k) : bodyFont(px * k, 800);
+    g.font = font;
+    wrap(g, text, textW, out);
+    if (out.length <= max || mission || px <= 13) break;
+    px -= 1;
+  }
+  const cut = out.length > max;
+  if (cut) {
+    out.length = max;
+    out[max - 1] = ellipsize(g, `${(out[max - 1] as string).replace(/[ ,.;:!?]+$/, '')}…`, textW);
+  }
+  return { lines: out, font, px, cut };
 }
 
 function renderToast(b: Banners, t: Toast, s: Sprite, dpr: number, k: number, hc: boolean, w: number): void {
   const mission = t.kind === 'mission';
-  const textFont = mission ? displayFont(16 * k) : bodyFont(15 * k, 800);
   const kickFont = displayFont(15 * k);
   const ir = 15 * k;
   const tx = 7 * k + 2 * ir + 10 * k;
-  const textW = w - tx - 14 * k;
-  // Measure on the sprite's own context (sized once to measure, then again to draw).
-  const mg = measureCtx();
-  mg.font = textFont;
-  wrap(mg, t.text, textW, b.toastLines);
-  // Up to three lines, as before the rework (a tip is a sentence the player needs whole).
-  if (b.toastLines.length > 3) {
-    b.toastLines.length = 3;
-    b.toastLines[2] = ellipsize(mg, `${(b.toastLines[2] as string).replace(/[ ,.;:!?]+$/, '')}…`, textW);
-  }
+  const textW = toastTextW(w, k);
+  const fit = fitToast(measureCtx(), t.text, mission, textW, k, b.toastLines);
+  const textFont = fit.font;
   b.toastWrapW = textW;
-  const lineH = (mission ? 19 : 18.5) * k;
+  const lineH = fit.px * (mission ? 19 / 16 : 18.5 / 15) * k;
   const h = Math.max(44 * k, 9 * k + 16 * k + 3 * k + b.toastLines.length * lineH + 8 * k);
   const g = begin(s, dpr, k, hc, w, t, w + 4, h + 6 * k, 2, 1);
   plate(g, 0, 0, w, h, Math.min(22 * k, h / 2), k, hc ? 4 * k : 3 * k);
@@ -608,7 +648,7 @@ function measureCtx(): CanvasRenderingContext2D {
 }
 
 /** Greedy word wrap of `text` into lines no wider than maxW (g.font set by the caller). */
-function wrap(g: CanvasRenderingContext2D, text: string, maxW: number, out: string[]): void {
+function wrap(g: Pick<CanvasRenderingContext2D, 'measureText'>, text: string, maxW: number, out: string[]): void {
   out.length = 0;
   if (!text) return;
   const words = text.split(' ');
@@ -626,7 +666,7 @@ function wrap(g: CanvasRenderingContext2D, text: string, maxW: number, out: stri
 }
 
 /** `text` cut to fit maxW with an ellipsis (g.font set by the caller). */
-function ellipsize(g: CanvasRenderingContext2D, text: string, maxW: number): string {
+function ellipsize(g: Pick<CanvasRenderingContext2D, 'measureText'>, text: string, maxW: number): string {
   if (g.measureText(text).width <= maxW) return text;
   let t = text.replace(/…$/, '');
   while (t.length > 1 && g.measureText(`${t}…`).width > maxW) t = t.slice(0, -1);

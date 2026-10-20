@@ -120,7 +120,7 @@ export const SOFT_FAIL_TIP = 'Goal eased: just reach the finish. The Dare still 
  * snap), each with its mechanic's glyph for the toast's icon disc (outside a level there is no
  * concept glyph to show).
  */
-const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
+export const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
   [...(MECH_TIPS.bud[0] as readonly [TipOn, string]), 'sunflower'],
   [...(MECH_TIPS.deep[1] as readonly [TipOn, string]), 'deep'],
   ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.', 'ring'],
