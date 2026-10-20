@@ -30,7 +30,7 @@ import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
 import { RARITY_LABEL } from '../labels.ts';
-import { button, buttonIcon, menuHeader, progressBar, ribbon, setDisabled, snowChip, type ButtonVariant } from '../widgets.ts';
+import { button, buttonIcon, menuHeader, progressBar, setDisabled, snowChip, type ButtonVariant } from '../widgets.ts';
 
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
 const PREVIEW_CSS = 168;
@@ -112,10 +112,9 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
   const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, 'aria-hidden': 'true' });
   const itemName = h('p', { class: 'preview-name gt-ink' });
   const itemRarity = h('span', { class: 'tag rarity' });
-  // The try-on spot hops when the selection changes; a small green ribbon says what Nubs wears
-  // (decoration: the action button says it too).
-  const wearing = ribbon('Wearing', { tone: 'green', size: 'sm', tag: 'span', hidden: true, className: 'wear-ribbon' });
-  const spot = h('div', { class: 'stage-spot' }, canvas, wearing.el);
+  // The try-on spot hops when the selection changes. Whether the item is on is said by the action
+  // button ("✓ Wearing", §10.8) and the note under it, not by a ribbon on the stage too.
+  const spot = h('div', { class: 'stage-spot' }, canvas);
   const itemNote = h('p', { class: 'preview-note' });
   const action = button(ctx, { label: 'Wearing', icon: 'check', variant: 'primary', size: 'lg', block: true, sound: null, onPress: () => act() });
 
@@ -315,7 +314,6 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
       h('span', { class: 'btn-label' }, buy ? 'Buy' : label),
       ...(buy ? [priceCounter(costOf(c), 'btn-price')] : []),
     );
-    spot.classList.toggle('is-wearing', state === 'equipped');
     itemNote.textContent = note;
     drawPreview();
   }

@@ -36,17 +36,6 @@
   height: 168px;
 }
 
-/* "Wearing" hangs across the spotlight's rim while the selected item is on. */
-.wear-ribbon {
-  position: absolute;
-  left: 50%;
-  bottom: -23px;
-  translate: -50%;
-  rotate: -3deg;
-}
-
-.stage-spot:not(.is-wearing) .wear-ribbon { display: none; }
-
 .preview-name { font-size: var(--fs-d-xl); }
 
 /* The rarity: a tag in the tier's face with ink text. */
@@ -100,7 +89,6 @@
   }
 
   .preview-canvas { width: 112px; height: 112px; }
-  .wear-ribbon { bottom: -19px; scale: 0.8; }
   .preview-name { font-size: var(--fs-d-lg); }
   .preview-note { min-height: 0; font-size: var(--fs-sm); }
 
