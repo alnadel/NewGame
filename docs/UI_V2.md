@@ -27,8 +27,9 @@ before the judges' grafts and fixes; where a mockup and this text disagree, this
 
 ## 0. Visual targets
 
-The mockups live in this session's scratchpad (they are not in the repo; this document stands on its
-own without them). `$S` = `/tmp/claude-0/-home-user-NewGame/69248689-90e4-58c4-a3f6-cdfe8d357f19/scratchpad/ui`.
+The mockups lived in the design session's scratch directory (they are not in the repo; this document
+stands on its own without them). `$S` below is that scratch directory: any temporary folder works for
+your own captures.
 
 | What | File | Use it for |
 |---|---|---|
