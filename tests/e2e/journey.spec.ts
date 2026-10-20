@@ -182,8 +182,9 @@ test('arrow keys walk the tiles and Continue takes the keyboard focus', async ({
   await page.locator('.lvl-tile[data-level="1"]').focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.lvl-tile[data-level="2"]')).toBeFocused();
+  // The road snakes (docs/UI_V2.md §10.2): Level 9 sits directly below Level 2 on screen.
   await page.keyboard.press('ArrowDown');
-  await expect(page.locator('.lvl-tile[data-level="7"]')).toBeFocused();
+  await expect(page.locator('.lvl-tile[data-level="9"]')).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('.lvl-tile[data-level="12"]')).toBeFocused();
   await page.keyboard.press('ArrowLeft');

@@ -1,33 +1,41 @@
-// Journey map (CAMPAIGN_PLAN §5): total stars, a sticky "Continue · Level N" with the progress to the
-// next star reward, then 20 chapter cards (name, stars, a bar) of 10 level tiles each (number, stars,
-// the concept a level introduces, a lock past the unlocked level). Tapping a playable tile starts it.
-// Every visit centers the level in play; stars and unlocks earned since the last visit (or boot) pop in. The
-// tiles are built once and refresh() updates them from the save, so focus survives a save change
-// (the testing toggle, another tab's progress).
+// Journey map (CAMPAIGN_PLAN §5, docs/UI_V2.md §6.13 and §10.2): the star total, a sticky "Continue ·
+// Level N" with the progress to the next star reward, then 20 chapter boards. A board carries its
+// biome colour, "Chapter 4" over its name and the chapter's Snow Globe with the stars earned; its ten
+// level nodes ride a dirt road that snakes left to right, then back (CSS only: DOM and Tab order stay
+// 1→10). A node shows its number, its stars, the concept a level introduces and a lock past the
+// unlocked level; the level in play wears Nubs on top and a ray burst. Tapping a playable node starts
+// it. Every visit centers the level in play; stars and unlocks earned since the last visit (or boot)
+// pop in. The nodes are built once and refresh() updates them from the save, so focus survives a save
+// change (the testing toggle, another tab's progress).
 
 import { CAMPAIGN_LEVELS, CHAPTERS, CONCEPTS, type LevelDef } from '../../core/index.ts';
 import { CAMPAIGN_STARS_MAX, continueLevel, isLevelPlayable, totalStars } from '../../meta/progression.ts';
 import { STARS_PER_LEVEL } from '../../meta/save.ts';
+import { sunMascot } from '../art.ts';
 import { biomeIcon, biomeName, conceptIcon } from '../concepts.ts';
-import { h } from '../dom.ts';
+import { h, svgFromMarkup } from '../dom.ts';
 import { artIcon } from '../art-icons.ts';
 import { icon } from '../icons.ts';
 import { continueLabel, levelTileLabel, starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
-import { button, countUp, menuHeader, progressBar, setButtonLabel, starRoad } from '../widgets.ts';
+import { button, countUp, menuHeader, progressBar, starRoad } from '../widgets.ts';
 
-/** Tiles per grid row (arrow keys move by this many up and down). */
+/** Nodes per road row: the road runs 1→5, U-turns, then 6→10 (journey.css). */
 const COLUMNS = 5;
 const LEVELS_PER_CHAPTER = 10;
 const CHAPTER_STARS = LEVELS_PER_CHAPTER * STARS_PER_LEVEL;
 /** New stars pop in this long after the map opens, this far apart. */
 const FRESH_MS = 280;
 const FRESH_GAP_MS = 160;
+/** The lead word of continueLabel ("Continue · Level 12"); the rest is set smaller. */
+const CONTINUE = 'Continue';
 
 interface Tile {
   level: LevelDef;
   el: HTMLButtonElement;
   stars: HTMLElement[];
+  /** Each star's <use>: the earned or the empty art star. */
+  uses: SVGUseElement[];
 }
 
 interface ChapterView {
@@ -35,6 +43,62 @@ interface ChapterView {
   count: HTMLElement;
   bar: HTMLElement;
   prize: HTMLElement;
+}
+
+/**
+ * Where a level sits on screen (§10.2): the visual row `R` (two per chapter) and the column, which
+ * runs right to left on a chapter's second row (the snake).
+ */
+function cellOf(n: number): { row: number; col: number } {
+  const i = (n - 1) % LEVELS_PER_CHAPTER;
+  const r = Math.floor(i / COLUMNS);
+  return { row: 2 * Math.floor((n - 1) / LEVELS_PER_CHAPTER) + r, col: r === 0 ? i % COLUMNS : COLUMNS - 1 - (i % COLUMNS) };
+}
+
+/** The level at a visual row and column (the inverse of cellOf). */
+function levelAt(row: number, col: number): number {
+  const r = row % 2;
+  return Math.floor(row / 2) * LEVELS_PER_CHAPTER + r * COLUMNS + (r === 0 ? col : COLUMNS - 1 - col) + 1;
+}
+
+/** The level an arrow key moves to from `n`: along the visual row (stopping at its ends) or straight up or down. */
+export function journeyStep(n: number, key: string, levels: number): number | null {
+  const { row, col } = cellOf(n);
+  const to =
+    key === 'ArrowLeft' ? (col > 0 ? levelAt(row, col - 1) : null)
+    : key === 'ArrowRight' ? (col < COLUMNS - 1 ? levelAt(row, col + 1) : null)
+    : key === 'ArrowUp' ? (row > 0 ? levelAt(row - 1, col) : null)
+    : key === 'ArrowDown' ? levelAt(row + 1, col)
+    : null;
+  return to !== null && to >= 1 && to <= levels ? to : null;
+}
+
+// --- Board props (the storybook graft): two per biome standing on a board's bottom corners, each
+// casting the game's purple shade. Drawn here once and handed to journey.css as data-URI custom
+// properties, so the locked boards reuse the same shapes in lavender.
+/** a: main face, b: its shaded side, c: wood and posts, d: a light (window, lamp). */
+type PropPalette = { a: string; b: string; c: string; d: string };
+type PropKind = 'tree' | 'bush' | 'house' | 'lamp';
+const SHADE = '<ellipse cx="27" cy="39" rx="17" ry="3.5" fill="#5A4A78" opacity=".32"/>';
+const PROPS: Record<PropKind, (p: PropPalette) => string> = {
+  tree: (p) => `${SHADE}<path d="M18 38V24h6v14Z" fill="${p.c}"/><circle cx="21" cy="15" r="11" fill="${p.a}"/><circle cx="12" cy="22" r="7" fill="${p.a}"/><circle cx="29" cy="22" r="7" fill="${p.b}"/><path d="M15 11a8 8 0 0 1 7-5" stroke="#fff" stroke-opacity=".6" stroke-width="2.5" fill="none"/>`,
+  bush: (p) => `${SHADE}<circle cx="14" cy="31" r="7" fill="${p.a}"/><circle cx="24" cy="27" r="10" fill="${p.a}"/><circle cx="34" cy="31" r="7" fill="${p.b}"/><path d="M8 38h32" stroke-width="2.5"/>`,
+  house: (p) => `${SHADE}<path d="M9 22h28v16H9Z" fill="${p.b}"/><path d="M5 23 23 8l18 15Z" fill="${p.a}"/><path d="M19 38v-9h6v9" fill="${p.c}"/><path d="M29 26h5v4h-5Z" fill="${p.d}"/>`,
+  lamp: (p) => `${SHADE}<path d="M22 38V16h4v22Z" fill="${p.c}"/><path d="M17 38h14" stroke-width="3"/><path d="M18 9h12l-2 8h-8Z" fill="${p.d}"/><path d="M20 9l4-4 4 4" fill="${p.c}"/>`,
+};
+const propUrl = (body: string): string =>
+  `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 44"><g stroke="#2A1B45" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">${body}</g></svg>`)}")`;
+const LIVE: Record<PropKind, PropPalette> = {
+  tree: { a: '#8FD45A', b: '#6CBF3E', c: '#B07A4A', d: '' },
+  bush: { a: '#7FCB4E', b: '#63B238', c: '', d: '' },
+  house: { a: '#F2774A', b: '#FFF1D6', c: '#B07A4A', d: '#BFE6FF' },
+  lamp: { a: '', b: '', c: '#5B4A7E', d: '#FFE27A' },
+};
+const LOCKED: PropPalette = { a: '#D9D1E6', b: '#C3B8D6', c: '#A99CC6', d: '#EEEAF5' };
+
+/** The sun mascot as one symbol, the crown of every finale node (it costs one copy of the art). */
+function crownSprite(): SVGSVGElement {
+  return svgFromMarkup(`<svg class="ai-sprite" aria-hidden="true" focusable="false" width="0" height="0"><symbol id="j-sun" viewBox="-1.7 -1.7 3.4 3.4" overflow="visible">${sunMascot({ id: 'j-sun', cx: 0, cy: 0, r: 1 })}</symbol></svg>`);
 }
 
 export function createJourneyScreen(ctx: UiContext): Screen {
@@ -57,10 +121,13 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     ctx.cb.startRun('campaign', undefined, id);
   };
 
+  // The header's star counter: "71" with "/600" as its small part (the element reads "71/600").
   const starsNum = h('span', { class: 'num' });
-  const starsChip = h('span', { class: 'chip chip--stars', role: 'img' }, artIcon('star'), starsNum);
+  const starsChip = h('span', { class: 'chip chip--stars', role: 'img' }, artIcon('star'), starsNum, h('small', null, `/${CAMPAIGN_STARS_MAX}`));
+  // "Continue · Level 38": the level is the smaller second half of the label (one text, two sizes).
+  const continueLevelText = h('span', { class: 'jc-level' });
   const continueBtn = button(ctx, {
-    label: 'Continue',
+    label: CONTINUE,
     icon: 'play',
     variant: 'primary',
     size: 'lg',
@@ -68,38 +135,56 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     className: 'journey-continue',
     onPress: () => start(continueLevel(ctx.save())),
   });
+  continueBtn.querySelector('.btn-label')?.append(continueLevelText);
   const road = starRoad();
+  // The road on the Journey is a plate with its item on an ice medal (§10.2).
+  road.el.classList.add('plate');
+  road.el.querySelector('.road-art')?.classList.add('medal', 'medal--ice');
   const sticky = h('div', { class: 'journey-sticky' }, continueBtn, road.el);
 
-  // Chapters and tiles, built once.
+  // The level in play: Nubs on top of its node and a slow ray burst behind it (moved on refresh).
+  const pin = artIcon('nubs', 'ai lvl-pin');
+  const glow = h('span', { class: 'lvl-glow', 'aria-hidden': 'true' });
+  const rays = h('span', { class: 'burst lvl-rays', 'aria-hidden': 'true' });
+
+  // Chapters and nodes, built once.
   const tiles: Tile[] = [];
   const chapters: ChapterView[] = [];
   const body = h('div', { class: 'menu-body journey-body' });
   for (const chapter of CHAPTERS) {
+    // The grid holds the ten nodes only (the snake places them by nth-child).
     const grid = h('div', { class: 'lvl-grid' });
     for (const level of CAMPAIGN_LEVELS.filter((l) => l.chapter === chapter.id)) {
-      const stars = Array.from({ length: STARS_PER_LEVEL }, () => h('span', { class: 'lvl-star' }, icon('star')));
+      const uses: SVGUseElement[] = [];
+      const stars = Array.from({ length: STARS_PER_LEVEL }, () => {
+        const art = artIcon('starEmpty');
+        uses.push(art.firstElementChild as SVGUseElement);
+        return h('span', { class: 'lvl-star' }, art);
+      });
       const concept = level.introduces ? CONCEPTS[level.introduces] : null;
+      const finale = level.id % LEVELS_PER_CHAPTER === 0;
       const el = h(
         'button',
-        { class: 'lvl-tile pe', type: 'button', 'data-level': level.id, title: concept ? (concept.name === level.name ? concept.blurb : `${concept.name}: ${concept.blurb}`) : null },
-        h('span', { class: 'lvl-num num' }, String(level.id)),
+        { class: `lvl-tile pe${finale ? ' is-finale' : ''}`, type: 'button', 'data-level': level.id, title: concept ? (concept.name === level.name ? concept.blurb : `${concept.name}: ${concept.blurb}`) : null },
+        h('span', { class: `lvl-num node candy${level.id >= 100 ? ' is-wide' : ''}` }, String(level.id)),
+        finale ? svgFromMarkup('<svg class="lvl-crown" aria-hidden="true" focusable="false"><use href="#j-sun"/></svg>') : null,
         concept ? h('span', { class: 'lvl-concept' }, icon(conceptIcon(concept.id))) : null,
         h('span', { class: 'lvl-stars' }, ...stars),
-        h('span', { class: 'lvl-lock' }, icon('lock')),
+        h('span', { class: 'lvl-lock lock-badge' }, icon('lock')),
       );
       el.addEventListener('click', () => {
         ctx.sound('tap');
         start(level.id);
       });
       grid.append(el);
-      tiles.push({ level, el, stars });
+      tiles.push({ level, el, stars, uses });
     }
-    // The banner: biome mark, "Chapter 4" over its name, the stars and the chapter's Snow Globe
-    // (earned once all ten levels are passed).
+    // The banner on the board's frame: biome coin, "Chapter 4" over its name, the chapter's Snow Globe
+    // (earned once all ten levels are passed) with the chapter's stars as a tag hanging under it.
     const count = h('span', { class: 'chapter-count num' });
     const bar = progressBar(0);
-    const prize = h('span', { class: 'chapter-prize', role: 'img' }, icon('globe'), h('span', { class: 'chapter-check' }, icon('check')));
+    const prize = h('span', { class: 'chapter-prize', role: 'img' }, artIcon('globe'), h('span', { class: 'chapter-check' }, artIcon('check')));
+    const first = (chapter.id - 1) * LEVELS_PER_CHAPTER + 1;
     const el = h(
       'section',
       { class: 'card chapter', 'data-chapter': chapter.id, 'data-biome': chapter.biome },
@@ -115,35 +200,50 @@ export function createJourneyScreen(ctx: UiContext): Screen {
         ),
         prize,
       ),
-      h('div', { class: 'chapter-meta' }, h('span', { class: 'chapter-stars' }, icon('star'), count), bar),
-      grid,
+      h('div', { class: 'chapter-meta tag' }, h('span', { class: 'chapter-stars' }, artIcon('star'), count), bar),
+      h(
+        'div',
+        { class: 'chapter-map' },
+        grid,
+        // A locked board says what opens it (each locked node still says "Locked" in its label).
+        first > 1 ? h('span', { class: 'chapter-plate plate', 'aria-hidden': 'true' }, h('span', { class: 'lock-badge' }, icon('lock')), `Finish Level ${first - 1}`) : null,
+      ),
     );
     chapters.push({ el, count, bar, prize });
     body.append(el);
   }
 
-  // Arrow keys walk the tiles: left/right one level, up/down one row (across chapters).
+  // Arrow keys walk the nodes as they sit on screen: along the road's row (stopping at its ends),
+  // or straight up and down to the node above or below, across chapters.
   body.addEventListener('keydown', (e) => {
     const t = e.target;
     if (!(t instanceof HTMLButtonElement) || !t.classList.contains('lvl-tile')) return;
-    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -COLUMNS, ArrowDown: COLUMNS }[e.key];
-    const next = step === undefined ? undefined : tiles[Number(t.dataset.level) - 1 + step];
-    if (!next) return;
+    const to = journeyStep(Number(t.dataset.level), e.key, tiles.length);
+    if (to === null) return;
     e.preventDefault();
-    next.el.focus();
+    tiles[to - 1]?.el.focus();
   });
 
   const header = menuHeader(ctx, 'Journey', starsChip);
   header.querySelector('.menu-title')?.setAttribute('id', 'journey-title');
-  const el = h('section', { class: 'scr scr-menu scr-journey', 'aria-labelledby': 'journey-title' }, h('div', { class: 'menu pe' }, header, sticky, body));
+  const el = h(
+    'section',
+    { class: 'scr scr-menu scr-journey', 'aria-labelledby': 'journey-title' },
+    crownSprite(),
+    h('div', { class: 'menu pe' }, header, sticky, body),
+  );
+  for (const kind of Object.keys(PROPS) as PropKind[]) {
+    el.style.setProperty(`--prop-${kind}`, propUrl(PROPS[kind](LIVE[kind])));
+    el.style.setProperty(`--prop-${kind}-x`, propUrl(PROPS[kind](LOCKED)));
+  }
 
   function refresh(): void {
     const save = ctx.save();
     const total = totalStars(save);
-    starsNum.textContent = `${total}/${CAMPAIGN_STARS_MAX}`;
+    starsNum.textContent = String(total);
     starsChip.setAttribute('aria-label', `${total} of ${CAMPAIGN_STARS_MAX} stars`);
     const next = continueLevel(save);
-    setButtonLabel(continueBtn, continueLabel(next));
+    continueLevelText.textContent = continueLabel(next).slice(CONTINUE.length);
     road.update(save);
     const perChapter = Array<number>(CHAPTERS.length).fill(0);
     const passed = Array<number>(CHAPTERS.length).fill(0);
@@ -159,8 +259,11 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       t.el.classList.toggle('is-next', id === next);
       t.el.setAttribute('aria-disabled', String(!playable));
       t.stars.forEach((s, i) => s.classList.toggle('is-on', i < stars));
+      t.uses.forEach((u, i) => u.setAttribute('href', i < stars ? '#a-star' : '#a-starEmpty'));
       t.el.setAttribute('aria-label', levelTileLabel(t.level, stars, playable));
     }
+    const current = tiles[next - 1]?.el;
+    if (current) current.append(glow, rays, pin);
     chapters.forEach((c, i) => {
       const n = perChapter[i] ?? 0;
       c.count.textContent = `${n}/${CHAPTER_STARS}`;
@@ -181,9 +284,11 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     const c = ctx.save().campaign;
     const before = seen;
     seen = snapshot();
-    // The header's total counts up by the stars earned since the last visit.
+    // The header's total counts up by the stars earned since the last visit (its slot holds the final width).
     const sum = (a: readonly number[]): number => a.reduce((x, y) => x + y, 0);
-    stopCount = countUp(starsNum, sum(before.stars), sum(c.stars), ctx, { format: (n) => `${n}/${CAMPAIGN_STARS_MAX}`, end: null });
+    const to = sum(c.stars);
+    starsNum.style.minWidth = `${String(to).length}ch`;
+    stopCount = countUp(starsNum, sum(before.stars), to, ctx, { end: null });
     let fresh = 0;
     for (const t of tiles) {
       const i = t.level.id - 1;

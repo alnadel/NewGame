@@ -1,317 +1,644 @@
-/* The Journey map: chapters, level tiles, the star road.
-   Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
-   compose the kit's recipes (kit.css), never copy them. */
+/* The Journey map: the sticky Continue and star road, the chapter boards, the level nodes on their
+   road. Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in
+   screen order; compose the kit's recipes (kit.css), never copy them.
 
-/* The map */
+   docs/UI_V2.md §6.13 and §10.2: a board is a biome-coloured frame holding a sunk well of the biome's
+   ground; ten nodes snake along the world's own dirt road (row 1 left to right, row 2 right to left:
+   CSS only, DOM and Tab order stay 1→10). The road is drawn by the tiles' own ::before (edge band)
+   and ::after (face band), so it always runs through the disc centres at every width. */
 
-.chip--stars .ic { color: var(--gold-deep); }
+/* ===== Sticky: Continue and the star road ===== */
 
-/* Continue stays above the chapters as they scroll. */
 .journey-sticky {
   flex: none;
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
-  padding: 0 var(--pad-x-r) 10px var(--pad-x-l);
+  padding: 2px var(--pad-x-r) 12px var(--pad-x-l);
 }
 
-.journey-sticky .road { margin-top: 10px; }
+/* The header's total: "71/600" reads as one number (no chip gap), the count right-aligned in the
+   slot it keeps while counting up. */
+.scr-journey .chip--stars { gap: 0; }
 
-.journey-body { padding-top: 2px; }
+.scr-journey .chip--stars .num { text-align: right; }
 
-.chapter .bar i,
-.road .bar i { background: linear-gradient(90deg, var(--gold), #ffd96b); }
+/* "Continue · Level 38": the level is the label's smaller half. */
+.journey-continue .jc-level { font-size: 0.82em; }
 
-/* A chapter card: a biome-coloured banner ("Chapter 4" over its name, the chapter's Snow Globe),
-   the stars with a bar, the ten tiles. White on the banners keeps 4.5:1. */
+.journey-sticky .road { margin-top: 12px; }
+
+/* The star road (widgets.ts starRoad, also on a level's Results): the next star reward's item on an
+   ice medal overlapping the plate's left end, its name and target, the count, a gold bar. */
+.road {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'text count' 'bar bar';
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 54px;
+  margin-left: 24px;
+  padding: 6px 14px 9px 34px;
+  text-align: left;
+}
+
+.road-art {
+  --d: 50px;
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  translate: 0 -50%;
+  border-radius: 50%;
+}
+
+.road-art .swatch {
+  position: relative;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+}
+
+.road-text {
+  grid-area: text;
+  min-width: 0;
+  font: 800 var(--fs-sm)/1.2 var(--font-body);
+  color: var(--t-amber);
+}
+
+.road-text strong {
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+.road-count {
+  grid-area: count;
+  align-self: start;
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--t-amber);
+}
+
+.road .bar {
+  grid-area: bar;
+  height: 16px;
+  border-radius: 9px;
+}
+
+/* ===== The boards ===== */
+
+.journey-body {
+  gap: 26px;
+  /* The boards fade out under the sticky header instead of being cut. */
+  -webkit-mask: linear-gradient(transparent, #000 14px);
+  mask: linear-gradient(transparent, #000 14px);
+  padding-top: 6px;
+  padding-bottom: calc(var(--in-bottom) + 40px);
+}
+
+/* A board: the biome's colour as its frame (the banner sits on it), a sunk well of its ground below.
+   The kicker is ink on the frame (7.7:1 meadow, 5.6:1 old town, 6.2:1 locked: white would fail). */
 .chapter {
-  --b1: #276b3d;
-  --b2: #348650;
-  padding: 0 0 14px;
-  overflow: hidden;
+  --b-hi: var(--meadow-hi);
+  --b: var(--meadow);
+  --b-lo: var(--meadow-lo);
+  --g1: var(--meadow-ground);
+  --g2: var(--meadow-ground-2);
+  --sh: inset 0 3px 0 rgba(255, 255, 255, 0.5), inset 0 -4px 0 rgba(0, 0, 0, 0.18), var(--drop-lg), var(--soft);
+  padding: 0 10px 12px;
+  background: linear-gradient(180deg, var(--b-hi), var(--b) 58px, var(--b) 72%, var(--b-lo));
+  overflow: visible;
 }
 
 .chapter[data-biome='oldtown'] {
-  --b1: #94452a;
-  --b2: #b0582f;
+  --b-hi: var(--oldtown-hi);
+  --b: var(--oldtown);
+  --b-lo: var(--oldtown-lo);
+  --g1: var(--oldtown-ground);
+  --g2: var(--oldtown-ground-2);
 }
 
+.chapter.is-locked {
+  --b-hi: var(--lockboard-hi);
+  --b: var(--lockboard);
+  --b-lo: var(--lockboard-lo);
+  --g1: var(--lockboard-ground);
+  --g2: var(--lockboard-ground);
+}
+
+/* Two props (journey.ts, one data-URI SVG each) stand on the board's bottom corners, in the gap to
+   the next board, with the game's purple shade baked in; a locked board's are lavender. */
+.chapter::after {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  left: -4px;
+  right: -4px;
+  bottom: -20px;
+  height: 40px;
+  background: var(--prop-tree) left bottom / 44px 40px no-repeat, var(--prop-bush) right bottom / 44px 40px no-repeat;
+  pointer-events: none;
+}
+
+.chapter[data-biome='oldtown']::after { background-image: var(--prop-house), var(--prop-lamp); }
+
+.chapter.is-locked::after { background-image: var(--prop-tree-x), var(--prop-bush-x); }
+
+.chapter.is-locked[data-biome='oldtown']::after { background-image: var(--prop-house-x), var(--prop-lamp-x); }
+
 .chapter-banner {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px 10px 14px;
-  background: var(--gloss), linear-gradient(120deg, var(--b1), var(--b2));
-  color: #fff;
+  min-height: 70px;
+  padding: 10px 0 12px;
+}
+
+.chapter-biome {
+  --d: 44px;
+  --ic: 26px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 35%, #fff, var(--cream) 55%, var(--cream-2));
+  box-shadow: inset 0 -3px 0 var(--cream-3), var(--drop-sm);
+  color: var(--ink);
 }
 
 .chapter-head {
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 3px;
   min-width: 0;
-  line-height: 1.15;
 }
 
 .chapter-kicker {
-  font-size: var(--fs-2xs);
-  font-weight: 800;
+  font: 400 var(--fs-d-xs)/1 var(--font-display);
+  color: var(--ink);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.92;
 }
 
+/* One line, white with the halo; a long name ellipsizes (the room for the halo is padded in). */
 .chapter-name {
-  font-size: var(--fs-lg);
-  font-weight: 900;
-  overflow-wrap: anywhere;
+  padding: 0 2px 2px;
+  overflow: clip;
+  font: 400 var(--fs-d-lg)/1.2 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: var(--halo) var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.chapter-biome,
+/* The chapter's Snow Globe; earned (all ten passed), a green check coin rides it. */
 .chapter-prize {
-  --d: 36px;
-  --ic: 20px;
+  --d: 46px;
+  --ic: 46px;
   position: relative;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  align-self: flex-start;
+  margin: 2px 12px 0 0;
 }
-
-.chapter-prize { --ic: 22px; }
 
 .chapter-check {
-  --d: 18px;
-  --ic: 12px;
+  --d: 24px;
+  --ic: 15px;
   position: absolute;
-  right: -3px;
-  bottom: -3px;
+  top: -6px;
+  right: -9px;
+  border: var(--bw-sm) solid var(--ink);
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--ink);
-  box-shadow: 0 0 0 2px #fff;
-}
-
-.chapter-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-}
-
-.chapter-meta .bar { flex: 1; }
-
-.chapter-stars {
-  --ic: 16px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-
-.chapter-stars .ic { color: var(--gold-deep); }
-
-.chapter .lvl-grid { padding: 0 14px; }
-
-/* Complete (all ten passed): the globe is earned, gold with a check; perfect: a gold rim. */
-.chapter.is-complete .chapter-prize {
-  background: var(--gold);
-  color: var(--ink);
-  box-shadow: 0 2px 0 var(--gold-deep);
+  background: radial-gradient(circle at 45% 35%, var(--green-hi), var(--green) 60%, var(--green-lo));
+  box-shadow: 0 2px 0 var(--ink);
 }
 
 .chapter:not(.is-complete) .chapter-check { display: none; }
 
-.chapter.is-perfect { box-shadow: inset 0 0 0 3px var(--gold), var(--shadow-sm); }
-
 .chapter.is-just-complete .chapter-prize { animation: unlock-pop 700ms var(--ease-back) 300ms both; }
 
-.chapter.is-locked {
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: none;
+/* The stars of the chapter as a tag hanging under the globe ("★ 13/30"); the count says what the bar did. */
+.chapter-meta {
+  position: absolute;
+  z-index: 3;
+  top: 48px;
+  right: calc(10px + 12px + 23px);
+  translate: 50% 0;
+  display: inline-flex;
+  gap: 2px;
+  padding: 0 8px 1px 4px;
 }
 
-.chapter.is-locked .chapter-banner {
-  background: var(--paper-2);
-  color: var(--ink-2);
+.chapter-meta .bar { display: none; }
+
+.chapter-stars {
+  --ic: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
-.chapter.is-locked .chapter-biome,
-.chapter.is-locked .chapter-prize { background: rgba(43, 33, 64, 0.07); }
+.chapter-count { font: inherit; }
 
-/* 10 tiles in two rows of 5. At 320 px the column is 256 px wide: 5 × 48 px with 4 px gaps. */
+/* Every star of the chapter: the tag turns gold. */
+.chapter.is-perfect .chapter-meta { background: var(--tint-gold); }
+
+/* The well: the biome's ground with a faint dot texture, sunk into the frame. */
+.chapter-map {
+  position: relative;
+  padding: 12px 8px 10px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 22px;
+  background:
+    radial-gradient(rgba(42, 27, 69, 0.06) 1.2px, transparent 1.6px) 0 0 / 14px 14px,
+    linear-gradient(180deg, var(--g1), var(--g2));
+  box-shadow: inset 0 5px 0 rgba(42, 27, 69, 0.12);
+}
+
+/* A locked board: what opens it, on a plate across the middle (aria-hidden; the nodes say "Locked"). */
+.chapter-plate {
+  --ic: 13px;
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  rotate: -3deg;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  padding: 7px 16px 10px 9px;
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.chapter-plate .lock-badge {
+  --d: 28px;
+  --ic: 16px;
+}
+
+.chapter:not(.is-locked) .chapter-plate { display: none; }
+
+/* ===== The nodes and their road (§6.13) ===== */
+
+/* Five columns, two rows; the second row runs right to left (the snake). --cy is the disc centre's
+   height in a cell: the road runs through it. */
 .lvl-grid {
+  --gap: 4px;
+  --d0: 52px;
+  --pt: 22px;
+  --cy: calc(var(--pt) + var(--d0) / 2);
+  --u: 4px;
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  column-gap: var(--gap);
+  row-gap: 10px;
 }
 
+.lvl-tile:nth-child(6) { grid-area: 2 / 5; }
+.lvl-tile:nth-child(7) { grid-area: 2 / 4; }
+.lvl-tile:nth-child(8) { grid-area: 2 / 3; }
+.lvl-tile:nth-child(9) { grid-area: 2 / 2; }
+.lvl-tile:nth-child(10) { grid-area: 2 / 1; }
+
+/* The cell is the button (the e2e size and centring checks measure it); the disc is its child. */
 .lvl-tile {
   position: relative;
-  justify-content: center;
-  gap: 2px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
   min-width: 0;
-  min-height: 60px;
-  padding: 6px 2px 5px;
+  min-height: 84px;
+  padding: var(--pt) 0 0;
   border: 0;
-  border-radius: 14px;
-  background: var(--paper);
+  border-radius: 0;
+  background: none;
   color: var(--ink);
-  box-shadow: inset 0 0 0 1.5px var(--line);
-  transition: transform 90ms var(--ease-out), box-shadow 90ms var(--ease-out), background var(--t);
 }
 
-@media (hover: hover) {
-  .lvl-tile:not(.is-locked):hover {
-    background: #fff;
-    box-shadow: inset 0 0 0 1.5px var(--line), var(--shadow-sm);
-  }
+/* The road: straight segments from a disc centre to the next (1-4 go right, 6-9 go left; 10 has none). */
+.lvl-tile::before,
+.lvl-tile::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
 }
 
-.lvl-tile:active:not(.is-locked) { transform: translateY(1px); }
-
-.lvl-tile.is-done {
-  background: #fff;
-  box-shadow: inset 0 0 0 2px var(--accent);
+.lvl-tile:nth-child(-n + 4)::before,
+.lvl-tile:nth-child(n + 6):nth-child(-n + 9)::before {
+  top: calc(var(--cy) - 9px);
+  width: calc(100% + var(--gap));
+  height: 18px;
+  border-block: 2px solid var(--ink);
+  background: var(--road-todo-edge);
 }
 
-.lvl-tile.is-perfect {
-  background: var(--gold-soft);
-  box-shadow: inset 0 0 0 2px var(--gold);
+.lvl-tile:nth-child(-n + 4)::after,
+.lvl-tile:nth-child(n + 6):nth-child(-n + 9)::after {
+  top: calc(var(--cy) - 5px);
+  width: calc(100% + var(--gap));
+  height: 10px;
+  background: var(--road-todo);
 }
 
-/* The level in play: the accent fill, as the Play button that leads here, and a slow glow. */
-.lvl-tile.is-next {
-  background: var(--accent);
-  color: var(--ink);
-  box-shadow: 0 3px 0 var(--accent-deep), var(--shadow-sm);
-  animation: next-glow 1.8s ease-in-out infinite;
+.lvl-tile:nth-child(-n + 5)::before,
+.lvl-tile:nth-child(-n + 5)::after { left: 50%; }
+
+.lvl-tile:nth-child(n + 6)::before,
+.lvl-tile:nth-child(n + 6)::after { right: 50%; }
+
+/* Travelled: the segment leaving a passed node is the warm dirt road with a light centre line. */
+.lvl-tile.is-done::before { background: var(--road-edge); }
+
+.lvl-tile.is-done::after { background: linear-gradient(180deg, var(--road) 0 35%, var(--road-hi) 35% 65%, var(--road) 65%); }
+
+/* The U-turn leaves node 5 to the right and enters node 6, directly below it: the edge band is a
+   14 px border with an ink line outside and inside (2 + 14 + 2 = the straight band's 18), the face
+   band a 10 px border 2 px within it. Height: one row pitch (the cell + the row gap) + the band. */
+.lvl-tile:nth-child(5)::before {
+  top: calc(var(--cy) - 7px);
+  width: calc(50% + var(--u));
+  height: calc(100% + 10px + 14px);
+  border: 14px solid var(--road-todo-edge);
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: none;
+  box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 2px var(--ink);
+  /* No ink line down the open left side. */
+  clip-path: inset(-3px -3px -3px 4px);
 }
 
-/* Unlocked since the last visit: the tile pops open. */
-.lvl-tile.is-unlocked { animation: unlock-pop 640ms var(--ease-back) 200ms both, next-glow 1.8s ease-in-out 840ms infinite; }
-
-.lvl-star.is-fresh .ic { animation: star-pop 420ms var(--ease-back) var(--d, 0ms) both; }
-
-@keyframes next-glow {
-  50% { box-shadow: 0 3px 0 var(--accent-deep), 0 0 0 6px rgba(46, 196, 182, 0.28); }
+.lvl-tile:nth-child(5)::after {
+  top: calc(var(--cy) - 5px);
+  width: calc(50% + var(--u) - 2px);
+  height: calc(100% + 10px + 10px);
+  border: 10px solid var(--road-todo);
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: none;
 }
+
+.lvl-tile.is-done:nth-child(5)::before { border-color: var(--road-edge); }
+
+.lvl-tile.is-done:nth-child(5)::after { border-color: var(--road); }
+
+/* The disc (a kit .node and .candy): blue open or passed, gold perfect, pink finale, green next,
+   locked lavender (kit). Its face follows the tile's state; its size changes keep the centre on --cy. */
+.lvl-num {
+  --d: var(--d0);
+  margin-top: calc((var(--d0) - var(--d)) / 2);
+  padding-bottom: 3px;
+  font-size: min(var(--fs-d-lg), calc(var(--d) * 0.44));
+  text-shadow: 0 2px 0 var(--ink);
+  transition: transform var(--t-up) var(--ease-back);
+}
+
+.lvl-num.is-wide { font-size: min(var(--fs-d-md), calc(var(--d) * 0.36)); }
+
+/* The gloss cap, shaped for a disc. */
+.lvl-num::before {
+  left: 18%;
+  right: 18%;
+  top: 5%;
+  height: 38%;
+  border-radius: 50% 50% 40% 40% / 60% 60% 40% 40%;
+}
+
+.lvl-tile.is-perfect:not(.is-locked) .lvl-num { --hi: var(--gold-hi); --face: var(--gold); --lo: var(--gold-lo); --lip: var(--gold-lip); }
+
+.lvl-tile.is-finale:not(.is-locked) .lvl-num {
+  --hi: var(--pink-hi);
+  --face: var(--pink);
+  --lo: var(--pink-lo);
+  --lip: var(--pink-lip);
+  --d: calc(var(--d0) + 6px);
+}
+
+.lvl-tile.is-locked .lvl-num { text-shadow: none; }
+
+/* The level in play: a larger green disc with a white and an ink ring (in the shadow stack, so the
+   cell never changes), a ring that breathes (opacity), rays behind and Nubs on top. */
+.lvl-tile.is-next .lvl-num {
+  --hi: var(--green-hi);
+  --face: var(--green);
+  --lo: var(--green-lo);
+  --lip: var(--green-lip);
+  --d: calc(var(--d0) + 8px);
+  --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 6px #fff, 0 0 0 9px var(--ink), 7px 9px 0 var(--shade);
+}
+
+.lvl-tile.is-next .lvl-num::after {
+  content: '';
+  position: absolute;
+  inset: -17px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: lvl-ring 1.6s ease-in-out infinite;
+}
+
+@keyframes lvl-ring {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+
+.lvl-rays,
+.lvl-glow {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: var(--cy);
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  pointer-events: none;
+}
+
+.lvl-rays { animation-duration: 12s; }
+
+/* The soft glow the rays sit on. */
+.lvl-glow {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 246, 170, 0.95), rgba(255, 230, 120, 0.45) 55%, rgba(255, 230, 120, 0));
+}
+
+/* Nubs on the level in play, in place of its stars; it bobs. */
+.lvl-pin {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: calc(var(--cy) - var(--d0) / 2 - 4px - 28px);
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  pointer-events: none;
+  animation: lvl-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes lvl-bob { 50% { transform: translateY(-5px); } }
+
+.lvl-tile.is-next .lvl-stars { display: none; }
+
+/* The finale's crown: the sun mascot perched on the disc's top-left rim (the concept coin takes the
+   top-right, the stars the top). */
+.lvl-crown {
+  position: absolute;
+  z-index: 3;
+  left: calc(50% - var(--d0) / 2 - 12px);
+  top: calc(var(--pt) - 12px);
+  width: 32px;
+  height: 32px;
+  overflow: visible;
+  rotate: -12deg;
+  pointer-events: none;
+}
+
+.lvl-tile.is-locked .lvl-crown { display: none; }
+
+/* Press: the disc sinks onto its lip (the cell never moves). */
+.lvl-tile:active:not(.is-locked) .lvl-num {
+  --sh: inset 0 -2px 0 var(--lip), var(--top-light), 0 0 0 var(--ink), 3px 4px 0 var(--shade);
+  transform: translateY(3px);
+  transition-duration: var(--t-down);
+}
+
+.lvl-tile.is-next:active .lvl-num { --sh: inset 0 -2px 0 var(--lip), var(--top-light), 0 0 0 6px #fff, 0 0 0 9px var(--ink), 4px 5px 0 var(--shade); }
+
+.sui.is-rm .lvl-tile:active .lvl-num { transform: none; }
+
+/* Focus: the three-ring on the disc, not the cell. */
+.sui .lvl-tile:focus-visible { outline: none; }
+
+.sui .lvl-tile:focus-visible .lvl-num {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+  box-shadow: var(--sh), 0 0 0 9px var(--ink);
+}
+
+.sui .lvl-tile.is-next:focus-visible .lvl-num { outline-offset: 12px; box-shadow: var(--sh), 0 0 0 18px var(--ink); }
+
+/* Unlocked since the last visit: the disc pops open. */
+.lvl-tile.is-unlocked .lvl-num { animation: unlock-pop 640ms var(--ease-back) 200ms both; }
 
 @keyframes unlock-pop {
   0% { transform: scale(0.7) rotate(-6deg); }
   60% { transform: scale(1.12); }
 }
 
-.lvl-tile.is-locked {
-  background: rgba(43, 33, 64, 0.06);
-  color: var(--ink-3);
-  box-shadow: none;
-}
-
-.lvl-num {
-  font-size: var(--fs-lg);
-  line-height: 1.1;
-}
-
-.lvl-tile.is-locked .lvl-num { opacity: 0.55; }
-
+/* The concept a level introduces: a cream coin on the disc's top-right, its line icon in ink. */
 .lvl-concept {
-  --d: 18px;
-  --ic: 13px;
+  --d: 24px;
+  --ic: 15px;
   position: absolute;
-  top: 3px;
-  right: 3px;
+  z-index: 3;
+  top: calc(var(--pt) - 3px);
+  left: calc(50% + var(--d0) / 2 - 14px);
+  border: var(--bw-sm) solid var(--ink);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
-  color: var(--ink-2);
-}
-
-.lvl-tile.is-next .lvl-concept {
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--cream);
+  box-shadow: 0 2px 0 var(--ink);
   color: var(--ink);
 }
 
-.lvl-tile.is-locked .lvl-concept {
-  background: transparent;
-  color: var(--ink-3);
-}
+.lvl-tile.is-next .lvl-concept { left: calc(50% + var(--d0) / 2 - 10px); top: calc(var(--pt) - 8px); }
 
+/* The stars: an arc above the disc (19 / 21 / 19, the outer ones tilted, the middle one higher). */
 .lvl-stars {
-  --ic: 13px;
-  display: inline-flex;
-  gap: 1px;
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 50%;
+  width: 62px;
+  height: 26px;
+  margin-left: -31px;
+  pointer-events: none;
 }
 
-.lvl-star .ic { color: rgba(43, 33, 64, 0.16); }
+.lvl-star {
+  position: absolute;
+  top: 6px;
+  width: 19px;
+  height: 19px;
+}
 
-.lvl-tile.is-next .lvl-star .ic { color: rgba(43, 33, 64, 0.2); }
+.lvl-star:nth-child(1) { left: 1px; rotate: -14deg; }
 
-.lvl-star.is-on .ic {
-  color: var(--gold);
-  filter: drop-shadow(0 1px 0 var(--gold-deep));
+.lvl-star:nth-child(2) {
+  left: 20px;
+  top: 1px;
+  width: 22px;
+  height: 22px;
+}
+
+.lvl-star:nth-child(3) { right: 1px; rotate: 14deg; }
+
+.lvl-star .ai {
+  width: 100%;
+  height: 100%;
+}
+
+.lvl-star.is-fresh .ai { animation: lvl-star-pop 420ms var(--ease-back) var(--d, 0ms) both; }
+
+@keyframes lvl-star-pop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.3); }
 }
 
 .lvl-tile.is-locked .lvl-stars,
 .lvl-tile:not(.is-locked) .lvl-lock { display: none; }
 
+/* The lock: a gold coin at the disc's bottom-right. */
 .lvl-lock {
-  --ic: 14px;
-  display: grid;
-  place-items: center;
-  height: 15px;
-  color: var(--ink-3);
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--cy) + var(--d0) / 2 - 18px);
+  left: calc(50% + var(--d0) / 2 - 16px);
 }
 
+/* Small phones: smaller discs and gaps keep each cell ≥ 50 × 78. */
 @media (max-width: 359.98px) {
-  .chapter .lvl-grid,
-  .chapter .chapter-meta {
-    padding-left: 10px;
-    padding-right: 10px;
+  .chapter { padding: 0 6px 8px; }
+
+  .chapter-map { padding: 12px 4px 8px; }
+
+  .chapter-meta { right: calc(6px + 12px + 23px); }
+
+  .chapter-banner { gap: 8px; }
+
+  .chapter-name { font-size: var(--fs-d-md); }
+
+  .lvl-grid {
+    --gap: 1px;
+    --d0: 46px;
+    --pt: 20px;
+    --u: 2px;
   }
 
-  .lvl-grid { gap: 4px; }
+  .lvl-tile { min-height: 78px; }
 
-  .lvl-tile {
-    min-height: 56px;
-    border-radius: 12px;
+  .lvl-rays,
+  .lvl-glow {
+    width: 96px;
+    height: 96px;
+    margin: -48px 0 0 -48px;
   }
 }
 
-/* The star road (widgets.ts starRoad): the next star reward's item, name, count and bar. */
-.road {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 10px;
-  text-align: left;
-}
+/* High contrast: flat faces, the locked hatch (kit), no rays or ring breathing. */
+.sui.is-hc .lvl-tile.is-next .lvl-num::after { animation: none; }
 
-.road-art {
-  --d: 44px;
-  grid-row: 1 / 3;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, #fff, var(--sky) 75%);
-}
+.sui.is-hc .chapter { background: var(--b); }
 
-.road-art .swatch {
-  width: 40px;
-  height: 40px;
-}
+.sui.is-hc .chapter-map { background: var(--g1); }
 
-.road-text {
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  color: var(--ink-2);
-  line-height: 1.25;
-}
-
-.road-text strong {
-  color: var(--ink);
-  font-weight: 900;
-}
-
-.road-count {
-  font-size: var(--fs-sm);
-  color: #8a5a00;
-}
-
-.road .bar { grid-column: 2 / 4; }
+/* Reduced motion: a static ring, no rays, no bob (the kit drops the animations); high contrast: no glow. */
+.sui.is-rm .lvl-rays,
+.sui.is-hc .lvl-glow { display: none; }
