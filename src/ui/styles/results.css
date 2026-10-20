@@ -239,12 +239,14 @@
 
 .res-head-actions .btn--round { --h: 50px; }
 
+/* "Nubs made it to", "Daily #293 · Try 2/3": a display-face caption over the score, not a button. */
 .res-kicker {
   flex: 0 1 auto;
   min-width: 0;
-  padding: 4px 12px 5px;
-  font-size: var(--fs-d-sm);
-  white-space: normal;
+  font: 400 var(--fs-d-md)/1.15 var(--font-display);
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+  text-wrap: balance;
 }
 
 /* The score row: the time, and the postcard to its right. */
@@ -766,13 +768,17 @@
 
 .res-goal-card:not(.is-met) { background: var(--cream-2); box-shadow: inset 0 -4px 0 var(--cream-3); }
 
+/* Up to two balanced lines ("≤ 3.7 s / in sun"); the grid row keeps the three cards one height. */
 .res-goal-rule {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   max-width: 100%;
   overflow: hidden;
   color: var(--ink);
   font: 800 0.8125rem/1.2 var(--font-body);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .res-goal-card:not(.is-met) .res-goal-rule { color: var(--ink-2); }

@@ -13,7 +13,7 @@
 //
 // Sizing: the sheet is at least 58% tall and grows with its content up to the viewport minus
 // 96 px of map. The score block stays pinned while stats and missions scroll; on short or
-// large-text screens (under 520 px, or under 120 px left for the scroll area) the whole sheet body
+// large-text screens (under 520 px, or under 200 px left for the scroll area) the whole sheet body
 // scrolls as one, with Retry always pinned below it.
 //
 // UI v2 (docs/UI_V2.md §10.3): the sheet is a framed panel; the celebration (the star burst, the
@@ -62,7 +62,7 @@ const CHIP_GAP_MS = 280;
 /** Below this viewport height the sheet body scrolls as one. */
 const ONE_SCROLL_BELOW_PX = 520;
 /** The stats/missions scroll area must keep at least this much height, or the body scrolls as one. */
-const MIN_SCROLL_PX = 120;
+const MIN_SCROLL_PX = 200;
 /**
  * A sheet that grows with its content stops at 68 % of the screen, so the Melt Map (and the
  * postcard cropped from it) keeps about a third; on tiny screens it keeps at least 96 px, and the
@@ -100,6 +100,9 @@ const TILE_ART: Readonly<Partial<Record<HourGlyph, string>>> = {
   hot: '<path d="M5 .6C5.6 2.6 8.4 3.8 8.4 6.4A3.4 3.4 0 0 1 1.6 6.4c0-1.5.9-2.4 1.6-3 .1 1 .6 1.7 1.3 1.9C4.3 3.6 4.4 2 5 .6Z" fill="#fff"/>',
   melt: '<path d="M5 .7S8.5 4.4 8.5 6.6a3.5 3.5 0 0 1-7 0C1.5 4.4 5 .7 5 .7Z" fill="#fff"/>',
 };
+
+/** A wrapped line keeps a number with its unit ("14 flakes", "3.7 s"), "≤" with its number and a ✓ with its clause. */
+const keepUnits = (s: string): string => s.replace(/(≤|\d) /g, '$1\u00a0').replace(/ ✓/g, '\u00a0✓');
 
 /** "Day 2: 7 cool, 3 warm and 2 hot hours" per row, for screen readers. */
 function stripLabel(strip: SunStrip): string {
@@ -192,7 +195,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   // "New best!"; decorative: the heading and the live region say it), the stars above it and, on a
   // passed level, the rays behind them (the canvas throws the confetti).
   const heroRibbon = ribbon('', { tone: 'red', tag: 'p', className: 'res-ribbon', hidden: true });
-  const kicker = h('p', { class: 'chip chip--dark res-kicker' });
+  const kicker = h('p', { class: 'res-kicker' });
   const dayBadge = h('span', { class: 'candy f-violet gt res-day' });
   const clock = h('span', { class: 'res-clock' });
   const time = h('h2', { class: 'res-time', id: 'res-time' }, dayBadge, clock);
@@ -410,7 +413,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
           'li',
           { class: `plate res-goal-card${ok ? ' is-met' : ''}`, 'aria-label': `${rule}: ${ok ? 'met' : 'not met'}` },
           artIcon(ok ? 'star' : 'starEmpty'),
-          h('span', { class: 'res-goal-rule', 'aria-hidden': 'true' }, rule),
+          h('span', { class: 'res-goal-rule', 'aria-hidden': 'true' }, keepUnits(rule)),
           ok ? h('span', { class: 'f-green res-coin res-goal-check', 'aria-hidden': 'true' }, artIcon('check')) : null,
         );
       }),
@@ -455,7 +458,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     levelName.textContent = c.name;
     level.setAttribute('aria-label', `Level ${c.id}, ${c.name}, ${c.passed ? starsLabel(c.stars) : 'not passed'}`);
     starsEl.setAttribute('aria-label', starsLabel(c.passed ? c.stars : 0));
-    goal.textContent = c.goalLine;
+    goal.textContent = keepUnits(c.goalLine);
     goal.classList.toggle('is-win', c.passed);
     if (nextLabelEl) nextLabelEl.dataset.sub = c.nextId !== null ? `LEVEL ${c.nextId}` : '';
     renderGoals(c);
@@ -510,7 +513,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     } else if (view.debug) {
       kicker.textContent = 'Debug run · not saved';
     } else if (dailyDate !== undefined) {
-      kicker.textContent = `Daily #${dailyNumber(dailyDate)} · ${dailyRunLabel(view.dailyTry, view.dailyScored)}`;
+      kicker.textContent = `Daily #${dailyNumber(dailyDate)}\u00a0· ${dailyRunLabel(view.dailyTry, view.dailyScored)}`;
     } else {
       kicker.textContent = result.mode === 'challenge' ? 'Challenge run' : 'Nubs made it to';
     }
