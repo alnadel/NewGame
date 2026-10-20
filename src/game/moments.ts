@@ -39,7 +39,7 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
     ['p25', 'The bar up top fills as Nubs nears the finish flag.'],
     // {n}: the level's flakes Dare (begin() fills it in, or drops the sentence when it dares another verb).
     ['flake', 'Flakes are Snow. Collect {n} for the second star!'],
-    ['p60', 'Little time in the sun earns the third star: a cool run.'],
+    ['p60', 'Third star: a cool run. Its ring drains while Nubs is in the sun.'],
   ],
   2: [
     ['go', 'Flakes melt in the sun: shade them before Nubs gets there.'],
