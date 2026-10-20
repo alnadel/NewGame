@@ -987,7 +987,7 @@ export class Renderer {
     } else {
       sc.hud.meterShown = false;
     }
-    if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
+    if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion, inp.highContrast);
     drawScreenParticles(g, sc.particles, v.dpr);
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   }
