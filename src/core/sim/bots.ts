@@ -349,6 +349,10 @@ function oracleBot(ctx: BotHookCtx): Bot {
     const drain = effectiveDrain(s);
     for (let h = 0; h < H + 3; h++) deltas[h] = worldOracleDelta(ctx, s, (j0 - 1 + h) * STEP, drain, s.params.regen);
     const maxC = s.nubs.maxChill;
+    // The tank a missed flare scorched (Endless, until nightfall or a Cold Snap): Chill refills no
+    // further, so a stretch of sun that needs more is no plan (review r5: planning with the whole
+    // tank, the oracle crossed stretches it could not afford after a scorch and melted).
+    const capC = maxC - s.flareScorch;
     const campaign = s.level !== null;
     const margin = campaign ? Math.min(ORACLE_CAMPAIGN.margin, maxC / 4) : cfg.margin;
     const shadeW = campaign ? ORACLE_CAMPAIGN.shadeWeight : 0;
@@ -364,7 +368,7 @@ function oracleBot(ctx: BotHookCtx): Bot {
       for (let b = 0; b < BINS; b++) {
         const nn = need[on + b] as number;
         const req = nn - ((deltas[i + 2] as Float64Array)[litH(i + 1, b)] as number);
-        tmp[b] = nn > maxC ? -INF : -(req < margin ? margin : req);
+        tmp[b] = nn > capC ? -INF : -(req < margin ? margin : req);
       }
       // A locked step cannot be turned into: the bin must already be held (CAMPAIGN 'lock').
       slidingMaxCircular(tmp, locked[i + 2] === 1 ? 0 : cfg.planBins, win);
@@ -382,7 +386,7 @@ function oracleBot(ctx: BotHookCtx): Bot {
     for (let k = -reach; k <= reach; k++) {
       const b = (b0 + k + BINS) % BINS;
       let next = c + ((deltas[2] as Float64Array)[litH(1, b)] as number);
-      if (next > maxC) next = maxC;
+      if (next > capC) next = capC;
       const slack = next - (need[BINS + b] as number);
       let v = (slack > cfg.slackCap ? cfg.slackCap : slack) - cfg.penalty * Math.abs(k) - shadeW * (lits[2 * BINS + b] as number);
       // Gold that is shaded next step is free; gold in the sun only while Chill is nearly full (never
