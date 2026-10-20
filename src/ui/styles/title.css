@@ -70,7 +70,15 @@
 
 .title-rank > .rank-badge { max-width: 100%; }
 
-.title-hud-gap { flex: 1; }
+.title-hud-gap { flex: 1; margin-left: -8px; }
+
+/* A 360 px phone: tighter gaps, so the first ranks' names ("Puddle") show whole beside a waiting
+   reward (the flexible gap above gives back most of its own). */
+@media (max-width: 379.98px) {
+  .title-hud { gap: 8px; }
+
+  .title-rank .rank-badge .rank-text { padding-right: 10px; }
+}
 
 /* The reward: a gold gift square on a slow ray burst, with a claim dot. */
 .title-reward-wrap {
