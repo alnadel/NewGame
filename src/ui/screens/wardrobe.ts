@@ -24,12 +24,13 @@ import {
 } from '../../meta/content.ts';
 import { markItemsSeen, newItems, rarity } from '../../meta/gamify.ts';
 import { itemState, totalStars, type ItemState } from '../../meta/progression.ts';
+import { artIcon } from '../art-icons.ts';
 import { h, setChildren } from '../dom.ts';
 import { icon, type IconName } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
 import { RARITY_LABEL } from '../labels.ts';
-import { button, menuHeader, progressBar, setDisabled, snowChip } from '../widgets.ts';
+import { button, buttonIcon, menuHeader, progressBar, ribbon, setDisabled, snowChip, type ButtonVariant } from '../widgets.ts';
 
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
 const PREVIEW_CSS = 168;
@@ -43,7 +44,17 @@ function lockName(c: Cosmetic): string {
   return c.unlock.kind === 'globe' ? 'Snow Globe' : 'Locked';
 }
 
-/** The tile's status line. Unaffordable prices carry a lock glyph, not just a muted color. */
+/** A price as a mini counter: the Snow gem on an embossed slot (§10.8). */
+const priceCounter = (cost: number, className = ''): HTMLElement =>
+  h('span', { class: `counter price${className ? ` ${className}` : ''}` }, artIcon('snow'), h('span', { class: 'num' }, String(cost)));
+
+/** The gold lock badge (§6.7). */
+const lockBadge = (): HTMLElement => h('span', { class: 'lock-badge' }, icon('lock'));
+
+/**
+ * The tile's status: a price counter, "Owned", a green "Wearing" tag, or a lock badge with what
+ * unlocks it. An unaffordable price carries a lock badge, never just a muted colour.
+ */
 function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (Node | string)[] } {
   switch (state) {
     case 'equipped':
@@ -51,11 +62,11 @@ function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (No
     case 'owned':
       return { cls: '', nodes: ['Owned'] };
     case 'buyable':
-      return { cls: 'is-cost', nodes: [icon('snow'), String(costOf(c))] };
+      return { cls: 'is-cost', nodes: [priceCounter(costOf(c))] };
     case 'expensive':
-      return { cls: 'is-cost is-short', nodes: [icon('lock'), String(costOf(c))] };
+      return { cls: 'is-cost is-short', nodes: [priceCounter(costOf(c)), lockBadge()] };
     case 'locked':
-      return { cls: 'is-locked', nodes: [icon(c.unlock.kind === 'globe' ? 'globe' : 'lock'), lockName(c)] };
+      return { cls: 'is-locked', nodes: [c.unlock.kind === 'globe' ? artIcon('globe', 'ai tile-globe') : lockBadge(), lockName(c)] };
   }
 }
 
@@ -100,9 +111,11 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
   const wallet = snowChip('0');
   const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, 'aria-hidden': 'true' });
   const itemName = h('p', { class: 'preview-name' });
-  const itemRarity = h('span', { class: 'rarity' });
-  // The try-on spot hops when the selection changes.
-  const spot = h('div', { class: 'stage-spot' }, canvas);
+  const itemRarity = h('span', { class: 'tag rarity' });
+  // The try-on spot hops when the selection changes; a small green ribbon says what Nubs wears
+  // (decoration: the action button says it too).
+  const wearing = ribbon('Wearing', { tone: 'green', size: 'sm', tag: 'span', hidden: true, className: 'wear-ribbon' });
+  const spot = h('div', { class: 'stage-spot' }, canvas, wearing.el);
   const itemNote = h('p', { class: 'preview-note' });
   const action = button(ctx, { label: 'Wearing', icon: 'check', variant: 'primary', size: 'lg', block: true, sound: null, onPress: () => act() });
 
@@ -128,11 +141,12 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     tabButtons.get(next)?.click();
   });
 
-  const grid = h('ul', { class: 'tile-grid', id: 'wardrobe-grid', role: 'tabpanel' });
-  // The collection: owned of all, with a bar.
+  // The item grid is a framed panel the selected folder tab joins (§6.9).
+  const grid = h('ul', { class: 'tile-grid panel', id: 'wardrobe-grid', role: 'tabpanel' });
+  // The collection: owned of all, with a gold bar, on a plate.
   const owned = h('span', { class: 'num' });
-  const collectionBar = progressBar(0);
-  const collection = h('p', { class: 'collection' }, icon('wardrobe'), h('span', { class: 'collection-label' }, 'Collection'), owned, collectionBar);
+  const collectionBar = progressBar(0, 'bar bar--sm');
+  const collection = h('p', { class: 'collection plate' }, artIcon('wardrobe'), h('span', { class: 'collection-label' }, 'Collection'), owned, collectionBar);
 
   const body = h(
     'div',
@@ -215,7 +229,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
           h('span', { class: 'tile-art', 'aria-hidden': 'true' }, cosmeticSwatch(c)),
           h('span', { class: 'tile-name', 'aria-hidden': 'true' }, c.name),
           status,
-          h('span', { class: 'new-tag', 'aria-hidden': 'true' }, 'New'),
+          h('span', { class: 'sticker tile-new', 'aria-hidden': 'true' }, 'New'),
         );
         btn.dataset.rarity = rarity(c);
         btn.addEventListener('click', () => select(c));
@@ -283,16 +297,25 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     const lockedNote = a
       ? `${a.hint}${a.stars !== undefined ? ` You have ${totalStars(save)}.` : ''}`
       : globe ? 'Found in Snow Globes: rank up, finish chapters, missions and streaks to earn them.' : 'Not available yet.';
-    const [label, variant, note, iconName]: [string, string, string, IconName] = {
+    const [label, variant, note, iconName]: [string, ButtonVariant, string, IconName] = {
       equipped: ['Wearing', 'plain', slot === 'shades' ? 'The sun has them on.' : 'Nubs has it on.', 'check'],
       owned: ['Wear it', 'primary', 'In your closet.', 'wardrobe'],
       buyable: [`Buy for ${costOf(c)} Snow`, 'gold', 'Trying it on. Like it?', 'snow'],
       expensive: [`Need ${costOf(c) - save.stats.wallet} more Snow`, 'plain', 'Collect flakes and finish missions to earn Snow.', 'snow'],
       locked: [a ? `Earn “${a.name}”` : globe ? 'Snow Globe' : 'Locked', 'plain', lockedNote, globe ? 'globe' : 'lock'],
-    }[state] as [string, string, string, IconName];
+    }[state] as [string, ButtonVariant, string, IconName];
     action.className = `btn btn--lg btn--block btn--${variant}`;
     setDisabled(action, state !== 'owned' && state !== 'buyable');
-    action.replaceChildren(icon(iconName), h('span', { class: 'btn-label' }, label));
+    // Buy shows its price as a mini counter (the accessible name keeps the words).
+    const buy = state === 'buyable';
+    if (buy) action.setAttribute('aria-label', label);
+    else action.removeAttribute('aria-label');
+    action.replaceChildren(
+      ...(buy ? [] : [buttonIcon(iconName, variant)]),
+      h('span', { class: 'btn-label' }, buy ? 'Buy' : label),
+      ...(buy ? [priceCounter(costOf(c), 'btn-price')] : []),
+    );
+    spot.classList.toggle('is-wearing', state === 'equipped');
     itemNote.textContent = note;
     drawPreview();
   }
