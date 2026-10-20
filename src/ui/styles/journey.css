@@ -173,8 +173,9 @@
   min-width: 0;
 }
 
+/* The banner's type is capped at large text sizes (it shares its line with the globe and its tag). */
 .chapter-kicker {
-  font: 400 var(--fs-d-xs)/1 var(--font-display);
+  font: 400 min(var(--fs-d-xs), 16px)/1 var(--font-display);
   color: var(--ink);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -184,7 +185,7 @@
 .chapter-name {
   padding: 0 2px 2px;
   overflow: clip;
-  font: 400 var(--fs-d-lg)/1.2 var(--font-display);
+  font: 400 min(var(--fs-d-lg), 26px)/1.2 var(--font-display);
   color: #fff;
   letter-spacing: 0.02em;
   -webkit-text-stroke: var(--halo) var(--ink);
@@ -211,15 +212,15 @@
   right: -9px;
   border: var(--bw-sm) solid var(--ink);
   border-radius: 50%;
-  background: radial-gradient(circle at 45% 35%, var(--green-hi), var(--green) 60%, var(--green-lo));
-  box-shadow: 0 2px 0 var(--ink);
+  background: var(--green);
+  box-shadow: inset 0 -3px 0 var(--green-lo), 0 2px 0 var(--ink);
 }
 
 .chapter:not(.is-complete) .chapter-check { display: none; }
 
 .chapter.is-just-complete .chapter-prize { animation: unlock-pop 700ms var(--ease-back) 300ms both; }
 
-/* The stars of the chapter as a tag hanging under the globe ("★ 13/30"); the count says what the bar did. */
+/* The stars of the chapter as a tag hanging under the globe ("★ 13/30"). */
 .chapter-meta {
   position: absolute;
   z-index: 3;
@@ -229,9 +230,8 @@
   display: inline-flex;
   gap: 2px;
   padding: 0 8px 1px 4px;
+  font-size: min(var(--fs-d-sm), 17px);
 }
-
-.chapter-meta .bar { display: none; }
 
 .chapter-stars {
   --ic: 18px;
@@ -487,21 +487,18 @@
 
 .lvl-tile.is-next .lvl-stars { display: none; }
 
-/* The finale's crown: the sun mascot perched on the disc's top-left rim (the concept coin takes the
-   top-right, the stars the top). */
-.lvl-crown {
+/* The finale's crown, perched on the disc's top-left rim (the concept coin takes the top-right, the
+   stars the top). */
+.sui .lvl-crown {
   position: absolute;
   z-index: 3;
   left: calc(50% - var(--d0) / 2 - 12px);
-  top: calc(var(--pt) - 12px);
-  width: 32px;
-  height: 32px;
-  overflow: visible;
-  rotate: -12deg;
-  pointer-events: none;
+  top: calc(var(--pt) - 10px);
+  width: 28px;
+  height: 28px;
+  rotate: -14deg;
 }
 
-.lvl-tile.is-locked .lvl-crown { display: none; }
 
 /* Press: the disc sinks onto its lip (the cell never moves). */
 .lvl-tile:active:not(.is-locked) .lvl-num {
@@ -509,8 +506,6 @@
   transform: translateY(3px);
   transition-duration: var(--t-down);
 }
-
-.lvl-tile.is-next:active .lvl-num { --sh: inset 0 -2px 0 var(--lip), var(--top-light), 0 0 0 6px #fff, 0 0 0 9px var(--ink), 4px 5px 0 var(--shade); }
 
 .sui.is-rm .lvl-tile:active .lvl-num { transform: none; }
 
@@ -547,8 +542,6 @@
   box-shadow: 0 2px 0 var(--ink);
   color: var(--ink);
 }
-
-.lvl-tile.is-next .lvl-concept { left: calc(50% + var(--d0) / 2 - 10px); top: calc(var(--pt) - 8px); }
 
 /* The stars: an arc above the disc (19 / 21 / 19, the outer ones tilted, the middle one higher). */
 .lvl-stars {
@@ -592,7 +585,7 @@
   70% { transform: scale(1.3); }
 }
 
-.lvl-tile.is-locked .lvl-stars,
+.lvl-tile.is-locked :is(.lvl-stars, .lvl-crown),
 .lvl-tile:not(.is-locked) .lvl-lock { display: none; }
 
 /* The lock: a gold coin at the disc's bottom-right. */
@@ -613,7 +606,7 @@
 
   .chapter-banner { gap: 8px; }
 
-  .chapter-name { font-size: var(--fs-d-md); }
+  .chapter-name { font-size: min(var(--fs-d-md), 22px); }
 
   .lvl-grid {
     --gap: 1px;
@@ -632,9 +625,7 @@
   }
 }
 
-/* High contrast: flat faces, the locked hatch (kit), no rays or ring breathing. */
-.sui.is-hc .lvl-tile.is-next .lvl-num::after { animation: none; }
-
+/* High contrast: flat faces (the kit adds the locked hatch and drops the rays). */
 .sui.is-hc .chapter { background: var(--b); }
 
 .sui.is-hc .chapter-map { background: var(--g1); }

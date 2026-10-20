@@ -201,7 +201,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // The daily streak's reward, when one waits: a gold gift square on a slow ray burst, claimed right
   // here (the reveal plays over the Title). Its aria-label names it.
   const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', square: true, className: 'title-reward pe', ariaLabel: 'Claim the daily reward', sound: null, onPress: () => void claimDailyReward(ctx) });
-  const reward = h('div', { class: 'title-reward-wrap' }, h('span', { class: 'burst', 'aria-hidden': 'true' }), rewardBtn, h('span', { class: 'title-reward-dot', 'aria-hidden': 'true' }));
+  const reward = h('div', { class: 'title-reward-wrap has-dot', 'data-dot': '' }, h('span', { class: 'burst', 'aria-hidden': 'true' }), rewardBtn);
   const walletValue = h('span', { class: 'num' });
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
   const hud = h('div', { class: 'title-hud' }, badgeSlot, reward, h('i', { class: 'title-hud-gap' }), chipSnow);
@@ -233,14 +233,13 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const modes = h('div', { class: 'modes' }, mapBtn, playBtn, endlessBtn);
 
   // --- Tray --------------------------------------------------------------------------------------
-  const dailyDot = h('span', { class: 'tray-dot', 'aria-hidden': 'true' });
   // Tray squares are all cloud (neutral: Play is the hero), each with its coloured art icon.
-  const trayButton = (label: string, iconName: ArtName, onActivate: () => void, f?: Feature, extras: HTMLElement[] = []): HTMLButtonElement => {
+  const trayButton = (label: string, iconName: ArtName, onActivate: () => void, f?: Feature): HTMLButtonElement => {
     const btn = pressable(
       h(
         'button',
         { class: 'tray-btn pe', type: 'button', 'aria-label': label },
-        h('span', { class: 'tray-disc candy f-cloud' }, artIcon(iconName), ...extras, ...(f ? [lockBadge(), newTag()] : [])),
+        h('span', { class: 'tray-disc candy f-cloud' }, artIcon(iconName), ...(f ? [lockBadge(), newTag()] : [])),
         h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
       ),
       f ? gated(f, onActivate) : onActivate,
@@ -249,7 +248,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     if (f) gates.push({ f, el: btn, name: label });
     return btn;
   };
-  const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily', [dailyDot]);
+  const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily');
   const trayFor: Partial<Record<ScreenId, HTMLElement>> = {
     profile: badge.el,
     journey: mapBtn,
@@ -389,7 +388,10 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     renderGates(save);
     keys.textContent = isOpen(save, 'endless') ? KEY_HINT : KEY_HINT_LOCKED;
     const unplayed = isOpen(save, 'daily') && !dailyStatus(save, ctx.today()).played;
-    hide(dailyDot, !unplayed);
+    // Today's Daily not played yet: a bare claim bubble on its square.
+    const dailyDisc = dailyBtn.firstElementChild as HTMLElement;
+    dailyDisc.dataset.dot = '';
+    dailyDisc.classList.toggle('has-dot', unplayed);
     if (unplayed) dailyBtn.setAttribute('aria-label', "Daily: today's is new");
 
     const banner = ctx.challenge();

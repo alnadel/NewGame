@@ -11,14 +11,13 @@
 import { CAMPAIGN_LEVELS, CHAPTERS, CONCEPTS, type LevelDef } from '../../core/index.ts';
 import { CAMPAIGN_STARS_MAX, continueLevel, isLevelPlayable, totalStars } from '../../meta/progression.ts';
 import { STARS_PER_LEVEL } from '../../meta/save.ts';
-import { sunMascot } from '../art.ts';
 import { biomeIcon, biomeName, conceptIcon } from '../concepts.ts';
-import { h, svgFromMarkup } from '../dom.ts';
+import { h } from '../dom.ts';
 import { artIcon } from '../art-icons.ts';
 import { icon } from '../icons.ts';
 import { continueLabel, levelTileLabel, starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
-import { button, countUp, menuHeader, progressBar, starRoad } from '../widgets.ts';
+import { button, countUp, menuHeader, starRoad } from '../widgets.ts';
 
 /** Nodes per road row: the road runs 1→5, U-turns, then 6→10 (journey.css). */
 const COLUMNS = 5;
@@ -41,7 +40,6 @@ interface Tile {
 interface ChapterView {
   el: HTMLElement;
   count: HTMLElement;
-  bar: HTMLElement;
   prize: HTMLElement;
 }
 
@@ -76,29 +74,20 @@ export function journeyStep(n: number, key: string, levels: number): number | nu
 // --- Board props (the storybook graft): two per biome standing on a board's bottom corners, each
 // casting the game's purple shade. Drawn here once and handed to journey.css as data-URI custom
 // properties, so the locked boards reuse the same shapes in lavender.
-/** a: main face, b: its shaded side, c: wood and posts, d: a light (window, lamp). */
-type PropPalette = { a: string; b: string; c: string; d: string };
+/** Each prop's shapes with its colours as `a` (face), `b` (shaded side or roof), `c` (wood, posts). */
 type PropKind = 'tree' | 'bush' | 'house' | 'lamp';
-const SHADE = '<ellipse cx="27" cy="39" rx="17" ry="3.5" fill="#5A4A78" opacity=".32"/>';
-const PROPS: Record<PropKind, (p: PropPalette) => string> = {
-  tree: (p) => `${SHADE}<path d="M18 38V24h6v14Z" fill="${p.c}"/><circle cx="21" cy="15" r="11" fill="${p.a}"/><circle cx="12" cy="22" r="7" fill="${p.a}"/><circle cx="29" cy="22" r="7" fill="${p.b}"/><path d="M15 11a8 8 0 0 1 7-5" stroke="#fff" stroke-opacity=".6" stroke-width="2.5" fill="none"/>`,
-  bush: (p) => `${SHADE}<circle cx="14" cy="31" r="7" fill="${p.a}"/><circle cx="24" cy="27" r="10" fill="${p.a}"/><circle cx="34" cy="31" r="7" fill="${p.b}"/><path d="M8 38h32" stroke-width="2.5"/>`,
-  house: (p) => `${SHADE}<path d="M9 22h28v16H9Z" fill="${p.b}"/><path d="M5 23 23 8l18 15Z" fill="${p.a}"/><path d="M19 38v-9h6v9" fill="${p.c}"/><path d="M29 26h5v4h-5Z" fill="${p.d}"/>`,
-  lamp: (p) => `${SHADE}<path d="M22 38V16h4v22Z" fill="${p.c}"/><path d="M17 38h14" stroke-width="3"/><path d="M18 9h12l-2 8h-8Z" fill="${p.d}"/><path d="M20 9l4-4 4 4" fill="${p.c}"/>`,
+const PROPS: Record<PropKind, string> = {
+  tree: '<path d="M18 38V24h6v14Z" fill="c"/><circle cx="21" cy="15" r="11" fill="a"/><circle cx="12" cy="22" r="7" fill="a"/><circle cx="29" cy="22" r="7" fill="b"/>',
+  bush: '<circle cx="14" cy="31" r="7" fill="a"/><circle cx="24" cy="27" r="10" fill="a"/><circle cx="34" cy="31" r="7" fill="b"/>',
+  house: '<path d="M9 22h28v16H9Z" fill="a"/><path d="M5 23 23 8l18 15Z" fill="b"/><path d="M19 38v-9h6v9" fill="c"/>',
+  lamp: '<path d="M22 38V16h4v22ZM17 38h14" fill="c"/><path d="M18 9h12l-2 8h-8Z" fill="a"/>',
 };
-const propUrl = (body: string): string =>
-  `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 44"><g stroke="#2A1B45" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">${body}</g></svg>`)}")`;
-const LIVE: Record<PropKind, PropPalette> = {
-  tree: { a: '#8FD45A', b: '#6CBF3E', c: '#B07A4A', d: '' },
-  bush: { a: '#7FCB4E', b: '#63B238', c: '', d: '' },
-  house: { a: '#F2774A', b: '#FFF1D6', c: '#B07A4A', d: '#BFE6FF' },
-  lamp: { a: '', b: '', c: '#5B4A7E', d: '#FFE27A' },
-};
-const LOCKED: PropPalette = { a: '#D9D1E6', b: '#C3B8D6', c: '#A99CC6', d: '#EEEAF5' };
-
-/** The sun mascot as one symbol, the crown of every finale node (it costs one copy of the art). */
-function crownSprite(): SVGSVGElement {
-  return svgFromMarkup(`<svg class="ai-sprite" aria-hidden="true" focusable="false" width="0" height="0"><symbol id="j-sun" viewBox="-1.7 -1.7 3.4 3.4" overflow="visible">${sunMascot({ id: 'j-sun', cx: 0, cy: 0, r: 1 })}</symbol></svg>`);
+const LIVE: Record<PropKind, string> = { tree: '8d5 6b4 b74', bush: '8c5 6b3 000', house: 'fec f74 b74', lamp: 'fe7 000 549' };
+/** A prop as a data-URI image: its purple shade, then its shapes in `colours` ("a b c", 3-digit hex). */
+function propUrl(kind: PropKind, colours: string): string {
+  const [a, b, c] = colours.split(' ');
+  const body = PROPS[kind].replace(/fill="([abc])"/g, (_, k: string) => `fill="#${k === 'a' ? a : k === 'b' ? b : c}"`);
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 44"><ellipse cx="27" cy="39" rx="17" ry="3.5" fill="#5A4A78" opacity=".32"/><g stroke="#2A1B45" stroke-width="2" stroke-linejoin="round">${body}</g></svg>`)}")`;
 }
 
 export function createJourneyScreen(ctx: UiContext): Screen {
@@ -167,7 +156,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
         'button',
         { class: `lvl-tile pe${finale ? ' is-finale' : ''}`, type: 'button', 'data-level': level.id, title: concept ? (concept.name === level.name ? concept.blurb : `${concept.name}: ${concept.blurb}`) : null },
         h('span', { class: `lvl-num node candy${level.id >= 100 ? ' is-wide' : ''}` }, String(level.id)),
-        finale ? svgFromMarkup('<svg class="lvl-crown" aria-hidden="true" focusable="false"><use href="#j-sun"/></svg>') : null,
+        finale ? artIcon('crown', 'ai lvl-crown') : null,
         concept ? h('span', { class: 'lvl-concept' }, icon(conceptIcon(concept.id))) : null,
         h('span', { class: 'lvl-stars' }, ...stars),
         h('span', { class: 'lvl-lock lock-badge' }, icon('lock')),
@@ -180,9 +169,9 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       tiles.push({ level, el, stars, uses });
     }
     // The banner on the board's frame: biome coin, "Chapter 4" over its name, the chapter's Snow Globe
-    // (earned once all ten levels are passed) with the chapter's stars as a tag hanging under it.
+    // (earned once all ten levels are passed) with the chapter's stars as a tag hanging under it (the
+    // count says what the v1 bar did).
     const count = h('span', { class: 'chapter-count num' });
-    const bar = progressBar(0);
     const prize = h('span', { class: 'chapter-prize', role: 'img' }, artIcon('globe'), h('span', { class: 'chapter-check' }, artIcon('check')));
     const first = (chapter.id - 1) * LEVELS_PER_CHAPTER + 1;
     const el = h(
@@ -200,7 +189,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
         ),
         prize,
       ),
-      h('div', { class: 'chapter-meta tag' }, h('span', { class: 'chapter-stars' }, artIcon('star'), count), bar),
+      h('div', { class: 'chapter-meta tag' }, h('span', { class: 'chapter-stars' }, artIcon('star'), count)),
       h(
         'div',
         { class: 'chapter-map' },
@@ -209,7 +198,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
         first > 1 ? h('span', { class: 'chapter-plate plate', 'aria-hidden': 'true' }, h('span', { class: 'lock-badge' }, icon('lock')), `Finish Level ${first - 1}`) : null,
       ),
     );
-    chapters.push({ el, count, bar, prize });
+    chapters.push({ el, count, prize });
     body.append(el);
   }
 
@@ -229,12 +218,11 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   const el = h(
     'section',
     { class: 'scr scr-menu scr-journey', 'aria-labelledby': 'journey-title' },
-    crownSprite(),
     h('div', { class: 'menu pe' }, header, sticky, body),
   );
   for (const kind of Object.keys(PROPS) as PropKind[]) {
-    el.style.setProperty(`--prop-${kind}`, propUrl(PROPS[kind](LIVE[kind])));
-    el.style.setProperty(`--prop-${kind}-x`, propUrl(PROPS[kind](LOCKED)));
+    el.style.setProperty(`--prop-${kind}`, propUrl(kind, LIVE[kind]));
+    el.style.setProperty(`--prop-${kind}-x`, propUrl(kind, 'd9d1e6 c3b8d6 a99cc6'));
   }
 
   function refresh(): void {
@@ -268,7 +256,6 @@ export function createJourneyScreen(ctx: UiContext): Screen {
       const n = perChapter[i] ?? 0;
       c.count.textContent = `${n}/${CHAPTER_STARS}`;
       c.count.setAttribute('aria-label', starsLabel(n, CHAPTER_STARS));
-      (c.bar.firstElementChild as HTMLElement).style.width = `${Math.round((n / CHAPTER_STARS) * 100)}%`;
       // Complete: all ten levels passed (the chapter's Snow Globe is earned); perfect: every star.
       const complete = (passed[i] ?? 0) >= LEVELS_PER_CHAPTER;
       c.el.classList.toggle('is-complete', complete);
