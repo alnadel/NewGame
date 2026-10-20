@@ -141,11 +141,14 @@ export default defineConfig({
   plugins: [shadySW()],
   build: {
     target: 'es2020',
-    // The UI's floor is CSS container queries (they lay out the Title, Results, Pause and the
-    // menus), so the CSS targets the first browsers that have them. A target derived from es2020
-    // made lightningcss split every :focus-visible/:is() selector list into separate rules and add
-    // -webkit-any/-moz-any copies, for browsers that cannot lay the UI out anyway (about 3.5 KB).
-    cssTarget: ['chrome105', 'edge105', 'firefox110', 'safari16'],
+    // The UI's floor is CSS container queries and :has() (they lay out the Title, Results, Pause,
+    // the dialogs and the menus), so the CSS targets the first browsers that have both. A target
+    // derived from es2020 made lightningcss split every :focus-visible/:is() selector list into
+    // separate rules and add -webkit-any/-moz-any copies for browsers that cannot lay the UI out
+    // (about 5 KB). Firefox stays at 121, its first :has(): below that lightningcss wraps a
+    // :has() selector list in :is(), which lifts every selector in it to the list's highest
+    // specificity (the kit's dialog ribbon padding then beat the Pause card's small-phone rule).
+    cssTarget: ['chrome105', 'edge105', 'firefox121', 'safari16'],
     assetsInlineLimit: 0,
     sourcemap: false,
   },
