@@ -687,6 +687,11 @@ body,
 
 :is(.tray-btn.is-new .tray-disc, .endless-pill.is-new) { animation: new-pulse 1.6s ease-in-out infinite; }
 
+/* A tray square's dot and NEW sticker keep to its top corner, clear of the modes' tags above. */
+.sui .tray .has-dot::after { top: -4px; right: -4px; }
+
+.tray .new-tag { top: -6px; }
+
 /* The NEW sticker speaks for a just-unlocked button: its claim dot waits until it has been opened. */
 .sui .tray-btn.is-new .has-dot::after { display: none; }
 
@@ -705,8 +710,12 @@ body,
 .title-bottom.is-tight .btn.mode-sq {
   --h: 56px;
   --w: 58px;
-  --ic: 32px;
+  --ic: 28px;
+  padding-bottom: 18px;
 }
+
+/* Tight: the tags sit on the squares' bottom edge (the icon rides higher), so they never reach the tray. */
+.title-bottom.is-tight .mode-tag { bottom: -4px; }
 
 .title-bottom.is-tight .modes .play-pill { --h: 60px; }
 
@@ -717,9 +726,9 @@ body,
 
 .title-bottom.is-tight .title-gap { min-height: 0; flex-basis: 0; }
 
-/* Tight: the rows close up (the tags still clear the tray), the chips are 36 px faces (their hit
-   boxes stay 44), so a 360x640 Title keeps both its chips and its tray labels. */
-.title-bottom.is-tight .modes { margin-bottom: 1px; }
+/* Tight: the rows close up (the tucked tags still clear the tray and its dots), the chips are 36 px
+   faces (their hit boxes stay 44), so a 360x640 Title keeps both its chips and its tray labels. */
+.title-bottom.is-tight .modes { margin-bottom: 4px; }
 
 .title-bottom.is-tight .tray-btn { padding-top: 0; }
 
