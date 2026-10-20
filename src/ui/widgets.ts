@@ -56,7 +56,7 @@ export function button(ctx: UiContext, o: ButtonOptions): HTMLButtonElement {
     'button',
     { class: cls, type: 'button', 'aria-label': iconOnly ? (o.ariaLabel ?? o.label) : (o.ariaLabel ?? null) },
     o.icon ? buttonIcon(o.icon, variant) : null,
-    iconOnly ? null : h('span', { class: 'btn-label' }, o.label),
+    iconOnly ? null : h('span', 'btn-label', o.label),
   );
   el.addEventListener('click', () => {
     if (el.getAttribute('aria-disabled') === 'true') return;
@@ -84,7 +84,7 @@ export interface SwitchControl {
 
 export function toggleSwitch(ctx: UiContext, label: string, onChange: (on: boolean) => void): SwitchControl {
   const el = h('button', { class: 'switch', type: 'button', role: 'switch', 'aria-checked': 'false', 'aria-label': label },
-    h('span', { class: 'switch-knob' }));
+    h('span', 'switch-knob'));
   const set = (on: boolean): void => el.setAttribute('aria-checked', String(on));
   el.addEventListener('click', () => {
     const on = el.getAttribute('aria-checked') !== 'true';
@@ -164,7 +164,7 @@ export function slider(o: SliderOptions): SliderControl {
     step: o.step,
     'aria-label': o.label,
   });
-  const out = h('output', { class: 'range-value' });
+  const out = h('output', 'range-value');
   const paint = (v: number): void => {
     out.textContent = o.format(v);
     input.setAttribute('aria-valuetext', o.format(v));
@@ -180,12 +180,12 @@ export function slider(o: SliderOptions): SliderControl {
     input.value = String(v);
     paint(v);
   };
-  return { el: h('div', { class: 'range-wrap' }, input, out), set };
+  return { el: h('div', 'range-wrap', input, out), set };
 }
 
 /** The Snow counter (the wallet): an embossed slot with the ice-gem coin. Give it an aria-label such as "230 Snow". */
 export function snowChip(value: string): HTMLElement {
-  return h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), h('span', { class: 'num' }, value));
+  return h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), h('span', 'num', value));
 }
 
 /** Sets a counter's number with room for its widest value (Lilita has no tabular figures, §2.4). */
@@ -287,7 +287,7 @@ export function progressBar(fraction: number, className = 'bar', tone?: BarTone)
   const fill = h('i');
   fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
   const cls = tone && tone !== 'gold' ? `${className} bar--${tone}` : className;
-  return h('span', { class: cls, 'aria-hidden': 'true' }, fill);
+  return h('span', { class: cls, deco: true }, fill);
 }
 
 /** Header for full-screen menus: the blue back coin, the title as a red ribbon, an optional right-hand slot. */
@@ -295,7 +295,7 @@ export function menuHeader(ctx: UiContext, title: string, right?: HTMLElement): 
   const back = button(ctx, { label: 'Back', icon: 'back', variant: 'blue', round: true, sound: 'back', onPress: () => ctx.back() });
   back.classList.add('menu-back');
   const r = ribbon(title, { tone: 'red', className: 'menu-ribbon', bandClass: 'menu-title' });
-  return h('header', { class: 'menu-head' }, back, r.el, right ?? h('span', { class: 'menu-spacer' }));
+  return h('header', 'menu-head', back, r.el, right ?? h('span', 'menu-spacer'));
 }
 
 /** An empty state: an icon in a soft disc, a short title and one line (and an optional action). */
@@ -303,16 +303,16 @@ export function emptyState(iconName: IconName, title: string, text: string, acti
   return h(
     'div',
     { class: 'empty' },
-    h('span', { class: 'empty-ic', 'aria-hidden': 'true' }, icon(iconName)),
-    h('strong', { class: 'empty-title' }, title),
-    h('p', { class: 'empty-text' }, text),
+    h('span', { class: 'empty-ic', deco: true }, icon(iconName)),
+    h('strong', 'empty-title', title),
+    h('p', 'empty-text', text),
     action ?? null,
   );
 }
 
 /** A labeled settings/menu section: a framed panel (blue by default) with its title in ink. */
 export function section(title: string, ...children: (HTMLElement | null)[]): HTMLElement {
-  return h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title), ...children);
+  return h('section', 'card', h('h3', 'card-title', title), ...children);
 }
 
 /** A medal (§6.6): Sun Rank, trophies, level badges. `tier` picks the metal. */
@@ -332,12 +332,12 @@ export function hide(el: HTMLElement, hidden: boolean): void {
  * a bar (the Journey map and a level's Results). Hidden once every reward is earned.
  */
 export function starRoad(): { el: HTMLElement; update(save: Save): void } {
-  const art = h('span', { class: 'road-art', 'aria-hidden': 'true' });
+  const art = h('span', { class: 'road-art', deco: true });
   const name = h('strong', null);
   const target = h('span', null);
-  const count = h('span', { class: 'road-count num' });
+  const count = h('span', 'road-count num');
   const bar = progressBar(0);
-  const el = h('p', { class: 'road' }, art, h('span', { class: 'road-text' }, name, target), count, bar);
+  const el = h('p', 'road', art, h('span', 'road-text', name, target), count, bar);
   return {
     el,
     update(save) {

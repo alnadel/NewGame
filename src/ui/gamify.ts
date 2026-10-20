@@ -60,9 +60,9 @@ export function globeSvg(className = 'globe-art'): SVGSVGElement {
 /** The rank badge: a gold medal with the rank, on a plate with "Sun Rank", the name and a mini XP bar. Tapping it opens the Profile. */
 export function rankBadge(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
   const num = medal('', { className: 'rank-medal' });
-  const name = h('span', { class: 'rank-name' });
+  const name = h('span', 'rank-name');
   const bar = progressBar(0, 'bar bar--sm rank-bar', 'violet');
-  const el = h('button', { type: 'button', class: 'rank-badge pe' }, num, h('span', { class: 'plate rank-text' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), name, bar));
+  const el = h('button', { type: 'button', class: 'rank-badge pe' }, num, h('span', 'plate rank-text', h('span', 'rank-kicker', 'Sun Rank'), name, bar));
   el.addEventListener('click', () => {
     if (!featureUnlocked(ctx.save(), 'profile')) {
       ctx.sound('deny');
@@ -98,13 +98,13 @@ const wait = (ms: number): Promise<void> => new Promise((done) => window.setTime
  */
 export function xpMeter(ctx: UiContext): { el: HTMLElement; show(o: GamifyOutcome | undefined, save?: Save): Promise<void> } {
   const num = medal('', { className: 'xp-medal' });
-  const title = h('span', { class: 'rank-name' });
-  const gainText = h('span', { class: 'gt xp-gain-t' });
-  const gain = h('span', { class: 'xp-gain', 'aria-hidden': 'true' }, kitShape('burst', 'xp-gain-bg'), gainText);
+  const title = h('span', 'rank-name');
+  const gainText = h('span', 'gt xp-gain-t');
+  const gain = h('span', { class: 'xp-gain', deco: true }, kitShape('burst', 'xp-gain-bg'), gainText);
   const fill = h('i');
-  const added = h('i', { class: 'bar-gain' });
-  const count = h('span', { class: 'num bar-label' });
-  const next = h('span', { class: 'xp-next' });
+  const added = h('i', 'bar-gain');
+  const count = h('span', 'num bar-label');
+  const next = h('span', 'xp-next');
   const el = h(
     'div',
     { class: 'xp-meter', role: 'group' },
@@ -112,12 +112,12 @@ export function xpMeter(ctx: UiContext): { el: HTMLElement; show(o: GamifyOutcom
     h(
       'div',
       { class: 'xp-foot' },
-      h('span', { class: 'bar bar--violet xp-track' }, fill, added, count),
-      h('span', { class: 'xp-title' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), title),
+      h('span', 'bar bar--violet xp-track', fill, added, count),
+      h('span', 'xp-title', h('span', 'rank-kicker', 'Sun Rank'), title),
       next,
     ),
     gain,
-    h('span', { class: 'sticker xp-pop', 'aria-hidden': 'true' }, 'Rank up!'),
+    h('span', { class: 'sticker xp-pop', deco: true }, 'Rank up!'),
   );
   let token = 0;
   /** Where this run's gain starts (total XP); after a roll-over the segment starts at the rank's left end. */
@@ -247,22 +247,22 @@ function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
   // The kicker is a small red ribbon (its band holds the words); the prize lands on a card framed
   // in its rarity's colour, the rarity word hung under it as a tag (the sub-line says it too).
   const kicker = ribbon('', { tone: 'red', size: 'sm', tag: 'p', bandClass: 'rv-kicker', className: 'rv-ribbon' });
-  const name = h('p', { class: 'gt rv-name' });
-  const sub = h('p', { class: 'rv-sub' });
-  const count = h('p', { class: 'rv-count' });
-  const prize = h('div', { class: 'rv-item' });
-  const tierTag = h('span', { class: 'tag rv-tag', 'aria-hidden': 'true' });
-  const card = h('div', { class: 'panel rv-prize' }, prize, tierTag);
-  const flakes = h('div', { class: 'rv-flakes', 'aria-hidden': 'true' });
+  const name = h('p', 'gt rv-name');
+  const sub = h('p', 'rv-sub');
+  const count = h('p', 'rv-count');
+  const prize = h('div', 'rv-item');
+  const tierTag = h('span', { class: 'tag rv-tag', deco: true });
+  const card = h('div', 'panel rv-prize', prize, tierTag);
+  const flakes = h('div', { class: 'rv-flakes', deco: true });
   for (let i = 0; i < FLAKES; i++) flakes.append(h('i', { style: `--i:${i}` }));
   const next = h('button', { type: 'button', class: 'btn btn--primary btn--xl rv-next' });
   const live = h('p', { class: 'sr-only', 'aria-live': 'assertive' });
   const el = h(
     'div',
     { class: 'rv pe', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Reward' },
-    h('div', { class: 'rv-scrim' }),
-    h('div', { class: 'rv-frame' }, h('div', { class: 'rv-stage' }, kicker.el,
-      h('div', { class: 'rv-art' }, h('div', { class: 'burst rv-rays' }), h('div', { class: 'rv-globe' }, globeSvg()), flakes, card),
+    h('div', 'rv-scrim'),
+    h('div', 'rv-frame', h('div', 'rv-stage', kicker.el,
+      h('div', 'rv-art', h('div', 'burst rv-rays'), h('div', 'rv-globe', globeSvg()), flakes, card),
       name, sub, count, next, live)),
   );
   root.append(el);
@@ -287,7 +287,7 @@ function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
       el.dataset.tier = item ? rarity(item) : 'snow';
       tierTag.textContent = item ? RARITY_LABEL[rarity(item)] : '';
       hide(tierTag, !item);
-      setChildren(prize, item ? cosmeticSwatch(item) : h('span', { class: 'num' }, artIcon('snow'), `+${r.amount}`));
+      setChildren(prize, item ? cosmeticSwatch(item) : h('span', 'num', artIcon('snow'), `+${r.amount}`));
       name.textContent = item ? item.name : `${r.amount} Snow`;
       sub.textContent = item ? `${RARITY_LABEL[rarity(item)]} · new in your Wardrobe` : 'Added to your wallet';
       live.textContent = `${kicker.band.textContent}: ${name.textContent}`;
@@ -377,12 +377,15 @@ export function claimDailyReward(ctx: UiContext): Promise<void> {
  * check, today a raised gold plate, future days cream plates with the Snow gem, and Day 7 a wide
  * violet plate holding the Snow Globe.
  */
+/** A streak day's state class, written out whole (never built at run time), so the build can shorten it (vite.config.ts). */
+const DAY_CLASS = { claimed: 'is-claimed', today: 'is-today', future: 'is-future' } as const;
+
 export function streakCard(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
-  const days = h('ol', { class: 'streak-days' });
-  const countEl = h('span', { class: 'card-count' });
-  const note = h('p', { class: 'card-note' });
+  const days = h('ol', 'streak-days');
+  const countEl = h('span', 'card-count');
+  const note = h('p', 'card-note');
   const claim = button(ctx, { label: 'Claim', icon: 'gift', variant: 'primary', size: 'lg', className: 'streak-claim', sound: null, onPress: () => void claimDailyReward(ctx) });
-  const el = h('section', { class: 'card streak-card' }, h('h3', { class: 'card-title' }, 'Daily streak', countEl), days, h('div', { class: 'streak-foot' }, note, claim));
+  const el = h('section', 'card streak-card', h('h3', 'card-title', 'Daily streak', countEl), days, h('div', 'streak-foot', note, claim));
   const update = (save: Save): void => {
     const v = streakView(save, ctx.today());
     countEl.textContent = v.count > 0 ? `${v.count} ${v.count === 1 ? 'day' : 'days'}` : '';
@@ -393,12 +396,12 @@ export function streakCard(ctx: UiContext): { el: HTMLElement; update(save: Save
         return h(
           'li',
           {
-            class: `streak-day plate is-${d.state}${globe ? ' is-globe' : ''}`,
+            class: `streak-day plate ${DAY_CLASS[d.state]}${globe ? ' is-globe' : ''}`,
             'aria-label': `Day ${d.day}: ${globe ? 'a Snow Globe' : `${d.reward.amount} Snow`}${d.state === 'today' ? ', ready' : d.state === 'claimed' ? ', claimed' : ''}`,
           },
-          h('small', { 'aria-hidden': 'true' }, `Day ${d.day}`),
+          h('small', { deco: true }, `Day ${d.day}`),
           d.state === 'claimed' ? artIcon('check') : globe ? globeSvg('globe-mini') : artIcon('snow'),
-          h('span', { 'aria-hidden': 'true' }, globe ? 'Globe' : `+${d.reward.amount}`),
+          h('span', { deco: true }, globe ? 'Globe' : `+${d.reward.amount}`),
         );
       }),
     );

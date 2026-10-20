@@ -16,10 +16,10 @@ import { button, hide, menuHeader, progressBar } from '../widgets.ts';
 
 export function createMissionsScreen(ctx: UiContext): Screen {
   const streak = streakCard(ctx);
-  const missionList = h('ul', { class: 'mission-list' });
-  const pips = h('span', { class: 'mset-pips', 'aria-hidden': 'true' });
+  const missionList = h('ul', 'mission-list');
+  const pips = h('span', { class: 'mset-pips', deco: true });
   const setText = h('span', null);
-  const set = h('p', { class: 'mset well' }, globeSvg(), setText, pips);
+  const set = h('p', 'mset well', globeSvg(), setText, pips);
 
   const trophiesLink = button(ctx, { label: 'Trophies', icon: 'trophy', size: 'sm', className: 'menu-link', onPress: () => ctx.go('profile') });
 
@@ -27,19 +27,19 @@ export function createMissionsScreen(ctx: UiContext): Screen {
     'div',
     { class: 'menu-body' },
     streak.el,
-    h('section', { class: 'card' }, h('h3', { class: 'card-title' }, 'Active missions'), missionList, set,
-      h('p', { class: 'card-note' }, 'Finished missions pay Snow right away and are swapped for new ones when your next run starts.')),
+    h('section', 'card', h('h3', 'card-title', 'Active missions'), missionList, set,
+      h('p', 'card-note', 'Finished missions pay Snow right away and are swapped for new ones when your next run starts.')),
   );
   const el = h('section', { class: 'scr scr-menu scr-missions', 'aria-label': 'Missions' },
-    h('div', { class: 'menu pe' }, menuHeader(ctx, 'Missions', trophiesLink), body));
+    h('div', 'menu pe', menuHeader(ctx, 'Missions', trophiesLink), body));
 
-  const reward = (n: number): (Node | string)[] => [artIcon('snow'), h('span', { 'aria-hidden': 'true' }, `+${n}`), h('span', { class: 'sr-only' }, `Reward ${n} Snow`)];
+  const reward = (n: number): (Node | string)[] => [artIcon('snow'), h('span', { deco: true }, `+${n}`), h('span', 'sr-only', `Reward ${n} Snow`)];
 
   /** The green bar with the count inside it (the bar is decoration; the count is also read out). */
   const bar = (m: MissionView): HTMLElement => {
     const b = progressBar(m.fraction, 'bar', 'green');
     // A time goal with no run yet reads '–' (meta): the bar says so in words.
-    if (!m.done) b.append(h('span', { class: 'bar-label' }, m.progressText === '–' ? 'Not yet' : m.progressText));
+    if (!m.done) b.append(h('span', 'bar-label', m.progressText === '–' ? 'Not yet' : m.progressText));
     return b;
   };
 
@@ -50,15 +50,15 @@ export function createMissionsScreen(ctx: UiContext): Screen {
       h(
         'div',
         { class: 'mcard-top' },
-        h('span', { class: 'mcard-label gt-ink' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
-        h('span', { class: 'chip mcard-reward' }, ...reward(m.reward)),
+        h('span', 'mcard-label gt-ink', m.label, m.tierLabel ? h('span', 'tier', m.tierLabel) : null),
+        h('span', 'chip mcard-reward', ...reward(m.reward)),
       ),
-      m.hint && !m.done ? h('p', { class: 'mcard-hint' }, m.hint) : null,
+      m.hint && !m.done ? h('p', 'mcard-hint', m.hint) : null,
       h(
         'div',
         { class: 'mcard-bottom' },
         bar(m),
-        m.done ? h('span', { class: 'stamp' }, 'Complete') : h('span', { class: 'mcard-prog sr-only' }, m.progressText),
+        m.done ? h('span', 'stamp', 'Complete') : h('span', 'mcard-prog sr-only', m.progressText),
         m.swappable
           ? button(ctx, { label: 'Swap', icon: 'swap', size: 'sm', className: 'mcard-swap', ariaLabel: `Swap “${m.label}” for another mission`,
               onPress: () => ctx.cb.swapMission(m.id) })
@@ -75,7 +75,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
     const left = MISSIONS_PER_GLOBE - n;
     setText.textContent = `${left} more ${left === 1 ? 'mission' : 'missions'} for a Snow Globe`;
     set.setAttribute('aria-label', `${n} of ${MISSIONS_PER_GLOBE} missions toward a Snow Globe`);
-    setChildren(pips, ...Array.from({ length: MISSIONS_PER_GLOBE }, (_, i) => (i < n ? h('i', { class: 'is-on' }, artIcon('check')) : h('i', { class: 'socket' }))));
+    setChildren(pips, ...Array.from({ length: MISSIONS_PER_GLOBE }, (_, i) => (i < n ? h('i', 'is-on', artIcon('check')) : h('i', 'socket'))));
     hide(trophiesLink, !featureUnlocked(save, 'profile'));
   }
 

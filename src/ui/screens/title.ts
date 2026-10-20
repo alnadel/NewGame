@@ -63,11 +63,11 @@ const PLAY_COIN = '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"
 function logo(): HTMLElement {
   const l = logoLayers();
   const origin = `${l.origin.x} ${l.origin.y}`;
-  const rays = h('span', { class: 'logo-layer logo-rays' }, svgFromMarkup(l.rays));
-  const sun = h('span', { class: 'logo-layer logo-sun' }, svgFromMarkup(l.bloom), rays, svgFromMarkup(l.face));
+  const rays = h('span', 'logo-layer logo-rays', svgFromMarkup(l.rays));
+  const sun = h('span', 'logo-layer logo-sun', svgFromMarkup(l.bloom), rays, svgFromMarkup(l.face));
   sun.style.transformOrigin = origin;
   rays.style.transformOrigin = origin;
-  return h('h1', { class: 'logo' }, sun, h('span', { class: 'logo-layer logo-drop' }, svgFromMarkup(l.shadow)), svgFromMarkup(l.word));
+  return h('h1', 'logo', sun, h('span', 'logo-layer logo-drop', svgFromMarkup(l.shadow)), svgFromMarkup(l.word));
 }
 
 /** An element's layout box top in viewport px, ignoring transforms (the banner pops in with a scale). */
@@ -148,8 +148,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // --- Challenge banner ------------------------------------------------------------------------
   // "Sam challenges you:" — the name is isolated (<bdi>) so a right-to-left name can't reorder the line.
   const challengeName = h('bdi', null);
-  const challengeGoal = h('strong', { class: 'challenge-goal' });
-  const challengeNote = h('span', { class: 'challenge-note' });
+  const challengeGoal = h('strong', 'challenge-goal');
+  const challengeNote = h('span', 'challenge-note');
   // Play is a green candy square (its name stays "Play"), so the goal keeps the banner's width.
   const challengePlay = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', square: true, className: 'challenge-play', onPress: () => run('challenge') });
   const challengeClose = button(ctx, { label: 'Dismiss challenge', icon: 'close', variant: 'danger', round: true, sound: 'back', className: 'challenge-close', onPress: () => {
@@ -161,8 +161,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     'div',
     { class: 'challenge panel pe', role: 'group', 'aria-label': 'Challenge' },
     ribbon('CHALLENGE!', { tone: 'pink', size: 'sm', tag: 'span', className: 'challenge-ribbon', hidden: true }).el,
-    h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, artIcon('flag')),
-    h('div', { class: 'challenge-text' }, h('span', { class: 'challenge-from' }, challengeName, ' challenges you:'), challengeGoal, challengeNote),
+    h('span', { class: 'challenge-flag', deco: true }, artIcon('flag')),
+    h('div', 'challenge-text', h('span', 'challenge-from', challengeName, ' challenges you:'), challengeGoal, challengeNote),
     challengePlay,
     challengeClose,
   );
@@ -183,12 +183,12 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     ctx.sound('tap');
     open();
   };
-  const lockBadge = (): HTMLElement => h('span', { class: 'tray-lock lock-badge', 'aria-hidden': 'true' }, icon('lock'));
-  const newTag = (): HTMLElement => h('span', { class: 'new-tag sticker', 'aria-hidden': 'true' }, 'New');
+  const lockBadge = (): HTMLElement => h('span', { class: 'tray-lock lock-badge', deco: true }, icon('lock'));
+  const newTag = (): HTMLElement => h('span', { class: 'new-tag sticker', deco: true }, 'New');
 
   // --- Top bar: the Sun Rank, a waiting daily reward, the wallet ----------------------------------
   const badge = rankBadge(ctx);
-  const badgeSlot = h('div', { class: 'title-rank pe' }, badge.el);
+  const badgeSlot = h('div', 'title-rank pe', badge.el);
   // The Profile opens from the badge once unlocked; before that the badge says how to get there.
   badgeSlot.addEventListener(
     'click',
@@ -202,36 +202,36 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // The daily streak's reward, when one waits: a gold gift square on a slow ray burst, claimed right
   // here (the reveal plays over the Title). Its aria-label names it.
   const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', square: true, className: 'title-reward pe', ariaLabel: 'Claim the daily reward', sound: null, onPress: () => void claimDailyReward(ctx) });
-  const reward = h('div', { class: 'title-reward-wrap has-dot', 'data-dot': '' }, h('span', { class: 'burst', 'aria-hidden': 'true' }), rewardBtn);
-  const walletValue = h('span', { class: 'num' });
+  const reward = h('div', { class: 'title-reward-wrap has-dot', 'data-dot': '' }, h('span', { class: 'burst', deco: true }), rewardBtn);
+  const walletValue = h('span', 'num');
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
-  const hud = h('div', { class: 'title-hud' }, badgeSlot, reward, h('i', { class: 'title-hud-gap' }), chipSnow);
+  const hud = h('div', 'title-hud', badgeSlot, reward, h('i', 'title-hud-gap'), chipSnow);
 
   // --- Chips -------------------------------------------------------------------------------------
   // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
-  const bestDay = h('span', { class: 'day-badge' });
-  const bestValue = h('span', { class: 'num' });
+  const bestDay = h('span', 'day-badge');
+  const bestValue = h('span', 'num');
   const chipBest = pressable(h('button', { class: 'chip chip--dark chip--btn pe', type: 'button' }, icon('trophy'), bestDay, bestValue, icon('chevron', 'ic chip-chev')), () => ctx.go('profile'));
   // The other chips are read as one labeled image each (their aria-label carries the full sentence).
-  const pips = h('span', { class: 'pips' });
+  const pips = h('span', 'pips');
   const chipMissions = h('span', { class: 'chip chip--dark', role: 'img' }, icon('missions'), pips);
-  const chips = h('div', { class: 'chips' }, chipBest, chipMissions);
+  const chips = h('div', 'chips', chipBest, chipMissions);
 
   // --- The modes: the map, the next level (primary) and Endless ----------------------------------
   // The map's tag reads "71★" (the star in the body font: it isn't in the display face) or "Map".
-  const starsValue = h('span', { class: 'num tag mode-tag' });
+  const starsValue = h('span', 'num tag mode-tag');
   const mapBtn = square('btn--blue journey-pill', 'map', starsValue, () => {
     ctx.go('journey');
     ctx.cb.openJourney();
   });
   // The one saturated hero: a green XL pill, "PLAY" (generated) over "Level 38".
   const playBtn = pressable(
-    h('button', { class: 'btn btn--primary btn--xl play-pill pe', type: 'button' }, h('span', { class: 'play-coin', 'aria-hidden': 'true' }, svgFromMarkup(PLAY_COIN)), h('span', { class: 'btn-label' })),
+    h('button', { class: 'btn btn--primary btn--xl play-pill pe', type: 'button' }, h('span', { class: 'play-coin', deco: true }, svgFromMarkup(PLAY_COIN)), h('span', 'btn-label')),
     playLevel,
   );
-  const endlessBtn = square('btn--violet endless-pill', 'endless', h('span', { class: 'btn-label tag mode-tag' }, 'Endless'), gated('endless', () => run('endless')), false, lockBadge(), newTag());
+  const endlessBtn = square('btn--violet endless-pill', 'endless', h('span', 'btn-label tag mode-tag', 'Endless'), gated('endless', () => run('endless')), false, lockBadge(), newTag());
   gates.push({ f: 'endless', el: endlessBtn, name: 'Endless run' });
-  const modes = h('div', { class: 'modes' }, mapBtn, playBtn, endlessBtn);
+  const modes = h('div', 'modes', mapBtn, playBtn, endlessBtn);
 
   // --- Tray --------------------------------------------------------------------------------------
   // Tray squares are all cloud (neutral: Play is the hero), each with its coloured art icon.
@@ -240,8 +240,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       h(
         'button',
         { class: 'tray-btn pe', type: 'button', 'aria-label': label },
-        h('span', { class: 'tray-disc candy f-cloud' }, artIcon(iconName), ...(f ? [lockBadge(), newTag()] : [])),
-        h('span', { class: 'tray-label', 'aria-hidden': 'true' }, label),
+        h('span', 'tray-disc candy f-cloud', artIcon(iconName), ...(f ? [lockBadge(), newTag()] : [])),
+        h('span', { class: 'tray-label', deco: true }, label),
       ),
       f ? gated(f, onActivate) : onActivate,
       f === undefined,
@@ -263,7 +263,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // After onboarding the tagline names the next goal; the forecast chip previews the endless run's Day 1.
   // The tagline is a small blue ribbon under the logo (the <p> is its band); a goal is Nubs' speech
   // bubble, its tail pointing down at him (fit() places it, or returns it to the flow).
-  const tagline = h('p', { class: 'tagline ribbon-band' }, TAGLINE);
+  const tagline = h('p', 'tagline ribbon-band', TAGLINE);
   const taglineBox = h(
     'div',
     { class: 'tagline-box ribbon ribbon--blue ribbon--sm' },
@@ -273,12 +273,12 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     kitShape('tail', 'ribbon-tail ribbon-tail--r'),
   );
   const forecast = h('p', { class: 'chip chip--dark forecast-chip', hidden: true });
-  const keys = h('p', { class: 'chip chip--dark title-keys' }, KEY_HINT);
-  const gap = (): HTMLElement => h('i', { class: 'title-gap', 'aria-hidden': 'true' });
-  const bottomCluster = h('div', { class: 'title-bottom' }, chips, gap(), modes, gap(), tray);
+  const keys = h('p', 'chip chip--dark title-keys', KEY_HINT);
+  const gap = (): HTMLElement => h('i', { class: 'title-gap', deco: true });
+  const bottomCluster = h('div', 'title-bottom', chips, gap(), modes, gap(), tray);
   const logoEl = logo();
-  const top = h('div', { class: 'title-top' }, logoEl, taglineBox, forecast, keys, challenge);
-  const el = h('section', { class: 'scr scr-title' }, hud, top, bottomCluster);
+  const top = h('div', 'title-top', logoEl, taglineBox, forecast, keys, challenge);
+  const el = h('section', 'scr scr-title', hud, top, bottomCluster);
   let preview: DayPlan | null = null;
   /** The wallet as last shown (it counts up from there); null before the first render. */
   let shownWallet: number | null = null;
@@ -356,7 +356,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
 
     const missions = activeMissionViews(save);
     setChildren(pips, ...missions.map((m) => {
-      const p = h('i', { class: `pip${m.done ? ' is-done' : ''}` });
+      const p = h('i', `pip${m.done ? ' is-done' : ''}`);
       p.style.setProperty('--p', String(m.fraction));
       return p;
     }));
@@ -385,7 +385,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     setButtonLabel(playBtn, `Level ${level}`);
     playBtn.setAttribute('aria-label', `Play Level ${level}`);
     const stars = totalStars(save);
-    if (stars > 0) setChildren(starsValue, String(stars), h('span', { class: 'glyph' }, '★'));
+    if (stars > 0) setChildren(starsValue, String(stars), h('span', 'glyph', '★'));
     else starsValue.textContent = 'Map';
     mapBtn.setAttribute('aria-label', `Journey map, ${stars} of ${CAMPAIGN_STARS_MAX} stars`);
 
@@ -448,7 +448,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     hide(forecast, preview === null);
     if (!preview) return forecast.replaceChildren();
     const [emoji = '', ...words] = planText(preview).split(' ');
-    setChildren(forecast, 'Forecast: ', h('span', { class: 'glyph' }, emoji), ` ${words.join(' ')}`);
+    setChildren(forecast, 'Forecast: ', h('span', 'glyph', emoji), ` ${words.join(' ')}`);
   }
 
   return {

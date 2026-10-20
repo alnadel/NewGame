@@ -188,24 +188,24 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const sharePostcard = (): void => void ctx.cb.sharePostcard().then(shared);
 
   // The map area above the sheet: tap = retry. Hidden from assistive tech (Retry is the real control).
-  const mapCatch = h('div', { class: 'res-map pe', 'aria-hidden': 'true' });
+  const mapCatch = h('div', { class: 'res-map pe', deco: true });
   mapCatch.addEventListener('pointerdown', primary);
 
   // The hero in the map band: the ribbon on the sheet's edge ("Level 38 Passed!", "So close!",
   // "New best!"; decorative: the heading and the live region say it), the stars above it and, on a
   // passed level, the rays behind them (the canvas throws the confetti).
   const heroRibbon = ribbon('', { tone: 'red', tag: 'p', className: 'res-ribbon', hidden: true });
-  const kicker = h('p', { class: 'res-kicker' });
-  const dayBadge = h('span', { class: 'candy f-violet gt res-day' });
-  const clock = h('span', { class: 'res-clock' });
+  const kicker = h('p', 'res-kicker');
+  const dayBadge = h('span', 'candy f-violet gt res-day');
+  const clock = h('span', 'res-clock');
   const time = h('h2', { class: 'res-time', id: 'res-time' }, dayBadge, clock);
   // The postcard: a 4:5 thumbnail of the shareable image (a placeholder while it is built).
   const postcardThumb = h('img', { class: 'res-postcard-img', alt: '', decoding: 'async' });
   const postcardBtn = h(
     'button',
     { class: 'candy f-cloud res-postcard pe', type: 'button', 'aria-label': 'Share the postcard' },
-    h('span', { class: 'res-postcard-card', 'aria-hidden': 'true' }, postcardThumb),
-    h('span', { class: 'res-postcard-label', 'aria-hidden': 'true' }, icon('share'), 'Postcard'),
+    h('span', { class: 'res-postcard-card', deco: true }, postcardThumb),
+    h('span', { class: 'res-postcard-label', deco: true }, icon('share'), 'Postcard'),
   );
   postcardBtn.addEventListener('click', () => {
     ctx.sound('tap');
@@ -213,13 +213,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   });
   // Journey: the stars (in the hero) and the level name take the time's place; the goal line, the
   // goal cards and the progress to the next star reward follow.
-  const starEls = Array.from({ length: 3 }, () => h('span', { class: 'res-star' }, artIcon('starEmpty'), artIcon('star', 'ai res-star-on')));
+  const starEls = Array.from({ length: 3 }, () => h('span', 'res-star', artIcon('starEmpty'), artIcon('star', 'ai res-star-on')));
   const starsEl = h('span', { class: 'res-stars', role: 'img' }, ...starEls);
-  const fx = h('div', { class: 'res-fx', 'aria-hidden': 'true' }, h('i', { class: 'burst res-burst' }));
+  const fx = h('div', { class: 'res-fx', deco: true }, h('i', 'burst res-burst'));
   /** A level's Share sits in the hero's top corner (Home is the Map there); endless runs keep it in the head row. */
-  const heroShare = h('div', { class: 'res-hero-share' });
-  const hero = h('div', { class: 'res-hero' }, fx, heroShare, starsEl, heroRibbon.el);
-  const levelName = h('span', { class: 'res-level-name' });
+  const heroShare = h('div', 'res-hero-share');
+  const hero = h('div', 'res-hero', fx, heroShare, starsEl, heroRibbon.el);
+  const levelName = h('span', 'res-level-name');
   const level = h('h2', { class: 'res-level', id: 'res-level' }, levelName);
   const goal = h('p', { class: 'res-goal', id: 'res-goal' });
   const goals = h('ul', { class: 'res-goals', 'aria-label': 'Star goals' });
@@ -231,7 +231,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const homeBtn = button(ctx, { label: 'Home', icon: 'home', round: true, sound: 'back', onPress: home });
   // A cloud coin wears the art house (drawn for any face; §6.2).
   homeBtn.firstElementChild?.replaceWith(artIcon('home'));
-  const headActions = h('div', { class: 'res-head-actions' }, shareBtn, homeBtn);
+  const headActions = h('div', 'res-head-actions', shareBtn, homeBtn);
   const nextBtn = button(ctx, { label: 'Next level', icon: 'play', variant: 'primary', size: 'xl', className: 'res-next res-arm', onPress: next });
   // Retry and Map squares carry their names as tags under them (the label is the tag: the
   // accessible names stay "Retry" and "Map").
@@ -239,24 +239,24 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   mapBtn.querySelector('.btn-label')?.classList.add('tag');
   // The full line is laid out invisibly so the paragraph has its final height from the first
   // frame; the typed copy is drawn over it. Screen readers get the sr-only copy at once.
-  const deathFull = h('span', { class: 'sr-only' });
-  const deathSpace = h('span', { class: 'res-death-space', 'aria-hidden': 'true' });
-  const deathTyped = h('span', { 'aria-hidden': 'true' });
-  let caret = h('span', { class: 'caret', 'aria-hidden': 'true' });
+  const deathFull = h('span', 'sr-only');
+  const deathSpace = h('span', { class: 'res-death-space', deco: true });
+  const deathTyped = h('span', { deco: true });
+  let caret = h('span', { class: 'caret', deco: true });
   const death = h(
     'p',
     { class: 'res-death', id: 'res-death' },
     deathFull,
     deathSpace,
-    h('span', { class: 'res-death-typed' }, deathTyped, caret),
+    h('span', 'res-death-typed', deathTyped, caret),
   );
-  const tip = h('p', { class: 'res-tip' });
-  const pace = h('p', { class: 'res-pace' });
-  const note = h('p', { class: 'res-note' });
-  const verdict = h('p', { class: 'plate res-verdict' });
-  const warmup = h('p', { class: 'plate res-warmup' });
+  const tip = h('p', 'res-tip');
+  const pace = h('p', 'res-pace');
+  const note = h('p', 'res-note');
+  const verdict = h('p', 'plate res-verdict');
+  const warmup = h('p', 'plate res-warmup');
   const awards = h('ul', { class: 'res-awards', 'aria-label': 'Unlocked this run' });
-  const stats = h('div', { class: 'res-stats' });
+  const stats = h('div', 'res-stats');
   const missionList = h('ul', { class: 'res-missions', 'aria-label': 'Missions' });
   const retryBtn = button(ctx, {
     label: 'Retry',
@@ -276,8 +276,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const top = h(
     'div',
     { class: 'res-top' },
-    h('div', { class: 'res-head' }, kicker, headActions),
-    h('div', { class: 'res-score' }, time, postcardBtn),
+    h('div', 'res-head', kicker, headActions),
+    h('div', 'res-score', time, postcardBtn),
     level,
     strip,
     goal,
@@ -289,13 +289,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     verdict,
     road.el,
   );
-  const scroll = h('div', { class: 'res-scroll' }, goals, warmup, awards, stats, missionList);
+  const scroll = h('div', 'res-scroll', goals, warmup, awards, stats, missionList);
   // Retry | Next level | Map, left to right (Next level, the primary, gets the initial focus).
-  const actions = h('div', { class: 'res-actions' }, retryBtn, nextBtn, mapBtn);
+  const actions = h('div', 'res-actions', retryBtn, nextBtn, mapBtn);
   // The score block stays pinned; stats and missions scroll (or the whole body, see sizing above).
-  const body = h('div', { class: 'res-body' }, top, scroll);
+  const body = h('div', 'res-body', top, scroll);
   const sheet = h('div', { class: 'panel res-sheet pe', role: 'region', 'aria-label': 'Run results' }, hero, body, actions);
-  const el = h('section', { class: 'scr scr-results' }, mapCatch, sheet);
+  const el = h('section', 'scr scr-results', mapCatch, sheet);
 
   // Keep the tap-to-retry area exactly above the sheet as its height changes, pick the scroll mode,
   // and cache the sheet's resting top for resultsSheetTop() (offset sizes ignore the slide-in).
@@ -334,32 +334,32 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     h(
       'div',
       { class: `${iconName === 'snow' ? 'candy f-blue' : 'plate'} stat ${cls}` },
-      iconName === 'snow' ? artIcon('snow', 'ai stat-coin') : h('span', { class: 'f-cloud res-coin stat-coin', 'aria-hidden': 'true' }, icon(iconName)),
+      iconName === 'snow' ? artIcon('snow', 'ai stat-coin') : h('span', { class: 'f-cloud res-coin stat-coin', deco: true }, icon(iconName)),
       h('span', { class: iconName === 'snow' ? 'stat-val gt' : 'stat-val' }, value),
-      h('span', { class: 'stat-cap' }, caption),
-      sub ? h('span', { class: 'stat-sub' }, sub) : null,
+      h('span', 'stat-cap', caption),
+      sub ? h('span', 'stat-sub', sub) : null,
     );
 
   /** A mission row, with Swap on a stale mission. */
   const missionRow = (m: MissionView): HTMLElement => {
     const side = m.done
-      ? h('span', { class: 'stamp stamp--sm' }, 'Complete')
-      : h('span', { class: 'mrow-prog' }, m.progressText === '–' ? 'Not yet' : m.progressText);
+      ? h('span', 'stamp stamp--sm', 'Complete')
+      : h('span', 'mrow-prog', m.progressText === '–' ? 'Not yet' : m.progressText);
     return h(
       'li',
       { class: `plate mrow${m.done ? ' is-done' : ''}${m.done && !m.justCompleted ? ' is-stamped' : ''}` },
-      h('span', { class: 'f-green res-coin mrow-check', 'aria-hidden': 'true' }, icon('check')),
+      h('span', { class: 'f-green res-coin mrow-check', deco: true }, icon('check')),
       h(
         'span',
         { class: 'mrow-main' },
-        h('span', { class: 'mrow-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
+        h('span', 'mrow-label', m.label, m.tierLabel ? h('span', 'tier', m.tierLabel) : null),
         progressBar(m.fraction, 'bar bar--sm', 'green'),
       ),
       h(
         'span',
         { class: 'mrow-side' },
         side,
-        h('span', { class: 'reward' }, icon('snow'), h('span', { 'aria-hidden': 'true' }, `+${m.reward}`), h('span', { class: 'sr-only' }, `, reward ${m.reward} Snow`)),
+        h('span', 'reward', icon('snow'), h('span', { deco: true }, `+${m.reward}`), h('span', 'sr-only', `, reward ${m.reward} Snow`)),
         m.swappable
           ? button(ctx, { label: 'Swap', icon: 'swap', className: 'btn--swap', ariaLabel: `Swap “${m.label}” for another mission`, onPress: () => ctx.cb.swapMission(m.id) })
           : null,
@@ -377,22 +377,22 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     let n = 0;
     setChildren(
       strip,
-      model.hidden > 0 ? h('span', { class: 'strip-more' }, `+${model.hidden} ${model.hidden === 1 ? 'day' : 'days'}`) : null,
+      model.hidden > 0 ? h('span', 'strip-more', `+${model.hidden} ${model.hidden === 1 ? 'day' : 'days'}`) : null,
       ...model.rows.map((rowModel) =>
         h(
           'div',
           { class: 'strip-row' },
-          h('span', { class: 'strip-day' }, rowModel.forecast ? rowModel.forecast.emoji : `D${rowModel.day}`),
+          h('span', 'strip-day', rowModel.forecast ? rowModel.forecast.emoji : `D${rowModel.day}`),
           ...rowModel.tiles.map((g, hour) => {
-            if (g === null) return h('i', { class: 'st st--ghost' });
-            const t = h('i', { class: `st st--${g}` });
+            if (g === null) return h('i', 'st st--ghost');
+            const t = h('i', `st st--${g}`);
             t.style.background = tileFill(hour, g);
             t.style.setProperty('--i', String(n++));
             const art = TILE_ART[g];
             if (art) t.append(svgFromMarkup(`<svg viewBox="0 0 10 10" aria-hidden="true">${art}</svg>`));
             return t;
           }),
-          rowModel.night ? h('i', { class: 'strip-night' }) : null,
+          rowModel.night ? h('i', 'strip-night') : null,
         ),
       ),
     );
@@ -413,8 +413,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
           'li',
           { class: `plate res-goal-card${ok ? ' is-met' : ''}`, 'aria-label': `${rule}: ${ok ? 'met' : 'not met'}` },
           artIcon(ok ? 'star' : 'starEmpty'),
-          h('span', { class: 'res-goal-rule', 'aria-hidden': 'true' }, keepUnits(rule)),
-          ok ? h('span', { class: 'f-green res-coin res-goal-check', 'aria-hidden': 'true' }, artIcon('check')) : null,
+          h('span', { class: 'res-goal-rule', deco: true }, keepUnits(rule)),
+          ok ? h('span', { class: 'f-green res-coin res-goal-check', deco: true }, artIcon('check')) : null,
         );
       }),
     );
@@ -600,7 +600,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     }
 
     // Stats (Snow counts up into the wallet); tiles with nothing to show are left out.
-    const snowValue = h('span', { class: 'num' });
+    const snowValue = h('span', 'num');
     const st = result.stats;
     const mult = multiplierTile(st);
     setChildren(
@@ -635,8 +635,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
         'li',
         { class: `plate award award--${t.tone ?? 'ink'}` },
         // A coin by kind: gold trophies and stars, pink cosmetics, green missions and features.
-        h('span', { class: `res-coin award-ic ${t.icon === 'gift' ? 'f-pink' : t.tone === 'gold' ? 'f-gold' : t.tone === 'accent' ? 'f-green' : 'f-cloud'}`, 'aria-hidden': 'true' }, icon(toastIconName(t.icon ?? 'info'))),
-        h('span', { class: 'award-text' }, t.text),
+        h('span', { class: `res-coin award-ic ${t.icon === 'gift' ? 'f-pink' : t.tone === 'gold' ? 'f-gold' : t.tone === 'accent' ? 'f-green' : 'f-cloud'}`, deco: true }, icon(toastIconName(t.icon ?? 'info'))),
+        h('span', 'award-text', t.text),
       ),
     );
     setChildren(awards, ...chips);

@@ -163,7 +163,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     profile: createProfileScreen(ctx),
   };
 
-  const screenLayer = h('div', { class: 'screens' });
+  const screenLayer = h('div', 'screens');
   for (const s of Object.values(screens)) {
     setHidden(s.el, true);
     screenLayer.append(s.el);
@@ -173,13 +173,13 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   // press, one way during the lesson. The Title leads with its Play button instead.
   const ghostEl = h(
     'div',
-    { class: 'ghost', 'aria-hidden': 'true' },
-    h('div', { class: 'ghost-track' }, h('div', { class: 'ghost-trail' }),
-      h('div', { class: 'ghost-hand' }, h('span', { class: 'ghost-tip' }), svgFromMarkup(ghostHandSvg()))),
-    h('p', { class: 'ghost-word' }, h('span', { class: 'ghost-arrow' }, '‹'), 'drag', h('span', { class: 'ghost-arrow' }, '›')),
+    { class: 'ghost', deco: true },
+    h('div', 'ghost-track', h('div', 'ghost-trail'),
+      h('div', 'ghost-hand', h('span', 'ghost-tip'), svgFromMarkup(ghostHandSvg()))),
+    h('p', 'ghost-word', h('span', 'ghost-arrow', '‹'), 'drag', h('span', 'ghost-arrow', '›')),
   );
   // Keyboard players in play see the key to hold instead of the swiping hand.
-  const ghostKey = h('span', { class: 'ghost-key' });
+  const ghostKey = h('span', 'ghost-key');
   ghostEl.querySelector('.ghost-track')?.append(ghostKey);
 
   // The cue line above Nubs (ui.showCue): plain words for the first runs.
@@ -210,7 +210,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const rotateEl = createRotateOverlay();
   // Screens, the ghost hint and toasts live in the world column; modals and the rotate overlay
   // span the viewport (modals place their dialog inside the column themselves).
-  const world = h('div', { class: 'world' }, screenLayer, ghostEl, cueEl, toasts.el);
+  const world = h('div', 'world', screenLayer, ghostEl, cueEl, toasts.el);
   // The art icons' sprite (art-icons.ts): one hidden <svg> of symbols every artIcon() points at.
   root.append(artSprite(), world, modals.el, rotateEl, live);
 

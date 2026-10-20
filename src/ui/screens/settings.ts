@@ -35,8 +35,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       'div',
       // A long hint takes its own full-width line under the label and the control.
       { class: hint && hint.length > 80 ? 'set-row set-row--wide' : 'set-row' },
-      h('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon(iconName)),
-      h('span', { class: 'set-text' }, h('span', { class: 'set-label' }, label), hint ? h('span', { class: 'set-hint' }, hint) : null),
+      h('span', { class: 'set-ic', deco: true }, icon(iconName)),
+      h('span', 'set-text', h('span', 'set-label', label), hint ? h('span', 'set-hint', hint) : null),
       control,
     );
   const stackRow = (iconName: IconName, label: string, hint: string | null, control: HTMLElement): HTMLElement => {
@@ -55,14 +55,14 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const sensitivity = slider({ label: 'Drag sensitivity', min: 0.6, max: 1.5, step: 0.05, format: (v) => `${v.toFixed(2)}×`,
     onInput: (v) => change('sensitivity', Math.round(v * 100) / 100) });
   const invert = toggleSwitch(ctx, 'Invert drag direction', (on) => change('invert', on));
-  const keys = h('div', { class: 'set-row set-row--keys' },
-    h('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon('keyboard')),
-    h('span', { class: 'set-text' }, h('span', { class: 'set-label' }, 'Keys'), h('span', { class: 'set-hint set-keys' },
+  const keys = h('div', 'set-row set-row--keys',
+    h('span', { class: 'set-ic', deco: true }, icon('keyboard')),
+    h('span', 'set-text', h('span', 'set-label', 'Keys'), h('span', 'set-hint set-keys',
       // One binding per line (a "·" between them would wrap mid-binding on phones); the separators
       // stay in the text for screen readers.
       ...KEYS_LINE.split(' · ').flatMap((part, i) => [
-        ...(i > 0 ? [h('span', { class: 'sr-only' }, ' · ')] : []),
-        h('span', { class: 'set-key' }, part),
+        ...(i > 0 ? [h('span', 'sr-only', ' · ')] : []),
+        h('span', 'set-key', part),
       ]))));
 
   // Play: the name friends see on challenge links (sanitized; '' = "A friend"), adaptive comfort.
@@ -113,7 +113,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       });
     },
   });
-  const appSection = section('App', h('p', { class: 'card-note card-note--top' }, 'Play full screen from your home screen, even offline.'), installBtn);
+  const appSection = section('App', h('p', 'card-note card-note--top', 'Play full screen from your home screen, even offline.'), installBtn);
   const syncInstall = (): void => hide(appSection, !(canPromptInstall() && !isStandalone()));
 
   // Progress: backup code export / import, reset.
@@ -212,7 +212,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   // Backup, restore and reset; hidden mid-run (from Pause), where replacing the save would desync the run.
   const progressSection = section(
     'Progress',
-    h('p', { class: 'card-note card-note--top' }, 'Browsers can clear saved games. A backup code carries your progress to another browser or device.'),
+    h('p', 'card-note card-note--top', 'Browsers can clear saved games. A backup code carries your progress to another browser or device.'),
     exportBtn,
     exportArea,
     importArea,
@@ -221,7 +221,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   );
   progressSection.classList.add('set-progress');
   // Mid-run: a small plate says where backup, restore and reset went.
-  const midRunNote = h('p', { class: 'plate set-midrun' }, h('span', { class: 'lock-badge', 'aria-hidden': 'true' }, icon('lock')), MID_RUN_BACKUP_NOTE);
+  const midRunNote = h('p', 'plate set-midrun', h('span', { class: 'lock-badge', deco: true }, icon('lock')), MID_RUN_BACKUP_NOTE);
 
   /** A section's row tiles wear its candy face (kit.css .set-ic). */
   const toned = (face: string, card: HTMLElement): HTMLElement => {
@@ -262,14 +262,14 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     appSection,
     progressSection,
     midRunNote,
-    h('p', { class: 'version' }, `SHADY v${ctx.version}`),
+    h('p', 'version', `SHADY v${ctx.version}`),
     // The display face's credit (docs/UI_V2.md §2.1; its licence is src/ui/fonts/LICENSE-LilitaOne.txt).
-    h('p', { class: 'version' }, 'Lilita One font © 2011 Juan Montoreano · SIL Open Font License 1.1'),
+    h('p', 'version', 'Lilita One font © 2011 Juan Montoreano · SIL Open Font License 1.1'),
   );
 
   const header = menuHeader(ctx, 'Settings');
   const el = h('section', { class: 'scr scr-menu scr-settings', 'aria-labelledby': 'settings-title' },
-    h('div', { class: 'menu pe' }, header, body));
+    h('div', 'menu pe', header, body));
   header.querySelector('.menu-title')?.setAttribute('id', 'settings-title');
   const backBtn = header.querySelector('button');
 

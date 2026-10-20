@@ -35,6 +35,8 @@ import { button, buttonIcon, menuHeader, progressBar, setDisabled, snowChip, typ
 const SLOT_LABEL: Record<CosmeticSlot, string> = { scarf: 'Scarf', hat: 'Hat', nose: 'Nose', shades: 'Shades' };
 const PREVIEW_CSS = 168;
 const STATES: readonly ItemState[] = ['equipped', 'owned', 'buyable', 'expensive', 'locked'];
+/** Each state's class, written out whole (never built at run time), so the build can shorten them (vite.config.ts). */
+const STATE_CLASS: Readonly<Record<ItemState, string>> = { equipped: 'is-equipped', owned: 'is-owned', buyable: 'is-buyable', expensive: 'is-expensive', locked: 'is-locked' };
 
 const costOf = (c: Cosmetic): number => (c.unlock.kind === 'snow' ? c.unlock.cost : 0);
 
@@ -46,10 +48,10 @@ function lockName(c: Cosmetic): string {
 
 /** A price as a mini counter: the Snow gem on an embossed slot (§10.8). */
 const priceCounter = (cost: number, className = ''): HTMLElement =>
-  h('span', { class: `counter price${className ? ` ${className}` : ''}` }, artIcon('snow'), h('span', { class: 'num' }, String(cost)));
+  h('span', { class: `counter price${className ? ` ${className}` : ''}` }, artIcon('snow'), h('span', 'num', String(cost)));
 
 /** The gold lock badge (§6.7). */
-const lockBadge = (): HTMLElement => h('span', { class: 'lock-badge' }, icon('lock'));
+const lockBadge = (): HTMLElement => h('span', 'lock-badge', icon('lock'));
 
 /**
  * The tile's status: a price counter, "Owned", a green "Wearing" tag, or a lock badge with what
@@ -109,13 +111,13 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
   const isNew = (c: Cosmetic, state: ItemState): boolean => fresh.has(c.id) && state !== 'equipped' && state !== 'expensive';
 
   const wallet = snowChip('0');
-  const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, 'aria-hidden': 'true' });
-  const itemName = h('p', { class: 'preview-name gt-ink' });
-  const itemRarity = h('span', { class: 'tag rarity' });
+  const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, deco: true });
+  const itemName = h('p', 'preview-name gt-ink');
+  const itemRarity = h('span', 'tag rarity');
   // The try-on spot hops when the selection changes. Whether the item is on is said by the action
   // button ("✓ Wearing", §10.8) and the note under it, not by a ribbon on the stage too.
-  const spot = h('div', { class: 'stage-spot' }, canvas);
-  const itemNote = h('p', { class: 'preview-note' });
+  const spot = h('div', 'stage-spot', canvas);
+  const itemNote = h('p', 'preview-note');
   const action = button(ctx, { label: 'Wearing', icon: 'check', variant: 'primary', size: 'lg', block: true, sound: null, onPress: () => act() });
 
   const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Slot' });
@@ -143,20 +145,20 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
   // The item grid is a framed panel the selected folder tab joins (§6.9).
   const grid = h('ul', { class: 'tile-grid panel', id: 'wardrobe-grid', role: 'tabpanel' });
   // The collection: owned of all, with a gold bar, on a plate.
-  const owned = h('span', { class: 'num gt-ink' });
+  const owned = h('span', 'num gt-ink');
   const collectionBar = progressBar(0, 'bar bar--sm');
-  const collection = h('p', { class: 'collection plate' }, artIcon('wardrobe'), h('span', { class: 'gt-ink' }, 'Collection'), owned, collectionBar);
+  const collection = h('p', 'collection plate', artIcon('wardrobe'), h('span', 'gt-ink', 'Collection'), owned, collectionBar);
 
   const body = h(
     'div',
     { class: 'menu-body' },
-    h('div', { class: 'stage card' }, spot, itemName, itemRarity, itemNote, action),
+    h('div', 'stage card', spot, itemName, itemRarity, itemNote, action),
     collection,
     tabs,
     grid,
   );
   const el = h('section', { class: 'scr scr-menu scr-wardrobe', 'aria-label': 'Wardrobe' },
-    h('div', { class: 'menu pe' }, menuHeader(ctx, 'Wardrobe', wallet), body));
+    h('div', 'menu pe', menuHeader(ctx, 'Wardrobe', wallet), body));
 
   function drawPreview(): void {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -221,14 +223,14 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     setChildren(
       grid,
       ...cosmeticsForSlot(slot).map((c) => {
-        const status = h('span', { class: 'tile-status' });
+        const status = h('span', 'tile-status');
         const btn = h(
           'button',
           { class: 'tile', type: 'button', 'data-id': c.id },
-          h('span', { class: 'tile-art', 'aria-hidden': 'true' }, cosmeticSwatch(c)),
-          h('span', { class: 'tile-name gt-ink', 'aria-hidden': 'true' }, c.name),
+          h('span', { class: 'tile-art', deco: true }, cosmeticSwatch(c)),
+          h('span', { class: 'tile-name gt-ink', deco: true }, c.name),
           status,
-          h('span', { class: 'sticker tile-new', 'aria-hidden': 'true' }, 'New'),
+          h('span', { class: 'sticker tile-new', deco: true }, 'New'),
         );
         btn.dataset.rarity = rarity(c);
         btn.addEventListener('click', () => select(c));
@@ -246,7 +248,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     for (const { c, btn, status } of tiles.values()) {
       const state = itemState(save, c.id);
       const isSel = selected[slot] === c.id;
-      for (const s of STATES) btn.classList.toggle(`is-${s}`, s === state);
+      for (const s of STATES) btn.classList.toggle(STATE_CLASS[s], s === state);
       btn.classList.toggle('is-selected', isSel);
       btn.setAttribute('aria-pressed', String(isSel));
       const neu = isNew(c, state);
@@ -311,7 +313,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
     else action.removeAttribute('aria-label');
     action.replaceChildren(
       ...(buy ? [] : [buttonIcon(iconName, variant)]),
-      h('span', { class: 'btn-label' }, buy ? 'Buy' : label),
+      h('span', 'btn-label', buy ? 'Buy' : label),
       ...(buy ? [priceCounter(costOf(c), 'btn-price')] : []),
     );
     itemNote.textContent = note;

@@ -51,8 +51,8 @@ export function createToastStack(): ToastStack {
       const t = h(
         'div',
         { class: `toast toast--${o.tone ?? 'ink'}${text.length > TOAST_LONG ? ' toast--long' : ''}` },
-        h('span', { class: `toast-ic ${TOAST_FACE[o.tone ?? 'ink']}`, 'aria-hidden': 'true' }, icon(toastIconName(o.icon ?? 'info'))),
-        h('span', { class: 'toast-text' }, text),
+        h('span', { class: `toast-ic ${TOAST_FACE[o.tone ?? 'ink']}`, deco: true }, icon(toastIconName(o.icon ?? 'info'))),
+        h('span', 'toast-text', text),
       );
       el.append(t);
       // Never stack more than a few: the oldest leave early.
@@ -83,15 +83,15 @@ export interface ModalHost {
 }
 
 export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boolean) => void): ModalHost {
-  const el = h('div', { class: 'modal-layer' });
+  const el = h('div', 'modal-layer');
   let close: (() => void) | null = null;
 
   function open(content: HTMLElement, kind: 'dialog' | 'sheet', label: string, onDismiss: () => void): () => void {
     close?.();
-    const scrim = h('div', { class: 'scrim pe' });
+    const scrim = h('div', 'scrim pe');
     const box = h('div', { class: `modal modal--${kind} pe`, role: 'dialog', 'aria-modal': 'true', 'aria-label': label, tabindex: -1 }, content);
     // The scrim dims the whole viewport; the frame puts the dialog or sheet in the world column.
-    const wrap = h('div', { class: `modal-wrap modal-wrap--${kind}` }, scrim, h('div', { class: 'modal-frame' }, box));
+    const wrap = h('div', `modal-wrap modal-wrap--${kind}`, scrim, h('div', 'modal-frame', box));
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     scrim.addEventListener('click', () => {
       onDismiss();
@@ -157,9 +157,9 @@ export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boole
           'div',
           { class: 'confirm' },
           title.el,
-          h('div', { class: `confirm-ic${o.danger ? ' is-danger' : ''}`, 'aria-hidden': 'true' }, icon(o.danger ? 'warn' : 'info')),
-          h('p', { class: 'dialog-sub' }, o.body),
-          h('div', { class: 'row-2' }, cancel, ok),
+          h('div', { class: `confirm-ic${o.danger ? ' is-danger' : ''}`, deco: true }, icon(o.danger ? 'warn' : 'info')),
+          h('p', 'dialog-sub', o.body),
+          h('div', 'row-2', cancel, ok),
         );
         finish = open(content, 'dialog', o.title, () => resolve(false));
       });
@@ -177,8 +177,8 @@ export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boole
       };
       const copyBtn = button(c, { label: 'Copy progress', icon: 'copy', className: 'install-copy', onPress: () => void copyProgress() });
       const step = (n: number, text: string, side: HTMLElement): HTMLElement =>
-        h('li', { class: 'install-step' }, h('span', { class: 'install-n', 'aria-hidden': 'true' }, String(n)), h('span', { class: 'install-text' }, text), side);
-      const glyph = (name: IconName): HTMLElement => h('span', { class: 'install-ic', 'aria-hidden': 'true' }, icon(name));
+        h('li', 'install-step', h('span', { class: 'install-n', deco: true }, String(n)), h('span', 'install-text', text), side);
+      const glyph = (name: IconName): HTMLElement => h('span', { class: 'install-ic', deco: true }, icon(name));
       const steps = h('ol', { class: 'install-steps', hidden: true },
         step(1, 'Copy your progress', copyBtn),
         step(2, 'Tap the Share button, then “Add to Home Screen”', glyph('share')),
@@ -203,9 +203,9 @@ export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boole
       const content = h(
         'div',
         { class: 'install' },
-        h('div', { class: 'sheet-grip', 'aria-hidden': 'true' }),
-        h('h2', { class: 'dialog-title' }, 'Play SHADY from your Home Screen'),
-        h('p', { class: 'dialog-sub' }, 'It opens full screen and works offline. The Home Screen app keeps its own copy. Copy your progress first, then paste it there.'),
+        h('div', { class: 'sheet-grip', deco: true }),
+        h('h2', 'dialog-title', 'Play SHADY from your Home Screen'),
+        h('p', 'dialog-sub', 'It opens full screen and works offline. The Home Screen app keeps its own copy. Copy your progress first, then paste it there.'),
         steps,
         cta,
         later,
@@ -265,11 +265,11 @@ export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boole
       const content = h(
         'div',
         { class: 'install restore' },
-        h('div', { class: 'sheet-grip', 'aria-hidden': 'true' }),
-        h('h2', { class: 'dialog-title' }, 'Bringing your progress from Safari?'),
-        h('p', { class: 'dialog-sub' }, 'The Home Screen app starts with its own empty save. Paste the progress you copied before adding it.'),
+        h('div', { class: 'sheet-grip', deco: true }),
+        h('h2', 'dialog-title', 'Bringing your progress from Safari?'),
+        h('p', 'dialog-sub', 'The Home Screen app starts with its own empty save. Paste the progress you copied before adding it.'),
         field,
-        h('div', { class: 'row-2' }, paste, button(c, { label: 'Restore', icon: 'restore', variant: 'primary', onPress: restore })),
+        h('div', 'row-2', paste, button(c, { label: 'Restore', icon: 'restore', variant: 'primary', onPress: restore })),
         button(c, { label: 'Start fresh', sound: 'back', block: true, className: 'sheet-quiet', onPress: () => finish() }),
       );
       finish = open(content, 'sheet', 'Restore your progress', () => {});
@@ -285,8 +285,8 @@ export function createRotateOverlay(): HTMLElement {
   return h(
     'div',
     { class: 'rotate', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'rotate-title' },
-    h('div', { class: 'rotate-phone', 'aria-hidden': 'true' }, icon('phone')),
+    h('div', { class: 'rotate-phone', deco: true }, icon('phone')),
     h('h2', { class: 'rotate-title', id: 'rotate-title' }, 'Turn your phone upright'),
-    h('p', { class: 'rotate-sub' }, 'SHADY plays in portrait. Nubs will wait.'),
+    h('p', 'rotate-sub', 'SHADY plays in portrait. Nubs will wait.'),
   );
 }

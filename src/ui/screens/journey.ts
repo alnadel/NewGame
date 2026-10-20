@@ -111,10 +111,10 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   };
 
   // The header's star counter: "71" with "/600" as its small part (the element reads "71/600").
-  const starsNum = h('span', { class: 'num' });
+  const starsNum = h('span', 'num');
   const starsChip = h('span', { class: 'chip chip--stars', role: 'img' }, artIcon('star'), starsNum, h('small', null, `/${CAMPAIGN_STARS_MAX}`));
   // "Continue · Level 38": the level is the smaller second half of the label (one text, two sizes).
-  const continueLevelText = h('span', { class: 'jc-level' });
+  const continueLevelText = h('span', 'jc-level');
   const continueBtn = button(ctx, {
     label: CONTINUE,
     icon: 'play',
@@ -129,37 +129,37 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   // The road on the Journey is a plate with its item on an ice medal (§10.2).
   road.el.classList.add('plate');
   road.el.querySelector('.road-art')?.classList.add('medal', 'medal--ice');
-  const sticky = h('div', { class: 'journey-sticky' }, continueBtn, road.el);
+  const sticky = h('div', 'journey-sticky', continueBtn, road.el);
 
   // The level in play: Nubs on top of its node and a slow ray burst behind it (moved on refresh).
   const pin = artIcon('nubs', 'ai lvl-pin');
-  const glow = h('span', { class: 'lvl-glow', 'aria-hidden': 'true' });
-  const rays = h('span', { class: 'burst lvl-rays', 'aria-hidden': 'true' });
+  const glow = h('span', { class: 'lvl-glow', deco: true });
+  const rays = h('span', { class: 'burst lvl-rays', deco: true });
 
   // Chapters and nodes, built once.
   const tiles: Tile[] = [];
   const chapters: ChapterView[] = [];
-  const body = h('div', { class: 'menu-body journey-body' });
+  const body = h('div', 'menu-body journey-body');
   for (const chapter of CHAPTERS) {
     // The grid holds the ten nodes only (the snake places them by nth-child).
-    const grid = h('div', { class: 'lvl-grid' });
+    const grid = h('div', 'lvl-grid');
     for (const level of CAMPAIGN_LEVELS.filter((l) => l.chapter === chapter.id)) {
       const uses: SVGUseElement[] = [];
       const stars = Array.from({ length: STARS_PER_LEVEL }, () => {
         const art = artIcon('starEmpty');
         uses.push(art.firstElementChild as SVGUseElement);
-        return h('span', { class: 'lvl-star' }, art);
+        return h('span', 'lvl-star', art);
       });
       const concept = level.introduces ? CONCEPTS[level.introduces] : null;
       const finale = level.id % LEVELS_PER_CHAPTER === 0;
       const el = h(
         'button',
         { class: `lvl-tile pe${finale ? ' is-finale' : ''}`, type: 'button', 'data-level': level.id, title: concept ? (concept.name === level.name ? concept.blurb : `${concept.name}: ${concept.blurb}`) : null },
-        h('span', { class: `lvl-num node candy${level.id >= 100 ? ' is-wide' : ''}` }, String(level.id)),
+        h('span', `lvl-num node candy${level.id >= 100 ? ' is-wide' : ''}`, String(level.id)),
         finale ? artIcon('crown', 'ai lvl-crown') : null,
-        concept ? h('span', { class: 'lvl-concept' }, icon(conceptIcon(concept.id))) : null,
-        h('span', { class: 'lvl-stars' }, ...stars),
-        h('span', { class: 'lvl-lock lock-badge' }, icon('lock')),
+        concept ? h('span', 'lvl-concept', icon(conceptIcon(concept.id))) : null,
+        h('span', 'lvl-stars', ...stars),
+        h('span', 'lvl-lock lock-badge', icon('lock')),
       );
       el.addEventListener('click', () => {
         ctx.sound('tap');
@@ -171,8 +171,8 @@ export function createJourneyScreen(ctx: UiContext): Screen {
     // The banner on the board's frame: biome coin, "Chapter 4" over its name, the chapter's Snow Globe
     // (earned once all ten levels are passed) with the chapter's stars as a tag hanging under it (the
     // count says what the v1 bar did).
-    const count = h('span', { class: 'chapter-count num' });
-    const prize = h('span', { class: 'chapter-prize', role: 'img' }, artIcon('globe'), h('span', { class: 'chapter-check' }, artIcon('check')));
+    const count = h('span', 'chapter-count num');
+    const prize = h('span', { class: 'chapter-prize', role: 'img' }, artIcon('globe'), h('span', 'chapter-check', artIcon('check')));
     const first = (chapter.id - 1) * LEVELS_PER_CHAPTER + 1;
     const el = h(
       'section',
@@ -184,18 +184,18 @@ export function createJourneyScreen(ctx: UiContext): Screen {
         h(
           'h3',
           { class: 'chapter-head' },
-          h('span', { class: 'chapter-kicker' }, `Chapter ${chapter.id}`, h('span', { class: 'sr-only' }, `, ${biomeName(chapter.biome)}: `)),
-          h('span', { class: 'chapter-name' }, chapter.name),
+          h('span', 'chapter-kicker', `Chapter ${chapter.id}`, h('span', 'sr-only', `, ${biomeName(chapter.biome)}: `)),
+          h('span', 'chapter-name', chapter.name),
         ),
         prize,
       ),
-      h('div', { class: 'chapter-meta tag' }, h('span', { class: 'chapter-stars' }, artIcon('star'), count)),
+      h('div', 'chapter-meta tag', h('span', 'chapter-stars', artIcon('star'), count)),
       h(
         'div',
         { class: 'chapter-map' },
         grid,
         // A locked board says what opens it (each locked node still says "Locked" in its label).
-        first > 1 ? h('span', { class: 'chapter-plate plate', 'aria-hidden': 'true' }, h('span', { class: 'lock-badge' }, icon('lock')), `Finish Level ${first - 1}`) : null,
+        first > 1 ? h('span', { class: 'chapter-plate plate', deco: true }, h('span', 'lock-badge', icon('lock')), `Finish Level ${first - 1}`) : null,
       ),
     );
     chapters.push({ el, count, prize });
@@ -218,7 +218,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   const el = h(
     'section',
     { class: 'scr scr-menu scr-journey', 'aria-labelledby': 'journey-title' },
-    h('div', { class: 'menu pe' }, header, sticky, body),
+    h('div', 'menu pe', header, sticky, body),
   );
   for (const kind of Object.keys(PROPS) as PropKind[]) {
     el.style.setProperty(`--prop-${kind}`, propUrl(kind, LIVE[kind]));

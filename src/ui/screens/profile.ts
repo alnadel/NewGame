@@ -30,6 +30,10 @@ const fill = (bar: HTMLElement, f: number): void => {
   (bar.firstElementChild as HTMLElement).style.width = `${Math.round(Math.min(1, f) * 100)}%`;
 };
 
+// State classes are written out whole (never built at run time), so the build can shorten them (vite.config.ts).
+const TIER_CLASS = { bronze: 'is-bronze', silver: 'is-silver', gold: 'is-gold' } as const;
+const RARITY_CLASS = { common: 'is-common', rare: 'is-rare', epic: 'is-epic', legendary: 'is-legendary' } as const;
+
 export function createProfileScreen(ctx: UiContext): Screen {
   let origin: ScreenId = 'title';
   /** Trophies unlocked since the last visit, counted on entry (before they are marked seen). */
@@ -40,26 +44,26 @@ export function createProfileScreen(ctx: UiContext): Screen {
   // count inside it, and when the next Snow Globe comes.
   const rankMedal = medal('1', { size: 80, className: 'pf-medal' });
   rankMedal.setAttribute('aria-hidden', 'true');
-  const kicker = h('span', { class: 'rank-kicker' });
-  const rankName = h('span', { class: 'rank-name gt-ink' });
-  const xpCount = h('span', { class: 'bar-label' });
+  const kicker = h('span', 'rank-kicker');
+  const rankName = h('span', 'rank-name gt-ink');
+  const xpCount = h('span', 'bar-label');
   const xpBar = progressBar(0, 'bar pf-xp', 'violet');
   xpBar.removeAttribute('aria-hidden');
   xpBar.append(xpCount);
-  const xpNext = h('p', { class: 'pf-next' });
-  const hero = h('section', { class: 'card panel--violet pf-hero' }, rankMedal, h('span', { class: 'rank-text plate' }, kicker, rankName), xpBar, xpNext);
-  const road = h('ol', { class: 'pf-road' });
+  const xpNext = h('p', 'pf-next');
+  const hero = h('section', 'card panel--violet pf-hero', rankMedal, h('span', 'rank-text plate', kicker, rankName), xpBar, xpNext);
+  const road = h('ol', 'pf-road');
 
-  const globeCount = h('strong', { class: 'gt-ink' });
-  const globes = h('section', { class: 'card panel--gold pf-globes' }, h('span', { class: 'pf-globe-art', 'aria-hidden': 'true' }, globeSvg()),
+  const globeCount = h('strong', 'gt-ink');
+  const globes = h('section', 'card panel--gold pf-globes', h('span', { class: 'pf-globe-art', deco: true }, globeSvg()),
     h('div', null, globeCount, 'Each holds an item you don’t own yet.'),
     button(ctx, { label: 'Open', icon: 'gift', variant: 'gold', className: 'pf-open', sound: null, onPress: () => void openGlobes(ctx) }));
   const streak = streakCard(ctx);
 
-  const count = (): HTMLElement => h('span', { class: 'card-count' });
+  const count = (): HTMLElement => h('span', 'card-count');
   const trophyCount = count();
-  const trophyNew = h('span', { class: 'sticker pf-new' });
-  const trophies = h('ul', { class: 'badges' });
+  const trophyNew = h('span', 'sticker pf-new');
+  const trophies = h('ul', 'badges');
   const more = button(ctx, { label: '', className: 'pf-more', onPress: () => {
     showAll = !showAll;
     refresh();
@@ -67,8 +71,8 @@ export function createProfileScreen(ctx: UiContext): Screen {
 
   const ownedCount = count();
   const ownedBar = progressBar(0, 'bar bar--sm');
-  const swatches = h('ul', { class: 'pf-swatches', 'aria-hidden': 'true' });
-  const starsCount = h('span', { class: 'num' });
+  const swatches = h('ul', { class: 'pf-swatches', deco: true });
+  const starsCount = h('span', 'num');
   const starsBar = progressBar(0, 'bar bar--sm');
   const wardrobeBtn = button(ctx, { label: 'Wardrobe', icon: 'wardrobe', size: 'sm', onPress: () => ctx.go('wardrobe') });
   const journeyBtn = button(ctx, { label: 'Journey', icon: 'map', size: 'sm', onPress: () => {
@@ -76,26 +80,26 @@ export function createProfileScreen(ctx: UiContext): Screen {
     ctx.cb.openJourney();
   } });
 
-  const bests = h('div', { class: 'cells pf-bests' });
-  const chart = h('div', { class: 'jchart well', 'aria-hidden': 'true' });
-  const chartSummary = h('p', { class: 'sr-only' });
-  const totals = h('dl', { class: 'jtotals' });
+  const bests = h('div', 'cells pf-bests');
+  const chart = h('div', { class: 'jchart well', deco: true });
+  const chartSummary = h('p', 'sr-only');
+  const totals = h('dl', 'jtotals');
 
   const card = (title: string, right: Node | null, ...children: Node[]): HTMLElement =>
-    h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title, right), ...children);
+    h('section', 'card', h('h3', 'card-title', title, right), ...children);
   const body = h(
     'div',
     { class: 'menu-body' },
     hero,
-    card('Rank road', null, road, h('p', { class: 'card-note' }, 'Every run earns XP. Missions and trophies pay extra.')),
+    card('Rank road', null, road, h('p', 'card-note', 'Every run earns XP. Missions and trophies pay extra.')),
     globes,
     streak.el,
     card('Trophies', h('span', null, trophyNew, trophyCount), trophies, more),
     card('Collection', ownedCount, ownedBar, swatches,
-      h('p', { class: 'pf-row gt-ink' }, artIcon('star'), 'Journey stars', starsCount), starsBar, h('div', { class: 'pf-links' }, wardrobeBtn, journeyBtn)),
+      h('p', 'pf-row gt-ink', artIcon('star'), 'Journey stars', starsCount), starsBar, h('div', 'pf-links', wardrobeBtn, journeyBtn)),
     card('Records', null, bests, chart, chartSummary, totals),
   );
-  const el = h('section', { class: 'scr scr-menu scr-profile', 'aria-label': 'Profile' }, h('div', { class: 'menu pe' }, menuHeader(ctx, 'Profile'), body));
+  const el = h('section', { class: 'scr scr-menu scr-profile', 'aria-label': 'Profile' }, h('div', 'menu pe', menuHeader(ctx, 'Profile'), body));
 
   function refresh(): void {
     const save = ctx.save();
@@ -117,8 +121,8 @@ export function createProfileScreen(ctx: UiContext): Screen {
         return h(
           'li',
           { class: `pf-node${n.reached ? ' is-now' : ''}${globe ? ' is-globe' : ''}`, 'aria-label': `Rank ${n.level}, ${n.title}${n.reached ? ', now' : `: ${what}`}` },
-          h('b', { class: 'node' }, String(n.level)),
-          h('span', { class: 'pf-reward' }, ...(n.reached ? [artIcon('check')] : globe ? [globeSvg('globe-mini')] : [artIcon('snow'), `+${n.reward.amount}`])),
+          h('b', 'node', String(n.level)),
+          h('span', 'pf-reward', ...(n.reached ? [artIcon('check')] : globe ? [globeSvg('globe-mini')] : [artIcon('snow'), `+${n.reward.amount}`])),
           h('small', null, n.title),
         );
       }),
@@ -147,12 +151,12 @@ export function createProfileScreen(ctx: UiContext): Screen {
         const n = p.target > 1 && !on && a.id !== 'high-noon' ? `${p.value}/${p.target}` : '';
         return h(
           'li',
-          { class: `badge plate is-${tier}${on ? ' is-on' : ''}`, 'aria-label': `${on ? `${a.name}: ${a.description}` : `Locked: ${a.name}. ${a.hint}`} ${tier} trophy${n ? `, ${n}` : ''}${item ? `. Reward: ${item}` : ''}.` },
-          h('span', { class: `badge-medal medal medal--${on ? tier : 'socket'}`, 'aria-hidden': 'true' }, on ? artIcon('trophy') : icon('lock')),
-          h('span', { class: 'badge-name gt-ink', 'aria-hidden': 'true' }, a.name),
-          h('span', { class: 'badge-desc', 'aria-hidden': 'true' }, on ? a.description : a.hint),
-          on ? null : h('span', { class: 'pf-prog', 'aria-hidden': 'true' }, progressBar(p.value / p.target, 'bar bar--sm'), n),
-          item ? h('span', { class: 'badge-reward tag', 'aria-hidden': 'true' }, icon('gift'), item) : null,
+          { class: `badge plate ${TIER_CLASS[tier]}${on ? ' is-on' : ''}`, 'aria-label': `${on ? `${a.name}: ${a.description}` : `Locked: ${a.name}. ${a.hint}`} ${tier} trophy${n ? `, ${n}` : ''}${item ? `. Reward: ${item}` : ''}.` },
+          h('span', { class: `badge-medal medal medal--${on ? tier : 'socket'}`, deco: true }, on ? artIcon('trophy') : icon('lock')),
+          h('span', { class: 'badge-name gt-ink', deco: true }, a.name),
+          h('span', { class: 'badge-desc', deco: true }, on ? a.description : a.hint),
+          on ? null : h('span', { class: 'pf-prog', deco: true }, progressBar(p.value / p.target, 'bar bar--sm'), n),
+          item ? h('span', { class: 'badge-reward tag', deco: true }, icon('gift'), item) : null,
         );
       }),
     );
@@ -161,7 +165,7 @@ export function createProfileScreen(ctx: UiContext): Screen {
     const owned = new Set(save.unlocks.cosmetics);
     ownedCount.textContent = `${owned.size}/${COSMETICS.length}`;
     fill(ownedBar, owned.size / COSMETICS.length);
-    setChildren(swatches, ...COSMETICS.map((c) => h('li', { class: owned.has(c.id) ? `is-${rarity(c)}` : null }, cosmeticSwatch(c))));
+    setChildren(swatches, ...COSMETICS.map((c) => h('li', { class: owned.has(c.id) ? RARITY_CLASS[rarity(c)] : null }, cosmeticSwatch(c))));
     const stars = totalStars(save);
     starsCount.textContent = `${stars}/${CAMPAIGN_STARS_MAX}`;
     fill(starsBar, stars / CAMPAIGN_STARS_MAX);
@@ -173,13 +177,13 @@ export function createProfileScreen(ctx: UiContext): Screen {
     setChildren(
       bests,
       ...([['Best run', best > 0 ? formatScore(best) : '–'], ['Best Daily', daily > 0 ? formatScore(daily) : '–'],
-        ['Best streak', `${save.gamify.streak.best} d`]] as const).map(([k, val]) => h('div', { class: 'cell well' }, h('span', { class: 'kicker' }, k), h('span', { class: 'jbest-val gt-ink' }, val))),
+        ['Best streak', `${save.gamify.streak.best} d`]] as const).map(([k, val]) => h('div', 'cell well', h('span', 'kicker', k), h('span', 'jbest-val gt-ink', val))),
     );
     const c = journalChart(save.history);
     setChildren(
       chart,
       ...c.bars.map((b) => {
-        const bar = h('i', { class: `jbar jbar--d${Math.min(4, b.day)}${b.best ? ' is-best' : ''}${b.eased ? ' is-eased' : ''}` });
+        const bar = h('i', `jbar jbar--d${Math.min(4, b.day)}${b.best ? ' is-best' : ''}${b.eased ? ' is-eased' : ''}`);
         bar.style.height = `${Math.round(Math.max(MIN_BAR, b.height) * 100)}%`;
         return bar;
       }),
@@ -191,7 +195,7 @@ export function createProfileScreen(ctx: UiContext): Screen {
       ['flake', 'Flakes', st.flakes], ['phew', 'PHEWs', st.phews], ['swing', 'SWINGs', st.swings], ['snow', 'Snow earned', st.lifetimeSnow],
       ['daily', 'Dailies played', st.dailyDaysPlayed], ['gift', 'Globes opened', save.gamify.opened], ['sun', 'Sunny weeks', st.sunnyWeeks],
     ];
-    setChildren(totals, ...rowsOf.flatMap(([i, k, val]) => [h('dt', null, icon(i), k), h('dd', { class: 'gt-ink' }, String(val))]));
+    setChildren(totals, ...rowsOf.flatMap(([i, k, val]) => [h('dt', null, icon(i), k), h('dd', 'gt-ink', String(val))]));
   }
 
   return {

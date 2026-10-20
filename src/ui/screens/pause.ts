@@ -37,11 +37,13 @@ export function createPauseScreen(ctx: UiContext): Screen {
   });
 
   // The run so far (v1.4): the level or mode, its goal and progress, the time reached, star pips.
-  const statusTitle = h('p', { class: 'pause-st-title' });
-  const statusGoal = h('p', { class: 'pause-st-goal' });
-  const statusStars = h('ul', { class: 'pause-st-stars' });
-  const status = h('div', { class: 'well pause-status' }, statusTitle, statusGoal, statusStars);
+  const statusTitle = h('p', 'pause-st-title');
+  const statusGoal = h('p', 'pause-st-goal');
+  const statusStars = h('ul', 'pause-st-stars');
+  const status = h('div', 'well pause-status', statusTitle, statusGoal, statusStars);
   const STAR_WORD = { earned: 'earned', open: 'still open', lost: 'lost' } as const;
+  // Written out whole (never built at run time), so the build can shorten them (vite.config.ts).
+  const STAR_CLASS = { earned: 'is-earned', open: 'is-open', lost: 'is-lost' } as const;
   const renderStatus = (): void => {
     const v = ctx.cb.runStatus?.() ?? null;
     status.hidden = v === null;
@@ -51,10 +53,10 @@ export function createPauseScreen(ctx: UiContext): Screen {
     statusTitle.textContent = v.title;
     // "Day 1 · 6:47 AM" and "16 %" never break inside; the time may give way on short screens (ui.css).
     const nb = (t: string): string => t.replace(/ (AM|PM|%)/g, '\u00a0$1').replace(/Day (\d+) · /g, 'Day\u00a0$1\u00a0·\u00a0');
-    statusGoal.replaceChildren(nb(v.goal), v.now ? h('span', { class: 'pause-st-now' }, `${v.goal ? ' · ' : ''}now ${nb(v.now)}`) : '');
+    statusGoal.replaceChildren(nb(v.goal), v.now ? h('span', 'pause-st-now', `${v.goal ? ' · ' : ''}now ${nb(v.now)}`) : '');
     statusStars.replaceChildren(
       ...v.stars.map((st) =>
-        h('li', { class: `tag pause-star is-${st.state}`, 'aria-label': `${st.label}: ${STAR_WORD[st.state]}` }, artIcon(st.state === 'earned' ? 'star' : 'starEmpty', 'ai pause-star-ic'), st.label),
+        h('li', { class: `tag pause-star ${STAR_CLASS[st.state]}`, 'aria-label': `${st.label}: ${STAR_WORD[st.state]}` }, artIcon(st.state === 'earned' ? 'star' : 'starEmpty', 'ai pause-star-ic'), st.label),
       ),
     );
     statusStars.hidden = v.stars.length === 0;
@@ -66,14 +68,14 @@ export function createPauseScreen(ctx: UiContext): Screen {
     'div',
     { class: 'dialog pause-card pe', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pause-title' },
     ribbon('Paused', { tone: 'blue', id: 'pause-title', bandClass: 'dialog-title' }).el,
-    h('div', { class: 'pause-badge', 'aria-hidden': 'true' }, artIcon('nubsSleep'), h('span', { class: 'gt pause-z' }, 'z Z')),
-    h('p', { class: 'well dialog-sub' }, 'Nubs is chilling. Take your time.'),
+    h('div', { class: 'pause-badge', deco: true }, artIcon('nubsSleep'), h('span', 'gt pause-z', 'z Z')),
+    h('p', 'well dialog-sub', 'Nubs is chilling. Take your time.'),
     status,
     resumeBtn,
     restartBtn,
-    h('div', { class: 'row-2' }, settingsBtn, homeBtn),
+    h('div', 'row-2', settingsBtn, homeBtn),
   );
-  const el = h('section', { class: 'scr scr-pause' }, h('div', { class: 'scrim' }), card);
+  const el = h('section', 'scr scr-pause', h('div', 'scrim'), card);
 
   return {
     el,

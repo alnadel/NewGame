@@ -28,13 +28,13 @@ export function createDailyScreen(ctx: UiContext): Screen {
   /** The date the screen shows (and Play would start): today when it was last rendered. */
   let shown = ctx.today();
 
-  const number = h('span', { class: 'daily-num' });
-  const plan = h('span', { class: 'daily-plan chip' });
-  const date = h('span', { class: 'daily-date' });
-  const par = h('p', { class: 'daily-par' });
-  const tryPips = h('span', { class: 'try-pips', 'aria-hidden': 'true' });
-  const tryText = h('span', { class: 'daily-tries-text gt-ink' });
-  const best = h('span', { class: 'daily-best-val gt-ink' });
+  const number = h('span', 'daily-num');
+  const plan = h('span', 'daily-plan chip');
+  const date = h('span', 'daily-date');
+  const par = h('p', 'daily-par');
+  const tryPips = h('span', { class: 'try-pips', deco: true });
+  const tryText = h('span', 'daily-tries-text gt-ink');
+  const best = h('span', 'daily-best-val gt-ink');
   const play = button(ctx, {
     label: 'Play',
     icon: 'play',
@@ -61,24 +61,24 @@ export function createDailyScreen(ctx: UiContext): Screen {
   const hero = h(
     'div',
     { class: 'card panel--gold daily-hero' },
-    h('div', { class: 'daily-sun medal medal--ice', 'aria-hidden': 'true' },
+    h('div', { class: 'daily-sun medal medal--ice', deco: true },
       svgFromMarkup(`<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">${sunMascot({ id: 'daily-sun', cx: 50, cy: 50, r: 25 })}</svg>`)),
-    h('p', { class: 'kicker' }, 'Daily Solstice'),
-    h('h3', { class: 'daily-id' }, h('span', { class: 'daily-title gt-ink' }, 'Daily ', number), h('span', { class: 'sr-only' }, ' · '), plan),
+    h('p', 'kicker', 'Daily Solstice'),
+    h('h3', 'daily-id', h('span', 'daily-title gt-ink', 'Daily ', number), h('span', 'sr-only', ' · '), plan),
     date,
-    h('p', { class: 'daily-blurb' }, 'Same world for everyone today. You get 3 tries and your best one counts.'),
+    h('p', 'daily-blurb', 'Same world for everyone today. You get 3 tries and your best one counts.'),
     h(
       'div',
       { class: 'cells' },
-      h('div', { class: 'cell well' }, h('span', { class: 'kicker' }, 'Tries'), h('span', { class: 'daily-tries' }, tryPips, tryText)),
-      h('div', { class: 'cell well' }, h('span', { class: 'kicker' }, 'Best today'), best),
+      h('div', 'cell well', h('span', 'kicker', 'Tries'), h('span', 'daily-tries', tryPips, tryText)),
+      h('div', 'cell well', h('span', 'kicker', 'Best today'), best),
     ),
     par,
     play,
   );
 
-  const body = h('div', { class: 'menu-body' }, hero, h('section', { class: 'card daily-recent' }, h('h3', { class: 'card-title' }, 'Recent days'), history));
-  const el = h('section', { class: 'scr scr-menu scr-daily', 'aria-label': 'Daily Solstice' }, h('div', { class: 'menu pe' }, menuHeader(ctx, 'Daily'), body));
+  const body = h('div', 'menu-body', hero, h('section', 'card daily-recent', h('h3', 'card-title', 'Recent days'), history));
+  const el = h('section', { class: 'scr scr-menu scr-daily', 'aria-label': 'Daily Solstice' }, h('div', 'menu pe', menuHeader(ctx, 'Daily'), body));
 
   /** One history row. Days before the save existed read neutrally ("—"), not as missed. */
   const historyRow = (s: DailyStatus, isToday: boolean, before: boolean): HTMLElement => {
@@ -89,21 +89,21 @@ export function createDailyScreen(ctx: UiContext): Screen {
     return h(
       'li',
       { class: `drow plate${isToday ? ' is-today' : ''}${s.played ? '' : ' is-empty'}${quiet ? ' is-before' : ''}` },
-      h('span', { class: 'drow-when' }, h('span', { class: 'drow-num gt-ink' }, `#${s.number}`), h('span', { class: 'drow-date' }, isToday ? 'Today' : formatDateLabel(s.date))),
+      h('span', 'drow-when', h('span', 'drow-num gt-ink', `#${s.number}`), h('span', 'drow-date', isToday ? 'Today' : formatDateLabel(s.date))),
       h(
         'span',
         { class: 'drow-result' },
-        quiet ? h('span', { class: 'sr-only' }, 'Before you started') : null,
+        quiet ? h('span', 'sr-only', 'Before you started') : null,
         h('span', { class: 'drow-score', 'aria-hidden': quiet ? 'true' : null }, result),
-        strip ? h('span', { class: 'drow-strip', 'aria-hidden': 'true' }, strip) : null,
+        strip ? h('span', { class: 'drow-strip', deco: true }, strip) : null,
       ),
       quiet
-        ? h('span', { class: 'drow-tries', 'aria-hidden': 'true' })
+        ? h('span', { class: 'drow-tries', deco: true })
         : h(
             'span',
             { class: 'drow-tries' },
-            h('span', { 'aria-hidden': 'true' }, `${s.tries}/${DAILY_TRIES}`),
-            h('span', { class: 'sr-only' }, `${s.tries} of ${DAILY_TRIES} tries`),
+            h('span', { deco: true }, `${s.tries}/${DAILY_TRIES}`),
+            h('span', 'sr-only', `${s.tries} of ${DAILY_TRIES} tries`),
           ),
     );
   };
@@ -117,11 +117,11 @@ export function createDailyScreen(ctx: UiContext): Screen {
     // The forecast emoji is not in the display face: it keeps the body font (§2.4).
     const planWords = planText(dailyPlan(today));
     const cut = planWords.indexOf(' ');
-    plan.replaceChildren(h('span', { class: 'glyph' }, planWords.slice(0, cut)), planWords.slice(cut));
+    plan.replaceChildren(h('span', 'glyph', planWords.slice(0, cut)), planWords.slice(cut));
     date.textContent = formatDateLabel(today);
     par.replaceChildren(icon('bolt'), parLine(s.par));
     par.classList.toggle('is-waiting', s.par === null);
-    setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => (i < s.tries ? h('i', { class: 'socket' }) : h('i', null, artIcon('snow')))));
+    setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => (i < s.tries ? h('i', 'socket') : h('i', null, artIcon('snow')))));
     tryText.textContent = s.scored ? `${s.tries}/${DAILY_TRIES} used` : 'All used';
     best.textContent = s.bestMinutes > 0 ? formatScore(s.bestMinutes) : '–';
     setButtonLabel(play, s.scored ? `Play · try ${s.tries + 1}/${DAILY_TRIES}` : 'Practice (unscored)');

@@ -4,17 +4,23 @@
 export type AttrValue = string | number | boolean | null | undefined;
 export type Child = Node | string | null | undefined | false;
 
-/** Creates an element. `false`/`null`/`undefined` attributes and children are skipped; `true` sets an empty attribute. */
+/**
+ * Creates an element. `attrs` is its attributes, or just its class as a string. `false`/`null`/
+ * `undefined` attributes and children are skipped; `true` sets an empty attribute. `deco: true`
+ * marks a decorative element: aria-hidden="true".
+ */
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-  attrs?: Record<string, AttrValue> | null,
+  attrs?: Record<string, AttrValue> | string | null,
   ...children: Child[]
 ): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
-  if (attrs) {
+  if (typeof attrs === 'string') el.className = attrs;
+  else if (attrs) {
     for (const [key, value] of Object.entries(attrs)) {
       if (value === null || value === undefined || value === false) continue;
       if (key === 'class') el.className = String(value);
+      else if (key === 'deco') el.setAttribute('aria-hidden', 'true');
       else el.setAttribute(key, value === true ? '' : String(value));
     }
   }
