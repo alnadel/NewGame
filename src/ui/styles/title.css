@@ -686,7 +686,8 @@ body,
   50% { scale: 1.06; }
 }
 
-/* Tight columns (title.ts fit(), after the tray labels): smaller squares and a slimmer Play. */
+/* Tight columns (title.ts fit(), before the tray labels go): smaller squares, a slimmer Play, the
+   labels tucked 2 px further over the squares. */
 .title-bottom.is-tight .tray-disc {
   --ic: 30px;
   width: 52px;
@@ -716,6 +717,8 @@ body,
 .title-bottom.is-tight .modes { margin-bottom: 4px; }
 
 .title-bottom.is-tight .tray-btn { padding-top: 0; }
+
+.title-bottom.is-tight .tray-label { margin-top: -10px; }
 
 .title-bottom.is-tight .chips .chip--btn { min-height: 36px; }
 

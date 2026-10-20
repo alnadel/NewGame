@@ -291,8 +291,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    * Measures and resolves crowding (called on enter, refresh, resize and the first key press; reads
    * layout, never per frame):
    * - the bottom cluster stays below Nubs' halo (--nubs-y + --halo-r): gaps shrink first (CSS),
-   *   then the tray labels go (the buttons keep their aria-labels), then the tray discs and the
-   *   mode pills shrink (is-tight), then the chips row goes (tiny screens);
+   *   then the tray discs and the mode pills shrink (is-tight, the labels tucked closer), then the
+   *   chips row goes (the Profile stays a tap away on the rank badge), and only then the tray labels
+   *   (the buttons keep their aria-labels): a new player needs the names more than the pips;
    * - a tall challenge banner drops the goal tagline, shrinks the logo, drops the forecast chip,
    *   then the tagline, to stay clear of the chips.
    */
@@ -311,7 +312,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       // the published vars.
       const limit = nubsY + haloR + 1;
       const top = (): number => (bottomCluster.classList.contains('no-chips') ? modes : chips).getBoundingClientRect().top;
-      for (const step of ['no-labels', 'is-tight', 'no-chips']) if (top() < limit) bottomCluster.classList.add(step);
+      for (const step of ['is-tight', 'no-chips', 'no-labels']) if (top() < limit) bottomCluster.classList.add(step);
     }
     // A tall banner (large text, small phone) must not reach the chips.
     if (ctx.challenge() !== null) {
