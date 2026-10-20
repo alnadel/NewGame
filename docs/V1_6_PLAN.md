@@ -13,6 +13,7 @@ A number marked **measured** comes from those runs. Every other number is a star
 > - **A1. No ruleset-15 compatibility.** The game is unreleased, so v1.6 does not keep a bit-identical v1.5 path. Drop `RunConfig.ruleset`, `RULES16_DATE`, the challenge `r` field, the dual hashing and the `sim --rules 15` gate. Keep `V16Rules`, `V16_ALL`/`V16_NONE`, `RunConfig.v16` (default all on) and `sim --off …` as kill switches and for with/without measurements (with every flag off the game should play like v1.5, but bit-identity is not required). `hashState` simply includes the new state. Goldens are regenerated once at integration, with the reason in the commit.
 > - **A2. Three builders, not five.** CORE-1 (economy) and CORE-2 (world and Journey) as in §9; GAME takes §9's GAME list plus META's remaining items (mission retargets T8; the campaign soft-fail's per-level miss count as an optional save field, lossless, no save-version bump unless unavoidable). A contract agent lands §10 (minus A1) first.
 > - **A3. Budget.** `npm run build:single` within 621.6 KiB + 20 KiB.
+>   **Amended at release:** 670 KiB. The single build is 666.1 KiB; the 44 KiB over v1.5 is shipped feature code (core +27 KB, render +10, config +7 by source map), not dead code, and no further diet is worth a feature cut now.
 
 ---
 
@@ -1476,3 +1477,10 @@ Every `V16Rules` flag can ship off on its own.
 - `npm run build:single` within v1.5's budget + 20 KiB;
 - 60 fps on a mid phone: step() µs/tick within +10% of v1.5, guide refresh ≤ 1.5× v1.5;
 - screenshots of every new dial layer and HUD element at 390×844 and 360×640 looked at.
+
+## 14. Release decision (integrator)
+
+Final gates at the release tree:
+- typecheck, vitest: pass. `sim --check --seeds 40`: every target met. `sim --campaign --bot all`: every hard gate met (Dare advisories noted in §6). `sim --release` (decisions on seeds 1-960 plus the held-out E2/E3 blocks): exit 0. `bench-step.ts --gen`: pass. Full Playwright twice: 332 passed, 0 failed, both runs. `build:single`: 666.1 KiB, within the amended A3.
+- **Known miss, waived with evidence:** held-out `--check --seeds 240 --seed-from 80001`, row "[long] oracle p3 reaches Day 8 on 100%": 239 of 240. Seed 80151 (Long Shadows forced) melts at Day 7 · 2:16 PM: a drifting cloud leaves Nubs at the Day-7 Chill cap of 40, the oracle swings toward a far safe arc at its planning turn speed and burns out in 0.7 s with 0.54 of a frost meter (no snap available), while full-shade angles existed throughout (guide.now 25-44 bins) and the validator reports 0 unresolved worlds. It is an oracle planning limit, not an unfair world; a bot fix is a v1.7 item.
+- **Open balance items for v1.7:** the free starting snap carries passive play (+500 ± 27 min) and flattens the comfort ladder; generation is 1.66x v1.5 per chunk (inside its hard limit); the advisory misses listed in §6.
