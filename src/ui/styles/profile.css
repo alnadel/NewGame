@@ -162,6 +162,7 @@
 .pf-globes strong {
   display: block;
   font-size: var(--fs-d-lg);
+  text-wrap: balance;
 }
 
 .pf-globe-art {
@@ -179,6 +180,12 @@
 }
 
 @keyframes globe-bob { 50% { translate: 0 -4px; rotate: -3deg; } }
+
+/* A phone-width card: the globe beside its words, the Open button under them at full width. */
+@container menu (max-width: 459px) {
+  .pf-globes { grid-template-columns: 72px minmax(0, 1fr); }
+  .pf-open { grid-column: 1 / -1; }
+}
 
 /* ===== Trophies: plates holding a medal in their tier ===== */
 

@@ -37,7 +37,7 @@ const VARIANTS: Record<LabScreen, readonly string[]> = {
   missions: ['regular', 'fresh'],
   wardrobe: ['regular', 'hats', 'shades', 'poor'],
   journey: ['regular', 'fresh', 'unlock-all', 'far'],
-  profile: ['regular', 'fresh', 'globes', 'streak'],
+  profile: ['regular', 'fresh', 'globes', 'globes-closed', 'streak'],
   rotate: ['regular'],
 };
 /** A Title run's Day 1 in the lab. */
@@ -432,7 +432,7 @@ function mount(screen: LabScreen, variant: string): void {
     save.campaign.unlocked = 154;
     save.campaign.lastLevel = 153;
   }
-  if (screen === 'profile' && variant === 'globes') save.gamify.globes = 3;
+  if (screen === 'profile' && (variant === 'globes' || variant === 'globes-closed')) save.gamify.globes = variant === 'globes' ? 3 : 2;
   if (screen === 'profile' && variant === 'streak') save.gamify.streak = { last: addDays(today, -1), days: 6, best: 9, freezeUsed: false };
   if (params.get('rm') === '1') save.settings.reducedMotion = 'on';
   if (params.get('hc') === '1') save.settings.highContrast = true;
