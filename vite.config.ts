@@ -135,10 +135,69 @@ function shadySW(): Plugin {
   };
 }
 
+/** A custom property token: `--name` not glued to a word before it (so `.btn--primary` is no token). */
+const CSS_VAR = /(?<![\w-])--[a-zA-Z_][\w-]*/g;
+
+/** Files under `dir` whose names match `re`, as paths. */
+function sources(dir: string, re: RegExp): string[] {
+  return listFiles(dir)
+    .filter((f) => re.test(f))
+    .map((f) => join(dir, f));
+}
+
+/**
+ * Shortens the UI's custom property names in build output (`--font-display` → `--b`): the kit
+ * writes ~1,900 `var(--…)` references, about 6 KB of the single file (docs/UI_V2.md §13). Only names
+ * that CSS alone reads and writes are renamed: any name the TypeScript, the HTML or a spec mentions
+ * (set from JS, read with getPropertyValue, probed by an e2e test) keeps its name, and so does any
+ * name that starts like a template-built one (`--prop-${kind}`). The map is built once from every
+ * stylesheet under src/, most-used name first, so the same sources always give the same CSS (and
+ * the same content hash). Dev servers and the UI lab never see it.
+ */
+function shortCssVars(): Plugin {
+  let rename = new Map<string, string>();
+  return {
+    name: 'shady-short-css-vars',
+    apply: 'build',
+    enforce: 'pre',
+    buildStart() {
+      const read = (files: string[]): string => files.map((f) => readFileSync(f, 'utf8')).join('\n');
+      const code = read([
+        ...sources('src', /\.ts$/),
+        ...sources('tests', /\.ts$/),
+        'index.html',
+      ]);
+      const keep = new Set(code.match(CSS_VAR) ?? []);
+      const prefixes = [...code.matchAll(/(?<![\w-])(--[\w-]*)\$\{/g)].map((m) => m[1]);
+      const css = read(sources('src', /\.css$/)).replace(/\/\*[\s\S]*?\*\//g, '');
+      const count = new Map<string, number>();
+      for (const name of css.match(CSS_VAR) ?? []) count.set(name, (count.get(name) ?? 0) + 1);
+      const free = [...count.keys()].filter((n) => !keep.has(n) && !prefixes.some((p) => n.startsWith(p)));
+      free.sort((a, b) => count.get(b)! * b.length - count.get(a)! * a.length || (a < b ? -1 : 1));
+      const taken = new Set([...keep, ...count.keys()]);
+      const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      let i = 0;
+      const next = (): string => {
+        for (;;) {
+          let n = i++;
+          let s = alphabet[n % 52];
+          for (n = Math.floor(n / 52); n > 0; n = Math.floor((n - 1) / 52)) s = alphabet[(n - 1) % 52] + s;
+          if (!taken.has(`--${s}`)) return `--${s}`;
+        }
+      };
+      rename = new Map(free.map((n) => [n, next()]));
+    },
+    transform(code, id) {
+      if (!/\.css$/.test(id) || !id.startsWith(resolve('src'))) return null;
+      return { code: code.replace(CSS_VAR, (n) => rename.get(n) ?? n), map: null };
+    },
+  };
+}
+
 // Relative base so the same build works on GitHub Pages sub-paths, file:// WebViews and Capacitor.
 export default defineConfig({
   base: './',
-  plugins: [shadySW()],
+  plugins: [shortCssVars(), shadySW()],
   build: {
     target: 'es2020',
     // The UI's floor is CSS container queries and :has() (they lay out the Title, Results, Pause,
