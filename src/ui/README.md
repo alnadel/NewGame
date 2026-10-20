@@ -340,28 +340,58 @@ uses. `simulateSafeArea({ top: 47 })` fakes a notch for layout tests (it sets `-
 
 ## 7. Styling
 
-**Visual system (v1.4).** One type scale (`--fs-2xs` 13 px … `--fs-2xl` 28 px), a 4 px spacing
-grid, three elevations (`--shadow-sm`, `--shadow`, `--shadow-lg`), `--pill`
-and a `--gloss` top light on raised controls. One button family (`widgets.ts button`: plain,
-primary, gold, danger × md/lg/xl/round; their colour is `--bg` under the gloss) with one press feel
-(down onto the lip, 0.97 scale). Menu cards rise in one after another; the Title's top rises in
-while its bottom cluster only fades (fit() measures it on entry). `widgets.ts` also has
-`countUp` (Results' Snow, the Title wallet) and `emptyState` (an icon disc, a title, one line).
+**Visual system (v2 "Candy", the binding spec is `docs/UI_V2.md`).** Every screen reads as a
+casual game: glossy candy controls with an ink outline and a pressable lip, Lilita One with an ink
+halo for display text, ribbon banners, framed panels, embossed counters, medals and star bursts.
 
-`ui.css` defines the GDD palette as custom properties on `.sui` (`--ink #2B2140`, `--paper #FFF8EE`,
-`--accent #2EC4B6`, `--gold #FFC23D`, `--danger #FF5D5D`), white 0.92 panels with 20 px radius and
-the GDD shadow, system-ui at weight 800 with tabular numerals, buttons ≥ 48 px with a pressable lip
-and 180 ms transitions. Text on menus and Results is ≥ 16 px; every control has a 48×48 hit area
-(a `::before` hit box where the visual is smaller); `--ink-3` (#6E6584) meets 4.5:1 on paper.
-`:focus-visible` is a two-tone ring (3 px ink outline + white halo) that reads on any background;
-selected options and tabs carry an ink edge; `@media (forced-colors: active)` keeps switches,
-sliders and selections visible; hover states apply only on `(hover: hover)`. Layout uses
-`--safe-top|right|bottom|left` (default `env(safe-area-inset-*)`) through the world-column insets.
-Reduced motion (`settings.reducedMotion` or the OS preference when "auto") adds `.is-rm`:
-transitions become opacity-only and keyframe motion stops. Hidden screens pause their CSS
-animations; the Title logo animates composited transforms on stacked layers. The page pans but
-never zooms (`touch-action: pan-x pan-y`, iOS `gesturestart` prevented); the canvas and the tray
-keep `none`.
+**Stylesheets** (imported by `ui.ts` in cascade order; each has one owner, §14 of the spec):
+
+| File | Holds |
+|---|---|
+| `kit.css` | The tokens on `.sui` (ink `#2A1B45`, cream, the candy faces `--{green,blue,gold,pink,violet,red,cloud,ice,locked}-{hi,,lo,lip}`, slots, accent text `--t-*`, tints, the warm sky, scrims, drops, radii, the type scale `--fs-d-*` / `--fs-*`, motion) and every shared recipe: `.btn` (+ `--primary/--blue/--violet/--pink/--gold/--danger/--plain`, `--sm/--lg/--xl`, `--sq`, `--round`), `.candy`, `.f-*` face classes, `.panel`/`.card`/`.dialog` (+ `--gold/--violet/…`), `.plate`, `.well`, `.ribbon`, `.counter` (`.chip--snow`, `.chip--stars`), `.medal`, `.chip` (+ `--dark`, `--btn`), `.tag`, `.sticker`, `.lock-badge`, `.bar` (+ tones, `--sm`, `.bar-label`, `.bar-gain`), `.tabs`/`.tab`, `.seg`, `.switch`, `.range`, fields, `.toast`, dialogs and sheets, `.node` (level disc), the menu sky, `.burst`, and the high-contrast rules. Legacy v1.4 token names are aliases there until no rule uses them. |
+| `ui.css` | The shared layout: the root and its world-column insets, resets, screens, menus and headers, dialogs, toasts, modals, the rotate overlay. |
+| `styles/<screen>.css` | One file per screen (title, play, pause, dying, results, settings, daily, missions, wardrobe, profile, journey); they compose the kit and never copy it. |
+| `a11y.css` | Reduced motion, desktop hover and forced colours, imported last. |
+| `gamify.css` | Imported by `gamify.ts`: the rank badge, XP meter, claim bubbles, the reward reveal, the Profile and Missions widgets. |
+
+**Rules of the look.** One ink for every outline, halo and hard drop (no grey borders, no blur-only
+shadows; one soft shadow on panels and modals). Display text is Lilita One (`--font-display`,
+weight 400, `font-synthesis: none`) in white with `-webkit-text-stroke: var(--halo) var(--ink)` and
+`paint-order: stroke fill`, never under 15 px; smaller text passes 4.5:1 by its fill alone.
+Sentences stay in the system font (`--font-body`) at 700-800. Colour means role: green go, blue
+navigate, violet Endless/XP, pink share/dares, gold rewards, red danger and titles, cloud neutral;
+one saturated hero per screen. Components write `box-shadow: var(--sh)` so press and focus extend
+the stack; only `transform` and `opacity` animate; no CSS `filter`, no `backdrop-filter`.
+
+**Widgets** (`widgets.ts`): `button()` (variants, sizes, `round`/`square`; coloured faces take the
+art icon of the same name, cloud faces the ink line icon), `buttonIcon()`, `ribbon(text, { tone,
+size, tag })` (returns the wrapper and the band, which is the heading), `menuHeader()` (blue back
+coin + red ribbon), `section()` (a framed panel with an ink title), `medal()`, `progressBar(fraction,
+className, tone)`, `snowChip()` (the wallet counter), `setCount()` (a counter's min-width in `ch`:
+Lilita has no tabular figures), `toggleSwitch()` (ON/OFF are generated content), `segmented()`,
+`slider()`, `countUp()`, `emptyState()`, `starRoad()`. `art-icons.ts` holds the illustrated
+48 × 48 icons (`artIcon(name)`, a sprite of `<symbol>`s injected once into `#ui`, each with a baked
+2 px ink drop) and the kit shapes (`kitShape('tail' | 'burst')`).
+
+**Font** (`fonts.ts`): Lilita One's latin woff2 imported with `?inline` (a data URL in every build:
+the PWA precaches it with the JS chunk, `build:single` inlines it with the script) and loaded with
+`FontFace` (`display: swap`); `fontsReady` resolves once it is usable. The boot splash waits for it
+up to 300 ms; the current screen re-lays out when it arrives; the UI lab waits for it. Glyphs the
+subset lacks (★ ≤ ← → ↑ ↓ ✓, emoji) sit in a `.glyph` span in the body font. The canvas mirrors
+the palette and draws outlined text and candy shapes with `src/render/candy.ts` (`displayFont`,
+`outlined`, `candyRect`, `plate`, `slot`, `coin`, `burst`, `drawStar`/`starSprite`,
+`onDisplayFont` + `fontGen` for its caches).
+
+**Accessibility.** Every pressable visual is ≥ 48 × 48 (chips and the switch keep a pseudo hit
+box). Focus is an ink | white | ink ring (`outline` + a 9 px ink spread in `--sh`) that reads on
+sky, cream and the world. `.is-hc` (the "High-contrast shadows" setting or `prefers-contrast:
+more`) turns faces flat, drops gloss, rays and clouds and thickens outlines; `.no-po` (Chromium
+< 123, which ignores `paint-order` on HTML text) thins the halo. Reduced motion (`.is-rm`: the
+setting, or the OS preference on "auto") makes transitions opacity-only, stops keyframes and
+presses without moving. Forced colours drop halos and decoration and keep real borders and
+`Highlight` states. Layout uses `--safe-top|right|bottom|left` through the world-column insets;
+hidden screens pause their animations; the page pans but never zooms (`touch-action: pan-x
+pan-y`, iOS `gesturestart` prevented); the canvas and the tray keep `none`.
 
 ## 8. PWA
 
@@ -384,3 +414,9 @@ keep `none`.
 `index.html` carries Open Graph and Twitter tags with absolute URLs from `%VITE_SHARE_URL%` (one card
 for every link, A10). `node scripts/gen-og.ts` (after `npx vite build`) renders `public/og.png`:
 1200×630, 256 colours, under 300 KB; re-run it after visual changes and commit the PNG.
+
+## 10. Credits
+
+The display face is **Lilita One** © 2011 Juan Montoreano, under the SIL Open Font License 1.1
+(`src/ui/fonts/LICENSE-LilitaOne.txt`), shipped unmodified as Google Fonts' latin subset
+(`src/ui/fonts/lilita-one-latin.woff2`). Settings shows the credit under the version line.
