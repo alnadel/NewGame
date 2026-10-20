@@ -1883,6 +1883,9 @@ export class Session {
       stars: won?.stars ?? 0,
       nextId: next ? next.id : null,
       goalLine: goalLine(level, result.stats, passed, this.relaxed(), this.featSeen, this.misses(level.id)),
+      // The goal cards (UI v2): each rule and whether this run met it (won: the finish was reached).
+      starRules: starRules(level, this.relaxed()),
+      starBits: starState(level, result.stats, won !== null, this.relaxed(), this.featSeen),
     };
     if (level.introduces) {
       // The sheet reads "New: {name} {blurb}"; a concept named after its level keeps just the blurb.

@@ -17,7 +17,8 @@ export function createDyingScreen(ctx: UiContext): Screen {
   catcher.addEventListener('click', skip);
 
   return {
-    el: h('section', { class: 'scr scr-dying' }, catcher),
+    // "Tap to skip" fades in after 0.5 s (dying.css); decorative: the catcher's label says it.
+    el: h('section', { class: 'scr scr-dying' }, catcher, h('span', { class: 'chip chip--dark dying-hint', 'aria-hidden': 'true' }, 'Tap to skip')),
     enter() {
       skipped = false;
     },

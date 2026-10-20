@@ -145,7 +145,10 @@ function levelRun(id: number, passed: boolean, stars: 0 | 1 | 2 | 3, over: Parti
   return run;
 }
 
-function campaignView(id: number, run: RunResult, goalLine: string): ResultsView['campaign'] {
+/** The goal cards' data (the game fills it from game/campaign.ts, which the UI may not import). */
+const LAB_STAR_BITS: Record<string, number> = { level: 7, 'level-perfect': 3, 'level-last': 5, 'level-fail': 4, 'level-death': 6 };
+
+function campaignView(id: number, run: RunResult, goalLine: string, variant: string): ResultsView['campaign'] {
   const lv = levelDef(id);
   const intro = lv?.introduces ? CONCEPTS[lv.introduces] : null;
   return {
@@ -156,6 +159,8 @@ function campaignView(id: number, run: RunResult, goalLine: string): ResultsView
     nextId: id < CAMPAIGN_LEVELS.length ? id + 1 : null,
     goalLine,
     ...(intro ? { introduces: { name: intro.name, blurb: intro.blurb } } : {}),
+    starRules: [variant === 'level-fail' ? 'Collect 8 flakes' : 'Finish', `${lv?.stars.flakes ?? 8} flakes`, `≤ ${lv?.stars.sunSec ?? 4} s in sun`],
+    starBits: LAB_STAR_BITS[variant] ?? 0,
   };
 }
 
@@ -227,7 +232,7 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
       'level-fail': 'Not enough flakes: 5 of 8',
       'level-death': 'Melted before the finish · 7 of 8 flakes',
     };
-    view.campaign = campaignView(run.level.id, run, goal[variant] ?? '');
+    view.campaign = campaignView(run.level.id, run, goal[variant] ?? '', variant);
     if (variant === 'level-death') view.tip = 'Tip: red arcs on the dial are glare. Keep the sun off them.';
   }
   return { view, save: r.save };
