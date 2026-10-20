@@ -18,6 +18,11 @@
   padding: calc(var(--in-top) + 16px) var(--pad-x-r) max(calc(var(--in-bottom) + 16px), calc(var(--nubs-clear, 0px) - var(--world-gap-bottom, 0px) + 12px)) var(--pad-x-l);
 }
 
+/* A level's taller card (the run's status) starts below the dimmed HUD row (8 + 48 + 8 px and 8 px
+   of air), so dozing Nubs and the ribbon never sit on the level bar; the height queries below
+   shrink the card first when that leaves too little room. */
+.scr-pause:has(.has-status) { padding-top: calc(var(--in-top) + 72px); }
+
 /* In: the card scales up without overshoot (the layout specs measure its clearance above Nubs'
    halo); the ribbon drops in with a swing (kit.css). */
 .scr-pause .dialog {
