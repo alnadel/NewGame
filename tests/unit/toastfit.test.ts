@@ -71,6 +71,19 @@ describe('canvas tip toasts', () => {
     });
   }
 
+  it('keeps every tip to two lines at the full 15k face on a 390 px phone (the band it covers stays small)', () => {
+    const v = createView();
+    v.cssW = 390;
+    const k = hudScale(v);
+    const [, w] = toastBox(0, 390, 0, 0, k);
+    const g = measurer();
+    const long = TIPS.filter((t) => {
+      const fit = fitToast(g, t, false, toastTextW(w, k), k);
+      return fit.px !== 15 || fit.lines.length > 2;
+    });
+    expect(long).toEqual([]);
+  });
+
   it('keeps a tip that fits in three lines at the full 15k face', () => {
     const g = measurer();
     const fit = fitToast(g, 'Bloomed! Shade for the rest of the run.', false, toastTextW(318, 1), 1);
