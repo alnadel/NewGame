@@ -696,9 +696,10 @@ const cLines: string[] = [];
 let cGoalW = 0;
 let cDare = '';
 let cDareW = 0;
-/** The star wells' labels as fitted, and their font size. */
-const cLabels = ['', '', ''];
+/** The star wells' labels as fitted (one or two lines each), their font size, and whether any takes two lines. */
+const cLabels: string[][] = [[], [], []];
 const cLabelPx = [0, 0, 0];
+let cTwoLine = false;
 let cPillW = 0;
 let cPillTW = 0;
 /** The fit: blurb lines shown, compact wells, the chips (0 stacked, 1 one row, 2 the goal chip hidden), concept shown; the height. */
@@ -716,6 +717,8 @@ const PILL_H = 40;
 const START_TEXT = 'TAP OR DRAG TO START';
 /** The glyph beside each star rule: the goal, a flake, the sun (a cool run). */
 const STAR_GLYPHS = ['goal', 'frosty', 'clear'];
+/** A star well's label line (12k text): the wells grow by one when a label takes two. */
+const WELL_LINE = 13;
 /** The drag mark on the start pill (↔), in a 14-unit box. */
 let dragP: Path2D | null = null;
 
@@ -748,16 +751,24 @@ function measureCard(b: Banners, w: number, k: number): void {
     cLines.length = 3;
     cLines[2] = ellipsize(g, `${(cLines[2] as string).replace(/[ ,.;:!?]+$/, '')}…`, iw);
   }
+  // A rule's label: one line at 13.5k, else at 12k, else two lines at 12k ("1.3 s snap / shade"),
+  // and only a word too long for a whole line ellipsizes.
   const wellW = (iw - 16 * k) / 3 - 8 * k;
+  cTwoLine = false;
   for (let i = 0; i < 3; i++) {
     const label = b.levelStars[i] ?? '';
+    const out = cLabels[i] as string[];
     let px = 13.5 * k;
     g.font = bodyFont(px, 800);
     if (g.measureText(label).width > wellW) {
       px = 12 * k;
       g.font = bodyFont(px, 800);
     }
-    cLabels[i] = ellipsize(g, label, wellW);
+    wrap(g, label, wellW, out);
+    if (out.length > 2) out[1] = out.slice(1).join(' ');
+    out.length = Math.min(out.length, 2);
+    for (let j = 0; j < out.length; j++) out[j] = ellipsize(g, out[j] as string, wellW);
+    if (out.length > 1) cTwoLine = true;
     cLabelPx[i] = px;
   }
   g.font = displayFont(17 * k);
@@ -785,7 +796,7 @@ function fitCard(b: Banners, k: number, room: number): boolean {
     if (cShowConcept && b.levelConceptName) h += 40 * k;
     if (cBlurbN > 0) h += cBlurbN * 20 * k + 10 * k;
     h += (cChips === 0 && dare ? 68 : cChips === 2 && !dare ? 0 : 34) * k;
-    if (b.levelStars.length === 3) h += (cCompact ? 50 : 64) * k;
+    if (b.levelStars.length === 3) h += ((cCompact ? 50 : 64) + (cTwoLine ? WELL_LINE : 0)) * k;
     // The start pill hangs off the bottom edge (its centre on it): 8k clear of what is above it.
     cH = h + (8 + PILL_H / 2) * k;
     if (cH <= room) return true;
@@ -937,7 +948,7 @@ function wordChip(g: CanvasRenderingContext2D, x: number, y: number, w: number, 
 function starWells(g: CanvasRenderingContext2D, b: Banners, x0: number, y: number, w: number, k: number, dpr: number): void {
   const gap = 8 * k;
   const ww = (w - 2 * gap) / 3;
-  const h = (cCompact ? 46 : 60) * k;
+  const h = ((cCompact ? 46 : 60) + (cTwoLine ? WELL_LINE : 0)) * k;
   const sp = Math.round((cCompact ? 22 : 28) * k);
   const star = starSprite(sp, dpr, 'on');
   for (let i = 0; i < 3; i++) {
@@ -956,7 +967,8 @@ function starWells(g: CanvasRenderingContext2D, b: Banners, x0: number, y: numbe
     g.textBaseline = 'middle';
     g.font = bodyFont(cLabelPx[i] as number, 800);
     g.fillStyle = INK;
-    g.fillText(cLabels[i] as string, scx, y + h - 11 * k);
+    const lines = cLabels[i] as string[];
+    for (let j = 0; j < lines.length; j++) g.fillText(lines[j] as string, scx, y + h - (11 + (lines.length - 1 - j) * WELL_LINE) * k);
   }
 }
 
