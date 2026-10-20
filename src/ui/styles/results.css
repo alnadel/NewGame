@@ -3,7 +3,8 @@
    compose the kit's recipes (kit.css), never copy them.
 
    v2 (§10.3): a blue framed panel open at the bottom; the celebration lives in the map band above
-   it (.res-hero: rays, confetti, the hero stars and the ribbon straddling the sheet's edge), scaled
+   it (.res-hero: the rays, the hero stars and the ribbon straddling the sheet's edge; the canvas
+   throws the confetti), scaled
    to the room there by results.ts measure() (--room, --hero-scale). */
 
 /* ===== Results ===== */

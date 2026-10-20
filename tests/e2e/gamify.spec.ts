@@ -185,7 +185,8 @@ test('the daily streak: Day 7 claims a Snow Globe on Missions, once a day', asyn
   await card.getByRole('button', { name: 'Claim' }).click();
   const rv = page.locator('.rv');
   await expect(rv.locator('.rv-kicker')).toHaveText('Week streak!');
-  await rv.click();
+  // The prize shows by itself (as in the Results test below: a late tap would collect it).
+  await expect(rv).toHaveClass(/is-open/, { timeout: 10_000 });
   await page.getByRole('button', { name: 'Collect' }).click();
   await expect(rv).toHaveCount(0);
   const s = await stored(page);
@@ -242,7 +243,9 @@ test('Results: the stars, then the XP meter settles, then the reveal, then the a
   expect(seen.retry).toBe(true);
   const xp = (await stored(page)).gamify.xp as number;
   expect(seen.count).toBe(`${xp - 700} / 300 XP`);
-  await rv.click();
+  // The prize shows by itself (a tap from here could land after the 1.5 s shake and collect it;
+  // the Snow Globe tests cover the tap that skips it).
+  await expect(rv).toHaveClass(/is-open/, { timeout: 10_000 });
   await page.getByRole('button', { name: 'Collect' }).click();
   await expect(rv).toHaveCount(0);
   await expect(page.locator('.scr-results .res-retry')).toHaveClass(/is-ready/);

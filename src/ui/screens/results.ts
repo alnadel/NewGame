@@ -463,7 +463,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     starEls.forEach((star, i) => {
       star.classList.remove('is-on', 'is-pop');
       if (i >= lit) return;
-      // Reduced motion: the stars fade in one after another; otherwise they slam (with sparks).
+      // Reduced motion: the stars fade in one after another; otherwise they slam in with a stamp.
       if (reduced) later(40 + i * STAR_FADE_MS, () => star.classList.add('is-on'));
       else {
         later(STAR_FIRST_MS + i * STAR_GAP_MS, () => {

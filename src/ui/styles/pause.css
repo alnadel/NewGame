@@ -113,11 +113,14 @@
 }
 
 /* Shorter still (small phones): Restart, Settings and Home share one row, icon over
-   label, dozing Nubs (he would poke out of the top) goes and the ribbon takes its small size. */
+   label, dozing Nubs (he would poke out of the top) goes, the ribbon sits lower and the status
+   well tightens, so the card keeps clear of Nubs' halo under a 47 px notch (layout.spec). */
 @container pause (max-height: 22em) {
-  .scr-pause .dialog.pause-card { margin-top: 18px; padding-top: 44px; }
+  .scr-pause .dialog.pause-card { margin-top: 12px; padding-top: 44px; }
   .scr-pause .pause-badge { display: none; }
   .scr-pause .dialog > .ribbon:first-child { top: -24px; }
+  .scr-pause .pause-status { padding: 6px 10px 8px; }
+  .scr-pause .pause-st-stars { gap: 4px; margin-top: 5px; }
 
   .scr-pause .dialog.has-status {
     display: grid;

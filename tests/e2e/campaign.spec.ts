@@ -104,6 +104,13 @@ test.describe('campaign levels', () => {
     expect(verdict!.stars).toBeGreaterThanOrEqual(1);
     expect(verdict!.nextId).toBe(3);
     expect(verdict!.goalLine).toMatch(/^Collected \d+ flakes \(goal \d+\) ✓( · Next ★: .+)?$/);
+    // The hero (UI v2): the verdict ribbon, this run's stars lit over the sheet's edge, and one
+    // goal card per star rule, as many met as the stars (a pass meets the goal).
+    const sheet = page.locator('.res-sheet');
+    await expect(sheet.locator('.res-ribbon')).toHaveText('Level 2 Passed!');
+    await expect(sheet.locator('.res-stars .res-star.is-on')).toHaveCount(verdict!.stars);
+    await expect(sheet.locator('.res-goal-card')).toHaveCount(3);
+    await expect(sheet.locator('.res-goal-card.is-met')).toHaveCount(verdict!.stars);
     // Next level: the Results' primary button.
     await page.locator('.res-sheet .res-next').click();
     await expect
