@@ -3,7 +3,7 @@
 //   1. inlines every <script src> and stylesheet <link> it can find on disk, and drops
 //      modulepreload links;
 //   2. removes what a lone file cannot use: the PWA manifest and apple-touch-icon links;
-//   3. inlines the SVG favicon as a URI-encoded data:image/svg+xml URI;
+//   3. inlines the SVG favicon as a data:image/svg+xml URI, escaped only where a URL needs it;
 //   4. validates: the page must not reference assets/, a <script src> or a stylesheet <link>.
 // On any problem it prints what is wrong and exits 1 without touching the build, so a broken
 // single-file build fails CI instead of shipping a page that 404s offline. On success it rewrites
@@ -40,6 +40,16 @@ function readLocal(url) {
   return { path, text: readFileSync(path, 'utf8') };
 }
 
+/**
+ * An SVG as a data: URI with only the escapes a URL in an attribute needs (%, #, <, >, &, the quote,
+ * whitespace runs, anything outside ASCII): about 30% smaller than encodeURIComponent's output for the same icon.
+ * Double quotes become single ones, so the URI can sit in a double-quoted attribute.
+ */
+function svgDataUri(svg) {
+  const text = svg.trim().replace(/\s+/g, ' ').replace(/> </g, '><').replace(/"/g, "'");
+  return `data:image/svg+xml,${text.replace(/[%#<>&]|[^\0-\x7F]/gu, encodeURIComponent)}`;
+}
+
 let html = source;
 
 // <link>: stylesheets inline, modulepreload/manifest/apple-touch-icon go, the favicon becomes data:.
@@ -62,7 +72,7 @@ html = html.replace(/<link\b[^>]*>/gi, (tag) => {
       problems.push(`cannot inline the favicon ${href}: ${f ? 'only SVG favicons are supported' : `file not found in ${dir}`}`);
       return tag;
     }
-    return `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${encodeURIComponent(f.text.trim())}" />`;
+    return `<link rel="icon" type="image/svg+xml" href="${svgDataUri(f.text)}" />`;
   }
   return tag;
 });
