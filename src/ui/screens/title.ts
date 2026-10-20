@@ -43,8 +43,9 @@ const BEST_CHIP_RUNS = 3;
 const BANNER_GAP = 6;
 const TAGLINE = "Don't melt Nubs.";
 /** Shown under the tagline for mouse and keyboard players (the arrows play the level until Endless unlocks). */
-export const KEY_HINT = 'Space: play the level · ← →: Endless · Esc: back';
-const KEY_HINT_LOCKED = 'Space or ← →: play the level · Esc: back';
+// Each key keeps its action on its line (no-break spaces inside a pair; the hint wraps at ' · ').
+export const KEY_HINT = 'Space:\u00a0play\u00a0the\u00a0level · ←\u00a0→:\u00a0Endless · Esc:\u00a0back';
+const KEY_HINT_LOCKED = 'Space\u00a0or\u00a0←\u00a0→:\u00a0play\u00a0the\u00a0level · Esc:\u00a0back';
 /** Nubs' speech bubble (a goal tagline): its tail tip sits this far above the halo (px). */
 const BUBBLE_TIP_GAP = 6;
 /** The bubble's tail height below its box (px, title.css). */
@@ -361,9 +362,12 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     }));
     chipMissions.setAttribute('aria-label', `Missions: ${missions.filter((m) => m.done).length} of ${missions.length} complete`);
 
-    const goal = nextGoal(save, ctx.today());
+    // A mission's "So close" never points at the Missions tray while it is still locked; its count
+    // reads "×3 of ×4", not "×3/×4".
+    let goal = nextGoal(save, ctx.today());
+    if (goal && goal.text.startsWith('So close') && !isOpen(save, 'missions')) goal = null;
     goalTagline = goal !== null;
-    tagline.textContent = goal?.text ?? TAGLINE;
+    tagline.textContent = goal ? goal.text.replace(/ · (\S+)\/(\S+)$/, ' · $1 of $2') : TAGLINE;
     tagline.classList.toggle('is-goal', goalTagline);
     tagline.classList.toggle('ribbon-band', !goalTagline);
     taglineBox.classList.toggle('is-goal', goalTagline);
@@ -459,12 +463,14 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       returnFrom = from;
       refresh();
       // A feature unlocked since the last visit is announced once per session (its NEW mark stays).
+      // Two at once share one toast ("Unlocked: Endless · Wardrobe").
       const fresh = gates.filter((g) => g.el.classList.contains('is-new') && !celebrated.has(g.f));
-      for (const g of fresh) {
-        celebrated.add(g.f);
-        ctx.toast(`${featureName(g.f)} unlocked!`, { icon: 'star', tone: 'gold', duration: 3200 });
+      for (const g of fresh) celebrated.add(g.f);
+      const names = fresh.map((g) => featureName(g.f));
+      if (names.length > 0) {
+        ctx.toast(names.length === 1 ? `${names[0]} unlocked!` : `Unlocked: ${names.join(' · ')}`, { icon: 'star', tone: 'gold', duration: 3200 });
+        ctx.sound('unlock');
       }
-      if (fresh.length > 0) ctx.sound('unlock');
     },
     refresh,
     leave: () => stopCount(),

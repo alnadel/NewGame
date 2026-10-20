@@ -297,8 +297,30 @@
 
 .menu-ribbon .ribbon-band { padding: 0 16px 4px; }
 
-@media (max-width: 359.98px) {
+/* Phones under 380 px: every menu's title at one size, slimmer tails, and the compact counter on
+   the right, so Wardrobe's wallet and the Journey's stars leave the ribbon its tails as well. */
+@media (max-width: 379.98px) {
+  .menu-head { gap: 6px; }
+
+  .menu-ribbon { padding: 0 12px; }
+
+  .menu-ribbon .ribbon-tail { width: 30px; }
+
+  .menu-head .menu-link { padding: 4px 10px 4px 8px; }
+
   .menu-ribbon .ribbon-band { font-size: var(--fs-d-lg); }
+
+  .menu-head :is(.counter, .chip--snow, .chip--stars) {
+    margin-left: 16px;
+    padding: 0 10px 0 24px;
+    font-size: var(--fs-d-md);
+  }
+
+  .menu-head :is(.counter, .chip--snow, .chip--stars) > .ai {
+    left: -18px;
+    width: 40px;
+    height: 40px;
+  }
 }
 
 @media (min-width: 430px) {
@@ -411,8 +433,8 @@
 .sui[data-screen='journey'] .toasts,
 .sui[data-screen='profile'] .toasts { top: calc(var(--in-top) + 10px + 64px + 8px); }
 
-/* On the Title, below its top bar (rank, reward, wallet). */
-.sui[data-screen='title'] .toasts { top: calc(var(--in-top) + 64px); }
+/* On the Title, below its top bar and the rank plate's XP bar (10 + the 72 px bar, 8 px of air). */
+.sui[data-screen='title'] .toasts { top: calc(var(--in-top) + 90px); }
 
 /* ===== Modals (confirm dialog, install sheet) ===== */
 
