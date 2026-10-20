@@ -35,13 +35,15 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  padding: 6px 14px;
-  border-radius: 12px;
-  background: var(--paper);
+  /* A cloud candy key cap; the arrow falls back to the body face (it is not in the display subset). */
+  padding: 6px 16px 10px;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--cloud-hi), var(--cloud) 46%, var(--cloud-lo));
+  box-shadow: inset 0 -5px 0 var(--cloud-lip), var(--top-light), var(--drop);
   color: var(--ink);
-  box-shadow: 0 4px 0 rgba(43, 33, 64, 0.25), var(--shadow-sm);
-  font-weight: 900;
-  font-size: var(--fs-lg);
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  font-synthesis: none;
   white-space: nowrap;
   transform: translate(-50%, -50%);
 }
@@ -77,7 +79,6 @@
   height: 55px;
   margin: -5px 0 0 -20px;
   transform-origin: 20px 5px;
-  filter: drop-shadow(0 6px 8px rgba(43, 33, 64, 0.22));
 }
 
 .ghost-hand svg {
@@ -127,22 +128,23 @@
   align-items: center;
   gap: 12px;
   margin-top: 34px;
-  color: var(--paper);
-  font-weight: 900;
-  font-size: var(--fs-xl);
-  letter-spacing: 0.08em;
-  text-shadow: 0 2px 0 rgba(43, 33, 64, 0.55), 0 0 14px rgba(43, 33, 64, 0.3);
+  color: #fff;
+  font: 400 1.375rem/1 var(--font-display);
+  font-synthesis: none;
+  letter-spacing: 0.06em;
+  -webkit-text-stroke: var(--halo) var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 max(2px, 0.1em) 0 var(--ink);
 }
 
 .ghost[data-mode='both'] .ghost-word { display: flex; }
 
 .ghost-arrow {
-  font-size: var(--fs-2xl);
-  line-height: 1;
-  opacity: 0.85;
+  font: 800 var(--fs-2xl)/1 var(--font-body);
+  -webkit-text-stroke: 0.12em var(--ink);
 }
 
-/* ===== Cue line (ui.showCue): plain words above Nubs for the first runs ===== */
+/* ===== Cue line (ui.showCue): plain words above Nubs for the first runs, on a dark chip ===== */
 
 /* Its bottom edge sits 8 px above the dial's outer rims (R + 25: the glass and flare rims), and a
    wrapped cue grows upward, so it never covers the ring. */
@@ -152,13 +154,18 @@
   top: calc(var(--nubs-y, 68%) - var(--wt) - var(--halo-r, 44px) - 33px);
   width: max-content;
   max-width: calc(100% - 32px);
-  padding: 7px 16px;
-  border-radius: var(--pill);
-  background: rgba(43, 33, 64, 0.8);
-  color: var(--paper);
-  font-weight: 800;
-  font-size: 18px;
-  line-height: 1.25;
+  padding: 6px 16px 8px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 20px;
+  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.3), var(--drop-sm);
+  color: #fff;
+  /* The arrows (← → ↓) are not in the display subset: they fall back to the body face. */
+  font: 400 18px/1.25 var(--font-display);
+  font-synthesis: none;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: var(--halo) var(--ink);
+  paint-order: stroke fill;
   text-align: center;
   pointer-events: none;
   opacity: 0;
@@ -178,22 +185,29 @@
 
 /* ===== Play ===== */
 
+/* The pause button: a 48 × 48 blue candy square (§6.2); the canvas HUD row starts at its right + 8. */
 .pause-btn {
+  --r: 16px;
+  --ic: 26px;
   position: absolute;
   top: calc(var(--in-top) + 8px);
   left: calc(var(--in-left) + 8px);
-  border-radius: 16px !important;
-  background: var(--panel);
 }
 
+/* Sound is off: a small cloud coin under the pause button, the mute line icon in ink. */
 .muted-ind {
-  --d: 32px;
-  --ic: 18px;
+  --d: 36px;
+  --ic: 20px;
   position: absolute;
-  top: calc(var(--in-top) + 64px);
-  left: calc(var(--in-left) + 16px);
+  top: calc(var(--in-top) + 66px);
+  left: calc(var(--in-left) + 14px);
+  border: var(--bw) solid var(--ink);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.75);
-  color: var(--ink-2);
-  box-shadow: var(--shadow-sm);
+  background: radial-gradient(circle at 50% 32%, var(--cloud-hi) 0 25%, var(--cloud) 60%, var(--cloud-lo));
+  box-shadow: inset 0 -3px 0 var(--cloud-lip), var(--drop-sm);
+  color: var(--ink);
 }
+
+/* High contrast (§8.5): flat faces. */
+.sui.is-hc .cue { background: var(--slot-1); }
+.sui.is-hc .ghost-key { background: var(--cloud); }

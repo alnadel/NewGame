@@ -418,6 +418,7 @@ export function createScene(): RenderScene {
       campaign: null,
       mech: null,
       reducedMotion: false,
+      hc: false,
     },
   };
 }
@@ -434,6 +435,7 @@ function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
   h.campaign = inp.campaign;
   h.mech = inp.mech;
   h.reducedMotion = inp.reducedMotion;
+  h.hc = inp.highContrast;
   return h;
 }
 
@@ -942,7 +944,7 @@ export class Renderer {
     // R + 25 (their centres from R + 40), so a +5 never sits on the parry arc.
     const lift = inp.mech.flarePhase === 1 && inp.screen !== 'title' ? 10 * v.S + 40 : 0;
     sc.popLift += (lift - sc.popLift) * Math.min(1, adt * 12);
-    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion), sc.popLift);
+    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion), sc.popLift, inp.highContrast);
 
     // Edge sun mascot (decoration), kept below the HUD band.
     if (inp.mapT < 0 && inp.screen !== 'title' && inp.screen !== 'menu') {
@@ -985,7 +987,7 @@ export class Renderer {
     } else {
       sc.hud.meterShown = false;
     }
-    if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion);
+    if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion, inp.highContrast);
     drawScreenParticles(g, sc.particles, v.dpr);
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   }

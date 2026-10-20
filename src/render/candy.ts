@@ -38,10 +38,8 @@ export const CREAM_3 = '#EBC982';
 export const SLOT_1 = '#3B2A5A';
 export const SLOT_2 = '#4E3B6C';
 export const SLOT_SUB = '#FFE58A';
-/** Accent text on cream (each ≥ 4.5:1 on CREAM), as the --t-* tokens. */
-export const TEXT = {
-  green: '#136E4E', blue: '#1660B4', rose: '#C62A55', amber: '#B5560A', orange: '#C9470F', violet: '#5B2EB4', brown: '#8A4B00',
-} as const;
+/** Accent text on cream (each ≥ 4.5:1 on CREAM), as the --t-* tokens the canvas uses. */
+export const TEXT = { green: '#136E4E', amber: '#B5560A', orange: '#C9470F', brown: '#8A4B00' } as const;
 
 // ---------------------------------------------------------------------------------------------
 // The display font
@@ -185,26 +183,160 @@ export function candyRect(g: CanvasRenderingContext2D, x: number, y: number, w: 
   g.stroke();
 }
 
-/** A cream plate (§6.3): white → cream face, a cream-3 bottom bevel, ink outline and a hard drop. */
-export function plate(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, k = 1): void {
+/** A cream plate (§6.3): white → cream face, a cream-3 bottom bevel, ink outline (`line`, 3k; 4k in high contrast) and a hard drop. */
+export function plate(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, k = 1, line = 3 * k): void {
+  candyRect(g, x, y, w, h, r, PLATE, k, { lip: 4 * k, drop: 3 * k, line, gloss: false });
+}
+const PLATE: Face = ['#FFFFFF', '#FFFBF0', CREAM, CREAM_3];
+
+/** A flat chip or pill (§6.7): `fill` face (a colour or a gradient), an ink outline (2.5k) and a small ink drop (2k). */
+export function chip(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, fill: string | CanvasGradient, k = 1, line = 2.5 * k): void {
   g.fillStyle = INK;
-  rr(g, x, y + 3 * k, w, h, r);
+  rr(g, x, y + 2 * k, w, h, r);
   g.fill();
+  g.fillStyle = fill;
+  rr(g, x, y, w, h, r);
+  g.fill();
+  g.lineWidth = line;
+  g.strokeStyle = INK;
+  g.stroke();
+}
+
+/** A sunk cream well (§6.3) for things nested in a panel: cream-2, a cream-3 top bevel and a faint ink ring. */
+export function well(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, k = 1): void {
   g.save();
   rr(g, x, y, w, h, r);
-  const grad = g.createLinearGradient(0, y, 0, y + h);
-  grad.addColorStop(0, '#fff');
-  grad.addColorStop(1, CREAM);
-  g.fillStyle = grad;
+  g.fillStyle = CREAM_2;
   g.fill();
   g.clip();
   g.fillStyle = CREAM_3;
-  g.fillRect(x, y + h - 4 * k, w, 4 * k);
+  g.fillRect(x, y, w, 3 * k);
   g.restore();
-  g.lineWidth = 3 * k;
-  g.strokeStyle = INK;
-  rr(g, x, y, w, h, r);
+  g.lineWidth = 2 * k;
+  g.strokeStyle = 'rgba(42,27,69,0.12)';
+  rr(g, x + k, y + k, w - 2 * k, h - 2 * k, Math.max(0, r - k));
   g.stroke();
+}
+
+/**
+ * A framed cream panel (§6.3) as one shape: the ink drop (and a faint second drop for the soft
+ * shadow), a 4k ink border, the coloured frame band (8k), the
+ * 3k inner ink line and the cream face with its top shade. Returns the cream's inset from the edge.
+ */
+export function panel(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, frame: Face, k = 1, flat = false): number {
+  g.fillStyle = 'rgba(42,27,69,0.22)';
+  rr(g, x, y + 12 * k, w, h, r);
+  g.fill();
+  g.fillStyle = INK;
+  rr(g, x, y + 6 * k, w, h, r);
+  g.fill();
+  rr(g, x, y, w, h, r);
+  g.fill();
+  const b = 4 * k;
+  rr(g, x + b, y + b, w - 2 * b, h - 2 * b, r - b);
+  if (flat) g.fillStyle = frame[1];
+  else {
+    const grad = g.createLinearGradient(0, y, 0, y + h);
+    grad.addColorStop(0, frame[0]);
+    grad.addColorStop(0.3, frame[1]);
+    grad.addColorStop(1, frame[2]);
+    g.fillStyle = grad;
+  }
+  g.fill();
+  const f = b + 8 * k;
+  g.fillStyle = INK;
+  rr(g, x + f, y + f, w - 2 * f, h - 2 * f, r - f);
+  g.fill();
+  const c = f + 3 * k;
+  g.save();
+  rr(g, x + c, y + c, w - 2 * c, h - 2 * c, r - c);
+  g.fillStyle = CREAM;
+  g.fill();
+  g.clip();
+  g.fillStyle = 'rgba(42,27,69,0.10)';
+  g.fillRect(x + c, y + c, w - 2 * c, 5 * k);
+  g.restore();
+  return c;
+}
+
+/** A ribbon's band and tail colours (§6.4): hi, face, lo, tail. */
+export type RibbonTone = readonly [hi: string, face: string, lo: string, tail: string];
+export const RIBBON = {
+  red: ['#FF9B6A', '#FF6A45', '#E2401F', '#C5381C'],
+  green: ['#B4F25E', '#69D33B', '#43B226', '#2E8C1A'],
+  violet: ['#D7B0FF', '#A26AF7', '#8550EC', '#5B2EB4'],
+} as const satisfies Record<string, RibbonTone>;
+
+/** The band's height for display text of `px` (the DOM ribbon: 52 at 26 px). */
+export const ribbonH = (px: number): number => px * 2;
+
+let tailP: Path2D | null = null;
+let foldP: Path2D | null = null;
+
+/**
+ * A ribbon (§6.4) centred on (cx, cy) holding `text` (outlined display text of `px`), with
+ * swallowtails tucked under its ends; `textW` is the text's measured width, `bh` the band's height.
+ * Returns the whole width (tails included). Draw it into a cached sprite: it is a dozen fills.
+ */
+export function ribbon(g: CanvasRenderingContext2D, cx: number, cy: number, text: string, textW: number, px: number, tone: RibbonTone, flat = false, bh = ribbonH(px)): number {
+  const u = bh / 52;
+  const bw = textW + 44 * u;
+  const x0 = cx - bw / 2;
+  const y0 = cy - bh / 2;
+  tailP ??= new Path2D('M2 2H48V44H2L15 23Z');
+  foldP ??= new Path2D('M30 2V44');
+  g.lineJoin = 'round';
+  for (const side of [-1, 1]) {
+    g.save();
+    // The left tail's box starts 30u outside the band and tucks 20u under it; the right one mirrors it.
+    g.translate(side < 0 ? x0 - 30 * u : x0 + bw + 30 * u, y0 + 16 * u);
+    g.scale(side * -u, u);
+    g.save();
+    g.translate(0, 3);
+    g.fillStyle = INK;
+    g.fill(tailP);
+    g.lineWidth = 4;
+    g.strokeStyle = INK;
+    g.stroke(tailP);
+    g.restore();
+    g.fillStyle = tone[3];
+    g.fill(tailP);
+    g.strokeStyle = 'rgba(0,0,0,0.28)';
+    g.lineWidth = 5;
+    g.stroke(foldP);
+    g.strokeStyle = INK;
+    g.lineWidth = 4;
+    g.stroke(tailP);
+    g.restore();
+  }
+  g.fillStyle = INK;
+  rr(g, x0, y0 + 4 * u, bw, bh, 10 * u);
+  g.fill();
+  g.save();
+  rr(g, x0, y0, bw, bh, 10 * u);
+  if (flat) g.fillStyle = tone[1];
+  else {
+    const grad = g.createLinearGradient(0, y0, 0, y0 + bh);
+    grad.addColorStop(0, tone[0]);
+    grad.addColorStop(0.45, tone[1]);
+    grad.addColorStop(1, tone[2]);
+    g.fillStyle = grad;
+  }
+  g.fill();
+  g.clip();
+  g.fillStyle = 'rgba(255,255,255,0.5)';
+  g.fillRect(x0, y0, bw, 3 * u);
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(x0, y0 + bh - 5 * u, bw, 5 * u);
+  g.restore();
+  g.lineWidth = 4 * u;
+  g.strokeStyle = INK;
+  rr(g, x0, y0, bw, bh, 10 * u);
+  g.stroke();
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  outlined(g, text, cx, cy - 1.5 * u, px);
+  return bw + 60 * u;
 }
 
 /** The embossed dark slot (§6.5): counters, the ruler track, the goal pill. Opaque. */
@@ -297,11 +429,9 @@ export function burst(g: CanvasRenderingContext2D, cx: number, cy: number, rx: n
 // ---------------------------------------------------------------------------------------------
 
 export const STAR_D = 'M24 4 L29.88 16.91 L43.97 18.51 L33.51 28.09 L36.34 41.99 L24 35 L11.66 41.99 L14.49 28.09 L4.03 18.51 L18.12 16.91 Z';
-const STAR_FACET = 'M24 35 L36.34 41.99 L33.51 28.09 L43.97 18.51 L33.51 28.09 Z';
 const STAR_SHADE = 'M24 9.5 L28.3 19 L38.6 20.2';
 
 let starP: Path2D | null = null;
-let facetP: Path2D | null = null;
 let shadeP: Path2D | null = null;
 
 /** The star as a Path2D in its 48 × 48 box (created on first use: unit tests run in node). */
@@ -328,9 +458,6 @@ export function drawStar(g: CanvasRenderingContext2D, x: number, y: number, px: 
     grad.addColorStop(1, '#FF9A0A');
     g.fillStyle = grad;
     g.fill(p);
-    g.globalAlpha = 0.35;
-    g.fillStyle = '#E98500';
-    g.fill((facetP ??= new Path2D(STAR_FACET)));
     g.globalAlpha = 0.85;
     g.fillStyle = '#fff';
     g.beginPath();
@@ -365,14 +492,15 @@ export function drawStar(g: CanvasRenderingContext2D, x: number, y: number, px: 
   g.restore();
 }
 
-const starSprites = new Map<string, HTMLCanvasElement>();
+const starSprites = new Map<number, HTMLCanvasElement>();
 
 /**
  * A cached star sprite, `px` CSS px square drawn at `dpr` (with 2 px of margin for the outline).
  * Draw it with drawImage(sprite, x - 2, y - 2, px + 4, px + 4).
  */
 export function starSprite(px: number, dpr: number, state: StarState): HTMLCanvasElement {
-  const key = `${px}|${dpr}|${state}`;
+  // A numeric key (no string per call: the pops and the FINISH stars ask every frame).
+  const key = (Math.round(px * 4) * 64 + Math.round(dpr * 8)) * 4 + (state === 'on' ? 0 : state === 'off' ? 1 : 2);
   let c = starSprites.get(key);
   if (c) return c;
   c = document.createElement('canvas');

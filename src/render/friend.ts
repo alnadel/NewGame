@@ -4,9 +4,9 @@
 
 import { dayLength, trailX, worldYAtTime, type World } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
+import { displayFont } from './candy.ts';
 import { roundRect } from './sprites.ts';
 
-const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
 /** Where a score of `minutes` sits on the trail (world u): writes [x, y] into out. */
 export function friendSpot(world: World, minutes: number, out: Float64Array): void {
@@ -57,7 +57,7 @@ export function drawFriendPennant(g: CanvasRenderingContext2D, v: View, x: numbe
   g.lineWidth = 1;
   g.stroke();
   const label = name || 'A friend';
-  g.font = `800 11px ${FONT}`;
+  g.font = displayFont(12);
   const w = g.measureText(label).width + 12;
   const h = 17;
   const py = top - 11 - h;
