@@ -15,7 +15,8 @@ export function createPlayScreen(ctx: UiContext): PlayScreen {
     ctx.go('pause');
     ctx.cb.pause();
   };
-  const pauseBtn = button(ctx, { label: 'Pause', icon: 'pause', round: true, className: 'pause-btn pe', onPress: pause });
+  // A blue candy square (docs/UI_V2.md §6.2) at the HUD row's left end: the canvas row starts 8 px past it.
+  const pauseBtn = button(ctx, { label: 'Pause', icon: 'pause', variant: 'blue', size: 'sm', square: true, className: 'pause-btn pe', onPress: pause });
   const muted = h('span', { class: 'muted-ind', role: 'img', 'aria-label': 'Sound is off', hidden: true }, icon('mute'));
 
   return {
