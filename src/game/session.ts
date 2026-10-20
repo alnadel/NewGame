@@ -940,6 +940,7 @@ export class Session {
     r.time = this.time;
     r.highContrast = save.settings.highContrast;
     this.renderer.scene.banners.levelKeys = this.ui.keyboardMode();
+    this.ui.ghostClearMeter(this.renderer.scene.hud.meterShown);
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
     r.softShadows = this.gov.softShadows;

@@ -30,6 +30,10 @@
 
 .ghost[data-mode='left'] .ghost-track { transform: scaleX(-1); }
 
+/* With the frost meter in the corner (hud.ts: its ring 96k from the column's right edge) the swing
+   stops 8 px short of the ring (the hand reaches 24 px past its fingertip). */
+.ghost.is-meter { --reach: max(44px, min(calc(var(--cw) * 0.254 - 34px - var(--in-right)), 110px)); }
+
 .ghost-key {
   display: none;
   position: absolute;

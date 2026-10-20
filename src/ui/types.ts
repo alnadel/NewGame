@@ -269,6 +269,8 @@ export interface Ui {
   /** The Results postcard's thumbnail (an object URL of the ready PNG), or null while it is built. */
   setPostcard(thumbUrl: string | null): void;
   setGhostThumb(mode: GhostMode): void;
+  /** The frost meter is drawn in the corner: the ghost hand's swing stops short of it. */
+  ghostClearMeter(on: boolean): void;
   /**
    * Progress (0..1) through the current loop of the ghost hand's swipe animation, so the canvas can
    * move the sun in step with it; −1 while the hand is hidden or not sliding (reduced motion).

@@ -453,6 +453,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       updateGhostKey();
     },
     ghostProgress,
+    ghostClearMeter: (on) => ghostEl.classList.toggle('is-meter', on),
     keyboardMode: () => keyboardMode,
     setAudioMuted(muted) {
       play.setMuted(muted);
