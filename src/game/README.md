@@ -79,7 +79,11 @@ out every screen, control, sheet, toast and dialog inside it.
   waiting tip (and a tip shown 1.5 s steps aside), a new tip replaces a waiting one queued at least
   1 s ago (two tips of one moment, such as a snap's gauge tip and the Garden's bud tip, both show),
   the run's end drops the queue. An urgent toast (the first flare's tip) keeps its place once queued: a later tip
-  waits behind it, a mission goes after it, and on screen it never steps aside.
+  waits behind it, a mission goes after it, and on screen it never steps aside. The top band, where
+  the path ahead comes in, rests 6 s after any toast before a tip starts (`TIP_REST`: about one tip
+  in ten seconds; missions and urgent tips need not wait), and no tip starts while the first
+  "Keep Nubs in the shade" cue is read (`holdToasts`). A Journey level toasts no mission steps
+  before Missions open (they still pay at the end). Every tip fits two lines at 390 px.
 - **Pause**: `UiCallbacks.runStatus()` (and the test hook's `runStatus()`) gives the Pause card the
   run's title, goal (with its count or progress), the time reached and, on a level, the star rules
   with their state so far.
@@ -296,14 +300,14 @@ the gauge. A missed flare's scorch
 (`MechView.scorch`) chars the end of the track it took away, and in the Noon Heat a white gauge is
 hatched hot (`MechView.noonNow`: a snap pours nothing there). While Nubs is red-hot the gold bud arcs
 go pale and dashed and the bud's mark in the world dims (no bud grows; facing one decays it). The
-bud tip says it ("…fast while the gauge is white, slower in the amber, never in the red"). The first
+bud tip says it ("…fastest while the gauge is white"). The first
 snap of a new player's run always gets its gauge's tip, whatever it pours: white "A white snap pours
-your ring (up to 0.6 of a snap) and cools you full", amber (`snapCash.amber`) "An amber snap pours
+your ring into the frost and cools you full", amber (`snapCash.amber`) "An amber snap pours
 less…", red-hot (`snapCash.hot`) "A red-hot snap only shades you…", the Noon Heat (`snapCash.noon`)
 "In the Noon Heat a snap pours nothing…", or, while a missed flare's scorch stands, "The snap healed
 the scorch…". A flare miss that scorches pops SCORCHED! and tips "Missed! The flare scorched your
-tank until night. A Cold Snap heals it." The first saved glass cluster (its frost waits for the next
-snap) tips "Glass saved! Its frost waits on the meter…" (in Endless and on the glass's own level). A
+tank. A Cold Snap heals it." The first saved glass cluster (its frost waits for the next
+snap) tips "Glass saved! Its frost waits for your next snap." (in Endless and on the glass's own level). A
 charge filled under a snap waits for snapEnd: the frost tip and the "Frost full! Swipe ↓" cue never
 show while no swipe can cast.
 

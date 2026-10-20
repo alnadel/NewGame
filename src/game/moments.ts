@@ -20,6 +20,7 @@
 import { FLARE_KEPT, levelProgress, queryBuds, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
+import { featureUnlocked } from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { endToast, endToasts, showToast, type Banners } from '../render/banners.ts';
 import { goalMetLive } from './campaign.ts';
@@ -55,12 +56,12 @@ export const LEVEL_TIPS: Readonly<Record<number, readonly (readonly [TipOn, stri
 };
 
 /** A saved glass cluster's frost waits for the next snap (the meter's ghost chip). */
-const GLASS_SAVED_TIP = 'Glass saved! Its frost waits on the meter: your next snap pours it in.';
+const GLASS_SAVED_TIP = 'Glass saved! Its frost waits for your next snap.';
 
-/** The Heat Flare tip (three lines at 360 px): the real cue, the orange rim, and where to go. */
-const FLARE_TIP = 'Heat Flare! Before the orange rim runs out, swing to the frost-rimmed teal.';
-/** The first endless flare's tip, read before its warning (three lines at 360 px, like FLARE_TIP). */
-const FLARE_SOON_TIP = 'Heat Flare soon! Before its orange rim runs out, swing to the frost-rimmed teal.';
+/** The Heat Flare tip (two lines at 360 px): the real cue, the rim, and where to go. */
+const FLARE_TIP = 'Heat Flare! Reach frost-rimmed teal before the rim runs out.';
+/** The first endless flare's tip, read before its warning (two lines at 390 px). */
+const FLARE_SOON_TIP = 'Heat Flare soon! Before its rim runs out, reach frost-rimmed teal.';
 /** The flare tip shows this long (ticks) before the warning: a tip's read (TIP_HOLD) ahead of a 2 s countdown. */
 const FLARE_LEAD = 240;
 /**
@@ -76,26 +77,26 @@ const FLARE_TIP_MAX_S = 30;
  */
 export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, string])[]>> = {
   bud: [
-    ['bud', 'A bud! Gold on the dial grows it: fast while the gauge is white, slower in the amber, never in the red.'],
+    ['bud', 'A bud! Gold on the dial grows it, fastest while the gauge is white.'],
     // The bud's level comes before the frost meter: its bloom banks nothing yet.
     ['bloom', 'Bloomed! Shade for the rest of the run.'],
-    ['p60', 'Where gold meets teal, one angle keeps Nubs cool and grows the bud.'],
+    ['p60', 'Where gold meets teal, one angle cools Nubs and grows the bud.'],
   ],
   snap: [
-    ['go', 'Sunflowers grown from cool shade fill the frost. Full? Swipe down.'],
-    ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter, best while the gauge is white.'],
+    ['go', 'Sunflowers grown in shade fill the frost. Full? Swipe down.'],
+    ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
-    ['cash', 'A white snap pours your ring (up to 0.6 of a snap) and cools you full.'],
-    ['hot', 'A red-hot snap only shades you: no Chill back, no ring poured. Snap before the gauge turns red.'],
-    ['amber', 'An amber snap pours less and cools you part way. Snap while the gauge is white.'],
+    ['cash', 'A white snap pours your ring into the frost and cools you full.'],
+    ['hot', 'A red-hot snap only shades you. Snap before the gauge turns red.'],
+    ['amber', 'An amber snap pours less and cools you part way.'],
     ['heal', 'The snap healed the scorch: shade fills your whole tank again.'],
   ],
   deep: [
-    ['go', 'Two shadows over Nubs at once is deep shade: Chill and the ring fill twice as fast.'],
-    ['deep', 'Deep shade! The dark band on the teal means double cool. Hunt the overlaps.'],
+    ['go', 'Two shadows on Nubs is deep shade: it cools twice as fast.'],
+    ['deep', 'Deep shade! The dark teal band is double cool. Hunt the overlaps.'],
   ],
   glass: [
-    ['glass', 'Glass flakes melt fast. The white glint saves them; out on a dotted arc it costs you sun.'],
+    ['glass', 'Glass flakes melt fast: shade them on the white glint.'],
     ['glassSaved', GLASS_SAVED_TIP],
   ],
   // The Solar Flare's level says it at go, before its first 1.2 s warning (too short to read a tip in).
@@ -125,11 +126,11 @@ export const FIRST_TIPS: readonly (readonly [TipOn, string, string])[] = [
   [...(MECH_TIPS.deep[1] as readonly [TipOn, string]), 'deep'],
   ['drop', 'Idle sun drains the ring. Keep to the shade to keep your ×.', 'ring'],
   ...MECH_TIPS.snap.slice(2).map((t) => [...t, 'coldsnap'] as const),
-  ['noon', 'In the Noon Heat a snap pours nothing: cash your ring before 11 or after 1.', 'coldsnap'],
+  ['noon', 'In the Noon Heat a snap pours nothing: snap before 11 or after 1.', 'coldsnap'],
   ['glassSaved', GLASS_SAVED_TIP, 'brittle'],
   [...(MECH_TIPS.glass[0] as readonly [TipOn, string]), 'brittle'],
   ['soon', FLARE_SOON_TIP, 'flare'],
-  ['scorch', 'Missed! The flare scorched your tank until night. A Cold Snap heals it.', 'flare'],
+  ['scorch', 'Missed! The flare scorched your tank. A Cold Snap heals it.', 'flare'],
 ];
 /** Lifetime runs under which endless and daily runs still get FIRST_TIPS. */
 const NEW_PLAYER_RUNS = 12;
@@ -234,7 +235,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       soonRise = -1;
       budAt = -1e9;
       tipGlyph = lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
-      if (!scored) return;
+      // A Journey level toasts no mission steps before Missions open (they still pay at the end).
+      if (!scored || (lv && !featureUnlocked(save, 'missions'))) return;
       for (const slot of save.missions.active) {
         const parsed = parseMissionId(slot.id);
         if (!parsed) continue;

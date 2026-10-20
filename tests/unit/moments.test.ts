@@ -281,12 +281,12 @@ describe('RunMoments', () => {
     // Economy iteration 2: a snap in the Noon Heat pours nothing, and says so once.
     b.toasts.length = 0;
     m.onEvent({ e: 'snapCash', level: 3, refundH: 0, noon: true }, e);
-    expect(b.toasts.map((t) => t.text)).toEqual(['In the Noon Heat a snap pours nothing: cash your ring before 11 or after 1.']);
+    expect(b.toasts.map((t) => t.text)).toEqual(['In the Noon Heat a snap pours nothing: snap before 11 or after 1.']);
     // A saved glass cluster's frost waits on the meter for the next snap, and says so once.
     b.toasts.length = 0;
     e.glassBankH = TUNING.bank.clusterH;
     m.onEvent({ e: 'clusterSaved', cluster: 1, brittle: true, n: 5, x: 0, y: 0 }, e);
-    expect(b.toasts.map((t) => t.text)).toEqual(['Glass saved! Its frost waits on the meter: your next snap pours it in.']);
+    expect(b.toasts.map((t) => t.text)).toEqual(['Glass saved! Its frost waits for your next snap.']);
     e.glassBankH = 0;
     // A seasoned player gets none.
     save.stats.runs = 50;

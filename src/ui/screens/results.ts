@@ -25,6 +25,7 @@
 import type { HourGlyph } from '../../core/sim/events.ts';
 import { formatScore, formatTimeOfDay, splitMinutes } from '../../core/format.ts';
 import { challengeVerdict } from '../../meta/challenge.ts';
+import { featureUnlocked } from '../../meta/gamify.ts';
 import { dailyNumber } from '../../meta/daily.ts';
 import type { MissionView } from '../../meta/missions.ts';
 import { activeMissionViews, type ToastSpec } from '../../meta/progression.ts';
@@ -645,7 +646,9 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const done = outcome.missionsCompleted.length;
     // outcome.toasts carries the run's unlocks, features included (v1.4: "Wardrobe unlocked!").
     const toasts: ToastSpec[] = [...outcome.toasts];
-    if (done > 0) toasts.push({ text: `${done === 1 ? 'Mission' : `${done} missions`} done +${outcome.missionSnow}`, icon: 'check', tone: 'accent' });
+    // Before Missions open, a level's mission steps are a plain bonus (no feature named that isn't open yet).
+    const bonus = view.campaign && !featureUnlocked(ctx.save(), 'missions');
+    if (done > 0) toasts.push({ text: `${bonus ? 'Bonus' : done === 1 ? 'Mission done' : `${done} missions done`} +${outcome.missionSnow}`, icon: 'check', tone: 'accent' });
     const chips = toasts.map((t) =>
       h(
         'li',
