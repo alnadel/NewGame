@@ -982,12 +982,14 @@ export class Renderer {
     // HUD.
     const hudVisible = inp.screen === 'play' || inp.screen === 'pause' || inp.screen === 'dying';
     if (hudVisible) {
-      const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : 1;
+      // Under 672 px a level's pause card rises onto the HUD row (pause.css), so the row steps back.
+      const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : inp.screen === 'pause' && v.cssH < 672 ? 0.3 : 1;
       drawHud(g, sc.hud, v, hudInput(sc, inp, a));
     } else {
       sc.hud.meterShown = false;
     }
-    if (inp.screen === 'play' || inp.screen === 'pause') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion, inp.highContrast);
+    // Toasts, stamps and cards are play's alone: a pause card never sits over a live tip (their timers hold).
+    if (inp.screen === 'play') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion, inp.highContrast);
     drawScreenParticles(g, sc.particles, v.dpr);
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   }
