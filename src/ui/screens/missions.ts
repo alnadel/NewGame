@@ -1,24 +1,27 @@
 // Missions (GDD §8, V1_PLAN §11.1-§11.2, v1.4): the daily streak calendar, the three active
 // missions (with Swap on a stale one) and the progress to the next Snow Globe (every third mission
 // finished pays one). The trophies live in the Profile, which the header links to.
+// Look (docs/UI_V2.md §10.9, styles/missions.css): mission cards are plates with a green bar that
+// carries the count, the reward as a cream chip with the Snow gem, COMPLETE as a tilted green stamp;
+// the globe row is an ice well with three coins.
 
 import { featureUnlocked, MISSIONS_PER_GLOBE } from '../../meta/gamify.ts';
 import type { MissionView } from '../../meta/missions.ts';
 import { activeMissionViews } from '../../meta/progression.ts';
+import { artIcon } from '../art-icons.ts';
 import { h, setChildren } from '../dom.ts';
 import { globeSvg, streakCard } from '../gamify.ts';
-import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { button, hide, menuHeader, progressBar } from '../widgets.ts';
 
 export function createMissionsScreen(ctx: UiContext): Screen {
   const streak = streakCard(ctx);
   const missionList = h('ul', { class: 'mission-list' });
-  const pips = h('span', { 'aria-hidden': 'true' });
+  const pips = h('span', { class: 'mset-pips', 'aria-hidden': 'true' });
   const setText = h('span', null);
-  const set = h('p', { class: 'mset' }, globeSvg(), setText, pips);
+  const set = h('p', { class: 'mset well' }, globeSvg(), setText, pips);
 
-  const trophiesLink = button(ctx, { label: 'Trophies', icon: 'trophy', className: 'menu-link', onPress: () => ctx.go('profile') });
+  const trophiesLink = button(ctx, { label: 'Trophies', icon: 'trophy', size: 'sm', className: 'menu-link', onPress: () => ctx.go('profile') });
 
   const body = h(
     'div',
@@ -30,26 +33,33 @@ export function createMissionsScreen(ctx: UiContext): Screen {
   const el = h('section', { class: 'scr scr-menu scr-missions', 'aria-label': 'Missions' },
     h('div', { class: 'menu pe' }, menuHeader(ctx, 'Missions', trophiesLink), body));
 
-  const reward = (n: number): (Node | string)[] => [icon('snow'), h('span', { 'aria-hidden': 'true' }, `+${n}`), h('span', { class: 'sr-only' }, `Reward ${n} Snow`)];
+  const reward = (n: number): (Node | string)[] => [artIcon('snow'), h('span', { 'aria-hidden': 'true' }, `+${n}`), h('span', { class: 'sr-only' }, `Reward ${n} Snow`)];
+
+  /** The green bar with the count inside it (the bar is decoration; the count is also read out). */
+  const bar = (m: MissionView): HTMLElement => {
+    const b = progressBar(m.fraction, 'bar', 'green');
+    if (!m.done) b.append(h('span', { class: 'bar-label' }, m.progressText));
+    return b;
+  };
 
   const missionCard = (m: MissionView): HTMLElement =>
     h(
       'li',
-      { class: `mcard${m.done ? ' is-done' : ''}` },
+      { class: `mcard plate${m.done ? ' is-done' : ''}` },
       h(
         'div',
         { class: 'mcard-top' },
-        h('span', { class: 'mcard-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
-        h('span', { class: 'reward reward--chip' }, ...reward(m.reward)),
+        h('span', { class: 'mcard-label gt-ink' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
+        h('span', { class: 'chip mcard-reward' }, ...reward(m.reward)),
       ),
       m.hint && !m.done ? h('p', { class: 'mcard-hint' }, m.hint) : null,
       h(
         'div',
         { class: 'mcard-bottom' },
-        progressBar(m.fraction, 'bar bar--lg'),
-        m.done ? h('span', { class: 'stamp stamp--sm' }, 'Complete') : h('span', { class: 'mcard-prog' }, m.progressText),
+        bar(m),
+        m.done ? h('span', { class: 'stamp' }, 'Complete') : h('span', { class: 'mcard-prog sr-only' }, m.progressText),
         m.swappable
-          ? button(ctx, { label: 'Swap', icon: 'swap', className: 'btn--swap', ariaLabel: `Swap “${m.label}” for another mission`,
+          ? button(ctx, { label: 'Swap', icon: 'swap', size: 'sm', className: 'mcard-swap', ariaLabel: `Swap “${m.label}” for another mission`,
               onPress: () => ctx.cb.swapMission(m.id) })
           : null,
       ),
@@ -64,7 +74,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
     const left = MISSIONS_PER_GLOBE - n;
     setText.textContent = `${left} more ${left === 1 ? 'mission' : 'missions'} for a Snow Globe`;
     set.setAttribute('aria-label', `${n} of ${MISSIONS_PER_GLOBE} missions toward a Snow Globe`);
-    setChildren(pips, ...Array.from({ length: MISSIONS_PER_GLOBE }, (_, i) => h('i', { class: i < n ? 'is-on' : '' })));
+    setChildren(pips, ...Array.from({ length: MISSIONS_PER_GLOBE }, (_, i) => (i < n ? h('i', { class: 'is-on' }, artIcon('check')) : h('i', { class: 'socket' }))));
     hide(trophiesLink, !featureUnlocked(save, 'profile'));
   }
 

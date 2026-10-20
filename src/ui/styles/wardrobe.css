@@ -1,19 +1,34 @@
-/* The Wardrobe screen.
+/* The Wardrobe screen (docs/UI_V2.md §10.8): the try-on stage, the collection plate, folder tabs
+   joined to the item grid's panel, and item tiles framed in their rarity's colour.
    Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
-   compose the kit's recipes (kit.css), never copy them. */
+   compose the kit's recipes (kit.css), never copy them. Lilita text in ink wears the kit's .gt-ink. */
 
-/* Wardrobe */
+/* Rarity (meta/gamify.ts rarity): a frame colour, a light tint and a tag face per tier; the tag and
+   the tile's label always say the word too (never colour alone). Ink on every tag face ≥ 8:1. */
+.scr-wardrobe [data-rarity] { --rar: var(--cloud-lo); --rar-tint: var(--tint-blue); --rar-tag: var(--cloud); }
+.scr-wardrobe [data-rarity='rare'] { --rar: var(--blue); --rar-tag: var(--blue-hi); }
+.scr-wardrobe [data-rarity='epic'] { --rar: var(--violet); --rar-tint: var(--tint-violet); --rar-tag: var(--violet-hi); }
+.scr-wardrobe [data-rarity='legendary'] { --rar: var(--gold); --rar-tint: var(--tint-gold); --rar-tag: var(--gold); }
+
+/* ===== The stage: a blue panel with a spotlight ===== */
 
 .stage {
-  gap: 4px;
+  gap: 6px;
   text-align: center;
 }
 
+/* The try-on spotlight: a white-to-ice disc in an ink ring with faint light rays (the game draws
+   Nubs' own shade under him). */
 .stage-spot {
-  --d: 176px;
-  margin-bottom: 4px;
+  --d: 184px;
+  position: relative;
+  margin-bottom: 24px;
+  border: var(--bw) solid var(--ink);
   border-radius: 50%;
-  background: radial-gradient(ellipse 60% 14% at 50% 84%, rgba(52, 48, 107, 0.18), transparent 70%), radial-gradient(circle at 50% 38%, #fff, var(--sky) 70%);
+  background:
+    repeating-conic-gradient(from 0deg at 50% 100%, #fff8 0 7deg, #fff0 7deg 18deg),
+    radial-gradient(circle at 50% 38%, #fff 22%, var(--tint-blue) 62%, #BFE3FB);
+  box-shadow: var(--drop-sm);
 }
 
 .preview-canvas {
@@ -21,9 +36,25 @@
   height: 168px;
 }
 
-.preview-name {
-  font-weight: 900;
-  font-size: 1.25rem;
+/* "Wearing" hangs across the spotlight's rim while the selected item is on. */
+.wear-ribbon {
+  position: absolute;
+  left: 50%;
+  bottom: -23px;
+  translate: -50%;
+  rotate: -3deg;
+}
+
+.stage-spot:not(.is-wearing) .wear-ribbon { display: none; }
+
+.preview-name { font-size: var(--fs-d-xl); }
+
+/* The rarity: a tag in the tier's face with ink text. */
+.rarity {
+  padding: 0 11px 1px;
+  background: var(--rar-tag);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .preview-note {
@@ -31,191 +62,256 @@
   max-width: 300px;
   margin-bottom: 8px;
   color: var(--ink-2);
-  font-size: var(--fs-md);
-  line-height: 1.3;
+  font-weight: 700;
 }
 
-/* Short screens: preview beside its caption and action, so the item grid stays in view. */
+/* Buy: the price rides inside the gold button as a mini counter. */
+.stage .btn-price {
+  height: 2em;
+  min-height: 0;
+  margin-left: 22px;
+  padding: 0 12px 0 22px;
+  font-size: var(--fs-d-md);
+}
+
+.stage .btn-price > .ai {
+  left: -20px;
+  width: 38px;
+  height: 38px;
+}
+
+/* Short screens: the spotlight beside its caption, so the item grid stays in view; in a narrow
+   column the action takes the whole row under them. */
 @media (max-height: 720px) {
   .stage {
     display: grid;
     grid-template-columns: 124px 1fr;
-    grid-template-rows: auto auto 1fr;
-    column-gap: 14px;
-    align-items: start;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 4px 14px;
+    place-items: start;
     text-align: left;
-    padding: 12px;
+    padding: 21px;
   }
 
   .stage-spot {
     --d: 124px;
     grid-row: 1 / 4;
-    margin: 0;
+    margin: 0 0 16px;
   }
 
-  .preview-canvas {
-    width: 120px;
-    height: 120px;
-  }
-
-  .preview-name { margin-top: 4px; }
-
-  .preview-note {
-    min-height: 0;
-    margin-bottom: 8px;
-  }
+  .preview-canvas { width: 112px; height: 112px; }
+  .wear-ribbon { bottom: -19px; scale: 0.8; }
+  .preview-name { font-size: var(--fs-d-lg); }
+  .preview-note { min-height: 0; font-size: var(--fs-sm); }
 
   .stage .btn {
-    align-self: end;
-    min-height: 48px;
-    padding: 4px 12px;
-    font-size: var(--fs-md);
+    --h: 52px;
+    --lipH: 5px;
+    --ic: 24px;
+    grid-column: 2;
+    justify-self: stretch;
+    padding: 2px 10px var(--lipH);
+    font-size: var(--fs-d-md);
+  }
+
+  @container menu (max-width: 339.98px) {
+    .stage .btn { grid-column: 1 / -1; }
   }
 }
 
+/* ===== The collection: owned of all, on a plate ===== */
+
+.collection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 10px 10px;
+  font-size: var(--fs-d-md);
+}
+
+.collection > .ai { --ic: 30px; margin: -6px 0 -4px; }
+.collection .num { color: var(--t-brown); }
+.collection .bar { flex: 1; }
+
+/* ===== Folder tabs joined to the grid's panel (§6.9) ===== */
+
+/* Unselected tabs tuck behind the panel's top border (the menu body's 14 px gap, then 4 px); the
+   selected one stands in front of it and runs down through the frame band into the cream. */
+.scr-wardrobe .tabs {
+  z-index: auto;
+  margin: 4px 0 -18px;
+  padding: 0 18px;
+}
+
+.scr-wardrobe .tab[aria-selected='true'] {
+  min-height: 68px;
+  margin-bottom: -15px;
+  padding-bottom: 12px;
+}
+
+/* A tab with new items wears a small claim bubble. */
+.tab.has-new::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 50%;
+  background: var(--bubble);
+}
+
+/* ===== The item grid: a blue panel of rarity-framed tiles ===== */
+
 .tile-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px 8px;
+  padding: 19px 15px 20px;
 }
 
-/* A narrow column: two tiles per row, so names and prices stay on their lines at 16 px. */
-@container menu (max-width: 299.98px) {
+.tile-grid::before { display: none; }
+
+/* A narrow column (a 320 px phone, or large text: the breakpoints are in rem): two tiles per row
+   and slimmer tabs; a little wider, the "Wearing" tag drops its check (the word says it). Tab
+   words stay at most 19 px so a four-letter slot name never breaks. */
+.scr-wardrobe .tab { font-size: min(1.0625rem, 19px); }
+
+@container menu (max-width: 20rem) {
   .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scr-wardrobe .tabs { gap: 3px; padding: 0 8px; }
+  .scr-wardrobe .tab { padding: 2px 2px 0; }
 }
 
-.tile {
+@container menu (20rem < width < 22rem) {
+  .tile-status.is-equipped .ic { display: none; }
+}
+
+/* A mini panel: a 5 px frame in the rarity's colour inside an ink border, cream within, a hard drop.
+   (> li > outranks a11y.css's generic tile hover.) Selected adds a green ring outside the frame;
+   only --sh changes, so the kit's focus ring still applies. */
+.tile-grid > li > .tile {
+  --in: inset 0 0 0 5px var(--rar), inset 0 0 0 7px var(--ink), inset 0 4px 0 7px #2a1b4514;
+  --sh: var(--in), var(--drop);
   position: relative;
   gap: 4px;
-  width: 100%;
-  min-height: 132px;
-  padding: 10px 4px 9px;
-  border: 0;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: transform 90ms var(--ease-out), box-shadow var(--t);
+  height: 100%;
+  min-height: 138px;
+  padding: 13px 9px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 20px;
+  background: var(--cream);
+  box-shadow: var(--sh);
+  transition: transform var(--t-up) var(--ease-back);
 }
 
-.tile:active { transform: scale(0.96); }
+.tile-grid > li > .tile.is-selected { --sh: var(--in), 0 0 0 4px var(--green), 0 0 0 6.5px var(--ink), 0 5px 0 6.5px var(--ink); }
+.tile-grid > li > .tile:active { transform: translateY(3px); }
+.sui.is-rm .tile-grid > li > .tile:active { transform: none; }
 
-.tile.is-selected { box-shadow: 0 0 0 3px var(--accent), var(--shadow-sm); }
-
+/* The art on a light disc tinted by rarity; a locked item's disc is lavender and its swatch faded
+   (the lock badge and the words carry the state). */
 .tile-art {
   --d: 64px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, #fff, var(--sky) 75%);
+  background: radial-gradient(circle at 50% 38%, #fff 30%, var(--rar-tint) 78%);
+  box-shadow: inset 0 0 0 2.5px #2a1b4524;
 }
 
-.swatch {
-  width: 56px;
-  height: 56px;
-}
-
-.tile.is-locked .tile-art { filter: grayscale(0.85) opacity(0.6); }
+.swatch { width: 56px; height: 56px; }
+.tile.is-locked .tile-art { background: var(--locked); }
+.tile.is-locked .swatch { opacity: 0.5; }
 
 .tile-name {
   max-width: 100%;
-  font-weight: 800;
-  font-size: var(--fs-md);
-  line-height: 1.15;
+  font-size: var(--fs-d-sm);
+  line-height: 1.1;
   overflow-wrap: break-word;
 }
 
 .tile-status {
   --ic: 14px;
+  position: relative;
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
   justify-content: center;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: auto;
-  font-size: var(--fs-md);
-  font-weight: 800;
   color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
+  font: 800 var(--fs-sm)/1.1 var(--font-body);
 }
 
-.tile-status.is-equipped { color: var(--accent-ink); }
-
-.tile-status.is-cost { color: var(--accent-ink); }
-
-.tile-status.is-short { color: var(--ink-3); }
-
-.tile-status.is-locked {
-  max-width: 100%;
-  color: #8a5a00;
-  line-height: 1.15;
-  text-align: center;
+/* "✓ Wearing": a green tag (ink on green, 8.2:1); it may reach into the tile's frame band. */
+.tile-status.is-equipped {
+  --ic: 13px;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin-inline: -9px;
+  padding: 0 7px 1px 4px;
+  background: var(--green);
+  color: var(--ink);
+  font: 400 var(--fs-d-sm)/1 var(--font-display);
 }
+
+/* A price: the gem coin (26) overlapping a small embossed slot (Lilita 16). */
+.tile-status .price {
+  height: 1.9em;
+  min-height: 0;
+  margin-left: 12px;
+  padding: 0 9px 0 16px;
+  font-size: 1rem;
+}
+
+.tile-status .price > .ai {
+  left: -13px;
+  width: 26px;
+  height: 26px;
+}
+
+/* Too dear: the number dims to the toggle's OFF lavender (6.8:1) and a lock badge on the slot's
+   corner says why. */
+.tile-status.is-short .price { padding-right: 13px; color: var(--slot-off); }
+
+.tile-status.is-short .lock-badge {
+  --d: 20px;
+  --ic: 12px;
+  position: absolute;
+  top: -9px;
+  right: -9px;
+}
+
+.tile-status.is-locked { color: var(--t-brown); }
+.tile-globe { --ic: 24px; margin: -3px 0; }
+
+/* NEW: a sticker on the tile's top-right corner. */
+.tile-new {
+  position: absolute;
+  top: -9px;
+  right: -6px;
+}
+
+.tile:not(.is-new) .tile-new { display: none; }
 
 .tile.is-bought .tile-art,
 .stage-spot.is-hop { animation: bought 600ms var(--ease-back); }
-
-/* Rarity (meta/gamify.ts rarity): a coloured rim on the tile and a label; common items stay plain. */
-.tile[data-rarity='rare'],
-.rarity[data-rarity='rare'] { --rar: #2559b8; }
-
-.tile[data-rarity='epic'],
-.rarity[data-rarity='epic'] { --rar: #7442c2; }
-
-.tile[data-rarity='legendary'],
-.rarity[data-rarity='legendary'] { --rar: #8a5a00; }
-
-.tile[data-rarity]:not([data-rarity='common']) { box-shadow: inset 0 -4px 0 var(--rar), var(--shadow-sm); }
-
-.tile[data-rarity]:not([data-rarity='common']).is-selected { box-shadow: inset 0 -4px 0 var(--rar), 0 0 0 3px var(--accent), var(--shadow-sm); }
-
-.rarity {
-  align-self: center;
-  justify-self: start;
-  width: fit-content;
-  padding: 1px 10px;
-  border-radius: var(--pill);
-  background: var(--rar, var(--paper-2));
-  color: #fff;
-  font-size: var(--fs-2xs);
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.rarity[data-rarity='common'] { color: var(--ink-2); }
-
-/* Tabs with new items carry a dot. */
-.tab { position: relative; }
-
-.tab.has-new::after {
-  content: '';
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
-/* The collection: owned of all, with a bar. */
-.collection {
-  --ic: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-2);
-  font-weight: 800;
-}
-
-.collection .num { color: var(--ink); }
-
-.collection .bar {
-  flex: 1;
-  height: 8px;
-}
-
-.tile .new-tag { top: 6px; left: auto; right: 6px; transform: rotate(6deg); }
 
 @keyframes bought {
   30% { transform: scale(1.25) rotate(-8deg); }
   60% { transform: scale(0.95) rotate(4deg); }
 }
+
+/* Hover brightens the cream (and keeps the candy stack over a11y.css's generic tile hover). */
+@media (hover: hover) {
+  .tile-grid > li > .tile:hover:not(:focus-visible) {
+    background: #fff;
+    box-shadow: var(--sh);
+  }
+}
+
+/* High contrast: no rays or tints; locked discs hatched. */
+.sui.is-hc :is(.stage-spot, .tile-art) { background: #fff; }
+.sui.is-hc .tile.is-locked .tile-art { background: repeating-linear-gradient(45deg, #2a1b452e 0 3px, #0000 0 7px), var(--locked); }

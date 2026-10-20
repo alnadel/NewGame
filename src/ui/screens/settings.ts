@@ -218,7 +218,9 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     importBtn,
     resetBtn,
   );
-  const midRunNote = h('p', { class: 'card card-note set-midrun' }, MID_RUN_BACKUP_NOTE);
+  progressSection.classList.add('set-progress');
+  // Mid-run: a small plate says where backup, restore and reset went.
+  const midRunNote = h('p', { class: 'plate set-midrun' }, h('span', { class: 'lock-badge', 'aria-hidden': 'true' }, icon('lock')), MID_RUN_BACKUP_NOTE);
 
   /** A section's row tiles wear its candy face (kit.css .set-ic). */
   const toned = (face: string, card: HTMLElement): HTMLElement => {
