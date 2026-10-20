@@ -1,16 +1,25 @@
 /* The Results sheet (endless, Daily, challenge and Journey levels).
    Owner: B4 Results (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
-   compose the kit's recipes (kit.css), never copy them. */
+   compose the kit's recipes (kit.css), never copy them.
+
+   v2 (§10.3): a blue framed panel open at the bottom; the celebration lives in the map band above
+   it (.res-hero: rays, confetti, the hero stars and the ribbon straddling the sheet's edge), scaled
+   to the room there by results.ts measure() (--room, --hero-scale). */
 
 /* ===== Results ===== */
 
-/* Always catches taps above the sheet (so none reach the game canvas); retries once armed. */
+/* The section's top padding is the hero's ceiling (results.ts reads it): the top inset + 8 px. */
+.scr-results { padding-top: calc(var(--in-top) + 8px); }
+
+/* Always catches taps above the sheet (so none reach the game canvas); retries once armed. A warm
+   plum vignette keeps the Melt Map readable under the celebration. */
 .res-map {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   bottom: 58%;
+  background: radial-gradient(ellipse at 50% 30%, rgba(56, 30, 50, 0.18), rgba(56, 30, 50, 0.55));
 }
 
 .res-map.is-armed { cursor: pointer; }
@@ -28,13 +37,17 @@
   margin: 0 auto;
   max-width: 560px;
   container: sheet / inline-size;
-  padding: 12px var(--pad-x-r) calc(var(--in-bottom) + 12px) var(--pad-x-l);
-  border-radius: 26px 26px 0 0;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 -8px 28px rgba(43, 33, 64, 0.2);
+  /* The 11 px frame plus 16 px of cream (12 under 360 px), and the safe areas. */
+  padding: 27px calc(var(--in-right) + 27px) calc(var(--in-bottom) + 18px) calc(var(--in-left) + 27px);
+  border-bottom: 0;
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
   opacity: 0;
   transform: translateY(40%);
   transition: transform 340ms var(--ease-out), opacity 200ms ease;
+}
+
+@media (max-width: 359.98px) {
+  .res-sheet { padding: 23px calc(var(--in-right) + 23px) calc(var(--in-bottom) + 14px) calc(var(--in-left) + 23px); }
 }
 
 .scr-results.is-on .res-sheet {
@@ -56,8 +69,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  margin: 0 -4px;
-  padding: 0 4px 28px;
+  margin: 0 -8px;
+  padding: 0 8px 28px;
   /* A soft 28 px fade at the bottom edge says the list goes on, so a tile cut by the Retry bar
      fades out instead of ending in hard-cut text; the padding lets the last row scroll clear of it.
      The list never scrolls by itself (results.ts). */
@@ -71,8 +84,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  margin: 0 -4px;
-  padding: 0 4px;
+  margin: 0 -8px;
+  padding: 0 8px;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
@@ -83,76 +96,162 @@
   mask-image: none;
 }
 
-.res-ribbon {
-  --ic: 20px;
-  position: absolute;
-  left: 50%;
-  top: 0;
-  display: none;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 18px 7px 14px;
-  border-radius: 12px;
-  background: var(--gold);
-  color: var(--ink);
-  font-weight: 900;
-  font-size: var(--fs-sm);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  box-shadow: 0 4px 0 var(--gold-deep), 0 10px 22px rgba(217, 154, 18, 0.35);
-  transform: translate(-50%, -70%) rotate(-3deg);
-  z-index: 1;
-}
-
-.res-ribbon.is-on {
-  display: inline-flex;
-  animation: ribbon-drop 640ms var(--ease-back) 260ms both;
-}
-
 .res-top { flex: none; }
 
-.res-ribbon.is-on ~ .res-body .res-top { padding-top: 16px; }
+/* The ribbon's lower half and tails hang into the cream. */
+.res-sheet.has-ribbon .res-top { padding-top: 14px; }
 
-@keyframes ribbon-drop {
-  0% { opacity: 0; transform: translate(-50%, -260%) rotate(8deg); }
-  100% { opacity: 1; transform: translate(-50%, -70%) rotate(-3deg); }
+/* ===== The hero (the map band above the sheet) ===== */
+
+.res-hero {
+  --s: var(--hero-scale, 1);
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: calc(100% - 26px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
 }
+
+/* A level's hero reaches the top inset: its stars and Share live there. */
+.res-sheet.is-campaign .res-hero { top: calc(-1 * var(--room, 150px)); }
+
+.res-ribbon { max-width: calc(100% - 12px); }
+
+.scr-results.is-on .res-ribbon { animation: ribbon-in 360ms var(--ease-back) 300ms both; }
+
+/* The stars: 92 / 124 / 92 px at full scale, the side ones tilted and 30 px lower, the middle one
+   in front. The earned star sits over its socket and slams in (results.ts). */
+.res-stars {
+  display: flex;
+  justify-content: center;
+  margin-bottom: calc(2px * var(--s));
+}
+
+.res-star {
+  --i: 0;
+  position: relative;
+  flex: none;
+  width: calc(92px * var(--s));
+  height: calc(92px * var(--s));
+  margin-top: calc(30px * var(--s));
+  rotate: -16deg;
+}
+
+.res-star:nth-child(2) {
+  --i: 1;
+  z-index: 1;
+  width: calc(124px * var(--s));
+  height: calc(124px * var(--s));
+  margin: 0 calc(-10px * var(--s));
+  rotate: none;
+}
+
+.res-star:nth-child(3) { --i: 2; rotate: 16deg; }
+
+.res-star > .ai {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.res-star-on { opacity: 0; }
+
+.res-star.is-on .res-star-on { opacity: 1; }
+
+.res-star.is-pop .res-star-on { animation: star-slam 300ms var(--ease-out) both; }
+
+@keyframes star-slam {
+  0% { opacity: 0; transform: scale(2.2); }
+  60% { opacity: 1; transform: scale(0.9); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* Reduced motion: each star fades in, 120 ms after the one before (results.ts). */
+.sui.is-rm .res-star-on { transition: opacity 120ms; }
+
+/* The rays, clipped to the map band (never over the cream). */
+.res-fx {
+  position: absolute;
+  inset: 0 0 26px;
+  overflow: hidden;
+  display: none;
+}
+
+.res-sheet.is-win .res-fx { display: block; }
+
+.res-sheet.is-low-hero .res-fx,
+.sui.is-hc .res-fx { display: none; }
+
+.res-burst {
+  position: absolute;
+  left: 50%;
+  bottom: calc(26px - 126px * var(--s));
+  width: calc(380px * var(--s));
+  height: calc(380px * var(--s));
+  margin-left: calc(-190px * var(--s));
+  opacity: 0;
+  transition: opacity 500ms 400ms;
+}
+
+.scr-results.is-on .res-sheet.is-win .res-burst { opacity: 1; }
+
+/* A level's Share: a pink coin in the hero's top-right corner (endless runs keep the pill). */
+.res-hero-share {
+  position: absolute;
+  top: 0;
+  right: var(--pad-x-r);
+  pointer-events: auto;
+}
+
+.res-hero-share:empty { display: none; }
+
+.res-hero .res-share {
+  --h: 50px;
+  width: 50px;
+  padding: 0 0 var(--lipH);
+  border-radius: 50%;
+}
+
+.res-hero .res-share .btn-label { display: none; }
+
+/* ===== The head row: the kicker chip, Share and Home ===== */
 
 .res-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .res-head-actions {
   display: flex;
   flex: none;
+  align-items: center;
   gap: 8px;
 }
 
-.res-head-actions .btn--round { background: var(--paper); }
+.res-head-actions .btn--round { --h: 50px; }
 
-/* Share: a labeled pill, accent after a new best, a challenge or a counted Daily try. */
-.res-share {
-  --ic: 20px;
-  min-height: 46px;
-  padding: 4px 14px 4px 10px;
-  gap: 6px;
-  border-radius: var(--pill);
-  background: var(--paper);
-  font-size: var(--fs-sm);
+.res-kicker {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 4px 12px 5px;
+  font-size: var(--fs-d-sm);
+  white-space: normal;
 }
-
-.res-share.btn--primary { background: var(--accent); }
 
 /* The score row: the time, and the postcard to its right. */
 .res-score {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .res-score .res-time {
@@ -160,22 +259,19 @@
   min-width: 0;
 }
 
-/* The Postcard: a 40×50 thumbnail of the shareable image, tilted like a card on a table, with a
-   small label (a paper placeholder until the game has built it). */
+/* The Postcard: a cloud candy holding a 40×50 thumbnail of the shareable image, tilted like a card
+   on a table (a paper placeholder until the game has built it). */
 .res-postcard {
+  --r: 16px;
+  --lipH: 5px;
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
-  min-height: 48px;
-  padding: 4px 12px 4px 6px;
-  border: 0;
-  border-radius: var(--pill);
-  background: var(--paper);
+  min-height: 56px;
+  padding: 2px 12px 7px 6px;
+  font: 400 var(--fs-d-sm)/1 var(--font-display);
   color: var(--ink);
-  font-weight: 800;
-  font-size: var(--fs-xs);
-  transition: opacity var(--t);
 }
 
 .res-postcard[aria-disabled='true'] { cursor: default; }
@@ -185,9 +281,10 @@
   display: block;
   width: 40px;
   height: 50px;
+  border: 2px solid var(--ink);
   border-radius: 4px;
-  background: linear-gradient(#f2b47c, #f2b47c) 3px 3px / 34px 28px no-repeat, #fff8ee;
-  box-shadow: 0 0 0 2px #fff, 0 4px 10px rgba(43, 33, 64, 0.25);
+  background: linear-gradient(#f2b47c, #f2b47c) 3px 3px / 30px 26px no-repeat, #fff8ee;
+  box-shadow: 0 2px 0 var(--ink);
   transform: rotate(-6deg);
   overflow: hidden;
 }
@@ -219,20 +316,13 @@
 /* Narrower sheets: the postcard keeps its thumbnail and drops the word, so the time stays on one
    line; on phones Share drops its icon so the kicker keeps its line next to Share and Home. */
 @container sheet (max-width: 439.98px) {
-  .res-postcard {
-    padding: 4px;
-    background: none;
-  }
+  .res-postcard { padding: 2px 8px 7px; }
 
   .res-postcard-label { display: none; }
 }
 
-@container sheet (max-width: 379.98px) {
-  .res-share .ic { display: none; }
-
-  .res-share { padding: 4px 14px; }
-
-  .res-kicker { letter-spacing: 0.04em; }
+@container sheet (max-width: 349.98px) {
+  .res-head-actions .res-share .ai { display: none; }
 }
 
 /* The Sun Strip: one row of hour tiles (6 AM-5 PM) per day, the last 4 (2 on short screens). */
@@ -241,17 +331,16 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
-  margin-top: 8px;
+  gap: 4px;
+  margin-top: 10px;
 }
 
 .strip-more {
   padding: 1px 8px;
   border-radius: var(--pill);
-  background: var(--paper-2);
+  background: var(--cream-2);
   color: var(--ink-2);
-  font-weight: 800;
-  font-size: var(--fs-2xs);
+  font: 400 var(--fs-2xs)/1.3 var(--font-display);
 }
 
 .strip-row {
@@ -262,10 +351,8 @@
 
 .strip-day {
   width: calc(var(--tile) + 4px);
-  font-size: calc(var(--tile) * 0.72);
-  font-weight: 900;
-  line-height: 1;
-  color: var(--ink-3);
+  font: 400 calc(var(--tile) * 0.72)/1 var(--font-display);
+  color: var(--ink-2);
   text-align: center;
 }
 
@@ -275,7 +362,8 @@
   place-items: center;
   width: var(--tile);
   height: var(--tile);
-  border-radius: calc(var(--tile) * 0.27);
+  border-radius: calc(var(--tile) * 0.3);
+  box-shadow: 0 0 0 1.5px var(--ink);
   animation: tile-in 180ms var(--ease-back) calc(var(--i, 0) * 35ms + 300ms) both;
 }
 
@@ -285,7 +373,7 @@
 }
 
 .st--ghost {
-  box-shadow: inset 0 0 0 1.5px rgba(43, 33, 64, 0.15);
+  box-shadow: inset 0 0 0 1.5px rgba(42, 27, 69, 0.2);
   animation: none;
 }
 
@@ -293,17 +381,18 @@
 
 .strip-night {
   position: relative;
-  width: 4px;
+  width: 5px;
   height: var(--tile);
   margin-left: 1px;
   border-radius: 2px;
   background: #1d2247;
+  box-shadow: 0 0 0 1.5px var(--ink);
 }
 
 .strip-night::after {
   content: '';
   position: absolute;
-  left: 0.5px;
+  left: 1px;
   top: 4px;
   width: 3px;
   height: 3px;
@@ -325,17 +414,13 @@
 .res-tip {
   margin-top: 4px;
   color: var(--ink-2);
-  font-style: italic;
-  font-weight: 600;
-  font-size: 15px;
-  line-height: 1.35;
+  font: italic 700 0.9375rem/1.35 var(--font-body);
 }
 
 .res-pace {
   margin-top: 4px;
-  color: var(--accent-ink);
-  font-weight: 800;
-  font-size: var(--fs-sm);
+  color: var(--t-green);
+  font: 800 var(--fs-sm)/1.3 var(--font-body);
 }
 
 /* "Below your usual": a plain fact, not praise. */
@@ -344,54 +429,45 @@
   font-weight: 700;
 }
 
-/* After the warm-up run: the challenge it was for. */
+/* After the warm-up run: the challenge it was for (a green-tint plate). */
 .res-warmup {
-  margin-top: 10px;
-  padding: 10px 14px;
-  border-radius: 14px;
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 2px var(--accent);
-  color: var(--accent-ink);
-  font-weight: 900;
-  font-size: var(--fs-lg);
+  margin-top: 12px;
+  padding: 10px 14px 12px;
+  background: var(--tint-green);
+  color: var(--t-green);
+  font: 400 var(--fs-d-md)/1.2 var(--font-display);
 }
 
-.res-kicker { min-width: 0; }
+.res-warmup bdi { color: var(--ink); }
 
+/* The time: Lilita in ink, the day as a violet chip. */
 .res-time {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin-top: -2px;
 }
 
 .res-day {
-  padding: 3px 10px;
-  border-radius: 10px;
-  background: var(--indigo);
-  color: var(--paper);
-  font-size: var(--fs-lg);
-  font-weight: 900;
-  letter-spacing: 0.02em;
+  --r: 12px;
+  --lipH: 4px;
+  padding: 3px 10px 6px;
+  font-size: var(--fs-d-lg);
+  line-height: 1;
 }
 
 .res-clock {
   /* Narrow columns and short screens get a smaller time. */
-  font-size: clamp(1.5rem, min(calc(var(--cw) * 0.1), calc(var(--ch) * 0.06)), 2.625rem);
-  font-weight: 900;
-  line-height: 1.05;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  font: 400 clamp(1.75rem, min(calc(var(--cw) * 0.1), calc(var(--ch) * 0.055)), 2.375rem)/1.05 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
 }
 
 .res-death {
   position: relative;
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--ink-2);
-  font-weight: 600;
-  font-size: var(--fs-md);
-  line-height: 1.35;
+  font: 700 var(--fs-md)/1.35 var(--font-body);
 }
 
 .res-death-space { visibility: hidden; }
@@ -407,7 +483,7 @@
   height: 1.05em;
   margin-left: 2px;
   vertical-align: -0.15em;
-  background: var(--ink-3);
+  background: var(--ink-2);
   animation: blink 0.9s steps(1) infinite;
 }
 
@@ -417,42 +493,40 @@
   50% { opacity: 0; }
 }
 
+/* The challenge verdict: a plate, green when beaten, rose when not. */
 .res-verdict {
   display: inline-block;
-  margin-top: 6px;
-  padding: 4px 10px;
-  border-radius: 10px;
-  background: var(--danger-soft);
-  color: #a52727;
-  font-weight: 800;
-  font-size: var(--fs-md);
+  margin-top: 8px;
+  padding: 5px 12px 7px;
+  background: var(--tint-pink);
+  color: var(--t-rose);
+  font: 400 var(--fs-d-md)/1.2 var(--font-display);
+}
+
+.res-verdict.is-win {
+  background: var(--tint-green);
+  color: var(--t-green);
 }
 
 /* "Not counted": why a Daily run used no try. */
 .res-note {
   margin-top: 4px;
   color: var(--ink-2);
-  font-weight: 700;
-  font-size: var(--fs-md);
-  line-height: 1.3;
-}
-
-.res-verdict.is-win {
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  font: 700 var(--fs-md)/1.3 var(--font-body);
 }
 
 /* The XP meter (gamify.ts xpMeter) keeps its place while the stars land, then fades in to fill;
-   its margin keeps the "Rank up!" pill off the goal line. */
-.res-sheet .xp-meter { margin-top: 8px; transition: opacity 200ms; }
+   its top margin leaves room for the "+125 XP" burst over the bar. */
+.res-sheet .xp-meter { margin-top: 12px; transition: opacity 200ms; }
 .res-sheet .xp-meter.is-waiting { opacity: 0; }
 
-/* The run's unlocks (achievements, cosmetics, the Daily): chips that pop in after the stamps. */
+/* ===== Awards: cream chips with a coin by kind, popping in after the stars ===== */
+
 .res-awards {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .award {
@@ -460,12 +534,11 @@
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  padding: 4px 12px 4px 4px;
-  border-radius: 12px;
-  background: var(--paper);
-  font-weight: 800;
-  font-size: var(--fs-md);
-  line-height: 1.25;
+  min-height: 40px;
+  padding: 3px 14px 5px 4px;
+  border-radius: 20px;
+  font: 400 var(--fs-d-sm)/1.2 var(--font-display);
+  color: var(--ink);
   opacity: 0;
   transform: scale(0.8);
   transition: opacity 180ms ease, transform 320ms var(--ease-back);
@@ -476,122 +549,112 @@
   transform: none;
 }
 
-.award--gold { background: var(--gold-soft); }
-
-.award--accent { background: var(--accent-soft); }
-
-.award-ic {
-  --d: 26px;
-  --ic: 16px;
-  border-radius: 8px;
-  background: var(--paper-2);
+/* The coins of the awards, loot tiles, goal checks and done missions: a candy face (its face
+   class) with a lip, the icon in ink. */
+.res-coin {
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--hi), var(--face) 50%, var(--lo));
+  box-shadow: inset 0 -3px 0 var(--lip), 0 2px 0 var(--ink);
+  color: var(--ink);
 }
 
-.award--gold .award-ic { background: var(--gold); }
+.award-ic { --d: 28px; --ic: 17px; }
 
-.award--accent .award-ic { background: var(--accent); }
+/* ===== Loot tiles: plates with their icon in a coin on the top edge ===== */
 
 .res-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 22px 8px;
+  margin-top: 26px;
 }
 
 .stat {
+  position: relative;
+  flex: 0 0 calc((100% - 24px) / 4);
   gap: 1px;
-  padding: 7px 2px 7px;
-  border-radius: 14px;
-  background: var(--paper);
-  text-align: center;
   min-width: 0;
+  padding: 19px 3px 9px;
+  border-radius: 16px;
+  text-align: center;
 }
 
-.stat--snow { background: var(--accent-soft); }
+.stat-coin {
+  --d: 34px;
+  --ic: 19px;
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  translate: -50% 0;
+}
+
+.sui .stat > .ai.stat-coin { --ic: 40px; top: -22px; }
 
 .stat-val {
-  --ic: 17px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-weight: 900;
-  font-size: 1.1875rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  font: 400 var(--fs-d-lg)/1.1 var(--font-display);
+  color: var(--ink);
   white-space: nowrap;
 }
 
-.stat-val .ic { color: var(--ink-3); }
-
-.stat--snow .stat-val .ic { color: var(--accent-deep); }
-
 .stat-cap {
-  font-size: var(--fs-md);
-  font-weight: 700;
-  color: var(--ink-2);
-  line-height: 1.15;
   max-width: 100%;
+  color: var(--ink-2);
+  font: 800 0.8125rem/1.15 var(--font-body);
   overflow-wrap: break-word;
 }
 
 .stat-sub {
-  font-size: var(--fs-md);
-  font-weight: 800;
-  color: #b23b3b;
-  line-height: 1.15;
+  color: var(--t-rose);
+  font: 800 0.8125rem/1.15 var(--font-body);
 }
 
-.stat--swing .stat-sub { color: var(--accent-ink); }
+.stat--swing .stat-sub { color: var(--t-green); }
 
-/* Five tiles (with SWINGs): the wide row fits them all; six (v1.5 blooms, snaps, deep shade) make two rows of three. */
-.res-stats[data-n='5'] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.res-stats[data-n='6'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* The Snow tile: a blue candy plate, the value white with the halo, the caption in ink. */
+.stat--snow { --r: 16px; --lipH: 4px; }
 
-/* A narrow sheet: two tiles per row (16 px captions need the room). */
+.stat--snow .stat-cap { color: var(--ink); }
+
+/* Rows of four; five tiles (with SWINGs) fit one wide row, six (v1.5 blooms, snaps, deep shade)
+   make two rows of three; a narrow sheet has two per row. A short last row is centred. */
+.res-stats[data-n='5'] .stat { flex-basis: calc((100% - 32px) / 5); }
+.res-stats[data-n='6'] .stat { flex-basis: calc((100% - 16px) / 3); }
+
 @container sheet (max-width: 439.98px) {
-  .res-stats,
-  .res-stats[data-n='5'],
-  .res-stats[data-n='6'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-  /* An odd count: Snow, the first tile, spans the row. */
-  .res-stats[data-n='1'] .stat--snow,
-  .res-stats[data-n='3'] .stat--snow,
-  .res-stats[data-n='5'] .stat--snow,
-  .res-stats[data-n='7'] .stat--snow { grid-column: 1 / -1; }
+  .res-stats .stat,
+  .res-stats:is([data-n='5'], [data-n='6']) .stat { flex-basis: calc((100% - 8px) / 2); }
 }
+
+/* ===== Missions ===== */
 
 .res-missions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .mrow {
   display: grid;
-  grid-template-columns: 26px 1fr auto;
+  grid-template-columns: 30px 1fr auto;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
-  padding: 5px 2px;
+  min-height: 52px;
+  padding: 6px 10px 8px;
 }
 
-.mrow + .mrow { border-top: 1px solid var(--line); }
-
-.mrow-check {
-  --d: 26px;
-  --ic: 16px;
-  border-radius: 50%;
-  border: 2.5px solid rgba(43, 33, 64, 0.16);
-  color: transparent;
-}
+.mrow-check { --d: 30px; --ic: 17px; }
 
 .mrow-check .ic { stroke-width: 3; }
 
-.mrow.is-done .mrow-check {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--ink);
+/* Not done yet: an empty socket. */
+.mrow:not(.is-done) .mrow-check {
+  border-color: rgba(42, 27, 69, 0.3);
+  background: var(--cream-2);
+  box-shadow: none;
+  color: transparent;
 }
 
 .mrow-main {
@@ -602,22 +665,20 @@
 }
 
 .mrow-label {
-  font-weight: 700;
-  font-size: var(--fs-md);
-  line-height: 1.2;
+  font: 800 var(--fs-md)/1.2 var(--font-body);
 }
 
 /* Swap on a mission stuck for 5 runs (Results rows and Missions cards). */
 .btn.btn--swap {
   --ic: 16px;
+  --lipH: 4px;
+  --sh: inset 0 -4px 0 var(--lip), var(--top-light), var(--drop-sm);
   overflow: visible;
   min-height: 36px;
-  padding: 4px 12px 4px 9px;
+  padding: 2px 12px 5px 9px;
   gap: 5px;
   border-radius: var(--pill);
-  background: var(--paper);
-  font-size: var(--fs-xs);
-  box-shadow: 0 3px 0 rgba(43, 33, 64, 0.14), var(--shadow-sm);
+  font-size: var(--fs-d-sm);
 }
 
 .btn--swap::before {
@@ -632,14 +693,16 @@
   pointer-events: auto;
 }
 
-.mrow-side .reward { font-size: var(--fs-md); }
+.mrow-side .reward { font-size: var(--fs-d-sm); }
 
 .mrow-side {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 4px;
 }
+
+.mrow-prog { font: 800 var(--fs-sm)/1.2 var(--font-body); color: var(--ink-2); }
 
 .mrow-prog,
 .mrow .stamp { opacity: 0; }
@@ -650,12 +713,190 @@
 
 .mrow.is-new .mrow-check { animation: pop-in 360ms var(--ease-back) both; }
 
-.res-actions {
-  flex: none;
-  padding-top: 10px;
+/* ===== A Journey level ===== */
+
+.res-level {
+  margin-top: 2px;
+  text-align: center;
+  font: 400 var(--fs-d-2xl)/1.1 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
 }
 
-/* The arming sweep of Retry (and the Journey's Next level): .res-arm, in the Journey section. */
+.res-level-name { overflow-wrap: anywhere; }
+
+/* The goal line: green ink after a pass, plain ink otherwise. */
+.res-goal {
+  margin-top: 4px;
+  text-wrap: balance;
+  text-align: center;
+  color: var(--ink-2);
+  font: 800 var(--fs-sm)/1.3 var(--font-body);
+}
+
+.res-goal.is-win { color: var(--t-green); }
+
+.res-sheet.is-campaign .res-death,
+.res-sheet.is-campaign .res-tip,
+.res-sheet.is-campaign .res-awards {
+  justify-content: center;
+  text-align: center;
+}
+
+/* The goal cards: the three star rules as plates, a check sticker on each one met. */
+.res-goals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.res-goal-card {
+  --ic: 26px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 4px 9px;
+  border-radius: 14px;
+}
+
+.res-goal-card:not(.is-met) { background: var(--cream-2); box-shadow: inset 0 -4px 0 var(--cream-3); }
+
+.res-goal-rule {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font: 800 0.8125rem/1.2 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-goal-card:not(.is-met) .res-goal-rule { color: var(--ink-2); }
+
+.res-goal-check {
+  --ic: 13px;
+  position: absolute;
+  top: -9px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  rotate: 8deg;
+}
+
+.res-top .road {
+  margin-top: 12px;
+  padding: 8px 12px 10px;
+  border-radius: 16px;
+  background: var(--cream-2);
+  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
+}
+
+/* A taller sheet (results.ts SHEET_MAX_CAMPAIGN); the missions show as their award chip. */
+.res-sheet.is-campaign { max-height: max(58%, min(82%, calc(100% - 96px))); }
+
+.res-sheet.is-campaign .res-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A level's loot tiles: one row of up to four (five or six: rows of three), after the goal cards. */
+.res-sheet.is-campaign .res-goals { order: -2; }
+.res-sheet.is-campaign .res-stats { order: -1; }
+.res-sheet.is-campaign .res-stats .stat { flex-basis: calc((100% - 24px) / 4); }
+.res-sheet.is-campaign .res-stats:is([data-n='5'], [data-n='6']) .stat { flex-basis: calc((100% - 16px) / 3); }
+
+.res-sheet.is-campaign .stat-sub,
+.res-sheet.is-campaign .res-missions { display: none; }
+
+/* ===== Actions ===== */
+
+.res-actions {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.res-actions > .btn--xl { flex: 1 1 auto; min-width: 0; }
+
+/* Retry and Map squares on a level, their names hung under them as tags. */
+.res-sq {
+  --h: 66px;
+  --r: 20px;
+  --lipH: 7px;
+  --ic: 36px;
+  flex: none;
+  width: 66px;
+  margin-bottom: 12px;
+  padding: 0 0 var(--lipH);
+  overflow: visible;
+}
+
+.res-sq .tag {
+  position: absolute;
+  left: 50%;
+  bottom: -15px;
+  translate: -50% 0;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+.res-actions .res-sq ~ .btn--xl { margin-top: -3px; }
+
+/* Next level: a two-line label, the sub-line ("LEVEL 39") generated so the text stays "Next level". */
+.res-next .btn-label::after {
+  content: attr(data-sub);
+  display: block;
+  margin-top: 1px;
+  font-size: var(--fs-d-sm);
+  letter-spacing: 0.08em;
+}
+
+/* Phones: the XL labels take one size down and Next level drops its icon, so they stay on one line;
+   narrower still (or large text) the squares shrink and a label may wrap rather than clip. */
+@container sheet (max-width: 26em) {
+  .res-actions .btn--xl {
+    padding: 2px 12px var(--lipH);
+    gap: 6px;
+    font-size: var(--fs-d-xl);
+  }
+
+  .res-next .ai { display: none; }
+}
+
+@container sheet (max-width: 20em) {
+  .res-sq { --h: 58px; --ic: 32px; width: 58px; }
+
+  .res-actions .btn--xl { font-size: var(--fs-d-lg); }
+}
+
+@container sheet (max-width: 15em) {
+  .res-actions .btn--xl { white-space: normal; }
+}
+
+/* The arming sweep: the primary action becomes live 0.3 s after the sheet appears (or once the
+   reveal is over). */
+.res-arm::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: calc(var(--r) - 3px);
+  background: rgba(255, 255, 255, 0.35);
+  transform-origin: left;
+  transform: scaleX(0);
+  pointer-events: none;
+}
+
+.res-arm.is-arming::after { animation: arm 300ms linear forwards; }
+
+.res-arm.is-ready { animation: ready-pop 260ms var(--ease-back); }
 
 @keyframes arm {
   from { transform: scaleX(1); }
@@ -666,127 +907,3 @@
   50% { transform: scale(1.03); }
 }
 
-/* Results: a Journey level */
-
-.res-level {
-  gap: 2px;
-  margin-top: 2px;
-  text-align: center;
-  font-weight: 900;
-  font-size: 1.5rem;
-  line-height: 1.15;
-}
-
-.res-stars {
-  --ic: 52px;
-  display: inline-flex;
-  gap: 4px;
-}
-
-/* The hero: three big stars, the middle one raised. */
-.res-star .ic {
-  color: rgba(43, 33, 64, 0.14);
-  transition: color var(--t);
-}
-
-.res-star:nth-child(2) .ic {
-  --ic: 64px;
-  margin-top: -14px;
-}
-
-.res-star.is-on .ic {
-  color: var(--gold);
-  filter: drop-shadow(0 2px 0 var(--gold-deep));
-}
-
-.res-star.is-pop .ic { animation: star-pop 420ms var(--ease-back) both; }
-
-@keyframes star-pop {
-  0% { opacity: 0; transform: scale(2.2) rotate(-18deg); }
-  70% { opacity: 1; transform: scale(0.92) rotate(2deg); }
-  100% { opacity: 1; transform: none; }
-}
-
-.sui.is-rm .res-star.is-pop .ic { animation: none; }
-
-.res-level-name { overflow-wrap: anywhere; }
-
-/* The goal line: the accent after a pass, plain ink otherwise. */
-.res-goal {
-  margin-top: 4px;
-  text-align: center;
-  font-weight: 700;
-  font-size: var(--fs-md);
-  color: var(--ink-2);
-}
-
-.res-goal.is-win { color: var(--accent-ink); }
-
-.res-sheet.is-campaign .res-death,
-.res-sheet.is-campaign .res-tip,
-.res-sheet.is-campaign .res-awards {
-  justify-content: center;
-  text-align: center;
-}
-
-.res-top .road {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 14px;
-  background: var(--gold-soft);
-}
-
-/* A taller sheet (results.ts SHEET_MAX_CAMPAIGN); the stats come first, as one row of small pills,
-   and the missions show as their award chip. */
-.res-sheet.is-campaign { max-height: max(58%, min(82%, calc(100% - 96px))); }
-
-.res-sheet.is-campaign .res-scroll {
-  display: flex;
-  flex-direction: column;
-}
-
-.res-sheet.is-campaign .res-stats {
-  order: -1;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.res-sheet.is-campaign .stat {
-  flex-direction: row;
-  gap: 6px;
-  padding: 4px 12px 4px 10px;
-  border-radius: var(--pill);
-}
-
-.res-sheet.is-campaign .stat-sub,
-.res-sheet.is-campaign .res-missions { display: none; }
-
-/* Next level above Retry | Map (or Retry above Map when the level wasn't passed). */
-.res-actions--campaign {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.res-actions--campaign .res-next { grid-column: 1 / -1; }
-
-.res-actions--campaign .res-next[hidden] + .res-retry,
-.res-actions--campaign .res-next[hidden] + .res-retry + .res-mapbtn { grid-column: 1 / -1; }
-
-.res-actions--campaign .res-mapbtn { background: var(--paper); }
-
-.res-arm::after {
-  /* Arming sweep: the primary action becomes live 0.3 s after the sheet appears. */
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(255, 255, 255, 0.35);
-  transform-origin: left;
-  transform: scaleX(0);
-}
-
-.res-arm.is-arming::after { animation: arm 300ms linear forwards; }
-
-.res-arm.is-ready { animation: ready-pop 260ms var(--ease-back); }

@@ -110,6 +110,10 @@ export interface ResultsCampaign {
   nextId: number | null;
   goalLine: string;
   introduces?: { name: string; blurb: string };
+  /** The three star rules' labels (game/campaign.ts starRules): the goal, the flakes or Dare, the cool run. */
+  starRules?: readonly [string, string, string];
+  /** starState's bits for the run: 1 the goal met, 2 the flakes or Dare earned, 4 the cool run lost. */
+  starBits?: number;
 }
 
 /** Title banner shown when the page was opened from a challenge link. */
