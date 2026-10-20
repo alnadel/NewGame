@@ -2,7 +2,21 @@
 // UM9). The game session drives it through the `Ui` interface and receives player intents through
 // `UiCallbacks` (see README.md).
 
+// Stylesheets, in cascade order (docs/UI_V2.md §14): the shared base, one file per screen (each
+// owned by one builder), then the motion / hover / forced-colour states over all of them.
 import './ui.css';
+import './styles/title.css';
+import './styles/play.css';
+import './styles/pause.css';
+import './styles/dying.css';
+import './styles/results.css';
+import './styles/settings.css';
+import './styles/daily.css';
+import './styles/missions.css';
+import './styles/wardrobe.css';
+import './styles/profile.css';
+import './styles/journey.css';
+import './a11y.css';
 import { shouldOfferRestoreSheet, welcomeBackDue } from '../meta/progression.ts';
 import type { Save, Settings } from '../meta/saveTypes.ts';
 import {

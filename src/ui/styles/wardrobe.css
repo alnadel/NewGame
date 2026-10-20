@@ -1,0 +1,221 @@
+/* The Wardrobe screen.
+   Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* Wardrobe */
+
+.stage {
+  gap: 4px;
+  text-align: center;
+}
+
+.stage-spot {
+  --d: 176px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse 60% 14% at 50% 84%, rgba(52, 48, 107, 0.18), transparent 70%), radial-gradient(circle at 50% 38%, #fff, var(--sky) 70%);
+}
+
+.preview-canvas {
+  width: 168px;
+  height: 168px;
+}
+
+.preview-name {
+  font-weight: 900;
+  font-size: 1.25rem;
+}
+
+.preview-note {
+  min-height: 2.6em;
+  max-width: 300px;
+  margin-bottom: 8px;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  line-height: 1.3;
+}
+
+/* Short screens: preview beside its caption and action, so the item grid stays in view. */
+@media (max-height: 720px) {
+  .stage {
+    display: grid;
+    grid-template-columns: 124px 1fr;
+    grid-template-rows: auto auto 1fr;
+    column-gap: 14px;
+    align-items: start;
+    text-align: left;
+    padding: 12px;
+  }
+
+  .stage-spot {
+    --d: 124px;
+    grid-row: 1 / 4;
+    margin: 0;
+  }
+
+  .preview-canvas {
+    width: 120px;
+    height: 120px;
+  }
+
+  .preview-name { margin-top: 4px; }
+
+  .preview-note {
+    min-height: 0;
+    margin-bottom: 8px;
+  }
+
+  .stage .btn {
+    align-self: end;
+    min-height: 48px;
+    padding: 4px 12px;
+    font-size: var(--fs-md);
+  }
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* A narrow column: two tiles per row, so names and prices stay on their lines at 16 px. */
+@container menu (max-width: 299.98px) {
+  .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.tile {
+  position: relative;
+  gap: 4px;
+  width: 100%;
+  min-height: 132px;
+  padding: 10px 4px 9px;
+  border: 0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 90ms var(--ease-out), box-shadow var(--t);
+}
+
+.tile:active { transform: scale(0.96); }
+
+.tile.is-selected { box-shadow: 0 0 0 3px var(--accent), var(--shadow-sm); }
+
+.tile-art {
+  --d: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #fff, var(--sky) 75%);
+}
+
+.swatch {
+  width: 56px;
+  height: 56px;
+}
+
+.tile.is-locked .tile-art { filter: grayscale(0.85) opacity(0.6); }
+
+.tile-name {
+  max-width: 100%;
+  font-weight: 800;
+  font-size: var(--fs-md);
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+
+.tile-status {
+  --ic: 14px;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  margin-top: auto;
+  font-size: var(--fs-md);
+  font-weight: 800;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-status.is-equipped { color: var(--accent-ink); }
+
+.tile-status.is-cost { color: var(--accent-ink); }
+
+.tile-status.is-short { color: var(--ink-3); }
+
+.tile-status.is-locked {
+  max-width: 100%;
+  color: #8a5a00;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.tile.is-bought .tile-art,
+.stage-spot.is-hop { animation: bought 600ms var(--ease-back); }
+
+/* Rarity (meta/gamify.ts rarity): a coloured rim on the tile and a label; common items stay plain. */
+.tile[data-rarity='rare'],
+.rarity[data-rarity='rare'] { --rar: #2559b8; }
+
+.tile[data-rarity='epic'],
+.rarity[data-rarity='epic'] { --rar: #7442c2; }
+
+.tile[data-rarity='legendary'],
+.rarity[data-rarity='legendary'] { --rar: #8a5a00; }
+
+.tile[data-rarity]:not([data-rarity='common']) { box-shadow: inset 0 -4px 0 var(--rar), var(--shadow-sm); }
+
+.tile[data-rarity]:not([data-rarity='common']).is-selected { box-shadow: inset 0 -4px 0 var(--rar), 0 0 0 3px var(--accent), var(--shadow-sm); }
+
+.rarity {
+  align-self: center;
+  justify-self: start;
+  width: fit-content;
+  padding: 1px 10px;
+  border-radius: var(--pill);
+  background: var(--rar, var(--paper-2));
+  color: #fff;
+  font-size: var(--fs-2xs);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rarity[data-rarity='common'] { color: var(--ink-2); }
+
+/* Tabs with new items carry a dot. */
+.tab { position: relative; }
+
+.tab.has-new::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* The collection: owned of all, with a bar. */
+.collection {
+  --ic: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.collection .num { color: var(--ink); }
+
+.collection .bar {
+  flex: 1;
+  height: 8px;
+}
+
+.tile .new-tag { top: 6px; left: auto; right: 6px; transform: rotate(6deg); }
+
+@keyframes bought {
+  30% { transform: scale(1.25) rotate(-8deg); }
+  60% { transform: scale(0.95) rotate(4deg); }
+}

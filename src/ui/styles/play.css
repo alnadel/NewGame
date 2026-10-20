@@ -1,0 +1,199 @@
+/* In play: the ghost thumb, the cue line, the pause button and the muted mark.
+   Owner: B5 Canvas & play (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* ===== Ghost thumb ===== */
+
+.ghost {
+  --reach: min(calc(var(--cw) * 0.26), 110px);
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* In play Nubs and his halo dial sit at 68-70% of the height: the hint stays just below them. */
+  top: min(84%, calc(100% - var(--in-bottom) - 72px));
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(-32px);
+  pointer-events: none;
+}
+
+.ghost[data-mode='both'],
+.ghost[data-mode='left'],
+.ghost[data-mode='right'] { display: flex; }
+
+.ghost-track {
+  position: relative;
+  width: calc(var(--reach) * 2 + 64px);
+  height: 64px;
+}
+
+.ghost[data-mode='left'] .ghost-track { transform: scaleX(-1); }
+
+.ghost-key {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 4px 0 rgba(43, 33, 64, 0.25), var(--shadow-sm);
+  font-weight: 900;
+  font-size: var(--fs-lg);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+/* Keyboard players in play: the key to hold replaces the swiping hand (the track is mirrored for
+   'left', so the chip un-mirrors itself). */
+.sui.is-kbd[data-screen='play'] .ghost .ghost-hand,
+.sui.is-kbd[data-screen='play'] .ghost .ghost-trail { display: none; }
+
+.sui.is-kbd[data-screen='play'] .ghost-key { display: block; }
+
+.ghost[data-mode='left'] .ghost-key { transform: translate(-50%, -50%) scaleX(-1); }
+
+.ghost-trail {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 50%;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6) 50%, rgba(255, 255, 255, 0));
+}
+
+.ghost-hand {
+  /* The fingertip (20 px, 5 px into the 44 px hand) sits on the track's center line. The box is
+     --reach wide (the hand is drawn at its left), so the swing keyframes can say ±100% instead of
+     var(--reach): keyframes with var() are re-resolved on the main thread every frame. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--reach);
+  height: 55px;
+  margin: -5px 0 0 -20px;
+  transform-origin: 20px 5px;
+  filter: drop-shadow(0 6px 8px rgba(43, 33, 64, 0.22));
+}
+
+.ghost-hand svg {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 100%;
+}
+
+.ghost-tip {
+  position: absolute;
+  left: 20px;
+  top: 5px;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0 30%, rgba(255, 255, 255, 0) 70%);
+}
+
+.ghost[data-mode='both'] .ghost-hand { animation: ghost-swing 2.4s ease-in-out infinite; }
+
+.ghost[data-mode='left'] .ghost-hand,
+.ghost[data-mode='right'] .ghost-hand { animation: ghost-once 1.5s ease-in-out infinite; }
+
+/* ±100% of the hand box = ±--reach (see .ghost-hand). */
+@keyframes ghost-swing {
+  0%, 100% { transform: translateX(-100%) scale(1); }
+  8%, 92% { transform: translateX(-100%) scale(0.88); }
+  50% { transform: translateX(100%) scale(0.88); }
+  58% { transform: translateX(100%) scale(1); }
+}
+
+@keyframes ghost-once {
+  0% { opacity: 0; transform: translateX(-100%) scale(1.1); }
+  15% { opacity: 1; transform: translateX(-100%) scale(0.9); }
+  75% { opacity: 1; transform: translateX(100%) scale(0.9); }
+  100% { opacity: 0; transform: translateX(100%) scale(1.1); }
+}
+
+@keyframes ghost-pulse {
+  50% { opacity: 0.45; }
+}
+
+.ghost-word {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  margin-top: 34px;
+  color: var(--paper);
+  font-weight: 900;
+  font-size: var(--fs-xl);
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 0 rgba(43, 33, 64, 0.55), 0 0 14px rgba(43, 33, 64, 0.3);
+}
+
+.ghost[data-mode='both'] .ghost-word { display: flex; }
+
+.ghost-arrow {
+  font-size: var(--fs-2xl);
+  line-height: 1;
+  opacity: 0.85;
+}
+
+/* ===== Cue line (ui.showCue): plain words above Nubs for the first runs ===== */
+
+/* Its bottom edge sits 8 px above the dial's outer rims (R + 25: the glass and flare rims), and a
+   wrapped cue grows upward, so it never covers the ring. */
+.cue {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--nubs-y, 68%) - var(--wt) - var(--halo-r, 44px) - 33px);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 7px 16px;
+  border-radius: var(--pill);
+  background: rgba(43, 33, 64, 0.8);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 1.25;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, calc(6px - 100%));
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.cue.is-on {
+  opacity: 1;
+  transform: translate(-50%, -100%);
+}
+
+.sui:not([data-screen='play']) .cue { display: none; }
+
+/* Reduced motion: no slide, the same bottom anchor (a top anchor hung the cue over the dial). */
+.sui.is-rm .cue { transform: translate(-50%, -100%); }
+
+/* ===== Play ===== */
+
+.pause-btn {
+  position: absolute;
+  top: calc(var(--in-top) + 8px);
+  left: calc(var(--in-left) + 8px);
+  border-radius: 16px !important;
+  background: var(--panel);
+}
+
+.muted-ind {
+  --d: 32px;
+  --ic: 18px;
+  position: absolute;
+  top: calc(var(--in-top) + 64px);
+  left: calc(var(--in-left) + 16px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-sm);
+}

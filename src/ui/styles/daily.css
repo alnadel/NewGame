@@ -1,0 +1,210 @@
+/* The Daily screen.
+   Owner: B2 Title & co. (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* Daily */
+
+.daily-hero {
+  position: relative;
+  gap: 4px;
+  padding-top: 20px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.daily-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 96px;
+  background: linear-gradient(180deg, #ffe7b8, rgba(255, 231, 184, 0));
+}
+
+.daily-hero > * { position: relative; }
+
+.daily-sun {
+  --d: 60px;
+  --ic: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe27a 0 55%, #ffd36b 56%);
+  color: #b0740a;
+  box-shadow: 0 0 0 8px rgba(255, 211, 107, 0.35);
+  margin-bottom: 6px;
+}
+
+.daily-id {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.daily-title {
+  font-size: 2.5rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+
+.daily-date {
+  font-weight: 800;
+  color: var(--ink-2);
+}
+
+.daily-id {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Day 1's weather and place (the Day Plan; the classic clear Meadow before it started). */
+.daily-plan {
+  padding: 3px 12px;
+  border-radius: var(--pill);
+  background: rgba(43, 33, 64, 0.08);
+  font-weight: 800;
+  font-size: var(--fs-md);
+}
+
+/* Snowbot's par: what the novice bot made of today's world. */
+.daily-par {
+  --ic: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.daily-par .ic { color: var(--gold-deep); }
+
+.daily-par.is-waiting {
+  font-weight: 700;
+  font-style: italic;
+}
+
+.daily-blurb {
+  max-width: 320px;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+}
+
+/* Two labeled values side by side (the Daily's tries and best, the Profile's bests). */
+.cells {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.cell {
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: 14px;
+  background: var(--paper);
+  text-align: center;
+}
+
+.cell .kicker { letter-spacing: 0.04em; }
+
+.daily-hero .cells { margin: 10px 0 8px; }
+
+.daily-tries {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 8px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.try-pips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.try-pips i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2.5px solid var(--accent);
+}
+
+.try-pips i.is-used { background: var(--accent); }
+
+.daily-tries-text {
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+}
+
+.daily-best-val {
+  font-weight: 900;
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.drow {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 4px;
+}
+
+.drow + .drow { border-top: 1px solid var(--line); }
+
+.drow.is-today {
+  margin: 0 -8px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--gold-soft);
+}
+
+.drow.is-today + .drow { border-top-color: transparent; }
+
+.drow-when {
+  display: flex;
+  flex-direction: column;
+}
+
+.drow-num {
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.drow-date {
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.drow-score {
+  font-weight: 800;
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Days before the save existed: muted with a lighter ink, not opacity (text keeps 4.5:1). */
+.drow.is-before,
+.drow.is-before .drow-date { color: var(--ink-3); }
+
+.drow.is-empty .drow-score {
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.drow-strip {
+  font-size: 0.6875rem;
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

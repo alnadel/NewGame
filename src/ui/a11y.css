@@ -1,0 +1,110 @@
+/* Reduced motion, desktop hover and forced colours. Owner: B1 Kit (docs/UI_V2.md §14). Imported
+   last by ui.ts so these states win over every screen file; a screen's own hover or forced-colour
+   rule may live in its file (styles/*.css) inside the same media block. */
+
+/* ===== Reduced motion: no transforms in transitions or keyframes; opacity fades only. ===== */
+
+.sui.is-rm *,
+.sui.is-rm *::before,
+.sui.is-rm *::after {
+  animation-name: none !important;
+  transition-property: opacity, background-color, color, box-shadow !important;
+}
+
+/* Only screens fade their visibility. A button that transitioned visibility too (with its own
+   duration) would still be hidden at the instant its screen appears, and focus() on it would fail:
+   Pause and Results opened from the keyboard left the focus on <body>. */
+.sui.is-rm .scr { transition-property: opacity, visibility !important; }
+
+.sui.is-rm .ghost-hand { animation: ghost-pulse 2s ease-in-out infinite !important; }
+
+.sui.is-rm .res-death .caret { display: none; }
+
+/* ===== Desktop affordances: hover states and the grab cursor on the game canvas. ===== */
+
+@media (hover: hover) {
+  .btn:hover:not([aria-disabled='true']) {
+    filter: brightness(1.05);
+    box-shadow: 0 5px 0 var(--lip), var(--halo, 0 6px 16px) var(--glow);
+  }
+
+  .tray-btn:hover .tray-disc { background: #fff; }
+
+  .tile:hover { box-shadow: 0 0 0 2px rgba(43, 33, 64, 0.18), var(--shadow-sm); }
+
+  .tile.is-selected:hover { box-shadow: 0 0 0 3px var(--accent), var(--shadow-sm); }
+
+  .tab:hover:not([aria-selected='true']),
+  .seg-opt:hover:not([aria-checked='true']) {
+    background: rgba(255, 255, 255, 0.55);
+    color: var(--ink);
+  }
+}
+
+/* The canvas lives outside #ui; its cursor follows the screen: grab where a drag turns the sun. */
+body:has(#ui[data-screen='title']) #game,
+body:has(#ui[data-screen='play']) #game { cursor: grab; }
+
+body:has(#ui[data-screen='title']) #game:active,
+body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
+
+/* ===== Forced colors (Windows High Contrast): state must not live in backgrounds and shadows alone. ===== */
+
+@media (forced-colors: active) {
+  .switch { border: 2px solid ButtonText; }
+
+  .switch[aria-checked='true'] { background: Highlight; }
+
+  .switch-knob {
+    background: ButtonText;
+    forced-color-adjust: none;
+  }
+
+  .seg-opt[aria-checked='true'],
+  .tab[aria-selected='true'],
+  .tile.is-selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .btn,
+  .tray-btn,
+  .tab,
+  .seg-opt,
+  .tile { border: 1px solid ButtonText; }
+
+  /* Range tracks: keep the track and the fill visible. */
+  .range { forced-color-adjust: none; }
+
+  .range::-webkit-slider-runnable-track {
+    background: linear-gradient(90deg, Highlight var(--fill), GrayText var(--fill));
+    border: 1px solid ButtonText;
+  }
+
+  .range::-moz-range-track {
+    background: GrayText;
+    border: 1px solid ButtonText;
+  }
+
+  .range::-moz-range-progress { background: Highlight; }
+
+  .range::-webkit-slider-thumb {
+    background: ButtonFace;
+    border-color: ButtonText;
+  }
+
+  .range::-moz-range-thumb {
+    background: ButtonFace;
+    border-color: ButtonText;
+  }
+
+  .bar,
+  .pip { border: 1px solid CanvasText; }
+
+  .bar i {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  .sui :focus-visible { outline-color: Highlight; }
+}

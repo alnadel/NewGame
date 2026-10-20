@@ -1,0 +1,75 @@
+/* The Profile records: bests, the last 30 runs, totals.
+   Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* ===== Records (the Profile, v1.4; the Journal until then): bests, the last 30 runs, totals ===== */
+
+.jbest-val {
+  font-weight: 900;
+  font-size: var(--fs-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* One bar per run, oldest left: height ∝ score, colour by the day reached, the best in gold, runs
+   on eased rules hatched. */
+.jchart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  padding: 0 2px 2px;
+  border-bottom: 2px solid var(--line);
+}
+
+.jbar {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 16px;
+  border-radius: 3px 3px 1px 1px;
+  background: #9ad8ff;
+}
+
+.jbar--d2 { background: #5ab8ff; }
+
+.jbar--d3 { background: var(--accent); }
+
+.jbar--d4 { background: #9b5de5; }
+
+.jbar.is-eased { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 5px); }
+
+.jbar.is-best {
+  background-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-deep);
+}
+
+.jtotals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  margin: 0;
+}
+
+.jtotals dt,
+.jtotals dd {
+  margin: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.jtotals dt:first-of-type,
+.jtotals dt:first-of-type + dd { border-top: 0; }
+
+.jtotals dt {
+  --ic: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.jtotals dt .ic { color: var(--ink-3); }
+
+.jtotals dd {
+  font-weight: 900;
+  text-align: right;
+}

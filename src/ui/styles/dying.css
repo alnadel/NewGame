@@ -1,0 +1,16 @@
+/* The death beat: the skip catcher.
+   Owner: B2 Title & co. (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* ===== Dying ===== */
+
+.dying-catch {
+  /* An invisible scrim: a tap anywhere skips, even beside the world column. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}

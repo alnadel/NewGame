@@ -1,0 +1,492 @@
+/* The Title screen: top bar, logo, tagline, forecast, challenge banner, chips, modes, tray.
+   Owner: B2 Title & co. (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* ===== Title ===== */
+
+.title-top {
+  container: title / inline-size;
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Below the top bar (48 px), with a little air on taller screens. */
+  top: calc(var(--in-top) + 52px + clamp(0px, calc(var(--ch) * 0.02), 24px));
+  padding: 0 var(--pad-x-r) 0 var(--pad-x-l);
+}
+
+/* Coming back to the Title: the top rises in; the bottom cluster only fades (title.ts fit() measures
+   it on entry, so it must not move). */
+.scr-title.is-on .title-hud,
+.scr-title.is-on .title-top { animation: rise 420ms var(--ease-out) both; }
+
+.scr-title.is-on .title-top { animation-delay: 60ms; }
+
+/* The top bar (v1.4): the Sun Rank badge (gamify.ts rankBadge), a waiting daily reward, the wallet. */
+.title-hud {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: calc(var(--in-top) + 8px) var(--pad-x-r) 0 var(--pad-x-l);
+}
+
+.title-hud-gap { flex: 1; }
+
+.title-hud .chip { min-height: 40px; }
+
+.title-reward {
+  --ic: 20px;
+  min-height: 44px;
+  padding: 4px 14px 4px 10px;
+  border-radius: var(--pill);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  animation: pop-in 420ms var(--ease-back) both, nudge 2.4s ease-in-out 1s infinite;
+}
+
+/* Narrow columns: the gift alone (its aria-label names it). */
+@media (max-width: 379.98px) {
+  .title-reward { padding: 0 11px; }
+
+  .title-reward .btn-label { display: none; }
+}
+
+@keyframes nudge {
+  0%, 80%, 100% { transform: none; }
+  85% { transform: rotate(-6deg) scale(1.06); }
+  90% { transform: rotate(5deg) scale(1.06); }
+  95% { transform: rotate(-3deg); }
+}
+
+.logo {
+  width: min(calc(var(--cw) * 0.84), 340px);
+  line-height: 0;
+  filter: drop-shadow(0 6px 10px rgba(43, 33, 64, 0.18));
+}
+
+.logo-svg {
+  position: relative;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* The logo is stacked full-size layers (title.ts logo(), art.ts logoLayers()); only these
+   wrappers animate, and only their transform, so the compositor runs the motions. Percentages are
+   of the logo box (viewBox 360 × 172): the sun bobs 2.16 units up and 4° around its center
+   (83.3333% 37.2093%, set inline), the rays spin around the same point; the shadow follows the
+   sun (.logo-drop). The keyframes hold constants: var() in keyframes is re-resolved on every frame. */
+.logo-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.logo-layer > .logo-svg {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.logo-sun { animation: bob 3.2s ease-in-out infinite; }
+
+.logo-rays { animation: spin 40s linear infinite; }
+
+.logo-drop {
+  /* The session moves the logo's shadow with the Title sun each frame (--lsx/--lsy, CSS px):
+     a compositor-only transform, with a static offset when the game never sets them. */
+  transform: translate(var(--lsx, 3px), var(--lsy, 4px));
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bob {
+  50% { transform: translateY(-1.2558%) rotate(-4deg); }
+}
+
+/* With a challenge banner on a short screen (title.ts fit()), the logo gives the hint room. */
+.scr-title.is-compact .logo { width: min(calc(var(--cw) * 0.56), 220px); }
+
+.scr-title.no-tagline .tagline { display: none; }
+
+.tagline {
+  margin-top: 2px;
+  padding: 6px 16px;
+  border-radius: var(--pill);
+  background: rgba(255, 248, 238, 0.82);
+  box-shadow: var(--shadow-sm);
+  font-weight: 800;
+  font-size: var(--fs-md);
+  letter-spacing: 0.01em;
+}
+
+/* After onboarding the tagline names the next goal (nextGoal): smaller, it may wrap. */
+.tagline.is-goal {
+  max-width: min(100%, 360px);
+  padding: 5px 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* The Title run's Day 1: weather and place (ui.setRunPreview). */
+.forecast-chip {
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: var(--pill);
+  background: rgba(43, 33, 64, 0.72);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scr-title.no-forecast .forecast-chip { display: none; }
+
+.challenge {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'flag text play';
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 380px);
+  margin-top: 14px;
+  /* The right padding keeps Play's 48 px hit box clear of the dismiss button's. */
+  padding: 10px 16px 10px 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow), inset 0 0 0 2px var(--accent);
+  animation: pop-in 420ms var(--ease-back) both;
+}
+
+.challenge-flag {
+  --d: 40px;
+  grid-area: flag;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.challenge-text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.challenge-from {
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  line-height: 1.25;
+  color: var(--accent-ink);
+  overflow-wrap: anywhere;
+}
+
+/* May wrap after "Beat" and after "·" (title.ts challengeGoalText keeps "Day 2" and "2:40 PM"). */
+.challenge-goal {
+  font-weight: 900;
+  font-size: var(--fs-lg);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+}
+
+.challenge-note {
+  font-size: var(--fs-2xs);
+  color: var(--ink-2);
+}
+
+.challenge .challenge-play {
+  grid-area: play;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 16px;
+}
+
+/* Narrow columns (or large text): Play goes under the goal, so the text never runs beneath it. */
+@container title (max-width: 20rem) {
+  .challenge {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'flag text' 'play play';
+  }
+}
+
+.challenge-close {
+  --ic: 16px;
+  position: absolute;
+  /* Close enough to the banner's corner that its 48 px hit box stays on screen at 320 px. */
+  top: -14px;
+  right: -4px;
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+}
+
+.challenge-close::before {
+  /* 48 px touch target around the small visual (round buttons don't clip their ::before). */
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 0;
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.9); }
+}
+
+/* Chips + tray. Its top stays below Nubs' halo (--nubs-y + --halo-r, viewport px): the cluster is
+   capped to that height and the gap between chips and tray shrinks first; title.ts fit() then drops
+   the tray labels if it still doesn't fit. */
+.title-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  justify-content: flex-end;
+  /* 1 px of slack: --nubs-y and --halo-r arrive rounded to whole px. */
+  max-height: calc(100% - (var(--nubs-y, 68%) - var(--wt)) - var(--halo-r, 44px) - 1px);
+  padding: 0 var(--pad-x-r) calc(var(--in-bottom) + 14px) var(--pad-x-l);
+}
+
+.title-gap {
+  display: block;
+  flex: 0 1 12px;
+  min-height: 4px;
+}
+
+/* One line of chips: the Snow chip goes below 340 px or when the row would overflow (fit()). */
+.chips {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* The modes: the map (with the stars earned), the next level (the primary action) and Endless. A
+   sideways drag on them is handed to the sun like the tray buttons (title.ts pressable). */
+.modes {
+  container: modes / inline-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.modes .btn {
+  flex: none;
+  min-height: 48px;
+  padding: 4px 14px 4px 12px;
+  border-radius: var(--pill);
+  white-space: nowrap;
+  touch-action: none;
+}
+
+.modes .play-pill {
+  --ic: 24px;
+  flex: 1 1 auto;
+  min-height: 52px;
+  font-size: 1.1875rem;
+}
+
+/* The main call to action breathes a soft glow (no transform: fit() measures this row). */
+.modes .play-pill { animation: cta-glow 2.4s ease-in-out infinite; }
+
+.modes .play-pill:active { animation: none; }
+
+@keyframes cta-glow {
+  50% { box-shadow: 0 4px 0 var(--lip), 0 10px 20px var(--glow), 0 0 0 7px rgba(46, 196, 182, 0.25); }
+}
+
+.journey-pill .ic { color: var(--accent-ink); }
+
+/* Narrow columns: Endless keeps its icon (and its aria-label). */
+@container modes (max-width: 351.98px) {
+  .modes .endless-pill { padding: 4px 12px; }
+
+  .endless-pill .btn-label { display: none; }
+}
+
+/* The key mapping under the tagline, for mouse and keyboard players (not with a challenge up). */
+.title-keys {
+  display: none;
+  margin-top: 8px;
+  padding: 3px 12px;
+  border-radius: var(--pill);
+  background: rgba(43, 33, 64, 0.78);
+  color: var(--paper);
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+@media (pointer: fine) {
+  .title-keys { display: block; }
+}
+
+.sui.is-kbd .title-keys { display: block; }
+
+.scr-title:has(.challenge:not([hidden])) .title-keys { display: none; }
+
+.tray {
+  display: flex;
+  justify-content: center;
+  gap: clamp(4px, calc(var(--cw) * 0.025), 20px);
+  width: 100%;
+  max-width: 420px;
+}
+
+.tray-btn {
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 88px;
+  padding: 4px 0 2px;
+  border: 0;
+  background: none;
+  /* A sideways drag that starts here is handed to the sun (dragHandoff). With the default
+     'manipulation' the browser claims the moving touch as a pan and fires pointercancel ~12 px
+     in, which the game must treat as a release. Taps and clicks still work with 'none'. */
+  touch-action: none;
+}
+
+.tray-disc {
+  --d: 58px;
+  --ic: 28px;
+  position: relative;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 4px 0 rgba(43, 33, 64, 0.16), var(--shadow);
+  transition: transform 90ms var(--ease-out), box-shadow 90ms var(--ease-out);
+}
+
+.tray-btn:active .tray-disc {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 rgba(43, 33, 64, 0.16), var(--shadow-sm);
+}
+
+/* 14 px (13 px in narrow columns) at any root size, on one line: words never break. Below 340 px
+   (or when fit() needs the room) the icons and the buttons' aria-labels carry the menu. */
+.tray-label {
+  max-width: calc(100% + 12px);
+  padding: 2px 7px;
+  border-radius: var(--pill);
+  background: rgba(255, 248, 238, 0.82);
+  font-weight: 800;
+  font-size: clamp(12px, calc(var(--cw) * 0.036), 14px);
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.title-bottom.no-labels .tray-label { display: none; }
+
+@media (max-width: 339.98px) {
+  .tray-label { display: none; }
+}
+
+.tray-btn.is-locked .tray-disc {
+  color: var(--ink-3);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tray-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2.5px #fff;
+  animation: dot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  50% { transform: scale(1.25); }
+}
+
+.tray-lock {
+  --d: 24px;
+  --ic: 14px;
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 0 0 2.5px #fff;
+}
+
+/* Progressive disclosure (title.ts renderGates): a locked feature shows its lock (a tap says how to
+   unlock it); a newly unlocked one a NEW tag and a pulse until it is opened. */
+.tray-btn:not(.is-locked) .tray-lock,
+.endless-pill:not(.is-locked) .tray-lock,
+.tray-btn:not(.is-new) .new-tag,
+.endless-pill:not(.is-new) .new-tag,
+.tile:not(.is-new) .new-tag { display: none; }
+
+.endless-pill { overflow: visible !important; }
+
+.endless-pill.is-locked {
+  --bg: rgba(255, 255, 255, 0.72);
+  color: var(--ink-3);
+}
+
+.new-tag {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  padding: 1px 6px;
+  border-radius: var(--pill);
+  /* White on this red keeps 4.5:1 at the tag's small size. */
+  background: #c4302b;
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+  font-size: 0.6875rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  transform: translateX(-50%) rotate(-6deg);
+}
+
+:is(.tray-btn.is-new .tray-disc, .endless-pill.is-new) { animation: new-pulse 1.6s ease-in-out infinite; }
+
+/* The NEW tag speaks for a just-unlocked button: its claim dot waits until it has been opened. */
+.sui .tray-btn.is-new .has-dot::after { display: none; }
+
+@keyframes new-pulse {
+  50% { box-shadow: 0 4px 0 rgba(43, 33, 64, 0.16), 0 0 0 7px rgba(255, 194, 61, 0.55); }
+}
+
+/* Tight columns (title.ts fit(), after the tray labels): smaller discs and a slimmer pill. */
+.title-bottom.is-tight .tray-disc {
+  --ic: 24px;
+  width: 48px;
+  height: 48px;
+}
+
+.title-bottom.is-tight .modes .btn {
+  min-height: 44px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.title-bottom.is-tight .title-gap { flex-basis: 4px; }
+
+/* Tiny screens: the chips row goes before the modes or the tray would (the Profile stays
+   reachable from the rank badge). */
+.title-bottom.no-chips .chips { display: none; }

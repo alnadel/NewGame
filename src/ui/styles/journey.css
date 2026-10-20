@@ -1,0 +1,317 @@
+/* The Journey map: chapters, level tiles, the star road.
+   Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
+   compose the kit's recipes (kit.css), never copy them. */
+
+/* The map */
+
+.chip--stars .ic { color: var(--gold-deep); }
+
+/* Continue stays above the chapters as they scroll. */
+.journey-sticky {
+  flex: none;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 0 var(--pad-x-r) 10px var(--pad-x-l);
+}
+
+.journey-sticky .road { margin-top: 10px; }
+
+.journey-body { padding-top: 2px; }
+
+.chapter .bar i,
+.road .bar i { background: linear-gradient(90deg, var(--gold), #ffd96b); }
+
+/* A chapter card: a biome-coloured banner ("Chapter 4" over its name, the chapter's Snow Globe),
+   the stars with a bar, the ten tiles. White on the banners keeps 4.5:1. */
+.chapter {
+  --b1: #276b3d;
+  --b2: #348650;
+  padding: 0 0 14px;
+  overflow: hidden;
+}
+
+.chapter[data-biome='oldtown'] {
+  --b1: #94452a;
+  --b2: #b0582f;
+}
+
+.chapter-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  background: var(--gloss), linear-gradient(120deg, var(--b1), var(--b2));
+  color: #fff;
+}
+
+.chapter-head {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.chapter-kicker {
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+.chapter-name {
+  font-size: var(--fs-lg);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.chapter-biome,
+.chapter-prize {
+  --d: 36px;
+  --ic: 20px;
+  position: relative;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.chapter-prize { --ic: 22px; }
+
+.chapter-check {
+  --d: 18px;
+  --ic: 12px;
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.chapter-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.chapter-meta .bar { flex: 1; }
+
+.chapter-stars {
+  --ic: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.chapter-stars .ic { color: var(--gold-deep); }
+
+.chapter .lvl-grid { padding: 0 14px; }
+
+/* Complete (all ten passed): the globe is earned, gold with a check; perfect: a gold rim. */
+.chapter.is-complete .chapter-prize {
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--gold-deep);
+}
+
+.chapter:not(.is-complete) .chapter-check { display: none; }
+
+.chapter.is-perfect { box-shadow: inset 0 0 0 3px var(--gold), var(--shadow-sm); }
+
+.chapter.is-just-complete .chapter-prize { animation: unlock-pop 700ms var(--ease-back) 300ms both; }
+
+.chapter.is-locked {
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: none;
+}
+
+.chapter.is-locked .chapter-banner {
+  background: var(--paper-2);
+  color: var(--ink-2);
+}
+
+.chapter.is-locked .chapter-biome,
+.chapter.is-locked .chapter-prize { background: rgba(43, 33, 64, 0.07); }
+
+/* 10 tiles in two rows of 5. At 320 px the column is 256 px wide: 5 × 48 px with 4 px gaps. */
+.lvl-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.lvl-tile {
+  position: relative;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 6px 2px 5px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  transition: transform 90ms var(--ease-out), box-shadow 90ms var(--ease-out), background var(--t);
+}
+
+@media (hover: hover) {
+  .lvl-tile:not(.is-locked):hover {
+    background: #fff;
+    box-shadow: inset 0 0 0 1.5px var(--line), var(--shadow-sm);
+  }
+}
+
+.lvl-tile:active:not(.is-locked) { transform: translateY(1px); }
+
+.lvl-tile.is-done {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.lvl-tile.is-perfect {
+  background: var(--gold-soft);
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+/* The level in play: the accent fill, as the Play button that leads here, and a slow glow. */
+.lvl-tile.is-next {
+  background: var(--accent);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--accent-deep), var(--shadow-sm);
+  animation: next-glow 1.8s ease-in-out infinite;
+}
+
+/* Unlocked since the last visit: the tile pops open. */
+.lvl-tile.is-unlocked { animation: unlock-pop 640ms var(--ease-back) 200ms both, next-glow 1.8s ease-in-out 840ms infinite; }
+
+.lvl-star.is-fresh .ic { animation: star-pop 420ms var(--ease-back) var(--d, 0ms) both; }
+
+@keyframes next-glow {
+  50% { box-shadow: 0 3px 0 var(--accent-deep), 0 0 0 6px rgba(46, 196, 182, 0.28); }
+}
+
+@keyframes unlock-pop {
+  0% { transform: scale(0.7) rotate(-6deg); }
+  60% { transform: scale(1.12); }
+}
+
+.lvl-tile.is-locked {
+  background: rgba(43, 33, 64, 0.06);
+  color: var(--ink-3);
+  box-shadow: none;
+}
+
+.lvl-num {
+  font-size: var(--fs-lg);
+  line-height: 1.1;
+}
+
+.lvl-tile.is-locked .lvl-num { opacity: 0.55; }
+
+.lvl-concept {
+  --d: 18px;
+  --ic: 13px;
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink-2);
+}
+
+.lvl-tile.is-next .lvl-concept {
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+}
+
+.lvl-tile.is-locked .lvl-concept {
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.lvl-stars {
+  --ic: 13px;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.lvl-star .ic { color: rgba(43, 33, 64, 0.16); }
+
+.lvl-tile.is-next .lvl-star .ic { color: rgba(43, 33, 64, 0.2); }
+
+.lvl-star.is-on .ic {
+  color: var(--gold);
+  filter: drop-shadow(0 1px 0 var(--gold-deep));
+}
+
+.lvl-tile.is-locked .lvl-stars,
+.lvl-tile:not(.is-locked) .lvl-lock { display: none; }
+
+.lvl-lock {
+  --ic: 14px;
+  display: grid;
+  place-items: center;
+  height: 15px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 359.98px) {
+  .chapter .lvl-grid,
+  .chapter .chapter-meta {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .lvl-grid { gap: 4px; }
+
+  .lvl-tile {
+    min-height: 56px;
+    border-radius: 12px;
+  }
+}
+
+/* The star road (widgets.ts starRoad): the next star reward's item, name, count and bar. */
+.road {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  text-align: left;
+}
+
+.road-art {
+  --d: 44px;
+  grid-row: 1 / 3;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #fff, var(--sky) 75%);
+}
+
+.road-art .swatch {
+  width: 40px;
+  height: 40px;
+}
+
+.road-text {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--ink-2);
+  line-height: 1.25;
+}
+
+.road-text strong {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.road-count {
+  font-size: var(--fs-sm);
+  color: #8a5a00;
+}
+
+.road .bar { grid-column: 2 / 4; }
