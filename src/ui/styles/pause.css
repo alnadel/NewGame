@@ -107,9 +107,14 @@
   .scr-pause .has-status .pause-star { font-size: 0.75rem; }
 }
 
-/* Narrow cards: Settings and Home take the S label size, so "Settings" stays on one line. */
+/* Narrow cards: Settings and Home take the S label size, so "Settings" stays on one line; on a
+   320 px phone (about 112 px a button) the tag size and a smaller icon. */
 @container pause (max-width: 22em) {
   .scr-pause .row-2 > .btn { font-size: var(--fs-d-md); }
+}
+
+@container pause (max-width: 19.5em) {
+  .scr-pause .row-2 > .btn { --ic: 20px; font-size: var(--fs-d-sm); }
 }
 
 /* Shorter still (small phones): Restart, Settings and Home share one row, icon over
