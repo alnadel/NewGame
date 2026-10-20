@@ -99,7 +99,7 @@
   --lip: var(--cream-3);
   color: var(--ink);
   -webkit-text-stroke: 0;
-  font-size: var(--fs-d-md);
+  font-size: min(var(--fs-d-md), 20px);
 }
 
 .pf-node.is-globe .node { --hi: var(--ice-hi); --face: #D7EEFF; --lo: var(--ice); --lip: var(--ice-lo); }
@@ -113,17 +113,18 @@
   --sh: inset 0 -5px 0 var(--lip), var(--top-light), var(--drop-sm), 0 0 0 5px #FFDC5A99;
   color: #fff;
   -webkit-text-stroke: var(--halo) var(--ink);
-  font-size: var(--fs-d-lg);
+  font-size: min(var(--fs-d-lg), 24px);
 }
 
-/* Under each node: the Snow gem and "+55", the globe, or a check on the current rank. */
+/* Under each node: the Snow gem and "+55", the globe, or a check on the current rank. The road's
+   text is capped (large text keeps its six columns legible). */
 .pf-reward {
   --ic: 18px;
   display: flex;
   align-items: center;
   height: 28px;
   color: var(--t-green);
-  font: 400 var(--fs-d-sm)/1 var(--font-display);
+  font: 400 min(var(--fs-d-sm), 16px)/1 var(--font-display);
   white-space: nowrap;
 }
 
@@ -185,7 +186,7 @@
 
 .badges {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 10px;
 }
 
@@ -226,6 +227,8 @@
   --ic: 15px;
   display: inline-flex;
   gap: 4px;
+  max-width: 100%;
+  white-space: normal;
   margin-top: 6px;
   background: var(--tint-gold);
   color: var(--t-brown);

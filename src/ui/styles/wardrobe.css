@@ -67,7 +67,7 @@
 
 /* Buy: the price rides inside the gold button as a mini counter. */
 .stage .btn-price {
-  height: 36px;
+  height: 2em;
   min-height: 0;
   margin-left: 22px;
   padding: 0 12px 0 22px;
@@ -175,15 +175,18 @@
 
 .tile-grid::before { display: none; }
 
-/* A narrow column: two tiles per row and slimmer tabs; a little wider, the "Wearing" tag drops
-   its check (the word says it). */
-@container menu (max-width: 299.98px) {
-  .tile-grid { grid-template-columns: 1fr 1fr; }
+/* A narrow column (a 320 px phone, or large text: the breakpoints are in rem): two tiles per row
+   and slimmer tabs; a little wider, the "Wearing" tag drops its check (the word says it). Tab
+   words stay at most 19 px so a four-letter slot name never breaks. */
+.scr-wardrobe .tab { font-size: min(1.0625rem, 19px); }
+
+@container menu (max-width: 20rem) {
+  .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scr-wardrobe .tabs { gap: 3px; padding: 0 8px; }
-  .scr-wardrobe .tab { padding: 2px 2px 0; font-size: var(--fs-d-sm); }
+  .scr-wardrobe .tab { padding: 2px 2px 0; }
 }
 
-@container menu (300px <= width < 350px) {
+@container menu (20rem < width < 22rem) {
   .tile-status.is-equipped .ic { display: none; }
 }
 
@@ -256,7 +259,7 @@
 
 /* A price: the gem coin (26) overlapping a small embossed slot (Lilita 16). */
 .tile-status .price {
-  height: 30px;
+  height: 1.9em;
   min-height: 0;
   margin-left: 12px;
   padding: 0 9px 0 16px;
