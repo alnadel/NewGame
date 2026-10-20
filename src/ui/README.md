@@ -138,9 +138,11 @@ cluster is the chips (Best → Profile, mission pips), the **modes** row and the
 Missions, Wardrobe, Settings). The modes are the map button `.journey-pill` (the stars earned,
 "Map" before any; `openJourney()`), the primary **Play** `.play-pill` "Level N" (`continueLevel`,
 the highest unlocked level: `startRun('campaign', undefined, N)`; Space/Enter too) and **Endless**
-`.endless-pill` (`startRun('endless')`; icon only in narrow columns). A sideways drag on any of
-them is handed to the sun. When the cluster would reach Nubs' halo the Title sheds, in order, the
-tray labels, then disc/pill size (`is-tight`), then the chips row (`no-chips`). Mouse and keyboard
+`.endless-pill` (`startRun('endless')`); the map and Endless are candy squares with their label
+as a tag hanging under them (docs/UI_V2.md §10.1). A sideways drag on any of them is handed to the
+sun. When the cluster would reach Nubs' halo the Title sheds, in order, the tray labels, then the
+square and pill sizes (`is-tight`), then the chips row (`no-chips`). A goal tagline is Nubs' speech
+bubble just above his halo (`fit()` places it, or returns it under the logo: `.goal-inline`). Mouse and keyboard
 players see the key line "Space: play the level · ← →: Endless · Esc: back" under the tagline
 ("Space or ← →: play the level" while Endless is locked: a canvas press or an arrow then plays the
 next level, session.ts onPress).
@@ -164,7 +166,7 @@ unlocked are among `outcome.toasts`, the award chips ("Wardrobe unlocked!").
 
 **v1.4 Journey and Wardrobe**: each chapter card opens with a biome-coloured banner ("Chapter 4"
 over its name) and the chapter's Snow Globe, gold with a check once all ten levels are passed
-(`.is-complete`; a gold rim at 30 stars, `.is-perfect`); a chapter completed since the last visit
+(`.is-complete`; its star tag turns gold at 30 stars, `.is-perfect`); a chapter completed since the last visit
 pops its globe and toasts. The Wardrobe shows the collection (owned / all, with a bar), each item's
 rarity (meta/gamify.ts `rarity`, the one the Snow Globes weigh and the reveal names: by price, by
 the granting trophy's tier, or globe exclusive) as a coloured rim and label, and NEW marks (with a dot on their tab) on wearable or buyable
@@ -184,12 +186,14 @@ the accent after a pass. `introduces` is no longer shown (the level's intro card
 
 The Journey screen (`'journey'`, `screens/journey.ts`) reads the save and `CAMPAIGN_LEVELS` itself:
 the header's total stars `n/600`, a sticky "Continue · Level N" over the star road, then 20 chapter
-cards (biome mark, name, stars `n/30` with a gold bar; `.is-locked` while their first level is,
-`.is-complete` at 30) of 10 tiles `.lvl-tile[data-level]` (number, stars, the concept mark on levels
-1-40 with the concept's name and blurb as the tooltip and in the aria-label, `.is-locked` with a
-lock when `isLevelPlayable` is false, `.is-next` with a slow glow on Continue's level,
-`.is-perfect` at 3 stars). A playable tile calls `startRun('campaign', undefined, id)`; a locked one
-toasts "Finish Level N first.". Arrow keys walk the tiles (±1, ±5). Every visit centers the level
+boards (biome mark, name, stars `n/30` as a tag under the globe; `.is-locked` while their first level
+is, with a "Finish Level N" plate; `.is-complete` at 30) of 10 tiles `.lvl-tile[data-level]` on a
+road that snakes 1→5, then 6→10 right to left (CSS only; DOM and Tab order stay 1→10). A tile shows
+its number on a disc, its stars, the concept mark on levels 1-40 with the concept's name and blurb
+as the tooltip and in the aria-label, `.is-locked` with a lock when `isLevelPlayable` is false,
+`.is-next` (Continue's level: a larger green disc with Nubs on top), `.is-perfect` at 3 stars. A
+playable tile calls `startRun('campaign', undefined, id)`; a locked one toasts "Finish Level N
+first.". Arrow keys follow the screen (`journeyStep`): along the visual row, straight up and down. Every visit centers the level
 in play, and the stars and unlocks earned since the last visit pop in (`.is-fresh` stars one after
 another, `.is-unlocked` tiles, with the stamp or unlock sound). `setSave` and the Settings toggle
 re-render the tiles in place (focus survives).

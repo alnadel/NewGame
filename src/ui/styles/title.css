@@ -1,16 +1,45 @@
 /* The Title screen: top bar, logo, tagline, forecast, challenge banner, chips, modes, tray.
    Owner: B2 Title & co. (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
-   compose the kit's recipes (kit.css), never copy them. */
+   compose the kit's recipes (kit.css), never copy them.
+
+   docs/UI_V2.md §10.1: the candy wordmark with a ribbon tagline (or Nubs' speech bubble for a goal),
+   dark chips on the world, square candy modes around the one saturated hero (Play), and a neutral
+   cloud tray. Two static shades keep the candy readable over busy ground. */
 
 /* ===== Title ===== */
+
+/* A top and a bottom shade over the world (static layers under the screen's controls). */
+.scr-title { isolation: isolate; }
+
+.scr-title::before,
+.scr-title::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.scr-title::before {
+  top: 0;
+  height: calc(var(--in-top) + 120px);
+  background: linear-gradient(rgba(42, 27, 69, 0.38), rgba(42, 27, 69, 0));
+}
+
+.scr-title::after {
+  bottom: 0;
+  height: 260px;
+  background: linear-gradient(rgba(42, 27, 69, 0), rgba(42, 27, 69, 0.42));
+}
 
 .title-top {
   container: title / inline-size;
   position: absolute;
   left: 0;
   right: 0;
-  /* Below the top bar (48 px), with a little air on taller screens. */
-  top: calc(var(--in-top) + 52px + clamp(0px, calc(var(--ch) * 0.02), 24px));
+  /* Below the top bar (its 54 px squares and their drop), with a little air on taller screens. */
+  top: calc(var(--in-top) + 66px + clamp(0px, calc(var(--ch) * 0.02), 20px));
   padding: 0 var(--pad-x-r) 0 var(--pad-x-l);
 }
 
@@ -21,50 +50,69 @@
 
 .scr-title.is-on .title-top { animation-delay: 60ms; }
 
-/* The top bar (v1.4): the Sun Rank badge (gamify.ts rankBadge), a waiting daily reward, the wallet. */
+/* ===== Top bar: the Sun Rank badge (gamify.ts rankBadge), a waiting daily reward, the wallet ===== */
+
 .title-hud {
   position: absolute;
   inset: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: calc(var(--in-top) + 8px) var(--pad-x-r) 0 var(--pad-x-l);
+  gap: 10px;
+  min-height: 58px;
+  padding: calc(var(--in-top) + 10px) var(--pad-x-r) 0 var(--pad-x-l);
 }
+
+/* The badge gives way first when the bar is narrow (its name ellipsizes). */
+.title-rank {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.title-rank > .rank-badge { max-width: 100%; }
 
 .title-hud-gap { flex: 1; }
 
-.title-hud .chip { min-height: 40px; }
-
-.title-reward {
-  --ic: 20px;
-  min-height: 44px;
-  padding: 4px 14px 4px 10px;
-  border-radius: var(--pill);
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-  animation: pop-in 420ms var(--ease-back) both, nudge 2.4s ease-in-out 1s infinite;
+/* The reward: a gold gift square on a slow ray burst, with a claim dot. */
+.title-reward-wrap {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  animation: pop-in 420ms var(--ease-back) both;
 }
 
-/* Narrow columns: the gift alone (its aria-label names it). Interim (UI v2 kit): from 420 px, as the
-   embossed wallet is wider; B2's gold square hides the label everywhere (docs/UI_V2.md §6.2). */
-@media (max-width: 419.98px) {
-  .title-reward { padding: 0 11px; }
-
-  .title-reward .btn-label { display: none; }
+.title-reward-wrap > .burst {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  animation-duration: 30s;
 }
 
-@keyframes nudge {
-  0%, 80%, 100% { transform: none; }
-  85% { transform: rotate(-6deg) scale(1.06); }
-  90% { transform: rotate(5deg) scale(1.06); }
-  95% { transform: rotate(-3deg); }
+.btn.title-reward {
+  --h: 54px;
+  --r: 18px;
+  --ic: 34px;
 }
 
+/* The gift wiggles twice every 4 s. */
+.title-reward .ai { animation: gift-wiggle 4s ease-in-out 1s infinite; }
+
+@keyframes gift-wiggle {
+  0%, 80%, 100% { rotate: 0deg; }
+  84%, 92% { rotate: -6deg; }
+  88%, 96% { rotate: 6deg; }
+}
+
+/* ===== The logo ===== */
+
+/* The positioned box the stacked layers fill (the v1.4 drop-shadow filter used to provide it). */
 .logo {
-  width: min(calc(var(--cw) * 0.84), 340px);
+  position: relative;
+  width: min(calc(var(--cw) * 0.86), 340px);
   line-height: 0;
-  filter: drop-shadow(0 6px 10px rgba(43, 33, 64, 0.18));
 }
 
 .logo-svg {
@@ -101,6 +149,25 @@
   transform: translate(var(--lsx, 3px), var(--lsy, 4px));
 }
 
+/* The session writes --lsx/--lsy on <html> (session.ts publishLogoShadow). Inherited, every write
+   restyled every element of every screen, hidden ones included (the Journey's 200 nodes made that
+   ~30 ms a frame in a software-rendered Chromium, and the Title ran at 15 fps). Registered as
+   non-inherited, a write restyles only the explicit chain from <html> down to the shadow layer. */
+@property --lsx { syntax: '<length>'; inherits: false; initial-value: 3px; }
+@property --lsy { syntax: '<length>'; inherits: false; initial-value: 4px; }
+
+body,
+.sui,
+.sui > .world,
+.world > .screens,
+.scr-title,
+.title-top,
+.logo,
+.logo-drop {
+  --lsx: inherit;
+  --lsy: inherit;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -109,234 +176,123 @@
   50% { transform: translateY(-1.2558%) rotate(-4deg); }
 }
 
+.sui.is-hc .logo-sparkle { display: none; }
+
 /* With a challenge banner on a short screen (title.ts fit()), the logo gives the hint room. */
 .scr-title.is-compact .logo { width: min(calc(var(--cw) * 0.56), 220px); }
 
-.scr-title.no-tagline .tagline { display: none; }
+/* ===== Tagline: a small blue ribbon, or Nubs' speech bubble for a goal ===== */
 
-.tagline {
-  margin-top: 2px;
-  padding: 6px 16px;
-  border-radius: var(--pill);
-  background: rgba(255, 248, 238, 0.82);
-  box-shadow: var(--shadow-sm);
-  font-weight: 800;
-  font-size: var(--fs-md);
-  letter-spacing: 0.01em;
+.scr-title.no-tagline .tagline-box { display: none; }
+
+/* The ribbon overlaps the logo's bottom. */
+.tagline-box {
+  z-index: 2;
+  margin-top: -14px;
+  rotate: -2deg;
 }
 
-/* After onboarding the tagline names the next goal (nextGoal): smaller, it may wrap. */
+.tagline-box .tagline-ic { display: none; }
+
+/* A goal ("So close: …"): a white bubble with an ink line, its tail pointing down at Nubs, set
+   just above his halo (fit() sets --goal-top). */
+.tagline-box.is-goal {
+  position: absolute;
+  top: var(--goal-top, 0px);
+  left: 50%;
+  translate: -50% 0;
+  rotate: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(300px, calc(100% - var(--pad-x-l) - var(--pad-x-r)));
+  margin: 0;
+  padding: 8px 14px 9px 8px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: inset 0 -3px 0 #EDE8F5, var(--drop-sm);
+}
+
+.tagline-box.is-goal > .ribbon-tail { display: none; }
+
+.tagline-box.is-goal .tagline-ic {
+  --ic: 32px;
+  display: block;
+}
+
+/* The tail: an ink triangle with a white one inside it. */
+.tagline-box.is-goal::before,
+.tagline-box.is-goal::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  pointer-events: none;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.tagline-box.is-goal::before {
+  top: 100%;
+  width: 24px;
+  height: 17px;
+  margin: 0 0 0 -12px;
+  background: var(--ink);
+}
+
+.tagline-box.is-goal::after {
+  top: calc(100% - 4px);
+  width: 16px;
+  height: 14px;
+  margin-left: -8px;
+  background: #fff;
+}
+
 .tagline.is-goal {
-  max-width: min(100%, 360px);
-  padding: 5px 14px;
-  font-size: var(--fs-sm);
-  line-height: 1.3;
-  text-align: center;
+  min-width: 0;
+  font: 800 var(--fs-sm)/1.3 var(--font-body);
+  color: var(--ink);
+  text-align: left;
 }
 
-/* The Title run's Day 1: weather and place (ui.setRunPreview). */
+/* Crowded (fit()): the bubble returns to the flow under the logo, a plate without a tail. */
+.tagline-box.is-goal.goal-inline {
+  position: relative;
+  top: auto;
+  left: auto;
+  translate: none;
+  margin-top: 4px;
+}
+
+.tagline-box.is-goal.goal-inline::before,
+.tagline-box.is-goal.goal-inline::after { display: none; }
+
+/* ===== Forecast and the key line: dark chips on the world ===== */
+
+/* The Title run's Day 1: weather and place (ui.setRunPreview); the emoji is a body-font glyph. */
 .forecast-chip {
-  margin-top: 8px;
-  padding: 4px 12px;
-  border-radius: var(--pill);
-  background: rgba(43, 33, 64, 0.72);
-  color: var(--paper);
-  font-weight: 800;
-  font-size: var(--fs-xs);
-  line-height: 1.3;
-  white-space: nowrap;
+  display: block;
   max-width: 100%;
-  overflow: hidden;
+  margin-top: 8px;
+  padding: 0 14px;
+  overflow: clip;
+  line-height: 32px;
   text-overflow: ellipsis;
 }
 
 .scr-title.no-forecast .forecast-chip { display: none; }
 
-.challenge {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: 'flag text play';
-  align-items: center;
-  gap: 10px;
-  width: min(100%, 380px);
-  margin-top: 14px;
-  /* The right padding keeps Play's 48 px hit box clear of the dismiss button's. */
-  padding: 10px 16px 10px 12px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  box-shadow: var(--shadow), inset 0 0 0 2px var(--accent);
-  animation: pop-in 420ms var(--ease-back) both;
-}
-
-.challenge-flag {
-  --d: 40px;
-  grid-area: flag;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-
-.challenge-text {
-  grid-area: text;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.challenge-from {
-  font-weight: 800;
-  font-size: var(--fs-xs);
-  line-height: 1.25;
-  color: var(--accent-ink);
-  overflow-wrap: anywhere;
-}
-
-/* May wrap after "Beat" and after "·" (title.ts challengeGoalText keeps "Day 2" and "2:40 PM"). */
-.challenge-goal {
-  font-weight: 900;
-  font-size: var(--fs-lg);
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  white-space: normal;
-}
-
-.challenge-note {
-  font-size: var(--fs-2xs);
-  color: var(--ink-2);
-}
-
-.challenge .challenge-play {
-  grid-area: play;
-  min-height: 48px;
-  min-width: 48px;
-  padding: 0 16px;
-}
-
-/* Narrow columns (or large text): Play goes under the goal, so the text never runs beneath it. */
-@container title (max-width: 20rem) {
-  .challenge {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'flag text' 'play play';
-  }
-}
-
-.challenge-close {
-  --ic: 16px;
-  position: absolute;
-  /* Close enough to the banner's corner that its 48 px hit box stays on screen at 320 px. */
-  top: -14px;
-  right: -4px;
-  width: 32px !important;
-  height: 32px !important;
-  min-height: 32px !important;
-}
-
-.challenge-close::before {
-  /* 48 px touch target around the small visual (round buttons don't clip their ::before). It
-     replaces the kit's gloss cap on this ::before (UI v2 kit), so it resets the cap's look. */
-  content: '';
-  position: absolute;
-  inset: -8px;
-  height: auto;
-  border-radius: 0;
-  background: none;
-  pointer-events: auto;
-}
-
-@keyframes pop-in {
-  from { opacity: 0; transform: scale(0.9); }
-}
-
-/* Chips + tray. Its top stays below Nubs' halo (--nubs-y + --halo-r, viewport px): the cluster is
-   capped to that height and the gap between chips and tray shrinks first; title.ts fit() then drops
-   the tray labels if it still doesn't fit. */
-.title-bottom {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  justify-content: flex-end;
-  /* 1 px of slack: --nubs-y and --halo-r arrive rounded to whole px. */
-  max-height: calc(100% - (var(--nubs-y, 68%) - var(--wt)) - var(--halo-r, 44px) - 1px);
-  padding: 0 var(--pad-x-r) calc(var(--in-bottom) + 14px) var(--pad-x-l);
-}
-
-.title-gap {
-  display: block;
-  flex: 0 1 12px;
-  min-height: 4px;
-}
-
-/* One line of chips: the Snow chip goes below 340 px or when the row would overflow (fit()). */
-.chips {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: center;
-  gap: 6px;
-  max-width: 100%;
-}
-
-/* The modes: the map (with the stars earned), the next level (the primary action) and Endless. A
-   sideways drag on them is handed to the sun like the tray buttons (title.ts pressable). */
-.modes {
-  container: modes / inline-size;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 420px;
-}
-
-.modes .btn {
-  /* Interim (UI v2 kit): the v1.4 label size and icon, until the modes become candy squares (B2). */
-  --ic: 22px;
-  flex: none;
-  min-height: 48px;
-  padding: 4px 14px 4px 12px;
-  border-radius: var(--pill);
-  font-size: var(--fs-md);
-  white-space: nowrap;
-  touch-action: none;
-}
-
-.modes .play-pill {
-  --ic: 24px;
-  flex: 1 1 auto;
-  min-height: 52px;
-  font-size: 1.1875rem;
-}
-
-/* The main call to action breathes a soft glow (no transform: fit() measures this row). */
-.modes .play-pill { animation: cta-glow 2.4s ease-in-out infinite; }
-
-.modes .play-pill:active { animation: none; }
-
-@keyframes cta-glow {
-  50% { box-shadow: 0 4px 0 var(--lip), 0 10px 20px var(--glow), 0 0 0 7px rgba(46, 196, 182, 0.25); }
-}
-
-.journey-pill .ic { color: var(--accent-ink); }
-
-/* Narrow columns: Endless keeps its icon (and its aria-label). */
-@container modes (max-width: 351.98px) {
-  .modes .endless-pill { padding: 4px 12px; }
-
-  .endless-pill .btn-label { display: none; }
-}
-
-/* The key mapping under the tagline, for mouse and keyboard players (not with a challenge up). */
+/* The key mapping under the tagline, for mouse and keyboard players (not with a challenge up): the
+   body font, as it holds the arrows; white on the slot passes without a halo. */
 .title-keys {
   display: none;
+  max-width: 100%;
   margin-top: 8px;
-  padding: 3px 12px;
-  border-radius: var(--pill);
-  background: rgba(43, 33, 64, 0.78);
-  color: var(--paper);
-  font-weight: 800;
-  font-size: var(--fs-xs);
+  padding: 4px 12px 5px;
+  font: 800 var(--fs-xs)/1.3 var(--font-body);
   text-align: center;
+  white-space: normal;
+  -webkit-text-stroke: 0;
 }
 
 @media (pointer: fine) {
@@ -347,6 +303,268 @@
 
 .scr-title:has(.challenge:not([hidden])) .title-keys { display: none; }
 
+/* ===== The challenge banner: a pink-framed panel with a "CHALLENGE!" ribbon ===== */
+
+.challenge {
+  --frame: var(--pink);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'flag text play';
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 380px);
+  margin-top: 30px;
+  /* The right padding keeps Play clear of the dismiss coin. */
+  padding: 28px 20px 18px 16px;
+  text-align: left;
+  animation: pop-in 420ms var(--ease-back) both;
+}
+
+.challenge-ribbon {
+  position: absolute;
+  top: -21px;
+  left: 50%;
+  translate: -50% 0;
+  rotate: -2deg;
+}
+
+.challenge-flag {
+  --d: 46px;
+  --ic: 32px;
+  grid-area: flag;
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 14px;
+  background: var(--tint-pink);
+  box-shadow: inset 0 -3px 0 rgba(174, 36, 83, 0.25);
+}
+
+.challenge-text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.challenge-from {
+  font: 800 var(--fs-xs)/1.25 var(--font-body);
+  color: var(--t-rose);
+  overflow-wrap: anywhere;
+}
+
+/* May wrap after "Beat" and after "·" (title.ts challengeGoalText keeps "Day 2" and "2:40 PM"). */
+.challenge-goal {
+  font: 400 var(--fs-d-lg)/1.15 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
+  white-space: normal;
+}
+
+.challenge-note {
+  font: 700 var(--fs-2xs)/1.3 var(--font-body);
+  color: var(--ink-2);
+}
+
+.challenge .challenge-play {
+  --ic: 34px;
+  grid-area: play;
+}
+
+/* Narrow columns (or large text): the flag goes, so the goal keeps its line. */
+@container title (max-width: 22.5rem) {
+  .challenge { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'text play'; }
+
+  .challenge-flag { display: none; }
+}
+
+/* The dismiss coin on the banner's corner (its 48 px stays on screen at 320 px). */
+.challenge .challenge-close {
+  --ic: 22px;
+  position: absolute;
+  top: -16px;
+  right: -12px;
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.9); }
+}
+
+/* ===== The bottom cluster: chips, modes, tray =====
+   Its top stays below Nubs' halo (--nubs-y + --halo-r, viewport px): the cluster is capped to that
+   height and the gaps shrink first; title.ts fit() then drops the tray labels, then tightens the
+   squares, then drops the chips row. */
+.title-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  justify-content: flex-end;
+  /* 1 px of slack: --nubs-y and --halo-r arrive rounded to whole px. */
+  max-height: calc(100% - (var(--nubs-y, 68%) - var(--wt)) - var(--halo-r, 44px) - 1px);
+  padding: 0 var(--pad-x-r) calc(var(--in-bottom) + 10px) var(--pad-x-l);
+}
+
+.title-gap {
+  display: block;
+  flex: 0 1 10px;
+  min-height: 4px;
+}
+
+/* One line of dark chips: Best (opens the Profile) and the missions' pips. */
+.chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+/* The modes: the map (with the stars earned), the next level (the hero) and Endless. A sideways
+   drag on them is handed to the sun like the tray buttons (title.ts pressable). The squares' tags
+   hang below them, so the row keeps room under it. */
+.modes {
+  container: modes / inline-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 420px;
+  margin-bottom: 8px;
+}
+
+.modes .btn { touch-action: none; }
+
+/* The map and Endless: candy squares 74 × 68 with their art icon; their label hangs as a tag. */
+.btn.mode-sq {
+  --h: 68px;
+  --w: 74px;
+  --r: 22px;
+  --lipH: 7px;
+  --ic: 40px;
+  overflow: visible;
+}
+
+/* The tag is ink on cream (no halo: the button's white type stops here). */
+.mode-tag {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: -11px;
+  display: inline-flex;
+  align-items: center;
+  translate: -50% 0;
+  /* Capped at large text sizes: the tag must stay about its square's width. */
+  font-size: min(var(--fs-d-sm), 18px);
+  color: var(--ink);
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+/* "71★": the star in gold with an ink line. */
+.journey-pill .mode-tag .glyph {
+  margin-left: 1px;
+  color: var(--gold-lo);
+  -webkit-text-stroke: 2px var(--ink);
+  paint-order: stroke fill;
+}
+
+/* Play: the green XL pill, a white coin with the play triangle, "PLAY" (generated, so the label
+   still reads "Level 38") over the level. Its idle motion is a shine sweep, never a scale (fit()
+   measures the row). */
+.modes .play-pill {
+  flex: 0 1 204px;
+  min-width: 0;
+  gap: 10px;
+  padding: 2px 14px var(--lipH) 12px;
+}
+
+.play-coin {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 35%, #fff, #F3FFE6 55%, #DDF6C4);
+  box-shadow: inset 0 -3px 0 #B7E28C, 0 2px 0 var(--ink);
+}
+
+.play-coin svg {
+  width: 26px;
+  height: 26px;
+  margin-left: 3px;
+  overflow: visible;
+}
+
+.play-pill .btn-label {
+  line-height: 0.95;
+  text-align: left;
+  overflow-wrap: normal;
+}
+
+.play-pill .btn-label::before {
+  content: 'PLAY';
+  display: block;
+  margin-bottom: 1px;
+  /* Never larger than half the level line, at any text size. */
+  font-size: min(var(--fs-d-sm), 0.55em);
+  letter-spacing: 0.08em;
+  color: #F4FFD9;
+}
+
+.play-pill::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 26%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+  transform: translateX(-120%) skewX(-18deg);
+  animation: cta-shine 3.2s ease-in-out 1.2s infinite;
+  pointer-events: none;
+}
+
+@keyframes cta-shine {
+  0%, 81% { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(420%) skewX(-18deg); }
+}
+
+/* The label shrinks with the row before it could clip (it never wraps: §6.1 XL). */
+.play-pill .btn-label { font-size: min(var(--fs-d-2xl), 7.8cqi); }
+
+/* Narrower rows: 64 px squares; then Play drops its coin. */
+@container modes (max-width: 349.98px) {
+  .btn.mode-sq {
+    --h: 64px;
+    --w: 64px;
+    --ic: 36px;
+  }
+
+  .modes .play-pill {
+    gap: 8px;
+    padding: 2px 10px var(--lipH) 8px;
+  }
+
+  .play-coin {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@container modes (max-width: 309.98px) {
+  .play-coin { display: none; }
+
+  .modes .play-pill { padding: 2px 8px var(--lipH); }
+
+  .play-pill .btn-label { text-align: center; }
+}
+
+/* ===== The tray: four cloud squares with their coloured art icons ===== */
+
 .tray {
   display: flex;
   justify-content: center;
@@ -356,11 +574,10 @@
 }
 
 .tray-btn {
-  gap: 6px;
   flex: 1 1 0;
   min-width: 0;
   max-width: 88px;
-  padding: 4px 0 2px;
+  padding: 2px 0 0;
   border: 0;
   background: none;
   /* A sideways drag that starts here is handed to the sun (dragHandoff). With the default
@@ -370,31 +587,46 @@
 }
 
 .tray-disc {
-  --d: 58px;
-  --ic: 28px;
-  position: relative;
-  border-radius: 50%;
-  background: var(--panel);
-  color: var(--ink);
-  box-shadow: 0 4px 0 rgba(43, 33, 64, 0.16), var(--shadow);
-  transition: transform 90ms var(--ease-out), box-shadow 90ms var(--ease-out);
+  --r: 20px;
+  --lipH: 5px;
+  --ic: 38px;
+  width: 62px;
+  height: 56px;
+  padding-bottom: 3px;
+  transition: transform var(--t-up) var(--ease-back);
 }
 
 .tray-btn:active .tray-disc {
+  --sh: inset 0 -2px 0 var(--lip), var(--top-light), 0 0 0 var(--ink);
   transform: translateY(3px);
-  box-shadow: 0 1px 0 rgba(43, 33, 64, 0.16), var(--shadow-sm);
+  transition-duration: var(--t-down);
 }
 
-/* 14 px (13 px in narrow columns) at any root size, on one line: words never break. Below 340 px
-   (or when fit() needs the room) the icons and the buttons' aria-labels carry the menu. */
+.sui.is-rm .tray-btn:active .tray-disc { transform: none; }
+
+/* The focus three-ring goes on the square, not the button box. */
+.sui .tray-btn:focus-visible { outline: none; }
+
+.sui .tray-btn:focus-visible .tray-disc {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+  box-shadow: var(--sh), 0 0 0 9px var(--ink);
+}
+
+/* 15 px Lilita at any root size (decorative: the buttons' aria-labels carry the names), white with
+   the halo, overlapping the square's bottom. Below 340 px (or when fit() needs the room) the icons
+   and the aria-labels carry the menu. */
 .tray-label {
+  position: relative;
+  z-index: 2;
   max-width: calc(100% + 12px);
-  padding: 2px 7px;
-  border-radius: var(--pill);
-  background: rgba(255, 248, 238, 0.82);
-  font-weight: 800;
-  font-size: clamp(12px, calc(var(--cw) * 0.036), 14px);
-  line-height: 1.25;
+  margin-top: -8px;
+  font: 400 15px/1.2 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: var(--halo) var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 var(--ink);
   text-align: center;
   white-space: nowrap;
 }
@@ -405,96 +637,93 @@
   .tray-label { display: none; }
 }
 
-.tray-btn.is-locked .tray-disc {
-  color: var(--ink-3);
-  background: rgba(255, 255, 255, 0.72);
+/* Narrow columns: 56 px tray squares. */
+@media (max-width: 359.98px) {
+  .tray-disc {
+    --ic: 34px;
+    width: 56px;
+    height: 52px;
+  }
 }
 
-.tray-dot {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--danger);
-  box-shadow: 0 0 0 2.5px #fff;
-  animation: dot-pulse 1.8s ease-in-out infinite;
-}
-
-@keyframes dot-pulse {
-  50% { transform: scale(1.25); }
-}
-
+/* The lock: a gold coin at the bottom-right (Endless: the top-right, its tag hangs below). */
 .tray-lock {
-  --d: 24px;
-  --ic: 14px;
   position: absolute;
-  right: -4px;
-  bottom: -4px;
-  border-radius: 50%;
-  background: var(--gold);
-  color: var(--ink);
-  box-shadow: 0 0 0 2.5px #fff;
+  z-index: 3;
+  right: -6px;
+  bottom: -6px;
+}
+
+.endless-pill .tray-lock {
+  top: -8px;
+  right: -8px;
+  bottom: auto;
 }
 
 /* Progressive disclosure (title.ts renderGates): a locked feature shows its lock (a tap says how to
-   unlock it); a newly unlocked one a NEW tag and a pulse until it is opened. */
+   unlock it); a newly unlocked one a NEW sticker and a pulse until it is opened. */
 .tray-btn:not(.is-locked) .tray-lock,
 .endless-pill:not(.is-locked) .tray-lock,
 .tray-btn:not(.is-new) .new-tag,
 .endless-pill:not(.is-new) .new-tag,
 .tile:not(.is-new) .new-tag { display: none; }
 
-.endless-pill { overflow: visible !important; }
-
-.endless-pill.is-locked {
-  --bg: rgba(255, 255, 255, 0.72);
-  color: var(--ink-3);
-}
-
 .new-tag {
   position: absolute;
-  top: -8px;
+  z-index: 3;
+  top: -12px;
   left: 50%;
-  padding: 1px 6px;
-  border-radius: var(--pill);
-  /* White on this red keeps 4.5:1 at the tag's small size. */
-  background: #c4302b;
-  color: #fff;
-  box-shadow: 0 0 0 2px #fff;
-  font-size: 0.6875rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  line-height: 1.3;
-  text-transform: uppercase;
-  transform: translateX(-50%) rotate(-6deg);
+  translate: -50% 0;
+  rotate: -6deg;
 }
 
 :is(.tray-btn.is-new .tray-disc, .endless-pill.is-new) { animation: new-pulse 1.6s ease-in-out infinite; }
 
-/* The NEW tag speaks for a just-unlocked button: its claim dot waits until it has been opened. */
+/* The NEW sticker speaks for a just-unlocked button: its claim dot waits until it has been opened. */
 .sui .tray-btn.is-new .has-dot::after { display: none; }
 
 @keyframes new-pulse {
-  50% { box-shadow: 0 4px 0 rgba(43, 33, 64, 0.16), 0 0 0 7px rgba(255, 194, 61, 0.55); }
+  50% { scale: 1.06; }
 }
 
-/* Tight columns (title.ts fit(), after the tray labels): smaller discs and a slimmer pill. */
+/* Tight columns (title.ts fit(), after the tray labels): smaller squares and a slimmer Play. */
 .title-bottom.is-tight .tray-disc {
-  --ic: 24px;
-  width: 48px;
+  --ic: 30px;
+  width: 52px;
   height: 48px;
 }
 
-.title-bottom.is-tight .modes .btn {
-  min-height: 44px;
-  padding-top: 2px;
-  padding-bottom: 2px;
+.title-bottom.is-tight .btn.mode-sq {
+  --h: 56px;
+  --w: 58px;
+  --ic: 32px;
 }
 
-.title-bottom.is-tight .title-gap { flex-basis: 4px; }
+.title-bottom.is-tight .modes .play-pill { --h: 64px; }
+
+.title-bottom.is-tight .play-coin {
+  width: 34px;
+  height: 34px;
+}
+
+.title-bottom.is-tight .title-gap {
+  flex-basis: 2px;
+  min-height: 2px;
+}
+
+/* Tight: the rows close up (the tags still clear the tray), the chips are 36 px faces (their hit
+   boxes stay 44). */
+.title-bottom.is-tight .modes { margin-bottom: 4px; }
+
+.title-bottom.is-tight .tray-btn { padding-top: 0; }
+
+.title-bottom.is-tight .chips .chip--btn { min-height: 36px; }
+
+.title-bottom.is-tight { padding-bottom: calc(var(--in-bottom) + 8px); }
 
 /* Tiny screens: the chips row goes before the modes or the tray would (the Profile stays
    reachable from the rank badge). */
 .title-bottom.no-chips .chips { display: none; }
+
+/* High contrast: no shine, no shades' softness needed (the kit flattens the faces). */
+.sui.is-hc .play-pill::after { display: none; }
