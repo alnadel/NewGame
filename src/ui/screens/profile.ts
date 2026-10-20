@@ -3,19 +3,23 @@
 // were the Journal (bests, the last 30 endless runs, lifetime totals; ui.css's Journal and badge
 // styles). Opened from the rank badge, the Title's best chip and Missions; Back returns there.
 // Opening it marks the trophies seen.
+// Look (docs/UI_V2.md §10.10, styles/profile.css): a violet hero with the rank on a gold medal and a
+// name plate, the rank road as candy nodes on a dirt road, trophies as medal cards in their tier,
+// the collection as wells ringed by rarity, the records' bests as wells and the chart in a well.
 
 import { formatScore } from '../../core/format.ts';
 import { ACHIEVEMENTS, COSMETICS, getCosmetic } from '../../meta/content.ts';
 import { featureIsNew, featureUnlocked, markFeatureSeen, markTrophiesSeen, nextGlobeRank, rankRoad, rankView, rarity, trophyProgress, trophyTier } from '../../meta/gamify.ts';
 import { CAMPAIGN_STARS_MAX, totalStars } from '../../meta/progression.ts';
 import { h, setChildren } from '../dom.ts';
-import { globeSvg, openGlobes, rankRing, streakCard } from '../gamify.ts';
+import { artIcon } from '../art-icons.ts';
+import { globeSvg, openGlobes, streakCard } from '../gamify.ts';
 import { icon, type IconName } from '../icons.ts';
 import { journalChart, journalSummary, playTime } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { cosmeticSwatch } from '../swatches.ts';
 import type { ScreenId } from '../types.ts';
-import { button, hide, menuHeader, progressBar } from '../widgets.ts';
+import { button, hide, medal, menuHeader, progressBar } from '../widgets.ts';
 
 /** Bars keep a sliver of height so a 6:05 AM melt still shows. */
 const MIN_BAR = 0.04;
@@ -32,23 +36,29 @@ export function createProfileScreen(ctx: UiContext): Screen {
   let fresh = 0;
   let showAll = false;
 
-  const ring = rankRing();
+  // The hero: the rank number on a gold medal, its name on a plate, the violet XP bar with the
+  // count inside it, and when the next Snow Globe comes.
+  const rankMedal = medal('1', { size: 80, className: 'pf-medal' });
+  rankMedal.setAttribute('aria-hidden', 'true');
   const kicker = h('span', { class: 'rank-kicker' });
   const rankName = h('span', { class: 'rank-name' });
-  const xpBar = progressBar(0, 'xp-bar');
-  const xpCount = h('span', { class: 'num' });
-  const xpNext = h('span', null);
-  const hero = h('section', { class: 'card pf-hero' }, ring.el, h('span', { class: 'rank-text' }, kicker, rankName), xpBar, h('span', { class: 'xp-foot' }, xpCount, xpNext));
+  const xpCount = h('span', { class: 'bar-label' });
+  const xpBar = progressBar(0, 'bar pf-xp', 'violet');
+  xpBar.removeAttribute('aria-hidden');
+  xpBar.append(xpCount);
+  const xpNext = h('p', { class: 'pf-next' });
+  const hero = h('section', { class: 'card panel--violet pf-hero' }, rankMedal, h('span', { class: 'rank-text plate' }, kicker, rankName), xpBar, xpNext);
   const road = h('ol', { class: 'pf-road' });
 
   const globeCount = h('strong', null);
-  const globes = h('section', { class: 'card pf-globes' }, globeSvg(), h('div', null, globeCount, 'Each holds an item you don’t own yet.'),
+  const globes = h('section', { class: 'card panel--gold pf-globes' }, h('span', { class: 'pf-globe-art', 'aria-hidden': 'true' }, globeSvg()),
+    h('div', null, globeCount, 'Each holds an item you don’t own yet.'),
     button(ctx, { label: 'Open', icon: 'gift', variant: 'gold', className: 'pf-open', sound: null, onPress: () => void openGlobes(ctx) }));
   const streak = streakCard(ctx);
 
   const count = (): HTMLElement => h('span', { class: 'card-count' });
   const trophyCount = count();
-  const trophyNew = h('span', { class: 'pf-new' });
+  const trophyNew = h('span', { class: 'sticker pf-new' });
   const trophies = h('ul', { class: 'badges' });
   const more = button(ctx, { label: '', className: 'pf-more', onPress: () => {
     showAll = !showAll;
@@ -56,12 +66,12 @@ export function createProfileScreen(ctx: UiContext): Screen {
   } });
 
   const ownedCount = count();
-  const ownedBar = progressBar(0, 'bar bar--lg');
+  const ownedBar = progressBar(0, 'bar bar--sm');
   const swatches = h('ul', { class: 'pf-swatches', 'aria-hidden': 'true' });
   const starsCount = h('span', { class: 'num' });
-  const starsBar = progressBar(0, 'bar bar--lg');
-  const wardrobeBtn = button(ctx, { label: 'Wardrobe', icon: 'wardrobe', onPress: () => ctx.go('wardrobe') });
-  const journeyBtn = button(ctx, { label: 'Journey', icon: 'map', onPress: () => {
+  const starsBar = progressBar(0, 'bar bar--sm');
+  const wardrobeBtn = button(ctx, { label: 'Wardrobe', icon: 'wardrobe', size: 'sm', onPress: () => ctx.go('wardrobe') });
+  const journeyBtn = button(ctx, { label: 'Journey', icon: 'map', size: 'sm', onPress: () => {
     ctx.go('journey');
     ctx.cb.openJourney();
   } });
@@ -82,7 +92,7 @@ export function createProfileScreen(ctx: UiContext): Screen {
     streak.el,
     card('Trophies', h('span', null, trophyNew, trophyCount), trophies, more),
     card('Collection', ownedCount, ownedBar, swatches,
-      h('p', { class: 'pf-row' }, icon('star'), 'Journey stars', starsCount), starsBar, h('div', { class: 'pf-links' }, wardrobeBtn, journeyBtn)),
+      h('p', { class: 'pf-row' }, artIcon('star'), 'Journey stars', starsCount), starsBar, h('div', { class: 'pf-links' }, wardrobeBtn, journeyBtn)),
     card('Records', null, bests, chart, chartSummary, totals),
   );
   const el = h('section', { class: 'scr scr-menu scr-profile', 'aria-label': 'Profile' }, h('div', { class: 'menu pe' }, menuHeader(ctx, 'Profile'), body));
@@ -91,12 +101,13 @@ export function createProfileScreen(ctx: UiContext): Screen {
     const save = ctx.save();
     const st = save.stats;
     const v = rankView(save);
-    ring.set(v.level, v.fraction);
+    rankMedal.textContent = String(v.level);
+    rankMedal.classList.toggle('medal--sm', String(v.level).length >= 3);
     kicker.textContent = `Sun Rank ${v.level}`;
     rankName.textContent = v.title;
     fill(xpBar, v.fraction);
     xpCount.textContent = `${v.into} / ${v.need} XP`;
-    xpNext.textContent = `Globe at Rank ${nextGlobeRank(save)}`;
+    xpNext.replaceChildren(globeSvg('globe-mini'), `Globe at Rank ${nextGlobeRank(save)}`);
 
     setChildren(
       road,
@@ -106,8 +117,8 @@ export function createProfileScreen(ctx: UiContext): Screen {
         return h(
           'li',
           { class: `pf-node${n.reached ? ' is-now' : ''}${globe ? ' is-globe' : ''}`, 'aria-label': `Rank ${n.level}, ${n.title}${n.reached ? ', now' : `: ${what}`}` },
-          h('b', { class: 'num' }, String(n.level)),
-          h('span', null, ...(n.reached ? [icon('check')] : globe ? [globeSvg('globe-mini')] : [icon('snow'), `+${n.reward.amount}`])),
+          h('b', { class: 'node' }, String(n.level)),
+          h('span', { class: 'pf-reward' }, ...(n.reached ? [artIcon('check')] : globe ? [globeSvg('globe-mini')] : [artIcon('snow'), `+${n.reward.amount}`])),
           h('small', null, n.title),
         );
       }),
@@ -137,10 +148,10 @@ export function createProfileScreen(ctx: UiContext): Screen {
         return h(
           'li',
           { class: `badge is-${tier}${on ? ' is-on' : ''}`, 'aria-label': `${on ? `${a.name}: ${a.description}` : `Locked: ${a.name}. ${a.hint}`} ${tier} trophy${n ? `, ${n}` : ''}${item ? `. Reward: ${item}` : ''}.` },
-          h('span', { class: 'badge-medal', 'aria-hidden': 'true' }, icon(on ? 'medal' : 'lock')),
+          h('span', { class: `badge-medal medal medal--${on ? tier : 'socket'}`, 'aria-hidden': 'true' }, on ? artIcon('trophy') : icon('lock')),
           h('span', { class: 'badge-name', 'aria-hidden': 'true' }, a.name),
           h('span', { class: 'badge-desc', 'aria-hidden': 'true' }, on ? a.description : a.hint),
-          on ? null : h('span', { class: 'pf-prog', 'aria-hidden': 'true' }, progressBar(p.value / p.target), n),
+          on ? null : h('span', { class: 'pf-prog', 'aria-hidden': 'true' }, progressBar(p.value / p.target, 'bar bar--sm'), n),
           item ? h('span', { class: 'badge-reward', 'aria-hidden': 'true' }, icon('gift'), item) : null,
         );
       }),

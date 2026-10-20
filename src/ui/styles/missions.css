@@ -1,25 +1,120 @@
-/* The Missions screen.
+/* The Missions screen (docs/UI_V2.md §10.9): the daily streak calendar (gamify.ts streakCard, also
+   shown on the Profile), the mission cards and the globe row.
    Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
    compose the kit's recipes (kit.css), never copy them. */
 
-/* Missions */
+/* ===== The daily streak: a 4-column calendar of candy plates, Day 7 a wide violet plate ===== */
+
+.streak-card .card-count {
+  font: 400 var(--fs-d-md)/1 var(--font-display);
+  color: var(--t-orange);
+}
+
+.streak-days {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 8px;
+  padding-top: 4px;
+}
+
+/* A future day: a cream plate with the Snow gem. */
+.streak-day {
+  --sh: inset 0 -4px 0 var(--cream-3), var(--drop-sm);
+  --ic: 30px;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 84px;
+  padding: 6px 2px 9px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 16px;
+  background: var(--cream);
+  box-shadow: var(--sh);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.streak-day small {
+  font: 400 var(--fs-d-xs)/1 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.streak-day > span { font: 400 var(--fs-d-md)/1 var(--font-display); }
+
+.streak-day > .globe-mini {
+  width: 46px;
+  height: 46px;
+}
+
+/* Day 7: twice as wide, light violet, the globe beside its words. */
+.streak-day.is-globe {
+  --sh: inset 0 -4px 0 var(--violet), var(--top-light), var(--drop-sm);
+  grid-column: span 2;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  align-items: center;
+  column-gap: 8px;
+  background: linear-gradient(180deg, var(--violet-hi), color-mix(in srgb, var(--violet-hi), var(--violet)));
+}
+
+.streak-day.is-globe > svg { grid-row: 1 / span 2; }
+.streak-day.is-globe > small { align-self: end; justify-self: start; }
+.streak-day.is-globe > span { align-self: start; justify-self: start; font-size: var(--fs-d-lg); }
+
+/* Claimed: a green candy plate with a check (ink on green, 8.2:1). */
+.streak-day.is-claimed {
+  --sh: inset 0 -4px 0 var(--green-lo), var(--top-light), var(--drop-sm);
+  background: linear-gradient(180deg, var(--green-hi), var(--green));
+}
+
+/* Today: a raised gold plate in a static glow ring. */
+.streak-day.is-today {
+  --sh: inset 0 -4px 0 var(--gold-lo), var(--top-light), 0 6px 0 var(--ink), 0 0 0 5px rgba(255, 220, 90, 0.75), 0 0 0 9px rgba(255, 220, 90, 0.3);
+  z-index: 1;
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+  transform: translateY(-4px);
+}
+
+.streak-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.streak-foot .card-note {
+  flex: 1 1 180px;
+  margin: 0;
+}
+
+/* Claim: green L with the gift; on a phone it takes the row under the note. */
+.sui .streak-claim { flex: 1 1 140px; }
+
+/* ===== Mission cards: plates ===== */
 
 .mission-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .mcard {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: var(--paper);
+  gap: 8px;
+  padding: 12px 12px 12px 14px;
 }
 
-.mcard.is-done { background: var(--accent-soft); }
+/* Done: a green-tinted plate; the COMPLETE stamp says it in words. */
+.mcard.is-done {
+  background: var(--tint-green);
+  box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--green) 45%, var(--tint-green)), var(--drop-sm);
+}
 
 .mcard-top {
   display: flex;
@@ -29,82 +124,94 @@
 }
 
 .mcard-label {
-  font-weight: 800;
-  font-size: var(--fs-md);
-  line-height: 1.25;
+  padding-top: 6px;
+  font: 400 var(--fs-d-md)/1.15 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+/* The reward: a cream chip with the Snow gem. */
+.mcard-reward {
+  --ic: 28px;
+  gap: 4px;
+  padding: 0 12px 0 3px;
 }
 
 .mcard-hint {
-  margin: 2px 0 0;
-  font-size: var(--fs-2xs);
-  line-height: 1.3;
   color: var(--ink-2);
+  font: 700 var(--fs-xs)/1.3 var(--font-body);
 }
 
 .mcard-bottom {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 48px;
 }
 
 .mcard-bottom .bar { flex: 1 1 auto; }
 
-.mcard-prog {
-  font-weight: 800;
-  font-size: var(--fs-md);
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.mcard-bottom .bar-label { padding-bottom: 1px; }
+
+.mcard-bottom .stamp {
+  flex: none;
+  margin-right: 4px;
 }
 
-.badges {
+.sui .mcard-swap {
+  --ic: 22px;
+  flex: none;
+  padding: 2px 12px var(--lipH) 9px;
+  gap: 5px;
+}
+
+/* ===== The globe row: an ice well, the globe art and three coins ===== */
+
+.mset {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.badge {
-  gap: 4px;
-  padding: 14px 10px 12px;
-  border-radius: 16px;
-  background: var(--paper);
-  text-align: center;
-}
-
-.badge-medal {
-  --d: 52px;
-  --ic: 26px;
-  margin-bottom: 4px;
-  border-radius: 50%;
-  background: rgba(43, 33, 64, 0.08);
-  color: var(--ink-3);
-}
-
-.badge.is-on .badge-medal {
-  background: radial-gradient(circle at 35% 30%, #ffe9a8, var(--gold) 60%);
-  color: #7a4c00;
-  box-shadow: 0 3px 0 var(--gold-deep), 0 0 0 4px var(--gold-soft);
-}
-
-.badge-name {
-  font-weight: 900;
-  font-size: var(--fs-md);
-}
-
-.badge:not(.is-on) .badge-name { color: var(--ink-2); }
-
-.badge:not(.is-on) .badge-desc { font-style: italic; }
-
-.badge-reward {
-  --ic: 14px;
-  display: inline-flex;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 2px 8px;
-  border-radius: var(--pill);
-  background: var(--gold-soft);
-  color: #7a4c00;
-  font-weight: 800;
-  font-size: var(--fs-md);
+  gap: 10px;
+  margin-top: 14px;
+  padding: 8px 12px 9px 8px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--ice-hi), #CDEBFF);
+  box-shadow: inset 0 3px 0 rgba(45, 127, 200, 0.22), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
+  color: var(--ink);
+  font: 800 var(--fs-md)/1.3 var(--font-body);
 }
+
+.mset > svg {
+  width: 48px;
+  height: 48px;
+}
+
+.mset-pips {
+  display: flex;
+  gap: 6px;
+}
+
+/* An empty socket, or a green coin with a check: shape and fill, not colour alone. */
+.mset-pips i {
+  --ic: 16px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.mset-pips i.is-on {
+  background: radial-gradient(circle at 45% 35%, var(--green-hi), var(--green) 55%, var(--green-lo));
+  box-shadow: inset 0 -3px 0 var(--green-lip), 0 2px 0 var(--ink);
+}
+
+/* High contrast: flat faces. */
+.sui.is-hc .streak-day.is-claimed,
+.sui.is-hc .mset-pips i.is-on { background: var(--green); }
+.sui.is-hc .streak-day.is-today { background: var(--gold); }
+.sui.is-hc .streak-day.is-globe:not(.is-claimed, .is-today) { background: var(--violet-hi); }
+.sui.is-hc .mset { background: var(--ice-hi); }

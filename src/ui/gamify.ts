@@ -26,6 +26,7 @@ import {
   type Reward,
 } from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
+import { artIcon } from './art-icons.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from './dom.ts';
 import { icon } from './icons.ts';
 import { RARITY_LABEL } from './labels.ts';
@@ -359,12 +360,17 @@ export function claimDailyReward(ctx: UiContext): Promise<void> {
   return revealRewards(ctx, rewards);
 }
 
-/** The 7-day streak calendar with today's Claim button (Missions, Profile; the Title may show it too). */
+/**
+ * The 7-day streak calendar with today's Claim button (Missions, Profile; the Title may show it too).
+ * Its look (docs/UI_V2.md §10.9, styles/missions.css): claimed days are green candy plates with a
+ * check, today a raised gold plate, future days cream plates with the Snow gem, and Day 7 a wide
+ * violet plate holding the Snow Globe.
+ */
 export function streakCard(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
   const days = h('ol', { class: 'streak-days' });
   const countEl = h('span', { class: 'card-count' });
   const note = h('p', { class: 'card-note' });
-  const claim = button(ctx, { label: 'Claim', icon: 'gift', variant: 'primary', className: 'streak-claim', sound: null, onPress: () => void claimDailyReward(ctx) });
+  const claim = button(ctx, { label: 'Claim', icon: 'gift', variant: 'primary', size: 'lg', className: 'streak-claim', sound: null, onPress: () => void claimDailyReward(ctx) });
   const el = h('section', { class: 'card streak-card' }, h('h3', { class: 'card-title' }, 'Daily streak', countEl), days, h('div', { class: 'streak-foot' }, note, claim));
   const update = (save: Save): void => {
     const v = streakView(save, ctx.today());
@@ -380,7 +386,7 @@ export function streakCard(ctx: UiContext): { el: HTMLElement; update(save: Save
             'aria-label': `Day ${d.day}: ${globe ? 'a Snow Globe' : `${d.reward.amount} Snow`}${d.state === 'today' ? ', ready' : d.state === 'claimed' ? ', claimed' : ''}`,
           },
           h('small', { 'aria-hidden': 'true' }, `Day ${d.day}`),
-          globe ? globeSvg('globe-mini') : icon(d.state === 'claimed' ? 'check' : 'snow'),
+          d.state === 'claimed' ? artIcon('check') : globe ? globeSvg('globe-mini') : artIcon('snow'),
           h('span', { 'aria-hidden': 'true' }, globe ? 'Globe' : `+${d.reward.amount}`),
         );
       }),
