@@ -1604,8 +1604,9 @@ version line and the font credit (§2.1) at the end in `--ink-2` on the sand end
 
 ### 10.12 Overlays (B1)
 
-Confirm dialog, install/restore sheet: §6.15. Rotate overlay (`.rotate`): the warm sky, the phone art
-outlined in ink, the title Lilita `--fs-d-xl` white outlined, the sub body 800 ink. Toast stack: §6.14.
+Confirm dialog, install/restore sheet: §6.15. Rotate overlay (`.rotate`): the warm sky, a cream panel
+(`.rotate-card`) holding the phone art (an ink-outlined blue candy phone with Nubs on a sky screen,
+turning upright), the title Lilita `--fs-d-xl` white outlined, the sub body 800 ink. Toast stack: §6.14.
 
 ### 10.13 HUD, level intro card, toasts
 

@@ -565,11 +565,27 @@
 
 .rotate.is-on { display: flex; }
 
+/* On the warm sky, a cream card (the kit's panel) holds a candy phone with Nubs on its screen. */
+.rotate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 460px;
+}
+
+/* The phone: an ink-outlined blue body, a sky screen, a deeper chin. */
 .rotate-phone {
-  --ic: 64px;
-  width: 64px;
-  height: 64px;
-  color: var(--ink);
+  --ic: 40px;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 94px;
+  margin-bottom: 6px;
+  border: var(--bw-lg) solid var(--ink);
+  border-radius: 15px;
+  background: linear-gradient(180deg, var(--sky-1), var(--sky-3));
+  box-shadow: inset 0 0 0 6px var(--blue), inset 0 -12px 0 6px var(--blue), var(--drop);
   animation: rotate-hint 2.4s var(--ease-out) infinite;
 }
 
@@ -578,10 +594,9 @@
   55%, 100% { transform: rotate(0deg); }
 }
 
-.rotate-phone .ic { stroke-width: 2.4; }
-
 .rotate-title {
   font: 400 var(--fs-d-xl)/1.1 var(--font-display);
+  word-spacing: 0.12em;
   font-synthesis: none;
   color: #fff;
   -webkit-text-stroke: var(--halo) var(--ink);

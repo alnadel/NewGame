@@ -2,6 +2,7 @@
 
 import type { ToastIcon } from '../meta/progression.ts';
 import { copyText } from '../platform/share.ts';
+import { artIcon } from './art-icons.ts';
 import { h } from './dom.ts';
 import { icon, type IconName } from './icons.ts';
 import type { ConfirmOptions, UiContext } from './screen.ts';
@@ -285,8 +286,12 @@ export function createRotateOverlay(): HTMLElement {
   return h(
     'div',
     { class: 'rotate', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'rotate-title' },
-    h('div', { class: 'rotate-phone', deco: true }, icon('phone')),
-    h('h2', { class: 'rotate-title', id: 'rotate-title' }, 'Turn your phone upright'),
-    h('p', 'rotate-sub', 'SHADY plays in portrait. Nubs will wait.'),
+    h(
+      'div',
+      'panel rotate-card',
+      h('div', { class: 'rotate-phone', deco: true }, artIcon('nubs')),
+      h('h2', { class: 'rotate-title', id: 'rotate-title' }, 'Turn your phone upright'),
+      h('p', 'rotate-sub', 'SHADY plays in portrait. Nubs will wait.'),
+    ),
   );
 }

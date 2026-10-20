@@ -40,7 +40,6 @@ const ICONS = {
   restore: `<path d="M12 4v10.6"/><path d="M7.6 10.4 12 14.8l4.4-4.4"/><path d="M5 19.6h14"/>`,
   trash: `<path d="M4.5 7h15M9.6 7V5.2c0-.8.6-1.4 1.4-1.4h2c.8 0 1.4.6 1.4 1.4V7M6.5 7l.9 11.8a2 2 0 0 0 2 1.9h5.2a2 2 0 0 0 2-1.9L17.5 7"/>`,
   plusSquare: `<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8.4v7.2M8.4 12h7.2"/>`,
-  phone: `<rect x="7" y="2.6" width="10" height="18.8" rx="2.6"/><path d="M10.8 18.2h2.4"/>`,
   gift: `<rect x="4" y="9" width="16" height="11" rx="2.2"/><path d="M3.4 9h17.2M12 9v11"/><path d="M12 9C10.6 5.7 6.6 5 6.6 7.2 6.6 8.6 9 9 12 9Zm0 0c1.4-3.3 5.4-4 5.4-1.8C17.4 8.6 15 9 12 9Z"/>`,
   info: `<circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.6M12 7.8v.1"/>`,
   warn: `<path d="M12 4.2 21 19.6H3Z"/><path d="M12 10v4.6M12 17.1v.1"/>`,
