@@ -6,7 +6,7 @@ import { h } from './dom.ts';
 import { icon, type IconName } from './icons.ts';
 import type { ConfirmOptions, UiContext } from './screen.ts';
 import type { ToastOptions } from './types.ts';
-import { button } from './widgets.ts';
+import { button, ribbon } from './widgets.ts';
 
 // ---------------------------------------------------------------------------------------------
 // Toasts: a stack at the top of the world column (below the header on menus, below the HUD row in
@@ -18,6 +18,10 @@ const TOAST_MAX = 3;
 const TOAST_OUT_MS = 220;
 /** A screen switch clears the stack this fast (the CSS fade is 120 ms). */
 const TOAST_CLEAR_MS = 140;
+/** Longer texts are sentences (storage, backup): they read in the body font (docs/UI_V2.md §6.14). */
+const TOAST_LONG = 34;
+/** The icon coin's candy face by tone (kit.css face classes). */
+const TOAST_FACE: Record<NonNullable<ToastOptions['tone']>, string> = { ink: 'f-cloud', accent: 'f-green', gold: 'f-gold', danger: 'f-red' };
 
 /** The icon a toast (or a Results award chip) shows for a ToastSpec icon. */
 export function toastIconName(i: ToastIcon): IconName {
@@ -46,8 +50,8 @@ export function createToastStack(): ToastStack {
     show(text, o = {}) {
       const t = h(
         'div',
-        { class: `toast toast--${o.tone ?? 'ink'}` },
-        h('span', { class: 'toast-ic', 'aria-hidden': 'true' }, icon(toastIconName(o.icon ?? 'info'))),
+        { class: `toast toast--${o.tone ?? 'ink'}${text.length > TOAST_LONG ? ' toast--long' : ''}` },
+        h('span', { class: `toast-ic ${TOAST_FACE[o.tone ?? 'ink']}`, 'aria-hidden': 'true' }, icon(toastIconName(o.icon ?? 'info'))),
         h('span', { class: 'toast-text' }, text),
       );
       el.append(t);
@@ -147,11 +151,13 @@ export function createModalHost(ctx: () => UiContext, onOpenChange: (open: boole
           resolve(true);
           finish();
         } });
+        // The title is the ribbon on the card's top edge (red when it destroys data).
+        const title = ribbon(o.title, { tone: o.danger ? 'red' : 'blue', bandClass: 'dialog-title' });
         const content = h(
           'div',
           { class: 'confirm' },
+          title.el,
           h('div', { class: `confirm-ic${o.danger ? ' is-danger' : ''}`, 'aria-hidden': 'true' }, icon(o.danger ? 'warn' : 'info')),
-          h('h2', { class: 'dialog-title' }, o.title),
           h('p', { class: 'dialog-sub' }, o.body),
           h('div', { class: 'row-2' }, cancel, ok),
         );

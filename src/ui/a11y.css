@@ -20,12 +20,19 @@
 
 .sui.is-rm .res-death .caret { display: none; }
 
+/* A press shrinks the lip but never moves the face. */
+.sui.is-rm .btn:active,
+.sui.is-rm .candy:active,
+.sui.is-rm .chip--btn:active { transform: none; }
+
 /* ===== Desktop affordances: hover states and the grab cursor on the game canvas. ===== */
 
 @media (hover: hover) {
-  .btn:hover:not([aria-disabled='true']) {
-    filter: brightness(1.05);
-    box-shadow: 0 5px 0 var(--lip), var(--halo, 0 6px 16px) var(--glow);
+  /* The face brightens (a variable can't be redefined from itself, so the gradient is restated);
+     never a filter. */
+  .btn:hover:not([aria-disabled='true']),
+  .candy:is(button, a):hover:not([aria-disabled='true']) {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--hi), #fff 25%), color-mix(in srgb, var(--face), #fff 12%) 46%, var(--lo));
   }
 
   .tray-btn:hover .tray-disc { background: #fff; }
@@ -34,11 +41,9 @@
 
   .tile.is-selected:hover { box-shadow: 0 0 0 3px var(--accent), var(--shadow-sm); }
 
-  .tab:hover:not([aria-selected='true']),
-  .seg-opt:hover:not([aria-checked='true']) {
-    background: rgba(255, 255, 255, 0.55);
-    color: var(--ink);
-  }
+  .tab:hover:not([aria-selected='true']) { background: linear-gradient(180deg, #84CEFB, #3D9CE8); }
+
+  .seg-opt:hover:not([aria-checked='true']) { background: rgba(255, 255, 255, 0.14); }
 }
 
 /* The canvas lives outside #ui; its cursor follows the screen: grab where a drag turns the sun. */
@@ -51,6 +56,23 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
 /* ===== Forced colors (Windows High Contrast): state must not live in backgrounds and shadows alone. ===== */
 
 @media (forced-colors: active) {
+  /* Halos, drops and decoration fall away; the kit's real borders stay. */
+  .sui * {
+    -webkit-text-stroke: 0 !important;
+    text-shadow: none !important;
+  }
+
+  .btn::before,
+  .candy::before,
+  .burst,
+  .ribbon-tail,
+  .scr-menu::before { display: none; }
+
+  .switch[aria-checked='true'] .switch-knob { border-color: Highlight; }
+
+  .seg-opt[aria-checked='true'],
+  .tab[aria-selected='true'] { border: 4px solid Highlight; }
+
   .switch { border: 2px solid ButtonText; }
 
   .switch[aria-checked='true'] { background: Highlight; }
@@ -67,10 +89,8 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
     outline-offset: -2px;
   }
 
-  .btn,
+  /* The kit's controls keep their own borders; these had none. */
   .tray-btn,
-  .tab,
-  .seg-opt,
   .tile { border: 1px solid ButtonText; }
 
   /* Range tracks: keep the track and the fill visible. */
@@ -101,7 +121,7 @@ body:has(#ui[data-screen='play']) #game:active { cursor: grabbing; }
   .bar,
   .pip { border: 1px solid CanvasText; }
 
-  .bar i {
+  .bar > i {
     forced-color-adjust: none;
     background: Highlight;
   }

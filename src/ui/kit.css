@@ -1,0 +1,1384 @@
+/* SHADY UI kit, v2 "Candy" (docs/UI_V2.md §3-§8). Owner: B1 Kit.
+   Tokens, faces, type and every shared component recipe: candy buttons, panels, plates, wells,
+   ribbons, counters, medals, chips, tags, stickers, bars, tabs, the segmented control, the toggle,
+   the slider, toasts, dialogs and sheets, the menu sky and the celebration burst. Imported by ui.ts
+   first; screen files (styles/*.css) compose these recipes and never fork them: a missing variant
+   is added here.
+
+   Rules of the look: one ink for every outline, halo and hard drop; Lilita One with an ink halo
+   for display text (never under 15 px), the system font for sentences; everything pressable has a
+   lip and sinks onto it; colour means role (green go, blue navigate, violet endless/XP, pink share
+   and dares, gold rewards, red danger and titles, cloud neutral). Components write
+   `box-shadow: var(--sh)` so focus and press states can extend the stack. Only transform and
+   opacity animate. */
+
+.sui {
+  /* Ink: every outline, text halo, hard drop and dark text. */
+  --ink: #2A1B45;
+  --ink-2: #4E3A6E;            /* secondary text: 9.2:1 on cream, 8.4:1 on cream-2 */
+
+  /* Cream: panel faces, plates, wells. */
+  --cream: #FFF8E6;
+  --cream-2: #FFEDC2;
+  --cream-3: #EBC982;
+
+  /* Candy faces: -hi (top), face, -lo (bottom), -lip (the extruded bottom band). */
+  --green-hi: #B4F25E;  --green: #69D33B;  --green-lo: #43B226;  --green-lip: #2C8416;
+  --blue-hi: #8EDBFF;   --blue: #3FAEF7;   --blue-lo: #2189E6;   --blue-lip: #1660B4;
+  --gold-hi: #FFF07A;   --gold: #FFCB2B;   --gold-lo: #FFA51C;   --gold-lip: #CF6F00;
+  --pink-hi: #FFA3C0;   --pink: #FF6390;   --pink-lo: #EE3D6E;   --pink-lip: #AE2453;
+  --violet-hi: #D7B0FF; --violet: #A26AF7; --violet-lo: #8550EC; --violet-lip: #5B2EB4;
+  --red-hi: #FF9A6E;    --red: #FF6A45;    --red-lo: #F0472C;    --red-lip: #B0301A;
+  --cloud-hi: #FFFFFF;  --cloud: #F4F1FB;  --cloud-lo: #DCD5EC;  --cloud-lip: #A99CC6;
+  --ice-hi: #E9F6FF;    --ice: #9ED8FF;    --ice-lo: #4FA9EE;    --ice-lip: #2D7FC8;
+  --locked-hi: #EEEAF5; --locked: #D9D1E6; --locked-lo: #C3B8D6; --locked-lip: #A99CC6;
+
+  /* The embossed slot (counters, bar tracks, toggle off, the HUD goal pill). Always opaque. */
+  --slot-1: #3B2A5A;
+  --slot-2: #4E3B6C;
+  --slot-sub: #FFE58A;         /* secondary numbers on the slot: 10.1:1 */
+  --slot-off: #E6DCF5;         /* "OFF" on the toggle slot: 6.8:1 */
+
+  /* Accent text on cream (each ≥ 4.5:1 on --cream). */
+  --t-green: #136E4E;  --t-blue: #1660B4;  --t-rose: #C62A55;  --t-amber: #B5560A;
+  --t-orange: #C9470F; --t-violet: #5B2EB4; --t-brown: #8A4B00;
+
+  /* Light tinted chip faces (ink or accent text on them). */
+  --tint-green: #E5F8D8; --tint-blue: #E3F3FF; --tint-gold: #FFF1C9;
+  --tint-pink: #FFE4EE;  --tint-violet: #F1E6FF;
+
+  /* Bubbles and stickers: flat faces, so small white text passes without a halo. */
+  --bubble: #D9263A;           /* white: 4.9:1 */
+  --sticker: #B8285A;          /* white: 6.0:1 */
+
+  /* The warm sky behind full-screen menus. */
+  --sky-1: #7CCBF2; --sky-2: #BFE7F4; --sky-3: #FBE9C6; --sky-4: #EBD3A0;
+  --sky-glow: #FFE6A3; --cloud-shade: #E9DCC8;
+
+  /* Chapter boards (the Journey). */
+  --meadow-hi: #B6EE7C;  --meadow: #6CCB45;  --meadow-lo: #3E9B2A;
+  --meadow-ground: #CFEFA3;  --meadow-ground-2: #B5E284;
+  --oldtown-hi: #FFB088; --oldtown: #F2774A; --oldtown-lo: #C9502C;
+  --oldtown-ground: #F7DDB0; --oldtown-ground-2: #EFCB8E;
+  --lockboard-hi: #CDC4DD; --lockboard: #A99DC0; --lockboard-lo: #8A7DA6;
+  --lockboard-ground: #EAE5F2;
+
+  /* The map road: the world's own dirt road. */
+  --road-edge: #C9826A; --road: #E8A98A; --road-hi: #F2BEA0;
+  --road-todo-edge: #BFA796; --road-todo: #DCC6B6;
+
+  /* The game's shade colour, under map props and nodes. */
+  --shade: rgba(90, 74, 120, 0.32);
+
+  /* Scrims. */
+  --scrim: rgba(56, 30, 50, 0.58);       /* Pause, confirm, install: warm plum */
+  --scrim-rv: rgba(34, 20, 64, 0.88);    /* the reward reveal's stage */
+
+  /* Elevation and outline (§5). */
+  --top-light: inset 0 2px 0 rgba(255, 255, 255, 0.65);
+  --drop-sm: 0 3px 0 var(--ink);
+  --drop: 0 4px 0 var(--ink);
+  --drop-lg: 0 6px 0 var(--ink);
+  --soft: 0 14px 24px -8px rgba(42, 27, 69, 0.45);   /* panels and modals only */
+  --bw-sm: 2.5px; --bw: 3px; --bw-lg: 4px;
+
+  /* Radii. */
+  --r-sm: 14px; --r: 18px; --r-lg: 22px; --r-xl: 24px; --r-panel: 30px; --pill: 999px;
+
+  /* Type (§4): display sizes in rem (the large-text specs scale them); body steps below. */
+  --font-display: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font: var(--font-body);
+  --halo: 0.24em;              /* the ink halo's stroke width (§4.2) */
+  --fs-d-hero: 2.125rem;       /* 34: the Daily number */
+  --fs-d-2xl: 1.875rem;        /* 30: XL buttons, level names */
+  --fs-d-xl: 1.625rem;         /* 26: ribbons, L buttons */
+  --fs-d-lg: 1.375rem;         /* 22: M buttons, counters, node numbers, card titles */
+  --fs-d-md: 1.125rem;         /* 18: S buttons, chips, small ribbons, labels */
+  --fs-d-sm: 0.9375rem;        /* 15: tags, bar labels, kickers on the world (the halo floor) */
+  --fs-d-xs: 0.8125rem;        /* 13: kickers on frames, stickers, ON/OFF: never haloed */
+  --fs-2xs: 0.8125rem;
+  --fs-xs: 0.875rem;
+  --fs-sm: 0.9375rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+
+  /* Motion (§7). */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-down: 80ms; --t-up: 140ms; --t: 180ms;
+
+  /* Legacy aliases (v1.4 names), kept while the screen files move to the tokens above; each goes
+     once grep shows no rule uses it (§3). */
+  --ink-3: var(--ink-2);
+  --paper: var(--cream); --paper-2: var(--cream-2); --panel: var(--cream);
+  --line: rgba(42, 27, 69, 0.14);
+  --accent: var(--green); --accent-deep: var(--green-lip);
+  --accent-ink: var(--t-green); --accent-soft: var(--tint-green);
+  --gold-deep: var(--gold-lip); --gold-soft: var(--tint-gold);
+  --danger: var(--red); --danger-deep: var(--red-lip); --danger-soft: #FFE4DC;
+  --indigo: var(--violet-lip); --sky: var(--tint-blue);
+  --shadow-sm: var(--drop-sm); --shadow: var(--drop); --shadow-lg: var(--drop-lg), var(--soft);
+  --radius: var(--r-lg);
+  --gloss: none;
+}
+
+/* Lilita One has one weight (400): never let the browser fake a bold or italic of it. */
+.sui { font-synthesis: none; }
+
+/* §2.5: Chromium before 123 ignores paint-order on HTML text; a thinner centred halo keeps the fill. */
+.sui.no-po { --halo: 0.1em; }
+
+/* ===== Type (§4) ===== */
+
+/* Game type: white with an ink halo and a hard ink drop. Never under 15 px. */
+.sui .gt {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-shadow: 0 max(2px, 0.1em) 0 var(--ink);
+}
+
+/* Game type in ink, on cream or tints: panel titles, labels, values. */
+.sui .gt-ink {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+/* The ink halo (§4.3): every white display text on a candy face, the sky or the world. Text under
+   15 px never carries it (it passes 4.5:1 by its fill alone). Rules that drop it set the stroke to 0. */
+.sui .gt,
+.btn,
+.ribbon-band,
+.counter,
+.chip--snow,
+.chip--stars,
+.medal,
+.chip--dark,
+.bar-label,
+.stamp,
+.tab,
+.seg-opt,
+.node {
+  -webkit-text-stroke: var(--halo) var(--ink);
+  paint-order: stroke fill;
+}
+
+/* Body-font glyphs inside display text (★ ← → ≤ and emoji are not in the Lilita subset, §2.4). */
+.sui .glyph { font-family: var(--font-body); font-weight: 800; -webkit-text-stroke: 0; }
+
+/* ===== Focus (§8.3): an ink | white | ink ring that reads on sky, cream and the world ===== */
+
+.sui :focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.sui .btn:focus-visible,
+.sui .candy:focus-visible,
+.sui .tab:focus-visible,
+.sui .seg-opt:focus-visible,
+.sui .switch:focus-visible,
+.sui .chip--btn:focus-visible,
+.sui .tile:focus-visible,
+.sui .rank-badge:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+  box-shadow: var(--sh, 0 0 #0000), 0 0 0 9px var(--ink);
+}
+
+/* ===== Candy button (§6.1) ===== */
+
+.btn,
+.candy {
+  --hi: var(--cloud-hi);
+  --face: var(--cloud);
+  --lo: var(--cloud-lo);
+  --lip: var(--cloud-lip);
+  --r: 18px;
+  --lipH: 6px;
+  position: relative;
+  isolation: isolate;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--hi), var(--face) 46%, var(--lo));
+  box-shadow: var(--sh);
+}
+
+.btn {
+  --h: 56px;
+  --ic: 28px;
+  --sh: inset 0 calc(-1 * var(--lipH)) 0 var(--lip), var(--top-light), var(--drop);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--h);
+  min-width: 48px;
+  padding: 2px 20px var(--lipH);
+  /* Clips the gloss and the Results arming sweep to the rounded face (round coins don't clip). */
+  overflow: hidden;
+  font: 400 var(--fs-d-lg)/1.05 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-shadow: 0 max(2px, 0.1em) 0 var(--ink);
+  transition: transform var(--t-up) var(--ease-back);
+}
+
+.candy { --sh: inset 0 calc(-1 * var(--lipH)) 0 var(--lip), var(--top-light), var(--drop-sm); }
+
+/* Faces: one class sets a candy face's four colours; any element can wear it. */
+
+.f-green,  .btn--primary { --hi: var(--green-hi);  --face: var(--green);  --lo: var(--green-lo);  --lip: var(--green-lip); }
+.f-blue,   .btn--blue    { --hi: var(--blue-hi);   --face: var(--blue);   --lo: var(--blue-lo);   --lip: var(--blue-lip); }
+.f-gold,   .btn--gold    { --hi: var(--gold-hi);   --face: var(--gold);   --lo: var(--gold-lo);   --lip: var(--gold-lip); }
+.f-pink,   .btn--pink    { --hi: var(--pink-hi);   --face: var(--pink);   --lo: var(--pink-lo);   --lip: var(--pink-lip); }
+.f-violet, .btn--violet  { --hi: var(--violet-hi); --face: var(--violet); --lo: var(--violet-lo); --lip: var(--violet-lip); }
+.f-red,    .btn--danger  { --hi: var(--red-hi);    --face: var(--red);    --lo: var(--red-lo);    --lip: var(--red-lip); }
+.f-cloud,  .btn--plain   { --hi: var(--cloud-hi);  --face: var(--cloud);  --lo: var(--cloud-lo);  --lip: var(--cloud-lip); }
+.f-ice                   { --hi: var(--ice-hi);    --face: var(--ice);    --lo: var(--ice-lo);    --lip: var(--ice-lip); }
+.f-locked, .is-locked.btn { --hi: var(--locked-hi); --face: var(--locked); --lo: var(--locked-lo); --lip: var(--locked-lip); }
+
+
+/* The gloss cap and its sparkle share one ::before (::after stays free for claim dots and sweeps). */
+.btn::before,
+.candy::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 7px;
+  right: 7px;
+  top: 4px;
+  height: 40%;
+  border-radius: calc(var(--r) - 6px) calc(var(--r) - 6px) 40% 40% / calc(var(--r) - 6px) calc(var(--r) - 6px) 9px 9px;
+  background:
+    radial-gradient(4.5px 3px at 9px 6px, #fff 90%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.12));
+  pointer-events: none;
+}
+
+/* Press: the face sinks onto its lip. */
+.btn:active:not([aria-disabled='true']),
+.candy:is(button, a):active:not([aria-disabled='true']) {
+  --sh: inset 0 -3px 0 var(--lip), var(--top-light), 0 0 0 var(--ink);
+  transform: translateY(calc(var(--lipH) - 2px));
+  transition-duration: var(--t-down);
+  transition-timing-function: var(--ease-out);
+}
+
+.btn--sm { --h: 48px; --r: 15px; --lipH: 5px; --ic: 24px; padding: 2px 14px var(--lipH); font-size: var(--fs-d-md); }
+.btn--lg { --h: 64px; --r: 22px; --lipH: 7px; --ic: 32px; font-size: var(--fs-d-xl); }
+.btn--xl { --h: 72px; --r: 24px; --lipH: 8px; --ic: 36px; font-size: var(--fs-d-2xl); white-space: nowrap; }
+
+/* Icon-only: a square, or a round coin. The label is the aria-label. */
+.btn--sq {
+  flex: none;
+  width: var(--w, var(--h));
+  padding: 0 0 var(--lipH);
+}
+
+.btn--round {
+  --h: 48px;
+  --ic: 26px;
+  flex: none;
+  width: var(--h);
+  height: var(--h);
+  padding: 0 0 var(--lipH);
+  border-radius: 50%;
+  overflow: visible;
+}
+
+.btn--round::before {
+  left: 8px;
+  right: 8px;
+  border-radius: 50% 50% 40% 40% / 60% 60% 30% 30%;
+}
+
+.btn--block {
+  display: flex;
+  width: 100%;
+}
+
+/* Labels wrap rather than clip (large text, narrow buttons); XL labels stay on one line. */
+.btn-label {
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* A line icon on a candy face is ink, never white (art icons carry their own colours). */
+.btn .ic { color: var(--ink); }
+
+.btn .ai {
+  width: var(--ic);
+  height: var(--ic);
+}
+
+/* Disabled: a cloud face with an ink-2 label, no halo, no gloss, a soft drop; it never presses. */
+.btn[aria-disabled='true']:not(.is-arming) {
+  --hi: var(--cloud-hi);
+  --face: var(--cloud);
+  --lo: var(--cloud-lo);
+  --lip: var(--cloud-lip);
+  --sh: inset 0 calc(-1 * var(--lipH)) 0 var(--cloud-lo), 0 2px 0 rgba(42, 27, 69, 0.35);
+  color: var(--ink-2);
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  cursor: default;
+}
+
+.btn[aria-disabled='true']:not(.is-arming)::before { display: none; }
+
+.btn.is-shake { animation: shake 320ms ease; }
+
+@keyframes shake {
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* Under 360 px or at large text, XL labels step down one size before they would wrap. */
+@media (max-width: 359.98px) {
+  .btn--xl { font-size: var(--fs-d-xl); }
+}
+
+/* ===== Art icons (art-icons.ts) ===== */
+
+.ai-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sui .ai {
+  display: block;
+  flex: none;
+  width: var(--ic, 28px);
+  height: var(--ic, 28px);
+  overflow: visible;
+}
+
+/* ===== Panel, plate, well (§6.3) ===== */
+
+.panel,
+.card,
+.dialog,
+.modal--dialog {
+  --frame: var(--blue);
+  --sh: inset 0 2px 0 rgba(255, 255, 255, 0.55),
+        inset 0 -3px 0 rgba(0, 0, 0, 0.18),
+        inset 0 0 0 8px var(--frame),
+        inset 0 0 0 11px var(--ink),
+        inset 0 5px 0 11px rgba(42, 27, 69, 0.1),
+        var(--drop-lg), var(--soft);
+  position: relative;
+  border: var(--bw-lg) solid var(--ink);
+  border-radius: var(--r-panel);
+  padding: 27px;
+  background: var(--cream);
+  box-shadow: var(--sh);
+}
+
+/* Small phones: 4 px less cream around the content. */
+@media (max-width: 359.98px) {
+  .panel,
+  .card,
+  .dialog,
+  .modal--dialog { padding: 23px; }
+}
+
+/* Two rivets centred in the top frame band. */
+.panel::before,
+.card::before,
+.dialog::before,
+.modal--dialog::before {
+  content: '';
+  position: absolute;
+  top: 0.5px;
+  left: 24px;
+  right: 24px;
+  height: 7px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle 3.5px at 3.5px 3.5px, rgba(255, 255, 255, 0.8) 95%, transparent),
+    radial-gradient(circle 3.5px at calc(100% - 3.5px) 3.5px, rgba(255, 255, 255, 0.8) 95%, transparent);
+}
+
+.panel--gold { --frame: var(--gold); }
+.panel--violet { --frame: var(--violet); }
+.panel--red { --frame: var(--red); }
+.panel--cloud { --frame: var(--cloud-lo); }
+.panel--meadow, .chapter[data-biome='meadow'] { --frame: var(--meadow); }
+.panel--oldtown, .chapter[data-biome='oldtown'] { --frame: var(--oldtown); }
+.chapter.is-locked { --frame: var(--lockboard); }
+
+/* A panel's title on the cream: Lilita in ink, no ribbon (§1 rule 5). */
+.card-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font: 400 var(--fs-d-lg)/1.15 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+/* Plate: dense rows (mission rows, list rows, the star road, toasts). */
+.plate {
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r);
+  background: var(--cream);
+  box-shadow: inset 0 -4px 0 var(--cream-3), var(--drop-sm);
+}
+
+/* Well: anything nested in a panel (stat tiles' ground, the pause status, the mascot well). */
+.well {
+  border-radius: 16px;
+  background: var(--cream-2);
+  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
+}
+
+/* Rows inside a panel are parted by a dashed line. */
+.rows > * + * { border-top: 2.5px dashed rgba(42, 27, 69, 0.18); }
+
+/* ===== Level node disc (§6.13): the Journey's level discs, the Profile's rank road ===== */
+
+/* A round candy with the number in haloed Lilita and the game's purple shade under it. Its face
+   comes from a face class or the state rules of the screen that uses it (blue open, gold perfect,
+   green next, pink finale, locked). Screens add their own selector to this list (e.g. .lvl-num)
+   rather than copying it; the road and the snake stay in the screen's file. */
+.node {
+  --d: 52px;
+  --hi: var(--blue-hi); --face: var(--blue); --lo: var(--blue-lo); --lip: var(--blue-lip);
+  --sh: inset 0 -5px 0 var(--lip), var(--top-light), var(--drop-sm), 6px 7px 0 var(--shade);
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--d);
+  height: var(--d);
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, var(--hi) 0 18%, var(--face) 55%, var(--lo));
+  box-shadow: var(--sh);
+  font: 400 var(--fs-d-lg)/1 var(--font-display);
+  color: #fff;
+}
+
+/* Locked: the number in ink-2 with no halo (7.7:1 / 6.6:1 on the locked face); never opacity. */
+.node.f-locked,
+.is-locked > .node {
+  --hi: var(--locked-hi); --face: var(--locked); --lo: var(--locked-lo); --lip: var(--locked-lip);
+  color: var(--ink-2);
+  -webkit-text-stroke: 0;
+}
+
+/* The current one: a white and an ink ring (in the shadow stack, so the box never changes). */
+.node.is-current {
+  --sh: inset 0 -5px 0 var(--lip), var(--top-light), var(--drop-sm), 0 0 0 7px #fff, 0 0 0 10px var(--ink), 6px 7px 0 var(--shade);
+}
+
+.sui.is-hc .node { background: var(--face); }
+.sui.is-hc :is(.node.f-locked, .is-locked > .node) { background: repeating-linear-gradient(45deg, rgba(42, 27, 69, 0.18) 0 3px, transparent 3px 7px), var(--locked); }
+
+/* ===== Ribbon (§6.4; widgets.ts ribbon()) ===== */
+
+.ribbon {
+  --rb-hi: #FF9B6A; --rb: #FF6A45; --rb-lo: #E2401F; --rb-tail: #C5381C;
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  max-width: 100%;
+  padding: 0 30px;
+  pointer-events: none;
+}
+
+.ribbon--blue { --rb-hi: #8EDBFF; --rb: #3FAEF7; --rb-lo: #1F86E0; --rb-tail: #1B6FC6; }
+.ribbon--green { --rb-hi: #B4F25E; --rb: #69D33B; --rb-lo: #43B226; --rb-tail: #2E8C1A; }
+.ribbon--violet { --rb-hi: #D7B0FF; --rb: #A26AF7; --rb-lo: #8550EC; --rb-tail: #5B2EB4; }
+.ribbon--pink { --rb-hi: #FFA3C0; --rb: #FF6390; --rb-lo: #EE3D6E; --rb-tail: #AE2453; }
+
+.ribbon-band {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 22px 4px;
+  border: 4px solid var(--ink);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--rb-hi), var(--rb) 45%, var(--rb-lo));
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.5), inset 0 -5px 0 rgba(0, 0, 0, 0.18), var(--drop);
+  font: 400 var(--fs-d-xl)/1.05 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-shadow: 0 max(2px, 0.1em) 0 var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ribbon-tail {
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  width: 50px;
+  height: 46px;
+  color: var(--rb-tail);
+  overflow: visible;
+}
+
+.ribbon-tail--l { left: 0; }
+.ribbon-tail--r { right: 0; transform: scaleX(-1); }
+
+/* fitRibbon() (widgets.ts): the steps a long title takes before it may ellipsize. */
+.ribbon.fit-1 .ribbon-band { font-size: var(--fs-d-lg); }
+.ribbon.fit-2 .ribbon-band { font-size: var(--fs-d-md); padding: 0 12px 3px; }
+.ribbon:is(.fit-3, .fit-4) { padding: 0; }
+.ribbon:is(.fit-3, .fit-4) .ribbon-tail { display: none; }
+.ribbon.fit-3 .ribbon-band { font-size: var(--fs-d-md); padding: 0 10px 3px; }
+.ribbon.fit-4 .ribbon-band { font-size: 1rem; padding: 0 8px 3px; }
+
+.ribbon--sm { padding: 0 22px; }
+
+.ribbon--sm .ribbon-band {
+  min-height: 38px;
+  padding: 0 16px 3px;
+  border-width: 3px;
+  font-size: var(--fs-d-md);
+}
+
+.ribbon--sm .ribbon-tail {
+  top: 11px;
+  width: 36px;
+  height: 34px;
+}
+
+/* ===== Medal (§6.6): Sun Rank, the HUD level badge, trophies ===== */
+
+.medal {
+  --d: 52px;
+  --m1: #FFF29A; --m2: #FFC82A; --m3: #F59A0E; --ml: #D17400;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--d);
+  height: var(--d);
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, var(--m1) 0 30%, var(--m2) 62%, var(--m3));
+  box-shadow: inset 0 -4px 0 var(--ml), inset 0 3px 0 rgba(255, 255, 255, 0.7), var(--drop-sm);
+  font: 400 calc(var(--d) * 0.5)/1 var(--font-display);
+  color: #fff;
+}
+
+.medal::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 2px dashed rgba(170, 90, 0, 0.45);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.medal--ice { --m1: #E9F6FF; --m2: #9ED8FF; --m3: #4FA9EE; --ml: #2D7FC8; }
+.medal--bronze { --m1: #FFD7A8; --m2: #E89A55; --m3: #B8662A; --ml: #8A4415; }
+.medal--silver { --m1: #FFF; --m2: #DCE3EE; --m3: #A9B4C8; --ml: #7F8AA3; }
+.medal--socket { --m1: var(--slot-2); --m2: var(--slot-2); --m3: var(--slot-1); --ml: var(--slot-1); }
+.medal--ice::after, .medal--silver::after, .medal--socket::after { border-color: rgba(42, 27, 69, 0.22); }
+.medal--sm { font-size: calc(var(--d) * 0.42); }
+
+/* ===== Chips, tags, stickers, the lock badge (§6.7) ===== */
+
+.chip {
+  --ic: 24px;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px 0 6px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 18px;
+  background: var(--cream);
+  box-shadow: var(--drop-sm);
+  /* Capped at large text sizes (the Title's chips row must stay above Nubs' halo). */
+  font: 400 min(1.125rem, 20px)/1.1 var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.chip .ic { color: var(--ink); }
+
+/* Dark chips sit on the world (the forecast, the Best and mission-pips chips, the Dying hint). */
+.chip--dark {
+  border-color: var(--ink);
+  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.3), 0 3px 0 rgba(42, 27, 69, 0.45);
+  color: #fff;
+}
+
+.chip--dark .ic { color: #fff; }
+
+/* A chip that opens something keeps a 44 px hit box around its 36-40 px face (chips have no gloss). */
+.chip--btn {
+  position: relative;
+  min-height: 40px;
+  padding-right: 6px;
+  cursor: pointer;
+  transition: transform var(--t-up) var(--ease-back);
+}
+
+.chip--btn::before {
+  content: '';
+  position: absolute;
+  inset: -4px -2px;
+}
+
+.chip--btn:active:not([aria-disabled='true']) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--ink);
+  transition-duration: var(--t-down);
+}
+
+.chip .chip-chev {
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+}
+
+/* A tag hangs under an icon button as its visible label ("71★", "Endless", "Retry"). */
+.tag {
+  display: inline-grid;
+  place-items: center;
+  min-height: 26px;
+  padding: 0 9px 1px;
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 13px;
+  background: var(--cream);
+  box-shadow: 0 2px 0 var(--ink);
+  font: 400 var(--fs-d-sm)/1 var(--font-display);
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* NEW, BEST, DARE, RANK UP!: a flat sticker, small white text that passes without a halo. */
+.sticker {
+  display: inline-block;
+  padding: 3px 7px 4px;
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 8px;
+  background: var(--sticker);
+  box-shadow: 0 2px 0 var(--ink);
+  font: 400 var(--fs-d-xs)/1 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  white-space: nowrap;
+  rotate: 6deg;
+  pointer-events: none;
+}
+
+/* The lock badge: a gold coin with an ink lock, at the bottom-right of its control. */
+.lock-badge {
+  --d: 22px;
+  --ic: 13px;
+  display: grid;
+  place-items: center;
+  width: var(--d);
+  height: var(--d);
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 35%, #FFF6B0, var(--gold) 55%, var(--gold-lo));
+  box-shadow: 0 2px 0 var(--ink);
+  color: var(--ink);
+}
+
+.lock-badge .ic { stroke-width: 3; }
+
+/* The day badge (D3) and the tier word: small, flat, high-contrast. */
+.day-badge {
+  padding: 1px 6px 2px;
+  border-radius: 7px;
+  background: var(--violet-lip);
+  color: #fff;
+  font: 400 var(--fs-2xs)/1.2 var(--font-display);
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: 0;
+}
+
+.chip.is-eased .day-badge { background: repeating-linear-gradient(135deg, var(--violet-lip) 0 4px, var(--ink-2) 4px 7px); }
+
+.tier {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px 2px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: var(--tint-gold);
+  color: var(--t-brown);
+  font: 400 var(--fs-md)/1.15 var(--font-display);
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+
+/* A reward amount (+55 Snow) in green ink; as a chip on a green tint. */
+.reward {
+  --ic: 18px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  color: var(--t-green);
+  white-space: nowrap;
+}
+
+.reward--chip {
+  padding: 3px 10px 4px 7px;
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: var(--pill);
+  background: var(--tint-green);
+  box-shadow: 0 2px 0 var(--ink);
+}
+
+/* The COMPLETE stamp: a green plate, white outlined Lilita, tilted. */
+.stamp {
+  display: inline-block;
+  padding: 4px 10px 6px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--green-hi), var(--green) 50%, var(--green-lo));
+  box-shadow: inset 0 -3px 0 var(--green-lip), var(--drop-sm);
+  font: 400 var(--fs-d-md)/1 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transform: rotate(-6deg);
+  white-space: nowrap;
+}
+
+.stamp--sm {
+  padding: 3px 8px 5px;
+  font-size: var(--fs-d-sm);
+}
+
+@keyframes stamp-in {
+  0% { opacity: 0; transform: rotate(-6deg) scale(2.4); }
+  60% { opacity: 1; transform: rotate(-6deg) scale(0.9); }
+  100% { opacity: 1; transform: rotate(-6deg) scale(1); }
+}
+
+/* Mission pips (the Title's mission chip): coins that fill, gold when done. */
+.pips {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.pip {
+  --p: 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: conic-gradient(var(--green) calc(var(--p) * 1turn), var(--slot-2) 0);
+}
+
+.pip.is-done { background: radial-gradient(circle at 45% 35%, #FFF6B0, var(--gold) 55%, var(--gold-lo)); }
+
+/* ===== Embossed counter (§6.5): the wallet, the star total, Results' Snow ===== */
+
+.counter,
+.chip--snow,
+.chip--stars {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 40px;
+  min-height: 40px;
+  margin-left: 20px;
+  padding: 0 14px 0 30px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 20px;
+  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35), inset 0 -2px 0 rgba(255, 255, 255, 0.12), 0 3px 0 rgba(42, 27, 69, 0.5);
+  font: 400 var(--fs-d-lg)/1 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* The coin overlaps the slot's left end. */
+.counter > .ai,
+.chip--snow > .ai,
+.chip--stars > .ai {
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 46px;
+  height: 46px;
+}
+
+.counter .num,
+.chip--snow .num,
+.chip--stars .num {
+  font: inherit;
+  font-variant-numeric: normal;
+}
+
+/* Small phones: a slimmer counter leaves the header's title room. */
+@media (max-width: 359.98px) {
+  .counter,
+  .chip--snow,
+  .chip--stars {
+    margin-left: 16px;
+    padding: 0 10px 0 24px;
+    font-size: var(--fs-d-md);
+  }
+
+  :is(.counter, .chip--snow, .chip--stars) > .ai {
+    left: -18px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.counter small,
+.chip--stars small {
+  margin-left: 2px;
+  font-size: var(--fs-d-sm);
+  color: var(--slot-sub);
+}
+
+.counter.is-pop > .ai,
+.chip.is-pop > .ai { animation: coin-pop 160ms var(--ease-out); }
+
+@keyframes coin-pop { 50% { scale: 1.18; } }
+
+/* ===== Progress bar (§6.8; widgets.ts progressBar()) ===== */
+
+.bar {
+  position: relative;
+  display: block;
+  height: 22px;
+  overflow: hidden;
+  border: var(--bw) solid var(--ink);
+  border-radius: 13px;
+  background: linear-gradient(180deg, #3A2A58, #54406F);
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35), 0 2px 0 rgba(255, 255, 255, 0.6);
+}
+
+.bar > i {
+  --b-hi: #FFE45C;
+  --b: #FFB21D;
+  position: absolute;
+  inset: 0 auto 0 0;
+  max-width: 100%;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0 30%, rgba(255, 255, 255, 0) 31%),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.18) 0 7px, rgba(255, 255, 255, 0) 7px 14px),
+    linear-gradient(180deg, var(--b-hi), var(--b));
+  box-shadow: 2px 0 0 var(--ink);
+}
+
+.bar--green > i { --b-hi: #B4F25E; --b: #4CC22C; }
+.bar--blue > i { --b-hi: #9BE3FF; --b: #2E9BEF; }
+.bar--violet > i { --b-hi: #D7B0FF; --b: #8E59F0; }
+
+/* Compact: no label, no stripes. */
+.bar--sm,
+.bar--lg {
+  height: 16px;
+  border-radius: 9px;
+}
+
+.bar--sm > i,
+.bar--lg > i { background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0 35%, rgba(255, 255, 255, 0) 36%), linear-gradient(180deg, var(--b-hi), var(--b)); }
+
+/* A label inside a bar (bars ≥ 22 px only). */
+.bar-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 400 var(--fs-d-sm)/1 var(--font-display);
+  color: #fff;
+}
+
+/* What this run added: a lighter segment over the fill (left = before, width = gain). */
+.bar-gain {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* ===== Folder tabs (Wardrobe) and the segmented control (Settings), §6.9 ===== */
+
+.tabs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 10px;
+  margin-bottom: -4px;
+}
+
+.tab {
+  --sh: inset 0 3px 0 rgba(255, 255, 255, 0.45);
+  position: relative;
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 48px;
+  padding: 2px 4px 0;
+  border: var(--bw) solid var(--ink);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(180deg, #5FBDF9, #2A8FE3);
+  box-shadow: var(--sh);
+  font: 400 1.0625rem/1.05 var(--font-display);
+  color: #fff;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+.tab[aria-selected='true'] {
+  --sh: inset 0 3px 0 #fff;
+  z-index: 2;
+  min-height: 56px;
+  margin-bottom: -3px;
+  background: linear-gradient(180deg, #fff, var(--cream));
+  color: var(--ink);
+  -webkit-text-stroke: 0;
+}
+
+.seg {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 4px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.seg-opt {
+  --sh: none;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 4px 2px;
+  border: var(--bw) solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  font: 400 var(--fs-d-md)/1.05 var(--font-display);
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+/* Checked: a raised cloud candy with ink text (shape, height and text colour, never colour alone). */
+.seg-opt[aria-checked='true'] {
+  --sh: inset 0 -4px 0 var(--cloud-lip), var(--top-light), var(--drop-sm);
+  border-color: var(--ink);
+  background: linear-gradient(180deg, var(--cloud-hi), var(--cloud) 46%, var(--cloud-lo));
+  box-shadow: var(--sh);
+  color: var(--ink);
+  -webkit-text-stroke: 0;
+}
+
+/* ===== Toggle (§6.10): ON/OFF is generated content, so the aria-label stays the name ===== */
+
+.switch {
+  --sh: inset 0 3px 0 rgba(0, 0, 0, 0.35);
+  position: relative;
+  flex: none;
+  width: 76px;
+  height: 40px;
+  padding: 0;
+  border: var(--bw) solid var(--ink);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #3F2E5C, #54406F);
+  box-shadow: var(--sh);
+}
+
+/* The 48 px hit box. */
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: -7px -4px;
+}
+
+.switch::after {
+  content: 'OFF';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  translate: 0 -50%;
+  font: 400 var(--fs-d-xs)/1 var(--font-display);
+  color: var(--slot-off);
+  letter-spacing: 0.04em;
+}
+
+.switch[aria-checked='true'] {
+  --sh: inset 0 -4px 0 var(--green-lip), var(--top-light);
+  background: linear-gradient(180deg, var(--green-hi), var(--green-lo));
+}
+
+.switch[aria-checked='true']::after {
+  content: 'ON';
+  right: auto;
+  left: 11px;
+  color: var(--ink);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 30px;
+  height: 30px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff, #E4DDF0);
+  box-shadow: 0 2px 0 var(--ink);
+  transition: transform var(--t) var(--ease-back);
+}
+
+.switch[aria-checked='true'] .switch-knob { transform: translateX(36px); }
+
+/* ===== Slider (§6.11): the bar slot, a blue fill to --fill, a gold coin thumb ===== */
+
+.range-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.range-value {
+  min-width: 3.2em;
+  text-align: right;
+  font: 400 var(--fs-d-md)/1 var(--font-display);
+  color: var(--ink);
+}
+
+.range {
+  --fill: 50%;
+  --track: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0 35%, rgba(255, 255, 255, 0) 36%) 0 0 / var(--fill) 100% no-repeat,
+           linear-gradient(180deg, #9BE3FF, #2E9BEF) 0 0 / var(--fill) 100% no-repeat,
+           linear-gradient(180deg, #3A2A58, #54406F);
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 48px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.range::-webkit-slider-runnable-track {
+  box-sizing: border-box;
+  height: 22px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 13px;
+  background: var(--track);
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.3);
+}
+
+.range::-moz-range-track {
+  box-sizing: border-box;
+  height: 22px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 13px;
+  background: var(--track);
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  margin-top: -9px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 35%, #FFF6B0, var(--gold) 55%, var(--gold-lo));
+  box-shadow: inset 0 -3px 0 var(--gold-lip), var(--drop-sm);
+}
+
+.range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 35%, #FFF6B0, var(--gold) 55%, var(--gold-lo));
+  box-shadow: inset 0 -3px 0 var(--gold-lip), var(--drop-sm);
+}
+
+.range:focus-visible {
+  outline-offset: 0;
+  border-radius: 14px;
+}
+
+/* ===== Fields: the name input and the backup code box are wells ===== */
+
+.text-field,
+.code-box {
+  display: block;
+  width: 100%;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--cream-2);
+  box-shadow: inset 0 3px 0 var(--cream-3);
+  color: var(--ink);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.text-field {
+  min-height: 48px;
+  padding: 8px 14px;
+  font: 400 var(--fs-d-md)/1.2 var(--font-display);
+}
+
+.text-field::placeholder {
+  color: var(--ink-2);
+  opacity: 1;
+}
+
+.code-box {
+  margin: 10px 0;
+  padding: 10px 12px;
+  /* 16 px: iOS zooms the page into any smaller text field on focus. */
+  font: 600 1rem/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  resize: none;
+  word-break: break-all;
+  /* A text area is its own scroll container, so it doesn't inherit the page's no-zoom panning. */
+  touch-action: pan-x pan-y;
+}
+
+.text-field:focus,
+.code-box:focus {
+  outline: 3px solid var(--blue-lo);
+  outline-offset: 2px;
+}
+
+/* ===== Toast (§6.14) ===== */
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(100%, 420px);
+  min-height: 44px;
+  padding: 6px 16px 8px 6px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 22px;
+  background: var(--cream);
+  box-shadow: inset 0 -4px 0 var(--cream-3), var(--drop-sm);
+  font: 400 var(--fs-d-md)/1.2 var(--font-display);
+  color: var(--ink);
+  animation: toast-in 220ms var(--ease-back) both;
+  transition: opacity 200ms ease;
+}
+
+/* Sentences (storage, backup) read in the body font. */
+.toast--long {
+  font: 800 var(--fs-md)/1.3 var(--font-body);
+}
+
+.toast.is-out { opacity: 0; }
+
+/* Cleared by a screen switch: gone within 150 ms. */
+.toast.is-fast { transition-duration: 120ms; }
+
+.toast-ic {
+  --d: 32px;
+  --ic: 18px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--d);
+  height: var(--d);
+  border: var(--bw-sm) solid var(--ink);
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--hi), var(--face) 50%, var(--lo));
+  box-shadow: inset 0 -3px 0 var(--lip);
+  color: var(--ink);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+}
+
+/* ===== Dialog, modal, sheet (§6.15) ===== */
+
+.scrim { background: var(--scrim); }
+
+/* A ribbon heading straddles the card's top edge; the card's padding clears its lower half. */
+.dialog:has(> .ribbon:first-child),
+.modal--dialog:has(.confirm > .ribbon:first-child) { padding-top: 53px; }
+
+.dialog > .ribbon:first-child,
+.modal--dialog .confirm > .ribbon:first-child {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  translate: -50% 0;
+  max-width: calc(100% + 20px);
+}
+
+.dialog-title:not(.ribbon-band) {
+  font: 400 var(--fs-d-xl)/1.1 var(--font-display);
+  color: var(--ink);
+}
+
+.dialog-sub {
+  color: var(--ink-2);
+  font: 800 var(--fs-md)/1.35 var(--font-body);
+}
+
+/* In: the card scales up without overshoot (the layout specs measure its clearance above Nubs'
+   halo); the ribbon does the bouncy part, 80 ms later. */
+.modal {
+  transform: scale(0.85);
+  opacity: 0;
+  transition: transform 260ms var(--ease-out), opacity 260ms var(--ease-out);
+}
+
+.modal-wrap.is-on .modal {
+  transform: none;
+  opacity: 1;
+}
+
+.modal-wrap.is-on .modal .ribbon,
+.scr-pause.is-on .dialog > .ribbon:first-child { animation: ribbon-in 360ms var(--ease-back) 80ms both; }
+
+@keyframes ribbon-in {
+  from { transform: translateY(-24px) rotate(-6deg); opacity: 0; }
+  to { transform: rotate(-2deg); }
+}
+
+/* The bottom sheet (install, restore): the panel recipe, open at the bottom. */
+.modal--sheet {
+  --frame: var(--blue);
+  --sh: inset 0 2px 0 rgba(255, 255, 255, 0.55), inset 0 0 0 8px var(--frame), inset 0 0 0 11px var(--ink), 0 -10px 24px -8px rgba(42, 27, 69, 0.45);
+  border: var(--bw-lg) solid var(--ink);
+  border-bottom: 0;
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
+  background: var(--cream);
+  box-shadow: var(--sh);
+  opacity: 1;
+}
+
+.sheet-grip {
+  width: 48px;
+  height: 6px;
+  margin: 2px auto 10px;
+  border-radius: 3px;
+  background: rgba(42, 27, 69, 0.3);
+}
+
+/* Install steps: wells with a gold medal number. */
+.install-step {
+  border-radius: 16px;
+  background: var(--cream-2);
+  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
+}
+
+.install-n {
+  --d: 28px;
+  font-size: 15px;
+}
+
+/* "Not now" / "Start fresh": a quiet text button under the sheet's main action. */
+.btn.sheet-quiet {
+  --sh: none;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font: 800 1rem/1.2 var(--font-body);
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+.btn.sheet-quiet::before { display: none; }
+
+@media (hover: hover) {
+  .btn.sheet-quiet:hover { text-decoration: underline; }
+}
+
+/* ===== Backdrops (§6.16) ===== */
+
+/* Menus: a warm dawn sky that ends on the world's sand, with slow rays and three clouds, all one
+   static layer behind .menu (K8: the canvas does not redraw behind menus). */
+.scr-menu::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 420'%3E%3Cdefs%3E%3Cpath id='c' d='M30 76c-16 0-26-10-24-22 2-11 13-16 23-13 3-14 17-22 31-17 8-13 30-15 40 0 13-4 28 6 26 21 12 1 19 12 15 22-3 6-9 9-16 9Z'/%3E%3C/defs%3E%3Cg fill='%23fff' stroke='%23E9DCC8' stroke-width='3'%3E%3Cuse href='%23c' transform='translate(-34 70) scale(1.25)'/%3E%3Cuse href='%23c' transform='translate(262 168) scale(1.05)' opacity='.9'/%3E%3Cuse href='%23c' transform='translate(30 330) scale(.85)' opacity='.8'/%3E%3C/g%3E%3C/svg%3E") center top / min(100%, 560px) auto no-repeat,
+    repeating-conic-gradient(from 0deg at 50% -8%, rgba(255, 255, 255, 0.12) 0 6deg, rgba(255, 255, 255, 0) 6deg 15deg),
+    radial-gradient(90% 45% at 50% -6%, var(--sky-glow), rgba(255, 230, 163, 0) 70%),
+    linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 42%, var(--sky-3) 80%, var(--sky-4) 100%);
+}
+
+/* The celebration burst: rotating rays on a soft glow (Results, the reveal, the gift, the next node). */
+.burst {
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255, 236, 140, 0.55) 0 9deg, rgba(255, 236, 140, 0) 9deg 22.5deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.5) 45%, transparent 75%);
+  mask: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.5) 45%, transparent 75%);
+  animation: burst-spin 24s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes burst-spin { to { transform: rotate(1turn); } }
+
+/* ===== High contrast (§8.5): flat faces, no decoration, thicker outlines ===== */
+
+.sui.is-hc {
+  --bw: 4px;
+  --scrim: rgba(56, 30, 50, 0.78);
+  --top-light: inset 0 0 0 transparent;
+}
+
+.sui.is-hc :is(.btn, .candy)::before,
+.sui.is-hc .burst { display: none; }
+
+.sui.is-hc :is(.btn, .candy, .toast-ic) { background: var(--face); }
+.sui.is-hc .seg-opt[aria-checked='true'] { background: var(--cloud); }
+.sui.is-hc .switch[aria-checked='true'],
+.sui.is-hc .stamp { background: var(--green); }
+.sui.is-hc .ribbon-band { background: var(--rb); }
+.sui.is-hc .tab { background: var(--blue-lo); }
+.sui.is-hc .tab[aria-selected='true'] { background: #fff; }
+.sui.is-hc .bar > i { background: linear-gradient(180deg, var(--b-hi), var(--b)); }
+.sui.is-hc .scr-menu::before { background: var(--sky-2); }
+.sui.is-hc :is(.btn, .ribbon-band, .counter, .chip--snow, .chip--stars, .medal, .stamp, .tab, .gt) { text-shadow: none; }
+.sui.is-hc :is(.f-locked, .is-locked.btn) { background: repeating-linear-gradient(45deg, rgba(42, 27, 69, 0.18) 0 3px, transparent 3px 7px), var(--locked); }

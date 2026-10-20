@@ -2,8 +2,10 @@
 // UM9). The game session drives it through the `Ui` interface and receives player intents through
 // `UiCallbacks` (see README.md).
 
-// Stylesheets, in cascade order (docs/UI_V2.md §14): the shared base, one file per screen (each
-// owned by one builder), then the motion / hover / forced-colour states over all of them.
+// Stylesheets, in cascade order (docs/UI_V2.md §14): the kit (tokens and component recipes), the
+// shared base, one file per screen (each owned by one builder), then the motion / hover /
+// forced-colour states over all of them.
+import './kit.css';
 import './ui.css';
 import './styles/title.css';
 import './styles/play.css';
@@ -30,9 +32,11 @@ import {
 } from '../platform/lifecycle.ts';
 import { captureInstallPrompt } from '../platform/pwa.ts';
 import { ghostHandSvg } from './art.ts';
+import { artSprite } from './art-icons.ts';
 import { fontsReady } from './fonts.ts';
 import { h, isInteractive, setFlag, svgFromMarkup } from './dom.ts';
 import { createModalHost, createRotateOverlay, createToastStack } from './overlays.ts';
+import { fitRibbon } from './widgets.ts';
 import type { Screen, UiContext } from './screen.ts';
 import { createDailyScreen } from './screens/daily.ts';
 import { createDyingScreen } from './screens/dying.ts';
@@ -70,10 +74,21 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
 
   root.classList.add('sui');
   root.dataset.screen = current;
+  // Chromium before 123 ignores paint-order on HTML text, so the centred ink halo would eat into the
+  // white fill: a thinner halo there (docs/UI_V2.md §2.5). WebKit browsers (Safari, iOS's CriOS)
+  // carry no "Chrome/NNN" token, so they never match.
+  const chrome = typeof navigator === 'undefined' ? null : /Chrom(?:e|ium)\/(\d+)/.exec(navigator.userAgent);
+  root.classList.toggle('no-po', chrome !== null && Number(chrome[1]) < 123);
 
   const reducedMotion = (): boolean => motionSetting === 'on' || (motionSetting === 'auto' && prefersReducedMotion());
   const applyMotion = (): void => {
     root.classList.toggle('is-rm', reducedMotion());
+  };
+  // High contrast (docs/UI_V2.md §8.5): the "High-contrast shadows" setting or the OS preference
+  // flattens the candy (no gloss, rays, clouds; flat faces, thicker outlines).
+  const contrastQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-contrast: more)') : null;
+  const applyContrast = (): void => {
+    root.classList.toggle('is-hc', save.settings.highContrast || contrastQuery?.matches === true);
   };
   const setKeyboardMode = (on: boolean): void => {
     if (on === keyboardMode) return;
@@ -124,6 +139,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       // The screens read the new settings at once (the Journey's testing toggle), whether or not
       // the integrator pushes the persisted save back with setSave.
       save = { ...save, settings };
+      applyContrast();
       cb.settingsChanged(settings);
     },
     confirm: (options) => modals.confirm(options),
@@ -194,7 +210,8 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   // Screens, the ghost hint and toasts live in the world column; modals and the rotate overlay
   // span the viewport (modals place their dialog inside the column themselves).
   const world = h('div', { class: 'world' }, screenLayer, ghostEl, cueEl, toasts.el);
-  root.append(world, modals.el, rotateEl, live);
+  // The art icons' sprite (art-icons.ts): one hidden <svg> of symbols every artIcon() points at.
+  root.append(artSprite(), world, modals.el, rotateEl, live);
 
   // The column's distance to the right and bottom viewport edges, for the inset math in ui.css.
   // Re-measured when the game republishes --world-* (an inline style change) or the viewport moves;
@@ -224,9 +241,16 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       results.invalidateSheetTop();
     }
     if ((worldChanged || nubsChanged) && current !== 'boot') screens[current].relayout?.();
+    if (worldChanged) fitTitles(current);
   };
   const worldObserver = typeof MutationObserver === 'function' ? new MutationObserver(() => syncWorld(false)) : null;
   worldObserver?.observe(root, { attributes: true, attributeFilter: ['style'] });
+
+  /** Menu headers' ribbon titles shrink to fit their row (it depends on the column and the right-hand chip). */
+  function fitTitles(id: ScreenId): void {
+    if (id === 'boot') return;
+    for (const r of screens[id].el.querySelectorAll<HTMLElement>('.menu-ribbon')) fitRibbon(r);
+  }
 
   function setHidden(el: HTMLElement, hidden: boolean): void {
     el.classList.toggle('is-on', !hidden);
@@ -292,6 +316,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     root.dataset.screen = id;
     next.enter(from, data);
     setHidden(next.el, false);
+    fitTitles(id);
     updateGhost();
     // Screens that measure (the Title's crowding checks) do it once they and the ghost are shown.
     next.relayout?.();
@@ -381,6 +406,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     syncWorld(true);
   });
   const stopMotion = onReducedMotionChange(applyMotion);
+  contrastQuery?.addEventListener('change', applyContrast);
   // The display face changes text widths: the Title re-fits, Results re-measures its sheet. CSS text
   // re-renders by itself.
   let alive = true;
@@ -388,9 +414,11 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     if (!ok || !alive) return;
     if (current !== 'boot') screens[current].relayout?.();
     results.invalidateSheetTop();
+    fitTitles(current);
   });
 
   applyMotion();
+  applyContrast();
   checkRotate();
   syncWorld(true);
 
@@ -403,6 +431,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       save = next;
       motionSetting = next.settings.reducedMotion;
       applyMotion();
+      applyContrast();
       if (current !== 'boot') screens[current].refresh?.();
     },
     setToday,
@@ -447,11 +476,12 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       stopInstallPrompt();
       stopViewport();
       stopMotion();
+      contrastQuery?.removeEventListener('change', applyContrast);
       alive = false;
       worldObserver?.disconnect();
       for (const s of Object.values(screens)) s.leave?.();
       root.replaceChildren();
-      root.classList.remove('sui', 'is-rm', 'is-kbd');
+      root.classList.remove('sui', 'is-rm', 'is-kbd', 'is-hc', 'no-po');
       delete root.dataset.screen;
     },
   };

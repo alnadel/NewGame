@@ -21,6 +21,7 @@ import {
 } from '../../meta/progression.ts';
 import { claimables, featureHint, featureIsNew, featureName, featureUnlocked, markFeatureSeen, type Feature } from '../../meta/gamify.ts';
 import type { Save } from '../../meta/saveTypes.ts';
+import { artIcon } from '../art-icons.ts';
 import { logoLayers } from '../art.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
 import { claimDailyReward, claimDot, rankBadge } from '../gamify.ts';
@@ -182,7 +183,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // The daily streak's reward, when one waits: claimed right here (the reveal plays over the Title).
   const rewardBtn = button(ctx, { label: 'Reward', icon: 'gift', variant: 'gold', className: 'title-reward pe', ariaLabel: 'Claim the daily reward', sound: null, onPress: () => void claimDailyReward(ctx) });
   const walletValue = h('span', { class: 'num' });
-  const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), walletValue);
+  const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
   const hud = h('div', { class: 'title-hud' }, badgeSlot, rewardBtn, h('i', { class: 'title-hud-gap' }), chipSnow);
 
   // --- Chips -------------------------------------------------------------------------------------

@@ -160,21 +160,33 @@
 :where(.sui .has-dot) { position: relative; }
 
 .sui .has-dot::after {
+  /* The claim bubble (docs/UI_V2.md §6.7, B1 Kit): a flat red face, an ink rim, Lilita 15 px white
+     (4.9:1 without a halo). It hops every 4 s (none under reduced motion). */
   content: attr(data-dot);
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 20px;
-  height: 20px;
+  z-index: 3;
+  top: -9px;
+  right: -9px;
+  min-width: 26px;
+  height: 26px;
   padding: 0 5px;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  background: var(--danger);
+  border: var(--bw) solid var(--ink);
+  border-radius: 13px;
+  background: var(--bubble);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 2px 0 var(--ink);
   color: #fff;
-  font: 900 0.6875rem/16px var(--font);
+  font: 400 15px/20px var(--font-display);
+  font-synthesis: none;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
   text-align: center;
   pointer-events: none;
-  animation: gf-pop 320ms var(--ease-back);
+  animation: gf-pop 320ms var(--ease-back), dot-hop 4s ease-in-out 1s infinite;
+}
+
+@keyframes dot-hop {
+  0%, 92%, 100% { translate: 0 0; }
+  96% { translate: 0 -3px; }
 }
 
 /* ===== Snow Globe art ===== */

@@ -46,8 +46,9 @@
   animation: pop-in 420ms var(--ease-back) both, nudge 2.4s ease-in-out 1s infinite;
 }
 
-/* Narrow columns: the gift alone (its aria-label names it). */
-@media (max-width: 379.98px) {
+/* Narrow columns: the gift alone (its aria-label names it). Interim (UI v2 kit): from 420 px, as the
+   embossed wallet is wider; B2's gold square hides the label everywhere (docs/UI_V2.md §6.2). */
+@media (max-width: 419.98px) {
   .title-reward { padding: 0 11px; }
 
   .title-reward .btn-label { display: none; }
@@ -285,10 +286,13 @@
 }
 
 .modes .btn {
+  /* Interim (UI v2 kit): the v1.4 label size and icon, until the modes become candy squares (B2). */
+  --ic: 22px;
   flex: none;
   min-height: 48px;
   padding: 4px 14px 4px 12px;
   border-radius: var(--pill);
+  font-size: var(--fs-md);
   white-space: nowrap;
   touch-action: none;
 }

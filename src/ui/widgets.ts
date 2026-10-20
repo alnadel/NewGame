@@ -1,23 +1,31 @@
-// Reusable UI pieces: buttons, switches, segmented controls, sliders, chips, progress bars, headers,
-// the star road.
+// Reusable UI pieces: buttons, switches, segmented controls, sliders, chips, progress bars, ribbons,
+// headers, the star road. Their look is the kit's (kit.css, docs/UI_V2.md §6).
 
 import { nextStarGoal } from '../meta/progression.ts';
 import type { Save } from '../meta/saveTypes.ts';
+import { artIcon, hasArt, kitShape } from './art-icons.ts';
 import { h, setFlag } from './dom.ts';
 import { icon, type IconName } from './icons.ts';
 import { cosmeticSwatch } from './swatches.ts';
 import type { UiContext } from './screen.ts';
 import type { UiSoundName } from './types.ts';
 
+/** The candy face: green go, blue navigate, violet endless/XP, pink share/dares, gold rewards, red danger, cloud (plain) neutral. */
+export type ButtonVariant = 'primary' | 'gold' | 'danger' | 'plain' | 'blue' | 'violet' | 'pink';
+
 export interface ButtonOptions {
-  /** Visible text; for `round` buttons it becomes the aria-label. */
+  /** Visible text; for `round` and `square` buttons it becomes the aria-label. */
   label: string;
+  /** On a coloured face the art icon of that name is used when there is one (art-icons.ts); cloud faces keep the line icon in ink. */
   icon?: IconName;
-  variant?: 'primary' | 'gold' | 'danger' | 'plain';
-  size?: 'md' | 'lg' | 'xl';
+  variant?: ButtonVariant;
+  /** Heights: sm 48, md 56 (default), lg 64, xl 72. */
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   block?: boolean;
-  /** Icon-only circular 48 px button. */
+  /** Icon-only circular coin (48 px; .menu-back and Home are 50). */
   round?: boolean;
+  /** Icon-only square of the size's height. */
+  square?: boolean;
   /** Overrides the accessible name (defaults to `label`). */
   ariaLabel?: string;
   sound?: UiSoundName | null;
@@ -25,22 +33,30 @@ export interface ButtonOptions {
   onPress: () => void;
 }
 
+/** The button's icon: the art icon on coloured faces, the ink line icon on cloud ones (§6.17). */
+export function buttonIcon(name: IconName, variant: ButtonVariant = 'plain'): SVGSVGElement {
+  return variant !== 'plain' && hasArt(name) ? artIcon(name) : icon(name);
+}
+
 export function button(ctx: UiContext, o: ButtonOptions): HTMLButtonElement {
+  const variant = o.variant ?? 'plain';
+  const iconOnly = o.round === true || o.square === true;
   const cls = [
     'btn',
-    `btn--${o.variant ?? 'plain'}`,
+    `btn--${variant}`,
     o.size && o.size !== 'md' ? `btn--${o.size}` : '',
     o.block ? 'btn--block' : '',
     o.round ? 'btn--round' : '',
+    o.square ? 'btn--sq' : '',
     o.className ?? '',
   ]
     .filter(Boolean)
     .join(' ');
   const el = h(
     'button',
-    { class: cls, type: 'button', 'aria-label': o.round ? (o.ariaLabel ?? o.label) : (o.ariaLabel ?? null) },
-    o.icon ? icon(o.icon) : null,
-    o.round ? null : h('span', { class: 'btn-label' }, o.label),
+    { class: cls, type: 'button', 'aria-label': iconOnly ? (o.ariaLabel ?? o.label) : (o.ariaLabel ?? null) },
+    o.icon ? buttonIcon(o.icon, variant) : null,
+    iconOnly ? null : h('span', { class: 'btn-label' }, o.label),
   );
   el.addEventListener('click', () => {
     if (el.getAttribute('aria-disabled') === 'true') return;
@@ -167,9 +183,39 @@ export function slider(o: SliderOptions): SliderControl {
   return { el: h('div', { class: 'range-wrap' }, input, out), set };
 }
 
-/** Snowflake + amount chip, e.g. the wallet. Give it an aria-label such as "230 Snow". */
+/** The Snow counter (the wallet): an embossed slot with the ice-gem coin. Give it an aria-label such as "230 Snow". */
 export function snowChip(value: string): HTMLElement {
-  return h('span', { class: 'chip chip--snow', role: 'img' }, icon('snow'), h('span', { class: 'num' }, value));
+  return h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), h('span', { class: 'num' }, value));
+}
+
+/** Sets a counter's number with room for its widest value (Lilita has no tabular figures, §2.4). */
+export function setCount(num: HTMLElement, text: string, widest = text): void {
+  num.textContent = text;
+  num.style.minWidth = `${widest.length + 0.5}ch`;
+}
+
+export type RibbonTone = 'red' | 'blue' | 'green' | 'violet' | 'pink';
+
+export interface Ribbon {
+  /** The wrapper: the band and its two tails. */
+  el: HTMLElement;
+  /** The band: the heading element itself (set its textContent to change the words). */
+  band: HTMLElement;
+}
+
+/**
+ * A ribbon banner (§6.4): a band between two swallowtails. The band is the heading (`tag`, h2 by
+ * default) unless the ribbon only repeats one (then pass `hidden` and it is aria-hidden).
+ */
+export function ribbon(
+  text: string,
+  o: { tone?: RibbonTone; size?: 'sm' | 'md'; tag?: 'h1' | 'h2' | 'h3' | 'p' | 'span'; className?: string; bandClass?: string; id?: string; hidden?: boolean } = {},
+): Ribbon {
+  const band = h(o.tag ?? 'h2', { class: `ribbon-band${o.bandClass ? ` ${o.bandClass}` : ''}`, id: o.id ?? null }, text);
+  const cls = ['ribbon', `ribbon--${o.tone ?? 'red'}`, o.size === 'sm' ? 'ribbon--sm' : '', o.className ?? ''].filter(Boolean).join(' ');
+  const el = h('div', { class: cls, 'aria-hidden': o.hidden ? 'true' : null },
+    kitShape('tail', 'ribbon-tail ribbon-tail--l'), band, kitShape('tail', 'ribbon-tail ribbon-tail--r'));
+  return { el, band };
 }
 
 /**
@@ -211,18 +257,45 @@ export function countUp(
   };
 }
 
-/** A thin progress bar; `fraction` in [0, 1]. */
-export function progressBar(fraction: number, className = 'bar'): HTMLElement {
-  const fill = h('i');
-  fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
-  return h('span', { class: className, 'aria-hidden': 'true' }, fill);
+/** The steps a ribbon takes to fit its words (kit.css .ribbon.fit-N): smaller type, then no tails, then smaller still. */
+const RIBBON_FIT = ['fit-1', 'fit-2', 'fit-3', 'fit-4'] as const;
+
+/**
+ * Shrinks a ribbon until its words fit on one line (§6.4: the band shrinks before it may ellipsize,
+ * and it never wraps). Reads layout: call it when the ribbon's room may have changed (a screen
+ * shown, a resize, the display font arriving), never per frame.
+ */
+export function fitRibbon(el: HTMLElement): void {
+  const band = el.querySelector<HTMLElement>('.ribbon-band');
+  if (!band) return;
+  el.classList.remove(...RIBBON_FIT);
+  for (const step of RIBBON_FIT) {
+    if (band.scrollWidth <= band.clientWidth + 1) return;
+    el.classList.remove(...RIBBON_FIT);
+    el.classList.add(step);
+  }
 }
 
-/** Header for full-screen menus: back button, title, optional right-hand slot. */
+export type BarTone = 'gold' | 'green' | 'blue' | 'violet';
+
+/**
+ * A progress bar in the embossed slot (§6.8); `fraction` in [0, 1]. Tones: XP violet; stars and star
+ * rewards gold (the default); missions and level progress green; frost and sliders blue. Add
+ * `bar--sm` to `className` for the compact 16 px bar.
+ */
+export function progressBar(fraction: number, className = 'bar', tone?: BarTone): HTMLElement {
+  const fill = h('i');
+  fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+  const cls = tone && tone !== 'gold' ? `${className} bar--${tone}` : className;
+  return h('span', { class: cls, 'aria-hidden': 'true' }, fill);
+}
+
+/** Header for full-screen menus: the blue back coin, the title as a red ribbon, an optional right-hand slot. */
 export function menuHeader(ctx: UiContext, title: string, right?: HTMLElement): HTMLElement {
-  const back = button(ctx, { label: 'Back', icon: 'back', round: true, sound: 'back', onPress: () => ctx.back() });
+  const back = button(ctx, { label: 'Back', icon: 'back', variant: 'blue', round: true, sound: 'back', onPress: () => ctx.back() });
   back.classList.add('menu-back');
-  return h('header', { class: 'menu-head' }, back, h('h2', { class: 'menu-title' }, title), right ?? h('span', { class: 'menu-spacer' }));
+  const r = ribbon(title, { tone: 'red', className: 'menu-ribbon', bandClass: 'menu-title' });
+  return h('header', { class: 'menu-head' }, back, r.el, right ?? h('span', { class: 'menu-spacer' }));
 }
 
 /** An empty state: an icon in a soft disc, a short title and one line (and an optional action). */
@@ -237,9 +310,17 @@ export function emptyState(iconName: IconName, title: string, text: string, acti
   );
 }
 
-/** A labeled settings/menu section card. */
+/** A labeled settings/menu section: a framed panel (blue by default) with its title in ink. */
 export function section(title: string, ...children: (HTMLElement | null)[]): HTMLElement {
   return h('section', { class: 'card' }, h('h3', { class: 'card-title' }, title), ...children);
+}
+
+/** A medal (§6.6): Sun Rank, trophies, level badges. `tier` picks the metal. */
+export function medal(text: string, o: { size?: number; tier?: 'gold' | 'ice' | 'bronze' | 'silver' | 'socket'; className?: string } = {}): HTMLElement {
+  const el = h('span', { class: `medal${o.tier && o.tier !== 'gold' ? ` medal--${o.tier}` : ''}${o.className ? ` ${o.className}` : ''}` }, text);
+  if (o.size) el.style.setProperty('--d', `${o.size}px`);
+  if (text.length >= 3) el.classList.add('medal--sm');
+  return el;
 }
 
 export function hide(el: HTMLElement, hidden: boolean): void {

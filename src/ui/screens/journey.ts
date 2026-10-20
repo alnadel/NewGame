@@ -10,6 +10,7 @@ import { CAMPAIGN_STARS_MAX, continueLevel, isLevelPlayable, totalStars } from '
 import { STARS_PER_LEVEL } from '../../meta/save.ts';
 import { biomeIcon, biomeName, conceptIcon } from '../concepts.ts';
 import { h } from '../dom.ts';
+import { artIcon } from '../art-icons.ts';
 import { icon } from '../icons.ts';
 import { continueLabel, levelTileLabel, starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
@@ -57,7 +58,7 @@ export function createJourneyScreen(ctx: UiContext): Screen {
   };
 
   const starsNum = h('span', { class: 'num' });
-  const starsChip = h('span', { class: 'chip chip--stars', role: 'img' }, icon('star'), starsNum);
+  const starsChip = h('span', { class: 'chip chip--stars', role: 'img' }, artIcon('star'), starsNum);
   const continueBtn = button(ctx, {
     label: 'Continue',
     icon: 'play',
