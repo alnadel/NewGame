@@ -126,6 +126,13 @@
   --g2: var(--lockboard-ground);
 }
 
+/* A board off screen skips style, layout and paint (its rendered height is 296 px): opening the
+   Journey styles the boards in view, not all twenty. What hangs off a board (its props, the next
+   level's rays) still paints, so only where the clip margin can say so. */
+@supports (overflow-clip-margin: 1px) {
+  .chapter { content-visibility: auto; contain-intrinsic-size: auto 296px; overflow-clip-margin: 40px; }
+}
+
 /* Two props (journey.ts, one data-URI SVG each) stand on the board's bottom corners, in the gap to
    the next board, with the game's purple shade baked in; a locked board's are lavender. */
 .chapter::after {

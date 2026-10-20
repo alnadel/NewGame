@@ -57,6 +57,8 @@ const STORAGE_WARNING = "Progress can't be saved in this browser mode.";
 const WELCOME_BACK = 'Welcome back! Double Snow this run.';
 
 const WORLD_VARS = ['--world-left', '--world-top', '--world-width', '--world-height'] as const;
+/** A screen that left is skipped (ui.css) once its fade (180 ms) and its parts' slide-outs (340 ms) are done. */
+const SKIP_AFTER_MS = 400;
 
 export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   const cb = deps.callbacks;
@@ -308,6 +310,8 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     if (from !== 'boot') {
       const prev = screens[from];
       setHidden(prev.el, true);
+      // Rendered through its fade and its parts' slide-outs, then skipped until shown again (ui.css).
+      window.setTimeout(() => prev.el.classList.contains('is-on') || prev.el.classList.remove('is-in'), SKIP_AFTER_MS);
       prev.leave?.();
       // Toasts belong to the screen that raised them; the entering screen's own (raised in enter()
       // or later) stay. The boot-time storage warning survives the first switch.
@@ -315,7 +319,12 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     }
     current = id;
     root.dataset.screen = id;
+    // Rendered again before enter() measures; a screen never styled yet is styled once hidden first,
+    // so its transitions start there.
+    next.el.classList.add('is-in');
     next.enter(from, data);
+    if (!styled.has(next.el)) void next.el.offsetWidth;
+    styled.add(next.el);
     setHidden(next.el, false);
     fitTitles(id);
     updateGhost();
@@ -330,6 +339,9 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       else if (welcomeBackDue(save, today)) toasts.show(WELCOME_BACK, { icon: 'snow', tone: 'gold', duration: 4000 });
     }
   }
+
+  /** Screens styled at least once (go() styles a new one hidden before it shows, for its transitions). */
+  const styled = new Set<HTMLElement>();
 
   /**
    * Moves the focus to screen `id`'s initial target; if the target can't take it yet (still

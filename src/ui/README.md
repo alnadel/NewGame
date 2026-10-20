@@ -394,8 +394,13 @@ more`) turns faces flat, drops gloss, rays and clouds and thickens outlines; `.n
 setting, or the OS preference on "auto") makes transitions opacity-only, stops keyframes and
 presses without moving. Forced colours drop halos and decoration and keep real borders and
 `Highlight` states. Layout uses `--safe-top|right|bottom|left` through the world-column insets;
-hidden screens pause their animations; the page pans but never zooms (`touch-action: pan-x
-pan-y`, iOS `gesturestart` prevented); the canvas and the tray keep `none`.
+a screen that is not shown skips style, layout and paint (`content-visibility: hidden` until
+`go()` gives it `is-in`, which it keeps through its fade and slide-outs, 400 ms), so boot and every
+switch restyle the screen shown and not all eleven; a screen measures only while it has `is-in`
+(Results' `measure()`, the Title's `fit()`), and its first show styles it once hidden so its
+transitions start there. Journey boards off screen skip the same way (`content-visibility: auto`,
+296 px). The page pans but never zooms (`touch-action: pan-x pan-y`, iOS `gesturestart`
+prevented); the canvas and the tray keep `none`.
 
 ## 8. PWA
 

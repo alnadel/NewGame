@@ -182,11 +182,10 @@
   inset: 0;
 }
 
-/* Inactive screens are hidden but laid out (for their fade): no CSS animation may tick in them. */
-.scr:not(.is-on),
-.scr:not(.is-on) *,
-.scr:not(.is-on) *::before,
-.scr:not(.is-on) *::after { animation-play-state: paused !important; }
+/* A screen skips style, layout and paint (content-visibility) unless it is on, entering or fading
+   out (is-in, ui.ts go()): boot and every switch restyle the screen shown, not all eleven, and
+   nothing in a skipped screen animates on screen. */
+.scr:not(.is-in) { content-visibility: hidden; }
 
 .scr {
   position: absolute;

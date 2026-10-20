@@ -309,6 +309,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   // and cache the sheet's resting top for resultsSheetTop() (offset sizes ignore the slide-in).
   let sheetTopPx = 0;
   const measure = (): void => {
+    // A skipped screen (ui.css) has no layout to read: enter() measures again.
+    if (!el.classList.contains('is-in')) return;
     const screenH = el.clientHeight;
     const campaign = sheet.classList.contains('is-campaign');
     const padTop = parseFloat(getComputedStyle(el).paddingTop);
