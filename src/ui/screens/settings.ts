@@ -33,7 +33,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const row = (iconName: IconName, label: string, hint: string | null, control: HTMLElement): HTMLElement =>
     h(
       'div',
-      { class: 'set-row' },
+      // A long hint takes its own full-width line under the label and the control.
+      { class: hint && hint.length > 80 ? 'set-row set-row--wide' : 'set-row' },
       h('span', { class: 'set-ic', 'aria-hidden': 'true' }, icon(iconName)),
       h('span', { class: 'set-text' }, h('span', { class: 'set-label' }, label), hint ? h('span', { class: 'set-hint' }, hint) : null),
       control,

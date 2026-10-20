@@ -18,6 +18,10 @@
 
 .set-row--stack { grid-template-columns: 46px minmax(0, 1fr); }
 
+.set-row--wide > .set-text { display: contents; }
+.set-row--wide > :last-child { grid-area: 1 / 3; }
+.set-row--wide .set-hint { grid-area: 2 / 1 / 3 / -1; }
+
 .set-row--stack > :last-child {
   grid-column: 1 / -1;
   margin-top: 2px;
