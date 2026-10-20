@@ -1685,6 +1685,15 @@ Every builder runs `npm run build:single` before handing work to the integrator 
 the commit message. Over allowance → cut decoration first (confetti, cloud variants, prop variety),
 never accessibility.
 
+**Measured at the merge of the four screen branches** (bytes on disk): the kit landed at 729,406 B
+(712.3 KiB, not the ~690 planned; `candy.ts` was not in it yet, as nothing imported it), the screens
+added Title + Journey +12.9, Results + overlays +7.5, menus +5.8 and canvas +11.8 KiB, and the merged
+build was 767,543 B. The integrator took back 5,075 B with no visual change (CSS target at the first
+browsers with container queries and `:has()`, see `vite.config.ts`; dead rules and recipe variants no
+screen uses): **762,468 B (744.6 KiB), 14.6 KiB over.** What is left is shipped look, spread thin (the
+largest single decorations are 0.3-1.5 KiB each), so meeting 730 KiB means cutting decoration across
+every screen or amending this budget; that call is the lead's.
+
 ---
 
 ## 14. Work split (five builders)
