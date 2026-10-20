@@ -8,7 +8,7 @@ import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } fro
 import { createMoments, LEVEL_TIPS, MECH_TIPS, withDare } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
-import { createBanners, endToast, endToasts, showToast, updateBanners } from '../../src/render/banners.ts';
+import { createBanners, endToast, endToasts, holdToasts, resetBanners, showToast, updateBanners } from '../../src/render/banners.ts';
 
 const stats = (flakes: number, snow: number, litTotal: number, minChill: number) => ({ flakes, snow, litTotal, minChill });
 
@@ -118,6 +118,29 @@ describe('toast queue', () => {
     endToast(b, 'soon');
     run(b, 0.4);
     expect(b.toasts.map((x) => x.text)).toEqual(['m1', 'm2', 'deep']);
+  });
+  it('a tip waits 6 s after the last toast left (the top band rests) and while a cue is read; a mission does not', () => {
+    const b = createBanners();
+    showToast(b, 'tip', 'TIP', 'one', 'drag', 1);
+    showToast(b, 'tip', 'TIP', 'two', 'drag', 1);
+    run(b, 1.7);
+    expect(b.toasts.map((t) => t.text)).toEqual(['two']);
+    run(b, 5);
+    expect(b.toastT).toBe(-1);
+    run(b, 1.2);
+    expect(b.toastT).toBeGreaterThanOrEqual(0);
+    run(b, 2);
+    showToast(b, 'mission', 'MISSION ✓ 1/3', 'm1', null, 1);
+    updateBanners(b, 0.1, false);
+    expect(b.toasts[0]!.text).toBe('m1');
+    expect(b.toastT).toBeGreaterThanOrEqual(0);
+    resetBanners(b);
+    holdToasts(b, 2.4);
+    showToast(b, 'tip', 'TIP', 'go', 'drag', 3);
+    run(b, 2.2);
+    expect(b.toastT).toBe(-1);
+    run(b, 0.4);
+    expect(b.toastT).toBeGreaterThanOrEqual(0);
   });
   it('the run ending drops what waits', () => {
     const b = createBanners();

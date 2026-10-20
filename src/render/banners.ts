@@ -160,6 +160,8 @@ export interface Banners {
   toastHide: number;
   /** Seconds since the banners were made (updateBanners): when each toast was queued (Toast.at). */
   toastClock: number;
+  /** No tip starts before this toastClock (TIP_REST after the last toast, holdToasts); missions and urgent tips may. */
+  tipAt: number;
   /** The toast on screen's wrapped lines and the width they were wrapped for. */
   toastLines: string[];
   toastWrapW: number;
@@ -252,6 +254,7 @@ export function createBanners(): Banners {
     toastT: -1,
     toastHide: 0,
     toastClock: 0,
+    tipAt: 0,
     toastLines: [],
     toastWrapW: 0,
   };
@@ -332,6 +335,11 @@ const TOAST_OUT = 0.3;
 /** A tip on screen at least this long (s) steps aside for a mission. */
 const TIP_YIELD_S = 1.5;
 /**
+ * The top band, where the path ahead comes in, stays clear this long (s) after a toast before a tip
+ * shows: at most one tip in about ten seconds.
+ */
+const TIP_REST = 6;
+/**
  * A waiting tip queued this recently (s) is never replaced by a newer one: the newer waits behind it
  * (two tips of one moment, such as a snap's gauge tip and the bud under it, both show).
  */
@@ -384,6 +392,11 @@ export function endToast(b: Banners, text: string): void {
   }
 }
 
+/** No tip starts for `s` seconds (a cue line is being read). */
+export function holdToasts(b: Banners, s: number): void {
+  b.tipAt = Math.max(b.tipAt, b.toastClock + s);
+}
+
 /** The run ended: drop what waits (the Results take over); the toast on screen fades out. */
 export function endToasts(b: Banners): void {
   b.toasts.length = Math.min(b.toasts.length, b.toastT >= 0 ? 1 : 0);
@@ -395,6 +408,7 @@ export function resetBanners(b: Banners): void {
   b.toasts.length = 0;
   b.toastT = -1;
   b.toastHide = 0;
+  b.tipAt = 0;
   b.night = -1;
   b.day = -1;
   b.coolPulse = 0;
@@ -446,9 +460,11 @@ export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
     if (b.toastT > TOAST_IN + (b.toasts[0]?.hold ?? 0) + TOAST_OUT) {
       b.toasts.shift();
       b.toastT = -1;
+      holdToasts(b, TIP_REST);
     }
   }
-  if (b.toastT < 0 && b.toasts.length > 0 && !covered) {
+  const next = b.toasts[0];
+  if (b.toastT < 0 && next && !covered && (next.kind === 'mission' || next.urgent || b.toastClock >= b.tipAt)) {
     b.toastT = 0;
     b.toastWrapW = 0;
   }

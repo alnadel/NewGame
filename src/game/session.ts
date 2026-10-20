@@ -110,7 +110,7 @@ import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
-import { dismissLevelCard, showLevelCard, type StampKind } from '../render/banners.ts';
+import { dismissLevelCard, holdToasts, showLevelCard, type StampKind } from '../render/banners.ts';
 import { createMoments, type RunMoments } from './moments.ts';
 import {
   campaignConfig,
@@ -1677,7 +1677,11 @@ export class Session {
         if (this.runLevel) dismissLevelCard(this.renderer.scene.banners);
         break;
       case 'go':
-        if (this.s.cfg.profile <= 1 || (this.runLevel !== null && this.s.cfg.lesson === true)) this.cue('keep-shade');
+        if (this.s.cfg.profile <= 1 || (this.runLevel !== null && this.s.cfg.lesson === true)) {
+          this.cue('keep-shade');
+          // The cue line (2 s) is read first: no tip stacks over it.
+          holdToasts(this.renderer.scene.banners, 2.4);
+        }
         break;
       case 'levelWon':
         this.onLevelWon(ev);
