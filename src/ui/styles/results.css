@@ -685,11 +685,11 @@
 }
 
 .btn--swap::before {
-  /* 48 px touch target around the small pill. It replaces the kit's gloss cap on this ::before
-     (UI v2 kit), so it resets the cap's look. */
+  /* 48 px touch target around the small pill (the inset counts the border: an absolute box starts
+     inside it). It replaces the kit's gloss cap on this ::before (UI v2 kit), so it resets the cap's look. */
   content: '';
   position: absolute;
-  inset: -6px 0;
+  inset: calc(-6px - var(--bw)) calc(0px - var(--bw));
   height: auto;
   border-radius: 0;
   background: none;
@@ -794,6 +794,9 @@
   height: 24px;
   rotate: 8deg;
 }
+
+/* On cream-2 the accent amber is 4.22:1: the road's words and count take the brown (5.9:1). */
+.res-top .road :is(.road-text, .road-count) { color: var(--t-brown); }
 
 .res-top .road {
   margin-top: 12px;

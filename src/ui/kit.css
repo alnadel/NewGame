@@ -167,6 +167,8 @@
 .node {
   -webkit-text-stroke: var(--halo) var(--ink);
   paint-order: stroke fill;
+  /* The centred halo eats most of a space's advance: multi-word labels keep their gaps. */
+  word-spacing: 0.12em;
 }
 
 /* Body-font glyphs inside display text (★ ← → ≤ and emoji are not in the Lilita subset, §2.4). */
@@ -631,10 +633,11 @@
   transition: transform var(--t-up) var(--ease-back);
 }
 
+/* An absolute box starts inside the border: the inset counts it, so the hit box is 48 px tall. */
 .chip--btn::before {
   content: '';
   position: absolute;
-  inset: -4px -2px;
+  inset: calc(-4px - var(--bw)) calc(-2px - var(--bw));
 }
 
 .chip--btn:active:not([aria-disabled='true']) {

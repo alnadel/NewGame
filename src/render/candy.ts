@@ -89,6 +89,8 @@ export function onDisplayFont(cb: () => void): void {
  */
 export function outlined(g: CanvasRenderingContext2D, t: string, x: number, y: number, px: number, fill = '#fff', maxW?: number, halo = 0.24): void {
   g.font = displayFont(px);
+  // The halo eats into Lilita's word gaps: 0.12em more keeps "TAP OR DRAG" three words.
+  g.wordSpacing = `${(px * 0.12).toFixed(1)}px`;
   g.lineJoin = 'round';
   g.miterLimit = 2;
   g.lineWidth = px * halo;
@@ -101,6 +103,7 @@ export function outlined(g: CanvasRenderingContext2D, t: string, x: number, y: n
   g.strokeText(t, x, y, maxW);
   g.fillStyle = fill;
   g.fillText(t, x, y, maxW);
+  g.wordSpacing = '0px';
 }
 
 /** Plain display text in `fill` (ink by default): panel titles and labels on cream, no halo. */
