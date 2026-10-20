@@ -1128,7 +1128,9 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   // is 2k left of the coin's centre (the coin overlaps it), its right end under the multiplier coin.
   const slotLOf = (): number => textEnd - textW - (icon ? 3 * k + coinR + 2 * k : 12 * k);
   const plateROf = (): number => slotLOf() + (icon ? 2 * k - coinR : 0) - tuck;
-  const rulerOf = (): number => plateROf() - FLAG_IN * k - (lx0 + 2 * medalR + gap + clockW + gap);
+  // An Endless clock keeps at least 6k before the ruler's cap (the pips carry their own air).
+  const clockGap = (): number => (c ? gap : Math.max(gap, 6 * k));
+  const rulerOf = (): number => plateROf() - FLAG_IN * k - (lx0 + 2 * medalR + gap + clockW + clockGap());
   if (rulerOf() < RULER_COMFY) medalR = 19 * k;
   if (rulerOf() < RULER_COMFY) gap = 3 * k;
   if (rulerOf() < RULER_COMFY) tuck = 0;
@@ -1220,7 +1222,7 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
     g.textBaseline = 'middle';
   }
   // Reserve the width of the widest clock so the ruler doesn't jump.
-  cx += clockW + gap;
+  cx += clockW + clockGap();
   const r0 = cx;
   const r1 = plateR - FLAG_IN * k;
   if (r1 - r0 <= 24) return;
@@ -1385,12 +1387,14 @@ function flareMarks(g: CanvasRenderingContext2D, s: SimState, m: MechView | null
       } else tick(g, x, y, rh, k, out === 0 ? '#FF6A3D' : '#2EE0C8');
       continue;
     }
-    // The ring sits 9k over the ruler, on a short ink stem.
+    // The ring sits 9k over the ruler, on a short ink stem; within the noon boss's reach (the
+    // ruler's middle) it hangs 9k under the ruler instead, clear of the glyph.
+    const under = Math.abs(x - (x0 + x1) / 2) < 13 * k;
     g.fillStyle = INK;
-    g.fillRect(x - 1 * k, y - 6 * k, 2 * k, 6 * k);
+    g.fillRect(x - 1 * k, under ? y + rh : y - 6 * k, 2 * k, 6 * k);
     g.fillStyle = out === 0 ? '#FFF4D6' : out === 1 ? '#2EC4B6' : '#B5ABC4';
     g.beginPath();
-    g.arc(x, y - 9 * k, 4 * k, 0, TAU);
+    g.arc(x, under ? y + rh + 9 * k : y - 9 * k, 4 * k, 0, TAU);
     g.fill();
     g.lineWidth = 1.8 * k;
     g.strokeStyle = out === 0 ? '#FF6A3D' : INK;
