@@ -51,7 +51,8 @@
 /* Keyboard players in play: the key to hold replaces the swiping hand (the track is mirrored for
    'left', so the chip un-mirrors itself). */
 .sui.is-kbd[data-screen='play'] .ghost .ghost-hand,
-.sui.is-kbd[data-screen='play'] .ghost .ghost-trail { display: none; }
+.sui.is-kbd[data-screen='play'] .ghost .ghost-trail,
+.sui.is-kbd[data-screen='play'] .ghost .ghost-word { display: none; }
 
 .sui.is-kbd[data-screen='play'] .ghost-key { display: block; }
 

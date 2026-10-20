@@ -152,6 +152,11 @@ export interface UiCallbacks {
    * already on 'play'.
    */
   startRun(kind: RunKind, date?: string, level?: number): void;
+  /**
+   * Space/Enter in play: a held run (a level's intro card, a Daily or challenge waiting at dawn)
+   * starts as a tap would start it. False when no run is held (the key does nothing then).
+   */
+  startHeld?(): boolean;
   /** Results > Next level on a passed Journey level: start `campaign.nextId`. The UI is already on 'play'. */
   nextLevel(): void;
   /**
@@ -269,6 +274,8 @@ export interface Ui {
    * move the sun in step with it; −1 while the hand is hidden or not sliding (reduced motion).
    */
   ghostProgress(): number;
+  /** The last input came from a keyboard (the level card's start pill says which key). */
+  keyboardMode(): boolean;
   /** Shows the small muted indicator in play while audio isn't running. */
   setAudioMuted(muted: boolean): void;
   toast(text: string, options?: ToastOptions): void;

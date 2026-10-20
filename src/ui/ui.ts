@@ -202,7 +202,8 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   };
   function updateGhostKey(): void {
     const dir = ghost === 'left' ? -1 : ghost === 'right' ? 1 : undefined;
-    ghostKey.textContent = dir === undefined ? '' : `Hold ${keyDir(dir) === -1 ? '←' : '→'}`;
+    // Waiting to start ('both'): Space starts the run (the arrows do too, steering as they go).
+    ghostKey.textContent = dir === undefined ? 'Space' : `Hold ${keyDir(dir) === -1 ? '←' : '→'}`;
   }
   const toasts = createToastStack();
   const modals = createModalHost(() => ctx, (open) => setFlag(screenLayer, 'inert', open || rotateBlocking));
@@ -452,6 +453,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       updateGhostKey();
     },
     ghostProgress,
+    keyboardMode: () => keyboardMode,
     setAudioMuted(muted) {
       play.setMuted(muted);
     },

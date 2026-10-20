@@ -488,6 +488,7 @@ export class Session {
       };
     const callbacks: UiCallbacks = {
         startRun: sync((k: RunKind, date?: string, level?: number) => this.startRun(k, date, level)),
+        startHeld: () => this.startHeld(),
         nextLevel: sync(() => this.nextLevel()),
         openJourney: sync(() => this.openJourney()),
         retry: sync(() => this.retry()),
@@ -938,6 +939,7 @@ export class Session {
     r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
     r.time = this.time;
     r.highContrast = save.settings.highContrast;
+    this.renderer.scene.banners.levelKeys = this.ui.keyboardMode();
     r.reducedMotion = this.reducedMotion();
     r.equipped = save.equipped;
     r.softShadows = this.gov.softShadows;
@@ -1508,6 +1510,14 @@ export class Session {
         : this.makeRun(kind, date);
     this.beginRun(run);
     this.setGhost('both');
+  }
+
+  /** Space/Enter in play: a run held on its level card (or at dawn) starts as a tap starts it. */
+  private startHeld(): boolean {
+    if (this.ui.current() !== 'play' || this.s.phase !== 'hold') return false;
+    this.d.audio.ensure();
+    this.input.tap();
+    return true;
   }
 
   private retry(): void {

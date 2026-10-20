@@ -139,6 +139,8 @@ export interface Banners {
   levelBiome: BiomeId;
   /** Bumped by showLevelCard: the card's sprite is redrawn for new words. */
   levelGen: number;
+  /** The last input came from a keyboard (set each frame): the start pill names the key instead of the tap. */
+  levelKeys: boolean;
   /** The intro card's sprites (the card; the start pill). */
   cardSprite: Sprite;
   pillSprite: Sprite;
@@ -239,6 +241,7 @@ export function createBanners(): Banners {
     levelDareGlyph: null,
     levelBiome: 'meadow',
     levelGen: 0,
+    levelKeys: false,
     cardSprite: sprite(),
     pillSprite: sprite(),
     stampSprite: sprite(),
@@ -715,6 +718,9 @@ const RIBBON_PX = 26;
 const RIBBON_BAND = 44;
 const PILL_H = 40;
 const START_TEXT = 'TAP OR DRAG TO START';
+/** The start pill for a keyboard player (the arrows start the run too, steering as they go). */
+const START_KEYS = 'PRESS SPACE TO START';
+let cKeys = false;
 /** The glyph beside each star rule: the goal, a flake, the sun (a cool run). */
 const STAR_GLYPHS = ['goal', 'frosty', 'clear'];
 /** A star well's label line (12k text): the wells grow by one when a label takes two. */
@@ -771,8 +777,9 @@ function measureCard(b: Banners, w: number, k: number): void {
     if (out.length > 1) cTwoLine = true;
     cLabelPx[i] = px;
   }
+  cKeys = b.levelKeys;
   g.font = displayFont(17 * k);
-  cPillTW = g.measureText(START_TEXT).width;
+  cPillTW = g.measureText(cKeys ? START_KEYS : START_TEXT).width;
   cPillW = cPillTW + 64 * k;
 }
 
@@ -817,7 +824,7 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
   const lo = top + 8 + (RIBBON_BAND / 2) * scale;
   const hi = dialTop - 8 - (PILL_H / 2) * scale;
   const room = Math.round(hi - lo);
-  if (cOwner !== b || cGen !== b.levelGen || cFont !== fontGen || cScale !== scale || cVw !== v.vw || Math.abs(cRoom - room) > 2) {
+  if (cOwner !== b || cGen !== b.levelGen || cFont !== fontGen || cScale !== scale || cVw !== v.vw || cKeys !== b.levelKeys || Math.abs(cRoom - room) > 2) {
     cScale = scale;
     cVw = v.vw;
     cRoom = room;
@@ -835,7 +842,7 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
   const cs = b.cardSprite;
   if (stale(cs, dpr, k, hc, cW, fit)) renderCard(b, cs, dpr, k, hc, fit);
   const ps = b.pillSprite;
-  if (stale(ps, dpr, k, hc, cPillW, null)) renderPill(ps, dpr, k, hc);
+  if (stale(ps, dpr, k, hc, cPillW, cKeys)) renderPill(ps, dpr, k, hc);
   g.globalAlpha = a;
   blit(g, cs, cx - cW / 2, y);
   // The start pill breathes (static under reduced motion, gone as the card leaves).
@@ -976,7 +983,7 @@ function starWells(g: CanvasRenderingContext2D, b: Banners, x0: number, y: numbe
 function renderPill(s: Sprite, dpr: number, k: number, hc: boolean): void {
   const w = cPillW;
   const h = PILL_H * k;
-  const g = begin(s, dpr, k, hc, w, null, w + 8, h + 10 * k, w / 2 + 4, h / 2 + 2);
+  const g = begin(s, dpr, k, hc, w, cKeys, w + 8, h + 10 * k, w / 2 + 4, h / 2 + 2);
   candyRect(g, -w / 2, -h / 2, w, h, h / 2, FACE.gold, k, { lip: 5 * k, drop: 4 * k, flat: hc });
   // The coin and the words centred together.
   const ccx = -(30 * k + cPillTW) / 2 + 12 * k;
@@ -991,7 +998,7 @@ function renderPill(s: Sprite, dpr: number, k: number, hc: boolean): void {
   g.restore();
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  outlined(g, START_TEXT, ccx + 18 * k + cPillTW / 2, -1.5 * k, 17 * k);
+  outlined(g, cKeys ? START_KEYS : START_TEXT, ccx + 18 * k + cPillTW / 2, -1.5 * k, 17 * k);
 }
 
 // ---------------------------------------------------------------------------------------------

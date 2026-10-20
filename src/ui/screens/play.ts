@@ -23,6 +23,8 @@ export function createPlayScreen(ctx: UiContext): PlayScreen {
     el: h('section', { class: 'scr scr-play', 'aria-label': 'Playing' }, pauseBtn, muted),
     enter() {},
     back: pause,
+    // Space/Enter on a held run (the level card, a Daily at dawn) starts it, like a tap.
+    activate: () => ctx.cb.startHeld?.() === true,
     setMuted(on) {
       hide(muted, !on);
     },
