@@ -38,7 +38,8 @@ export function createMissionsScreen(ctx: UiContext): Screen {
   /** The green bar with the count inside it (the bar is decoration; the count is also read out). */
   const bar = (m: MissionView): HTMLElement => {
     const b = progressBar(m.fraction, 'bar', 'green');
-    if (!m.done) b.append(h('span', { class: 'bar-label' }, m.progressText));
+    // A time goal with no run yet reads '–' (meta): the bar says so in words.
+    if (!m.done) b.append(h('span', { class: 'bar-label' }, m.progressText === '–' ? 'Not yet' : m.progressText));
     return b;
   };
 

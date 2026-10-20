@@ -344,7 +344,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   const missionRow = (m: MissionView): HTMLElement => {
     const side = m.done
       ? h('span', { class: 'stamp stamp--sm' }, 'Complete')
-      : h('span', { class: 'mrow-prog' }, m.progressText);
+      : h('span', { class: 'mrow-prog' }, m.progressText === '–' ? 'Not yet' : m.progressText);
     return h(
       'li',
       { class: `plate mrow${m.done ? ' is-done' : ''}${m.done && !m.justCompleted ? ' is-stamped' : ''}` },
