@@ -6,6 +6,7 @@
 
 import type { View } from '../game/camera.ts';
 import { OBLIQUE } from '../game/camera.ts';
+import { burst, displayFont, INK } from './candy.ts';
 import { cssa, type Rgb } from './color.ts';
 import { ctx2d, flake, makeCanvas, radialSprite, sparkle, type Canvas2D } from './sprites.ts';
 
@@ -722,13 +723,32 @@ function popScale(t: number, inDur: number, peak: number): number {
   return peak + (1 - peak) * ((u - 0.6) / 0.4);
 }
 
-const POP_FONT = "800 20px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+/** The pops' face (docs/UI_V2.md §9.9): the display face at 20 px, scaled per pop. */
+const POP_FONT = displayFont(20);
 
-/** Text pops in screen space, riding with Nubs at (nx, ny) — his hop included — rising as they fade, `lift` CSS px higher. */
-export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale: number, nx: number, ny: number, lift = 0): void {
+/** The burst sprites behind the headline pops (SWING gold, PHEW green, COLD SNAP ice), made on first use. */
+const BURST_W = 160;
+const BURST_H = 100;
+let burstGold: Canvas2D | null = null;
+let burstGreen: Canvas2D | null = null;
+let burstIce: Canvas2D | null = null;
+function burstSprite(fill: string): Canvas2D {
+  const c = makeCanvas(BURST_W, BURST_H);
+  const g = ctx2d(c);
+  burst(g, BURST_W / 2, BURST_H / 2 - 3, BURST_W / 2 - 6, BURST_H / 2 - 8, fill, 1.2, 12, 0.2);
+  return c;
+}
+
+/**
+ * Text pops in screen space, riding with Nubs at (nx, ny) — his hop included — rising as they fade,
+ * `lift` CSS px higher. Every pop is the display face in its colour with an ink halo and a hard ink
+ * drop; the headlines (PHEW!, SWING!, COLD SNAP!) sit on a small comic burst (none in high contrast).
+ */
+export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale: number, nx: number, ny: number, lift = 0, hc = false): void {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
+  g.miterLimit = 2;
   for (let i = 0; i < POP_CAP; i++) {
     const dur = p.dur[i]!;
     if (dur <= 0) continue;
@@ -740,40 +760,37 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     let scale: number;
     let size: number;
     let fill: string;
-    let stroke: string;
+    let back: Canvas2D | null = null;
     switch (style) {
       case POP_PHEW:
       case POP_SWING:
         scale = popScale(t, 0.25, 1.3) * (style === POP_SWING ? 0.8 : 1);
         size = 30;
         fill = '#FFFFFF';
-        stroke = '#1B9A8E';
+        if (!hc) back = style === POP_SWING ? (burstGold ??= burstSprite('#FFCB2B')) : (burstGreen ??= burstSprite('#69D33B'));
         break;
       case POP_GO:
       case POP_MULT:
         scale = popScale(t, 0.2, 1.35);
         size = style === POP_GO ? 36 : 22;
         fill = '#FFE27A';
-        stroke = '#2B2140';
         break;
       case POP_BANG:
         scale = popScale(t, 0.15, 1.4);
         size = 26;
-        fill = '#FF5D5D';
-        stroke = '#FFFFFF';
+        fill = '#FF6A45';
         break;
       case POP_DEEP:
       case POP_SNAP:
         scale = popScale(t, 0.25, 1.3);
         size = style === POP_SNAP ? 30 : 18;
         fill = '#EAF7FF';
-        stroke = style === POP_SNAP ? '#2B6FC0' : '#1F2A66';
+        if (style === POP_SNAP && !hc) back = burstIce ??= burstSprite('#9ED8FF');
         break;
       default:
         scale = popScale(t, 0.2, 1.2);
         size = 17;
         fill = '#FFFFFF';
-        stroke = '#2B5A8A';
         break;
     }
     // A merged pop bumps: 1 → 1.25 → 1 over 160 ms.
@@ -786,14 +803,24 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     g.font = POP_FONT;
     const fs = size / 20;
     // Kept inside the safe area (COLD SNAP! over a Nubs near the edge was cut off).
-    const half = (g.measureText(p.text[i]!).width * fs * s) / 2 + 4;
+    const tw = g.measureText(p.text[i]!).width;
+    const half = (tw * fs * s) / 2 + (back ? 16 : 4);
     const lo = v.vx + v.safe.left + half;
     const hi = v.vx + v.vw - v.safe.right - half;
     const cx = lo < hi ? Math.min(hi, Math.max(lo, sx)) : sx;
     g.setTransform(v.dpr * s, 0, 0, v.dpr * s, cx * v.dpr, sy * v.dpr);
     g.scale(fs, fs);
+    if (back) {
+      // The burst, sized to the words (in the pop's 20 px space).
+      const bw = tw + 56;
+      const bh = 60;
+      g.drawImage(back, -bw / 2, -bh / 2 - 1, bw, bh);
+    }
     g.lineWidth = 5;
-    g.strokeStyle = stroke;
+    g.strokeStyle = INK;
+    g.fillStyle = INK;
+    g.strokeText(p.text[i]!, 0, 2);
+    g.fillText(p.text[i]!, 0, 2);
     g.strokeText(p.text[i]!, 0, 0);
     g.fillStyle = fill;
     g.fillText(p.text[i]!, 0, 0);
