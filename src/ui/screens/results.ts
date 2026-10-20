@@ -89,6 +89,11 @@ const HERO_RIBBON_PX = 30;
 const HERO_MISS_MAX = 0.72;
 /** Under this scale the rays go (too little room for them to read). */
 const HERO_FX_MIN = 0.55;
+/**
+ * A level's sheet always leaves the hero this much room under the top inset (results.css mirrors
+ * it as 99 px): stars at the rays' scale and the ribbon, never up into the inset.
+ */
+const HERO_ROOM_MIN = Math.ceil(HERO_RIBBON_PX + HERO_FX_MIN * HERO_STARS_PX);
 /** The goal cards' star bits (game/campaign.ts starState): the goal, the flakes or Dare, the cool run lost. */
 const BIT_GOAL = 1;
 const BIT_TWO = 2;
@@ -302,8 +307,12 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   let sheetTopPx = 0;
   const measure = (): void => {
     const screenH = el.clientHeight;
-    const maxFraction = sheet.classList.contains('is-campaign') ? SHEET_MAX_CAMPAIGN : SHEET_MAX_FRACTION;
-    const maxSheet = Math.max(SHEET_MIN_FRACTION * screenH, Math.min(maxFraction * screenH, screenH - MAP_MIN_PX));
+    const campaign = sheet.classList.contains('is-campaign');
+    const padTop = parseFloat(getComputedStyle(el).paddingTop);
+    const maxSheet = Math.max(
+      SHEET_MIN_FRACTION * screenH,
+      Math.min((campaign ? SHEET_MAX_CAMPAIGN : SHEET_MAX_FRACTION) * screenH, screenH - MAP_MIN_PX, campaign ? screenH - padTop - HERO_ROOM_MIN : screenH),
+    );
     const cs = getComputedStyle(sheet);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const left = maxSheet - padY - top.offsetHeight - actions.offsetHeight;
@@ -313,9 +322,9 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     sheetTopPx = el.getBoundingClientRect().top + screenH - hh;
     // The hero fills the map band down to the sheet: from the top inset (the section's padding)
     // to the sheet's edge; its stars scale to that room.
-    const room = Math.max(0, screenH - hh - parseFloat(getComputedStyle(el).paddingTop));
+    const room = Math.max(0, screenH - hh - padTop);
     // A missed level's empty sockets stay smaller: the Melt Map's pins of the death line show more.
-    const cap = sheet.classList.contains('is-campaign') && !sheet.classList.contains('is-passed') ? HERO_MISS_MAX : 1;
+    const cap = campaign && !sheet.classList.contains('is-passed') ? HERO_MISS_MAX : 1;
     const scale = Math.max(0.4, Math.min(cap, (room - HERO_RIBBON_PX) / HERO_STARS_PX));
     sheet.style.setProperty('--room', `${Math.round(room)}px`);
     sheet.style.setProperty('--hero-scale', scale.toFixed(3));

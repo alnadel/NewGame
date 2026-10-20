@@ -806,8 +806,9 @@
   box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
 }
 
-/* A taller sheet (results.ts SHEET_MAX_CAMPAIGN); the missions show as their award chip. */
-.res-sheet.is-campaign { max-height: max(58%, min(82%, calc(100% - 96px))); }
+/* A taller sheet (results.ts SHEET_MAX_CAMPAIGN), which still leaves the hero 99 px under the
+   section's top padding (HERO_ROOM_MIN); the missions show as their award chip. */
+.res-sheet.is-campaign { max-height: max(58%, min(82%, calc(100% - 96px), calc(100% - var(--in-top) - 107px))); }
 
 .res-sheet.is-campaign .res-scroll {
   display: flex;
