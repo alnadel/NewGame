@@ -30,6 +30,7 @@ import {
 } from '../platform/lifecycle.ts';
 import { captureInstallPrompt } from '../platform/pwa.ts';
 import { ghostHandSvg } from './art.ts';
+import { fontsReady } from './fonts.ts';
 import { h, isInteractive, setFlag, svgFromMarkup } from './dom.ts';
 import { createModalHost, createRotateOverlay, createToastStack } from './overlays.ts';
 import type { Screen, UiContext } from './screen.ts';
@@ -380,6 +381,14 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     syncWorld(true);
   });
   const stopMotion = onReducedMotionChange(applyMotion);
+  // The display face changes text widths: the Title re-fits, Results re-measures its sheet. CSS text
+  // re-renders by itself.
+  let alive = true;
+  void fontsReady.then((ok) => {
+    if (!ok || !alive) return;
+    if (current !== 'boot') screens[current].relayout?.();
+    results.invalidateSheetTop();
+  });
 
   applyMotion();
   checkRotate();
@@ -438,6 +447,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       stopInstallPrompt();
       stopViewport();
       stopMotion();
+      alive = false;
       worldObserver?.disconnect();
       for (const s of Object.values(screens)) s.leave?.();
       root.replaceChildren();

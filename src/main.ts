@@ -14,6 +14,7 @@ import { prepareHostDownloads } from './platform/host.ts';
 import { registerServiceWorker } from './platform/pwa.ts';
 import { createStorage } from './platform/storage.ts';
 import type { DebugDraw } from './render/renderer.ts';
+import { fontsReadyWithin } from './ui/fonts.ts';
 
 const VERSION = '0.1.0';
 
@@ -62,7 +63,11 @@ function boot(): void {
       installDebugOverlay(session, draw);
     }
   }
-  session.start(() => {
+  // The splash waits for the display face as well as the first frame, but never more than 300 ms
+  // for the face (docs/UI_V2.md §2.3): a data-URL font decodes in a few ms, so the usual boot shows
+  // no flash of the fallback face, and a slow one never holds the game.
+  const fontGate = fontsReadyWithin(300);
+  session.start(() => void fontGate.then(() => {
     const splash = document.getElementById('boot');
     if (splash) {
       splash.style.pointerEvents = 'none';
@@ -70,7 +75,7 @@ function boot(): void {
       splash.style.opacity = '0';
       window.setTimeout(() => splash.remove(), 220);
     }
-  });
+  }));
   // The single-file build has no sw.js (pwa.ts skips it there too): leave the registration out of it.
   if (import.meta.env.MODE !== 'single') void registerServiceWorker();
   prepareHostDownloads();

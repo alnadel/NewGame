@@ -4,6 +4,8 @@
 //   ?screen=title|play|pause|dying|results|settings|daily|missions|wardrobe|journey|profile|rotate
 //   &variant=…   (see VARIANTS)   &inset=47 (simulated top inset)   &rm=1 (reduced motion)
 //   &bare=1 (hide the lab toolbar)   &toast=1 (demo toasts)   &sheet=install|confirm
+//   &hc=1 (high contrast: the "High-contrast shadows" setting)
+// The first render waits for the display font (fonts.ts), so screenshots never show the fallback.
 
 import { CAMPAIGN_LEVELS, CONCEPTS, formatScore, levelDef, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import type { Save } from '../meta/saveTypes.ts';
@@ -18,6 +20,7 @@ import { backfillXp } from '../meta/gamify.ts';
 import { shareText } from '../platform/share.ts';
 import { cosmeticSwatch } from './swatches.ts';
 import { simulateSafeArea } from '../platform/safeArea.ts';
+import { fontsReady } from './fonts.ts';
 import { createUi } from './ui.ts';
 import type { ResultsView, ScreenId, Ui, UiCallbacks } from './types.ts';
 
@@ -427,6 +430,7 @@ function mount(screen: LabScreen, variant: string): void {
   if (screen === 'profile' && variant === 'globes') save.gamify.globes = 3;
   if (screen === 'profile' && variant === 'streak') save.gamify.streak = { last: addDays(today, -1), days: 6, best: 9, freezeUsed: false };
   if (params.get('rm') === '1') save.settings.reducedMotion = 'on';
+  if (params.get('hc') === '1') save.settings.highContrast = true;
 
   const log = (...args: unknown[]): void => console.info('[lab]', ...args);
   let lastResults: ResultsView | null = null;
@@ -608,6 +612,7 @@ function buildBar(): void {
   panel.append(Object.assign(document.createElement('span'), { className: 'lab-sep' }));
   add('inset 47', params.get('inset') === '47', () => toggleParam('inset', '47'));
   add('reduced motion', params.get('rm') === '1', () => toggleParam('rm', '1'));
+  add('high contrast', params.get('hc') === '1', () => toggleParam('hc', '1'));
   add('toasts', params.get('toast') === '1', () => toggleParam('toast', '1'));
   add('install sheet', params.get('sheet') === 'install', () => toggleParam('sheet', 'install'));
   const toggle = document.createElement('button');
@@ -622,5 +627,7 @@ function buildBar(): void {
 }
 
 window.addEventListener('resize', () => drawScene(ui, currentScreen()));
-mount(currentScreen(), currentVariant());
-buildBar();
+void fontsReady.then(() => {
+  mount(currentScreen(), currentVariant());
+  buildBar();
+});
