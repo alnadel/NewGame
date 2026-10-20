@@ -220,33 +220,38 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   );
   const midRunNote = h('p', { class: 'card card-note set-midrun' }, MID_RUN_BACKUP_NOTE);
 
+  /** A section's row tiles wear its candy face (kit.css .set-ic). */
+  const toned = (face: string, card: HTMLElement): HTMLElement => {
+    card.classList.add(face);
+    return card;
+  };
   const body = h(
     'div',
     { class: 'menu-body' },
     // Short groups: one line per control where it fits (sliders sit beside their label).
-    section(
+    toned('f-pink', section(
       'Sound',
       row('sound', 'Effects', null, sfx.el),
       row('music', 'Music', null, music.el),
       row('vibrate', 'Vibration', typeof navigator.vibrate === 'function' ? null : 'Not supported here', haptics.el),
-    ),
-    section(
+    )),
+    toned('f-blue', section(
       'Controls',
       row('gauge', 'Drag speed', null, sensitivity.el),
       row('invert', 'Invert drag', 'Drag right to turn the sun the other way', invert.el),
       keys,
-    ),
-    section(
+    )),
+    toned('f-green', section(
       'Play',
       stackRow('flag', 'Name on challenges', 'Friends see it on the links you share.', nameInput),
       row('sun', 'Adaptive comfort', 'Eases the heat after a rough run (not in Daily or challenges).', comfort.el),
-    ),
-    section(
+    )),
+    toned('f-violet', section(
       'Accessibility',
       stackRow('motion', 'Reduced motion', 'No shake, zoom or sliding cards', motion.el),
       row('contrast', 'High-contrast shadows', null, contrast.el),
       stackRow('compass', 'Shade guide', 'Thick teal lasts, thin is ending. "Always" marks your shares.', guide.el),
-    ),
+    )),
     section(
       'Testing',
       row('map', 'Unlock all levels (testing)', 'Every Journey level opens from the map, and every feature (Endless, Daily, Missions, Wardrobe, Profile) is open. Stars and unlocks still count as usual.', unlockAll.el),
@@ -255,6 +260,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     progressSection,
     midRunNote,
     h('p', { class: 'version' }, `SHADY v${ctx.version}`),
+    // The display face's credit (docs/UI_V2.md §2.1; its licence is src/ui/fonts/LICENSE-LilitaOne.txt).
+    h('p', { class: 'version' }, 'Lilita One font © 2011 Juan Montoreano · SIL Open Font License 1.1'),
   );
 
   const header = menuHeader(ctx, 'Settings');

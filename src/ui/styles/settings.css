@@ -2,33 +2,40 @@
    Owner: B1 Kit (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
    compose the kit's recipes (kit.css), never copy them. */
 
-/* Settings rows */
+/* Settings rows (docs/UI_V2.md §10.7): a 46 px candy tile by section, the label in Lilita, the
+   control at the end; rows parted by a dashed line. */
 
 .set-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 52px;
-  padding: 6px 0;
+  min-height: 58px;
+  padding: 7px 0;
 }
 
-.set-row + .set-row { border-top: 1px solid var(--line); }
+.set-row + .set-row { border-top: 2.5px dashed rgba(42, 27, 69, 0.18); }
 
-.set-row--stack { grid-template-columns: 36px 1fr; }
+.set-row--stack { grid-template-columns: 46px minmax(0, 1fr); }
 
 .set-row--stack > :last-child {
   grid-column: 1 / -1;
   margin-top: 2px;
 }
 
+/* The tile wears its section's face (settings.ts: Sound pink, Controls blue, Play green,
+   Accessibility violet, the rest cloud); no gloss; the line icon in ink (≥ 4.4:1 on -hi → face). */
 .set-ic {
-  --d: 36px;
-  --ic: 20px;
-  border-radius: 12px;
-  background: var(--paper);
-  color: var(--ink-2);
+  --d: 46px;
+  --ic: 24px;
+  border: var(--bw) solid var(--ink);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--hi, var(--cloud-hi)), var(--face, var(--cloud)));
+  box-shadow: inset 0 -4px 0 var(--lip, var(--cloud-lip)), var(--top-light), var(--drop-sm);
+  color: var(--ink);
 }
+
+.set-ic .ic { stroke-width: 2.4; }
 
 .set-text,
 .drow-result {
@@ -38,14 +45,16 @@
 }
 
 .set-label {
-  font-weight: 800;
-  font-size: var(--fs-md);
+  font: 400 var(--fs-d-md)/1.15 var(--font-display);
+  font-synthesis: none;
+  letter-spacing: 0.01em;
 }
 
 .set-hint,
 .badge-desc {
   color: var(--ink-2);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
+  font-weight: 700;
   line-height: 1.3;
 }
 
@@ -67,13 +76,35 @@
 
 .set-midrun { margin-top: 0; }
 
-.set-row .range-wrap { width: min(calc(var(--cw) * 0.52), 240px); }
+.set-row .range-wrap { width: min(calc(var(--cw) * 0.46), 230px); }
 
 .set-row--stack .range-wrap { width: 100%; }
 
+/* Narrow columns: a slider goes under its label, full width, so the label keeps its line. */
+@container menu (max-width: 350px) {
+  .set-row:has(> .range-wrap) {
+    grid-template-columns: 46px minmax(0, 1fr);
+    row-gap: 0;
+  }
+
+  .set-row:has(> .range-wrap) > .set-ic { grid-row: 1 / span 2; }
+
+  .set-row > .range-wrap {
+    grid-column: 2;
+    width: 100%;
+    margin-top: -8px;
+  }
+}
+
+/* The version line and the font credit, on the sand end of the sky (ink-2: 6.7:1). */
 .version {
   text-align: center;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--fs-md);
   font-weight: 700;
+}
+
+.version + .version {
+  margin-top: -8px;
+  font-size: var(--fs-sm);
 }
