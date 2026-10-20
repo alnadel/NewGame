@@ -30,7 +30,7 @@
   --violet-hi: #D7B0FF; --violet: #A26AF7; --violet-lo: #8550EC; --violet-lip: #5B2EB4;
   --red-hi: #FF9A6E;    --red: #FF6A45;    --red-lo: #F0472C;    --red-lip: #B0301A;
   --cloud-hi: #FFFFFF;  --cloud: #F4F1FB;  --cloud-lo: #DCD5EC;  --cloud-lip: #A99CC6;
-  --ice-hi: #E9F6FF;    --ice: #9ED8FF;    --ice-lo: #4FA9EE;    --ice-lip: #2D7FC8;
+  --ice-hi: #E9F6FF;    --ice: #9ED8FF;    --ice-lo: #4FA9EE;
   --locked-hi: #EEEAF5; --locked: #D9D1E6; --locked-lo: #C3B8D6; --locked-lip: #A99CC6;
 
   /* The embossed slot (counters, bar tracks, toggle off, the HUD goal pill). Always opaque. */
@@ -41,7 +41,7 @@
 
   /* Accent text on cream (each ≥ 4.5:1 on --cream). */
   --t-green: #136E4E;  --t-blue: #1660B4;  --t-rose: #C62A55;  --t-amber: #B5560A;
-  --t-orange: #C9470F; --t-violet: #5B2EB4; --t-brown: #8A4B00;
+  --t-orange: #C9470F; --t-brown: #8A4B00;
 
   /* Light tinted chip faces (ink or accent text on them). */
   --tint-green: #E5F8D8; --tint-blue: #E3F3FF; --tint-gold: #FFF1C9;
@@ -53,7 +53,7 @@
 
   /* The warm sky behind full-screen menus. */
   --sky-1: #7CCBF2; --sky-2: #BFE7F4; --sky-3: #FBE9C6; --sky-4: #EBD3A0;
-  --sky-glow: #FFE6A3; --cloud-shade: #E9DCC8;
+  --sky-glow: #FFE6A3;
 
   /* Chapter boards (the Journey). */
   --meadow-hi: #B6EE7C;  --meadow: #6CCB45;  --meadow-lo: #3E9B2A;
@@ -83,12 +83,11 @@
   --bw-sm: 2.5px; --bw: 3px; --bw-lg: 4px;
 
   /* Radii. */
-  --r-sm: 14px; --r: 18px; --r-lg: 22px; --r-xl: 24px; --r-panel: 30px; --pill: 999px;
+  --r-sm: 14px; --r: 18px; --r-lg: 22px; --r-panel: 30px; --pill: 999px;
 
   /* Type (§4): display sizes in rem (the large-text specs scale them); body steps below. */
   --font-display: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font: var(--font-body);
   --halo: 0.24em;              /* the ink halo's stroke width (§4.2) */
   --fs-d-hero: 2.125rem;       /* 34: the Daily number */
   --fs-d-2xl: 1.875rem;        /* 30: XL buttons, level names */
@@ -101,8 +100,6 @@
   --fs-xs: 0.875rem;
   --fs-sm: 0.9375rem;
   --fs-md: 1rem;
-  --fs-lg: 1.125rem;
-  --fs-xl: 1.375rem;
   --fs-2xl: 1.75rem;
 
   /* Motion (§7). */
@@ -112,17 +109,8 @@
 
   /* Legacy aliases (v1.4 names), kept while the screen files move to the tokens above; each goes
      once grep shows no rule uses it (§3). */
-  --ink-3: var(--ink-2);
-  --paper: var(--cream); --paper-2: var(--cream-2); --panel: var(--cream);
-  --line: rgba(42, 27, 69, 0.14);
-  --accent: var(--green); --accent-deep: var(--green-lip);
-  --accent-ink: var(--t-green); --accent-soft: var(--tint-green);
-  --gold-deep: var(--gold-lip); --gold-soft: var(--tint-gold);
-  --danger: var(--red); --danger-deep: var(--red-lip); --danger-soft: #FFE4DC;
-  --indigo: var(--violet-lip); --sky: var(--tint-blue);
-  --shadow-sm: var(--drop-sm); --shadow: var(--drop); --shadow-lg: var(--drop-lg), var(--soft);
-  --radius: var(--r-lg);
-  --gloss: none;
+  --paper-2: var(--cream-2);
+  --danger: var(--red); --danger-soft: #FFE4DC;
 }
 
 /* Lilita One has one weight (400): never let the browser fake a bold or italic of it. */

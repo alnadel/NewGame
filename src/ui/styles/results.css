@@ -606,7 +606,6 @@
   color: var(--ink-2);
   font: 800 0.8125rem/1.15 var(--font-body);
   overflow-wrap: break-word;
-  hyphens: auto;
 }
 
 .stat-sub {
@@ -816,12 +815,12 @@
   flex-direction: column;
 }
 
-/* A level's loot tiles, after the goal cards: four make one row; two, three, five or six tiles are a
-   third of the row wide, so a caption keeps its words whole. */
+/* A level's loot tiles, after the goal cards: four make one row; any other count, tiles a third of
+   the row wide, so a caption keeps its words whole. */
 .res-sheet.is-campaign .res-goals { order: -2; }
 .res-sheet.is-campaign .res-stats { order: -1; }
 .res-sheet.is-campaign .res-stats .stat { flex-basis: calc((100% - 24px) / 4); }
-.res-sheet.is-campaign .res-stats:is([data-n='2'], [data-n='3'], [data-n='5'], [data-n='6']) .stat { flex-basis: calc((100% - 16px) / 3); }
+.res-sheet.is-campaign .res-stats:not([data-n='4']) .stat { flex-basis: calc((100% - 16px) / 3); }
 
 /* Under 328 px a quarter can't hold 'multiplier': four tiles make two rows of two. */
 @container sheet (max-width: 327.98px) {

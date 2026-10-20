@@ -3,13 +3,6 @@
    tokens. Reduced motion: ui.css drops every animation under .is-rm and the reveal skips straight to
    the prize. */
 
-.sui {
-  --r-common: #2ec4b6;
-  --r-rare: #4d96ff;
-  --r-epic: #9b5de5;
-  --r-legendary: #ffb21d;
-}
-
 /* ===== Rank badge and XP meter ===== */
 
 .rank-text {
