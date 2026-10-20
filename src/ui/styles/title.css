@@ -708,7 +708,7 @@ body,
   --ic: 32px;
 }
 
-.title-bottom.is-tight .modes .play-pill { --h: 64px; }
+.title-bottom.is-tight .modes .play-pill { --h: 60px; }
 
 .title-bottom.is-tight .play-coin {
   width: 34px;
@@ -717,7 +717,7 @@ body,
 
 .title-bottom.is-tight .title-gap { min-height: 0; flex-basis: 0; }
 
-/* Tight: the rows close up (the tags still clear the tray), the chips are 32 px faces (their hit
+/* Tight: the rows close up (the tags still clear the tray), the chips are 36 px faces (their hit
    boxes stay 44), so a 360x640 Title keeps both its chips and its tray labels. */
 .title-bottom.is-tight .modes { margin-bottom: 1px; }
 
@@ -725,7 +725,7 @@ body,
 
 .title-bottom.is-tight .tray-label { margin-top: -10px; }
 
-.title-bottom.is-tight .chips .chip--btn { min-height: 32px; }
+.title-bottom.is-tight .chips .chip--btn { min-height: 36px; }
 
 .title-bottom.is-tight { padding-bottom: calc(var(--in-bottom) + 5px); }
 
