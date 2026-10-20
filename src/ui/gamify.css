@@ -103,10 +103,13 @@
   margin-top: -6px;
 }
 
+/* The bar, then the rank's name and the next reward on one line; when both don't fit, the reward
+   wraps under it, right-aligned (a one-word name never ellipsizes). */
 .xp-meter .xp-foot {
   container-type: inline-size;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: baseline;
   gap: 4px 8px;
   flex: 1 1 auto;
@@ -117,7 +120,7 @@
 }
 
 .xp-track {
-  grid-column: 1 / -1;
+  flex: 1 0 100%;
   /* Grows with large text, so its label never clips. */
   height: max(26px, 1.25rem + 6px);
   margin-left: -20px;
@@ -137,17 +140,18 @@
 }
 
 .xp-title .rank-name {
-  min-width: 0;
+  overflow: visible;
   font: 800 var(--fs-sm)/1.2 var(--font-body);
   color: var(--ink-2);
 }
 
-/* Narrow columns: the rank's name alone (the medal says the rank; the aria-label all of it). */
-@container (max-width: 16.5em) {
+/* Phone columns: the rank's name alone (the medal says the rank; the aria-label all of it). */
+@container (max-width: 24em) {
   .xp-title .rank-kicker { display: none; }
 }
 
 .xp-next {
+  margin-left: auto;
   color: var(--t-blue);
   font: 800 var(--fs-sm)/1.2 var(--font-body);
   white-space: nowrap;
