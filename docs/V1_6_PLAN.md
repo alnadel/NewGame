@@ -471,6 +471,8 @@ Shape and strength:
 
 Schedule:
 - Profile 3: none on Day 1, one in the afternoon on Day 2, two a day from Day 3 (one morning, one afternoon).
+  Since review r5 (§6.5): one morning flare on Day 1 as well (d 6°; its miss scorches at most 20), because
+  the standard rung's runs end on Day 1.
 - Profiles 0-2: one afternoon flare a day from Day 3.
 - The rise falls at t/Dl in [0.20, 0.32] (about 8:24-9:50 AM) or [0.68, 0.80] (about 2:10-3:36 PM), drawn from `rngFor(seed, 'flares', day)`.
 - Flares are at least 8 s apart, and never at night or inside an eclipse or lock window.
@@ -502,10 +504,12 @@ Telegraph:
 **Noon Heat (tuning fix, same validator plumbing).**
 - Drain × H between 11:00 AM and 1:00 PM (dayTick in [5/12, 7/12)·Dl).
 - H = 1.0 on Day 1, 1.15 on Days 2-3, 1.25 from Day 4. Profiles 0-2 get each step one day later.
+  As shipped (§6.5): 1.05 on Day 1, 1.1 on Days 2-3, 1.2 from Day 4.
 - Validator-aware: the DP uses a per-slot delta table, `chillDeltaTable(validatorDrain(w)·H, regen)`, keyed by (day, in window), and the oracle uses the same function.
 - Endless and Daily only. It is off in the Journey, whose concept costs were calibrated without it.
 - A Heat Wave day (forecast `heat`) has none since the review of economy iteration 2: its higher sun is
-  that day's heat, and the two together pushed p3 heat rescues over the hard 0.8 a chunk (§6.4).
+  that day's heat, and the two together pushed p3 heat rescues over the hard 0.8 a chunk (§6.4). Since
+  review r5 its sun stands 2° higher at noon, not 3° (§6.5).
 
 **Journey.**
 - L38, concept `flare` ("Solar Flare"). It takes Moon Sun's teaching slot; Moonlit stays a composed concept.
@@ -695,7 +699,8 @@ hardy flakes never melt and sit on the trail, so a flake Dare there would be aut
 
 ## 4. How the set fits
 
-**The shape of a day** (Day 3, profile 3):
+**The shape of a day** (Day 3, profile 3; since review r5 Day 1 has the same shape in small: a d 6° morning
+flare and a ×1.05 Noon Heat, §6.5):
 1. Dawn to 8:20: long shadows, buds are cheap, the ring builds.
 2. Around 9 AM: a flare.
 3. 11-1: Noon Heat x1.15, survived on shade and on the cool a snap cast before 11 bought; a snap cast in it
@@ -761,8 +766,8 @@ All runs use profile 3 unless noted.
 |---|---|---|---|---|
 | Reactive mean multiplier / x5 share | x1.5 / 2% | x2.8-3.8 / ≤ 20% | hard | `sim --check --seeds 40` |
 | humanDial R2 Day-1 mean multiplier | x1.0-1.2 | x1.8-2.5 | advisory | same |
-| Chase − plain (mean minutes) | +147 | ≥ +150 | hard | `sim --decisions --seeds 80` |
-| Naive − plain / safe − plain | n/a | ≤ 0 / < 0 | hard | same |
+| Chase − plain (mean minutes) | +147 | ≥ +150: the lower 1-SE bound, on seeds 1-960 and on the held-out seeds 40001-40960 and 50001-50960 pooled (§6.5) | hard | `sim --release` |
+| Naive − plain / safe − plain | n/a | ≤ 0 / < 0, on both seed sets | hard | same |
 | Plan-snap − panic-snap | n/a | ≥ +60 min | advisory | same |
 | Full meter unspent | 14-36% of daylight | ≤ 10% | hard | `sim --check` |
 | Dial-only meters filled from income | 0.29 a day | ≤ 0.15 | hard | same |
@@ -774,17 +779,17 @@ All runs use profile 3 unless noted.
 | Oracle parry rate | n/a | ≥ 70% | hard | `sim --check` |
 | PreAim − plain parry rate | n/a | ≥ +15 points | advisory | `sim --decisions` |
 | Reactive deaths at 11 AM-1 PM | 12% | ≥ 25% | advisory | `sim --check --hours` |
-| Priced moments per daylight minute, Days 2-4 (reactive): glass windows + flare warnings + snap squeezes + costly-gold moments | measure with `--rules 15` | ≥ +3 over today | advisory | `sim --decisions` |
+| Priced moments per daylight minute, Days 2-4 (reactive): glass windows + flare warnings + snap squeezes + costly-gold moments | measured on the v1.6-all-off row | ≥ +3 over today | advisory | `sim --decisions` |
 | Reactive dial median | Day 3 · 11:33 AM | in [Day 2 noon, Day 4 noon] | hard (existing) | `sim --check` |
 | Mechanics vs dial (median) | +609 min | ≥ +180 | hard (existing) | same |
 | Novice p3 median / idle / oracle | Day 1 11:34 AM / dies < 8 AM / Day 8 | unchanged windows | hard (existing) | same |
 | Rescues per chunk / unresolved | 0.22-0.25 / 0 | ≤ 0.8 and ≤ +0.1 / 0 | hard | same |
-| Generation ms per chunk | 2.37 | ≤ 3.5 | hard | same |
+| Generation ms per chunk | 2.37 | ≤ 3.5 (which reading binds, absolute or the ratio to v1.5 alongside, is the integrator's call: §6.5) | hard | same; `bench-step.ts --gen` |
 | Journey oracle / reactive 1-100 | 200 / ≥ 95% | 200 (verb goals) / ≥ 95% | hard | `sim --campaign --bot all` |
 | Reactive three-star share, 41-200 | 74% | ≤ 50% | advisory | same |
 | humanDial mean stars, 41-200 | 1.07 | ≥ 0.95 | advisory | same |
 | Career: humanDial reaching standard within 20 runs | 88% | ≥ 85% | advisory | `sim --career 40` |
-| Ruleset 15 | — | identical to v1.5 output and goldens | hard | `sim --rules 15 --check --seeds 40`, vitest |
+| Ruleset 15 | — | dropped by amendment A1 (no ruleset-15 path ships) | – | – |
 
 ### 6.1 Fix round 3
 
@@ -1118,6 +1123,53 @@ src/core/README.md §16.6 has every row):
 
   Display hysteresis on the ring badge would answer the level-change row without touching a rule.
 
+### 6.5 Review r5: fix round 2
+
+The review of the fix round had four lenses (core, gameplay, phone readability, regressions). It found:
+- the oracle melting on a held-out Heat Wave world, and an unresolved validator failure with rescues
+  on the 0.8 bar on held-out heat worlds (blockers);
+- `build:single` 23 KiB over A3 (blocker);
+- E2 missing its bound on a fresh 960-seed block, with the held-out gate and the §13 commands never
+  specified;
+- a red-hot or amber snap cooling at the full regen under a shadow over Nubs' centre alone;
+- a threat layer (flares, Noon Heat) the standard rung never met;
+- a reduced-motion cue hanging over the dial;
+- a paired generation gate on unequal populations, and generation at 1.74× v1.5 a chunk.
+
+The economy loop's design is unchanged. Where a finding met it, the smallest change that satisfies
+both was taken.
+
+**Rules** (src/core/README.md §16.7 has the mechanism and the numbers):
+1. A snap's cooling cap follows real shade as it would be without the snap: the cap is at least the
+   Chill the tick would reach with the snap's cloud left out (the lit fraction without it, `fReal`),
+   and never below the Chill it was cast at. A shadow over the centre alone no longer refills at the
+   full 30 a second (it did: 58.8 Chill after 2 s against 11.6 with the same steering and no snap).
+2. The validator drops a kept Endless flare before it spends a rescue on it: on a failure anywhere in
+   its lift, and when a chunk would otherwise end in an unresolved failure.
+3. A Heat Wave's sun stands 2° higher at noon, not 3°.
+4. Day 1 (profile 3) meets the threat layer: one morning flare (lift 6°, its miss scorches at most 20)
+   and a Noon Heat of ×1.05 (profiles 0-2 one day later, as every step).
+5. The oracle plans its parry at half its turn rate before the hold, weighs a parried hold step 12, not
+   6, and after a miss plans with the tank the scorch left (bot changes, not rules).
+
+The game reads rule 4 with what it has: the flare telegraph, the first-flare tip of new players'
+runs, the ruler marks and the Day card's Noon Heat line. The reduced-motion cue keeps its bottom
+anchor (an e2e check measures it against the dial's rims with reduced motion on and off).
+
+**Gate re-specifications.** Each one adds rows or measures the same intent on a common denominator;
+no bar moved.
+
+| Row | Was | Now | Why |
+|---|---|---|---|
+| E2 and E3 on held-out seeds (hard) | E2's chase row and E3's near-seeker row gated on seeds 1-960 only (§6.3-§6.4); §13 named `--decisions --seeds 80`, where the bounds never run | `sim --release`: `--decisions` on seeds 1-960 as before, **and** chase − plain's lower 1-SE bound ≥ +150, naive and safe below plain, and the near seeker's lower 1-SE bound > 0 on the held-out seeds 40001-40960 and 50001-50960 **pooled** | Rows added, bars kept: stricter than before. Pooled, not each block: one 960-seed block's SE is about 31 min, so its bound clears +150 only when its mean reads ≥ 181. At the review's HEAD the two blocks read +167 and +258 (pooled +213 ± 22, bound 191) and the thirds of one block +96 to +267: a single block's bound measured the seed draw. Seeds 1-960, the ones every iteration was tuned on, read +269. |
+| `bench-step.ts --gen` p99 slice (≤ 1.1 × base, hard) | each tree's p99 over its own working slices; best of 3 reps over 12 seeds | the k-th largest slice of each tree with k = 1% of the base's working slices; the median of ≥ 3 alternating reps over 30 seeds; frames over 1 ms and over 2 ms a minute gated paired at 1.1× beside it | Same bar and intent. HEAD worked on 1.65× more frames (3630 slices against 2194), so its own p99 was diluted by small slices and the paired ratio flipped between 0.73 and 1.18 run to run (review). On the common denominator HEAD read 1.13-1.17× (a FAIL the old measure hid). |
+| Ruleset 15 (§6, §13) | `sim --rules 15 --check --seeds 40` | dropped | Amendment A1 removed ruleset 15; sim.ts no longer has the flag. |
+
+The heat rescue target the review suggested (≤ 0.78 on three blocks) is reported below; the hard row
+stays ≤ 0.8.
+
+@@MEASURED@@
+
 ---
 
 ## 7. What the skeptics changed (merge log)
@@ -1413,9 +1465,13 @@ Every `V16Rules` flag can ship off on its own.
 
 - typecheck and vitest, including the contest, keep-test, snap-cover, freshness and bake-currency tests;
 - `sim --check --seeds 40` (every hard target in §6);
-- `sim --decisions --seeds 80` (its hard rows);
+- `sim --release`: `--decisions` on seeds 1-960 (every hard row; E2 and E3 on their lower 1-SE bounds),
+  then E2 and E3 on the held-out seeds 40001-40960 and 50001-50960 pooled (§6.5); it exits 1 on either;
+- the oracle reaches Day 8 on 100% of seeds 1-240 and of the held-out blocks 80001-80240 and
+  90001-90240, on the plan mix and every forecast, and rescues per chunk ≤ 0.8 with no unresolved
+  failure on each (the oracle and rescue rows of `sim --check --seeds 240 --seed-from S`; §6.5);
 - `sim --campaign --bot all` (oracle 200/200 with verb goals; reactive ≥ 95% of levels 1-100);
-- `sim --rules 15 --check --seeds 40` identical to v1.5;
+- `bench-step.ts --gen` (the paired slice gates, §6.4-§6.5);
 - full Playwright twice, 0 failures;
 - `npm run build:single` within v1.5's budget + 20 KiB;
 - 60 fps on a mid phone: step() µs/tick within +10% of v1.5, guide refresh ≤ 1.5× v1.5;

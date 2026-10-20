@@ -1255,7 +1255,8 @@ that did not read the gauge. The economy loop's design is unchanged: one gauge p
 - **Real shade refills Chill under a snap.** A red-hot or amber snap's cooling cap
   (`s.snapChillCap`) applies only on ticks where the snap cloud is Nubs' only shade:
   `computeCoverage` sets `nb.realShade` when a caster or a cloud other than the snap is over his
-  center sample, or when the sun is down or eclipsed, and `applyDaylight` skips the cap then. Before,
+  center sample, or when the sun is down or eclipsed, and `applyDaylight` skips the cap then
+  (§16.7 replaces `nb.realShade` with the lit fraction without the snap, `nb.fReal`). Before,
   a red-hot snap held Chill at 20 for its whole life in a caster's full shade (four spots, 89-90 of
   90 ticks shaded: 20.0 at 1.5 s against 77-100 without the snap; an amber snap at 35 capped at 61).
   The rule's sentence ("red-hot, a snap only shades") now holds: it shades, and the shade it bridges
@@ -1278,7 +1279,7 @@ that did not read the gauge. The economy loop's design is unchanged: one gauge p
   | 0.25 | 0.781 | 0.790 |
   | **0 (shipped)** | **0.763** | **0.779** |
 
-  Only 0 keeps a margin on both blocks. The forecast's higher sun (εnoon +3°) and its tighter
+  Only 0 keeps a margin on both blocks (§16.7 lowers the sun to εnoon +2°). The forecast's higher sun (εnoon +3°) and its tighter
   spacing (×0.92) are that day's heat; its blurb says "no Noon Heat".
 - **The Bank's kill switch is whole.** With `v16.bank` off a snap's cash-in is the v1.5 one
   (`cashInH` gauge factor 1), it sets no cooling cap, and buds grow at full speed: none of the gauge
@@ -1293,7 +1294,7 @@ that did not read the gauge. The economy loop's design is unchanged: one gauge p
   a unit test (v16world.test.ts) pins it.
 - **Hash.** `hashState` reads pickup positions and clusters (glass shifts move them), and the
   counters `x5Ticks`, `multDowns`, `frostSpilledH`, `snapCashH`, `gardenBlooms`, `snapLandsOwn`
-  and `nb.realShade`.
+  and `nb.realShade` (§16.7: `nb.fReal`, `nb.deepReal`).
 - `snapCash` gains `amber` (cast in the amber: it pours and cools part of the way), for the tips.
 
 **Bots** (`sim/bots/world.ts`, `sim/bots/econ.ts`, `sim/bots/dares.ts`):
@@ -1414,3 +1415,68 @@ shade under a snap, and a Heat Wave without Noon Heat. They were not measured ap
 | 30001-30240 | 96 (mean 249) | −41 (mean −73), parrying 92.2%; before, 76 against the dial bot's 109 (review), a FAIL | 94.9% |
 
 At 1-120 preAim parries 91.1%, against 74% before.
+
+### 16.7 Review r5: fix round 2
+
+The review of the fix round (core, gameplay, phone-readability and regression lenses; docs/V1_6_PLAN.md
+§6.5) found the oracle melting on a held-out Heat Wave world, an unresolved validator failure and a
+rescue rate on the bar on held-out heat worlds, a snap cap that lifted under a shadow over Nubs'
+centre alone, a threat layer the standard rung never met, generation slices over the paired bar,
+and the E2 held-out gate unspecified. The economy loop's design is unchanged.
+
+**Core rules** (goldens re-made once per change, in its commit):
+- **A snap's cooling cap follows real shade as it would be without the snap.** `computeCoverage`
+  keeps the lit fraction with the snap's cloud left out (`nb.fReal`, glare weighted 2 as in `f`) and
+  deep shade on the same terms (`nb.deepReal`); `nb.realShade` is gone. Under a snap whose
+  `snapChillCap` is below the tank, the cap is max(`snapChillCap`, Chill, min(the Chill this tick
+  would reach without the snap, the tank)): it never takes Chill away, and real shade refills
+  exactly what it would refill alone. Before, any shadow over the centre sample lifted the cap and
+  the snap's full cover refilled at 30 a second (review: 58.8 Chill after 2 s against 11.6 with the
+  same steering and no snap). A unit test lays a shadow over the centre alone (Chill held at the
+  cast) and over four samples (Chill equal to the no-snap value).
+- **The validator never ends a chunk on a flare's account.** A kept Endless flare is dropped before
+  any rescue is spent on it, on a failure anywhere in its lift (rise, hold or fall; it was the hold
+  only), and when a chunk would otherwise accept an unresolved failure, the job's last kept flare is
+  dropped and the DP resumes before its rise. Seed 80139 (heat): a rise failure used the chunk's 8
+  rescues and a parked cloud before the hold revoked the flare; generation only, heat, seeds
+  80001-80240: unresolved 1 → 0, flares kept on Days 2-4 86.9% → 86.6%.
+- **A Heat Wave's sun stands 2° higher at noon** (was 3°). Rescues a chunk with the heat forecast
+  forced (generation only, p3, Days 1-8, seeds 80001-80240; hard bar 0.8): v1.5 0.808, HEAD with
+  flares off 0.808, HEAD 0.798; the review's levers: flare lift −2 on heat days 0.802, one flare a
+  heat day 0.806; spacing ×0.88 0.792; εnoon +2° **0.714**. The forecast sat on the bar, not the flares.
+- **Day 1 meets the threat layer** (profile 3; profiles 0-2 take the Noon Heat step a day later,
+  and draw no Day-1 flare): one morning flare (lift 6°, keep-tested as every flare, `flareCountOf`,
+  placer.ts `addDayFlares`), whose miss scorches at most `TUNING.flare.scorchMaxDay1` (20), and a
+  Noon Heat of ×1.05. humanDial, seeds 1-240: R4 meets a flare warning 1% → 66% and the Noon Heat
+  2% → 64%; reaches 11 AM 70% → 68% and the first night 12% → 11%; R3 meets them 10% → 68% and
+  24% → 89%; novice p3 median Day 1 11:10 → 10:38 AM. With the full 80-point scorch on Day 1,
+  R4's 11 AM share fell to 63%.
+
+**Bots.** The oracle's parry plan assumes half its turn rate before the hold
+(`PARRY_PLAN_REACH`): at the full rate every bin could still reach the parry until the last moment,
+the bonus was flat, and the oracle set out too late (seed 80019, heat: 180° away at the warning,
+missed, a 68-point scorch, melted two hours later). Charging a lit hold step the scorch it causes,
+the review's first lever, instead lost eight other held-out seeds (it spent snaps on flares). A
+parried hold step weighs 12 (`PARRY_W`, was 6): at 6, seed 62 with Long Shadows forced met Day 7's
+flare 150° from its parry, valued the bins near it at a 12-Chill pull that lost to a few points of
+slack, missed (a 76-point scorch) and melted; at 12 it and the eight seeds above reach Day 8. After
+a miss the oracle plans with the tank the scorch left (`maxChill − s.flareScorch`, in its need DP and
+its next-step clamp; it used the whole tank): seed 198 with Long Shadows forced missed Day 5's
+afternoon flare (an 80-point scorch), crossed sun its 20-Chill tank could not afford and melted at
+3:22 PM; it now reaches Day 8. Only runs after a miss change; the Journey has no scorch.
+
+**Generation slices** (no world changes; goldens and the slicing-independence test unchanged):
+- the validator's DP is charged a unit per 3 slots and pauses at the slice budget;
+- the contest's Chill DP is resumable (its layers and step live in the contest run with the other
+  flake's window) and runs 96 slot-layers a stage call, charged at 10 slot-layers a unit (was 25:
+  measured ~2.5 µs a slot-layer);
+- `slidingMaxCircular` copies its extended row in three straight loops.
+
+**Tooling.**
+- `sim --release`: `--decisions` on seeds 1-960, then E2 and E3 on the held-out blocks
+  (`HELD_OUT`: 40001-40960 and 50001-50960) pooled; `Sim16Ctx.run` takes another seed block.
+- `bench-step.ts --gen` reads both trees on one population (the k-th largest slice, k = 1% of the
+  base's working slices), takes the median of ≥ 3 alternating reps over 30 seeds, and gates frames
+  over 1 ms and 2 ms a minute paired at 1.1× beside the p99.
+- `sim --check` prints the oracle's Day-8 share with its count, and humanDial R3/R4's flare
+  meeting (advisory ≥ 50%) with their 11 AM and first-night shares.
