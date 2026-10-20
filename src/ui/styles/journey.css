@@ -600,6 +600,14 @@
   left: calc(50% + var(--d0) / 2 - 16px);
 }
 
+/* Below 380 px the longest chapter name ("Town and Weather") needs the banner's air: no tracking and
+   a slimmer gap before the globe keep it whole. */
+@media (max-width: 379.98px) {
+  .chapter-banner { gap: 6px; }
+
+  .chapter-name { letter-spacing: 0; }
+}
+
 /* Small phones: smaller discs and gaps keep each cell ≥ 50 × 78. */
 @media (max-width: 359.98px) {
   .chapter { padding: 0 6px 8px; }
