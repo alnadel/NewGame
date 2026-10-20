@@ -74,7 +74,33 @@
 
 .set-key { display: block; }
 
-.set-midrun { margin-top: 0; }
+/* Mid-run (from Pause): the note where Progress would be, on a plate with a lock badge. */
+.set-midrun {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 12px 12px;
+  color: var(--ink);
+  font: 700 var(--fs-md)/1.35 var(--font-body);
+}
+
+.set-midrun .lock-badge {
+  --d: 32px;
+  --ic: 18px;
+  flex: none;
+}
+
+/* Progress: the backup, restore and reset buttons (and the code boxes) stacked with even gaps. */
+.set-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.set-progress > .card-title { margin-bottom: 0; }
+.set-progress > .card-note--top { margin: 0 0 2px; }
+
+.sui .set-progress > :is(.btn, .code-box) { margin: 0; }
 
 .set-row .range-wrap { width: min(calc(var(--cw) * 0.46), 230px); }
 
