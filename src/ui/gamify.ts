@@ -57,24 +57,6 @@ export function globeSvg(className = 'globe-art'): SVGSVGElement {
 // Rank badge and XP meter
 // ---------------------------------------------------------------------------------------------
 
-/** The rank number in a ring filled to `fraction` (stroke dashes over a 100-unit path). */
-export function rankRing(): { el: HTMLElement; set(level: number, fraction: number): void } {
-  const num = h('span', { class: 'rank-num num' });
-  const el = h(
-    'span',
-    { class: 'rank-ring', 'aria-hidden': 'true' },
-    svgFromMarkup('<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" pathLength="100"/><circle cx="20" cy="20" r="17" pathLength="100"/></svg>'),
-    num,
-  );
-  return {
-    el,
-    set(level, fraction) {
-      num.textContent = String(level);
-      el.style.setProperty('--p', String(Math.round(Math.max(0, Math.min(1, fraction)) * 100)));
-    },
-  };
-}
-
 /** The rank badge: a gold medal with the rank, on a plate with "Sun Rank", the name and a mini XP bar. Tapping it opens the Profile. */
 export function rankBadge(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
   const num = medal('', { className: 'rank-medal' });

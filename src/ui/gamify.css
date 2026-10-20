@@ -1,4 +1,4 @@
-/* v1.4 gamification widgets (src/ui/gamify.ts), the Profile and the Missions globe row. Owned by the
+/* v1.4 gamification widgets (src/ui/gamify.ts): the rank badge, the XP meter and the reward reveal. Owned by the
    meta builder; the UX builder places the widgets and never styles their insides. Uses the ui.css
    tokens. Reduced motion: ui.css drops every animation under .is-rm and the reveal skips straight to
    the prize. */
@@ -10,41 +10,7 @@
   --r-legendary: #ffb21d;
 }
 
-/* ===== Rank ring, badge and XP meter ===== */
-
-/* The rank in a progress ring (gamify.ts rankRing; the Profile's hero). */
-.rank-ring {
-  --d: 40px;
-  position: relative;
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: var(--d);
-  height: var(--d);
-}
-
-.rank-ring svg {
-  position: absolute;
-  inset: 0;
-  rotate: -90deg;
-  fill: #fff;
-  stroke-width: 4.5;
-}
-
-.rank-ring circle + circle {
-  fill: none;
-  stroke: var(--gold);
-  stroke-linecap: round;
-  stroke-dasharray: var(--p, 0) 100;
-}
-
-.rank-ring circle:first-child { stroke: rgba(43, 33, 64, 0.12); }
-
-.rank-num {
-  position: relative;
-  font-size: calc(var(--d) * 0.4);
-  line-height: 1;
-}
+/* ===== Rank badge and XP meter ===== */
 
 .rank-text {
   display: flex;
@@ -120,32 +86,6 @@
   .rank-badge .rank-name { font-size: var(--fs-d-md); }
 }
 
-/* The Profile hero's bar and foot (profile.ts, B3), as before UI v2. */
-.xp-bar {
-  height: 12px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--paper-2);
-}
-
-.xp-bar i {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--gold), #ff9f43);
-}
-
-.xp-foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0 8px;
-  font-size: 0.875rem;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-
 /* The Results meter (§10.3): the gold medal at the left end of the violet bar ("368 / 450 XP"
    inside, this run's gain lighter), the rank and the next reward under it, a "+125 XP" burst over
    the bar's right end. */
@@ -171,6 +111,9 @@
   gap: 4px 8px;
   flex: 1 1 auto;
   min-width: 0;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  white-space: nowrap;
 }
 
 .xp-track {
