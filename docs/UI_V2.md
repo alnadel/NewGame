@@ -1663,8 +1663,21 @@ keeps its words.
   cost does not grow (§9.10).
 - Text halos use `-webkit-text-stroke`, never multi-direction `text-shadow` outlines (8× the paint).
 - The Journey: 20 boards of CSS-only roads (no SVG per board, no JS layout).
+- All eleven screens are built at boot, but a screen not shown skips style, layout and paint
+  (`.scr:not(.is-in) { content-visibility: hidden }`, ui.css): `go()` gives the entering screen
+  `is-in` before `enter()` (so it can measure) and the leaving one keeps it 400 ms, through its fade
+  and slide-outs. A first show styles the screen once hidden, so its transitions start there. Code
+  that reads layout runs only while its screen has `is-in`. Journey boards off screen skip the same
+  way (`content-visibility: auto`, 296 px; only where `overflow-clip-margin` keeps their props and the
+  next level's rays painted).
 - Measure: `npm run e2e` perf specs as today, plus a 10 s DevTools trace at 4× CPU throttle on the
   Title, the Journey (scrolling) and a level with stamps: no long frames attributable to UI paint.
+  Screen switches: the longest frame within 1.5 s of a raw tap (a pointer click at a point found
+  before arming), not a role locator: Playwright's visibility checks force layout on screens that are
+  skipped and inflate the number. Measured after the second fix round (single file, 390x844 @2.625,
+  4× CPU, median of 5; before → after, pre-rework in brackets): boot to the splash fade 2583 → 1185 ms
+  (1313; 549 → 261 at 1×), Title → Journey 850 → 300 (383), Journey → Title 817 → 333 (350),
+  Title → Settings 333 → 167 (150), Settings → Title 433 → 150 (267), Title → Profile 350 → 233 (200).
 
 ---
 
@@ -1707,6 +1720,11 @@ A class or custom property that a script outside the UI, a spec or `index.html` 
 name automatically, and so does every class starting with a template's literal prefix
 (`ribbon--${tone}` keeps all `ribbon--…`); a class name must never come whole from a variable or
 data (write it out, or give it such a prefix).
+
+**Measured after the second fix round:** 747,094 B (729.6 KiB), 426 B under (+243 B on the round).
+The round's fixes (Profile, Title, Results, Pause, toast pacing, shorter tip copy, the screen and
+board skipping) cost about 750 B net; 29 custom properties no rule or script read (the v1.4 aliases,
+the old rarity colours, a few unused scale steps) gave 432 B back and one shared Results rule 72 B.
 
 ---
 
