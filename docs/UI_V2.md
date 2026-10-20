@@ -1696,7 +1696,7 @@ screen uses): **762,468 B (744.6 KiB), 14.6 KiB over.** What is left is shipped 
 largest single decorations are 0.3-1.5 KiB each), so meeting 730 KiB means cutting decoration across
 every screen or amending this budget; that call is the lead's.
 
-**Measured after the first fix round:** 746,855 B (729.4 KiB), 665 B under, with no decoration cut.
+**Measured after the first fix round:** 746,851 B (729.4 KiB), 669 B under, with no decoration cut.
 The build's `shortCss()` plugin (`vite.config.ts`) gives short names to the custom properties only
 CSS uses and to the hyphenated classes no script outside `src/ui` / `src/render`, no e2e spec and
 `index.html` name, and drops the spaces after commas (CSS 104.6 → 94.3 kB, JS −2.1 kB); the
