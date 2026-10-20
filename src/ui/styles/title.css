@@ -149,6 +149,25 @@
   transform: translate(var(--lsx, 3px), var(--lsy, 4px));
 }
 
+/* The session writes --lsx/--lsy on <html> (session.ts publishLogoShadow). Inherited, every write
+   restyled every element of every screen, hidden ones included (the Journey's 200 nodes made that
+   ~30 ms a frame in a software-rendered Chromium, and the Title ran at 15 fps). Registered as
+   non-inherited, a write restyles only the explicit chain from <html> down to the shadow layer. */
+@property --lsx { syntax: '<length>'; inherits: false; initial-value: 3px; }
+@property --lsy { syntax: '<length>'; inherits: false; initial-value: 4px; }
+
+body,
+.sui,
+.sui > .world,
+.world > .screens,
+.scr-title,
+.title-top,
+.logo,
+.logo-drop {
+  --lsx: inherit;
+  --lsy: inherit;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
