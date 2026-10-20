@@ -1696,6 +1696,18 @@ screen uses): **762,468 B (744.6 KiB), 14.6 KiB over.** What is left is shipped 
 largest single decorations are 0.3-1.5 KiB each), so meeting 730 KiB means cutting decoration across
 every screen or amending this budget; that call is the lead's.
 
+**Measured after the first fix round:** 746,855 B (729.4 KiB), 665 B under, with no decoration cut.
+The build's `shortCss()` plugin (`vite.config.ts`) gives short names to the custom properties only
+CSS uses and to the hyphenated classes no script outside `src/ui` / `src/render`, no e2e spec and
+`index.html` name, and drops the spaces after commas (CSS 104.6 → 94.3 kB, JS −2.1 kB); the
+favicon's data URI keeps only the escapes a URL needs (`scripts/inline-build.mjs`, −1 KiB); `h()`
+takes a class string and `deco` for `aria-hidden`; and whole state class names replace templated
+ones (`is-${x}`), so the plugin can see them. The round's fixes spent about 1.5 KiB of that back.
+A class or custom property that a script outside the UI, a spec or `index.html` names keeps its
+name automatically, and so does every class starting with a template's literal prefix
+(`ribbon--${tone}` keeps all `ribbon--…`); a class name must never come whole from a variable or
+data (write it out, or give it such a prefix).
+
 ---
 
 ## 14. Work split (five builders)
