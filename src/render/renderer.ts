@@ -418,6 +418,7 @@ export function createScene(): RenderScene {
       campaign: null,
       mech: null,
       reducedMotion: false,
+      hc: false,
     },
   };
 }
@@ -434,6 +435,7 @@ function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
   h.campaign = inp.campaign;
   h.mech = inp.mech;
   h.reducedMotion = inp.reducedMotion;
+  h.hc = inp.highContrast;
   return h;
 }
 
