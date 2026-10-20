@@ -5,7 +5,7 @@
 // screen is the UI batch's). v1.4: a level's tip and star pips, the Pause card's run status, and an
 // endless run's mission toast.
 import { expect, test, type Page } from '@playwright/test';
-import { screen, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
+import { runCfg, screen, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
 /** Opens the game with the test hook on a campaign level (it holds on its intro card, no Title). */
 async function openLevel(page: Page, query: string): Promise<void> {
@@ -216,13 +216,17 @@ test.describe('in-run moments (v1.4)', () => {
   test('an endless run toasts a mission the moment it lands', async ({ page }) => {
     test.slow();
     const errors = watchErrors(page);
+    // Endless open, Missions not yet: on a fresh save the press plays Level 1 instead, and a Journey
+    // level toasts no mission steps before Missions open (fix round 2). A fresh deal starts with
+    // "Reach 9:00 AM".
+    await seedSave(page, { v: 4, createdAt: 1, gamify: { features: ['endless'], seenFeatures: ['endless'] } });
     await page.goto('/?test=1&seed=42');
     await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
     await waitForScreen(page, 'title');
-    // A fresh save deals "Reach 9:00 AM" first.
     await page.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
     await page.keyboard.press('ArrowRight');
     await waitForScreen(page, 'play');
+    expect((await runCfg(page)).mode).toBe('endless');
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(4));
     await expect
       .poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.toasts())).map((t) => `${t.kicker}:${t.text}`).join('|'), { timeout: 90_000 })

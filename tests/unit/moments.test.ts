@@ -199,6 +199,30 @@ describe('RunMoments', () => {
     expect(log).toHaveLength(2);
   });
 
+  it('a Journey level toasts no mission steps before Missions open (fix round 2); Endless still does', () => {
+    const save = defaults(0);
+    save.missions.active = [{ id: 'flakes-10', progress: 0, done: false, stale: 0 }];
+    const b = createBanners();
+    const m = createMoments(b, sinks().sinks);
+    const s = dayRun(2);
+    s.tick = 100;
+    s.stats.flakes = 10;
+    m.begin(save, levelDef(2)!, true);
+    m.update(s);
+    expect(b.toasts.filter((t) => t.kind === 'mission')).toHaveLength(0);
+    save.settings.unlockAll = true;
+    m.begin(save, levelDef(2)!, true);
+    s.tick += 6;
+    m.update(s);
+    expect(b.toasts.filter((t) => t.kind === 'mission')).toHaveLength(1);
+    save.settings.unlockAll = false;
+    b.toasts.length = 0;
+    m.begin(save, null, true);
+    s.tick += 6;
+    m.update(s);
+    expect(b.toasts.filter((t) => t.kind === 'mission')).toHaveLength(1);
+  });
+
   it('a tip that names a count reads it from the level (L1: its flakes Dare); a level daring another verb drops that sentence', () => {
     for (const [id, tips] of Object.entries(LEVEL_TIPS)) {
       const lv = levelDef(Number(id))!;
