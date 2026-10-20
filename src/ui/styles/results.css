@@ -621,10 +621,15 @@
 }
 
 .btn--swap::before {
-  /* 48 px touch target around the small pill. */
+  /* 48 px touch target around the small pill. It replaces the kit's gloss cap on this ::before
+     (UI v2 kit), so it resets the cap's look. */
   content: '';
   position: absolute;
   inset: -6px 0;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  pointer-events: auto;
 }
 
 .mrow-side .reward { font-size: var(--fs-md); }

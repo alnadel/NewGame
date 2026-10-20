@@ -233,11 +233,15 @@
 }
 
 .challenge-close::before {
-  /* 48 px touch target around the small visual (round buttons don't clip their ::before). */
+  /* 48 px touch target around the small visual (round buttons don't clip their ::before). It
+     replaces the kit's gloss cap on this ::before (UI v2 kit), so it resets the cap's look. */
   content: '';
   position: absolute;
   inset: -8px;
+  height: auto;
   border-radius: 0;
+  background: none;
+  pointer-events: auto;
 }
 
 @keyframes pop-in {
