@@ -492,14 +492,15 @@ export function drawStar(g: CanvasRenderingContext2D, x: number, y: number, px: 
   g.restore();
 }
 
-const starSprites = new Map<string, HTMLCanvasElement>();
+const starSprites = new Map<number, HTMLCanvasElement>();
 
 /**
  * A cached star sprite, `px` CSS px square drawn at `dpr` (with 2 px of margin for the outline).
  * Draw it with drawImage(sprite, x - 2, y - 2, px + 4, px + 4).
  */
 export function starSprite(px: number, dpr: number, state: StarState): HTMLCanvasElement {
-  const key = `${px}|${dpr}|${state}`;
+  // A numeric key (no string per call: the pops and the FINISH stars ask every frame).
+  const key = (Math.round(px * 4) * 64 + Math.round(dpr * 8)) * 4 + (state === 'on' ? 0 : state === 'off' ? 1 : 2);
   let c = starSprites.get(key);
   if (c) return c;
   c = document.createElement('canvas');

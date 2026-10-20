@@ -13,12 +13,12 @@
 import { dayLength, historyAt, historyLength, trailX, worldDayAtY, worldYAtTime, type Caster, type SimState } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { setMapping } from '../game/camera.ts';
+import { displayFont, INK } from './candy.ts';
 import { css, cssa, hex, mix, type Rgb } from './color.ts';
 import { drawFrozenDial } from './halo.ts';
 import { roundRect } from './sprites.ts';
 
 const TAU = Math.PI * 2;
-const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const BLUE = hex('#5AB8FF');
 const GOLD = hex('#FFC23D');
 const RED = hex('#FF5D5D');
@@ -202,10 +202,13 @@ function drawHourTicks(g: CanvasRenderingContext2D, v: View, s: SimState, m: Map
   const from = Math.max(m.y0, h4[1] as number);
   const top = Math.min(m.y1, s.nubs.y);
   const d1 = worldDayAtY(s.world, Math.max(0, top));
-  g.font = `800 9px ${FONT}`;
+  // World labels are the one place a sub-15 px halo is allowed (docs/UI_V2.md §9.2): the display
+  // face at 11 px, white with a 0.3 em ink stroke, on the busy world.
+  g.font = displayFont(11);
   g.textBaseline = 'middle';
   g.textAlign = 'left';
   g.lineCap = 'round';
+  g.lineJoin = 'round';
   for (let day = worldDayAtY(s.world, Math.max(0, m.y0)); day <= d1; day++) {
     const len = dayLength(day);
     for (let h = 1; h < 12; h++) {
@@ -221,8 +224,8 @@ function drawHourTicks(g: CanvasRenderingContext2D, v: View, s: SimState, m: Map
       g.lineTo(sx + w, sy);
       g.stroke();
       const label = HOUR_LABELS[h] as string;
-      g.strokeStyle = cssa(0x2b2140, 0.7);
-      g.lineWidth = 2.5;
+      g.strokeStyle = INK;
+      g.lineWidth = 3.3;
       g.strokeText(label, sx + w + 3, sy);
       g.fillStyle = '#FFFFFF';
       g.fillText(label, sx + w + 3, sy);
@@ -391,7 +394,7 @@ function pin(
   // When it would cover an earlier callout it goes to the other side of its pin.
   if (labelA > 0.01 && sy <= limit) {
     let right = c.x >= trailX;
-    g.font = `800 13px ${FONT}`;
+    g.font = displayFont(14);
     const label = name.charAt(0).toUpperCase() + name.slice(1);
     const tw = g.measureText(label).width;
     const w = tw + 18;
@@ -420,7 +423,10 @@ function pin(
       g.fillStyle = cssa(0xffffff, 0.96 * a * labelA);
       roundRect(g, lx, ly, w, h, 13);
       g.fill();
-      g.fillStyle = cssa(0x2b2140, a * labelA);
+      g.strokeStyle = cssa(0x2a1b45, a * labelA);
+      g.lineWidth = 1.5;
+      g.stroke();
+      g.fillStyle = cssa(0x2a1b45, a * labelA);
       g.textAlign = 'left';
       g.textBaseline = 'middle';
       g.fillText(label, lx + 9, ly + h / 2 + 1);
