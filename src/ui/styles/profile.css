@@ -1,30 +1,27 @@
 /* The Profile (docs/UI_V2.md §10.10): the rank hero, the rank road, the waiting Snow Globes, the
    trophies, the collection and the records (bests, the last 30 runs, totals). The streak card is
-   styled with Missions (styles/missions.css).
+   styled with Missions (styles/missions.css), the bests' wells with the Daily (styles/daily.css).
    Owner: B3 Map & menus (docs/UI_V2.md §14). Imported by ui.ts after kit.css and ui.css, in screen order;
-   compose the kit's recipes (kit.css), never copy them. */
+   compose the kit's recipes (kit.css), never copy them. Lilita text in ink wears the kit's .gt-ink. */
 
 /* ===== Hero: a violet panel, the rank on a gold medal, its name on a plate, the XP bar ===== */
 
 .pf-hero {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  grid-template-areas: 'medal plate' 'bar bar' 'next next';
+  grid-template: 'medal plate' 'bar bar' 'next next' / 80px minmax(0, 1fr);
   align-items: center;
-  gap: 12px 0;
+  row-gap: 12px;
 }
 
 .pf-medal {
   grid-area: medal;
   z-index: 1;
-  box-shadow: inset 0 -5px 0 var(--ml), inset 0 3px 0 rgba(255, 255, 255, 0.7), var(--drop);
 }
 
 /* The name plate starts under the medal's centre. */
 .pf-hero .rank-text {
   grid-area: plate;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   min-width: 0;
   margin-left: -40px;
   padding: 7px 14px 10px 50px;
@@ -32,16 +29,16 @@
 }
 
 .pf-hero .rank-kicker {
+  color: var(--ink-2);
   font: 400 var(--fs-d-xs)/1.1 var(--font-display);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-2);
 }
 
 .pf-hero .rank-name {
   overflow: hidden;
-  font: 400 var(--fs-d-xl)/1.1 var(--font-display);
-  color: var(--ink);
+  font-size: var(--fs-d-xl);
+  line-height: 1.1;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -54,13 +51,10 @@
   align-items: center;
   gap: 8px;
   color: var(--ink-2);
-  font: 800 var(--fs-md)/1.3 var(--font-body);
+  font-weight: 800;
 }
 
-.pf-next .globe-mini {
-  width: 28px;
-  height: 28px;
-}
+.pf-next .globe-mini { width: 28px; height: 28px; }
 
 /* ===== The rank road: candy nodes on a straight dirt road ===== */
 
@@ -69,11 +63,9 @@
   --nd-now: 50px;
   container: road / inline-size;
   position: relative;
-  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
-  padding-top: 4px;
   text-align: center;
 }
 
@@ -81,28 +73,24 @@
 .pf-road::before {
   content: '';
   position: absolute;
-  z-index: 0;
-  top: calc(4px + var(--nd-now) / 2 - 8px);
-  left: calc(100% / 12);
-  right: calc(100% / 12);
+  top: calc(var(--nd-now) / 2 - 8px);
+  left: 8%;
+  right: 8%;
   height: 16px;
   border-block: 2px solid var(--ink);
-  background: linear-gradient(180deg, var(--road-todo) 0 35%, #E9D8CB 35% 65%, var(--road-todo) 65%);
-  box-shadow: 0 -2px 0 var(--road-todo-edge) inset;
+  background: linear-gradient(var(--road-todo) 35%, #E9D8CB 0 65%, var(--road-todo) 0);
 }
 
 .pf-node {
-  --ic: 18px;
-  position: relative;
   display: grid;
   grid-template-rows: var(--nd-now) auto auto;
-  justify-items: center;
-  align-items: center;
+  place-items: center;
   gap: 4px;
   min-width: 0;
 }
 
-/* A future rank: a cream disc with the number in ink (no halo on cream). */
+/* A future rank is a cream disc with its number in ink; a globe rank is ice; the current one gold,
+   larger and glowing, its number white with the halo. */
 .pf-node .node {
   --d: var(--nd);
   --hi: #fff;
@@ -114,51 +102,37 @@
   font-size: var(--fs-d-md);
 }
 
-/* The current rank: gold, larger, in a soft gold glow; its number white with the halo. */
+.pf-node.is-globe .node { --hi: var(--ice-hi); --face: #D7EEFF; --lo: var(--ice); --lip: var(--ice-lo); }
+
 .pf-node.is-now .node {
   --d: var(--nd-now);
   --hi: var(--gold-hi);
   --face: var(--gold);
   --lo: var(--gold-lo);
   --lip: var(--gold-lip);
-  --sh: inset 0 -5px 0 var(--lip), var(--top-light), var(--drop-sm), 0 0 0 5px rgba(255, 220, 90, 0.6), 6px 7px 0 var(--shade);
+  --sh: inset 0 -5px 0 var(--lip), var(--top-light), var(--drop-sm), 0 0 0 5px #FFDC5A99;
   color: #fff;
   -webkit-text-stroke: var(--halo) var(--ink);
   font-size: var(--fs-d-lg);
 }
 
-/* A globe rank: an ice rim says the prize is a Snow Globe. */
-.pf-node.is-globe:not(.is-now) .node {
-  --hi: var(--ice-hi);
-  --face: #D7EEFF;
-  --lo: var(--ice);
-  --lip: var(--ice-lo);
-}
-
-/* The reward under each node: the Snow gem and "+55", the globe, or a check on the current rank. */
+/* Under each node: the Snow gem and "+55", the globe, or a check on the current rank. */
 .pf-reward {
+  --ic: 18px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 1px;
   height: 28px;
-  font: 400 var(--fs-d-sm)/1 var(--font-display);
   color: var(--t-green);
+  font: 400 var(--fs-d-sm)/1 var(--font-display);
   white-space: nowrap;
 }
 
-.pf-reward .ai { --ic: 18px; }
-.pf-node.is-now .pf-reward .ai { --ic: 26px; }
-
-.pf-reward .globe-mini {
-  width: 28px;
-  height: 28px;
-}
+.is-now .pf-reward { --ic: 26px; }
+.pf-reward .globe-mini { width: 28px; height: 28px; }
 
 /* Names wrap at spaces ("Snow / Angel"); where six columns can't hold "Snowflake" they go (each
    node's aria-label still names its rank, and the hero names the current one). */
 .pf-node small {
-  max-width: 100%;
   color: var(--ink-2);
   font: 700 0.75rem/1.15 var(--font-body);
 }
@@ -170,13 +144,10 @@
 /* A narrow road (a 360 px phone): smaller discs, so six fit. */
 @container road (max-width: 285px) {
   .pf-road { --nd: 34px; --nd-now: 44px; }
-  .pf-node .node { font-size: 1rem; }
-  .pf-node.is-now .node { font-size: var(--fs-d-md); }
-  .pf-reward { font-size: 0.875rem; }
-  .pf-reward .ai { --ic: 15px; }
+  .pf-reward { --ic: 15px; font-size: 0.875rem; }
 }
 
-/* ===== Snow Globes to open: a gold panel, the globe in a sunburst ===== */
+/* ===== Snow Globes to open: a gold panel, the globe on a sunburst ===== */
 
 .pf-globes {
   display: grid;
@@ -184,25 +155,20 @@
   align-items: center;
   gap: 12px;
   color: var(--ink-2);
-  font: 700 var(--fs-md)/1.3 var(--font-body);
+  font-weight: 700;
 }
 
 .pf-globes strong {
   display: block;
-  font: 400 var(--fs-d-lg)/1.15 var(--font-display);
-  color: var(--ink);
+  font-size: var(--fs-d-lg);
 }
 
 .pf-globe-art {
-  position: relative;
   display: grid;
   place-items: center;
-  width: 72px;
   height: 72px;
   border-radius: 50%;
-  background:
-    repeating-conic-gradient(rgba(255, 214, 90, 0.55) 0 12deg, rgba(255, 214, 90, 0) 12deg 30deg),
-    radial-gradient(circle, var(--tint-gold) 0 40%, rgba(255, 241, 201, 0) 70%);
+  background: repeating-conic-gradient(#FFD65A8C 0 12deg, #0000 0 30deg);
 }
 
 .pf-globe-art > svg {
@@ -213,30 +179,23 @@
 
 @keyframes globe-bob { 50% { translate: 0 -4px; rotate: -3deg; } }
 
-/* ===== Trophies: medal cards on plates ===== */
+/* ===== Trophies: plates holding a medal in their tier ===== */
 
-.pf-new {
-  margin-right: 8px;
-  vertical-align: 2px;
-}
+.pf-new { margin-right: 8px; }
 
 .badges {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 12px 10px;
 }
 
 .badge {
   gap: 4px;
   padding: 12px 10px 14px;
-  border: var(--bw) solid var(--ink);
-  border-radius: var(--r);
-  background: var(--cream);
-  box-shadow: inset 0 -4px 0 var(--cream-3), var(--drop-sm);
   text-align: center;
 }
 
-/* The medal in its tier (bronze, silver, gold) holds the trophy; a locked one is a dark socket. */
+/* Bronze, silver or gold holding the trophy art; a locked one is a dark socket with a lock. */
 .badge-medal {
   --d: 56px;
   --ic: 30px;
@@ -244,20 +203,10 @@
   color: var(--slot-off);
 }
 
-.badge-medal .ic {
-  --ic: 24px;
-  stroke-width: 2.6;
-}
-
-.badge.is-on { background: linear-gradient(180deg, #fff, var(--cream) 60%); }
-
-.badge-name {
-  font: 400 var(--fs-d-md)/1.15 var(--font-display);
-  color: var(--ink);
-}
-
+.badge-medal .ic { --ic: 24px; }
+.badge.is-on { background: linear-gradient(#fff, var(--cream) 60%); }
+.badge-name { font-size: var(--fs-d-md); }
 .badge:not(.is-on) .badge-name { color: var(--ink-2); }
-
 .badge:not(.is-on) .badge-desc { font-style: italic; }
 
 .pf-prog {
@@ -270,27 +219,21 @@
   font: 400 var(--fs-d-sm)/1 var(--font-display);
 }
 
-.pf-prog .bar { flex: 1 1 auto; }
+.pf-prog .bar { flex: 1; }
 
+/* The item a trophy pays: a gold-tint tag. */
 .badge-reward {
   --ic: 15px;
   display: inline-flex;
-  align-items: center;
   gap: 4px;
-  max-width: 100%;
   margin-top: 6px;
-  padding: 3px 9px 4px;
-  border: var(--bw-sm) solid var(--ink);
-  border-radius: var(--pill);
   background: var(--tint-gold);
-  box-shadow: 0 2px 0 var(--ink);
   color: var(--t-brown);
-  font: 400 var(--fs-d-sm)/1.1 var(--font-display);
 }
 
 .sui .pf-more { display: flex; margin: 14px auto 0; }
 
-/* ===== Collection: every item in a small well, owned ones ringed by rarity ===== */
+/* ===== Collection: every item in a small well, owned ones on a disc ringed in ink and rarity ===== */
 
 .pf-swatches {
   display: grid;
@@ -305,14 +248,13 @@
   aspect-ratio: 1;
   border-radius: 12px;
   background: var(--cream-2);
-  box-shadow: inset 0 2px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
+  box-shadow: inset 0 2px 0 var(--cream-3);
 }
 
 .pf-swatches li:not([class]) .swatch { opacity: 0.3; }
 
-/* Owned: a light disc in an ink ring with the rarity's colour inside it. */
 .pf-swatches li[class] {
-  background: radial-gradient(circle at 50% 38%, #fff 0 35%, var(--tint-blue));
+  background: radial-gradient(#fff 35%, var(--tint-blue));
   box-shadow: inset 0 0 0 3px var(--r, var(--cloud-lo)), 0 0 0 2px var(--ink), 0 3px 0 var(--ink);
 }
 
@@ -327,14 +269,10 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font: 400 var(--fs-d-md)/1.1 var(--font-display);
+  font-size: var(--fs-d-md);
 }
 
-.pf-row .num {
-  margin-left: auto;
-  font: inherit;
-  color: var(--t-brown);
-}
+.pf-row .num { margin-left: auto; color: var(--t-brown); }
 
 .pf-links {
   display: grid;
@@ -343,40 +281,30 @@
   margin-top: 16px;
 }
 
-.sui .pf-links .btn { margin: 0; }
+.sui .pf-links .btn { margin: 0; padding-inline: 8px; }
 
-/* ===== Records: the bests as wells, the last 30 runs in a well, the totals ===== */
+/* ===== Records: the bests in wells, the last 30 runs in a well, the totals ===== */
 
 .pf-bests {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 12px;
 }
 
-.jbest-val {
-  font: 400 var(--fs-d-md)/1.15 var(--font-display);
-  color: var(--ink);
-}
+.jbest-val { font-size: var(--fs-d-md); }
 
-/* One bar per run, oldest left: height ∝ score, colour by the day reached, each outlined in ink;
-   the best in gold, runs on eased rules hatched. */
+/* One bar per run, oldest left: height ∝ score, outlined in ink, coloured by the day reached; the
+   best in gold, runs on eased rules hatched. */
 .jchart {
   display: flex;
   align-items: flex-end;
   gap: 2px;
   height: 128px;
   padding: 10px 8px 0;
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(42, 27, 69, 0) calc(100% - 4px), rgba(42, 27, 69, 0.35) calc(100% - 4px)),
-    var(--cream-2);
-  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
 }
 
 .jbar {
   flex: 1 1 0;
-  min-width: 0;
   max-width: 16px;
-  margin-bottom: 4px;
   border: 1.5px solid var(--ink);
   border-bottom: 0;
   border-radius: 4px 4px 0 0;
@@ -386,9 +314,7 @@
 .jbar--d2 { background: var(--blue); }
 .jbar--d3 { background: var(--green); }
 .jbar--d4 { background: var(--violet); }
-
-.jbar.is-eased { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 5px); }
-
+.jbar.is-eased { background-image: repeating-linear-gradient(135deg, #fff8 0 2px, #0000 0 5px); }
 .jbar.is-best { background-color: var(--gold); }
 
 .jtotals {
@@ -397,11 +323,10 @@
   margin: 12px 0 0;
 }
 
-.jtotals dt,
-.jtotals dd {
+.jtotals :is(dt, dd) {
   margin: 0;
   padding: 9px 0;
-  border-top: 2.5px dashed rgba(42, 27, 69, 0.18);
+  border-top: 2.5px dashed #2A1B452E;
 }
 
 .jtotals dt:first-of-type,
@@ -413,18 +338,14 @@
   align-items: center;
   gap: 10px;
   color: var(--ink-2);
-  font: 700 var(--fs-md)/1.3 var(--font-body);
+  font-weight: 700;
 }
 
-.jtotals dt .ic { color: var(--ink); }
-
 .jtotals dd {
-  font: 400 var(--fs-d-md)/1.3 var(--font-display);
-  color: var(--ink);
+  font-size: var(--fs-d-md);
   text-align: right;
 }
 
 /* High contrast: flat faces, no rays. */
-.sui.is-hc .pf-globe-art { background: var(--tint-gold); }
-.sui.is-hc .jchart { background: var(--cream-2); }
+.sui.is-hc .pf-globe-art { background: none; }
 .sui.is-hc .pf-node .node { background: var(--face); }

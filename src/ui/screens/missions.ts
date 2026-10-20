@@ -19,7 +19,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
   const missionList = h('ul', { class: 'mission-list' });
   const pips = h('span', { class: 'mset-pips', 'aria-hidden': 'true' });
   const setText = h('span', null);
-  const set = h('p', { class: 'mset' }, globeSvg(), setText, pips);
+  const set = h('p', { class: 'mset well' }, globeSvg(), setText, pips);
 
   const trophiesLink = button(ctx, { label: 'Trophies', icon: 'trophy', size: 'sm', className: 'menu-link', onPress: () => ctx.go('profile') });
 
@@ -49,7 +49,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
       h(
         'div',
         { class: 'mcard-top' },
-        h('span', { class: 'mcard-label' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
+        h('span', { class: 'mcard-label gt-ink' }, m.label, m.tierLabel ? h('span', { class: 'tier' }, m.tierLabel) : null),
         h('span', { class: 'chip mcard-reward' }, ...reward(m.reward)),
       ),
       m.hint && !m.done ? h('p', { class: 'mcard-hint' }, m.hint) : null,
@@ -74,7 +74,7 @@ export function createMissionsScreen(ctx: UiContext): Screen {
     const left = MISSIONS_PER_GLOBE - n;
     setText.textContent = `${left} more ${left === 1 ? 'mission' : 'missions'} for a Snow Globe`;
     set.setAttribute('aria-label', `${n} of ${MISSIONS_PER_GLOBE} missions toward a Snow Globe`);
-    setChildren(pips, ...Array.from({ length: MISSIONS_PER_GLOBE }, (_, i) => (i < n ? h('i', { class: 'is-on' }, artIcon('check')) : h('i', null))));
+    setChildren(pips, ...Array.from({ length: MISSIONS_PER_GLOBE }, (_, i) => (i < n ? h('i', { class: 'is-on' }, artIcon('check')) : h('i', { class: 'socket' }))));
     hide(trophiesLink, !featureUnlocked(save, 'profile'));
   }
 

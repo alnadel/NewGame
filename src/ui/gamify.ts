@@ -382,7 +382,7 @@ export function streakCard(ctx: UiContext): { el: HTMLElement; update(save: Save
         return h(
           'li',
           {
-            class: `streak-day is-${d.state}${globe ? ' is-globe' : ''}`,
+            class: `streak-day plate is-${d.state}${globe ? ' is-globe' : ''}`,
             'aria-label': `Day ${d.day}: ${globe ? 'a Snow Globe' : `${d.reward.amount} Snow`}${d.state === 'today' ? ', ready' : d.state === 'claimed' ? ', claimed' : ''}`,
           },
           h('small', { 'aria-hidden': 'true' }, `Day ${d.day}`),

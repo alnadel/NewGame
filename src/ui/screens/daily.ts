@@ -29,12 +29,12 @@ export function createDailyScreen(ctx: UiContext): Screen {
   let shown = ctx.today();
 
   const number = h('span', { class: 'daily-num' });
-  const plan = h('span', { class: 'daily-plan' });
+  const plan = h('span', { class: 'daily-plan chip' });
   const date = h('span', { class: 'daily-date' });
   const par = h('p', { class: 'daily-par' });
   const tryPips = h('span', { class: 'try-pips', 'aria-hidden': 'true' });
-  const tryText = h('span', { class: 'daily-tries-text' });
-  const best = h('span', { class: 'daily-best-val' });
+  const tryText = h('span', { class: 'daily-tries-text gt-ink' });
+  const best = h('span', { class: 'daily-best-val gt-ink' });
   const play = button(ctx, {
     label: 'Play',
     icon: 'play',
@@ -64,14 +64,14 @@ export function createDailyScreen(ctx: UiContext): Screen {
     h('div', { class: 'daily-sun medal medal--ice', 'aria-hidden': 'true' },
       svgFromMarkup(`<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">${sunMascot({ id: 'daily-sun', cx: 50, cy: 50, r: 25 })}</svg>`)),
     h('p', { class: 'kicker' }, 'Daily Solstice'),
-    h('h3', { class: 'daily-id' }, h('span', { class: 'daily-title' }, 'Daily ', number), h('span', { class: 'sr-only' }, ' · '), plan),
+    h('h3', { class: 'daily-id' }, h('span', { class: 'daily-title gt-ink' }, 'Daily ', number), h('span', { class: 'sr-only' }, ' · '), plan),
     date,
     h('p', { class: 'daily-blurb' }, 'Same world for everyone today. You get 3 tries and your best one counts.'),
     h(
       'div',
       { class: 'cells' },
-      h('div', { class: 'cell' }, h('span', { class: 'kicker' }, 'Tries'), h('span', { class: 'daily-tries' }, tryPips, tryText)),
-      h('div', { class: 'cell' }, h('span', { class: 'kicker' }, 'Best today'), best),
+      h('div', { class: 'cell well' }, h('span', { class: 'kicker' }, 'Tries'), h('span', { class: 'daily-tries' }, tryPips, tryText)),
+      h('div', { class: 'cell well' }, h('span', { class: 'kicker' }, 'Best today'), best),
     ),
     par,
     play,
@@ -89,7 +89,7 @@ export function createDailyScreen(ctx: UiContext): Screen {
     return h(
       'li',
       { class: `drow plate${isToday ? ' is-today' : ''}${s.played ? '' : ' is-empty'}${quiet ? ' is-before' : ''}` },
-      h('span', { class: 'drow-when' }, h('span', { class: 'drow-num' }, `#${s.number}`), h('span', { class: 'drow-date' }, isToday ? 'Today' : formatDateLabel(s.date))),
+      h('span', { class: 'drow-when' }, h('span', { class: 'drow-num gt-ink' }, `#${s.number}`), h('span', { class: 'drow-date' }, isToday ? 'Today' : formatDateLabel(s.date))),
       h(
         'span',
         { class: 'drow-result' },
@@ -121,7 +121,7 @@ export function createDailyScreen(ctx: UiContext): Screen {
     date.textContent = formatDateLabel(today);
     par.replaceChildren(icon('bolt'), parLine(s.par));
     par.classList.toggle('is-waiting', s.par === null);
-    setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => (i < s.tries ? h('i', { class: 'is-used' }) : h('i', null, artIcon('snow')))));
+    setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => (i < s.tries ? h('i', { class: 'socket' }) : h('i', null, artIcon('snow')))));
     tryText.textContent = s.scored ? `${s.tries}/${DAILY_TRIES} used` : 'All used';
     best.textContent = s.bestMinutes > 0 ? formatScore(s.bestMinutes) : '–';
     setButtonLabel(play, s.scored ? `Play · try ${s.tries + 1}/${DAILY_TRIES}` : 'Practice (unscored)');

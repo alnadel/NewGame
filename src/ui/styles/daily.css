@@ -1,8 +1,9 @@
-/* The Daily screen (docs/UI_V2.md §10.6), and the labelled value wells (.cells) it shares with the
-   Profile's records.
+/* The Daily screen (docs/UI_V2.md §10.6), plus two small pieces the menus share: the labelled value
+   wells (.cells, also the Profile's bests) and the empty socket (.socket: a used try, a mission
+   still to finish toward a globe).
    Owner: the menus builder (Settings, Daily, Missions, Wardrobe, Profile) in the v2 rework; docs/UI_V2.md
    §14 first listed it under B2. Imported by ui.ts after kit.css and ui.css, in screen order;
-   compose the kit's recipes (kit.css), never copy them. */
+   compose the kit's recipes (kit.css), never copy them. Lilita text in ink wears the kit's .gt-ink. */
 
 /* ===== The hero: a gold panel ===== */
 
@@ -11,15 +12,13 @@
   text-align: center;
 }
 
-/* The sun mascot on a 72 px medal (the sky-blue one, so the sun reads against it). */
+/* The sun mascot on the sky-blue medal, so the sun reads against it. */
 .daily-sun {
   --d: 76px;
-  margin: -2px 0 6px;
-  box-shadow: inset 0 -5px 0 var(--ml), inset 0 3px 0 rgba(255, 255, 255, 0.7), var(--drop);
+  margin-bottom: 6px;
 }
 
 .daily-sun > svg {
-  position: relative;
   z-index: 1;
   width: 74px;
   height: 74px;
@@ -28,56 +27,37 @@
 .daily-hero > .kicker {
   font: 400 var(--fs-d-xs)/1.1 var(--font-display);
   letter-spacing: 0.08em;
-  color: var(--ink-2);
 }
 
 .daily-id {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  justify-items: center;
   gap: 8px;
 }
 
 .daily-title {
-  font: 400 var(--fs-d-hero)/1.05 var(--font-display);
-  color: var(--ink);
-  letter-spacing: 0.01em;
+  font-size: var(--fs-d-hero);
+  line-height: 1.05;
 }
 
-.daily-title .daily-num {
+.daily-num {
   font: inherit;
   color: var(--t-orange);
 }
 
-/* Day 1's weather and place (the Day Plan; the classic clear Meadow before it started): a cream
-   chip, the forecast emoji in the body font. */
-.daily-plan {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 36px;
-  padding: 0 14px 1px 10px;
-  border: var(--bw) solid var(--ink);
-  border-radius: 18px;
-  background: var(--cream);
-  box-shadow: inset 0 -3px 0 var(--cream-3), var(--drop-sm);
-  font: 400 var(--fs-d-md)/1.1 var(--font-display);
-  color: var(--ink);
-  white-space: nowrap;
-}
-
-.daily-plan .glyph { font-size: 1.125rem; }
+/* Day 1's weather and place (the Day Plan): a cream chip, the forecast emoji in the body font. */
+.daily-plan { padding: 0 14px 1px 10px; }
 
 .daily-date {
   margin-top: 6px;
-  color: var(--ink);
-  font: 800 var(--fs-md)/1.3 var(--font-body);
+  font-weight: 800;
 }
 
 .daily-blurb {
   max-width: 320px;
   color: var(--ink-2);
-  font: 700 var(--fs-md)/1.4 var(--font-body);
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 /* ===== Labelled values in wells (the Daily's tries and best, the Profile's bests) ===== */
@@ -93,9 +73,6 @@
   justify-content: center;
   gap: 5px;
   padding: 10px 6px 11px;
-  border-radius: 16px;
-  background: var(--cream-2);
-  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
   text-align: center;
 }
 
@@ -114,34 +91,25 @@
   gap: 4px 8px;
 }
 
+.daily-tries-text,
+.daily-best-val { font-size: var(--fs-d-md); }
+
 /* A try left: an ice gem with its flake; a used one: an empty socket. */
 .try-pips {
+  --ic: 26px;
   display: inline-flex;
   gap: 4px;
 }
 
-.try-pips i {
-  --ic: 26px;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-}
+.try-pips .socket { margin: 1px; }
 
-.try-pips i.is-used {
+.socket {
   width: 24px;
   height: 24px;
-  margin: 1px;
   border: var(--bw-sm) solid var(--ink);
   border-radius: 50%;
-  background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
-  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35);
-}
-
-.daily-tries-text,
-.daily-best-val {
-  font: 400 var(--fs-d-md)/1.1 var(--font-display);
-  color: var(--ink);
+  background: linear-gradient(var(--slot-1), var(--slot-2));
+  box-shadow: inset 0 3px 0 #0000005C;
 }
 
 /* Snowbot's par: what the novice bot made of today's world. */
@@ -151,19 +119,17 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 12px;
-  color: var(--ink);
-  font: 800 var(--fs-md)/1.3 var(--font-body);
+  font-weight: 800;
 }
 
-.daily-par .ic { color: var(--t-amber); stroke-width: 2.6; }
+.daily-par .ic { color: var(--t-amber); }
 
 .daily-par.is-waiting {
   color: var(--ink-2);
-  font-weight: 700;
   font-style: italic;
 }
 
-/* Play is the hero: green XL; it steps down a size where the column is narrow. */
+/* Play is the hero: green XL, one size down in a narrow column; Practice keeps the cloud face. */
 @container menu (max-width: 339.98px) {
   .daily-play { font-size: var(--fs-d-xl); }
 }
@@ -173,8 +139,7 @@
 /* ===== Recent days: plates, today's gold-tinted ===== */
 
 .daily-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 8px;
 }
 
@@ -192,50 +157,30 @@
   box-shadow: inset 0 -4px 0 var(--gold), var(--drop-sm);
 }
 
-.drow-when {
-  display: flex;
-  flex-direction: column;
-}
+.drow-when { display: grid; }
+.drow-num { font-size: var(--fs-d-md); }
 
-.drow-num {
-  font: 400 var(--fs-d-md)/1.1 var(--font-display);
-  color: var(--ink);
-}
-
-.drow-date {
-  color: var(--ink-2);
-  font: 700 var(--fs-sm)/1.25 var(--font-body);
-}
-
-.drow-score {
-  font: 400 var(--fs-d-sm)/1.2 var(--font-display);
-  color: var(--ink);
-}
-
-.drow-tries { font: 400 var(--fs-d-md)/1 var(--font-display); }
-
-/* Days before the save existed: a flat well and a lighter ink, not opacity (text keeps 4.5:1). */
-.drow.is-before {
-  border-color: transparent;
-  background: var(--cream-2);
-  box-shadow: inset 0 0 0 2px rgba(42, 27, 69, 0.12);
-}
-
-.drow.is-before,
-.drow.is-before .drow-date { color: var(--ink-2); }
-
+.drow-date,
 .drow.is-empty .drow-score {
   color: var(--ink-2);
   font: 700 var(--fs-sm)/1.25 var(--font-body);
 }
 
+.drow-score,
+.drow-tries { font: 400 var(--fs-d-sm)/1.2 var(--font-display); }
+
+/* Days before the save existed: a flat well in a lighter ink, not opacity (text keeps 4.5:1). */
+.drow.is-before {
+  border-color: #0000;
+  background: var(--cream-2);
+  box-shadow: none;
+  color: var(--ink-2);
+}
+
 .drow-strip {
+  overflow: hidden;
   font-size: 0.6875rem;
   letter-spacing: -0.05em;
   white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* High contrast: flat faces. */
-.sui.is-hc .drow.is-today { background: var(--tint-gold); }

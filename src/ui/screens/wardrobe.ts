@@ -58,7 +58,7 @@ const lockBadge = (): HTMLElement => h('span', { class: 'lock-badge' }, icon('lo
 function statusContent(c: Cosmetic, state: ItemState): { cls: string; nodes: (Node | string)[] } {
   switch (state) {
     case 'equipped':
-      return { cls: 'is-equipped', nodes: [icon('check'), 'Wearing'] };
+      return { cls: 'is-equipped tag', nodes: [icon('check'), 'Wearing'] };
     case 'owned':
       return { cls: '', nodes: ['Owned'] };
     case 'buyable':
@@ -110,7 +110,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
 
   const wallet = snowChip('0');
   const canvas = h('canvas', { class: 'preview-canvas', width: PREVIEW_CSS, height: PREVIEW_CSS, 'aria-hidden': 'true' });
-  const itemName = h('p', { class: 'preview-name' });
+  const itemName = h('p', { class: 'preview-name gt-ink' });
   const itemRarity = h('span', { class: 'tag rarity' });
   // The try-on spot hops when the selection changes; a small green ribbon says what Nubs wears
   // (decoration: the action button says it too).
@@ -144,9 +144,9 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
   // The item grid is a framed panel the selected folder tab joins (§6.9).
   const grid = h('ul', { class: 'tile-grid panel', id: 'wardrobe-grid', role: 'tabpanel' });
   // The collection: owned of all, with a gold bar, on a plate.
-  const owned = h('span', { class: 'num' });
+  const owned = h('span', { class: 'num gt-ink' });
   const collectionBar = progressBar(0, 'bar bar--sm');
-  const collection = h('p', { class: 'collection plate' }, artIcon('wardrobe'), h('span', { class: 'collection-label' }, 'Collection'), owned, collectionBar);
+  const collection = h('p', { class: 'collection plate' }, artIcon('wardrobe'), h('span', { class: 'gt-ink' }, 'Collection'), owned, collectionBar);
 
   const body = h(
     'div',
@@ -227,7 +227,7 @@ export function createWardrobeScreen(ctx: UiContext): Screen {
           'button',
           { class: 'tile', type: 'button', 'data-id': c.id },
           h('span', { class: 'tile-art', 'aria-hidden': 'true' }, cosmeticSwatch(c)),
-          h('span', { class: 'tile-name', 'aria-hidden': 'true' }, c.name),
+          h('span', { class: 'tile-name gt-ink', 'aria-hidden': 'true' }, c.name),
           status,
           h('span', { class: 'sticker tile-new', 'aria-hidden': 'true' }, 'New'),
         );
