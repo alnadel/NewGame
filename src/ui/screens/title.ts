@@ -159,7 +159,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const challenge = h(
     'div',
     { class: 'challenge panel pe', role: 'group', 'aria-label': 'Challenge' },
-    ribbon('Challenge!', { tone: 'pink', size: 'sm', tag: 'span', className: 'challenge-ribbon', hidden: true }).el,
+    ribbon('CHALLENGE!', { tone: 'pink', size: 'sm', tag: 'span', className: 'challenge-ribbon', hidden: true }).el,
     h('span', { class: 'challenge-flag', 'aria-hidden': 'true' }, artIcon('flag')),
     h('div', { class: 'challenge-text' }, h('span', { class: 'challenge-from' }, challengeName, ' challenges you:'), challengeGoal, challengeNote),
     challengePlay,
