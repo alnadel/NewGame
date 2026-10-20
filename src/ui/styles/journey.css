@@ -487,8 +487,7 @@
 
 .lvl-tile.is-next .lvl-stars { display: none; }
 
-/* The finale's crown, perched on the disc's top-left rim (the concept coin takes the top-right, the
-   stars the top). */
+/* The finale's crown, perched on the disc's top-left rim (the stars take the top). */
 .sui .lvl-crown {
   position: absolute;
   z-index: 3;
@@ -544,28 +543,29 @@
 }
 
 /* The stars: an arc above the disc (19 / 21 / 19, the outer ones tilted, the middle one higher). */
+/* 56 px wide: each node's three stars stay over its own disc, a gap from the next node's. */
 .lvl-stars {
   position: absolute;
   z-index: 3;
   top: 0;
   left: 50%;
-  width: 62px;
+  width: 56px;
   height: 26px;
-  margin-left: -31px;
+  margin-left: -28px;
   pointer-events: none;
 }
 
 .lvl-star {
   position: absolute;
   top: 6px;
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
 }
 
 .lvl-star:nth-child(1) { left: 1px; rotate: -14deg; }
 
 .lvl-star:nth-child(2) {
-  left: 20px;
+  left: 17px;
   top: 1px;
   width: 22px;
   height: 22px;
@@ -587,6 +587,10 @@
 
 .lvl-tile.is-locked :is(.lvl-stars, .lvl-crown),
 .lvl-tile:not(.is-locked) .lvl-lock { display: none; }
+
+/* An open node's concept coin moves to the bottom-right (a locked one's lock sits there), so its
+   third star stays clear. */
+.lvl-tile:not(.is-locked) .lvl-concept { top: calc(var(--cy) + var(--d0) / 2 - 18px); }
 
 /* The lock: a gold coin at the disc's bottom-right. */
 .lvl-lock {
