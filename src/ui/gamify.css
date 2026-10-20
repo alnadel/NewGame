@@ -12,6 +12,7 @@
 
 /* ===== Rank ring, badge and XP meter ===== */
 
+/* The rank in a progress ring (gamify.ts rankRing; the Profile's hero). */
 .rank-ring {
   --d: 40px;
   position: relative;
@@ -45,21 +46,6 @@
   line-height: 1;
 }
 
-.rank-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 4px 14px 4px 4px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
-  text-align: left;
-}
-
-.rank-badge:active { scale: 0.96; }
-
 .rank-text {
   display: flex;
   flex-direction: column;
@@ -67,89 +53,175 @@
   line-height: 1.1;
 }
 
+/* "SUN RANK": a small Lilita kicker in ink-2 (13 px: never haloed). */
 .rank-kicker {
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font: 400 var(--fs-d-xs)/1.1 var(--font-display);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .rank-name {
   overflow: clip;
-  font-weight: 900;
+  font: 400 var(--fs-d-lg)/1.1 var(--font-display);
+  color: var(--ink);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+/* The Title's badge (§10.1): a 54 px gold medal overlapping a cream name plate with a mini XP bar. */
+.rank-badge {
+  --sh: 0 0 #0000;
+  display: inline-flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 27px;
+  background: none;
+  text-align: left;
+  transition: transform var(--t-up) var(--ease-back);
+}
+
+.rank-badge:active { transform: translateY(2px); transition-duration: var(--t-down); }
+
+.rank-medal {
+  --d: 54px;
+  z-index: 1;
+  box-shadow: inset 0 -4px 0 var(--ml), inset 0 3px 0 rgba(255, 255, 255, 0.7), var(--drop);
+}
+
+.rank-badge .rank-text {
+  gap: 1px;
+  min-width: 84px;
+  max-width: 148px;
+  margin-left: -16px;
+  padding: 5px 14px 7px 24px;
+  border-radius: 0 16px 16px 0;
+}
+
+.rank-bar {
+  height: 10px;
+  margin-top: 2px;
+  border-width: 2px;
+  border-radius: 5px;
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* The claim count is a bubble on the medal. */
+.sui .rank-badge.has-dot::after { top: -7px; right: auto; left: 34px; }
+
+@media (max-width: 359.98px) {
+  .rank-medal { --d: 46px; }
+
+  .rank-badge .rank-text { max-width: 112px; padding-right: 10px; }
+
+  .rank-badge .rank-name { font-size: var(--fs-d-md); }
+}
+
+/* The Results meter (§10.3): the gold medal at the left end of the violet bar ("368 / 450 XP"
+   inside, this run's gain lighter), the rank and the next reward under it, a "+125 XP" burst over
+   the bar's right end. */
 .xp-meter {
   position: relative;
-  display: grid;
-  gap: 6px;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-}
-
-.xp-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding-top: 8px;
 }
 
-.xp-row .rank-text { flex: 1 1 auto; }
-
-.xp-gain {
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--gold-soft);
-  color: #8a5a00;
-}
-
-.xp-bar {
-  height: 12px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--paper-2);
-}
-
-.xp-bar i {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--gold), #ff9f43);
+.xp-medal {
+  --d: 52px;
+  z-index: 1;
+  margin-top: -6px;
 }
 
 .xp-foot {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.xp-track {
+  grid-column: 1 / -1;
+  height: 26px;
+  margin-left: -20px;
+}
+
+.xp-track > i:first-child { max-width: 100%; }
+
+.xp-track .bar-label { padding-left: 16px; }
+
+.xp-title {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0 8px;
-  font-size: 0.875rem;
-  color: var(--ink-2);
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  padding-left: 6px;
   white-space: nowrap;
 }
 
-.xp-pop {
-  position: absolute;
-  top: -12px;
-  right: 12px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--gold);
-  font-weight: 900;
-  font-size: 0.8125rem;
-  text-transform: uppercase;
-  opacity: 0;
+.xp-title .rank-name {
+  min-width: 0;
+  font: 800 var(--fs-sm)/1.2 var(--font-body);
+  color: var(--ink-2);
 }
 
-.xp-meter.is-rankup { box-shadow: 0 0 0 3px var(--gold), var(--shadow-sm); }
+/* Narrow columns: the rank's name alone (the medal says the rank; the aria-label all of it). */
+@container (max-width: 16.5em) {
+  .xp-title .rank-kicker { display: none; }
+}
+
+.xp-next {
+  color: var(--t-blue);
+  font: 800 var(--fs-sm)/1.2 var(--font-body);
+  white-space: nowrap;
+}
+
+/* The "+125 XP" tag: white Lilita on a violet comic burst, tilted. */
+.xp-gain {
+  position: absolute;
+  top: -12px;
+  right: -6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 7px 14px 9px;
+  color: var(--violet);
+  rotate: 6deg;
+}
+
+.xp-gain-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.xp-gain-t {
+  position: relative;
+  font-size: var(--fs-d-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* RANK UP!: a pink sticker at the roll-over only; the medal pops. */
+.xp-pop {
+  position: absolute;
+  top: -10px;
+  left: 30px;
+  z-index: 2;
+  opacity: 0;
+  rotate: -8deg;
+}
+
 .is-rankup .xp-pop { opacity: 1; animation: gf-pop 520ms var(--ease-back); }
-.is-rankup .rank-ring { animation: pulse 520ms var(--ease-back); }
+.is-rankup .xp-medal { animation: pulse 520ms var(--ease-back); }
 
 /* Named apart from ui.css's keyframes: one stylesheet, and a later @keyframes of the same name wins. */
 @keyframes gf-pop { from { translate: 0 8px; scale: 0.6; opacity: 0; } }
@@ -194,10 +266,12 @@
 .globe-art { display: block; width: 100%; height: 100%; overflow: visible; }
 .globe-mini { display: block; width: 30px; height: 30px; }
 
-/* ===== Reward reveal ===== */
+/* ===== Reward reveal (§10.3) ===== */
 
+/* A plum stage; the prize lands on a card framed in its rarity's colour (common cloud, rare blue,
+   epic violet, legendary and Snow gold) over the celebration burst. */
 .rv {
-  --tier: var(--r-common);
+  --tier: var(--cloud-lo);
   position: absolute;
   inset: 0;
   z-index: 40;
@@ -208,16 +282,16 @@
 
 .rv.is-on { opacity: 1; }
 .rv.is-out { opacity: 0; }
-.rv[data-tier='rare'] { --tier: var(--r-rare); }
-.rv[data-tier='epic'] { --tier: var(--r-epic); }
+.rv[data-tier='rare'] { --tier: var(--blue); }
+.rv[data-tier='epic'] { --tier: var(--violet); }
 .rv[data-tier='legendary'],
-.rv[data-tier='snow'] { --tier: var(--r-legendary); }
+.rv[data-tier='snow'] { --tier: var(--gold); }
 
 .rv-scrim {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 50% 42%, rgba(60, 54, 128, 0.93), rgba(23, 17, 36, 0.98));
-  backdrop-filter: blur(6px);
+  /* The stage: the plum scrim, darker towards the edges. */
+  background: radial-gradient(circle at 50% 45%, #0000 35%, rgba(34, 20, 64, 0.7)), var(--scrim-rv);
 }
 
 .rv-frame {
@@ -235,41 +309,32 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: min(100%, 360px);
   color: #fff;
   text-align: center;
 }
 
-.rv-kicker {
-  padding: 4px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--gold);
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+.rv-ribbon { max-width: 100%; }
+
+.rv.is-on .rv-ribbon { animation: ribbon-in 360ms var(--ease-back) 80ms both; }
 
 .rv-art {
   position: relative;
-  width: min(64vw, 240px, calc(var(--ch) * 0.36));
+  width: min(62vw, 230px, calc(var(--ch) * 0.34));
   aspect-ratio: 1;
-  margin: 6px 0;
+  margin: 10px 0 14px;
 }
 
 .rv-art > * { position: absolute; }
 
 .rv-rays {
-  inset: -30%;
-  border-radius: 50%;
-  background: repeating-conic-gradient(color-mix(in srgb, var(--tier) 55%, transparent) 0 10deg, transparent 0 24deg);
-  mask: radial-gradient(circle, #000 20%, transparent 68%);
+  inset: -42%;
   opacity: 0;
   transition: opacity 300ms;
 }
 
-.rv.is-open .rv-rays { opacity: 1; animation: spin 9s linear infinite; }
+.rv.is-open .rv-rays { opacity: 1; }
 
 .rv-globe {
   inset: 0;
@@ -285,7 +350,6 @@
 .rv.is-burst .rv-globe {
   opacity: 0;
   scale: 1.35;
-  filter: brightness(2.2);
   transition: 360ms var(--ease-out);
 }
 
@@ -305,12 +369,12 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 7px;
-  height: 7px;
-  margin: -3.5px;
+  width: 8px;
+  height: 8px;
+  margin: -4px;
+  border: 1.5px solid var(--ink);
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 1.5px rgba(90, 184, 255, 0.7);
   opacity: 0;
 }
 
@@ -330,13 +394,15 @@
   to { transform: rotate(calc(var(--a) + 360deg)) translateX(calc(10px + var(--i) * 3.6px)) rotate(360deg) translateX(14px); }
 }
 
-.rv-prize {
-  inset: 14%;
+/* The prize card: a panel (the kit's frame) with a soft spotlight; the rarity tag hangs under it. */
+.sui .rv-prize {
+  --frame: var(--tier);
+  inset: 6%;
   display: grid;
   place-items: center;
-  border-radius: 32%;
-  background: #fff;
-  box-shadow: 0 0 0 5px var(--tier), 0 0 44px 8px color-mix(in srgb, var(--tier) 70%, transparent);
+  padding: 14px;
+  border-radius: 34px;
+  background: radial-gradient(circle at 50% 42%, #fff 30%, var(--cream) 72%);
   opacity: 0;
   scale: 0.3;
 }
@@ -347,30 +413,47 @@
   transition: opacity 160ms, scale 520ms var(--ease-back);
 }
 
-.rv-prize .swatch { width: 84%; height: 84%; }
+.rv-item {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
 
-.rv-prize .num {
+.rv-item .swatch { width: 92%; height: 92%; }
+
+.rv-item .num {
+  --ic: 72px;
   display: grid;
   justify-items: center;
-  color: var(--accent-deep);
-  font-size: 2rem;
+  gap: 2px;
+  font: 400 2.25rem/1 var(--font-display);
+  color: var(--t-blue);
 }
 
-.rv-prize .ic { width: 64px; height: 64px; }
+.rv-tag {
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  translate: -50% 0;
+  font-size: var(--fs-d-md);
+  min-height: 30px;
+  padding: 0 12px 1px;
+}
 
 .rv-name {
-  font-weight: 900;
-  font-size: 1.75rem;
-  line-height: 1.15;
+  max-width: 100%;
+  font-size: var(--fs-d-2xl);
+  line-height: 1.1;
 }
 
-.rv-sub { color: color-mix(in srgb, var(--tier) 55%, #fff); font-weight: 800; }
-.rv-count { color: rgba(255, 255, 255, 0.7); }
+.rv-sub { color: var(--slot-off); font: 800 0.9375rem/1.3 var(--font-body); }
+.rv-count { color: rgba(255, 255, 255, 0.75); font: 700 var(--fs-md)/1.3 var(--font-body); }
 .rv .rv-name,
 .rv .rv-sub,
-.rv .rv-count { min-height: 1.35em; }
+.rv .rv-count { min-height: 1.3em; }
 
-.sui .rv-next { min-width: 200px; margin-top: 6px; }
+.sui .rv-next { min-width: 220px; margin-top: 8px; }
 
 .rv:not(.is-open) .rv-name,
 .rv:not(.is-open) .rv-sub,
@@ -378,6 +461,8 @@
 .rv.is-open .rv-name,
 .rv.is-open .rv-sub,
 .rv.is-open .rv-next { transition: opacity 260ms 140ms; }
+
+.sui.is-hc .rv-scrim { background: rgba(34, 20, 64, 0.95); }
 
 /* ===== Daily streak card ===== */
 

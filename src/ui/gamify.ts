@@ -1,8 +1,10 @@
 // v1.4 gamification widgets (docs/V1_4_PLAN.md). CONTRACT FILE: the four first signatures are
 // fixed for the v1.4 builders; the rest is additive. The UX builder places these widgets (Title,
 // Results, Journey); this file makes them look (gamify.css) and behave:
-// - rankBadge: the Sun Rank in a progress ring; opens the Profile.
+// - rankBadge: the Sun Rank as a gold medal on a name plate with a mini XP bar; opens the Profile.
 // - xpMeter: the Results XP bar that fills by the run's XP and rolls over on a rank up.
+// UI v2 (docs/UI_V2.md §6.6, §10.1, §10.3): medals, the violet XP bar with this run's gain marked
+// and a "+125 XP" comic burst, a RANK UP! sticker; the reveal is a rarity-framed card on a burst.
 // - claimDot: the red dot with a count on a button.
 // - revealRewards: the reward overlay (a Snow Globe shakes, snow swirls, it opens on the prize).
 // - streakCard / claimDailyReward / openGlobes: the 7-day streak calendar and the claim flows.
@@ -26,6 +28,7 @@ import {
   type Reward,
 } from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
+import { artIcon, kitShape } from './art-icons.ts';
 import { h, setChildren, setFlag, svgFromMarkup } from './dom.ts';
 import { icon } from './icons.ts';
 import { RARITY_LABEL } from './labels.ts';
@@ -33,21 +36,21 @@ import type { UiContext } from './screen.ts';
 import { cosmeticSwatch } from './swatches.ts';
 import { isLegalTransition } from './transitions.ts';
 import type { ScreenId } from './types.ts';
-import { button, hide } from './widgets.ts';
+import { button, hide, medal, progressBar, ribbon } from './widgets.ts';
 
 let globeIds = 0;
 
-/** The Snow Globe: a glass dome with Nubs in the snow, on a gold stand. */
+/** The Snow Globe: a glass dome with Nubs in the snow, on a gold stand, outlined in the kit's ink. */
 export function globeSvg(className = 'globe-art'): SVGSVGElement {
   // Gradient ids are unique per copy: a hidden copy's gradient would blank the others.
   const g = `gg${++globeIds}`;
-  return svgFromMarkup(`<svg class="${className}" viewBox="0 0 120 120" aria-hidden="true">
+  return svgFromMarkup(`<svg class="${className}" viewBox="0 0 120 120" aria-hidden="true" stroke="#2A1B45" stroke-linejoin="round">
 <radialGradient id="${g}" cx=".38" cy=".3" r=".8"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#9ad8ff"/></radialGradient>
-<path d="M30 92h60l6 16H24Z" fill="#ffc23d"/><rect x="26" y="88" width="68" height="8" rx="4" fill="#d99a12"/>
-<circle cx="60" cy="52" r="42" fill="url(#${g})" stroke="#fff" stroke-width="3"/><path d="M22 66q38 14 76 0a42 42 0 0 1-76 0Z" fill="#fff"/>
-<g fill="#fff" stroke="#c9d8f0" stroke-width="1.5"><circle cx="60" cy="62" r="11"/><circle cx="60" cy="45" r="8"/></g>
-<path d="M51 52q9 4 18 0l1 4q-10 4-20 0Z" fill="#e8475a"/><path d="M60 46l7 2-7 1.6Z" fill="#ff8a2b"/>
-<path d="M57 43h.1M63 43h.1" stroke="#2b2b33" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M30 96h60l6 15H24Z" fill="#2A1B45" stroke="none"/><path d="M30 92h60l6 15H24Z" fill="#ffc23d" stroke-width="4"/><rect x="26" y="86" width="68" height="10" rx="5" fill="#f59a0e" stroke-width="4"/>
+<circle cx="60" cy="52" r="42" fill="url(#${g})" stroke="none"/><path d="M22 66q38 14 76 0a42 42 0 0 1-76 0Z" fill="#fff" stroke="none"/>
+<g fill="#fff" stroke-width="2.5"><circle cx="60" cy="62" r="11"/><circle cx="60" cy="45" r="8"/></g>
+<path d="M51 52q9 4 18 0l1 4q-10 4-20 0Z" fill="#e8475a" stroke-width="2"/><path d="M60 46l7 2-7 1.6Z" fill="#ff8a2b" stroke="none"/>
+<path d="M57 43h.1M63 43h.1" stroke-width="2.6" stroke-linecap="round"/><circle cx="60" cy="52" r="42" fill="none" stroke-width="4.5"/>
 <path d="M36 30a30 30 0 0 1 18-12" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none"/></svg>`);
 }
 
@@ -73,11 +76,12 @@ export function rankRing(): { el: HTMLElement; set(level: number, fraction: numb
   };
 }
 
-/** The rank badge (level number in a progress ring, rank name). Tapping it opens the Profile. */
+/** The rank badge: a gold medal with the rank, on a plate with "Sun Rank", the name and a mini XP bar. Tapping it opens the Profile. */
 export function rankBadge(ctx: UiContext): { el: HTMLElement; update(save: Save): void } {
-  const r = rankRing();
+  const num = medal('', { className: 'rank-medal' });
   const name = h('span', { class: 'rank-name' });
-  const el = h('button', { type: 'button', class: 'rank-badge pe' }, r.el, h('span', { class: 'rank-text' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), name));
+  const bar = progressBar(0, 'bar bar--sm rank-bar', 'violet');
+  const el = h('button', { type: 'button', class: 'rank-badge pe' }, num, h('span', { class: 'plate rank-text' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), name, bar));
   el.addEventListener('click', () => {
     if (!featureUnlocked(ctx.save(), 'profile')) {
       ctx.sound('deny');
@@ -93,8 +97,10 @@ export function rankBadge(ctx: UiContext): { el: HTMLElement; update(save: Save)
   });
   const update = (save: Save): void => {
     const v = rankView(save);
-    r.set(v.level, v.fraction);
+    num.textContent = String(v.level);
+    num.classList.toggle('medal--sm', v.level >= 100);
     name.textContent = v.title;
+    (bar.firstElementChild as HTMLElement).style.width = `${Math.round(Math.max(0, Math.min(1, v.fraction)) * 100)}%`;
     el.setAttribute('aria-label', `Sun Rank ${v.level}, ${v.title}: ${v.into} of ${v.need} XP. Profile`);
   };
   update(ctx.save());
@@ -105,33 +111,50 @@ const frame = (): Promise<number> => new Promise((done) => requestAnimationFrame
 const wait = (ms: number): Promise<void> => new Promise((done) => window.setTimeout(done, ms));
 
 /**
- * The Results XP meter: fills by the run's XP, rolls over on a rank up (the rankUp sound and a
- * flash), ticking as it goes. `show` resolves once it has settled (at once under reduced motion).
+ * The Results XP meter: fills by the run's XP, rolls over on a rank up (the rankUp sound, the medal's
+ * pop and a RANK UP! sticker), ticking as it goes. `show` resolves once it has settled (at once
+ * under reduced motion). The lighter segment on the bar is what this run added within the rank shown.
  */
 export function xpMeter(ctx: UiContext): { el: HTMLElement; show(o: GamifyOutcome | undefined, save?: Save): Promise<void> } {
-  const r = rankRing();
+  const num = medal('', { className: 'xp-medal' });
   const title = h('span', { class: 'rank-name' });
-  const gain = h('span', { class: 'xp-gain num' });
+  const gainText = h('span', { class: 'gt xp-gain-t' });
+  const gain = h('span', { class: 'xp-gain', 'aria-hidden': 'true' }, kitShape('burst', 'xp-gain-bg'), gainText);
   const fill = h('i');
-  const count = h('span', { class: 'num' });
-  const next = h('span');
+  const added = h('i', { class: 'bar-gain' });
+  const count = h('span', { class: 'num bar-label' });
+  const next = h('span', { class: 'xp-next' });
   const el = h(
     'div',
     { class: 'xp-meter', role: 'group' },
-    h('div', { class: 'xp-row' }, r.el, h('span', { class: 'rank-text' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), title), gain,
-      h('span', { class: 'xp-pop', 'aria-hidden': 'true' }, 'Rank up!')),
-    h('span', { class: 'xp-bar', 'aria-hidden': 'true' }, fill),
-    h('div', { class: 'xp-foot' }, count, next),
+    num,
+    h(
+      'div',
+      { class: 'xp-foot' },
+      h('span', { class: 'bar bar--violet xp-track' }, fill, added, count),
+      h('span', { class: 'xp-title' }, h('span', { class: 'rank-kicker' }, 'Sun Rank'), title),
+      next,
+    ),
+    gain,
+    h('span', { class: 'sticker xp-pop', 'aria-hidden': 'true' }, 'Rank up!'),
   );
   let token = 0;
+  /** Where this run's gain starts (total XP); after a roll-over the segment starts at the rank's left end. */
+  let from0 = 0;
   const paint = (xp: number): number => {
     const level = rankForXp(xp);
-    const into = xp - rankStartXp(level);
+    const start = rankStartXp(level);
+    const into = xp - start;
     const need = rankNeed(level);
     const n = rankReward(level + 1);
-    r.set(level, into / need);
+    const pct = (v: number): string => `${((100 * v) / need).toFixed(1)}%`;
+    const g0 = Math.max(0, from0 - start);
+    num.textContent = String(level);
+    num.classList.toggle('medal--sm', level >= 100);
     title.textContent = rankTitle(level);
-    fill.style.width = `${((100 * into) / need).toFixed(1)}%`;
+    fill.style.width = pct(into);
+    added.style.left = pct(g0);
+    added.style.width = pct(Math.max(0, into - g0));
     count.textContent = `${Math.floor(into)} / ${need} XP`;
     next.textContent = `Rank ${level + 1}: ${n.kind === 'globe' ? 'Snow Globe' : `+${n.amount} Snow`}`;
     return level;
@@ -151,7 +174,9 @@ export function xpMeter(ctx: UiContext): { el: HTMLElement; show(o: GamifyOutcom
       if (!o) return;
       const end = o.xpBefore + o.xpGained;
       const up = o.rankAfter > o.rankBefore;
-      gain.textContent = `+${o.xpGained} XP`;
+      from0 = o.xpBefore;
+      gainText.textContent = `+${o.xpGained} XP`;
+      hide(gain, o.xpGained <= 0);
       el.setAttribute('aria-label', `Sun Rank ${rankForXp(end)}, ${rankTitle(rankForXp(end))}: plus ${o.xpGained} XP${up ? ', rank up' : ''}`);
       if (ctx.reducedMotion() || o.xpGained <= 0) {
         paint(end);
@@ -238,21 +263,25 @@ function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
   const wasInert = layer?.hasAttribute('inert') ?? false;
   const previous = document.activeElement as HTMLElement | null;
 
-  const kicker = h('p', { class: 'rv-kicker' });
-  const name = h('p', { class: 'rv-name' });
+  // The kicker is a small red ribbon (its band holds the words); the prize lands on a card framed
+  // in its rarity's colour, the rarity word hung under it as a tag (the sub-line says it too).
+  const kicker = ribbon('', { tone: 'red', size: 'sm', tag: 'p', bandClass: 'rv-kicker', className: 'rv-ribbon' });
+  const name = h('p', { class: 'gt rv-name' });
   const sub = h('p', { class: 'rv-sub' });
   const count = h('p', { class: 'rv-count' });
-  const prize = h('div', { class: 'rv-prize' });
+  const prize = h('div', { class: 'rv-item' });
+  const tierTag = h('span', { class: 'tag rv-tag', 'aria-hidden': 'true' });
+  const card = h('div', { class: 'panel rv-prize' }, prize, tierTag);
   const flakes = h('div', { class: 'rv-flakes', 'aria-hidden': 'true' });
   for (let i = 0; i < FLAKES; i++) flakes.append(h('i', { style: `--i:${i}` }));
-  const next = h('button', { type: 'button', class: 'btn btn--primary btn--lg rv-next' });
+  const next = h('button', { type: 'button', class: 'btn btn--primary btn--xl rv-next' });
   const live = h('p', { class: 'sr-only', 'aria-live': 'assertive' });
   const el = h(
     'div',
     { class: 'rv pe', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Reward' },
     h('div', { class: 'rv-scrim' }),
-    h('div', { class: 'rv-frame' }, h('div', { class: 'rv-stage' }, kicker,
-      h('div', { class: 'rv-art' }, h('div', { class: 'rv-rays' }), h('div', { class: 'rv-globe' }, globeSvg()), flakes, prize),
+    h('div', { class: 'rv-frame' }, h('div', { class: 'rv-stage' }, kicker.el,
+      h('div', { class: 'rv-art' }, h('div', { class: 'burst rv-rays' }), h('div', { class: 'rv-globe' }, globeSvg()), flakes, card),
       name, sub, count, next, live)),
   );
   root.append(el);
@@ -275,10 +304,12 @@ function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
     const land = (r: Reward): void => {
       const item = r.cosmetic ? getCosmetic(r.cosmetic) : undefined;
       el.dataset.tier = item ? rarity(item) : 'snow';
-      setChildren(prize, item ? cosmeticSwatch(item) : h('span', { class: 'num' }, icon('snow'), `+${r.amount}`));
+      tierTag.textContent = item ? RARITY_LABEL[rarity(item)] : '';
+      hide(tierTag, !item);
+      setChildren(prize, item ? cosmeticSwatch(item) : h('span', { class: 'num' }, artIcon('snow'), `+${r.amount}`));
       name.textContent = item ? item.name : `${r.amount} Snow`;
       sub.textContent = item ? `${RARITY_LABEL[rarity(item)]} · new in your Wardrobe` : 'Added to your wallet';
-      live.textContent = `${kicker.textContent}: ${name.textContent}`;
+      live.textContent = `${kicker.band.textContent}: ${name.textContent}`;
     };
 
     const step = (): void => {
@@ -289,7 +320,7 @@ function reveal(ctx: UiContext, steps: readonly Reward[]): Promise<void> {
       }
       el.classList.remove('is-open', 'is-shake', 'is-burst');
       count.textContent = steps.length > 1 ? `${i + 1} of ${steps.length}` : '';
-      kicker.textContent = s.title;
+      kicker.band.textContent = s.title;
       next.textContent = i + 1 < steps.length ? 'Next' : 'Collect';
       const globe = s.kind === 'globe';
       const got = globe ? openOne(ctx) : s;
