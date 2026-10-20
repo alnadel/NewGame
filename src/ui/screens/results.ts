@@ -98,6 +98,8 @@ const HERO_ROOM_MIN = Math.ceil(HERO_RIBBON_PX + HERO_FX_MIN * HERO_STARS_PX);
 const BIT_GOAL = 1;
 const BIT_TWO = 2;
 const BIT_COOL_LOST = 4;
+/** Which of the three star rules a run met (the goal, the flakes or Dare, the cool run). */
+const rulesMet = (bits: number): boolean[] => [(bits & BIT_GOAL) !== 0, (bits & BIT_TWO) !== 0, (bits & BIT_COOL_LOST) === 0];
 
 /** The glyph art inside a Sun Strip tile (10 px, white on the tile colour). */
 const TILE_ART: Readonly<Partial<Record<HourGlyph, string>>> = {
@@ -413,7 +415,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     const bits = c.starBits;
     hide(goals, !rules || bits === undefined);
     if (!rules || bits === undefined) return;
-    const met = [(bits & BIT_GOAL) !== 0, (bits & BIT_TWO) !== 0, (bits & BIT_COOL_LOST) === 0];
+    const met = rulesMet(bits);
     setChildren(
       goals,
       ...rules.map((rule, i) => {
@@ -471,14 +473,19 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     goal.classList.toggle('is-win', c.passed);
     if (nextLabelEl) nextLabelEl.dataset.sub = c.nextId !== null ? `LEVEL ${c.nextId}` : '';
     renderGoals(c);
-    const lit = c.passed ? c.stars : 0;
+    // A passed level lights each star whose rule was met, in the goal cards' (and the HUD's) order;
+    // without the rule bits, the first `stars` stars.
+    const bits = c.starBits;
+    const lit = c.passed ? (bits === undefined ? [0, 1, 2].map((i) => i < c.stars) : rulesMet(bits)) : [];
+    let n = 0;
     starEls.forEach((star, i) => {
       star.classList.remove('is-on', 'is-pop');
-      if (i >= lit) return;
+      if (lit[i] !== true) return;
+      const k = n++;
       // Reduced motion: the stars fade in one after another; otherwise they slam in with a stamp.
-      if (reduced) later(40 + i * STAR_FADE_MS, () => star.classList.add('is-on'));
+      if (reduced) later(40 + k * STAR_FADE_MS, () => star.classList.add('is-on'));
       else {
-        later(STAR_FIRST_MS + i * STAR_GAP_MS, () => {
+        later(STAR_FIRST_MS + k * STAR_GAP_MS, () => {
           star.classList.add('is-on', 'is-pop');
           ctx.sound('stamp');
         });

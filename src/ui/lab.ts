@@ -31,7 +31,7 @@ const VARIANTS: Record<LabScreen, readonly string[]> = {
   play: ['regular', 'muted', 'hint', 'cue', 'kbd'],
   pause: ['regular'],
   dying: ['regular'],
-  results: ['best', 'first', 'daily', 'challenge', 'warmup', 'long', 'quiet', 'level', 'level-perfect', 'level-last', 'level-fail', 'level-death'],
+  results: ['best', 'first', 'daily', 'challenge', 'warmup', 'long', 'quiet', 'level', 'level-skip', 'level-perfect', 'level-last', 'level-fail', 'level-death'],
   settings: ['regular', 'from-pause'],
   daily: ['regular', 'used'],
   missions: ['regular', 'fresh'],
@@ -146,7 +146,7 @@ function levelRun(id: number, passed: boolean, stars: 0 | 1 | 2 | 3, over: Parti
 }
 
 /** The goal cards' data (the game fills it from game/campaign.ts, which the UI may not import). */
-const LAB_STAR_BITS: Record<string, number> = { level: 7, 'level-perfect': 3, 'level-last': 5, 'level-fail': 4, 'level-death': 6 };
+const LAB_STAR_BITS: Record<string, number> = { level: 7, 'level-skip': 1, 'level-perfect': 3, 'level-last': 5, 'level-fail': 4, 'level-death': 6 };
 
 function campaignView(id: number, run: RunResult, goalLine: string, variant: string): ResultsView['campaign'] {
   const lv = levelDef(id);
@@ -202,6 +202,8 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
       run = fakeRun(95, { flakes: 3, flakesMelted: 3, snow: 3 }, {}, 'Melted by You at 7:35 AM.');
       break;
     case 'level':
+    // Two stars with the flakes star missed and the cool-run star kept: the hero lights 1 and 3.
+    case 'level-skip':
       run = levelRun(6, true, 2, { flakes: 14, snow: 31, maxMult: 3, minChill: 12, blooms: 2, snaps: 1 }, 'Finished at 12:00 PM.');
       break;
     case 'level-perfect':
@@ -227,6 +229,7 @@ function resultsView(variant: string, save: Save): { view: ResultsView; save: Sa
   if (run.level) {
     const goal: Record<string, string> = {
       level: 'Reached the finish · 14 flakes · lowest Chill 12',
+      'level-skip': 'Reached the finish · 14 flakes · lowest Chill 12',
       'level-perfect': 'Reached the finish · 26 flakes · lowest Chill 61',
       'level-last': 'Reached the finish · 9 flakes · lowest Chill 4',
       'level-fail': 'Not enough flakes: 5 of 8',
