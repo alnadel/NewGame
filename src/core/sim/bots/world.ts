@@ -141,8 +141,11 @@ let memoTable: Float64Array | null = null;
 
 // Oracle parry plan (§2.5): for the kept flare whose hold lies within the plan's horizon, the most
 // shaded hold steps a turn-limited path can still get from each bin of the next step (validator
-// rows with the lift, the 3-step rule), recomputed once per plan.
-const PARRY_W = 6;
+// rows with the lift, the 3-step rule), recomputed once per plan. A parried hold step is worth
+// PARRY_W Chill-equivalents while the slack allows (review r5: at 6 the pull toward a parry 150° away
+// lost to a few points of slack until it was too late, seed 62 long; at 12 it holds on every
+// held-out seed tried, and the oracle misses fewer flares).
+const PARRY_W = 12;
 const PARRY_SLACK = 4;
 const PARRY_HORIZON = TUNING.bots.oracle.horizonSteps * STEP;
 const PARRY_REACH = Math.round(TUNING.bots.oracle.rate * STEP * DT);
