@@ -241,7 +241,6 @@
 .f-violet, .btn--violet  { --hi: var(--violet-hi); --face: var(--violet); --lo: var(--violet-lo); --lip: var(--violet-lip); }
 .f-red,    .btn--danger  { --hi: var(--red-hi);    --face: var(--red);    --lo: var(--red-lo);    --lip: var(--red-lip); }
 .f-cloud,  .btn--plain   { --hi: var(--cloud-hi);  --face: var(--cloud);  --lo: var(--cloud-lo);  --lip: var(--cloud-lip); }
-.f-ice                   { --hi: var(--ice-hi);    --face: var(--ice);    --lo: var(--ice-lo);    --lip: var(--ice-lip); }
 .f-locked, .is-locked.btn { --hi: var(--locked-hi); --face: var(--locked); --lo: var(--locked-lo); --lip: var(--locked-lip); }
 
 
@@ -413,8 +412,6 @@
 
 .panel--gold { --frame: var(--gold); }
 .panel--violet { --frame: var(--violet); }
-.panel--red { --frame: var(--red); }
-.panel--cloud { --frame: var(--cloud-lo); }
 .panel--meadow, .chapter[data-biome='meadow'] { --frame: var(--meadow); }
 .panel--oldtown, .chapter[data-biome='oldtown'] { --frame: var(--oldtown); }
 .chapter.is-locked { --frame: var(--lockboard); }
@@ -445,9 +442,6 @@
   background: var(--cream-2);
   box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
 }
-
-/* Rows inside a panel are parted by a dashed line. */
-.rows > * + * { border-top: 2.5px dashed rgba(42, 27, 69, 0.18); }
 
 /* ===== Level node disc (§6.13): the Journey's level discs, the Profile's rank road ===== */
 
@@ -483,11 +477,6 @@
   -webkit-text-stroke: 0;
 }
 
-/* The current one: a white and an ink ring (in the shadow stack, so the box never changes). */
-.node.is-current {
-  --sh: inset 0 -5px 0 var(--lip), var(--top-light), var(--drop-sm), 0 0 0 7px #fff, 0 0 0 10px var(--ink), 6px 7px 0 var(--shade);
-}
-
 .sui.is-hc .node { background: var(--face); }
 .sui.is-hc :is(.node.f-locked, .is-locked > .node) { background: repeating-linear-gradient(45deg, rgba(42, 27, 69, 0.18) 0 3px, transparent 3px 7px), var(--locked); }
 
@@ -505,7 +494,6 @@
 
 .ribbon--blue { --rb-hi: #8EDBFF; --rb: #3FAEF7; --rb-lo: #1F86E0; --rb-tail: #1B6FC6; }
 .ribbon--green { --rb-hi: #B4F25E; --rb: #69D33B; --rb-lo: #43B226; --rb-tail: #2E8C1A; }
-.ribbon--violet { --rb-hi: #D7B0FF; --rb: #A26AF7; --rb-lo: #8550EC; --rb-tail: #5B2EB4; }
 .ribbon--pink { --rb-hi: #FFA3C0; --rb: #FF6390; --rb-lo: #EE3D6E; --rb-tail: #AE2453; }
 
 .ribbon-band {
@@ -751,14 +739,6 @@
   white-space: nowrap;
 }
 
-.reward--chip {
-  padding: 3px 10px 4px 7px;
-  border: var(--bw-sm) solid var(--ink);
-  border-radius: var(--pill);
-  background: var(--tint-green);
-  box-shadow: 0 2px 0 var(--ink);
-}
-
 /* The COMPLETE stamp: a green plate, white outlined Lilita, tilted. */
 .stamp {
   display: inline-block;
@@ -902,7 +882,6 @@
 }
 
 .bar--green > i { --b-hi: #B4F25E; --b: #4CC22C; }
-.bar--blue > i { --b-hi: #9BE3FF; --b: #2E9BEF; }
 .bar--violet > i { --b-hi: #D7B0FF; --b: #8E59F0; }
 
 /* Compact: no label, no stripes. */
