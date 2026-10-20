@@ -199,11 +199,19 @@ function shortCss(): Plugin {
     apply: 'build',
     enforce: 'pre',
     buildStart() {
-      const ui = read([...sources('src/ui', /\.ts$/), ...sources('src/render', /\.ts$/)]);
-      const rest = read(['src/core', 'src/meta', 'src/config', 'src/audio', 'src/platform', 'src/game'].flatMap((d) => sources(d, /\.ts$/)).concat(sources('src', /^[^/]+\.ts$/)));
+      // The UI and audio labs are dev pages with their own markup and styles: never part of a build.
+      const ts = (dir: string): string[] => sources(dir, /\.ts$/).filter((f) => !f.endsWith('/lab.ts'));
+      const ui = read([...ts('src/ui'), ...ts('src/render')]);
+      const rest = read(['src/core', 'src/meta', 'src/config', 'src/audio', 'src/platform', 'src/game'].flatMap(ts).concat(sources('src', /^[^/]+\.ts$/)));
       const outside = read([...sources('tests/e2e', /\.ts$/), 'index.html']);
       const code = `${ui}\n${rest}\n${outside}`;
-      const prefixes = [...code.matchAll(/(?<![\w-])(-?-?[a-zA-Z][\w-]*)\$\{/g)].map((m) => m[1]);
+      // A template can build a name from a literal start (`btn--${variant}`, `jbar--d${n}`): every name
+      // with that start stays as it is. A start followed by a conditional that adds its own spaced
+      // class (`mrow${done ? ' is-done' : ''}`) builds no name from it, nor does a lone letter
+      // (debug text like `p${profile}`).
+      const prefixes = [...code.matchAll(/(?<![\w-])(-?-?[a-zA-Z][\w-]*)\$\{([^}]*)/g)]
+        .filter((m) => (m[1] as string).length > 1 && !/^[^?`'"]*\?\s*['"`] /.test(m[2] as string))
+        .map((m) => m[1] as string);
       const cssAll = read(sources('src', /\.css$/));
       const css = cssAll.split(CSS_OPAQUE).filter((_, i) => i % 2 === 0).join(' ');
 
