@@ -14,3 +14,22 @@
   background: transparent;
   cursor: pointer;
 }
+
+/* "Tap to skip": a dark chip at the bottom centre, fading in after 0.5 s (at once under reduced
+   motion: the delay is an animation). Never in the way of the tap. */
+.dying-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--in-bottom) + 24px);
+  translate: -50% 0;
+  min-height: 36px;
+  padding: 2px 14px 4px;
+  font-size: var(--fs-d-sm);
+  pointer-events: none;
+}
+
+.scr-dying.is-on .dying-hint { animation: hint-in 300ms ease 500ms both; }
+
+@keyframes hint-in {
+  from { opacity: 0; }
+}

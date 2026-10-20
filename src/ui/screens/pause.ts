@@ -1,10 +1,12 @@
 // Pause card: Resume / Restart / Settings / Home (GDD §5). Escape resumes.
+// UI v2 (docs/UI_V2.md §10.5): a blue panel under a blue "Paused" ribbon (the heading), Nubs dozing
+// on top of it, the sub-line and the run's status in wells with art stars.
 
+import { artIcon } from '../art-icons.ts';
 import { h } from '../dom.ts';
-import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import type { ScreenId } from '../types.ts';
-import { button } from '../widgets.ts';
+import { button, ribbon } from '../widgets.ts';
 
 export function createPauseScreen(ctx: UiContext): Screen {
   let from: ScreenId = 'play';
@@ -16,6 +18,7 @@ export function createPauseScreen(ctx: UiContext): Screen {
   const restartBtn = button(ctx, {
     label: 'Restart',
     icon: 'retry',
+    variant: 'blue',
     block: true,
     onPress: () => {
       ctx.go('play');
@@ -37,7 +40,7 @@ export function createPauseScreen(ctx: UiContext): Screen {
   const statusTitle = h('p', { class: 'pause-st-title' });
   const statusGoal = h('p', { class: 'pause-st-goal' });
   const statusStars = h('ul', { class: 'pause-st-stars' });
-  const status = h('div', { class: 'pause-status' }, statusTitle, statusGoal, statusStars);
+  const status = h('div', { class: 'well pause-status' }, statusTitle, statusGoal, statusStars);
   const STAR_WORD = { earned: 'earned', open: 'still open', lost: 'lost' } as const;
   const renderStatus = (): void => {
     const v = ctx.cb.runStatus?.() ?? null;
@@ -51,7 +54,7 @@ export function createPauseScreen(ctx: UiContext): Screen {
     statusGoal.replaceChildren(nb(v.goal), v.now ? h('span', { class: 'pause-st-now' }, `${v.goal ? ' · ' : ''}now ${nb(v.now)}`) : '');
     statusStars.replaceChildren(
       ...v.stars.map((st) =>
-        h('li', { class: `pause-star is-${st.state}`, 'aria-label': `${st.label}: ${STAR_WORD[st.state]}` }, h('span', { class: 'pause-star-ic', 'aria-hidden': 'true' }, '★'), st.label),
+        h('li', { class: `tag pause-star is-${st.state}`, 'aria-label': `${st.label}: ${STAR_WORD[st.state]}` }, artIcon(st.state === 'earned' ? 'star' : 'starEmpty', 'ai pause-star-ic'), st.label),
       ),
     );
     statusStars.hidden = v.stars.length === 0;
@@ -62,9 +65,9 @@ export function createPauseScreen(ctx: UiContext): Screen {
   const card = h(
     'div',
     { class: 'dialog pause-card pe', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pause-title' },
-    h('div', { class: 'pause-badge', 'aria-hidden': 'true' }, icon('pause')),
-    h('h2', { class: 'dialog-title', id: 'pause-title' }, 'Paused'),
-    h('p', { class: 'dialog-sub' }, 'Nubs is chilling. Take your time.'),
+    ribbon('Paused', { tone: 'blue', id: 'pause-title', bandClass: 'dialog-title' }).el,
+    h('div', { class: 'pause-badge', 'aria-hidden': 'true' }, artIcon('nubsSleep'), h('span', { class: 'gt pause-z' }, 'z Z')),
+    h('p', { class: 'well dialog-sub' }, 'Nubs is chilling. Take your time.'),
     status,
     resumeBtn,
     restartBtn,
