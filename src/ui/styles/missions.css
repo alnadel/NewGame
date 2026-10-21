@@ -171,7 +171,7 @@
 }
 
 .mset-pips i.is-on {
-  border: var(--bw-sm) solid var(--ink);
+  border: var(--line-sm);
   border-radius: 50%;
   background: radial-gradient(circle at 45% 35%, var(--green-hi), var(--green) 55%, var(--green-lo));
   box-shadow: 0 2px 0 var(--ink);

@@ -217,7 +217,7 @@ body,
   max-width: min(300px, calc(100% - var(--pad-x-l) - var(--pad-x-r)));
   margin: 0;
   padding: 8px 14px 9px 8px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 20px;
   background: #fff;
   box-shadow: inset 0 -3px 0 #EDE8F5, var(--drop-sm);
@@ -340,7 +340,7 @@ body,
   --d: 46px;
   --ic: 32px;
   grid-area: flag;
-  border: var(--bw-sm) solid var(--ink);
+  border: var(--line-sm);
   border-radius: 14px;
   background: var(--tint-pink);
   box-shadow: inset 0 -3px 0 rgba(174, 36, 83, 0.25);
@@ -493,7 +493,7 @@ body,
   flex: none;
   width: 40px;
   height: 40px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 50%;
   background: radial-gradient(circle at 45% 35%, #fff, #F3FFE6 55%, #DDF6C4);
   box-shadow: inset 0 -3px 0 #B7E28C, 0 2px 0 var(--ink);
@@ -601,7 +601,7 @@ body,
   width: 62px;
   height: 56px;
   padding-bottom: 3px;
-  transition: transform var(--t-up) var(--ease-back);
+  transition: var(--tr-up);
 }
 
 .tray-btn:active .tray-disc {

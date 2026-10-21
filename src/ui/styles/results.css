@@ -38,6 +38,7 @@
   margin: 0 auto;
   max-width: 560px;
   container: sheet / inline-size;
+  --fade-foot: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   /* The 11 px frame plus 16 px of cream (12 under 360 px), and the safe areas. */
   padding: 27px calc(var(--in-right) + 27px) calc(var(--in-bottom) + 18px) calc(var(--in-left) + 27px);
   border-bottom: 0;
@@ -75,7 +76,7 @@
   /* A soft 28 px fade at the bottom edge says the list goes on, so a tile cut by the Retry bar
      fades out instead of ending in hard-cut text; the padding lets the last row scroll clear of it.
      The list never scrolls by itself (results.ts). */
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: var(--fade-foot);
 }
 
 /* ...unless the screen is short or the text large (results.ts measure()): then the whole body
@@ -87,7 +88,7 @@
   touch-action: pan-y;
   margin: 0 -8px;
   padding: 0 8px;
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: var(--fade-foot);
 }
 
 .res-sheet.is-one-scroll .res-scroll {
@@ -555,7 +556,7 @@
 /* The coins of the awards, loot tiles, goal checks and done missions: a candy face (its face
    class) with a lip, the icon in ink. */
 .res-coin {
-  border: var(--bw-sm) solid var(--ink);
+  border: var(--line-sm);
   border-radius: 50%;
   background: linear-gradient(180deg, var(--hi), var(--face) 50%, var(--lo));
   box-shadow: inset 0 -3px 0 var(--lip), 0 2px 0 var(--ink);
@@ -803,12 +804,10 @@
 /* On cream-2 the accent amber is 4.22:1: the road's words and count take the brown (5.9:1). */
 .res-top .road :is(.road-text, .road-count) { color: var(--t-brown); }
 
+/* The road sits in a well (kit.css). */
 .res-top .road {
   margin-top: 12px;
   padding: 8px 12px 10px;
-  border-radius: 16px;
-  background: var(--cream-2);
-  box-shadow: inset 0 3px 0 var(--cream-3), inset 0 0 0 2px rgba(42, 27, 69, 0.12);
 }
 
 /* A taller sheet (results.ts SHEET_MAX_CAMPAIGN), which still leaves the hero 99 px under the
@@ -868,14 +867,8 @@
 
 .res-actions .res-sq ~ .btn--xl { margin-top: -3px; }
 
-/* Next level: a two-line label, the sub-line ("LEVEL 39") generated so the text stays "Next level". */
-.res-next .btn-label::after {
-  content: attr(data-sub);
-  display: block;
-  margin-top: 1px;
-  font-size: var(--fs-d-sm);
-  letter-spacing: 0.08em;
-}
+/* Next level: a two-line label, the sub-line ("LEVEL 39") generated (kit.css data-sub) so the text
+   stays "Next level". */
 
 /* Phones: the XL labels take one size down and Next level drops its icon, so they stay on one line;
    narrower still (or large text) the squares shrink and a label may wrap rather than clip. */

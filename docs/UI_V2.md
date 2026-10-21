@@ -496,8 +496,8 @@ element: no wrapper markup. The coloured frame and the inner ink line are inset 
 .panel--violet { --frame: var(--violet); }
 .panel--red    { --frame: var(--red); }
 .panel--cloud  { --frame: var(--cloud-lo); }
-.panel--meadow, .chapter[data-biome='meadow']   { --frame: var(--meadow); }
-.panel--oldtown, .chapter[data-biome='oldtown'] { --frame: var(--oldtown); }
+.chapter[data-biome='meadow']  { --frame: var(--meadow); }   /* no screen used .panel--meadow / --oldtown */
+.chapter[data-biome='oldtown'] { --frame: var(--oldtown); }
 .chapter.is-locked { --frame: var(--lockboard); }
 ```
 
@@ -1739,6 +1739,14 @@ data (write it out, or give it such a prefix).
 The round's fixes (Profile, Title, Results, Pause, toast pacing, shorter tip copy, the screen and
 board skipping) cost about 750 B net; 29 custom properties no rule or script read (the v1.4 aliases,
 the old rarity colours, a few unused scale steps) gave 432 B back and one shared Results rule 72 B.
+
+**Measured after the third fix round:** 747,297 B (729.8 KiB), 223 B under (+203 B on the round).
+The round's fixes cost about 1,550 B (unique swatch ids, the ribbon's block band and the 1rem probe
+that re-fits on a text size change, Daily's kicker, the Results order and the challenge ribbon, the
+intro card's teaching ladder). Tokens for repeated values gave about 1,350 B back with no pixel
+changed (`--line` and `--line-sm` for the 42 ink outlines, `--gold-ball`, `--tr-up`, the Results
+fade mask), as did one shared rule each for the wells and the data-sub kicker; the probe reuses
+`.sr-only`, and two biome panel classes no screen used went.
 
 ---
 

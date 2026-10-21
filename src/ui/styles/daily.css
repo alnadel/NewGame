@@ -106,7 +106,7 @@
 .socket {
   width: 24px;
   height: 24px;
-  border: var(--bw-sm) solid var(--ink);
+  border: var(--line-sm);
   border-radius: 50%;
   background: linear-gradient(var(--slot-1), var(--slot-2));
   box-shadow: inset 0 3px 0 #0000005C;
@@ -137,14 +137,7 @@
 
 .daily-play.btn--plain { font-size: var(--fs-d-lg); }
 
-/* Practice: 'Practice' over an 'UNSCORED' kicker (daily.ts sets data-sub), like Results' Next. */
-.daily-play .btn-label:not([data-sub=''])::after {
-  content: attr(data-sub);
-  display: block;
-  margin-top: 1px;
-  font-size: var(--fs-d-sm);
-  letter-spacing: 0.08em;
-}
+/* Practice: 'Practice' over an 'UNSCORED' kicker (daily.ts sets data-sub; kit.css draws it). */
 
 /* ===== Recent days: plates, today's gold-tinted ===== */
 

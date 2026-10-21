@@ -41,7 +41,7 @@
   top: 50%;
   /* A cloud candy key cap; the arrow falls back to the body face (it is not in the display subset). */
   padding: 6px 16px 10px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: var(--r-sm);
   background: linear-gradient(180deg, var(--cloud-hi), var(--cloud) 46%, var(--cloud-lo));
   box-shadow: inset 0 -5px 0 var(--cloud-lip), var(--top-light), var(--drop);
@@ -160,7 +160,7 @@
   width: max-content;
   max-width: calc(100% - 32px);
   padding: 6px 16px 8px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 20px;
   background: linear-gradient(180deg, var(--slot-1), var(--slot-2));
   box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.3), var(--drop-sm);
@@ -206,7 +206,7 @@
   position: absolute;
   top: calc(var(--in-top) + 66px);
   left: calc(var(--in-left) + 14px);
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 50%;
   background: radial-gradient(circle at 50% 32%, var(--cloud-hi) 0 25%, var(--cloud) 60%, var(--cloud-lo));
   box-shadow: inset 0 -3px 0 var(--cloud-lip), var(--drop-sm);

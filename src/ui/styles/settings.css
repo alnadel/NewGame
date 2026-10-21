@@ -32,7 +32,7 @@
 .set-ic {
   --d: 46px;
   --ic: 24px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 14px;
   background: linear-gradient(180deg, var(--hi, var(--cloud-hi)), var(--face, var(--cloud)));
   box-shadow: inset 0 -4px 0 var(--lip, var(--cloud-lip)), var(--top-light), var(--drop-sm);

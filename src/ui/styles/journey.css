@@ -165,7 +165,7 @@
 .chapter-biome {
   --d: 44px;
   --ic: 26px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 50%;
   background: radial-gradient(circle at 45% 35%, #fff, var(--cream) 55%, var(--cream-2));
   box-shadow: inset 0 -3px 0 var(--cream-3), var(--drop-sm);
@@ -217,7 +217,7 @@
   position: absolute;
   top: -6px;
   right: -9px;
-  border: var(--bw-sm) solid var(--ink);
+  border: var(--line-sm);
   border-radius: 50%;
   background: var(--green);
   box-shadow: inset 0 -3px 0 var(--green-lo), 0 2px 0 var(--ink);
@@ -256,7 +256,7 @@
 .chapter-map {
   position: relative;
   padding: 12px 8px 10px;
-  border: var(--bw) solid var(--ink);
+  border: var(--line);
   border-radius: 22px;
   background:
     radial-gradient(rgba(42, 27, 69, 0.06) 1.2px, transparent 1.6px) 0 0 / 14px 14px,
@@ -406,7 +406,7 @@
   padding-bottom: 3px;
   font-size: min(var(--fs-d-lg), calc(var(--d) * 0.44));
   text-shadow: 0 2px 0 var(--ink);
-  transition: transform var(--t-up) var(--ease-back);
+  transition: var(--tr-up);
 }
 
 .lvl-num.is-wide { font-size: min(var(--fs-d-md), calc(var(--d) * 0.36)); }
@@ -543,7 +543,7 @@
   z-index: 3;
   top: calc(var(--pt) - 3px);
   left: calc(50% + var(--d0) / 2 - 14px);
-  border: var(--bw-sm) solid var(--ink);
+  border: var(--line-sm);
   border-radius: 50%;
   background: var(--cream);
   box-shadow: 0 2px 0 var(--ink);

@@ -423,27 +423,27 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
   // The display face changes text widths: the Title re-fits, Results re-measures its sheet. CSS text
   // re-renders by itself.
   let alive = true;
-  void fontsReady.then((ok) => {
-    if (!ok || !alive) return;
+  const refit = (): void => {
     if (current !== 'boot') screens[current].relayout?.();
     results.invalidateSheetTop();
     fitTitles(current);
+  };
+  void fontsReady.then((ok) => {
+    if (ok && alive) refit();
   });
   // The text size (the root font size) can change after boot, from browser text scaling or a page
-  // zoom setting: a 1rem probe re-fits the same things when it does.
-  const remProbe = h('i', { class: 'rem-probe', deco: true });
+  // zoom setting: a 1rem-wide probe re-fits the same things when it does.
+  const remProbe = h('i', { class: 'sr-only', style: 'width:1rem' });
   root.append(remProbe);
-  const remPx = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const remPx = (): string => getComputedStyle(root).fontSize;
   let rem = remPx();
   const remObserver =
     typeof ResizeObserver === 'function'
       ? new ResizeObserver(() => {
-          const px = remPx();
-          if (px === rem || !alive) return;
-          rem = px;
-          if (current !== 'boot') screens[current].relayout?.();
-          results.invalidateSheetTop();
-          fitTitles(current);
+          if (alive && remPx() !== rem) {
+            rem = remPx();
+            refit();
+          }
         })
       : null;
   remObserver?.observe(remProbe);
