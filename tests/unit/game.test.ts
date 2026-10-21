@@ -508,6 +508,37 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
     expect(run(new Cadence(), 2, 1000 / 120, { timeScale: 0 })).toBeGreaterThanOrEqual(118);
   });
 
+  it('keeps drawing at 60 fps the moment a long hold or slow-mo ends on a 90-144 Hz display', () => {
+    for (const hz of [60, 90, 120, 144]) {
+      for (const over of [{ inputActive: true }, { timeScale: 0.3 }]) {
+        const c = new Cadence();
+        const ms = 1000 / hz;
+        let now = 1000;
+        let gap = 0;
+        let last = now;
+        const span = (seconds: number, active: Partial<CadenceInput>): number => {
+          let draws = 0;
+          for (const end = now + seconds * 1000; now < end; now += ms) {
+            if (c.shouldDraw({ now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, settled: false, ...active })) {
+              c.drawn(now);
+              draws++;
+              gap = Math.max(gap, now - last);
+              last = now;
+            }
+          }
+          return draws / seconds;
+        };
+        span(1, {});
+        // A 10 s hold (or slow-mo) draws every rAF; once it ends, play draws at 60 fps straight away.
+        expect(span(10, over)).toBeGreaterThanOrEqual(hz - 2);
+        gap = 0;
+        const after = span(2, {});
+        expect(after, `${hz} Hz after ${JSON.stringify(over)}`).toBeGreaterThanOrEqual(56);
+        expect(gap, `${hz} Hz longest gap`).toBeLessThanOrEqual(25);
+      }
+    }
+  });
+
   it('pauses at 30 fps and the reduced-motion Title at 10 fps', () => {
     const pause = run(new Cadence(), 4, 16.7, { screen: 'pause' });
     expect(pause).toBeGreaterThanOrEqual(28);

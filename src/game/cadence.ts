@@ -99,7 +99,11 @@ export class Cadence {
     this.menuDirty = false;
     const interval = this.interval > 0 && Number.isFinite(this.interval) ? this.interval : FRAME_60;
     // Advance the timeline by one slot; resync when more than a slot behind (slow frames, a pause
-    // in the rAF stream, an uncapped stretch).
-    this.due = now - this.due > interval ? now + interval : this.due + interval;
+    // in the rAF stream, an uncapped stretch), and never run more than a slot ahead: an uncapped
+    // stretch (a finger down, slow-mo) on a 90-144 Hz display draws faster than one slot a frame,
+    // and a timeline left ahead of the clock held the canvas still after the finger lifted while
+    // the run went on underneath. A capped frame drawn early (by SLACK_MS at most) keeps its slot.
+    const next = now - this.due > interval ? now + interval : this.due + interval;
+    this.due = Math.min(next, now + interval + SLACK_MS);
   }
 }
