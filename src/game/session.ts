@@ -692,7 +692,9 @@ export class Session {
       window.visualViewport?.removeEventListener('resize', onResize);
     });
     this.gov.onChange = () => {
-      this.resize(true);
+      // Resized at the top of the next frame, which then draws (a resize clears the canvas, and the
+      // governor steps after this frame's draw).
+      this.sizeDirty = true;
       this.renderer.scene.particles.limit = this.gov.particleCap;
     };
     this.resize(true);

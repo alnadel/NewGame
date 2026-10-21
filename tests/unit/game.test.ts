@@ -513,16 +513,18 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
       for (const over of [{ inputActive: true }, { timeScale: 0.3 }]) {
         const c = new Cadence();
         const ms = 1000 / hz;
-        let now = 1000;
-        let gap = 0;
-        let last = now;
+        let i = 0;
+        let last = 0;
+        const gaps: number[] = [];
         const span = (seconds: number, active: Partial<CadenceInput>): number => {
           let draws = 0;
-          for (const end = now + seconds * 1000; now < end; now += ms) {
+          for (const end = i + Math.round((seconds * 1000) / ms); i < end; i++) {
+            // rAF timestamps jitter by a fraction of a ms.
+            const now = 1000 + i * ms + Math.sin(i * 12.9898) * 1.5;
             if (c.shouldDraw({ now, screen: 'play', inputActive: false, timeScale: 1, reducedMotion: false, settled: false, ...active })) {
               c.drawn(now);
               draws++;
-              gap = Math.max(gap, now - last);
+              gaps.push(now - last);
               last = now;
             }
           }
@@ -531,11 +533,29 @@ describe('render cadence (K8, render-at-full-display-rate)', () => {
         span(1, {});
         // A 10 s hold (or slow-mo) draws every rAF; once it ends, play draws at 60 fps straight away.
         expect(span(10, over)).toBeGreaterThanOrEqual(hz - 2);
-        gap = 0;
-        const after = span(2, {});
-        expect(after, `${hz} Hz after ${JSON.stringify(over)}`).toBeGreaterThanOrEqual(56);
-        expect(gap, `${hz} Hz longest gap`).toBeLessThanOrEqual(25);
+        gaps.length = 0;
+        const label = `${hz} Hz after ${JSON.stringify(over)}`;
+        expect(span(2, {}), label).toBeGreaterThanOrEqual(56);
+        expect(Math.max(...gaps), label).toBeLessThanOrEqual(25);
+        // And evenly: on 60 and 120 Hz every interval is one 16.7 ms slot, not a judder of 8.3 and 25.
+        if (hz % 60 === 0) expect(gaps.filter((g) => g < 12.5 || g > 21).length, label).toBe(0);
       }
+    }
+  });
+
+  it('draws the frame after an invalidation whatever the cap (a resize clears the canvas)', () => {
+    for (const screen of ['play', 'pause', 'title', 'results'] as const) {
+      const c = new Cadence();
+      const inp: CadenceInput = { now: 1000, screen, inputActive: false, timeScale: 1, reducedMotion: true, settled: true };
+      expect(c.shouldDraw(inp)).toBe(true);
+      c.drawn(inp.now);
+      inp.now += 1000 / 120;
+      expect(c.shouldDraw(inp), screen).toBe(false);
+      c.invalidate();
+      expect(c.shouldDraw(inp), screen).toBe(true);
+      c.drawn(inp.now);
+      inp.now += 1000 / 120;
+      expect(c.shouldDraw(inp), screen).toBe(false);
     }
   });
 
