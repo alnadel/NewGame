@@ -1274,8 +1274,11 @@ Content, top to bottom (k = the HUD scale; width `min(vw − 32, 352k)` as today
 **Fit.** The card must stay between the HUD band (+ 8 + the ribbon's 22k) and the dial's top (− 8 −
 the pill's 20k), as today's placement rule. While it is too tall, in order: blurb to 2 lines; star
 wells to 46k (star 22k, no glyph); goal and Dare chips side by side when both fit, else the goal chip
-goes (the first well says the goal); blurb hidden; concept chip hidden; finally scale the sprite down
-(not below .8). The ghost hand and "‹ drag ›" below it keep their behaviour; "drag" is Lilita 22
+goes; the goal chip goes (the first well says the goal); blurb hidden; concept chip hidden; finally
+scale the sprite down (not below .8). A teaching level (a concept) keeps its blurb: before the blurb
+step it runs the ladder up to the goal chip at .9 and .85 of k, and on a wide column (k above 1, a
+desktop) at a phone's k = 1 and then .9, so a laptop's Level 1 still says what it teaches (the test
+hook's `levelCard()` reports the fit). The ghost hand and "‹ drag ›" below it keep their behaviour; "drag" is Lilita 22
 outlined.
 
 ### 9.8 Day and night cards

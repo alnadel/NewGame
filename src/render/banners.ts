@@ -801,20 +801,21 @@ function measureCard(b: Banners, w: number, k: number): void {
 
 /**
  * Picks the first fit that keeps the card inside `room` (CSS px), §9.7's ladder: the blurb to two
- * lines, compact wells, the goal and Dare chips in one row (or the goal chip goes: the first well
- * says the goal), no blurb, no concept chip.
+ * lines, compact wells, the goal and Dare chips in one row (or the goal chip goes), the goal chip
+ * gone (the first well says the goal), then, unless `keepBlurb`, no blurb and no concept chip.
  */
-function fitCard(b: Banners, k: number, room: number): boolean {
+function fitCard(b: Banners, k: number, room: number, keepBlurb: boolean): boolean {
   const iw = cW - 2 * (CARD_INSET + CARD_PAD) * k;
   const n = cLines.length;
   const dare = cDare !== '';
   const row = !dare ? 0 : cGoalW + 8 * k + cDareW <= iw ? 1 : 2;
   const two = Math.min(2, n);
-  for (let step = 0; step < 6; step++) {
-    cBlurbN = step === 0 ? n : step < 4 ? two : 0;
+  const steps = keepBlurb ? 5 : 7;
+  for (let step = 0; step < steps; step++) {
+    cBlurbN = step === 0 ? n : step < 5 ? two : 0;
     cCompact = step >= 2;
-    cChips = step >= 3 ? row : 0;
-    cShowConcept = step < 5;
+    cChips = step >= 4 ? 2 : step === 3 ? row : 0;
+    cShowConcept = step < 6;
     let h = (CARD_INSET + RIBBON_BAND / 2 + 8 + 38) * k;
     if (cShowConcept && b.levelConceptName) h += 40 * k;
     if (cBlurbN > 0) h += cBlurbN * 20 * k + 10 * k;
@@ -825,6 +826,28 @@ function fitCard(b: Banners, k: number, room: number): boolean {
     if (cH <= room) return true;
   }
   return false;
+}
+
+/** The intro card's fit as last sized (the test hook): blurb lines shown of all, the scale, the height. */
+export function levelCardFit(): { blurb: number; lines: number; compact: boolean; chips: number; concept: boolean; k: number; h: number } {
+  return { blurb: cBlurbN, lines: cLines.length, compact: cCompact, chips: cChips, concept: cShowConcept, k: cK, h: cH };
+}
+
+/**
+ * Sizes the card for `room`. A teaching level (a concept) keeps its blurb: the card shrinks to .85
+ * first, and on a wide column (k above 1, a desktop) on to a phone's size and then .9 of it, before
+ * the blurb may go.
+ */
+function sizeCard(b: Banners, v: View, scale: number, room: number): void {
+  const at = (f: number, keepBlurb: boolean): boolean => {
+    measureCard(b, Math.round(Math.min(v.vw - 32, 352 * scale) * f), scale * f);
+    return fitCard(b, scale * f, room, keepBlurb);
+  };
+  if (b.levelConcept && b.levelBlurb) {
+    for (const f of [1, 0.9, 0.85, 1 / scale, 0.9 / scale]) if ((f >= 0.85 || scale > 1) && f <= 1 && at(f, true)) return;
+  }
+  // Too tall even at the last fit: the whole card scales down, not below 0.8.
+  for (let f = 1; f >= 0.8 - 1e-6; f -= 0.1) if (at(f, false)) return;
 }
 
 /**
@@ -844,11 +867,7 @@ function levelCard(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
     cScale = scale;
     cVw = v.vw;
     cRoom = room;
-    // Too tall even at the last fit: the whole card scales down, not below 0.8.
-    for (let f = 1; f >= 0.8 - 1e-6; f -= 0.1) {
-      measureCard(b, Math.round(Math.min(v.vw - 32, 352 * scale) * f), scale * f);
-      if (fitCard(b, scale * f, room)) break;
-    }
+    sizeCard(b, v, scale, room);
   }
   const k = cK;
   const h = cH;

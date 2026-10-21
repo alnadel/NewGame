@@ -215,6 +215,7 @@ declare global {
       hud(): { snow: number; left: boolean; ruler: boolean; rulerW: number; icon: boolean; stars: number };
       runStatus(): { title: string; goal: string; now: string; stars: { label: string; state: 'earned' | 'open' | 'lost' }[] } | null;
       toasts(): { kind: string; kicker: string; text: string }[];
+      levelCard(): { blurb: number; lines: number; compact: boolean; chips: number; concept: boolean; k: number; h: number };
       setSnow(n: number): void;
       mech(): ShadyMech;
     };

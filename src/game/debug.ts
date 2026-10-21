@@ -3,6 +3,7 @@
 import { BOT_KINDS, runHeadless, type BotKind } from '../core/index.ts';
 import type { ShadyAudio } from '../audio/index.ts';
 import type { DebugDraw, RenderOptions } from '../render/renderer.ts';
+import { levelCardFit } from '../render/banners.ts';
 import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
 import { shakeOf, zoomOf } from './camera.ts';
 import type { MapProbe, PixelAB, Session } from './session.ts';
@@ -79,6 +80,8 @@ export interface ShadyTestHook {
   runStatus(): RunStatusView | null;
   /** The in-run toasts: the one showing first, then the queue (kind, kicker, text). */
   toasts(): { kind: string; kicker: string; text: string }[];
+  /** The level intro card's fit as last drawn (render/banners.ts levelCardFit). */
+  levelCard(): { blurb: number; lines: number; compact: boolean; chips: number; concept: boolean; k: number; h: number };
   /** Sets the run's Snow (layout checks with long numbers). */
   setSnow(n: number): void;
   /**
@@ -183,6 +186,7 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     },
     runStatus: () => session.runStatus(),
     toasts: () => session.renderer.scene.banners.toasts.map((t) => ({ kind: t.kind, kicker: t.kicker.replace(/\u200c/g, ''), text: t.text })),
+    levelCard: () => levelCardFit(),
     setSnow: (n) => session.testSetSnow(n),
     mech: () => {
       const m = session.mech.view;

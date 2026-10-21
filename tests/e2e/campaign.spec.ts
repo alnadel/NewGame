@@ -89,6 +89,19 @@ test.describe('campaign levels', () => {
     expect(errors).toEqual([]);
   });
 
+  // Fix round 3: on a laptop the card's scale grows with the column, and the fit ladder dropped the
+  // teaching sentence before it tried a smaller card. A teaching level keeps its blurb.
+  for (const size of [{ width: 1280, height: 800 }, { width: 1280, height: 720 }, { width: 390, height: 844 }, { width: 360, height: 640 }]) {
+    test(`the intro cards of Levels 1-3 keep their teaching sentence at ${size.width}x${size.height}`, async ({ page }) => {
+      await page.setViewportSize(size);
+      for (const n of [1, 2, 3]) {
+        await openLevel(page, `level=${n}&test=1`);
+        await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.levelCard().blurb), { message: `Level ${n}` }).toBeGreaterThan(0);
+        expect((await page.evaluate(() => window.__SHADY_TEST__!.levelCard())).concept, `Level ${n} concept chip`).toBe(true);
+      }
+    });
+  }
+
   test('a bot run reaches the Results with stars, and Next level starts level 3', async ({ page }) => {
     test.slow();
     const errors = watchErrors(page);
