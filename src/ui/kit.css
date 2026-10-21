@@ -293,11 +293,11 @@
   width: 100%;
 }
 
-/* Labels wrap rather than clip (large text, narrow buttons); XL labels stay on one line. */
+/* Labels wrap at spaces rather than clip (large text, narrow buttons), never inside a word; XL
+   labels stay on one line. */
 .btn-label {
   min-width: 0;
   text-align: center;
-  overflow-wrap: anywhere;
 }
 
 /* A line icon on a candy face is ink, never white (art icons carry their own colours). */

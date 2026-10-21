@@ -129,12 +129,22 @@
   font-style: italic;
 }
 
-/* Play is the hero: green XL, one size down in a narrow column; Practice keeps the cloud face. */
-@container menu (max-width: 339.98px) {
-  .daily-play { font-size: var(--fs-d-xl); }
+/* Play is the hero: green XL, one size down in a narrow column (in em, so large text counts too),
+   where 'Play · try 2/3' may wrap at its spaces rather than clip; Practice keeps the cloud face. */
+@container menu (max-width: 21.24em) {
+  .daily-play { font-size: var(--fs-d-xl); line-height: 1.1; white-space: normal; }
 }
 
 .daily-play.btn--plain { font-size: var(--fs-d-lg); }
+
+/* Practice: 'Practice' over an 'UNSCORED' kicker (daily.ts sets data-sub), like Results' Next. */
+.daily-play .btn-label:not([data-sub=''])::after {
+  content: attr(data-sub);
+  display: block;
+  margin-top: 1px;
+  font-size: var(--fs-d-sm);
+  letter-spacing: 0.08em;
+}
 
 /* ===== Recent days: plates, today's gold-tinted ===== */
 

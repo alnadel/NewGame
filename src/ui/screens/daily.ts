@@ -124,7 +124,13 @@ export function createDailyScreen(ctx: UiContext): Screen {
     setChildren(tryPips, ...Array.from({ length: DAILY_TRIES }, (_, i) => (i < s.tries ? h('i', 'socket') : h('i', null, artIcon('snow')))));
     tryText.textContent = s.scored ? `${s.tries}/${DAILY_TRIES} used` : 'All used';
     best.textContent = s.bestMinutes > 0 ? formatScore(s.bestMinutes) : '–';
-    setButtonLabel(play, s.scored ? `Play · try ${s.tries + 1}/${DAILY_TRIES}` : 'Practice (unscored)');
+    // Practice is a two-line label: 'Practice' over a generated 'UNSCORED' kicker (data-sub), so it
+    // never clips in a phone column; the name stays 'Practice (unscored)'.
+    setButtonLabel(play, s.scored ? `Play · try ${s.tries + 1}/${DAILY_TRIES}` : 'Practice');
+    const label = play.querySelector<HTMLElement>('.btn-label');
+    if (label) label.dataset.sub = s.scored ? '' : 'UNSCORED';
+    if (s.scored) play.removeAttribute('aria-label');
+    else play.setAttribute('aria-label', 'Practice (unscored)');
     play.classList.toggle('btn--primary', s.scored);
     play.classList.toggle('btn--plain', !s.scored);
     setChildren(

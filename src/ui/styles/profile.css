@@ -284,9 +284,11 @@
 
 .pf-row .num { margin-left: auto; color: var(--t-brown); }
 
+/* Two links side by side only while 'Wardrobe' fits beside its icon (140 px, more with large text);
+   otherwise one full-width link per row (phones under about 380 px). */
 .pf-links {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(max(140px, 8.75em), 1fr));
   gap: 10px;
   margin-top: 16px;
 }
