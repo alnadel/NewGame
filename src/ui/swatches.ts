@@ -8,6 +8,10 @@ const SNOW = '#FFFFFF';
 const SNOW_RIM = '#C9D8F0';
 const COAL = '#2B2B33';
 
+// Every swatch copy gets its own clip and gradient ids: the same item shows on several screens, and
+// `url(#id)` resolves to the first copy in the document, which may sit in a screen that is not drawn.
+let swatchSeq = 0;
+
 const head = (cx: number, cy: number, r: number): string =>
   `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${SNOW}" stroke="${SNOW_RIM}" stroke-width="1.4"/>`;
 const eyes = (cx: number, cy: number): string =>
@@ -35,7 +39,7 @@ function bands(colors: readonly string[], width: number, from: number, to: numbe
 }
 
 function scarfArt(id: string, l: ScarfLook): string {
-  const clip = `sw-${id}`;
+  const clip = `sw-${id}-${++swatchSeq}`;
   // Neck wrap plus one hanging tail.
   const shape = 'M12 22.5Q24 26.5 36 22.5L37 28Q24 32.5 11 28ZM28 28.5L34.5 27.5L37.5 41L31.5 42.5Z';
   let fill = `<rect width="48" height="48" fill="${l.main}"/>`;
@@ -123,7 +127,7 @@ function lensPath(shape: ShadesLook['shape'], x: number, y: number): string {
 
 /** The sun's face wearing a pair of Sun Shades. */
 function shadesArt(id: string, l: ShadesLook): string {
-  const grad = `sg-${id}`;
+  const grad = `sg-${id}-${++swatchSeq}`;
   const cx = 24;
   const cy = 25;
   const ey = 23.4;

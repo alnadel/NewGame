@@ -115,6 +115,65 @@ test.describe('the Profile', () => {
   }
 });
 
+// The same item swatch shows on several screens (Wardrobe, Profile, the next-reward road on Journey
+// and Results). Each copy needs its own clip and gradient ids: `url(#id)` resolves to the first copy
+// in the document, and a copy in a screen that is not drawn would turn every other copy into a block.
+test('item swatches keep their own ids across screens, so a Profile scarf is a scarf, not a block', async ({ page }) => {
+  const owned = ['scarf-red', 'scarf-mint', 'scarf-plaid', 'hat-none', 'hat-beanie', 'nose-carrot', 'shades-classic', 'shades-round'];
+  await seedSave(page, v4({}, { settings: { unlockAll: true }, unlocks: { cosmetics: owned } }));
+  await openGame(page);
+  const back = async (): Promise<void> => {
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await waitForScreen(page, 'title');
+  };
+  await page.locator('.tray-btn', { hasText: 'Wardrobe' }).click();
+  await waitForScreen(page, 'wardrobe');
+  await back();
+  await page.locator('.scr-title .journey-pill').click();
+  await waitForScreen(page, 'journey');
+  await back();
+  await page.locator('.scr-title .play-pill').click();
+  await waitForScreen(page, 'play');
+  await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
+  await waitForScreen(page, 'results', 15_000);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.screen()), { timeout: 10_000 }).not.toBe('results');
+  if ((await page.evaluate(() => window.__SHADY_TEST__!.screen())) !== 'title') await back();
+  await openProfile(page);
+  // No id that some url(#…) points at may appear twice in the document.
+  const dups = await page.evaluate(() => {
+    const seen = new Map<string, number>();
+    for (const e of document.querySelectorAll('[id]')) seen.set(e.id, (seen.get(e.id) ?? 0) + 1);
+    const refs = new Set<string>();
+    for (const e of document.querySelectorAll('*')) {
+      for (const a of ['clip-path', 'fill', 'stroke', 'mask', 'filter', 'href']) {
+        const m = /url\(#([\w-]+)\)|^#([\w-]+)$/.exec(e.getAttribute(a) ?? '');
+        if (m) refs.add(m[1] ?? m[2]!);
+      }
+    }
+    return [...seen].filter(([id, n]) => n > 1 && refs.has(id)).map(([id, n]) => `${id} x${n}`);
+  });
+  expect(dups).toEqual([]);
+  // The Red Scarf tile (the first owned swatch): its top corner shows the tile, not the scarf red.
+  const tile = page.locator('.pf-swatches li[class] .swatch').first();
+  await tile.scrollIntoViewIfNeeded();
+  const png = (await tile.screenshot()).toString('base64');
+  const corner = await page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const g = c.getContext('2d')!;
+    g.drawImage(img, 0, 0);
+    return [...g.getImageData(Math.round(img.width * 0.1), Math.round(img.height * 0.1), 1, 1).data].slice(0, 3);
+  }, png);
+  // #E8475A is the Red Scarf's main colour; the tile behind it is near white.
+  const [r, gr, b] = corner;
+  expect(Math.abs(r! - 0xe8) + Math.abs(gr! - 0x47) + Math.abs(b! - 0x5a)).toBeGreaterThan(120);
+});
+
 test.describe('Snow Globes', () => {
   test('open in the reveal: the globe shakes, a tap skips to the prize, the item lands in the Wardrobe', async ({ page }, info) => {
     await seedSave(page, v4({ globes: 2 }));
