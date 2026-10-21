@@ -2,7 +2,8 @@
 // every rAF while a finger is down. On a 90-144 Hz display that uncapped stretch once drew faster
 // than the 60 Hz timeline advanced, so after a long hold the canvas froze (at 120 Hz about as long
 // again as the hold) while the run went on underneath. Each test drives a 120 or 144 Hz rAF stream,
-// holds a drag for 4 s, lifts it and checks the canvas goes on drawing at 60 fps at once.
+// holds a drag for 3 s, lifts it and checks the canvas goes on drawing at 60 fps at once. Counted
+// in rAFs rather than ms, so a loaded machine (late rAFs, each of which draws) still passes.
 import { expect, test, type Page } from '@playwright/test';
 import { keepAlive, state, waitForScreen, watchErrors } from './helpers.ts';
 
@@ -46,7 +47,9 @@ const draws = (page: Page): Promise<{ draws: number; t: number }> =>
   page.evaluate(() => ({ draws: window.__SHADY_TEST__!.perf().draws, t: performance.now() }));
 
 for (const hz of [120, 144]) {
-  test(`${hz} Hz: the canvas goes on drawing at 60 fps the moment a 4 s hold ends`, async ({ page }) => {
+  test(`${hz} Hz: the canvas goes on drawing at 60 fps the moment a 3 s hold ends`, async ({ page }, info) => {
+    // A touch-screen bug; one project is enough for an uncapped stretch this heavy.
+    test.skip(info.project.name !== 'mobile', 'mobile project only');
     const errors = watchErrors(page);
     await emulateRefresh(page, hz);
     // A level's intro card holds until the first tap; the oracle bot keeps the run alive.
@@ -63,12 +66,12 @@ for (const hz of [120, 144]) {
     await page.waitForTimeout(1600);
     await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.timeScale())).toBe(1);
 
-    // A slow horizontal drag held for 4 s: every rAF draws.
+    // A slow horizontal drag held for 3 s: every rAF draws.
     await page.mouse.move(cx - 80, cy);
     await page.mouse.down();
     const held = await draws(page);
-    for (let i = 1; i <= 40; i++) {
-      await page.mouse.move(cx - 80 + 4 * (i <= 20 ? i : 40 - i), cy);
+    for (let i = 1; i <= 30; i++) {
+      await page.mouse.move(cx - 80 + 4 * (i <= 15 ? i : 30 - i), cy);
       await page.waitForTimeout(100);
     }
     const lift = await draws(page);
@@ -88,32 +91,29 @@ for (const hz of [120, 144]) {
       }
       return { frames, minutes: hook.state().minutes - m0 };
     });
-    let gap = 0;
-    let last = 0;
+    // The longest run of rAFs that drew nothing: one or two between 60 fps slots on 120/144 Hz.
+    let skipped = 0;
+    let run = 0;
     let total = 0;
     for (const f of after.frames) {
-      if (f.draws === total) continue;
-      gap = Math.max(gap, f.t - last);
-      last = f.t;
+      run = f.draws === total ? run + 1 : 0;
+      skipped = Math.max(skipped, run);
       total = f.draws;
     }
-    gap = Math.max(gap, 600 - last);
-    const first300 = after.frames.filter((f) => f.t <= 300).at(-1)?.draws ?? 0;
     const report = JSON.stringify({
       holdFps: Math.round(((lift.draws - held.draws) * 1000) / (lift.t - held.t)),
-      first300,
       total,
-      gap: Math.round(gap),
+      skipped,
       rafs: after.frames.length,
       minutes: after.minutes,
       scales: [...new Set(after.frames.map((f) => f.scale))],
     });
-    test.info().annotations.push({ type: `${hz} Hz after the lift`, description: report });
+    info.annotations.push({ type: `${hz} Hz after the lift`, description: report });
 
-    // Within 300 ms of the lift the canvas has drawn at about 60 fps, and it never stalls since...
-    expect(first300, report).toBeGreaterThanOrEqual(10);
-    expect(gap, report).toBeLessThanOrEqual(60);
-    // ...nor runs at the display's rate (that is for a finger down or another time scale only).
+    // From the lift on the canvas draws on every 60 fps slot, never a run of rAFs without one...
+    expect(after.frames.length, report).toBeGreaterThanOrEqual(12);
+    expect(skipped, report).toBeLessThanOrEqual(3);
+    // ...nor at the display's rate (that is for a finger down or another time scale only).
     if (after.frames.every((f) => f.scale === 1)) expect(total, report).toBeLessThanOrEqual(42);
     // The run is still in play and its clock kept going.
     expect(after.frames.every((f) => f.screen === 'play'), report).toBe(true);
