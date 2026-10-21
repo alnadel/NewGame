@@ -1554,7 +1554,10 @@ version line and the font credit (§2.1) at the end in `--ink-2` on the sand end
 ### 10.8 Wardrobe (B3)
 
 - Sky backdrop; header ribbon "Wardrobe" + the wallet counter.
-- **Stage** (`.stage.card`): a blue panel with a radial spotlight in the preview area
+- **Stage** (`.stage.card`), laid out like a game shop: the spotlight (140 px, 112 px under 720 px
+  tall) on the left, the name, rarity and note beside it, and the action across the stage under them
+  (under the caption in a column of 26rem or more). It stays under 300 px, so the first row of item
+  tiles shows on the first screen at 390x844 with a 47 px inset. A blue panel with a radial spotlight in the preview area
   (`radial-gradient(circle at 50% 40%, #fff, var(--tint-blue) 70%)` on `.stage-spot`, a 3 px ink ring);
   the item name Lilita `--fs-d-xl` ink; the rarity (`.rarity`) as a tag in the rarity colour (common
   cloud, rare blue, epic violet, legendary gold; ink text); the note body; the action: **Wear** green

@@ -12,17 +12,25 @@
 
 /* ===== The stage: a blue panel with a spotlight ===== */
 
+/* The spotlight beside its caption (name, rarity, note) and the action across the stage under
+   them, so the stage stays under 300 px and the first row of items shows on a phone's first screen;
+   a wide column (desktop) puts the action under the caption. */
 .stage {
-  gap: 6px;
-  text-align: center;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 4px 14px;
+  place-items: start;
+  padding: 21px;
+  text-align: left;
 }
 
 /* The try-on spotlight: a white-to-ice disc in an ink ring with faint light rays (the game draws
    Nubs' own shade under him). */
 .stage-spot {
-  --d: 184px;
   position: relative;
-  margin-bottom: 24px;
+  grid-row: 1 / 4;
+  margin: 0 0 16px;
   border: var(--bw) solid var(--ink);
   border-radius: 50%;
   background:
@@ -32,8 +40,8 @@
 }
 
 .preview-canvas {
-  width: 168px;
-  height: 168px;
+  width: 140px;
+  height: 140px;
 }
 
 .preview-name { font-size: var(--fs-d-xl); }
@@ -47,11 +55,23 @@
 }
 
 .preview-note {
-  min-height: 2.6em;
   max-width: 300px;
-  margin-bottom: 8px;
   color: var(--ink-2);
   font-weight: 700;
+}
+
+.stage .btn {
+  --h: 56px;
+  --lipH: 6px;
+  --ic: 26px;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  padding: 2px 10px var(--lipH);
+  font-size: var(--fs-d-lg);
+}
+
+@container menu (min-width: 26rem) {
+  .stage .btn { grid-column: 2; }
 }
 
 /* Buy: the price rides inside the gold button as a mini counter. */
@@ -69,41 +89,17 @@
   height: 38px;
 }
 
-/* Short screens: the spotlight beside its caption, so the item grid stays in view; in a narrow
-   column the action takes the whole row under them. */
+/* Short screens: a smaller spotlight and caption. */
 @media (max-height: 720px) {
-  .stage {
-    display: grid;
-    grid-template-columns: 124px 1fr;
-    grid-template-rows: auto auto 1fr auto;
-    gap: 4px 14px;
-    place-items: start;
-    text-align: left;
-    padding: 21px;
-  }
-
-  .stage-spot {
-    --d: 124px;
-    grid-row: 1 / 4;
-    margin: 0 0 16px;
-  }
-
   .preview-canvas { width: 112px; height: 112px; }
   .preview-name { font-size: var(--fs-d-lg); }
-  .preview-note { min-height: 0; font-size: var(--fs-sm); }
+  .preview-note { font-size: var(--fs-sm); }
 
   .stage .btn {
     --h: 52px;
     --lipH: 5px;
     --ic: 24px;
-    grid-column: 2;
-    justify-self: stretch;
-    padding: 2px 10px var(--lipH);
     font-size: var(--fs-d-md);
-  }
-
-  @container menu (max-width: 339.98px) {
-    .stage .btn { grid-column: 1 / -1; }
   }
 }
 
