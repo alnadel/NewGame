@@ -237,6 +237,49 @@ for (const pct of [150, 200]) {
   });
 }
 
+// A menu title shrinks step by step, then ellipsizes from its first letter (UI_V2 §6.4): never a
+// word clipped on both edges. The text size lands after boot here, so the titles must re-fit.
+for (const pct of [150, 200]) {
+  test(`large text ${pct}%: every menu title fits or ellipsizes from its first letter`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript((p) => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.documentElement.style.fontSize = `${p}%`;
+      });
+    }, pct);
+    await seedSave(page, OPEN_SAVE);
+    await openGame(page);
+    const menus: [string, () => Promise<void>][] = [
+      ['journey', () => page.locator('.scr-title .journey-pill').click()],
+      ['missions', () => page.locator('.tray-btn', { hasText: 'Missions' }).click()],
+      ['wardrobe', () => page.locator('.tray-btn', { hasText: 'Wardrobe' }).click()],
+      ['settings', () => page.locator('.tray-btn', { hasText: 'Settings' }).click()],
+    ];
+    for (const [id, open] of menus) {
+      await open();
+      await waitForScreen(page, id);
+      await page.waitForTimeout(300);
+      const band = await page.evaluate(() => {
+        const el = document.querySelector('.scr.is-on .menu-ribbon .ribbon-band') as HTMLElement;
+        const cs = getComputedStyle(el);
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const text = range.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        return {
+          fits: el.scrollWidth <= el.clientWidth + 1,
+          ellipsis: cs.textOverflow === 'ellipsis' && cs.display === 'block' && cs.whiteSpace === 'nowrap',
+          firstLetterIn: text.left >= box.left + parseFloat(cs.borderLeftWidth) - 1,
+        };
+      });
+      expect(band.fits || band.ellipsis, `${id} title fits or ellipsizes`).toBe(true);
+      expect(band.firstLetterIn, `${id} title starts at its first letter`).toBe(true);
+      await page.getByRole('button', { name: 'Back' }).first().click();
+      await waitForScreen(page, 'title');
+    }
+  });
+}
+
 const RICH_SAVE = {
   v: 1,
   createdAt: 1,

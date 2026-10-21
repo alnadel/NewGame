@@ -429,6 +429,24 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     results.invalidateSheetTop();
     fitTitles(current);
   });
+  // The text size (the root font size) can change after boot, from browser text scaling or a page
+  // zoom setting: a 1rem probe re-fits the same things when it does.
+  const remProbe = h('i', { class: 'rem-probe', deco: true });
+  root.append(remProbe);
+  const remPx = (): number => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  let rem = remPx();
+  const remObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          const px = remPx();
+          if (px === rem || !alive) return;
+          rem = px;
+          if (current !== 'boot') screens[current].relayout?.();
+          results.invalidateSheetTop();
+          fitTitles(current);
+        })
+      : null;
+  remObserver?.observe(remProbe);
 
   applyMotion();
   applyContrast();
@@ -494,6 +512,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       contrastQuery?.removeEventListener('change', applyContrast);
       alive = false;
       worldObserver?.disconnect();
+      remObserver?.disconnect();
       for (const s of Object.values(screens)) s.leave?.();
       root.replaceChildren();
       root.classList.remove('sui', 'is-rm', 'is-kbd', 'is-hc', 'no-po');

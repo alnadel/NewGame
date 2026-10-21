@@ -149,6 +149,17 @@
   display: block;
 }
 
+/* ui.ts: its width follows the root font size, so a text size change re-fits the titles. */
+.sui .rem-probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1rem;
+  height: 1px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .sui .sr-only {
   position: absolute;
   width: 1px;

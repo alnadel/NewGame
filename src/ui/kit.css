@@ -486,12 +486,13 @@
 .ribbon--green { --rb-hi: #B4F25E; --rb: #69D33B; --rb-lo: #43B226; --rb-tail: #2E8C1A; }
 .ribbon--pink { --rb-hi: #FFA3C0; --rb: #FF6390; --rb-lo: #EE3D6E; --rb-tail: #AE2453; }
 
+/* A block, not a flex box: text-overflow only works on a block's own line (a flex container's text
+   is an anonymous item, clipped on both sides when centred). The line height centres the one line
+   in the 52 px band (border-box: 52 - 2 x 4 border - 4 lip) and grows with large text. */
 .ribbon-band {
   position: relative;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   min-width: 0;
   min-height: 52px;
   padding: 0 22px 4px;
@@ -499,7 +500,8 @@
   border-radius: 10px;
   background: linear-gradient(180deg, var(--rb-hi), var(--rb) 45%, var(--rb-lo));
   box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.5), inset 0 -5px 0 rgba(0, 0, 0, 0.18), var(--drop);
-  font: 400 var(--fs-d-xl)/1.05 var(--font-display);
+  font: 400 var(--fs-d-xl)/max(40px, 1.05em) var(--font-display);
+  text-align: center;
   color: #fff;
   letter-spacing: 0.02em;
   text-shadow: 0 max(2px, 0.1em) 0 var(--ink);
@@ -536,6 +538,7 @@
   padding: 0 16px 3px;
   border-width: 3px;
   font-size: var(--fs-d-md);
+  line-height: max(29px, 1.05em);
 }
 
 .ribbon--sm .ribbon-tail {
