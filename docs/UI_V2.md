@@ -910,7 +910,9 @@ its paper background (it stays a transparent, transformed layer):
 - The clouds: one shared SVG path (`M30 76c-16 0-26-10-24-22…Z` from the candy kit), white with a
   `--cloud-shade` underside stroke, three of them at 150–240 px wide, opacity .8–1, baked into one
   data URI (≤ 900 B). They may drift ±20 px over 40 s on the `::after` (transform only); static under
-  reduced motion and in `.is-hc`.
+  reduced motion and in `.is-hc`. Every cloud lies inside the image: its viewBox is `-60 0 510 420`
+  (a 390 phone plus 60 units a side), drawn at `min(130.77%, 732px)` wide, so a phone sees the same
+  framing and a desktop no straight cut beside the column.
 - The sky's lower part is the world's sand (`--sky-4`), so long menus end on warm ground, not on cold
   blue. Text never sits directly on the sky except headings with the halo.
 
