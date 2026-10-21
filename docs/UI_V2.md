@@ -1440,9 +1440,13 @@ section.scr-results
                                   .res-stars (moved here from h2.res-level; role="img" kept),
                                   .res-ribbon (moved here; aria-hidden; the ribbon band)
     .res-body
-      .res-top        .res-head (kicker, Share, Home), .res-score, h2.res-level (name only now),
-                      .strip, .res-goal, xp, death, tip, pace, note, verdict, road
-      .res-scroll     .res-goals (new, campaign only), .res-warmup, .res-awards, .res-stats, .res-missions
+      .res-top        .res-head (kicker, Share, Home), .res-score, verdict (a challenge's outcome,
+                      under the time), h2.res-level (name only now), .strip, .res-goal, xp, death,
+                      pace, note, road
+      .res-scroll     .res-goals (new, campaign only), .res-warmup, .res-stats, tip, .res-awards,
+                      .res-missions: the payout first, so the Snow tile shows on a 390x844 first
+                      screen however many chips a run earns; under 700 px tall an endless run's
+                      chips go before the loot tiles (results.ts measure())
     .res-actions      Next, Retry, Map
 ```
 
@@ -1455,8 +1459,8 @@ section.scr-results
   `clamp(0.4, (room − 30) / 124, 1)` where `room = sheetTop − (in-top + 8)`; the star row scales by it
   (92 / 124 / 92 at 1), the ribbon does not. Under 0.55 the rays and confetti are hidden.
 - **Ribbon text** (`.res-ribbon`): a passed level "Level 38 Passed!" (red); a failed level "So close!"
-  (blue); an endless, Daily or challenge run with a new best "New best!" (or "New eased best!") (red);
-  otherwise no ribbon. On a level the kicker (`.res-kicker`, "Level 38 · Passed") becomes visually
+  (blue); a beaten challenge "Challenge beaten!" (pink, over a new best); an endless, Daily or
+  challenge run with a new best "New best!" (or "New eased best!") (red); otherwise no ribbon. On a level the kicker (`.res-kicker`, "Level 38 · Passed") becomes visually
   hidden (`sr-only`), the ribbon carries it visually; elsewhere the kicker stays as a dark chip at the
   head's left.
 - **Stars:** passed: earned stars lit as today (`c.passed ? c.stars : 0`), slammed (§7); failed: three
@@ -1474,8 +1478,9 @@ section.scr-results
 - **Loot tiles** (`.res-stats .stat`, restyled; DOM unchanged): plates, r 16, with the icon in a 34 px
   coin straddling the top edge, the value Lilita `--fs-d-lg` ink, the caption body 800 13 `--ink-2`.
   The Snow tile is a blue candy plate with the value white outlined and an ink caption. A tile with a
-  new best wears the BEST sticker. Grid rules (4 columns, `data-n=6` → 3 × 2, narrow → 2 per row)
-  unchanged.
+  new best wears the BEST sticker. Grid rules: 4 columns, 5 in one wide row, `data-n=6` → 3 × 2; a
+  phone's sheet (under 440 px) keeps one row where it can: 4 a quarter wide, any other count a third
+  (a caption keeps its words whole); under 328 px 4 make 2 × 2.
 - **Awards** (`.res-awards .award`): cream chips with a 26 px coin (gold for trophies, pink for
   cosmetics, green for "missions done") and Lilita `--fs-d-sm` ink; **all chips stay** (no cap, no
   expand interaction; they scroll as today). `.is-in` pops unchanged.
@@ -1651,9 +1656,10 @@ button[aria-label="Share"]`, `.res-sheet button[aria-label="Home"]`, `.res-stats
 ### 11.4 New visible strings
 
 "PLAY" (generated), "LEVEL N" sub-line on Next (generated), "Level N Passed!", "So close!",
-"New best!", "New eased best!", "CHALLENGE!", "Tap to skip", "z Z", "ON", "OFF", "DARE" (canvas
-sticker), "BEST", "RANK UP!", "Finish Level N" (locked board plate), the font credit. Everything else
-keeps its words.
+"New best!", "New eased best!", "Challenge beaten!", "CHALLENGE!", "Tap to skip", "z Z", "ON", "OFF", "DARE" (canvas
+sticker), "BEST", "RANK UP!", "Finish Level N" (locked board plate), the Daily's spent-tries button
+"Practice" with its generated "UNSCORED" kicker (named "Practice (unscored)"), the font credit.
+Everything else keeps its words.
 
 ---
 

@@ -413,9 +413,9 @@
   to { transform: scale(1.08); }
 }
 
-/* The death recap tip and the pace line under the death line. */
+/* The death recap's tip, under the loot tiles; the pace line under the death line. */
 .res-tip {
-  margin-top: 4px;
+  margin-top: 14px;
   color: var(--ink-2);
   font: italic 700 0.9375rem/1.35 var(--font-body);
 }
@@ -621,13 +621,18 @@
 .stat--snow .stat-cap { color: var(--ink); }
 
 /* Rows of four; five tiles (with SWINGs) fit one wide row, six (v1.5 blooms, snaps, deep shade)
-   make two rows of three; a narrow sheet has two per row. A short last row is centred. */
+   make two rows of three. A phone's sheet keeps the payout to one row where it can: four tiles a
+   quarter wide, any other count a third (so a caption keeps its words whole), and under 328 px four
+   make two rows of two. A short last row is centred. */
 .res-stats[data-n='5'] .stat { flex-basis: calc((100% - 32px) / 5); }
 .res-stats[data-n='6'] .stat { flex-basis: calc((100% - 16px) / 3); }
 
 @container sheet (max-width: 439.98px) {
-  .res-stats .stat,
-  .res-stats:is([data-n='5'], [data-n='6']) .stat { flex-basis: calc((100% - 8px) / 2); }
+  .res-stats:not([data-n='4']) .stat { flex-basis: calc((100% - 16px) / 3); }
+}
+
+@container sheet (max-width: 327.98px) {
+  .res-stats[data-n='4'] .stat { flex-basis: calc((100% - 8px) / 2); }
 }
 
 /* ===== Missions ===== */
@@ -816,13 +821,10 @@
 }
 
 /* A level's loot tiles, after the goal cards: four make one row; any other count, tiles a third of
-   the row wide, so a caption keeps its words whole. */
-.res-sheet.is-campaign .res-goals { order: -2; }
-.res-sheet.is-campaign .res-stats { order: -1; }
+   the row wide (under 328 px four make two rows of two, as on every sheet). */
 .res-sheet.is-campaign .res-stats .stat { flex-basis: calc((100% - 24px) / 4); }
 .res-sheet.is-campaign .res-stats:not([data-n='4']) .stat { flex-basis: calc((100% - 16px) / 3); }
 
-/* Under 328 px a quarter can't hold 'multiplier': four tiles make two rows of two. */
 @container sheet (max-width: 327.98px) {
   .res-sheet.is-campaign .res-stats[data-n='4'] .stat { flex-basis: calc((100% - 8px) / 2); }
 }

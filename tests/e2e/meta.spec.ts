@@ -226,8 +226,10 @@ for (const width of [360, 390, 430]) {
 }
 
 // A run that completes a mission and unlocks things: the stamps and chips land without moving the
-// score. Auto-scroll only moves the stats/missions list, only downward, and never the body that
-// holds the score (one-scroll mode on short screens).
+// score. Nothing scrolls by itself, neither the list nor the body that holds the score (one-scroll
+// mode). From 700 px tall the scroll area leads with the payout (fix round 3): the Snow tile stays in
+// view above the actions and the chips under it never move; a shorter screen leads with the chips,
+// and the first one stays in view.
 for (const size of [
   { width: 360, height: 640 },
   { width: 390, height: 844 },
@@ -248,7 +250,8 @@ for (const size of [
       window.__SHADY_TEST__!.bot(null);
     });
     await die(page);
-    const probe = (): Promise<{ score: number[]; sheet: number[]; body: number; list: number; stamped: number; firstChipShown: boolean }> =>
+    const payoutFirst = size.height >= 700;
+    const probe = (): Promise<{ score: number[]; sheet: number[]; body: number; list: number; stamped: number; firstChipShown: boolean; snowShown: boolean; chipTop: number; statsFirst: boolean }> =>
       page.evaluate(() => {
         const r = (sel: string): number[] => {
           const b = document.querySelector(sel)!.getBoundingClientRect();
@@ -258,6 +261,11 @@ for (const size of [
         const chip = document.querySelector('.scr-results .res-awards .award');
         const [top, bottom] = r(view);
         const c = chip?.getBoundingClientRect();
+        // The Snow tile counts as shown only above the actions (they cover the sheet's foot).
+        const snow = document.querySelector('.scr-results .stat--snow')!.getBoundingClientRect();
+        const actionsTop = r('.scr-results .res-actions')[0]!;
+        const stats = document.querySelector('.scr-results .res-stats')!;
+        const awards = document.querySelector('.scr-results .res-awards')!;
         return {
           score: r('.scr-results .res-score'),
           sheet: r('.scr-results .res-sheet'),
@@ -265,15 +273,27 @@ for (const size of [
           list: document.querySelector('.scr-results .res-scroll')!.scrollTop,
           stamped: document.querySelectorAll('.scr-results .mrow.is-new').length,
           firstChipShown: !!c && c.top >= top! - 1 && c.bottom <= bottom! + 1,
+          snowShown: snow.top >= top! - 1 && snow.bottom <= Math.min(bottom!, actionsTop) + 1,
+          chipTop: c ? c.top : -1,
+          statsFirst: (stats.compareDocumentPosition(awards) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
         };
       });
+    let chipTop: number | null = null;
     for (const ms of [600, 900, 1500, 1500]) {
       await page.waitForTimeout(ms);
       const p = await probe();
       expect(p.body, 'the body holding the score never scrolls').toBe(0);
       // Scrolling to a stamp pushed the chips (and a warm-up's challenge line) out of view (fix round 2).
       expect(p.list, 'the list never scrolls by itself').toBe(0);
-      expect(p.firstChipShown, 'the first award chip stays in view').toBe(true);
+      expect(p.statsFirst, 'the loot tiles lead the list from 700 px tall').toBe(payoutFirst);
+      if (payoutFirst) {
+        expect(p.snowShown, 'the Snow tile stays in view above the actions').toBe(true);
+        expect(p.chipTop, 'the first award chip is there').toBeGreaterThan(0);
+        chipTop ??= p.chipTop;
+        expect(Math.abs(p.chipTop - chipTop), 'the first award chip never moves').toBeLessThanOrEqual(1);
+      } else {
+        expect(p.firstChipShown, 'the first award chip stays in view').toBe(true);
+      }
       expect(p.score[0], 'score top inside the sheet').toBeGreaterThanOrEqual(p.sheet[0]! - 1);
       expect(p.score[1], 'score bottom inside the sheet').toBeLessThanOrEqual(p.sheet[1]! + 1);
     }

@@ -105,6 +105,23 @@ test.describe('challenge links', () => {
     expect(errors).toEqual([]);
   });
 
+  // Fix round 3: the outcome sits under the time (never below the fold at 360 px), and a beaten
+  // challenge is the sheet's headline, as a new best is.
+  test('a beaten challenge: the pink "Challenge beaten!" ribbon, the verdict under the time', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await openGame(page, `test=1#c=${challengeCode({ v: 1, k: 'e', seed: 42, m: 0, s: 0 })}`);
+    await keepAlive(page);
+    await dragOnCanvas(page);
+    await waitForScreen(page, 'play');
+    await forceDeath(page);
+    const verdict = page.locator('.res-top > .res-score + .res-verdict.is-win');
+    await expect(verdict).toBeVisible();
+    await expect(page.locator('.res-ribbon.ribbon--pink .ribbon-band')).toHaveText('Challenge beaten!');
+    const box = await verdict.boundingBox();
+    const actions = await page.locator('.res-actions').boundingBox();
+    expect(box!.y + box!.height, 'the verdict shows above the actions').toBeLessThanOrEqual(actions!.y);
+  });
+
   test('Space on the Title plays the challenge', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openGame(page, `test=1#c=${ENDLESS_CHALLENGE}`);

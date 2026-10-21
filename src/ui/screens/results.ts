@@ -78,7 +78,10 @@ const SHEET_MAX_CAMPAIGN = 0.82;
 const STRIP_ROWS = 4;
 const STRIP_ROWS_SHORT = 2;
 const STRIP_SHORT_BELOW_PX = 700;
+/** From this viewport height an endless sheet's scroll area leads with the loot tiles (measure()). */
+const PAYOUT_FIRST_PX = 700;
 const TAKE_CHALLENGE = 'Take the challenge';
+const CHALLENGE_BEATEN = 'Challenge beaten!';
 /** Journey stars slam in this long after the sheet, this far apart (reduced motion: fades, 120 ms apart). */
 const STAR_FIRST_MS = 420;
 const STAR_GAP_MS = 250;
@@ -286,18 +289,21 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     { class: 'res-top' },
     h('div', 'res-head', kicker, headActions),
     h('div', 'res-score', time, postcardBtn),
+    // A challenge's outcome sits right under the time, never below the fold.
+    verdict,
     level,
     strip,
     goal,
     xp.el,
     death,
-    tip,
     pace,
     note,
-    verdict,
     road.el,
   );
-  const scroll = h('div', 'res-scroll', goals, warmup, awards, stats, missionList);
+  // The payout leads the scroll area (after a level's goal cards): the loot tiles, the death recap's
+  // tip, then the unlock chips and the missions, so the Snow tile lands on a phone's first screen
+  // however many chips a run earns. measure() puts the chips first on a short screen.
+  const scroll = h('div', 'res-scroll', goals, warmup, stats, tip, awards, missionList);
   // Retry | Next level | Map, left to right (Next level, the primary, gets the initial focus).
   const actions = h('div', 'res-actions', retryBtn, nextBtn, mapBtn);
   // The score block stays pinned; stats and missions scroll (or the whole body, see sizing above).
@@ -318,6 +324,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
       SHEET_MIN_FRACTION * screenH,
       Math.min((campaign ? SHEET_MAX_CAMPAIGN : SHEET_MAX_FRACTION) * screenH, screenH - MAP_MIN_PX, campaign ? screenH - padTop - HERO_ROOM_MIN : screenH),
     );
+    // Under 700 px tall the score block fills the first screen by itself: an endless run's unlock
+    // chips go first there, where they land as the list moves; a level keeps its loot first.
+    const payoutFirst = campaign || window.innerHeight >= PAYOUT_FIRST_PX;
+    if (payoutFirst ? awards.previousElementSibling !== tip : awards.nextElementSibling !== stats) {
+      if (payoutFirst) tip.after(awards);
+      else stats.before(awards);
+    }
     const cs = getComputedStyle(sheet);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const left = maxSheet - padY - top.offsetHeight - actions.offsetHeight;
@@ -558,10 +571,12 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     time.setAttribute('aria-label', `${outcome.newBest ? `${bestWords}! ` : ''}Day ${day}, ${formatTimeOfDay(minute)}`);
     // The ribbon: a level's verdict ("Level 38 Passed!" red, "So close!" blue), or an endless,
     // Daily or challenge run's new best; none otherwise.
-    const words = c ? (c.passed ? `Level ${c.id} Passed!` : 'So close!') : outcome.newBest ? `${bestWords}!` : '';
+    // A beaten challenge is the run's headline (pink), over a new best.
+    const words = c ? (c.passed ? `Level ${c.id} Passed!` : 'So close!') : win ? CHALLENGE_BEATEN : outcome.newBest ? `${bestWords}!` : '';
     heroRibbon.band.textContent = words;
-    heroRibbon.el.classList.toggle('ribbon--red', c?.passed !== false);
+    heroRibbon.el.classList.toggle('ribbon--red', c ? c.passed : !win);
     heroRibbon.el.classList.toggle('ribbon--blue', c?.passed === false);
+    heroRibbon.el.classList.toggle('ribbon--pink', !c && win);
     hide(heroRibbon.el, words === '');
     hide(hero, words === '' && !c);
     sheet.classList.toggle('has-ribbon', words !== '');
