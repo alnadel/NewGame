@@ -14,6 +14,7 @@ A number marked **measured** comes from those runs. Every other number is a star
 > - **A2. Three builders, not five.** CORE-1 (economy) and CORE-2 (world and Journey) as in §9; GAME takes §9's GAME list plus META's remaining items (mission retargets T8; the campaign soft-fail's per-level miss count as an optional save field, lossless, no save-version bump unless unavoidable). A contract agent lands §10 (minus A1) first.
 > - **A3. Budget.** `npm run build:single` within 621.6 KiB + 20 KiB.
 >   **Amended at release:** 670 KiB. The single build is 666.1 KiB; the 44 KiB over v1.5 is shipped feature code (core +27 KB, render +10, config +7 by source map), not dead code, and no further diet is worth a feature cut now.
+>   **Amended for UI v2 (docs/UI_V2.md):** 730 KiB, to carry the bundled Lilita One display font and the candy component kit.
 >   **Superseded for the UI v2 release** by `docs/UI_V2.md` §13: 730 KiB (747,520 B). Measured when the four UI v2 screen branches were merged: 762,468 B (744.6 KiB), 14.6 KiB over and open (see §13 there).
 
 ---
