@@ -116,6 +116,15 @@ export interface CampaignState {
   misses?: number[];
 }
 
+/**
+ * Elementals (docs/ELEMENTALS.md): best stars per Trial (index n − 1, 0..3) and whether the screen was
+ * opened. Absent until either; kept apart from the Journey's campaign, so no Journey count sees a Trial.
+ */
+export interface ElementalsState {
+  stars: number[];
+  seen: boolean;
+}
+
 /** The 7-day daily reward calendar (meta/gamify.ts claimDaily). */
 export interface StreakState {
   /** Local date of the last claim, or '' before the first. */
@@ -165,6 +174,8 @@ export interface Save {
   history: RunRecord[];
   week: WeekState;
   campaign: CampaignState;
+  /** Elementals Trials (absent on a save that never opened the screen or passed a Trial). */
+  elementals?: ElementalsState;
   gamify: GamifyState;
   /** Local date of the last finished run, or ''. */
   lastPlay: string;

@@ -4,7 +4,7 @@
 // Loading never throws and never trusts its input: every field is type-checked, clamped and filtered
 // against the content catalog. A save written by a newer build is left untouched on disk.
 
-import type { CampaignState, DailyEntry, ErrandState, GamifyState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, ElementalsState, ErrandState, GamifyState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
 import type { StorageAdapter } from '../platform/storage.ts';
 import { onPageVisible } from '../platform/lifecycle.ts';
 import {
@@ -23,7 +23,7 @@ import {
 import { parseMissionId, refillMissions } from './missions.ts';
 import { sanitizeName } from './challenge.ts';
 import { DAILY_TRIES, isDateString } from './daily.ts';
-import { CAMPAIGN_LEVELS, COMFORT_MAX } from '../core/index.ts';
+import { CAMPAIGN_LEVELS, COMFORT_MAX, TRIAL_COUNT } from '../core/index.ts';
 import { mergeSaves } from './saveMerge.ts';
 import { emptyGamify, FEATURES, MISSIONS_PER_GLOBE, upgradeToV4 } from './gamify.ts';
 
@@ -317,6 +317,13 @@ function sanitizeCampaign(raw: unknown): CampaignState {
 /** A level's goal misses stop counting here (two relax its goal). */
 export const MAX_MISSES = 9;
 
+/** The Elementals Trials' best stars (TRIAL_COUNT entries of 0..3) and the screen's seen mark. */
+function sanitizeElementals(raw: unknown): ElementalsState {
+  const r = rec(raw);
+  const list = Array.isArray(r.stars) ? r.stars : [];
+  return { stars: Array.from({ length: TRIAL_COUNT }, (_, i) => int(list[i], 0, 0, STARS_PER_LEVEL)), seen: bool(r.seen, false) };
+}
+
 /** The v1.4 gamification: counters clamped, unknown features and items dropped, a damaged streak date cleared. */
 function sanitizeGamify(raw: unknown, achievements: number): GamifyState {
   const r = rec(raw);
@@ -450,6 +457,8 @@ function sanitize(r: Rec, now: number): Save {
     history,
     week: sanitizeWeek(r.week),
     campaign: sanitizeCampaign(r.campaign),
+    // Elementals: only a save that has the field keeps it (defaults() has none).
+    ...(isRecord(r.elementals) ? { elementals: sanitizeElementals(r.elementals) } : {}),
     gamify: sanitizeGamify(r.gamify, achievements.length),
     lastPlay: typeof r.lastPlay === 'string' && isDateString(r.lastPlay) ? r.lastPlay : '',
     flags: {
@@ -783,7 +792,8 @@ export class SaveStore {
     this.lastRaw = raw;
     const head = this.revs[this.revs.length - 1];
     let next: Save;
-    if (!this.dirty && (head === undefined || remoteRevs.includes(head))) {
+    // A build from before the Elementals drops their field: its save never includes this one's.
+    if (!this.dirty && (head === undefined || remoteRevs.includes(head)) && (remote.save.elementals !== undefined || this.current.elementals === undefined)) {
       // It includes everything this instance has: adopt it as it is.
       next = remote.save;
     } else {

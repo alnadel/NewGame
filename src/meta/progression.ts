@@ -2,7 +2,22 @@
 // takes a save and returns a new one; inputs are never mutated, so the session can diff, test and
 // persist freely.
 
-import { comfortAfterRun, COMFORT_MAX, FORECAST_IDS, isWarmup, MINUTES_PER_DAY, type HourGlyph, type RunResult } from '../core/index.ts';
+import {
+  comfortAfterRun,
+  COMFORT_MAX,
+  FORECAST_IDS,
+  HEROES,
+  isTrialId,
+  isWarmup,
+  MINUTES_PER_DAY,
+  TRIAL_BASE,
+  TRIAL_COUNT,
+  trialDef,
+  TRIALS,
+  type HeroId,
+  type HourGlyph,
+  type RunResult,
+} from '../core/index.ts';
 import type { CampaignState, DailyEntry, Save } from './saveTypes.ts';
 import { ACHIEVEMENTS, COSMETICS, getAchievement, getCosmetic, type AchievementId, type Cosmetic, type CosmeticId } from './content.ts';
 import { missionTarget, missionValue, missionView, parseMissionId, refillMissions, swapSlot, type MissionView } from './missions.ts';
@@ -191,6 +206,43 @@ export function continueLevel(save: Pick<Save, 'campaign'>): number {
   return Math.min(CAMPAIGN_LEVEL_COUNT, Math.max(1, save.campaign.unlocked));
 }
 
+// ---------------------------------------------------------------------------------------------
+// Elementals Trials (docs/ELEMENTALS.md §3.0, §4.10): their own stars, apart from the Journey's
+// ---------------------------------------------------------------------------------------------
+
+/** Snow a Trial's first pass pays. */
+export const TRIAL_FIRST_PASS_SNOW = 20;
+/** Stars all the Trials can give. */
+export const ELEMENTAL_STARS_MAX = TRIAL_COUNT * STARS_PER_LEVEL;
+
+/** Trial n's best stars (0: not passed). */
+export function trialBest(save: Pick<Save, 'elementals'>, n: number): number {
+  return save.elementals?.stars[n - 1] ?? 0;
+}
+
+/** Trial n (1..8) can be played: every Trial it requires is passed, or the testing toggle opens them all. */
+export function trialOpen(save: Pick<Save, 'elementals' | 'settings'>, n: number): boolean {
+  const t = trialDef(TRIAL_BASE + n);
+  return t !== null && (save.settings.unlockAll || t.requires.every((k) => trialBest(save, k) > 0));
+}
+
+/** A hero's roster tile is open: its intro Trial passed (Nubs always), or the testing toggle. */
+export function heroUnlocked(save: Pick<Save, 'elementals' | 'settings'>, hero: HeroId): boolean {
+  const n = HEROES[hero].intro;
+  return n === 0 || save.settings.unlockAll || trialBest(save, n) > 0;
+}
+
+/** The next open Trial after Trial n (its number), or null. */
+export function nextOpenTrial(save: Pick<Save, 'elementals' | 'settings'>, n: number): number | null {
+  for (let k = n + 1; k <= TRIAL_COUNT; k++) if (trialOpen(save, k)) return k;
+  return null;
+}
+
+/** Stars earned across the Trials (of ELEMENTAL_STARS_MAX). */
+export function elementalStars(save: Pick<Save, 'elementals'>): number {
+  return save.elementals?.stars.reduce((a, b) => a + b, 0) ?? 0;
+}
+
 /** The next Journey star reward: the stars so far, the previous and next thresholds, its item. */
 export interface StarGoal {
   stars: number;
@@ -307,6 +359,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   const dailyWasUnlocked = isDailyUnlocked(save);
   const recentBestBefore = recentBest(save);
   const rawSnow = Math.max(0, Math.floor(r.stats.snow));
+  const trial = r.mode === 'campaign' && r.level !== undefined && isTrialId(r.level.id);
 
   // Bests, from lifetime run 3 on (Dailies keep their own per-date best): standard-rules runs
   // (challenges, endless at rung 4) set the best; endless runs at eased rules (comfort rungs below
@@ -344,12 +397,12 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   s.cloudSeconds += r.stats.cloudSeconds;
   s.playSeconds += Math.max(0, options.playSeconds ?? 0);
   s.swings += r.stats.swings;
-  s.forecastNoons |= forecastNoonBits(r);
+  if (!trial) s.forecastNoons |= forecastNoonBits(r);
   // Death only happens in daylight, so a score past 6:00 PM of Day 1 means a night was reached.
   if (r.minutes >= MINUTES_PER_DAY || r.stats.nightsReached > 0) s.reachedNight = true;
 
   // Missions: progress is the best single run; completion pays out immediately. A slot that gains
-  // nothing grows staler (Swap at 5).
+  // nothing grows staler (Swap at 5). An Elementals Trial counts toward no mission (nor trophy).
   let missionSnow = 0;
   const missions: MissionView[] = [];
   const missionsCompleted: MissionView[] = [];
@@ -357,7 +410,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     const parsed = parseMissionId(slot.id);
     if (!parsed) continue;
     let justCompleted = false;
-    if (!slot.done) {
+    if (!slot.done && !trial) {
       const before = slot.progress;
       slot.progress = Math.max(before, missionValue(parsed.def, r));
       if (slot.progress >= missionTarget(parsed.def, parsed.tier)) {
@@ -388,7 +441,26 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   // bonus (id × 2 Snow); the run's Snow, missions and achievements count as for endless.
   let campaign: CampaignOutcome | undefined;
   let firstPass = false;
-  if (r.mode === 'campaign' && r.level !== undefined) {
+  if (trial && r.level) {
+    // An Elementals Trial (docs/ELEMENTALS.md §4.10): its best stars and a first-pass bonus; the
+    // Journey's stars, unlocked level, misses and Continue never change.
+    const lv = r.level;
+    const n = lv.id - TRIAL_BASE;
+    const before = trialBest(save, n);
+    const stars = lv.passed ? Math.max(1, Math.min(STARS_PER_LEVEL, Math.floor(lv.stars))) : 0;
+    if (stars > before) {
+      const el = (next.elementals ??= { stars: Array<number>(TRIAL_COUNT).fill(0), seen: false });
+      el.stars[n - 1] = stars;
+    }
+    if (lv.passed && before === 0) {
+      firstPass = true;
+      bonusSnow += TRIAL_FIRST_PASS_SNOW;
+      chips.push({ text: `First pass +${TRIAL_FIRST_PASS_SNOW}`, icon: 'star', tone: 'gold' });
+    }
+    const opened = TRIALS.filter((t) => !trialOpen(save, t.n) && trialOpen(next, t.n));
+    for (const t of opened) chips.push({ text: `New trial: ${t.name}`, icon: 'star', tone: 'accent' });
+    campaign = { passed: lv.passed, stars, newStars: Math.max(0, stars - before), unlockedNext: opened.length > 0 };
+  } else if (r.mode === 'campaign' && r.level !== undefined) {
     const lv = r.level;
     const c = next.campaign;
     const i = lv.id - 1;
@@ -423,7 +495,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   // Achievements and their cosmetic rewards.
   const achievementsUnlocked: AchievementId[] = [];
   const cosmeticsUnlocked: CosmeticId[] = [];
-  for (const a of ACHIEVEMENTS) {
+  for (const a of trial ? [] : ACHIEVEMENTS) {
     const earned = a.stars !== undefined ? totalStars(next) >= a.stars : ACHIEVEMENT_CHECKS[a.id]?.(next, r, options) === true;
     if (next.unlocks.achievements.includes(a.id) || !earned) continue;
     achievementsUnlocked.push(a.id);
@@ -444,7 +516,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     missions: missionsCompleted.length,
     trophies: achievementsUnlocked,
   });
-  const award = awardRun(next, { before: save, xp, passedLevel: campaign?.passed && r.level ? r.level.id : null, missionsCompleted: missionsCompleted.length, trophies: achievementsUnlocked });
+  const award = awardRun(next, { before: save, xp, passedLevel: campaign?.passed && r.level && !trial ? r.level.id : null, missionsCompleted: missionsCompleted.length, trophies: achievementsUnlocked });
   const gamify = award.outcome;
   bonusSnow += award.snow;
   for (const reward of gamify.rewards) if (reward.title.startsWith('Rank ')) chips.push({ text: reward.kind === 'snow' ? `${reward.title} +${reward.amount}` : `${reward.title} Snow Globe`, icon: 'star', tone: 'gold' });
@@ -741,10 +813,14 @@ export function equipCosmetic(save: Save, id: CosmeticId): EquipResult {
   return { ok: true, save: next };
 }
 
-/** Settings > Reset progress: a fresh save that keeps the player's settings and device flags. */
+/**
+ * Settings > Reset progress: a fresh save that keeps the player's settings and device flags. Trial
+ * stars are zeroed, not dropped: another tab's merge reads a missing field as unchanged.
+ */
 export function resetProgress(save: Save, now: number = Date.now()): Save {
   const fresh = defaults(now);
   fresh.settings = { ...save.settings };
+  if (save.elementals) fresh.elementals = { stars: Array<number>(TRIAL_COUNT).fill(0), seen: false };
   fresh.flags.installSheetShown = save.flags.installSheetShown;
   fresh.flags.persistRequested = save.flags.persistRequested;
   return fresh;
