@@ -1017,6 +1017,7 @@ export class Renderer {
       hi.mech = inp.screen === 'title' ? null : inp.mech;
       hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
       hi.trial = trial ? s : null;
+      hi.hc = inp.highContrast;
       drawHalo(g, sc.halo, hi);
     }
     g.restore();

@@ -28,12 +28,12 @@ import { ctx2d, radialSprite, type Canvas2D } from './sprites.ts';
 
 const parsed = new Map<string, ArtOp[]>();
 
-/** Draws an art string ('@' and '$0' are pal[0]) in the current transform. */
-function art(g: CanvasRenderingContext2D, src: string, pal: readonly string[]): void {
+/** Draws an art string ('@' and '$0' are pal[0]) in the current transform (`flat`: high contrast, no shines). */
+function art(g: CanvasRenderingContext2D, src: string, pal: readonly string[], flat = false): void {
   if (!src) return;
   let ops = parsed.get(src);
   if (!ops) parsed.set(src, (ops = artOps(src)));
-  drawArt(g, ops, pal[0], pal);
+  drawArt(g, ops, pal[0], pal, flat);
 }
 
 /** Eyes (open with a glint, a blink, joy's ^ ^ with cheeks) and mouths with their brows (calm, worried, joy), in U from the eye line. */
@@ -56,8 +56,8 @@ function face(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, y: number, 
   g.save();
   g.translate(p.lookX * 1.1 * U, (y + p.lookY * 0.8) * U);
   g.scale(U, U);
-  if (under && m < 2 && a.blink <= 0) art(g, under, pal);
-  art(g, EYES[a.blink > 0 ? 1 : m === 2 ? 2 : 0] as string, pal);
+  if (under && m < 2 && a.blink <= 0) art(g, under, pal, p.hc);
+  art(g, EYES[a.blink > 0 ? 1 : m === 2 ? 2 : 0] as string, pal, p.hc);
   art(g, MOUTHS[m] as string, pal);
   g.restore();
 }
@@ -132,7 +132,7 @@ function layer(g: CanvasRenderingContext2D, d: Def, p: NubsPose, a: NubsAnim, fr
   const k = d.k[st] as number;
   g.save();
   g.scale(U * Math.min(1, k), U * k);
-  art(g, (front ? d.front : d.back)[st] as string, pal);
+  art(g, (front ? d.front : d.back)[st] as string, pal, p.hc);
   g.restore();
   // A small flame (Ember guttering) carries its face down with it.
   if (front) face(g, p, a, d.eye * (k < 0.6 ? 0.6 : 1), +(d.mood[st] as string), pal[pal.length - 1] as string, d.under);

@@ -113,14 +113,15 @@ export function artOps(src: string): ArtOp[] {
 const DOTS = [1.5, 1.5];
 const NONE: number[] = [];
 
-/** Draws parsed art in the current transform ('@' takes `color`, '$n' colour n of `pal`). */
-export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], color = '#2B2140', pal?: readonly string[]): void {
+/** Draws parsed art in the current transform ('@' takes `color`, '$n' colour n of `pal`; `flat` skips translucent fills: shines, cheeks and glows). */
+export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], color = '#2B2140', pal?: readonly string[], flat = false): void {
   g.lineCap = 'round';
   g.lineJoin = 'round';
   const col = (c: string): string => (c === '@' ? color : c.charAt(0) === '$' && pal ? (pal[+c.slice(1)] as string) : c);
   for (const op of ops) {
     const c = col(op.color);
     const p = op.path as Path2D;
+    if (flat && op.kind === 'F' && c.length === 5) continue;
     switch (op.kind) {
       case 'P':
         g.fillStyle = c;

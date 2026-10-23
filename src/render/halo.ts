@@ -155,6 +155,8 @@ export interface HaloInput {
    * health 0..100), else null.
    */
   trial: SimState | null;
+  /** High contrast: a hero's patterns (rays, notches, beads, food dots, the dead-zone hatch) half as thick again. */
+  hc: boolean;
 }
 
 /** The incoming hero while a relay's TAG is telegraphed (TUNING.heroes.tagSoonTicks ahead), else null. */
@@ -169,7 +171,7 @@ export function createHaloIn(): HaloInput {
   return {
     cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, maxChill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
     hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
-    bud: null, deep: false, mech: null, trial: null,
+    bud: null, deep: false, mech: null, trial: null, hc: false,
   };
 }
 
@@ -737,6 +739,7 @@ function at(g: CanvasRenderingContext2D, inp: HaloInput, a: number, r: number, l
 function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uint8Array, col: number, a: number): void {
   const R = inp.R;
   const n = runs(m);
+  const T = inp.hc ? 1.5 : 1;
   if (hero === 'ember' || hero === 'volt') {
     g.beginPath();
     for (let i = 0; i < n; i++) {
@@ -756,14 +759,14 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
         }
       }
     }
-    g.lineWidth = 2;
+    g.lineWidth = 2 * T;
     g.strokeStyle = cssa(hero === 'volt' ? INK : col, a);
     g.stroke();
   }
   if (col === DRIP_WARM) {
     // Drip warming: white beads along the band.
     g.setLineDash(BEADS);
-    g.lineWidth = 3;
+    g.lineWidth = 3 * T;
     g.strokeStyle = cssa(0xffffff, a);
     g.beginPath();
     arcRuns(g, m, inp.cx, inp.cy, R, 2);
@@ -781,7 +784,7 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
     }
   }
   if (k > 0) {
-    g.lineWidth = 6;
+    g.lineWidth = 6 * T;
     g.strokeStyle = cssa(GOLD_FOOD, a);
     g.stroke();
   }
@@ -826,7 +829,7 @@ function deadZone(g: CanvasRenderingContext2D, inp: HaloInput, t: number, a: num
   at(g, inp, t - 2, R + 13, true);
   at(g, inp, t + 2, R + 12, true);
   at(g, inp, t - 3, R + 5, true);
-  g.lineWidth = 2;
+  g.lineWidth = inp.hc ? 3 : 2;
   g.strokeStyle = cssa(GREY, a);
   g.stroke();
 }
