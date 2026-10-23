@@ -42,12 +42,12 @@ describe('determinism', () => {
         const f = bot.next(live);
         recordFrame(rec, f);
         step(live, f);
-        if ((i + 1) % 300 === 0) liveHashes.push(hashState(live));
+        if ((i + 1) % 150 === 0) liveHashes.push(hashState(live));
       }
       expect(liveHashes.length).toBeGreaterThan(3);
       const replayHashes: string[] = [];
       const replayed = playReplay(rec, (s, i) => {
-        if ((i + 1) % 300 === 0) replayHashes.push(hashState(s));
+        if ((i + 1) % 150 === 0) replayHashes.push(hashState(s));
       });
       expect(replayHashes).toEqual(liveHashes);
       expect(hashState(replayed)).toBe(hashState(live));

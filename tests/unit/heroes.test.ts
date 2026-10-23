@@ -38,9 +38,13 @@ const R = 30;
 const row = (t: Float64Array | null): number[] => Array.from(t as Float64Array, (v) => Math.round(v * 10) / 10 + 0);
 const TAP: InputFrame = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, key: 0 };
 
-/** Trial `id` after its start beat: the clock running, daylight. */
-function going(id: number): SimState {
+/**
+ * Trial `id` after its start beat: the clock running, daylight; `drain` pins the drain the rule checks
+ * read (the §1.7 table's, whatever calibration pinned the trial at).
+ */
+function going(id: number, drain?: number): SimState {
   const s = createRun(campaignConfig(id));
+  if (drain !== undefined) s.cfg.drain = drain;
   step(s, TAP);
   while (s.ready > 0) step(s, NO_INPUT);
   return s;
@@ -84,7 +88,7 @@ describe('hero rates (§1.7)', () => {
     close(v.nubs.rate, -7.8);
     tick(v, 0);
     close(v.nubs.rate, -3.9);
-    const d = going(1004);
+    const d = going(1004, 24);
     tick(d, 0, 0);
     close(d.nubs.rate, -10.8);
     tick(d, 5, 1);
@@ -128,7 +132,7 @@ describe('hero helpers', () => {
 
 describe('Nubs, Ember and Sprout (table heroes)', () => {
   it('moves the meter by rate · DT, sets safe, and pays income from joy', () => {
-    const s = going(1001);
+    const s = going(1001, 26);
     s.nubs.chill = 50;
     s.nubs.frost = 0;
     tick(s, 4);
@@ -164,7 +168,7 @@ describe('Nubs, Ember and Sprout (table heroes)', () => {
   });
 
   it('Sprout feeds on the band, starves in shade and scorches in glare; its green thumb blooms buds', () => {
-    const s = going(1002);
+    const s = going(1002, 24);
     s.nubs.chill = 50;
     tick(s, 2);
     close(s.nubs.chill, 50 + 18 * DT);
@@ -313,7 +317,7 @@ describe('Volt', () => {
 
 describe('Drip', () => {
   it('reads its centre sample, wants a side with hysteresis, counts calm and pays income', () => {
-    const s = going(1004);
+    const s = going(1004, 24);
     expect([s.nubs.chill, s.dripCool]).toEqual([50, true]);
     s.nubs.frost = 0;
     tick(s, 4, 0); // c 4 but the centre is shaded: cools

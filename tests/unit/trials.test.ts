@@ -23,6 +23,7 @@ import { createRun } from '../../src/core/sim/create.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { V16_NONE } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
+import { audit, g2Ok, gateG5, playTrial, runHere, waived } from '../../scripts/sim16/trials.ts';
 
 describe('the trial table', () => {
   it('serves ids 1001..1008 only, outside the Journey', () => {
@@ -127,4 +128,19 @@ describe('C0: a trial loads and walks', () => {
     expect(s.nubs.hero).toBe('nubs');
     expect(s.stats.cleanTags).toBeUndefined();
   });
+});
+
+describe('every pinned trial is proven winnable and not trivial (docs/ELEMENTALS.md §3.9 G1, G2, G5)', () => {
+  for (const id of TRIAL_IDS) {
+    it(`T${id - 1000}: the audit, the path bot (Volt: the striker) and the anti-trivial gate`, async () => {
+      const t = trialDef(id) as TrialDef;
+      const a = audit(t);
+      expect(a.ok, `G1 margin ${a.margin}`).toBe(true);
+      const p = playTrial({ v: { id, salt: t.salt }, p: { bot: 'path' } });
+      expect(g2Ok(t, p), `G2 ${p.line}`).toBe(true);
+      if (waived(id, 5)) return;
+      const g5 = await gateG5(runHere, { id, salt: t.salt });
+      expect(g5.ok, `G5 best θ${g5.bestTheta}`).toBe(true);
+    }, 60_000);
+  }
 });
