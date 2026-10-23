@@ -39,8 +39,10 @@ function art(g: CanvasRenderingContext2D, src: string, pal: readonly string[]): 
 /** Eyes (open with a glint, a blink, joy's ^ ^ with cheeks) and mouths with their brows (calm, worried, joy), in U from the eye line. */
 const EYES = ['F@ O-2.8 0 1.1,1.3O2.8 0 1.1,1.3|F#FFF O-2.45-.45 .4O3.15-.45 .4', 'S@/1.15 M-3.9 0h2.2M1.7 0h2.2', 'S@/1.15 M-4 .4A1.2 1.2 0 0 1-1.6 .4M1.6 .4A1.2 1.2 0 0 1 4 .4|F#F784 O-4.3 1.8 1.3,.75O4.3 1.8 1.3,.75'];
 const MOUTHS = ['S@/1.15 M-1.1 2.3Q0 3.1 1.1 2.3', 'F@ O0 2.9 .8,1|S@/1.15 M-1.6-2.8L-3.8-2.1M1.6-2.8L3.8-2.1', 'S@/1.2 M-1.5 2Q0 3.6 1.5 2'];
-/** Closed eyes (a fallen hero). */
-const SLEEP = 'S@/1.1 M-3.9 0A1.1 1.1 0 0 0-1.7 0M1.7 0A1.1 1.1 0 0 0 3.9 0';
+/** Closed eyes (a fallen hero, in its death palette's ink '$2'). */
+const SLEEP = 'S$2/1.1 M-3.9 0A1.1 1.1 0 0 0-1.7 0M1.7 0A1.1 1.1 0 0 0 3.9 0';
+/** The face's one-colour palette (refilled per draw: no allocation). */
+const INK = [''];
 
 /**
  * A hero's face at eye line y (U), looking along the pose's look, its mood 0 calm, 1 worried, 2 joy
@@ -49,7 +51,8 @@ const SLEEP = 'S@/1.1 M-3.9 0A1.1 1.1 0 0 0-1.7 0M1.7 0A1.1 1.1 0 0 0 3.9 0';
 function face(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, y: number, mood: number, ink: string, under = ''): void {
   const U = p.S * NUBS_SCALE;
   const m = a.happy > 0 || a.phew > 0 ? 2 : mood;
-  const pal = [ink];
+  const pal = INK;
+  INK[0] = ink;
   g.save();
   g.translate(p.lookX * 1.1 * U, (y + p.lookY * 0.8) * U);
   g.scale(U, U);
@@ -88,6 +91,8 @@ function blade(g: CanvasRenderingContext2D, a: NubsAnim, t: number, U: number, x
  * A hero: its state from the pose, and per state its palette, layers, face and live parts. Palettes
  * read '$0' its body, '$1' its line, and its face's ink last.
  */
+type Death = readonly [string, string, number, number, number, number, number, string];
+
 interface Def {
   st(p: NubsPose, a: NubsAnim): number;
   /** Per state: its colours, comma-joined. */
@@ -105,8 +110,9 @@ interface Def {
    * scale, width, fill's palette slot, line width]; Volt's are bolt tails instead.
    */
   bl: readonly (readonly number[] | null)[];
-  /** A fallen hero (drawn whole each frame): [its back layer, palette, end scale x, y, end alpha, rise (U), eye line, art over it]. */
-  die(p: NubsPose): readonly [string, string, number, number, number, number, number, string];
+  /** A fallen hero (drawn whole each frame): [its back layer, palette (ink third), end scale x, y, end alpha, rise (U), eye line, art over it]; `freeze` for a frozen one. */
+  die: Death;
+  freeze?: Death;
   motion?(p: NubsPose, a: NubsAnim, m: Motion, st: number): void;
 }
 
@@ -186,7 +192,8 @@ function make(d: Def): CharArt {
     },
     death(g, p) {
       // It shrinks (or flattens), fades or rises, then dozes off (Drip frozen in its ice).
-      const [body, pal, sx, sy, fade, rise, eye, over] = d.die(p);
+      const D = p.cause === 'freeze' && d.freeze ? d.freeze : d.die;
+      const [body, pal, sx, sy, fade, rise, eye, over] = D;
       const U = p.S * NUBS_SCALE;
       const e = deathT(p);
       const ky = 1 + (sy - 1) * e;
@@ -198,11 +205,11 @@ function make(d: Def): CharArt {
       art(g, body, palOf(pal));
       g.restore();
       g.scale(U, U);
-      art(g, over, []);
+      art(g, over, INK);
       const ks = over ? 1 : Math.min(1, ky);
       g.translate(0, eye * ks);
       g.scale(ks, ks);
-      art(g, SLEEP, [palOf(pal).at(-1) as string]);
+      art(g, SLEEP, palOf(pal));
       g.restore();
     },
   };
@@ -228,7 +235,7 @@ const EMBER = make({
   eye: -7.4,
   bl: [TONGUES, TONGUES, TONGUES, null, TONGUES],
   // Snuffed: the flame sinks to nothing, dozing off.
-  die: () => [FLAME, '#C42,#821,#FC7', 0.2, 0.2, 1, 0, -4.4, ''],
+  die: [FLAME, '#C42,#821,#FC7', 0.2, 0.2, 1, 0, -4.4, ''],
   motion(_p, _a, m, st) {
     // Snuffing: 15 % smaller.
     if (st === 1) {
@@ -253,7 +260,7 @@ const SPROUT = make({
   eye: -10.4,
   bl: [leaves(2.4, -0.6), leaves(2.2, 0.75), leaves(2.6, -0.95), leaves(2.2, -0.25), leaves(1.2, 0.4)],
   // Wilted: the bulb sags flat and brown.
-  die: () => [BULB, '#A95,#542,#232', 1.2, 0.65, 1, 0, -9.6, ''],
+  die: [BULB, '#A95,#542,#232', 1.2, 0.65, 1, 0, -9.6, ''],
 });
 
 /** Volt: 0 calm, 1 leaking in the light (not safe), 2 a strike's flash, 3 droopy (low). */
@@ -271,7 +278,7 @@ const VOLT = make({
   under: 'F#FF95 O-2.8 0 2.6,2.8O2.8 0 2.6,2.8|P#FE5/@/.6 O-2.8 0 1.7,1.9O2.8 0 1.7,1.9',
   bl: [null, null, null, null],
   // Fizzled: the cloud puffs out, small and grey.
-  die: () => [CLOUD, '#CCD,#445', 0.45, 0.45, 1, 0, -11, ''],
+  die: [CLOUD, '#CCD,#445,#445', 0.45, 0.45, 1, 0, -11, ''],
 });
 
 /** Drip: its tint by T (0 icy < 15, 1 frosty < 30, 2 calm ≤ 70, 3 warm ≤ 85, 4 hot), 5 a rain cloud (CLOUDBURST). */
@@ -291,10 +298,8 @@ const DRIP = make({
   eye: -8.6,
   bl: [SPLASH, SPLASH, SPLASH, SPLASH, SPLASH, null],
   // Frozen solid in an ice cube, or boiled away: rising and thinning into the steam (no puddle).
-  die: (p) =>
-    p.cause === 'freeze'
-      ? [DROP, '#CEF,#58B,#135', 0.75, 0.75, 1, 0, -7, 'P#DEFC/#8CF/1.2 M-10.5-22h21v22h-21Z|S#FFF/1.2 M-8-18l4-2.5']
-      : [DROP, '#F65,#A32,#511', 0.5, 0.5, 0, 10, -8.6, ''],
+  die: [DROP, '#F65,#A32,#511', 0.5, 0.5, 0, 10, -8.6, ''],
+  freeze: [DROP, '#CEF,#58B,#135', 0.75, 0.75, 1, 0, -7, 'P#DEFC/#8CF/1.2 M-10.5-22h21v22h-21Z|S#FFF/1.2 M-8-18l4-2.5'],
   motion(p, a, m) {
     // Jelly: a squash out of step with the walk.
     if (!p.walking || p.reducedMotion) return;
@@ -383,14 +388,19 @@ export function drawHeroLegend(g: CanvasRenderingContext2D, hero: HeroId, x: num
   for (let i = 0; i < 2; i++) {
     g.lineWidth = r * (i ? 0.16 : 0.36);
     g.strokeStyle = i ? '#FFF' : cssa(heroArcColor(hero, hero !== 'drip'), 1);
-    g.setLineDash(hero === 'sprout' ? [r * 0.4, r * 0.3] : hero === 'ember' ? [r * 0.18, r * 0.16] : i ? [0.1, r * 0.4] : []);
+    LEG[0] = hero === 'sprout' ? r * 0.4 : hero === 'ember' ? r * 0.18 : i ? 0.1 : 0;
+    LEG[1] = hero === 'sprout' ? r * 0.3 : hero === 'ember' ? r * 0.16 : i ? r * 0.4 : 0;
+    g.setLineDash(LEG[0] ? LEG : NONE);
     g.beginPath();
     g.arc(x, y, r * 0.86, Math.PI * 0.8, Math.PI * 2.2);
     if (i === 0 || hero === 'drip') g.stroke();
   }
-  g.setLineDash([]);
+  g.setLineDash(NONE);
   drawGlyph(g, hero, x, y, r * 1.1);
 }
+
+const LEG = [0, 0];
+const NONE: number[] = [];
 
 /** The token that pops off a fallen hero (its glyph: a spark of flame, a leaf, a bolt, a drop), placed as nubs.ts renderHatSprite places the hat. */
 export function renderTokenSprite(c: Canvas2D, hero: HeroId, pxPerU: number): void {
