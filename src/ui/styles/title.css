@@ -105,6 +105,30 @@
   --ic: 34px;
 }
 
+/* The Elementals (docs/ELEMENTALS.md §4.10): a violet square, its NEW sticker on top. */
+.btn.elementals-btn {
+  --h: 46px;
+  --r: 16px;
+  --ic: 30px;
+  overflow: visible;
+}
+
+/* A crowded bar (title.ts fit(): the rank's name would be cut, e.g. beside a waiting reward and the
+   Elementals square): tighter gaps, a smaller reward, name and the menus' compact wallet. */
+.title-hud.is-tight { gap: 6px; }
+
+.title-hud.is-tight .btn.title-reward { --h: 50px; --ic: 32px; }
+
+.title-hud.is-tight .rank-name { font-size: var(--fs-d-md); }
+
+.title-hud.is-tight > .chip--snow {
+  margin-left: 16px;
+  padding: 0 10px 0 24px;
+  font-size: var(--fs-d-md);
+}
+
+.title-hud.is-tight > .chip--snow > .ai { left: -18px; width: 40px; height: 40px; }
+
 /* The gift wiggles twice every 4 s. */
 .title-reward .ai { animation: gift-wiggle 4s ease-in-out 1s infinite; }
 
@@ -674,6 +698,7 @@ body,
 .endless-pill:not(.is-locked) .tray-lock,
 .tray-btn:not(.is-new) .new-tag,
 .endless-pill:not(.is-new) .new-tag,
+.elementals-btn:not(.is-new) .new-tag,
 .tile:not(.is-new) .new-tag { display: none; }
 
 .new-tag {

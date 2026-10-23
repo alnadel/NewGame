@@ -30,7 +30,7 @@
   --violet-hi: #D7B0FF; --violet: #A26AF7; --violet-lo: #8550EC; --violet-lip: #5B2EB4;
   --red-hi: #FF9A6E;    --red: #FF6A45;    --red-lo: #F0472C;    --red-lip: #B0301A;
   --cloud-hi: #FFFFFF;  --cloud: #F4F1FB;  --cloud-lo: #DCD5EC;  --cloud-lip: #A99CC6;
-  --ice-hi: #E9F6FF;    --ice: #9ED8FF;    --ice-lo: #4FA9EE;
+  --ice-hi: #E9F6FF;    --ice: #9ED8FF;    --ice-lo: #4FA9EE;   --ice-lip: #2D7FC8;
   --locked-hi: #EEEAF5; --locked: #D9D1E6; --locked-lo: #C3B8D6; --locked-lip: #A99CC6;
 
   /* The embossed slot (counters, bar tracks, toggle off, the HUD goal pill). Always opaque. */
@@ -236,6 +236,7 @@
 .f-pink,   .btn--pink    { --hi: var(--pink-hi);   --face: var(--pink);   --lo: var(--pink-lo);   --lip: var(--pink-lip); }
 .f-violet, .btn--violet  { --hi: var(--violet-hi); --face: var(--violet); --lo: var(--violet-lo); --lip: var(--violet-lip); }
 .f-red,    .btn--danger  { --hi: var(--red-hi);    --face: var(--red);    --lo: var(--red-lo);    --lip: var(--red-lip); }
+.f-ice                   { --hi: var(--ice-hi);    --face: var(--ice);    --lo: var(--ice-lo);    --lip: var(--ice-lip); }
 .f-cloud,  .btn--plain   { --hi: var(--cloud-hi);  --face: var(--cloud);  --lo: var(--cloud-lo);  --lip: var(--cloud-lip); }
 .f-locked, .is-locked.btn { --hi: var(--locked-hi); --face: var(--locked); --lo: var(--locked-lo); --lip: var(--locked-lip); }
 

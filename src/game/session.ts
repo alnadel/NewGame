@@ -18,9 +18,12 @@ import {
   effectiveNoonCloud,
   formatTimeOfDay,
   generateSome,
+  HEROES,
+  isTrialId,
   lerpSnap,
   anyLevelDef,
   levelDef,
+  levelTag,
   levelProgress,
   PLAN_START_DATE,
   prepareRun,
@@ -29,6 +32,7 @@ import {
   splitMinutes,
   step,
   takeSnap,
+  TRIAL_BASE,
   TUNING,
   worldPlan,
   type Bot,
@@ -60,6 +64,7 @@ import {
   equipCosmetic,
   isDailyUnlocked,
   nextMilestone,
+  nextOpenTrial,
   recentBestAt,
   resetProgress,
   setDailyPar,
@@ -491,7 +496,7 @@ export class Session {
         startRun: sync((k: RunKind, date?: string, level?: number) => this.startRun(k, date, level)),
         startHeld: () => this.startHeld(),
         nextLevel: sync(() => this.nextLevel()),
-        openJourney: sync(() => this.openJourney()),
+        openJourney: sync((to?: 'journey' | 'elementals') => this.openJourney(to)),
         retry: sync(() => this.retry()),
         home: sync(() => this.home()),
         pause: sync(() => this.pause()),
@@ -559,6 +564,9 @@ export class Session {
         runStatus: () => this.runStatus(),
         renderWardrobePreview: (canvas, equipped, subject) =>
           subject === 'sun' ? renderSunPreview(canvas, equippedLooks(equipped).shades) : renderWardrobePreview(canvas, equipped),
+        // Elementals (docs/ELEMENTALS.md §4.11): Nubs in the saved outfit until ART lands
+        // render/heroes.ts renderHeroPreview(canvas, hero, equipped), which replaces this body at merge.
+        renderHeroPreview: (canvas) => renderWardrobePreview(canvas, store.get().equipped),
         updateSave: (change) => {
           const next = change(store.get());
           store.set(next);
@@ -1550,12 +1558,18 @@ export class Session {
     this.input.tap();
   }
 
-  /** Results > Next level: the level after this one waits on its intro card (the UI is on 'play'). */
+  /**
+   * Results > Next level: the level after this one waits on its intro card (the UI is on 'play'); a
+   * Trial's next is the next open Trial (the Results' nextId), and without one it leaves for the
+   * Elementals screen.
+   */
   private nextLevel(): void {
     this.d.audio.ensure();
-    const next = levelDef((this.runLevel?.id ?? 0) + 1);
+    const id = this.runLevel?.id ?? 0;
+    const trial = isTrialId(id);
+    const next = trial ? (this.lastCampaign?.nextId ? anyLevelDef(this.lastCampaign.nextId) : null) : levelDef(id + 1);
     if (!next) {
-      this.ui.show('title');
+      this.ui.show(trial ? 'elementals' : 'title');
       this.home();
       return;
     }
@@ -1564,10 +1578,13 @@ export class Session {
     this.setGhost('both');
   }
 
-  /** Results > Map and the Title's Journey pill: leaves the run like Home and shows the Journey map. */
-  private openJourney(): void {
+  /**
+   * Results > Map and the Title's Journey pill: leaves the run like Home and shows the Journey map
+   * (a Trial's Results: the Elementals screen).
+   */
+  private openJourney(to: 'journey' | 'elementals' = 'journey'): void {
     this.home();
-    if (this.ui.current() !== 'journey') this.ui.show('journey');
+    if (this.ui.current() !== to) this.ui.show(to);
   }
 
   private home(): void {
@@ -1769,7 +1786,9 @@ export class Session {
     this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
-    this.tip = deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
+    // A Trial's recap tip is the fallen hero's (Nubs keeps today's recap tips).
+    const heroTip = this.s.trial ? HEROES[result.death.who ?? this.s.nubs.hero].deathTip : '';
+    this.tip = heroTip || deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
     result.assisted = this.runAssisted;
@@ -1895,13 +1914,16 @@ export class Session {
   private campaignView(level: LevelDef, result: RunResult): ResultsCampaign {
     const won = this.won;
     const passed = won !== null && won.passed;
-    const next = levelDef(level.id + 1);
+    // A Trial's Next is the next open Trial (docs/ELEMENTALS.md §4.10), or none.
+    const trial = isTrialId(level.id);
+    const nextTrial = trial ? nextOpenTrial(this.d.store.get(), level.id - TRIAL_BASE) : null;
+    const next = trial ? null : levelDef(level.id + 1);
     const view: ResultsCampaign = {
       id: level.id,
       name: level.name,
       passed,
       stars: won?.stars ?? 0,
-      nextId: next ? next.id : null,
+      nextId: nextTrial !== null ? TRIAL_BASE + nextTrial : next ? next.id : null,
       goalLine: goalLine(level, result.stats, passed, this.relaxed(), this.featSeen, this.misses(level.id)),
       // The goal cards (UI v2): each rule and whether this run met it (won: the finish was reached).
       starRules: starRules(level, this.relaxed()),
@@ -2329,9 +2351,12 @@ export class Session {
       // The goal's own count (a finish goal: the progress); an open Dare's count (a finale's names both).
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
       const f = level.feats[0];
+      const t = s.trial;
       if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       return {
-        title: `Level ${level.id} · ${level.name}`,
+        title: `${levelTag(level.id)} · ${level.name}`,
+        // A Trial: the walking hero's tagline under the title (docs/ELEMENTALS.md §6.5).
+        ...(t ? { tagline: HEROES[s.nubs.hero].tagline } : {}),
         goal: `${goalText(level, relaxed)} · ${goal.target >= 0 ? countText(goal.value, goal.target, goal.sec) : `${Math.round(levelProgress(s) * 100)} %`}`,
         now,
         stars: [
@@ -2455,6 +2480,13 @@ export class Session {
       gust: s.sun.gust,
       locked: s.sun.locked,
       moonlit: s.moonlit,
+      // Elementals (docs/ELEMENTALS.md §4.10): the walking hero, the duo's mate, the relay index,
+      // each body's meter and the ability charge.
+      hero: s.nubs.hero,
+      mate: s.mate?.hero ?? null,
+      relay: s.relayIdx,
+      meters: s.mate ? [s.nubs.chill, s.mate.chill] : [s.nubs.chill],
+      charge: s.nubs.frost,
     };
   }
 
@@ -2464,7 +2496,7 @@ export class Session {
   }
 
   /** Test hook: the config of the current run (the Title's held run between runs). */
-  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
+  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number; hero: string | null } {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
     const c = s.cfg;
@@ -2476,6 +2508,7 @@ export class Session {
       seed: c.seed,
       dailyDate: c.dailyDate ?? null,
       drain: effectiveDrain(s),
+      hero: c.hero ?? null,
     };
   }
 

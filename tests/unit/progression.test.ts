@@ -9,7 +9,12 @@ import {
   applyRunResult,
   CAMPAIGN_STARS_MAX,
   continueLevel,
+  elementalStars,
+  ELEMENTAL_STARS_MAX,
+  heroUnlocked,
   isLevelPlayable,
+  nextOpenTrial,
+  trialOpen,
   totalStars,
   nextStarGoal,
   nextRunEased,
@@ -1010,5 +1015,103 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
     expect(continueLevel(s)).toBe(38);
     s.campaign.unlocked = 201;
     expect(continueLevel(s)).toBe(200);
+  });
+});
+
+describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
+  /** A finished Trial n: `passed` with `stars`, failed otherwise. */
+  const trial = (n: number, passed: boolean, stars: number, over: Partial<Stats> = {}): RunResult =>
+    run(300, { flakes: 7, snow: 25, ...over }, { mode: 'campaign', level: { id: 1000 + n, passed, stars: stars as 0 | 1 | 2 | 3, introduces: null } });
+
+  it('keeps its best stars apart from the Journey and pays +20 Snow on the first pass, once', () => {
+    const base = quiet(10);
+    base.gamify.xp = 100;
+    base.campaign.stars[0] = 2;
+    base.campaign.unlocked = 2;
+    base.campaign.lastLevel = 1;
+    base.campaign.misses = Array<number>(200).fill(0);
+    base.campaign.misses[1] = 1;
+    const journey = structuredClone(base.campaign);
+    const first = applyRunResult(base, trial(3, true, 2), opts());
+    expect(first.save.elementals).toEqual({ stars: [0, 0, 2, 0, 0, 0, 0, 0], seen: false });
+    // The Journey's stars, unlocked level, misses, last level, n/600 and Continue never change.
+    expect(first.save.campaign).toEqual(journey);
+    expect(totalStars(first.save)).toBe(2);
+    expect(continueLevel(first.save)).toBe(2);
+    expect(first.outcome.bonusSnow).toBe(20);
+    expect(first.outcome.snowEarned).toBe(25 + 20);
+    expect(first.save.stats.wallet).toBe(base.stats.wallet + 45);
+    expect(first.outcome.toasts.map((t) => t.text)).toContain('First pass +20');
+    expect(first.outcome.campaign).toEqual({ passed: true, stars: 2, newStars: 2, unlockedNext: false });
+    // XP comes through awardRun (a pass with its stars and the first-pass XP).
+    expect(first.outcome.gamify?.xpGained).toBeGreaterThan(0);
+    expect(first.save.gamify.xp).toBe(100 + (first.outcome.gamify?.xpGained ?? 0));
+    const again = applyRunResult(first.save, trial(3, true, 3), opts());
+    expect(again.save.elementals?.stars[2]).toBe(3);
+    expect(again.outcome.bonusSnow).toBe(0);
+    expect(again.outcome.toasts.map((t) => t.text)).not.toContain('First pass +20');
+    // A worse run or a fail keeps the best.
+    expect(applyRunResult(again.save, trial(3, true, 1), opts()).save.elementals?.stars[2]).toBe(3);
+    expect(applyRunResult(again.save, trial(3, false, 0), opts()).save.elementals?.stars[2]).toBe(3);
+  });
+
+  it('adds no mission progress, achievements or trophies; a fail stores nothing', () => {
+    const base = quiet(10);
+    const before = structuredClone(base.missions);
+    const { save, outcome } = applyRunResult(base, trial(1, true, 3, { flakes: 500, snow: 900, swings: 99, phews: 40 }), opts());
+    expect(save.missions).toEqual(before);
+    expect(outcome.missionsCompleted).toEqual([]);
+    expect(outcome.achievementsUnlocked).toEqual([]);
+    expect(outcome.cosmeticsUnlocked).toEqual([]);
+    expect(save.unlocks).toEqual(base.unlocks);
+    expect(save.history).toEqual([]);
+    // It counts as a run.
+    expect(save.stats.runs).toBe(11);
+    // A failed first try leaves the field absent.
+    const fail = applyRunResult(quiet(), trial(1, false, 0), opts());
+    expect('elementals' in fail.save).toBe(false);
+    expect(fail.outcome.bonusSnow).toBe(0);
+  });
+
+  it('opens Trials and heroes by the §3.0 order, and toasts each new Trial on the Results', () => {
+    let s = quiet();
+    const open = (): number[] => [1, 2, 3, 4, 5, 6, 7, 8].filter((n) => trialOpen(s, n));
+    expect(open()).toEqual([1, 2, 3, 4]);
+    expect(heroUnlocked(s, 'nubs')).toBe(true);
+    expect(heroUnlocked(s, 'ember')).toBe(false);
+    const t1 = applyRunResult(s, trial(1, true, 1), opts());
+    s = t1.save;
+    expect(open()).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(heroUnlocked(s, 'ember')).toBe(true);
+    expect(t1.outcome.toasts.map((t) => t.text)).toEqual(expect.arrayContaining(['New trial: Day Shift', 'New trial: Fire and Ice']));
+    expect(t1.outcome.campaign?.unlockedNext).toBe(true);
+    s = applyRunResult(s, trial(2, true, 2), opts()).save;
+    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(heroUnlocked(s, 'sprout')).toBe(true);
+    s = applyRunResult(s, trial(3, true, 3), opts()).save;
+    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    const t4 = applyRunResult(s, trial(4, true, 3), opts());
+    s = t4.save;
+    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(t4.outcome.toasts.map((t) => t.text)).toContain('New trial: Five Elements');
+    expect(heroUnlocked(s, 'volt') && heroUnlocked(s, 'drip')).toBe(true);
+    expect(elementalStars(s)).toBe(9);
+    expect(ELEMENTAL_STARS_MAX).toBe(24);
+    expect(nextOpenTrial(s, 1)).toBe(2);
+    expect(nextOpenTrial(s, 8)).toBeNull();
+    // The testing toggle opens every Trial and hero.
+    const all = quiet();
+    all.settings.unlockAll = true;
+    expect([1, 2, 3, 4, 5, 6, 7, 8].every((n) => trialOpen(all, n))).toBe(true);
+    expect(heroUnlocked(all, 'drip')).toBe(true);
+    expect(nextOpenTrial(quiet(), 4)).toBeNull();
+    expect(trialOpen(quiet(), 9)).toBe(false);
+  });
+
+  it('a reset zeroes the Trials (a merge must not bring them back)', () => {
+    const s = quiet();
+    s.elementals = { stars: [3, 3, 0, 0, 0, 0, 0, 0], seen: true };
+    expect(resetProgress(s).elementals).toEqual({ stars: Array(8).fill(0), seen: false });
+    expect('elementals' in resetProgress(quiet())).toBe(false);
   });
 });

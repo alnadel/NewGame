@@ -13,7 +13,7 @@
 // Journey (v1.2):                                   SHADY Journey · Level 12 ★★☆ · Glass Garden
 //                                                   <link>            (the plain link, no challenge code)
 
-import { FORECASTS, formatScore, formatTimeOfDay, levelDef, MINUTES_PER_DAY, PLAN_START_DATE, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
+import { anyLevelDef, FORECASTS, formatScore, formatTimeOfDay, isTrialId, levelTag, MINUTES_PER_DAY, PLAN_START_DATE, type DayPlan, type HourGlyph, type RunResult } from '../core/index.ts';
 import { isNative } from '../platform/native.ts';
 import { challengeUrl, type Challenge } from './challenge.ts';
 import { dailyNumber, DAILY_TRIES } from './daily.ts';
@@ -128,9 +128,12 @@ export interface CampaignShareInput {
   link: string | null;
 }
 
-/** "SHADY Journey · Level 12 ★★☆ · Glass Garden" and the link (no challenge code for a level). */
+/**
+ * "SHADY Journey · Level 12 ★★☆ · Glass Garden" (an Elementals Trial: "SHADY Elementals · Trial 3
+ * ★★☆ · Thunder Alley") and the link (no challenge code for a level).
+ */
 export function campaignShareText(p: CampaignShareInput): string {
-  const out = [`SHADY Journey · Level ${p.id} ${starText(p.stars)} · ${p.name}`];
+  const out = [`SHADY ${isTrialId(p.id) ? 'Elementals' : 'Journey'} · ${levelTag(p.id)} ${starText(p.stars)} · ${p.name}`];
   if (p.link !== null) out.push(p.link);
   return out.join('\n');
 }
@@ -175,7 +178,7 @@ export interface ShareExtra {
 export function buildShare(r: RunResult, baseUrl: string | null, tryNumber: number | null = null, extra: ShareExtra = {}): SharePayload {
   if (r.mode === 'campaign' && r.level !== undefined) {
     const lv = r.level;
-    const name = levelDef(lv.id)?.name ?? `Level ${lv.id}`;
+    const name = anyLevelDef(lv.id)?.name ?? levelTag(lv.id);
     return { text: campaignShareText({ id: lv.id, name, stars: lv.passed ? lv.stars : 0, link: baseUrl }), url: baseUrl, challenge: null };
   }
   const snow = Math.max(0, Math.floor(r.stats.snow));

@@ -3,9 +3,9 @@
 // the COMEBACK.
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
-import { createRun, levelDef, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { createRun, levelDef, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { createMoments, LEVEL_TIPS, MECH_TIPS, withDare } from '../../src/game/moments.ts';
+import { createMoments, DUO_TIPS, HERO_TIPS, LEVEL_TIPS, MECH_TIPS, RELAY_TIPS, withDare } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToast, endToasts, holdToasts, resetBanners, showToast, updateBanners } from '../../src/render/banners.ts';
@@ -355,5 +355,59 @@ describe('RunMoments', () => {
     s.tick += 60;
     m.update(s);
     expect(log).toEqual(['comeback']);
+  });
+
+  it('Elementals: a Trial shows its hero\'s tips (a relay\'s later heroes at their TAG, a duo its own) until passed, and no mission steps', () => {
+    const save = defaults(0);
+    save.missions.active = [{ id: 'flakes-10', progress: 0, done: false, stale: 0 }];
+    save.settings.unlockAll = true;
+    const b = createBanners();
+    const { log, sinks: k } = sinks();
+    const m = createMoments(b, k);
+    const texts = (): string[] => b.toasts.map((t) => t.text);
+    const run = (id: number): SimState => {
+      const s = createRun(campaignConfig(trialLevel(id)!, false, true));
+      s.phase = 'day';
+      return s;
+    };
+    // T1: Ember's 'go' tip with her glyph; no mission toast however many flakes.
+    let s = run(1001);
+    m.begin(save, trialLevel(1001)!, true);
+    m.onEvent({ e: 'go' }, s);
+    expect(texts()).toEqual([HERO_TIPS.ember[0]![1]]);
+    expect(b.toasts[0]!.glyph).toBe('ember');
+    s.tick = 100;
+    s.stats.flakes = 10;
+    m.update(s);
+    expect(log).toEqual([]);
+    // Passed: no tips.
+    save.elementals = { stars: [1, 0, 0, 0, 0, 0, 0, 0], seen: true };
+    b.toasts.length = 0;
+    m.begin(save, trialLevel(1001)!, true);
+    m.onEvent({ e: 'go' }, s);
+    expect(b.toasts).toHaveLength(0);
+    // T5 (relay Nubs → Ember → Nubs): the relay's and Nubs' tips at go, the TAG telegraph, Ember's
+    // 'go' tip when she takes over, once.
+    resetBanners(b);
+    s = run(1005);
+    m.begin(save, trialLevel(1005)!, true);
+    m.onEvent({ e: 'go' }, s);
+    expect(texts()).toEqual([RELAY_TIPS[0]![1], HERO_TIPS.nubs[0]![1]]);
+    m.onEvent({ e: 'tagSoon', to: 'ember', ticks: 90 }, s);
+    m.onEvent({ e: 'tag', from: 'nubs', to: 'ember', index: 0 }, s);
+    m.onEvent({ e: 'tag', from: 'ember', to: 'nubs', index: 1 }, s);
+    expect(texts().slice(2)).toEqual([RELAY_TIPS[1]![1], HERO_TIPS.ember[0]![1]]);
+    expect(b.toasts[3]!.glyph).toBe('ember');
+    // T6 (duo, Nubs' Cold Snap) warns of the Cold Snap's cloud when the charge is ready; T7 (duo, Seed) does not.
+    for (const [id, warn] of [[1006, true], [1007, false]] as const) {
+      resetBanners(b);
+      s = run(id);
+      m.begin(save, trialLevel(id)!, true);
+      m.onEvent({ e: 'go' }, s);
+      expect(texts()).toEqual([DUO_TIPS[0]![1]]);
+      expect(b.toasts[0]!.glyph).toBe('elementals');
+      m.onEvent({ e: 'frostReady' } as SimEvent, s);
+      expect(texts().includes(DUO_TIPS[2]![1])).toBe(warn);
+    }
   });
 });

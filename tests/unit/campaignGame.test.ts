@@ -13,10 +13,11 @@ import {
   NO_INPUT,
   starsFor,
   step,
+  trialLevel,
   type InputFrame,
   type SimEvent,
 } from '../../src/core/index.ts';
-import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint } from '../../src/game/campaign.ts';
+import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState } from '../../src/game/campaign.ts';
 import { isDebugRun, parseParams } from '../../src/game/params.ts';
 import { campaignShareText } from '../../src/meta/share.ts';
 import { createBanners, dismissLevelCard, resetBanners, showLevelCard, showStamp, updateBanners } from '../../src/render/banners.ts';
@@ -296,5 +297,33 @@ describe('level card and the finish stamps (render/banners)', () => {
     showStamp(b, 'miss', 'NOT ENOUGH FLAKES', 1.2);
     expect(b.stampKind).toBe('miss');
     expect(b.stamp).toBe(0);
+  });
+});
+
+describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
+  const t1 = trialLevel(1001)!;
+  const t6 = trialLevel(1006)!;
+  const t7 = trialLevel(1007)!;
+  it('the intro card, star rules and goal speak the Trial\'s own words; it is never relaxed', () => {
+    expect(introCard(t1)).toMatchObject({ kicker: 'TRIAL 1', title: 'Kindling', concept: 'ember', conceptName: 'EMBER · Fire', goal: 'Reach the finish', dareGlyph: 'ember' });
+    expect(introCard(t6)).toMatchObject({ kicker: 'TRIAL 6', concept: 'elementals', goal: 'Finish with both' });
+    expect(starRules(t1)).toEqual(['Finish', 'Blaze 1 s', 'Heat ≥ 40']);
+    expect(goalText(t7)).toBe('Bloom 2 buds');
+    expect(campaignConfig(t7, false, true, true).relaxedGoal).toBeUndefined();
+    expect(goalLine(t1, { flakes: 0, snow: 0 }, true)).toBe('Reached the finish');
+    expect(goalLine(t1, { flakes: 0, snow: 0 }, false)).toBe('Out before the finish');
+    expect(goalLine(t7, { flakes: 0, snow: 0, blooms: 1 }, false)).toBe('Goal missed: Bloom 2 buds (1/2)');
+  });
+  it('stars: the goal, the Dare (trialDareValue) and Steady (no body under the bar); the HUD pill counts the Dare', () => {
+    const st = (blazeTicks: number, minChill: number) => ({ flakes: 0, snow: 0, litTotal: 999, minChill, blazeTicks });
+    expect(starState(t1, st(0, 100), false)).toBe(0);
+    expect(starState(t1, st(60, 100), true)).toBe(STAR_GOAL | STAR_FLAKES);
+    // The Journey's sun bar never counts on a Trial; a dip under the Steady bar does.
+    expect(starState(t1, st(59, 39), true)).toBe(STAR_GOAL | STAR_COOL_LOST);
+    expect(hudGoal(t1, { flakes: 0, snow: 0, blazeTicks: 30 })).toMatchObject({ value: 30, target: 60, glyph: 'ember', sec: true });
+    expect(hudGoal(t1, { flakes: 0, snow: 0, blazeTicks: 99 }).value).toBe(60);
+    // T7 counts its blooms goal first, then its Harmony Dare.
+    expect(hudGoal(t7, { flakes: 0, snow: 0, blooms: 1, harmonyTicks: 50 })).toMatchObject({ value: 1, target: 2 });
+    expect(hudGoal(t7, { flakes: 0, snow: 0, blooms: 2, harmonyTicks: 50 })).toMatchObject({ value: 50, target: 240, glyph: 'elementals', sec: true });
   });
 });

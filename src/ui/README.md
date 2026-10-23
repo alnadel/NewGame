@@ -5,8 +5,9 @@ plumbing (storage, share, PWA, lifecycle, safe areas). The in-play HUD is drawn 
 renderer; the only DOM element during play is the pause button (plus a small muted indicator).
 
 ```
-src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab, the Journey map
-src/meta/      save v4, content catalog, progression (Journey levels and star rewards included),
+src/ui/        createUi() controller, screens, overlays, ui.css, brand art, lab, the Journey map,
+               the Elementals screen
+src/meta/      save v4, content catalog, progression (Journey levels, Trials and star rewards included),
                missions, gamify (Sun Rank, globes, daily streak, unlocks), sunny days, daily,
                share text, challenge links, backup
 src/platform/  storage, share, pwa, lifecycle, safeArea, native
@@ -14,7 +15,8 @@ src/platform/  storage, share, pwa, lifecycle, safeArea, native
 
 Dev lab: `npx vite` then open `/ui-lab.html` (every screen with fake data and a working fake integrator).
 URL parameters reach any state: `?screen=results&variant=warmup&inset=47&rm=1&bare=1&today=2026-10-18`
-(see `src/ui/lab.ts`; `screen=journey` with `regular|fresh|unlock-all|far`, and the Results variants
+(see `src/ui/lab.ts`; `screen=journey` with `regular|fresh|unlock-all|far`, `screen=elementals` with
+`regular|fresh|unlock-all|done`, and the Results variants
 `level|level-perfect|level-last|level-fail|level-death`).
 
 ---
@@ -53,14 +55,15 @@ into a screen only in keyboard mode, and a menu returns focus to the control tha
 
 ```
 boot -> title | play
-title -> play | daily | wardrobe | missions | settings | journey | profile
+title -> play | daily | wardrobe | missions | settings | journey | profile | elementals
 profile -> title | missions | wardrobe | journey  (v1.4; Back returns where it opened from)
 daily -> play | title          wardrobe -> title | profile          missions -> title | profile
 journey -> play | title | profile  (a tile starts its level; Back returns where it opened from)
+elementals -> play | title     (a Trial tile or Play starts the Trial; Back is the Title)
 settings -> title | pause      (Back returns to wherever Settings was opened from)
 play -> pause | dying | results | title
 pause -> play | title | settings
-dying -> results               results -> play | title | journey
+dying -> results               results -> play | title | journey | elementals
 ```
 
 Re-showing the current screen is legal and refreshes it (e.g. `show('results', newView)`).
@@ -81,7 +84,7 @@ Illegal transitions throw in dev and are ignored in production.
 
 Input ownership:
 - The UI handles **Escape** (back: play -> pause, pause -> resume, menus -> close, results -> home,
-  or the Journey map after a level), **P** (pause in play) and **Enter/Space** (Title: play the next
+  or the Journey map after a level, the Elementals screen after a Trial), **P** (pause in play) and **Enter/Space** (Title: play the next
   Journey level, or the challenge while its banner is up; Pause: resume; Dying: skip; Results:
   retry, or Next level after a passed level). Game input should only handle the sun keys (arrows,
   A/D; on the Title they start an endless run, as a canvas drag does).
@@ -198,6 +201,28 @@ in play, and the stars and unlocks earned since the last visit pop in (`.is-fres
 another, `.is-unlocked` tiles, with the stamp or unlock sound). `setSave` and the Settings toggle
 re-render the tiles in place (focus survives).
 
+**Elementals** (docs/ELEMENTALS.md §4.10; `'elementals'`, `screens/elementals.ts`,
+`styles/elementals.css`). The Title square `.elementals-btn` (art icon `elementals`, aria-label
+"Elementals") sits in the top bar just before the wallet. It is hidden on a fresh save and until
+Endless opens, and it wears the NEW sticker until the screen is first opened
+(`markElementalsSeen`). When the Rank name would be cut, the bar tightens (`.title-hud.is-tight`,
+measured in `fit()`), so 360x640, 390x844 and 1280x800 keep every item whole. The screen rebuilds
+from the save on every refresh. It has a header with the Trial stars `n/24`, then the stage (the
+Wardrobe's stage recipe). The stage holds the selected Trial's featured hero (a duo shows both) on
+`renderHeroPreview` canvases, its name and element, tagline, ability with its glyph, the three
+rules as tags, and the primary **Play** "Play T3 · Thunder Alley". Below the stage sit the five
+heroes as round candy coins (`.hero-tile[data-hero]`, `aria-pressed`). A locked hero is a
+silhouette with a lock coin and "Pass Kindling" (its intro Trial). Picking a hero frames its
+Trials in gold (`.is-hl`). Then come the eight Trials, two columns of Wardrobe tiles
+(`.trial-tile[data-trial]`). Each tile shows its `levelShort` disc, name, three stars and the cast
+as lettered faces ('▸' a relay, '+' a duo), and carries `.is-locked`, `.is-done`, `.is-next`
+(selected) and `aria-disabled`. An open tile starts its Trial
+(`startRun('campaign', undefined, 1000 + n)`). A locked one toasts "Pass Kindling first.". Arrow
+keys walk the grid. Trials and heroes opened since the last visit pop open (`.is-unlocked`), with
+"Ember joins the team!" and the unlock sound. `show('elementals', id)` selects that Trial (Results >
+Map and Back after a Trial). A Trial's Results print `levelTag` ("Trial 3"), hide the star road
+and lead Map/Back here; its Pause card adds the hero's tagline under the title.
+
 **Records** (the Profile's, v1.4; the v1.1 Journal's until then): bests (endless and Daily), the
 last 30 endless runs as bars (height ∝ score, colour by the day reached, the best in gold, runs on
 eased rules hatched, an sr-only summary), the last-10 average and its change against the 10 before,
@@ -216,8 +241,8 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 | Callback | When / what to do |
 |---|---|
 | `startRun(kind, date?, level?)` | `'endless'` (the Title's Endless button), `'challenge'` (the banner's Play, or Space/Enter while the banner is up), `'daily'` with the date the Daily screen showed (it checks that date is still today at press time; if not, it refreshes to today with a toast and doesn't start), `'campaign'` with the level id from the Title's Play (Space/Enter), a Journey tile or Continue. Start the run (daily: `dailySeed(date ?? localDate())`, profile 3; challenge: its seed or date, profile 3; campaign: `levelDef(level)`, CAMPAIGN_PLAN §4). UI is on `play`. |
-| `nextLevel()` | Results > Next level after a passed Journey level: start `view.campaign.nextId`. UI is on `play`. |
-| `openJourney()` | The Title's map button, and Results > Map (or Back) after a Journey level: leave the run for the Title scene behind the map (the map is opaque). UI is on `journey`. |
+| `nextLevel()` | Results > Next level after a passed Journey level: start `view.campaign.nextId`. UI is on `play`. After a Trial, `nextId` is the next open Trial (`nextOpenTrial`); with none the session shows `elementals`. |
+| `openJourney(to?)` | The Title's map button, and Results > Map (or Back) after a Journey level: leave the run for the Title scene behind the map (the map is opaque). UI is on `journey`. After a Trial `to` is `'elementals'` and the UI is on `elementals`. |
 | `retry()` | New run, started at once (the core's 0.8 s start beat then gives the player time to aim before Nubs walks). |
 | `home()` | Abandon/leave to the Title scene. Don't trap back-navigation any more. |
 | `pause()` / `resume()` | Freeze/unfreeze the loop. In `resume`, call `ensureAudio()` synchronously (iOS). |
@@ -235,6 +260,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 | `dismissChallenge()` | Forget the challenge and clear `#c=` (`history.replaceState`). |
 | `dragHandoff(e)` | A press that began on a Title tray button slid sideways > 10 px: start the run with catch semantics at `e.clientX/Y` and follow `e.pointerId` (listen on `window`; the button released capture). |
 | `uiSound(name)` | `'tap' 'back' 'toggle' 'slide' 'buy' 'equip' 'deny' 'stamp' 'unlock' 'count'`. Map to the GDD "UI tap" recipe (or richer ones) plus the 4 ms UI haptic. |
+| `renderHeroPreview(canvas, hero)` | The Elementals stage and hero coins: draw `hero` (a `HeroId`) on `canvas`; the screen sizes the backing store (CSS × DPR ≤ 2) and greys a locked hero's pixels itself. Until ART's `renderHeroPreview` lands, the session draws Nubs in his outfit (`renderWardrobePreview(…, 'nubs')`, §4.11). |
 | `renderWardrobePreview(canvas, equipped, subject)` | Draw Nubs wearing `equipped` (`subject` 'nubs'), or the sun in `equipped.shades` on the Shades tab ('sun'); use `equippedLooks(equipped)`. The backing store is CSS size × DPR (≤ 2). Called on every try-on or tab change. |
 
 ## 5. Meta API (pure unless noted)
@@ -252,6 +278,12 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
   `SAVE_BAK_KEY` (`shady.save.bak`); an unreadable main save is recovered from `.bak` when possible.
   - `.canPersist`: false while a newer version's save is on disk (the store then never writes;
     refuse reset and restore with the newer-version message).
+  - `elementals?: { stars[8] 0..3, seen }` (docs/ELEMENTALS.md §4.10) is optional: `sanitize` emits it
+    only when the raw save has it (`defaults()` has none), merges take the larger stars per Trial
+    and `seen` from either side, and a side without it (a build from before the Elementals) never
+    deletes it. A tab of such a build writing over it is merged rather than adopted, so the Trials
+    survive. The v3 → v4 upgrade (`upgradeToV4`) of a save with progress writes it
+    with `seen: true`, so that first visit marks nothing new. (A lone older build, with no newer tab open, still drops the field when it writes.)
   - `.onExternalChange(cb) -> unsubscribe`: another tab or instance wrote the save (a `storage`
     event, or a re-read on page visible that finds different bytes) and the store took it in (only
     clean `ok` saves). Each stored save names the revisions it includes (`revs`), so the store
@@ -283,6 +315,14 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
     target, name, item } | null` names the next one (the Title's goal line, the map, Results).
     `isLevelPlayable(save, id)` (`id ≤ unlocked || settings.unlockAll`), `totalStars`,
     `continueLevel` (the highest unlocked level, the last once all are passed), `CAMPAIGN_STARS_MAX`.
+  - Elementals Trials (`result.level.id` 1001..1008, docs/ELEMENTALS.md §4.10): `elementals.stars[n-1]`
+    keeps the best (the field is created on the first star), the first pass pays +20 Snow ("First
+    pass +20"), each Trial it opens toasts "New trial: Day Shift", and XP comes through `awardRun`.
+    The Journey (stars, unlocked, misses, `lastLevel`, n/600, Continue), missions, achievements and
+    trophies are never touched. Helpers: `trialOpen(save, n)` (every `requires` passed, or
+    `unlockAll`), `heroUnlocked(save, hero)` (its intro Trial passed; Nubs always), `nextOpenTrial(save,
+    n)`, `trialBest`, `elementalStars` (of `ELEMENTAL_STARS_MAX` 24), `markElementalsSeen`;
+    `resetProgress` zeroes the field when the save has it (so a merge cannot bring Trials back).
   - `swapMission`, `recentBest` (tutorial runs ignored), `MILESTONES`, `nextMilestone`, `nextGoal`
     (the Title tagline from run 3: a nearly done mission, a fresh Daily, the next star reward once the
     Journey has begun, the next milestone), `welcomeBackDue` (the launch toast), `setDailyPar`.
@@ -301,7 +341,8 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
   `recentDates`, `formatDateLabel`, `addDays`, `isDateString`.
 - `meta/share.ts`: `buildShare(result, baseUrl | null, tryNumber, { name?, par?, plan? }) -> { text,
   url | null, challenge | null }` (forecast emojis on Day Plan runs, "Beat Sam's run", Snowbot's par
-  on Dailies; a Journey level shares `SHADY Journey · Level 12 ★★☆ · Glass Garden` plus the plain
+  on Dailies; a Journey level shares `SHADY Journey · Level 12 ★★☆ · Glass Garden` (a Trial `SHADY
+  Elementals · Trial 3 ★★☆ · Thunder Alley`) plus the plain
   game link, `challenge` null, `campaignShareText`, `starText`), `shareBase()`, the pure
   `resolveShareBase()`, glyph helpers. `platform/share.ts`:
   `shareText`, `shareFiles({ file, text })` ('saved' = downloaded and copied), `copyText`.
@@ -311,7 +352,9 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 - `meta/backup.ts`: `exportBackup`, `importBackup`, `backupErrorMessage`.
 
 Endless rules come from the comfort rung (`stats.comfort`, core `rungConfig`); Daily and challenge
-runs use their own rules; Journey levels come from `levelDef(id)` (core, CAMPAIGN_PLAN §2).
+runs use their own rules; Journey levels come from `levelDef(id)` (core, CAMPAIGN_PLAN §2), Trials
+from `trialLevel(id)` (core, docs/ELEMENTALS.md §3). Wherever a level is named, `levelTag(id)` prints
+"Level 12" or "Trial 3".
 
 ## 6. Integration recipes
 
@@ -352,9 +395,9 @@ halo for display text, ribbon banners, framed panels, embossed counters, medals 
 
 | File | Holds |
 |---|---|
-| `kit.css` | The tokens on `.sui` (ink `#2A1B45`, cream, the candy faces `--{green,blue,gold,pink,violet,red,cloud,ice,locked}-{hi,,lo,lip}`, slots, accent text `--t-*`, tints, the warm sky, scrims, drops, radii, the type scale `--fs-d-*` / `--fs-*`, motion) and every shared recipe: `.btn` (+ `--primary/--blue/--violet/--pink/--gold/--danger/--plain`, `--sm/--lg/--xl`, `--sq`, `--round`), `.candy`, `.f-*` face classes, `.panel`/`.card`/`.dialog` (+ `--gold/--violet/…`), `.plate`, `.well`, `.ribbon`, `.counter` (`.chip--snow`, `.chip--stars`), `.medal`, `.chip` (+ `--dark`, `--btn`), `.tag`, `.sticker`, `.lock-badge`, `.bar` (+ tones, `--sm`, `.bar-label`, `.bar-gain`), `.tabs`/`.tab`, `.seg`, `.switch`, `.range`, fields, `.toast`, dialogs and sheets, `.node` (level disc), the menu sky, `.burst`, and the high-contrast rules. Legacy v1.4 token names are aliases there until no rule uses them. A recipe variant the spec lists but no screen uses (`.f-ice`, `.panel--red`, `.panel--cloud`, `.ribbon--violet`, `.bar--blue`, `.reward--chip`, `.node.is-current`, `.rows`) is left out until one does, to hold the size budget. |
+| `kit.css` | The tokens on `.sui` (ink `#2A1B45`, cream, the candy faces `--{green,blue,gold,pink,violet,red,cloud,ice,locked}-{hi,,lo,lip}`, slots, accent text `--t-*`, tints, the warm sky, scrims, drops, radii, the type scale `--fs-d-*` / `--fs-*`, motion) and every shared recipe: `.btn` (+ `--primary/--blue/--violet/--pink/--gold/--danger/--plain`, `--sm/--lg/--xl`, `--sq`, `--round`), `.candy`, `.f-*` face classes, `.panel`/`.card`/`.dialog` (+ `--gold/--violet/…`), `.plate`, `.well`, `.ribbon`, `.counter` (`.chip--snow`, `.chip--stars`), `.medal`, `.chip` (+ `--dark`, `--btn`), `.tag`, `.sticker`, `.lock-badge`, `.bar` (+ tones, `--sm`, `.bar-label`, `.bar-gain`), `.tabs`/`.tab`, `.seg`, `.switch`, `.range`, fields, `.toast`, dialogs and sheets, `.node` (level disc), the menu sky, `.burst`, and the high-contrast rules. Legacy v1.4 token names are aliases there until no rule uses them. `.f-ice` (with `--ice-lip`) is the Elementals' Nubs face. A recipe variant the spec lists but no screen uses (`.panel--red`, `.panel--cloud`, `.ribbon--violet`, `.bar--blue`, `.reward--chip`, `.node.is-current`, `.rows`) is left out until one does, to hold the size budget. |
 | `ui.css` | The shared layout: the root and its world-column insets, resets, screens, menus and headers, dialogs, toasts, modals, the rotate overlay. |
-| `styles/<screen>.css` | One file per screen (title, play, pause, dying, results, settings, daily, missions, wardrobe, profile, journey); they compose the kit and never copy it. |
+| `styles/<screen>.css` | One file per screen (title, play, pause, dying, results, settings, daily, missions, wardrobe, profile, journey, elementals); they compose the kit and never copy it. |
 | `a11y.css` | Reduced motion, desktop hover and forced colours, imported last. |
 | `gamify.css` | Imported by `gamify.ts`: the rank badge, XP meter, claim bubbles and the reward reveal (the streak card, the Profile and the Missions globe row are styled by `styles/missions.css` and `styles/profile.css`). |
 

@@ -1,0 +1,74 @@
+/* The Elementals screen (docs/ELEMENTALS.md §4.10, §5.5). Owner: UI. It composes other screens'
+   recipes: the Wardrobe's stage and its tile grid (the Trials), the Title tray's squares (the heroes,
+   made round), the kit's nodes, tags and lock badges; only what differs lives here. */
+
+/* The stage: a duo's two heroes side by side in one spotlight; the rule chips and Play across it. */
+.stage-spot.is-duo { grid-auto-flow: column; padding: 0 8px; border-radius: 48px; }
+
+.stage-spot.is-duo .preview-canvas { width: 72px; height: 72px; }
+
+.el-rules {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.el-stage .btn { grid-column: 1 / -1; font-size: var(--fs-d-md); }
+
+/* The heroes: round candy coins (≥ 64 px) with their names hung under them, as the Title's tray;
+   the focus ring and the selected one's ring on the coin. */
+.el-heroes { display: flex; justify-content: center; gap: 4px; }
+
+.hero-tile {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 88px;
+  padding: 2px 0 0;
+  border: 0;
+  background: none;
+}
+
+.el-disc { --r: 50%; --lipH: 5px; display: grid; place-items: center; width: 64px; height: 64px; padding-bottom: 3px; }
+
+.hero-tile.is-selected .el-disc { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
+
+.sui .hero-tile:focus-visible { outline: none; box-shadow: none; }
+
+.sui .hero-tile:focus-visible .el-disc { outline: 3px solid #fff; outline-offset: 3px; box-shadow: var(--sh), 0 0 0 9px var(--ink); }
+
+.el-name { position: relative; margin-top: -8px; font-size: 15px; line-height: 1.2; text-align: center; }
+
+.el-hcanvas { width: 52px; height: 52px; }
+
+.is-locked .el-hcanvas { filter: brightness(0); opacity: 0.55; }
+
+/* The Trials: two columns of Wardrobe tiles; a picked hero's Trials framed in gold. */
+.el-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.trial-tile { --rar: var(--cloud-lo); width: 100%; }
+
+.trial-tile.is-hl { --rar: var(--gold); }
+
+.trial-tile .node { --d: 44px; font-size: var(--fs-d-md); }
+
+.el-stars { --ic: 18px; display: flex; }
+
+.el-cast { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; }
+
+/* A hero's face: a small coin in its candy colour with its initial (never the colour alone). */
+.el-face {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--face);
+  font: 800 11px/1 var(--font-body);
+}
+
+.trial-tile .tray-lock { top: -6px; bottom: auto; }
+
+/* Opened since the last visit: the disc pops open (journey.css's keyframes). */
+.is-unlocked > :is(.node, .el-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }

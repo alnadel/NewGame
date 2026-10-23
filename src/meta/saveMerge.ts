@@ -9,6 +9,8 @@
 // - owned cosmetics and achievements keep everything either side added (and drop what one removed);
 // - Daily tries and pars merge per date, the run history keeps both sides' new runs;
 // - Journey stars take the larger per level and the unlocked level the higher;
+// - Elementals Trial stars take the larger per Trial and the screen's seen mark is OR-ed; a side
+//   without the field (a build from before them) leaves the other's as it is, never deleting it;
 // - XP and Snow Globes add both sides' deltas, the streak with the later claim wins, unlocked
 //   features and seen marks keep everything either side added;
 // - settings, outfit, the comfort rung and missions keep this instance's choice.
@@ -18,7 +20,7 @@
 // everything either side owns, every run either side recorded. That never loses one side's
 // progress to the other's, but runs both made meanwhile can count once.
 
-import type { CampaignState, DailyEntry, GamifyState, RunRecord, Save, SaveStats, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, ElementalsState, GamifyState, RunRecord, Save, SaveStats, WeekState } from './saveTypes.ts';
 import { DAILY_TRIES } from './daily.ts';
 
 const ADDITIVE = [
@@ -162,6 +164,17 @@ function campaignBoth(l: CampaignState, r: CampaignState): CampaignState {
   return out;
 }
 
+/** Both sides' Trial stars (the larger per Trial) and seen marks (either). */
+function elementalsBoth(l: ElementalsState, r: ElementalsState): ElementalsState {
+  return { stars: Array.from({ length: Math.max(l.stars.length, r.stars.length) }, (_, i) => Math.max(l.stars[i] ?? 0, r.stars[i] ?? 0)), seen: l.seen || r.seen };
+}
+
+/** The Elementals of a merge (`a` null: a join); a side without them keeps the other's. */
+function elementalsMerge(a: ElementalsState | undefined | null, l: ElementalsState | undefined, r: ElementalsState | undefined): { elementals?: ElementalsState } {
+  const e = !l ? r : !r ? l : a ? three(a, l, r, elementalsBoth) : elementalsBoth(l, r);
+  return e ? { elementals: e } : {};
+}
+
 const laterStreak = (l: GamifyState['streak'], r: GamifyState['streak']): GamifyState['streak'] =>
   r.last > l.last || (r.last === l.last && r.days > l.days) ? r : l;
 
@@ -207,6 +220,7 @@ function joinSaves(local: Save, remote: Save): Save {
     history: historyJoin(local.history, remote.history),
     week: weekBoth(local.week, remote.week),
     campaign: campaignBoth(local.campaign, remote.campaign),
+    ...elementalsMerge(null, local.elementals, remote.elementals),
     gamify: gamifyMerge(null, local.gamify, remote.gamify),
     lastPlay: local.lastPlay > remote.lastPlay ? local.lastPlay : remote.lastPlay,
     flags,
@@ -242,6 +256,7 @@ export function mergeSaves(base: Save | null, local: Save, remote: Save): Save {
     history: three(base.history, local.history, remote.history, (l, r, a) => historyMerge(a, l, r)),
     week: three(base.week, local.week, remote.week, weekBoth),
     campaign: three(base.campaign, local.campaign, remote.campaign, campaignBoth),
+    ...elementalsMerge(base.elementals, local.elementals, remote.elementals),
     gamify: three(base.gamify, local.gamify, remote.gamify, (l, r, a) => gamifyMerge(a, l, r)),
     lastPlay: three(base.lastPlay, local.lastPlay, remote.lastPlay, (l, r) => (l > r ? l : r)),
     flags: fields(base.flags, local.flags, remote.flags, (key, l, r) =>
