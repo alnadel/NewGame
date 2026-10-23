@@ -1515,7 +1515,8 @@ the code decided where the spec left room. Every hero rule is gated on `s.trial 
 - **`applyHeroDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial).
   Per body, lead first (`bodyTick`): the hero's rate (per s, in `nb.rate`) and safe set (`nb.safe`)
   from `nb.c` (Drip: `nb.w[0]`), the lead's TAG grace (the rate floored at 0), the meter (clamped;
-  Drip boils at 100 to 0 with `heroCause 'boil'`, and keeps its side with hysteresis), health into
+  Drip boils at 100 to 0 with `heroCause 'boil'`, and keeps its side with hysteresis; a Blazing
+  Ember reads c ≥ 5 and a Cloudbursting Drip is safe while its ability runs), health into
   `stats.minChill` and `lowChill`, and `keepMemory` (glare touches, the last shader, cloud rides:
   the block `applyDaylight` used to inline, now shared). Then once: Volt's strike on its
   lit-to-shaded edge, Harmony, the ability hero's income through `addFrost` (× `harmonyMul`; nothing
