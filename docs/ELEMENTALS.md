@@ -1709,7 +1709,7 @@ measured record in §5.3.
 | 1 typecheck | clean (both tsconfigs) |
 | 2 `npm test` | 56 files, 1,075 tests pass (architecture scan included) |
 | 3 goldens | `node scripts/golden.ts` leaves `hashes.json` unchanged; against the pre-Elementals base only the `trials` key is added (0 lines removed) |
-| 4 `sim --check --seeds 40` | all 36 targets met |
+| 4 `sim --check --seeds 40` | "All targets met": the 36 acceptance rows pass (exit 0); the 14 advisory MISS rows never fail `--check` and are the Nubs game's own (its runs are byte-identical) |
 | 5 `sim --campaign --bot all --tries 3` | all hard gates met: oracle 200/200, reactive 99.5% (100% of 1-100), oracle+feats ★2 on 100%; the advisory misses are the Journey's own (humanDial ★ on 41-200 0.68; the `flakes` and `still` Dares; no parry Dare on L70 and L200) |
 | 6 `sim --trials --check` | all eight trials pass every gate, waived: T2 G5, T3 G4, T5 G6, T7 G5 (8.4 s, 496 runs) |
 | 7 `bench-step` | step 10.35 against 9.60 µs/tick on c956421 (1.078, bar ≤ 1.10), guide refresh 1.045 (bar ≤ 1.5); against the pre-Elementals base 03c29ba: step 0.987, guide 1.000. `--gen` on c956421: p99 slice 1.41 ms, paired 1.056 / 0.876 / 0.875, pass |
