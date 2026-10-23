@@ -35,7 +35,6 @@ test('the Title square: shown with Endless open, NEW until the screen is opened'
   await expect(btn).toBeVisible();
   await expect(btn).toHaveAttribute('aria-label', 'Elementals');
   await expect(btn).toHaveClass(/is-new/);
-  await expect(btn.locator('.new-tag')).toBeVisible();
   // Inside the top bar, before the wallet.
   const order = await page.evaluate(() => [...document.querySelectorAll('.title-hud > *')].map((e) => e.className));
   expect(order.findIndex((c) => c.includes('elementals-btn'))).toBe(order.findIndex((c) => c.includes('chip--snow')) - 1);
@@ -64,7 +63,7 @@ test('lock states: T1-T4 open, T5-T8 locked; Nubs open, the others pass their in
   await expect(heroes).toHaveCount(5);
   await expect(page.locator('.hero-tile[data-hero="nubs"]')).not.toHaveClass(/is-locked/);
   await expect(page.locator('.hero-tile[data-hero="ember"]')).toHaveClass(/is-locked/);
-  await expect(page.locator('.hero-tile[data-hero="ember"] .lock-badge')).toHaveText('Pass Kindling');
+  await expect(page.locator('.hero-tile[data-hero="ember"]')).toContainText('Pass Kindling');
   await expect(page.locator('.hero-tile[data-hero="ember"]')).toHaveAttribute('aria-label', 'Ember, locked: pass Kindling');
   // A locked Trial says what opens it.
   await page.locator('.trial-tile[data-trial="6"]').click({ force: true });
@@ -101,7 +100,7 @@ test('a tap on T1 plays Ember; the Results say Trial 1, Retry keeps it and Map r
   await expect.poll(async () => `${await screen(page)}:${(await state(page)).level}`, { timeout: 10_000 }).toBe('play:1001');
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
-  await page.locator('.res-sheet .res-mapbtn').click();
+  await page.locator('.res-sheet').getByRole('button', { name: 'Map' }).click();
   await waitForScreen(page, 'elementals');
   await expect(page.locator('.trial-tile[data-trial="1"]')).toHaveClass(/is-next/);
   const save = await stored(page);

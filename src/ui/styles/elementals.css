@@ -1,153 +1,47 @@
-/* The Elementals screen (docs/ELEMENTALS.md §4.10, §5.5): the hero stage, five round hero tiles and
-   the eight Trials in two columns. Owner: UI. Composes the Wardrobe's stage (.stage, .stage-spot,
-   .preview-canvas, .preview-name, .preview-note) and the kit's nodes, tags, stars and lock badges. */
+/* The Elementals screen (docs/ELEMENTALS.md §4.10, §5.5). Owner: UI. It composes other screens'
+   recipes: the Wardrobe's stage and its tile grid (the Trials), the Title tray's squares (the heroes,
+   made round), the kit's nodes, tags and lock badges; only what differs lives here. */
 
-/* ===== The stage: the hero(es), the words, the dial swatch and Play ===== */
+/* The stage: a duo's two heroes side by side in one spotlight; the rule chips and Play across it. */
+.stage-spot.is-duo { grid-auto-flow: column; padding: 0 8px; border-radius: 48px; }
 
-.el-stage .preview-canvas { width: 120px; height: 120px; }
-
-/* A duo Trial: its two heroes side by side in one spotlight. */
-.stage-spot.is-duo { grid-auto-flow: column; padding: 0 6px; border-radius: 48px; }
-
-.stage-spot.is-duo .preview-canvas { width: 76px; height: 76px; }
-
-.el-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 8px;
-}
-
-.el-ability {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink);
-  font-size: var(--fs-sm);
-  font-weight: 800;
-}
-
-.el-dial > svg { display: block; width: 44px; height: 29px; }
+.stage-spot.is-duo .preview-canvas { width: 72px; height: 72px; }
 
 .el-rules {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 2px 0 6px;
 }
 
 .el-stage .btn { grid-column: 1 / -1; font-size: var(--fs-d-md); }
 
-@media (max-height: 720px) {
-  .el-stage .preview-canvas { width: 96px; height: 96px; }
-  .stage-spot.is-duo .preview-canvas { width: 64px; height: 64px; }
-}
+/* The heroes: round coins (≥ 64 px) that scroll with the menu; the focus ring and the selected
+   one's ring on the coin, as the tray's. */
+.hero-tile { touch-action: auto; }
 
-/* ===== Hero tiles: a round candy coin in the hero's face, its name (or what opens it) under it ===== */
+.sui .hero-tile:focus-visible { box-shadow: none; }
 
-.el-heroes {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  align-items: start;
-}
+.hero-tile .tray-disc { --r: 50%; width: 64px; height: 64px; }
 
-.hero-tile {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-}
+.hero-tile.is-selected .tray-disc { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
 
-.el-disc {
-  --r: 50%;
-  --lipH: 5px;
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  padding-bottom: 5px;
-  transition: var(--tr-up);
-}
-
-.hero-tile.is-selected .el-disc { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
-
-.hero-tile:active .el-disc { transform: translateY(3px); }
-
-.sui .hero-tile:focus-visible { outline: none; }
-
-.sui .hero-tile:focus-visible .el-disc { outline: 3px solid #fff; outline-offset: 3px; box-shadow: var(--sh), 0 0 0 9px var(--ink); }
+.hero-tile .tray-label { white-space: normal; }
 
 .el-hcanvas { width: 52px; height: 52px; }
 
-/* Ink on cream at a fixed 15 px (like the tray's labels), tucked over the coin's bottom edge. */
-.el-hname {
-  position: relative;
-  z-index: 2;
-  margin-top: -10px;
-  padding: 0 6px 1px;
-  font-size: 15px;
-}
+/* The Trials: two columns of Wardrobe tiles; a picked hero's Trials framed in gold. */
+.el-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-/* Locked: a gold badge that says what opens the hero ("Pass Kindling"), wrapped to its column. */
-.el-hname.lock-badge {
-  --ic: 12px;
-  width: auto;
-  max-width: 100%;
-  height: auto;
-  padding: 2px 5px 3px;
-  border-radius: 10px;
-  font: 800 var(--fs-2xs)/1.1 var(--font-body);
-  text-align: center;
-  white-space: normal;
-}
+.trial-tile { --rar: var(--cloud-lo); }
 
-.el-hname.lock-badge .ic { display: inline; vertical-align: -1px; margin-right: 2px; }
+.trial-tile.is-hl { --rar: var(--gold); }
 
-/* ===== Trial tiles: a "T3" disc, the name, the best stars and the cast's faces ===== */
+.trial-tile .node { --d: 44px; font-size: var(--fs-d-md); }
 
-.el-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 10px;
-}
+.el-stars { --ic: 18px; display: flex; }
 
-.trial-tile {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  justify-items: start;
-  gap: 4px 9px;
-  min-height: 84px;
-  padding: 9px 8px 10px 11px;
-  border: var(--line);
-  border-radius: 18px;
-  background: var(--cream);
-  box-shadow: var(--drop);
-  color: var(--ink);
-  text-align: left;
-  transition: var(--tr-up);
-}
-
-.trial-tile:active { transform: translateY(3px); }
-
-.trial-tile .node { --d: 44px; grid-row: 1 / 3; font-size: var(--fs-d-md); }
-
-.el-tname { font-size: var(--fs-d-sm); line-height: 1.05; }
-
-.el-stars { display: flex; }
-
-.el-stars > .ai { width: 18px; height: 18px; }
-
-.el-cast {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  font-size: var(--fs-xs);
-}
+.el-cast { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; }
 
 /* A hero's face: a small coin in its candy colour with its initial (never the colour alone). */
 .el-face {
@@ -161,39 +55,7 @@
   font: 800 11px/1 var(--font-body);
 }
 
-.trial-tile .lock-badge { position: absolute; top: -8px; right: -6px; }
+.trial-tile .tray-lock { top: -6px; bottom: auto; }
 
-.trial-tile:not(.is-locked) .lock-badge { display: none; }
-
-.trial-tile.is-locked { background: var(--locked-hi); }
-
-.trial-tile.is-locked .el-tname { color: var(--ink-2); }
-
-/* The selected Trial (Play's): a green disc with a white and an ink ring. */
-.trial-tile.is-next .node {
-  --hi: var(--green-hi);
-  --face: var(--green);
-  --lo: var(--green-lo);
-  --lip: var(--green-lip);
-  --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink);
-}
-
-/* The Trials of the hero picked on the stage. */
-.trial-tile.is-hl { box-shadow: 0 0 0 4px var(--gold), var(--drop); }
-
-.sui .trial-tile:focus-visible {
-  outline: 3px solid #fff;
-  outline-offset: 3px;
-  box-shadow: var(--drop), 0 0 0 9px var(--ink);
-}
-
-/* Opened since the last visit: the disc (or the hero) pops open (journey.css's keyframes). */
-:is(.trial-tile, .hero-tile).is-unlocked :is(.node, .el-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }
-
-.sui.is-rm :is(.trial-tile:active, .hero-tile:active .el-disc) { transform: none; }
-
-.sui.is-hc :is(.el-disc, .el-face) { background: var(--face); }
-
-@media (forced-colors: active) {
-  .trial-tile.is-next { outline: 2px solid Highlight; outline-offset: 2px; }
-}
+/* Opened since the last visit: the disc pops open (journey.css's keyframes). */
+.is-unlocked > :is(.node, .tray-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }
