@@ -4,6 +4,7 @@
 import type { FeatKind } from '../../config/campaign.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { DayPlan, NoonCloud } from '../../config/days.ts';
+import type { HeroDeath, HeroId } from '../../config/heroes.ts';
 
 export type HourGlyph = 'cool' | 'warm' | 'hot' | 'melt';
 
@@ -27,6 +28,9 @@ export interface DeathInfo {
   nextId?: number;
   nextName?: string;
   ballId?: number;
+  /** Trials: the hero who failed and how. */
+  who?: HeroId;
+  heroCause?: HeroDeath;
 }
 
 export type SimEvent =
@@ -89,7 +93,15 @@ export type SimEvent =
   | { e: 'flareEnd'; id: number }
   // Dares (CORE-2): a Dare's live count changed; a Dare was met.
   | { e: 'feat'; kind: FeatKind; value: number; target: number }
-  | { e: 'featMet'; kind: FeatKind };
+  | { e: 'featMet'; kind: FeatKind }
+  // Elementals (docs/ELEMENTALS.md §4.5): abilities, Volt's strikes, a non-Nubs pickup, relay TAGs.
+  | { e: 'ability'; hero: HeroId; kind: 'blaze' | 'seed' | 'thunder' | 'rain'; x: number; y: number }
+  | { e: 'abilityEnd'; kind: 'blaze' | 'rain' }
+  | { e: 'strike'; chain: number; gain: number; thunder: boolean; x: number; y: number }
+  | { e: 'heroPickup'; hero: HeroId; delta: number; x: number; y: number }
+  | { e: 'tagSoon'; to: HeroId; ticks: number }
+  | { e: 'tag'; from: HeroId; to: HeroId; index: number }
+  | { e: 'tagClean'; to: HeroId };
 
 export type SimEventName = SimEvent['e'];
 
@@ -122,7 +134,10 @@ export interface RunStats {
   swings: number;
   swingChainBest: number;
   phewMinChill: number;
-  /** Lowest Chill during daylight (the starting Chill when never lit; campaign star 3). */
+  /**
+   * Lowest Chill during daylight (the starting Chill when never lit; campaign star 3). On Trials:
+   * the lowest health (0..100) of any body during daylight, from 100 (docs/ELEMENTALS.md §4.5).
+   */
   minChill: number;
   /** v1.5: sunflowers bloomed, Cold Snaps cast, seconds in deep shade (absent = 0). */
   blooms?: number;
@@ -168,6 +183,21 @@ export interface RunStats {
   lockWindows?: number;
   gustHeld?: number;
   gustWindows?: number;
+  // Elementals (docs/ELEMENTALS.md §4.5): written only on Trials (created at 0 there), absent in Nubs runs.
+  /** Ticks blazing while the raw lit sum is below Ember's safe set (the T1 Dare). */
+  blazeTicks?: number;
+  /** Sprout's SEEDs cast (the next sunflower's id is SEED_ID_BASE + seeds). */
+  seeds?: number;
+  /** Volt's strikes (Thunderclaps included) and the best chain. */
+  strikes?: number;
+  bestChain?: number;
+  /** Drip's ticks with T in the calm band. */
+  calmTicks?: number;
+  /** Relay TAGs, and the clean ones. */
+  tags?: number;
+  cleanTags?: number;
+  /** Duo ticks with both bodies safe. */
+  harmonyTicks?: number;
 }
 
 export type RunMode = 'endless' | 'daily' | 'challenge' | 'campaign';

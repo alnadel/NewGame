@@ -19,6 +19,7 @@ import {
   formatTimeOfDay,
   generateSome,
   lerpSnap,
+  anyLevelDef,
   levelDef,
   levelProgress,
   PLAN_START_DATE,
@@ -712,7 +713,7 @@ export class Session {
       this.runFrame(now);
       if (!this.booted) {
         this.booted = true;
-        if (this.params.level !== null && levelDef(this.params.level)) {
+        if (this.params.level !== null && anyLevelDef(this.params.level)) {
           // ?level=N opens the level directly: the intro card holds until the first tap (a ?bot=
           // plays it at once).
           this.ui.show('play');
@@ -1158,11 +1159,13 @@ export class Session {
     this.cfgRung = -1;
     this.cfgWarmup = false;
     this.cfgLevel = null;
-    const def = kind === 'campaign' ? levelDef(level ?? 1) : null;
+    const def = kind === 'campaign' ? anyLevelDef(level ?? 1) : null;
     if (def) {
-      // A campaign level (CAMPAIGN_PLAN §4): the level's own rules, never the comfort ladder.
+      // A campaign level (CAMPAIGN_PLAN §4) or an Elementals Trial: the level's own rules, never the
+      // comfort ladder. A solo Trial opened with ?hero= walks that hero (a debug run).
       this.cfgLevel = def;
       cfg = campaignConfig(def, rm, save.flags.tutorialDone, relaxedGoalFor(def, save.campaign.misses?.[def.id - 1] ?? 0));
+      if (p.hero !== null && def.id === p.level) cfg.hero = p.hero;
       this.kind = 'campaign';
     } else if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());

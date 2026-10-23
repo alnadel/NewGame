@@ -23,7 +23,7 @@ import {
 } from '../shadows.ts';
 import type { HourGlyph, SimEvent } from './events.ts';
 import { addFrost, addFrostH, SNAP_TICKS } from './mechanics.ts';
-import type { SimState } from './types.ts';
+import type { NubsState, SimState } from './types.ts';
 
 const N = TUNING.nubs;
 const M = TUNING.mult;
@@ -51,12 +51,13 @@ const cloudHits = new Int32Array(64);
 const candBalls: GazingBall[] = [];
 
 /**
- * Computes the per-sample lit weights w, f, the glare count, the caster shading the center sample,
- * the cloud fully covering Nubs (never the Cold Snap's), the glaring ball and deep shade (v1.5:
- * fully shaded with two or more casters or clouds over the center sample), at Nubs' position.
+ * Computes the per-sample lit weights w, their integer sum c, f, the glare count, the caster
+ * shading the center sample, the cloud fully covering Nubs (never the Cold Snap's), the glaring ball
+ * and deep shade (v1.5: fully shaded with two or more casters or clouds over the center sample), at
+ * the position of body `nb` (Nubs, or an Elementals duo's mate; the scratch is shared, one call
+ * after the other).
  */
-export function computeCoverage(s: SimState): void {
-  const nb = s.nubs;
+export function computeCoverage(s: SimState, nb: NubsState = s.nubs): void {
   const w = s.world;
   nb.shaderId = -1;
   nb.cloudId = -1;
@@ -65,6 +66,7 @@ export function computeCoverage(s: SimState): void {
   nb.deepReal = false;
   if (!s.sunUp || s.eclipseOn) {
     nb.w.fill(0);
+    nb.c = 0;
     nb.f = 0;
     nb.fReal = 0;
     nb.glare = 0;
@@ -171,6 +173,7 @@ export function computeCoverage(s: SimState): void {
     sumReal += inG ? 2 : real ? 0 : 1;
     if (inG) glare++;
   }
+  nb.c = sum;
   nb.f = sum / SAMPLES;
   nb.fReal = sumReal / SAMPLES;
   nb.glare = glare;

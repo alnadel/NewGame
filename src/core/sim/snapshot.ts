@@ -24,10 +24,14 @@ export interface RenderSnap {
   chill: number;
   f: number;
   mult: number;
+  /** Elementals duo: the mate's position and meter (0 when there is no mate). */
+  mateX: number;
+  mateY: number;
+  mateChill: number;
 }
 
 export function createSnap(): RenderSnap {
-  return { tick: 0, tAbs: 0, day: 1, dayTick: 0, phase: 'hold', nubsX: 0, nubsY: 0, theta: 0, ux: 1, uy: 0, eps: 0, tanEps: 0, cot: 0, chill: 0, f: 0, mult: 1 };
+  return { tick: 0, tAbs: 0, day: 1, dayTick: 0, phase: 'hold', nubsX: 0, nubsY: 0, theta: 0, ux: 1, uy: 0, eps: 0, tanEps: 0, cot: 0, chill: 0, f: 0, mult: 1, mateX: 0, mateY: 0, mateChill: 0 };
 }
 
 export function takeSnap(s: SimState, out: RenderSnap): void {
@@ -47,10 +51,14 @@ export function takeSnap(s: SimState, out: RenderSnap): void {
   out.chill = s.nubs.chill;
   out.f = s.nubs.f;
   out.mult = s.nubs.mult;
+  const m = s.mate;
+  out.mateX = m !== null ? m.x : 0;
+  out.mateY = m !== null ? m.y : 0;
+  out.mateChill = m !== null ? m.chill : 0;
 }
 
 /**
- * Blends two snapshots: positions, time, Chill and ε linearly; θ along the short arc. Discrete
+ * Blends two snapshots: positions (a duo mate's too), time, Chill and ε linearly; θ along the short arc. Discrete
  * fields (day, phase, mult) come from `b`. Shadows should be rebuilt from out.ux/uy/cot.
  */
 export function lerpSnap(a: RenderSnap, b: RenderSnap, alpha: number, out: RenderSnap): void {
@@ -65,6 +73,9 @@ export function lerpSnap(a: RenderSnap, b: RenderSnap, alpha: number, out: Rende
   out.nubsY = a.nubsY + (b.nubsY - a.nubsY) * t;
   out.chill = a.chill + (b.chill - a.chill) * t;
   out.f = a.f + (b.f - a.f) * t;
+  out.mateX = a.mateX + (b.mateX - a.mateX) * t;
+  out.mateY = a.mateY + (b.mateY - a.mateY) * t;
+  out.mateChill = a.mateChill + (b.mateChill - a.mateChill) * t;
   out.theta = wrapDeg(a.theta + angleDiff(b.theta, a.theta) * t);
   out.ux = cosD(out.theta);
   out.uy = sinD(out.theta);

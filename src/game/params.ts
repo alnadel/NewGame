@@ -1,6 +1,21 @@
 // Debug and test URL parameters (V1_PLAN §14, archive/TECH_SPEC §17).
 
-import { BOT_KINDS, COMFORT_MAX, dayLength, FORECAST_IDS, V16_RULES, type BotKind, type ForecastId, type ProfileId, type V16Rules } from '../core/index.ts';
+import {
+  BOT_KINDS,
+  COMFORT_MAX,
+  dayLength,
+  FORECAST_IDS,
+  HERO_IDS,
+  TRIAL_BASE,
+  TRIAL_COUNT,
+  trialDef,
+  V16_RULES,
+  type BotKind,
+  type ForecastId,
+  type HeroId,
+  type ProfileId,
+  type V16Rules,
+} from '../core/index.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';
 
 export interface Params {
@@ -27,8 +42,13 @@ export interface Params {
   rung: number | null;
   /** Forces the Day Plan on or off (cfg.plan, A1); baselines pin ?plan=0. */
   plan: boolean | null;
-  /** Opens this campaign level (1..200) directly: a normal campaign run unless other debug params are present. */
+  /**
+   * Opens this campaign level (1..200) directly: a normal campaign run unless other debug params are
+   * present. Elementals: ?trial=1..8 opens Trial n as level 1000 + n (it wins over ?level=).
+   */
   level: number | null;
+  /** Elementals dev override (?hero=, docs/ELEMENTALS.md §4.10): a solo Trial's hero (cfg.hero); null otherwise. */
+  hero: HeroId | null;
   /** v1.6 rules switched by ?on=bank,… and ?off=flares,… (cfg.v16, over the shipped V16_SHIP); null when neither. */
   rules: Partial<V16Rules> | null;
 }
@@ -61,6 +81,10 @@ export function parseParams(search: string, today: string = localDate()): Params
   const forecast = q.get('forecast');
   const plan = q.get('plan');
   const level = num('level');
+  const trial = num('trial');
+  const tn = trial !== null && trial >= 1 && trial <= TRIAL_COUNT ? TRIAL_BASE + Math.floor(trial) : null;
+  const solo = tn !== null ? trialDef(tn) : null;
+  const hero = q.get('hero');
   let rules: { -readonly [K in keyof V16Rules]?: boolean } | null = null;
   for (const [k, v] of [['on', true], ['off', false]] as const) {
     for (const r of (q.get(k) ?? '').split(',')) if ((V16_RULES as readonly string[]).includes(r)) (rules ??= {})[r as keyof V16Rules] = v;
@@ -84,7 +108,8 @@ export function parseParams(search: string, today: string = localDate()): Params
     forecast: forecast && (FORECAST_IDS as readonly string[]).includes(forecast) ? (forecast as ForecastId) : null,
     rung: rung !== null && rung >= 0 && rung <= COMFORT_MAX ? Math.floor(rung) : null,
     plan: plan === '1' ? true : plan === '0' ? false : null,
-    level: level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null,
+    level: tn ?? (level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null),
+    hero: solo && solo.duo === null && solo.relays.length === 0 && hero && (HERO_IDS as readonly string[]).includes(hero) ? (hero as HeroId) : null,
     rules,
   };
 }
@@ -105,9 +130,10 @@ export function startTFor(t: string | null, day: number): number | null {
 
 /**
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
- * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward or a guide override. Such runs are not
- * scored, saved, shared or counted as Daily tries (they work in production builds for QA). ?seed,
- * ?mode=daily&date, ?level, ?mute, ?debug, ?test and ?perf don't make a run a debug run.
+ * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward, a guide override or a Trial's
+ * ?hero=. Such runs are not scored, saved, shared or counted as Daily tries (they work in production
+ * builds for QA). ?seed, ?mode=daily&date, ?level, ?trial, ?mute, ?debug, ?test and ?perf don't make
+ * a run a debug run.
  */
 export function isDebugRun(p: Params): boolean {
   return (
@@ -121,6 +147,7 @@ export function isDebugRun(p: Params): boolean {
     p.forecast !== null ||
     p.rung !== null ||
     p.plan !== null ||
-    p.rules !== null
+    p.rules !== null ||
+    p.hero !== null
   );
 }

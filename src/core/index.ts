@@ -66,6 +66,24 @@ export type {
   LevelStats,
   Mechanics,
 } from '../config/campaign.ts';
+// Elementals (docs/ELEMENTALS.md §4.2-§4.3): the heroes and the Trials.
+export { HERO_IDS, HEROES } from '../config/heroes.ts';
+export type { AbilityKind, HeroDeath, HeroFace, HeroId, HeroInfo } from '../config/heroes.ts';
+export {
+  anyLevelDef,
+  isTrialId,
+  levelShort,
+  levelTag,
+  TRIAL_BASE,
+  TRIAL_COUNT,
+  TRIAL_IDS,
+  trialDareValue,
+  trialDef,
+  trialLevel,
+  TRIALS,
+  trialStars,
+} from '../config/trials.ts';
+export type { TrialDareKind, TrialDef, TrialDuo, TrialRelay } from '../config/trials.ts';
 
 // Clock and formatting
 export {
@@ -109,6 +127,7 @@ export {
   PICKUP_MELTED,
   PICKUP_TAKEN,
   RUNTIME_ID_BASE,
+  SEED_ID_BASE,
   SNAP_ID_BASE,
 } from './objects.ts';
 export type {
@@ -203,6 +222,7 @@ export { meltBudgetOf } from './sim/pickups.ts';
 export { debugFlare, flarePhaseAt } from './sim/flares.ts';
 export { glassInWindow } from './sim/guide.ts';
 export { createSnap, lerpSnap, takeSnap } from './sim/snapshot.ts';
+export { abilityHero, heroHealth, heroRates, heroStart, nextTagHero, nextTagTicks, relayY, tagLocked } from './sim/heroes.ts';
 export type { RenderSnap } from './sim/snapshot.ts';
 export { historyAt, historyLength } from './sim/history.ts';
 export { buildRunResult } from './sim/result.ts';

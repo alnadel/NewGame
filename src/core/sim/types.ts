@@ -6,6 +6,8 @@ import { TUNING } from '../../config/tuning.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { BiomeId, DayParams, NoonCloud, ProfileId } from '../../config/days.ts';
 import type { ForecastId } from '../../config/forecasts.ts';
+import type { HeroDeath, HeroId } from '../../config/heroes.ts';
+import type { TrialDef } from '../../config/trials.ts';
 import type { World } from '../gen/store.ts';
 import type { DeathInfo, HourGlyph, RunMode, RunStats, SimEvent } from './events.ts';
 
@@ -148,6 +150,8 @@ export interface RunConfig {
   relaxedGoal?: boolean;
   /** v1.6 debug: force the glass-cluster quota to this share 0..1 (screenshots); part of the world's identity. */
   brittleShare?: number;
+  /** Elementals dev override (?hero=): the hero of a solo Trial. Never set outside Trials; not part of WorldConfig. */
+  hero?: HeroId;
 }
 
 /**
@@ -271,6 +275,14 @@ export interface NubsState {
   frostH: number;
   /** The last tick a SWING paid frost (at most once per TUNING.bank.swingEveryTicks). */
   swingFrostTick: number;
+  // Elementals (docs/ELEMENTALS.md §4.4).
+  /** Elementals: the hero this body is now (a relay changes it); 'nubs' in every Nubs run. */
+  hero: HeroId;
+  /** Integer lit sum Σw, 0..10 (computeCoverage, every run). */
+  c: number;
+  /** Trials only: the meter's rate this tick (per s; strikes and pickups excluded) and whether the body is in its hero's safe set. 0 / false otherwise. */
+  rate: number;
+  safe: boolean;
 }
 
 export interface GuideState {
@@ -299,6 +311,10 @@ export interface GuideState {
   readonly flare: Uint8Array;
   /** Ticks to the rise during a flare warning, −1 otherwise. CORE-2. */
   flareTicks: number;
+  /** Trials: the lead's own safe mask, the mate's (duo), and the incoming hero's during a TAG telegraph; all 0 otherwise. */
+  readonly lead: Uint8Array;
+  readonly mate: Uint8Array;
+  readonly tag: Uint8Array;
 }
 
 export interface SimState {
@@ -431,4 +447,27 @@ export interface SimState {
    * is never dropped from 12 Chill to the full drain at once. Nightfall clears it.
    */
   lessonGrace: number;
+  // Elementals (docs/ELEMENTALS.md §4.4). Nubs runs: trial null, mate null, the rest at defaults, never read.
+  /** The Trial being played, or null: the gate for every hero rule. */
+  readonly trial: TrialDef | null;
+  /** Duo: the right-hand body, or null. */
+  readonly mate: NubsState | null;
+  /** The timed ability running and its ticks left (null / 0 none). */
+  heroAbility: 'blaze' | 'rain' | null;
+  heroTicks: number;
+  /** Relay: index of the next relay in trial.relays; TAG grace and clean-TAG watch ticks left. */
+  relayIdx: number;
+  tagGrace: number;
+  tagWatch: number;
+  /** Volt: lit (hysteresis), last strike θ (−1 none), chain (0 none), last strike tick (−1e9 none). */
+  voltLit: boolean;
+  voltTheta: number;
+  voltChain: number;
+  voltTick: number;
+  /** Drip: wants shade (true) or sun (false). */
+  dripCool: boolean;
+  /** Duo: both bodies safe this tick. */
+  harmony: boolean;
+  /** A hero ending the state cannot show ('hiss', 'boil'), set on that tick; else null. */
+  heroCause: HeroDeath | null;
 }

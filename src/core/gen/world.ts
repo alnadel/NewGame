@@ -6,9 +6,10 @@
 // never changes, so chunk content is a pure function of the WorldConfig, k and the prior chunks:
 // generating in idle frames, inside step(), in one go or in many slices yields the same world.
 
-import { ALL_MECHANICS, levelDef, mechanicsOf, type LevelDef, type Mechanics } from '../../config/campaign.ts';
+import { ALL_MECHANICS, mechanicsOf, type LevelDef, type Mechanics } from '../../config/campaign.ts';
 import { foldTuning, type ConceptId } from '../../config/concepts.ts';
 import { dayParams, effectiveNoonCloud } from '../../config/days.ts';
+import { anyLevelDef } from '../../config/trials.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, tickAtMinute, TICK_HZ, yAtTick } from '../clock.ts';
 import { binOf } from '../intervals.ts';
@@ -74,7 +75,7 @@ export function createWorld(cfg: WorldConfig, levelOverride?: LevelDef): World {
   const seed = cfg.seed >>> 0;
   let level: LevelDef | null = null;
   if (cfg.level !== undefined) {
-    level = levelOverride ?? levelDef(cfg.level);
+    level = levelOverride ?? anyLevelDef(cfg.level);
     if (!level) throw new Error(`unknown campaign level ${cfg.level}`);
   }
   const modList: readonly ConceptId[] = cfg.mods && cfg.mods.length > 0 ? Object.freeze(cfg.mods.slice()) : NO_MODS;

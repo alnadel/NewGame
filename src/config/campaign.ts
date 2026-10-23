@@ -217,6 +217,12 @@ export interface LevelStats {
   readonly gustWindows?: number;
   readonly snapSavedTicks?: number;
   readonly gateShaded?: number;
+  // Elementals Trial Dares (docs/ELEMENTALS.md §4.3 trialDareValue); a missing value counts as 0.
+  readonly blazeTicks?: number;
+  readonly bestChain?: number;
+  readonly calmTicks?: number;
+  readonly cleanTags?: number;
+  readonly harmonyTicks?: number;
 }
 
 /** The chapter of level `id`. */

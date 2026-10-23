@@ -1480,3 +1480,25 @@ afternoon flare (an 80-point scorch), crossed sun its 20-Chill tank could not af
   over 1 ms and 2 ms a minute paired at 1.1× beside the p99.
 - `sim --check` prints the oracle's Day-8 share with its count, and humanDial R3/R4's flare
   meeting (advisory ≥ 50%) with their 11 AM and first-night shares.
+
+## 17. Elementals (docs/ELEMENTALS.md)
+
+**C0, the contract commit** (§4.1): everything the other teams compile against, with placeholder
+physics. The spec is binding; this section only says where things live.
+- **Config.** `config/heroes.ts` (`HeroId`, `HERO_IDS`, `HEROES`: words, ability, face, intro);
+  `config/trials.ts` (`TRIALS` 1001..1008 with `salt: 0` placeholders, `isTrialId`, `trialDef`,
+  `trialLevel`, `anyLevelDef`, `levelTag`/`levelShort`, `trialDareValue`, `trialStars`);
+  `TUNING.heroes`.
+- **Runs.** `campaignConfig(id)` takes a trial id: the trial's mechanics, `v16: V16_NONE`,
+  `startFrost: 1`. `createRun` sets `s.trial`, the lead's hero (`cast[0]`, or `cfg.hero` on a solo
+  trial) and start meter (`heroStart`), a duo's `s.mate`, `stats.minChill = 100` and the eight hero
+  counters at 0. `syncTime` puts a duo's lead at `trailX − 11` and its mate at `+ 11`;
+  `computeCoverage(s, nb)` runs per body and writes the integer lit sum `nb.c`.
+- **Not yet.** `applyHeroDaylight`, relays (`updateRelay`), abilities, `heroGuide`, `heroDeath`
+  and the trial hash block: until they land every body's meter follows Nubs' rule on the lead
+  (the mate's meter holds), `guide.now` is Nubs' mask and a relay never fires.
+- **Helpers** (`sim/heroes.ts`): `heroHealth`, `heroStart`, `heroRates` (memoized per hero, drain
+  and regen; the §1.7 table), `abilityHero`, `tagLocked`, `nextTagTicks`, `nextTagHero`, `relayY`;
+  `SEED_ID_BASE` (objects.ts). `RenderSnap` gains `mateX/mateY/mateChill`.
+- **Nubs runs are unchanged**: `trial` and `mate` are null, no new rng draw or hash feed, and the
+  goldens hold byte for byte.

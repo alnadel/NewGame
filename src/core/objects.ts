@@ -154,6 +154,8 @@ export const BUD_ID_BASE = 0x20000000;
 /** v1.6: flakes placed two chunks behind the casters (like buds) take ids from here (CORE-2, T7). */
 export const FLAKE_ID_BASE = 0x30000000;
 export const RUNTIME_ID_BASE = 0x40000000;
+/** Elementals (docs/ELEMENTALS.md §1.3): Sprout's seeded sunflowers, SEED_ID_BASE + the run's seed count. */
+export const SEED_ID_BASE = 0x50000000;
 export const SNAP_ID_BASE = 0x60000000;
 
 /**

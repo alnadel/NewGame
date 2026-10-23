@@ -47,7 +47,10 @@ const GATE_NOON_TO = 420;
 /** 'gate' concept: Snow for walking under a gate arch fully shaded. */
 const GATE_SNOW = 10;
 
-/** Derives time, elevation, sun vector and Nubs' position from (day, dayTick, θ). */
+/** Elementals duo (docs/ELEMENTALS.md §2.2): the lead walks this far left of the trail centre, the mate as far right. */
+const DUO_DX = TUNING.heroes.duoDx;
+
+/** Derives time, elevation, sun vector and Nubs' position (a duo's two bodies) from (day, dayTick, θ). */
 export function syncTime(s: SimState): void {
   const daylight = s.dayTick < dayTicks(s.day);
   s.tDay = s.dayTick / TICK_HZ;
@@ -62,6 +65,12 @@ export function syncTime(s: SimState): void {
   s.uy = sinD(s.sun.theta);
   s.nubs.y = worldYAtDayTick(s.world, s.day, s.dayTick);
   s.nubs.x = trailX(s.world.trail, s.nubs.y);
+  const m = s.mate;
+  if (m !== null) {
+    m.y = s.nubs.y;
+    m.x = s.nubs.x + DUO_DX;
+    s.nubs.x -= DUO_DX;
+  }
 }
 
 /** 'eclipse' concept: sets eclipseOn and the 0..1 intensity for the current absolute tick. */
@@ -200,6 +209,7 @@ function readyTick(s: SimState): void {
   s.ux = cosD(s.sun.theta);
   s.uy = sinD(s.sun.theta);
   computeCoverage(s);
+  if (s.mate !== null) computeCoverage(s, s.mate);
   if (s.ready === 0) {
     s.lessonOn = s.cfg.lesson === true;
     s.events.push({ e: 'go' });
@@ -243,6 +253,7 @@ export function step(s: SimState, input: InputFrame): void {
   syncEclipse(s);
   updateSnap(s, inp);
   computeCoverage(s);
+  if (s.mate !== null) computeCoverage(s, s.mate);
   if (daylight) applyDaylight(s);
   else applyNight(s);
   updatePickups(s, daylight);

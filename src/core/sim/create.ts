@@ -1,6 +1,8 @@
 // createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
 
 import { startsWithSnap } from '../../config/campaign.ts';
+import type { HeroId } from '../../config/heroes.ts';
+import { trialDef } from '../../config/trials.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayTicks } from '../clock.ts';
 import { paramsAt, worldYAtDayTick } from '../gen/plan.ts';
@@ -9,8 +11,9 @@ import { resolveLevelConfig } from '../level.ts';
 import { syncTime } from './step.ts';
 import { computeCoverage } from './nubs.ts';
 import { updateGuide } from './guide.ts';
+import { heroStart } from './heroes.ts';
 import type { RunStats } from './events.ts';
-import type { RunConfig, SimState } from './types.ts';
+import type { NubsState, RunConfig, SimState } from './types.ts';
 
 function freshStats(day: number, chill: number): RunStats {
   return {
@@ -92,6 +95,65 @@ function startFrostH(w: World, cfg: RunConfig): number {
   return cfg.lesson === true ? 0 : B.runStartH;
 }
 
+/**
+ * A body on the trail (Nubs, or a duo's mate on Trials) at the start: its meter, the frost meter
+ * empty (createRun fills the lead's) and every tracker reset; hero 'nubs' (createRun sets a Trial's).
+ */
+function freshBody(chill: number, maxChill: number, theta0: number): NubsState {
+  return {
+    x: 0,
+    y: 0,
+    chill,
+    maxChill,
+    w: new Float64Array(5),
+    f: 0,
+    glare: 0,
+    mult: 1,
+    frost: 0,
+    deep: false,
+    deepTick: -1e9,
+    fReal: 0,
+    deepReal: false,
+    shadeTicks: 0,
+    litTicks: 0,
+    x5Ticks: 0,
+    phewOpen: true,
+    highChillTick: chill >= TUNING.phew.armChill ? 0 : -1e9,
+    litSince: -1,
+    shaderId: -1,
+    lastShaderId: -1,
+    lastShaderName: '',
+    lastShaderTick: -1e9,
+    cloudId: -1,
+    rideId: -1,
+    rideTicks: 0,
+    glareBallId: -1,
+    prevGlareBallId: -1,
+    litTheta: theta0,
+    swSrc: -1,
+    swTheta: theta0,
+    swTick: -1e9,
+    swPend: -1,
+    swPendDeg: 0,
+    swPendTicks: 0,
+    swChain: 0,
+    swLastTick: -1e9,
+    swPendFrom: -1,
+    ringCharge: 0,
+    litStartMult: 1,
+    budGrewTick: -1e9,
+    streak: 0,
+    swFresh: new Int32Array(2 * TUNING.ring.freshSlots),
+    swFreshN: 0,
+    frostH: 0,
+    swingFrostTick: -1e9,
+    hero: 'nubs',
+    c: 0,
+    rate: 0,
+    safe: false,
+  };
+}
+
 /** The start day and tick of a run (cfg.startDay/startT are debug hooks). */
 function startOf(cfg: RunConfig): { day: number; dayTick: number } {
   const day = Math.max(1, Math.floor(cfg.startDay ?? 1));
@@ -143,11 +205,24 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
   const { day, dayTick } = startOf(cfg);
   const params = paramsAt(world, day);
   const maxChill = params.maxChill;
-  const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? maxChill));
+  // Elementals: a Trial's lead walks as cast[0] (a solo Trial's ?hero= override) and starts at its hero's meter.
+  const trial = trialDef(cfg.level ?? 0);
+  const hero: HeroId = trial === null ? 'nubs' : (trial.relays.length === 0 && trial.duo === null && cfg.hero) || (trial.cast[0] as HeroId);
+  const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? (trial === null ? maxChill : heroStart(hero, maxChill))));
   const theta0 = world.theta0;
   const bank = world.v16.bank;
   const frostH = !world.mech.snap ? 0 : bank ? startFrostH(world, cfg) : Math.floor(100 * Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world, cfg))));
   const frost = !world.mech.snap ? 0 : bank ? frostH / TUNING.bank.costH : Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world, cfg)));
+  const nubs = freshBody(chill, maxChill, theta0);
+  nubs.frost = frost;
+  nubs.frostH = frostH;
+  nubs.hero = hero;
+  const duo = trial === null ? null : trial.duo;
+  let mate: NubsState | null = null;
+  if (duo !== null) {
+    mate = freshBody(heroStart(duo.right, maxChill), maxChill, theta0);
+    mate.hero = duo.right;
+  }
   const s: SimState = {
     cfg: { ...cfg },
     params,
@@ -173,54 +248,7 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     uy: 0,
     theta0,
     sun: { theta: theta0, lag: 0, omega: 0, omegaRel: 0, mode: 'idle', detent: Math.floor(theta0 / TUNING.sun.detentDeg), dTheta: 0, keyTicks: 0, keySign: 0, gust: 0, locked: false },
-    nubs: {
-      x: 0,
-      y: 0,
-      chill,
-      maxChill,
-      w: new Float64Array(5),
-      f: 0,
-      glare: 0,
-      mult: 1,
-      frost,
-      deep: false,
-      deepTick: -1e9,
-      fReal: 0,
-      deepReal: false,
-      shadeTicks: 0,
-      litTicks: 0,
-      x5Ticks: 0,
-      phewOpen: true,
-      highChillTick: (cfg.startChill ?? maxChill) >= TUNING.phew.armChill ? 0 : -1e9,
-      litSince: -1,
-      shaderId: -1,
-      lastShaderId: -1,
-      lastShaderName: '',
-      lastShaderTick: -1e9,
-      cloudId: -1,
-      rideId: -1,
-      rideTicks: 0,
-      glareBallId: -1,
-      prevGlareBallId: -1,
-      litTheta: theta0,
-      swSrc: -1,
-      swTheta: theta0,
-      swTick: -1e9,
-      swPend: -1,
-      swPendDeg: 0,
-      swPendTicks: 0,
-      swChain: 0,
-      swLastTick: -1e9,
-      swPendFrom: -1,
-      ringCharge: 0,
-      litStartMult: 1,
-      budGrewTick: -1e9,
-      streak: 0,
-      swFresh: new Int32Array(2 * TUNING.ring.freshSlots),
-      swFreshN: 0,
-      frostH,
-      swingFrostTick: -1e9,
-    },
+    nubs,
     snapTicks: 0,
     snapCloudId: -1,
     snapBankH: 0,
@@ -255,6 +283,9 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
       land: new Uint8Array(360),
       flare: new Uint8Array(360),
       flareTicks: -1,
+      lead: new Uint8Array(360),
+      mate: new Uint8Array(360),
+      tag: new Uint8Array(360),
     },
     world,
     stats: freshStats(day, chill),
@@ -277,11 +308,30 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     lessonSwung: false,
     lessonShade: 0,
     lessonGrace: 0,
+    trial,
+    mate,
+    heroAbility: null,
+    heroTicks: 0,
+    relayIdx: 0,
+    tagGrace: 0,
+    tagWatch: 0,
+    voltLit: true,
+    voltTheta: -1,
+    voltChain: 0,
+    voltTick: -1e9,
+    dripCool: true,
+    harmony: false,
+    heroCause: null,
   };
+  if (trial !== null) {
+    // Trials: minChill holds the lowest health of any body (§4.5); the hero counters start at 0.
+    Object.assign(s.stats, { minChill: 100, blazeTicks: 0, seeds: 0, strikes: 0, bestChain: 0, calmTicks: 0, tags: 0, cleanTags: 0, harmonyTicks: 0 });
+  }
   syncTime(s);
   s.nextHistoryY = s.nubs.y;
   ensureGenerated(world, s.nubs.y + ahead);
   computeCoverage(s);
+  if (mate !== null) computeCoverage(s, mate);
   updateGuide(s);
   return s;
 }
