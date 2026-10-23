@@ -137,7 +137,6 @@ import {
   STAR_GOAL,
   starRules,
   starState,
-  trialDareText,
   type HudGoal,
 } from './campaign.ts';
 import { formatScore } from '../core/format.ts';
@@ -2353,7 +2352,6 @@ export class Session {
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
       const f = level.feats[0];
       const t = s.trial;
-      if (t && !(bits & STAR_FLAKES)) labels[1] = trialDareText(t, s.stats);
       if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       return {
         title: `${levelTag(level.id)} · ${level.name}`,

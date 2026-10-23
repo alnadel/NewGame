@@ -18,22 +18,22 @@
 // soft-fail) says so at go.
 //
 // Elementals (docs/ELEMENTALS.md §6.3): a Trial gets its hero's tips (HERO_TIPS), a relay's or a
-// duo's own (RELAY_TIPS, DUO_TIPS) until it is passed (save.elementals); in a relay each hero's
-// 'go' tip comes when it takes over at its TAG. No Journey tips, mission steps or COMEBACK there.
+// duo's own (RELAY_TIPS, DUO_TIPS) until it is passed (save.elementals); in a relay each later
+// hero's 'go' tip comes when it takes over at its TAG ('tag', with the hero as its glyph). No Journey tips, mission steps or COMEBACK there.
 
-import { FLARE_KEPT, HEROES, levelProgress, queryBuds, trialDef, type Bud, type HeroId, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
+import { FLARE_KEPT, levelProgress, queryBuds, trialDef, type Bud, type HeroId, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import { featureUnlocked } from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
 import { endToast, endToasts, showToast, type Banners } from '../render/banners.ts';
-import { goalMetLive } from './campaign.ts';
+import { goalMetLive, trialGlyph } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
 /** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
 export type TipOn =
   | 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop'
-  | 'cash' | 'hot' | 'amber' | 'heal' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon' | 'scorch' | 'tagSoon';
+  | 'cash' | 'hot' | 'amber' | 'heal' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon' | 'scorch' | 'tagSoon' | 'tag';
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -235,8 +235,6 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let tipGlyph: string | null = null;
   /** The level whose goal tips apply (null outside the Journey and on a relaxed level: its goal is the finish). */
   let level: LevelDef | null = null;
-  /** A relay's heroes still to take their first turn: each one's 'go' tip waits for its TAG. */
-  const walk = new Map<HeroId, string>();
   /** COMEBACK: armed by Chill under the PHEW line while lit, spent until Chill climbs back; the tick shade was found (-1 none). */
   let burn = false;
   let spent = false;
@@ -249,11 +247,11 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let scorched = false;
   let frostLater = false;
 
-  /** Shows the level's tip for `on`, once per run (an `urgent` one ahead of any other toast). */
-  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false): void => {
+  /** Shows the level's tip for `on` (a relay's 'tag' one: `who`'s), once per run (an `urgent` one ahead of any other toast). */
+  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string): void => {
     for (let i = 0; i < tips.length; i++) {
       const t = tips[i] as readonly [TipOn, string, string?];
-      if (t[0] !== on || (tipsShown & (1 << i)) !== 0) continue;
+      if (t[0] !== on || (who && t[2] !== who) || (tipsShown & (1 << i)) !== 0) continue;
       tipsShown |= 1 << i;
       showToast(banners, 'tip', 'TIP', t[1], t[2] ?? tipGlyph, hold, urgent);
     }
@@ -267,19 +265,15 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       shadeAt = -1;
       level = relaxed ? null : lv;
       tips.length = 0;
-      walk.clear();
       scorched = frostLater = false;
       const trial = lv ? trialDef(lv.id) : null;
-      const fresh = lv !== null && (trial ? (save.elementals?.stars[trial.n - 1] ?? 0) : (save.campaign.stars[lv.id - 1] ?? 0)) === 0;
+      const fresh = lv !== null && !(trial ? save.elementals?.stars[trial.n - 1] : save.campaign.stars[lv.id - 1]);
       if (trial) {
-        // A Trial's own tips until it is passed: a duo's, a relay's (each hero's 'go' at its TAG), a hero's.
+        // A Trial's own tips until it is passed: a duo's (the Cold Snap's on T6 only), else a relay's
+        // and its first hero's, the later heroes' 'go' tips waiting for their TAG.
         const [first, ...rest] = trial.cast as HeroId[];
-        if (fresh && trial.duo) tips.push(...DUO_TIPS.filter((t) => t[0] !== 'frost' || trial.duo?.ability === 'nubs'));
-        else if (fresh && first) {
-          if (trial.relays.length > 0) tips.push(...RELAY_TIPS);
-          tips.push(...HERO_TIPS[first]);
-          for (const x of rest) if (x !== first && !walk.has(x)) walk.set(x, (HERO_TIPS[x][0] as readonly [TipOn, string])[1]);
-        }
+        if (fresh && trial.duo) tips.push(...DUO_TIPS.slice(0, trial.duo.ability === 'nubs' ? 3 : 2));
+        else if (fresh && first) tips.push(...(trial.relays.length ? RELAY_TIPS : []), ...HERO_TIPS[first], ...rest.map((x) => ['tag', (HERO_TIPS[x][0] as readonly [TipOn, string])[1], x] as const));
       } else if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
       const mech = fresh && !trial ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
@@ -292,7 +286,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       soonTip = tips.some((t) => t[0] === 'soon');
       soonRise = -1;
       budAt = -1e9;
-      tipGlyph = trial ? (trial.cast.length === 1 ? HEROES[trial.cast[0] as HeroId].glyph : 'elementals') : lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
+      tipGlyph = trial ? trialGlyph(trial) : lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
       // A Journey level toasts no mission steps before Missions open (they still pay at the end); a
       // Trial never does (it counts toward no mission).
       if (!scored || trial || (lv && !featureUnlocked(save, 'missions'))) return;
@@ -324,13 +318,10 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'tagSoon':
           tip('tagSoon');
           break;
-        case 'tag': {
-          // A relay hero's first turn: its 'go' tip, once.
-          const w = walk.get(ev.to);
-          if (w !== undefined) showToast(banners, 'tip', 'TIP', w, HEROES[ev.to].glyph, TIP_HOLD);
-          walk.delete(ev.to);
+        case 'tag':
+          // A relay hero's first turn: its 'go' tip.
+          tip('tag', TIP_HOLD, false, ev.to);
           break;
-        }
         case 'flake':
           tip('flake');
           if (level && goalMetLive(level, s.stats)) tip('goal');

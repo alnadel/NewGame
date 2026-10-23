@@ -72,11 +72,21 @@
 
 .title-hud-gap { flex: 1; margin-left: -8px; }
 
-/* A 360 px phone: tighter gaps, so the first ranks' names ("Puddle") show whole beside a waiting
-   reward (the flexible gap above gives back most of its own). */
-@media (max-width: 379.98px) {
-  .title-hud { gap: 8px; }
+/* Phones: tighter gaps and the menus' compact wallet, so the first ranks' names ("Puddle") show
+   whole beside a waiting reward and the Elementals square (the flexible gap gives back its own). */
+@media (max-width: 399.98px) {
+  .title-hud { gap: 6px; }
 
+  .title-hud > .chip--snow {
+    margin-left: 16px;
+    padding: 0 10px 0 24px;
+    font-size: var(--fs-d-md);
+  }
+
+  .title-hud > .chip--snow > .ai { left: -18px; width: 40px; height: 40px; }
+}
+
+@media (max-width: 379.98px) {
   .title-rank .rank-badge .rank-text { padding-right: 10px; }
 }
 
@@ -105,34 +115,16 @@
   --ic: 34px;
 }
 
-/* The Elementals (docs/ELEMENTALS.md §4.10): a violet square like the reward's, its NEW sticker on top. */
+/* The Elementals (docs/ELEMENTALS.md §4.10): a violet square, its NEW sticker on top. */
 .btn.elementals-btn {
-  --h: 54px;
-  --r: 18px;
-  --ic: 36px;
+  --h: 46px;
+  --r: 16px;
+  --ic: 30px;
   overflow: visible;
 }
 
-.elementals-btn .new-tag { top: -9px; }
-
-/* Phones: the square, the gaps and the wallet tighten while the square shows, so the rank's name
-   still fits beside a waiting reward (the wallet as compact as the menus' counters). */
-@media (max-width: 399.98px) {
-  .title-hud:has(> .elementals-btn:not([hidden])) { gap: 6px; }
-
-  .title-hud > .btn.elementals-btn { --h: 46px; --r: 16px; --ic: 30px; }
-
-  .title-hud:has(> .elementals-btn:not([hidden])) > .chip--snow {
-    margin-left: 16px;
-    padding: 0 10px 0 24px;
-    font-size: var(--fs-d-md);
-  }
-
-  .title-hud:has(> .elementals-btn:not([hidden])) > .chip--snow > .ai { left: -18px; width: 40px; height: 40px; }
-}
-
 @media (max-width: 379.98px) {
-  .title-hud:has(> .elementals-btn:not([hidden])) .btn.title-reward { --h: 50px; --ic: 32px; }
+  .btn.title-reward { --h: 50px; --ic: 32px; }
 }
 
 /* The gift wiggles twice every 4 s. */

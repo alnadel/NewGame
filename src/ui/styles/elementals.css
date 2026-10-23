@@ -33,7 +33,7 @@
 /* The Trials: two columns of Wardrobe tiles; a picked hero's Trials framed in gold. */
 .el-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-.trial-tile { --rar: var(--cloud-lo); }
+.trial-tile { --rar: var(--cloud-lo); width: 100%; }
 
 .trial-tile.is-hl { --rar: var(--gold); }
 
