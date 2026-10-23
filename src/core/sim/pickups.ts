@@ -17,6 +17,7 @@ import {
   inGlare,
   shadowLength,
 } from '../shadows.ts';
+import { heroFlake } from './heroes.ts';
 import { addFrost } from './mechanics.ts';
 import { ringTrick } from './nubs.ts';
 import type { SimState } from './types.ts';
@@ -124,18 +125,21 @@ function collect(s: SimState, p: Pickup): void {
     const snow = Math.round(snowMult(s) * s.params.snowMult);
     st.flakes++;
     st.snow += snow;
-    nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + P.flakeChill);
+    if (s.trial === null) nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + P.flakeChill);
     s.events.push({ e: 'flake', mult: nb.mult, degree: (s.flakesToday + nb.mult) % 10, x: p.x, y: p.y, snow });
     s.flakesToday++;
-    addFrost(s, TUNING.frost.perFlake);
+    // Elementals: on a Trial the walking hero takes the flake its own way, and only joy pays charge.
+    if (s.trial !== null) heroFlake(s, p, 1);
+    else addFrost(s, TUNING.frost.perFlake);
     streak(s);
   } else if (p.kind === 'crystal') {
     const snow = Math.round(P.crystalSnowMult * snowMult(s) * s.params.snowMult);
     st.crystals++;
     st.snow += snow;
-    nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + P.crystalChill);
+    if (s.trial === null) nb.chill = Math.min(nb.maxChill - s.flareScorch, nb.chill + P.crystalChill);
     s.events.push({ e: 'crystal', mult: nb.mult, x: p.x, y: p.y, snow });
-    addFrost(s, TUNING.frost.perFlake);
+    if (s.trial !== null) heroFlake(s, p, 2);
+    else addFrost(s, TUNING.frost.perFlake);
     streak(s);
   } else {
     st.flowers++;

@@ -25,6 +25,7 @@ import { BUD_ID_BASE, RUNTIME_ID_BASE, SNAP_ID_BASE, type Bud, type Cloud } from
 import { rngFor } from '../rng.ts';
 import { trailX } from '../trail.ts';
 import type { SimEvent } from './events.ts';
+import { castHero } from './heroes.ts';
 import { ringTrick } from './nubs.ts';
 import type { InputFrame, SimState } from './types.ts';
 
@@ -525,7 +526,11 @@ export function updateSnap(s: SimState, inp: InputFrame): void {
     const cl = snapCloud(s);
     if (cl) aimSnap(s, cl);
   }
-  if (inp.snap === true) castSnap(s);
+  // Elementals: on a Trial the swipe casts the ability hero's power (heroes.ts castHero).
+  if (inp.snap === true) {
+    if (s.trial !== null) castHero(s);
+    else castSnap(s);
+  }
 }
 
 /**

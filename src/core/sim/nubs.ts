@@ -389,6 +389,40 @@ function lessonFloor(s: SimState): number {
   return g >= L.fadeTicks ? L.floor : (L.floor * g) / L.fadeTicks;
 }
 
+/**
+ * A body's daylight memory: glare touches (the clean-ball count), the death line's memory of who
+ * shaded it, and cloud captures and rides. Nubs keeps it every daylight tick; on Trials every body
+ * does (sim/heroes.ts).
+ */
+export function keepMemory(s: SimState, nb: NubsState): void {
+  const st = s.stats;
+  if (nb.glareBallId >= 0) {
+    s.glaredBalls.add(nb.glareBallId);
+    if (nb.prevGlareBallId < 0) s.events.push({ e: 'glareTouch', ballId: nb.glareBallId });
+    st.ballGlared = true;
+  }
+  nb.prevGlareBallId = nb.glareBallId;
+  if (nb.shaderId >= 0) {
+    nb.lastShaderId = nb.shaderId;
+    nb.lastShaderTick = s.tick;
+    nb.lastShaderName = s.world.byId.get(nb.shaderId)?.name ?? '';
+  }
+
+  // Cloud rides.
+  if (nb.cloudId >= 0) {
+    if (!s.captured.has(nb.cloudId)) {
+      s.captured.add(nb.cloudId);
+      s.events.push({ e: 'cloudCapture', id: nb.cloudId });
+    }
+    nb.rideTicks = nb.cloudId === nb.rideId ? nb.rideTicks + 1 : 1;
+    if (nb.f === 0) st.cloudSeconds += DT;
+  } else {
+    nb.rideTicks = 0;
+  }
+  nb.rideId = nb.cloudId;
+  if (nb.rideTicks * DT > st.cloudRideBest) st.cloudRideBest = nb.rideTicks * DT;
+}
+
 /** Daylight tick: Chill, multiplier, PHEW, SWING, lesson, shade/glare/cloud events and timers, hour log. */
 export function applyDaylight(s: SimState): void {
   const nb = s.nubs;
@@ -487,32 +521,7 @@ export function applyDaylight(s: SimState): void {
   st.multTicks = (st.multTicks as number) + nb.mult;
   if (nb.mult === M.max) st.x5Ticks = (st.x5Ticks as number) + 1;
 
-  // Glare touch and the death line's memory of who shaded Nubs.
-  if (nb.glareBallId >= 0) {
-    s.glaredBalls.add(nb.glareBallId);
-    if (nb.prevGlareBallId < 0) s.events.push({ e: 'glareTouch', ballId: nb.glareBallId });
-    st.ballGlared = true;
-  }
-  nb.prevGlareBallId = nb.glareBallId;
-  if (nb.shaderId >= 0) {
-    nb.lastShaderId = nb.shaderId;
-    nb.lastShaderTick = s.tick;
-    nb.lastShaderName = s.world.byId.get(nb.shaderId)?.name ?? '';
-  }
-
-  // Cloud rides.
-  if (nb.cloudId >= 0) {
-    if (!s.captured.has(nb.cloudId)) {
-      s.captured.add(nb.cloudId);
-      s.events.push({ e: 'cloudCapture', id: nb.cloudId });
-    }
-    nb.rideTicks = nb.cloudId === nb.rideId ? nb.rideTicks + 1 : 1;
-    if (!lit) st.cloudSeconds += DT;
-  } else {
-    nb.rideTicks = 0;
-  }
-  nb.rideId = nb.cloudId;
-  if (nb.rideTicks * DT > st.cloudRideBest) st.cloudRideBest = nb.rideTicks * DT;
+  keepMemory(s, nb);
 
   // Deep shade: deepEnter on entry after reenterTicks out of it; seconds in it.
   if (deep) {
