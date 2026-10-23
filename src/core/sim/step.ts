@@ -3,7 +3,9 @@
 // Order: sun → clock (+ night/dawn/noon/hour events) → sun vector and Nubs' position → world hard
 // guarantee and pruning → flares (v1.6) → eclipse → snap → coverage → Chill/multiplier/PHEW/SWING/
 // landing (or night regen) → pickups → buds → gates and balls passed → Dares (v1.6) → history →
-// death → guide. Everything is pure arithmetic on the state.
+// death → guide. Everything is pure arithmetic on the state. On an Elementals Trial (s.trial set) the
+// relay runs after the clock, a snap input casts the walking hero's ability, every body follows its
+// hero's rules (sim/heroes.ts) in place of Chill's, and either body's meter at 0 ends the run.
 // The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
 import { TUNING } from '../../config/tuning.ts';
@@ -31,6 +33,7 @@ import { deathCause } from './deathcause.ts';
 import { updateFeats } from './feats.ts';
 import { updateFlare } from './flares.ts';
 import { guideDue, updateGuide } from './guide.ts';
+import { applyHeroDaylight, heroDeath, updateRelay } from './heroes.ts';
 import { pushHistory } from './history.ts';
 import { applyDaylight, applyNight, computeCoverage, hourGlyph } from './nubs.ts';
 import { updateBuds, updateSnap } from './mechanics.ts';
@@ -177,10 +180,11 @@ function pushRecent(s: SimState): void {
 
 function die(s: SimState): void {
   s.phase = 'dead';
-  s.nubs.chill = 0;
+  // On a Trial the failed body's meter is already 0 (and a duo's other body keeps its own).
+  if (s.trial === null) s.nubs.chill = 0;
   s.stats.minutes = s.minutes;
   s.hourGlyphs[s.hourGlyphs.length - 1]?.push('melt');
-  const info = deathCause(s);
+  const info = s.trial !== null ? heroDeath(s) : deathCause(s);
   s.death = info;
   s.events.push({ e: 'death', info });
 }
@@ -244,6 +248,8 @@ export function step(s: SimState, input: InputFrame): void {
   advanceClock(s);
   const prevY = s.nubs.y;
   syncTime(s);
+  // Elementals: a relay's telegraph and TAG, before casting and coverage.
+  if (s.trial !== null) updateRelay(s);
   const daylight = s.phase === 'day';
 
   ensureGenerated(s.world, s.nubs.y + W.hardAhead);
@@ -254,8 +260,11 @@ export function step(s: SimState, input: InputFrame): void {
   updateSnap(s, inp);
   computeCoverage(s);
   if (s.mate !== null) computeCoverage(s, s.mate);
-  if (daylight) applyDaylight(s);
-  else applyNight(s);
+  // Elementals: a Trial's bodies follow their heroes' rules, and night leaves hero meters unchanged.
+  if (daylight) {
+    if (s.trial !== null) applyHeroDaylight(s);
+    else applyDaylight(s);
+  } else if (s.trial === null) applyNight(s);
   updatePickups(s, daylight);
   updateBuds(s);
   passObjects(s, prevY);
@@ -263,7 +272,7 @@ export function step(s: SimState, input: InputFrame): void {
   pushHistory(s);
   pushRecent(s);
 
-  if (daylight && s.nubs.chill <= 0) {
+  if (daylight && (s.nubs.chill <= 0 || (s.mate !== null && s.mate.chill <= 0))) {
     die(s);
     return;
   }

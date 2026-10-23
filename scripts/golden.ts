@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CASTER_KINDS } from '../src/config/casters.ts';
 import { rungConfig } from '../src/config/days.ts';
 import { FORECAST_IDS, forecastFits } from '../src/config/forecasts.ts';
+import { TRIAL_IDS } from '../src/config/trials.ts';
 import { TUNING } from '../src/config/tuning.ts';
 import { sinD } from '../src/core/dmath.ts';
 import { planDay } from '../src/core/gen/plan.ts';
@@ -162,6 +163,24 @@ export function campaignHashes(): Record<string, string> {
   return out;
 }
 
+/**
+ * Elementals (docs/ELEMENTALS.md §3.9): the core reactive bot (salt 0) on each Trial to its end, a
+ * checkpoint hash every 600 ticks ("id:tick") and the final phase and hash ("id").
+ */
+export function trialHashes(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const id of TRIAL_IDS) {
+    const s = createRun(campaignConfig(id));
+    const bot = createBot('reactive');
+    for (let i = 0; i < 12000 && s.phase !== 'dead' && s.phase !== 'won'; i++) {
+      step(s, bot.next(s));
+      if ((i + 1) % CHECK_EVERY === 0) out[`${id}:${i + 1}`] = hashState(s);
+    }
+    out[`${id}`] = `${s.phase}:${hashState(s)}`;
+  }
+  return out;
+}
+
 /** v1.5: digest of the buds of a profile-3 world through 11 chunks (id, x, y, face). */
 export function budDigest(seed: number): string {
   const w = createWorld({ seed, profile: 3, tutorial: false });
@@ -181,6 +200,7 @@ export function goldenValues(): Record<string, unknown> {
     forecasts: forecastHashes(),
     rungs: rungHashes(),
     campaign: campaignHashes(),
+    trials: trialHashes(),
   };
 }
 

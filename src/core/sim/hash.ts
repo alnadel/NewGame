@@ -7,6 +7,7 @@
 // only created far enough ahead that they can't affect play yet.
 
 import { CASTER_KINDS } from '../../config/casters.ts';
+import { HERO_IDS } from '../../config/heroes.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { worldYAtTick } from '../gen/plan.ts';
 import { FLARE_KEPT, type Bud, type Caster, type Pickup } from '../objects.ts';
@@ -170,6 +171,39 @@ export function hashState(s: SimState): string {
     st.gustWindows ?? 0,
   ]) {
     feed(v);
+  }
+  // Elementals (docs/ELEMENTALS.md §4.8): Trials only, so every Nubs-run hash still holds.
+  if (s.trial !== null) {
+    const m = s.mate;
+    for (const v of [
+      HERO_IDS.indexOf(nb.hero),
+      m ? HERO_IDS.indexOf(m.hero) : -1,
+      m ? m.x : 0,
+      m ? m.y : 0,
+      m ? m.chill : 0,
+      m ? m.c : 0,
+      s.heroAbility === null ? 0 : s.heroAbility === 'blaze' ? 1 : 2,
+      s.heroTicks,
+      s.relayIdx,
+      s.tagGrace,
+      s.tagWatch,
+      s.voltLit ? 1 : 0,
+      s.voltTheta,
+      s.voltChain,
+      s.voltTick,
+      s.dripCool ? 1 : 0,
+      s.harmony ? 1 : 0,
+      st.blazeTicks ?? 0,
+      st.seeds ?? 0,
+      st.strikes ?? 0,
+      st.bestChain ?? 0,
+      st.calmTicks ?? 0,
+      st.tags ?? 0,
+      st.cleanTags ?? 0,
+      st.harmonyTicks ?? 0,
+    ]) {
+      feed(v);
+    }
   }
   const flareLimit = nb.y + FLARE_HASH_AHEAD;
   for (const f of s.world.flares) {
