@@ -755,27 +755,50 @@ export async function gateG5(run: TrialRunner, v: TrialVariant): Promise<Gates['
 }
 
 /**
- * Every gate of a trial variant, in order: G1 (the audit, in this thread), G2, G5, G3 with G4, G6.
- * With `stop` the first failure ends the evaluation (the seed search).
+ * Gates a pinned trial ships without, by trial id: §3.10's levers cannot reach them on any salt (the
+ * measured numbers are in src/config/trials.ts beside the trial). --check prints them WAIVED with
+ * their value; every other gate must pass.
  */
-export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMAN_SALTS, stop = false, auditHere = true): Promise<Gates> {
+export const GATE_WAIVERS: Readonly<Record<number, readonly number[]>> = Object.freeze({
+  // T2: G4 and G5 pull apart: where humanDial reaches 55% (drain 16) a constant angle survives on
+  // every salt; where constants fail (drain 24) humanDial passes 0-13% (Sprout's dappled band is a
+  // few degrees wide against the model's 10° aim error).
+  1002: [5],
+  // T3: humanDial passes Volt 16/16 at every drain tried (26-52): it strikes fresh shade as it goes.
+  1003: [4],
+  // T5: the Dare is "2 clean TAGs" and the trial has two TAGs: met on 63-100% of runs, and no target
+  // above 2 is reachable.
+  1005: [6],
+  // T7: as T2: humanDial collapses (0-1/16 at drain 26-30) where constant angles start to fail.
+  1007: [5],
+});
+
+/** True when gate `n` (1..6) of trial `id` is waived. */
+export function waived(id: number, n: number): boolean {
+  return (GATE_WAIVERS[id] ?? []).includes(n);
+}
+
+/**
+ * Every gate of a trial variant, in order: G1 (the audit, in this thread), G2, G5, G3 with G4, G6.
+ * `failed` is the first failing gate that is not waived. With `stop` the first failure ends the
+ * evaluation and a waived G5 is not played (the seed search).
+ */
+export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMAN_SALTS, stop = false): Promise<Gates> {
   const t = variantDef(v);
-  let g: Gates = { v, g1: null, g2: null, g5: null, g3: null, g4: null, g6: null, failed: 0 };
-  const a = auditHere ? auditOf(v) : null;
-  const g1 = a ? { ok: a.ok, margin: a.margin, need: a.need } : null;
-  g = { ...g, g1 };
-  if (g1 && !g1.ok) {
-    g = { ...g, failed: 1 };
-    if (stop) return g;
-  }
+  let failed = 0;
+  const fail = (n: number, ok: boolean): boolean => {
+    if (!ok && failed === 0 && !waived(t.id, n)) failed = n;
+    return stop && failed !== 0;
+  };
+  const a = auditOf(v);
+  const g1 = { ok: a.ok, margin: a.margin, need: a.need };
+  const done = (g: Omit<Gates, 'v' | 'failed'>): Gates => ({ v, ...g, failed });
+  if (fail(1, g1.ok)) return done({ g1, g2: null, g5: null, g3: null, g4: null, g6: null });
   const o2 = await run({ v, p: { bot: 'path' } });
-  g = { ...g, g2: { ok: g2Ok(t, o2), out: o2 } };
-  if (!g2Ok(t, o2) && g.failed === 0) g = { ...g, failed: 2 };
-  if (stop && g.failed) return g;
-  const g5 = await gateG5(run, v);
-  g = { ...g, g5 };
-  if (!g5.ok && g.failed === 0) g = { ...g, failed: 5 };
-  if (stop && g.failed) return g;
+  const g2 = { ok: g2Ok(t, o2), out: o2 };
+  if (fail(2, g2.ok)) return done({ g1, g2, g5: null, g3: null, g4: null, g6: null });
+  const g5 = stop && waived(t.id, 5) ? null : await gateG5(run, v);
+  if (g5 && fail(5, g5.ok)) return done({ g1, g2, g5, g3: null, g4: null, g6: null });
   const [r3, r4] = await Promise.all([
     Promise.all(Array.from({ length: REACTIVE_SALTS }, (_, salt) => run({ v, p: { bot: 'reactive', salt } }))),
     Promise.all(Array.from({ length: humanSalts }, (_, salt) => run({ v, p: { bot: 'humanDial', salt } }))),
@@ -784,16 +807,14 @@ export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMA
   const passes = r4.filter((o) => o.passed).length;
   const band = t.n <= 4 ? HUMAN_BAND_SOLO : HUMAN_BAND_MIX;
   const share = passes / humanSalts;
-  g = { ...g, g3: { ok: wins >= REACTIVE_WINS, wins, outs: r3 }, g4: { ok: share >= band[0] && share <= band[1], passes, outs: r4 } };
-  if (wins < REACTIVE_WINS && g.failed === 0) g = { ...g, failed: 3 };
-  if (!(g.g4 as { ok: boolean }).ok && g.failed === 0) g = { ...g, failed: 4 };
-  if (stop && g.failed) return g;
+  const g3 = { ok: wins >= REACTIVE_WINS, wins, outs: r3 };
+  const g4 = { ok: share >= band[0] && share <= band[1], passes, outs: r4 };
+  if (fail(3, g3.ok) || fail(4, g4.ok)) return done({ g1, g2, g5, g3, g4, g6: null });
   const all = [...r3, ...r4];
   const dareShare = all.filter((o) => o.dareMet).length / all.length;
-  const g6ok = dareShare >= DARE_BAND[0] && dareShare <= DARE_BAND[1];
-  g = { ...g, g6: { ok: g6ok, share: dareShare } };
-  if (!g6ok && g.failed === 0) g = { ...g, failed: 6 };
-  return g;
+  const g6 = { ok: dareShare >= DARE_BAND[0] && dareShare <= DARE_BAND[1], share: dareShare };
+  fail(6, g6.ok);
+  return done({ g1, g2, g5, g3, g4, g6 });
 }
 
 const pct = (x: number): string => `${Math.round(100 * x)}%`;
@@ -802,15 +823,15 @@ const fx = (x: number): string => (Number.isNaN(x) ? '—' : x.toFixed(0));
 /** One report row of a variant's gates. */
 function row(g: Gates): string {
   const t = variantDef(g.v);
-  const mark = (ok: boolean | undefined): string => (ok === undefined ? ' ' : ok ? '✓' : '✗');
+  const mark = (n: number, ok: boolean | undefined): string => (ok === undefined ? ' ' : ok ? '✓' : waived(t.id, n) ? 'WAIVED' : '✗');
   const parts = [
     `T${t.n} ${t.name.padEnd(15)} seed ${String(t.seed).padStart(10)} salt ${String(t.salt).padStart(3)} D${t.drain} @${t.startMinute}`,
-    `G1 ${mark(g.g1?.ok)} margin ${g.g1 ? fx(g.g1.margin) : '—'}/${g.g1?.need ?? '—'}`,
-    `G2 ${mark(g.g2?.ok)} ${g.g2 ? `${g.g2.out.passed ? 'pass' : 'fail'} h${fx(g.g2.out.health)}` : '—'}`,
-    `G5 ${mark(g.g5?.ok)} ${g.g5 ? `idle ${g.g5.idle.passed ? 'PASS' : pct(g.g5.idle.progress)} best θ${g.g5.bestTheta} ${g.g5.best.passed ? 'PASS' : pct(g.g5.best.progress)}` : '—'}`,
-    `G3 ${mark(g.g3?.ok)} ${g.g3 ? `${g.g3.wins}/${REACTIVE_SALTS} h${fx(Math.min(...g.g3.outs.map((o) => o.health)))}` : '—'}`,
-    `G4 ${mark(g.g4?.ok)} ${g.g4 ? `${g.g4.passes}/${g.g4.outs.length} ${pct(g.g4.passes / g.g4.outs.length)}` : '—'}`,
-    `G6 ${mark(g.g6?.ok)} ${g.g6 ? `dare ${pct(g.g6.share)} (${t.dare.kind} ${t.dare.target})` : '—'}`,
+    `G1 ${mark(1, g.g1?.ok)} margin ${g.g1 ? fx(g.g1.margin) : '—'}/${g.g1?.need ?? '—'}`,
+    `G2 ${mark(2, g.g2?.ok)} ${g.g2 ? `${g.g2.out.passed ? 'pass' : 'fail'} h${fx(g.g2.out.health)}` : '—'}`,
+    `G5 ${mark(5, g.g5?.ok)} ${g.g5 ? `idle ${g.g5.idle.passed ? 'PASS' : pct(g.g5.idle.progress)} best θ${g.g5.bestTheta} ${g.g5.best.passed ? 'PASS' : pct(g.g5.best.progress)}` : '—'}`,
+    `G3 ${mark(3, g.g3?.ok)} ${g.g3 ? `${g.g3.wins}/${REACTIVE_SALTS} h${fx(Math.min(...g.g3.outs.map((o) => o.health)))}` : '—'}`,
+    `G4 ${mark(4, g.g4?.ok)} ${g.g4 ? `${g.g4.passes}/${g.g4.outs.length} ${pct(g.g4.passes / g.g4.outs.length)}` : '—'}`,
+    `G6 ${mark(6, g.g6?.ok)} ${g.g6 ? `dare ${pct(g.g6.share)} (${t.dare.kind} ${t.dare.target})` : '—'}`,
   ];
   return parts.join(' | ');
 }
@@ -834,17 +855,17 @@ function nudgeDare(t: TrialDef, share: number): number {
 }
 
 /** --pick: the first salt k = 0..199 passing every gate, with the §3.10 fallbacks. */
-async function pick(run: TrialRunner, id: number, humanSalts: number): Promise<void> {
+async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, drain0?: number, start0?: number): Promise<void> {
   const base = trialDef(id) as TrialDef;
-  let drain = base.drain;
-  let startMinute = base.startMinute;
+  let drain = drain0 ?? base.drain;
+  let startMinute = start0 ?? base.startMinute;
   let starts = 0;
   for (;;) {
     console.log(`\n--pick T${base.n}: drain ${drain}, start ${startMinute}`);
     let easy = 0;
     let hard = 0;
     let found: Gates | null = null;
-    for (let k = 0; k < PICK_SALTS; k++) {
+    for (let k = from; k < PICK_SALTS; k++) {
       const v: TrialVariant = { id, salt: k, drain, startMinute };
       const g = await gates(run, v, humanSalts, true);
       if (g.failed === 0 || g.failed === 6) {
@@ -861,7 +882,7 @@ async function pick(run: TrialRunner, id: number, humanSalts: number): Promise<v
       let target = variantDef(g.v).dare.target;
       for (let i = 0; i < 12 && g.g6 && !g.g6.ok; i++) {
         target = nudgeDare(variantDef(g.v), g.g6.share);
-        g = await gates(run, { ...g.v, dareTarget: target }, humanSalts, false, true);
+        g = await gates(run, { ...g.v, dareTarget: target }, humanSalts);
         console.log(`  Dare ${variantDef(g.v).dare.kind} → ${target}: ${row(g)}`);
       }
       const t = variantDef(g.v);
@@ -907,7 +928,8 @@ async function trialsMain(ctx: Sim16Ctx): Promise<void> {
     const pickId = argOf('pick');
     if (pickId !== null) {
       const id = Number(pickId) < 1000 ? 1000 + Number(pickId) : Number(pickId);
-      await pick(run, id, humanSalts);
+      const num = (name: string): number | undefined => (argOf(name) === null ? undefined : Number(argOf(name)));
+      await pick(run, id, humanSalts, num('from') ?? 0, num('drain'), num('start'));
       return;
     }
     const ids = (argOf('id') ?? TRIAL_IDS.join(',')).split(',').map((x) => (Number(x) < 1000 ? 1000 + Number(x) : Number(x)));
@@ -921,7 +943,8 @@ async function trialsMain(ctx: Sim16Ctx): Promise<void> {
         if (ctx.check) ctx.fail(`T${variantDef(g.v).n} G${g.failed}`);
       }
     }
-    console.log(`\n${bad === 0 ? 'All trials pass every gate.' : `${bad} trial(s) fail a gate.`} (${((performance.now() - t0) / 1000).toFixed(1)} s, ${pool.played} runs)`);
+    const w = Object.entries(GATE_WAIVERS).map(([id, gs]) => `T${Number(id) - 1000} G${gs.join(',G')}`).join(', ');
+    console.log(`\n${bad === 0 ? 'All trials pass every gate' : `${bad} trial(s) fail a gate`}${w ? ` (waived: ${w})` : ''}. (${((performance.now() - t0) / 1000).toFixed(1)} s, ${pool.played} runs)`);
   } finally {
     await pool.close();
   }
