@@ -110,17 +110,11 @@ export function createElementalsScreen(ctx: UiContext): Screen {
     setChildren(rules, ...hero.rules.map((r) => h('li', 'tag', r)));
     setButtonLabel(playBtn, `Play ${levelShort(sel.id)} · ${sel.name}`);
 
-    // The heroes: a locked one is an ink silhouette with its lock, and says what opens it.
+    // The heroes: a locked one is a silhouette (elementals.css) with its lock, and says what opens it.
     setChildren(heroes, ...HERO_IDS.map((x, i) => {
       const open = heroUnlocked(save, x);
       const c = fit(h('canvas', { class: 'el-hcanvas', deco: true }), 52);
       ctx.cb.renderHeroPreview(c, x);
-      const g = c.getContext('2d');
-      if (!open && g) {
-        const img = g.getImageData(0, 0, c.width, c.height);
-        for (let p = 0; p < img.data.length; p += 4) img.data.set([42, 27, 69, (img.data[p + 3] as number) > 200 ? 150 : 0], p);
-        g.putImageData(img, 0, 0);
-      }
       const info = HEROES[x];
       const intro = (TRIALS[info.intro - 1] as TrialDef | undefined)?.name;
       const word = open ? info.name : `Pass ${intro}`;

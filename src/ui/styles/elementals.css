@@ -41,6 +41,8 @@
 
 .el-hcanvas { width: 52px; height: 52px; }
 
+.is-locked .el-hcanvas { filter: brightness(0); opacity: 0.55; }
+
 /* The Trials: two columns of Wardrobe tiles; a picked hero's Trials framed in gold. */
 .el-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
