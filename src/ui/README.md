@@ -282,7 +282,8 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
     only when the raw save has it (`defaults()` has none), merges take the larger stars per Trial
     and `seen` from either side, and a side without it (a build from before the Elementals) never
     deletes it. A tab of such a build writing over it is merged rather than adopted, so the Trials
-    survive. (A lone older build, with no newer tab open, still drops the field when it writes.)
+    survive. The v3 → v4 upgrade (`upgradeToV4`) of a save with progress writes it
+    with `seen: true`, so that first visit marks nothing new. (A lone older build, with no newer tab open, still drops the field when it writes.)
   - `.onExternalChange(cb) -> unsubscribe`: another tab or instance wrote the save (a `storage`
     event, or a re-read on page visible that finds different bytes) and the store took it in (only
     clean `ok` saves). Each stored save names the revisions it includes (`revs`), so the store

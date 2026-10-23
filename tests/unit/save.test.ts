@@ -342,6 +342,9 @@ describe('migrate', () => {
     expect('elementals' in migrate({ v: 4, elementals: 'nope' }, NOW).save).toBe(false);
     // The Journey never sees a Trial.
     expect(ok.campaign).toEqual(defaults(NOW).campaign);
+    // A v3 save with progress upgrades with the Title square seen (its first visit marks nothing new).
+    expect(migrate({ v: 3, stats: { runs: 4 } }, NOW).save.elementals).toEqual({ stars: Array(8).fill(0), seen: true });
+    expect('elementals' in migrate({ v: 3 }, NOW).save).toBe(false);
   });
 
   it('round-trips a rich v3 save unchanged', () => {
