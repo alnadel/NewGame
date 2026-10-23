@@ -7,6 +7,7 @@ import {
   CONCEPTS,
   FORECASTS,
   formatScore,
+  levelTag,
   MINUTES_PER_DAY,
   PLAN_START_DATE,
   planDay,
@@ -78,7 +79,7 @@ export function resultsAnnouncement(view: ResultsView): string {
   const c = view.campaign;
   if (c) {
     const how = c.passed ? `passed with ${starsLabel(c.stars)}` : 'not passed';
-    return `Level ${c.id}, ${c.name}: ${how}. ${c.passed ? c.goalLine : view.result.death.line}`;
+    return `${levelTag(c.id)}, ${c.name}: ${how}. ${c.passed ? c.goalLine : view.result.death.line}`;
   }
   const parts = [`Nubs melted at ${formatScore(view.result.minutes)}.`];
   if (view.outcome.newBest) parts.push('New best!');
@@ -327,9 +328,9 @@ export function levelTileLabel(level: Pick<LevelDef, 'id' | 'name' | 'introduces
   return parts.join(' ');
 }
 
-/** The Results kicker of a Journey run: "Level 12 · Passed" (short: it shares its line with Share). */
+/** The Results kicker of a Journey run: "Level 12 · Passed" ("Trial 3 · Passed"; short: it shares its line with Share). */
 export function campaignKicker(c: Pick<ResultsCampaign, 'id' | 'passed'>): string {
-  return `Level ${c.id} · ${c.passed ? 'Passed' : 'Not passed'}`;
+  return `${levelTag(c.id)} · ${c.passed ? 'Passed' : 'Not passed'}`;
 }
 
 /** A cosmetic's rarity (meta/gamify.ts rarity) as a word. */

@@ -24,6 +24,7 @@
 
 import type { HourGlyph } from '../../core/sim/events.ts';
 import { formatScore, formatTimeOfDay, splitMinutes } from '../../core/format.ts';
+import { isTrialId, levelTag } from '../../core/index.ts';
 import { challengeVerdict } from '../../meta/challenge.ts';
 import { featureUnlocked } from '../../meta/gamify.ts';
 import { dailyNumber } from '../../meta/daily.ts';
@@ -177,6 +178,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ctx.cb.nextLevel();
   };
   const map = (): void => {
+    // An Elementals Trial goes back to its screen (with the Trial played selected).
+    const id = shown?.campaign?.id ?? 0;
+    if (isTrialId(id)) {
+      ctx.go('elementals', id);
+      ctx.cb.openJourney('elementals');
+      return;
+    }
     ctx.go('journey');
     ctx.cb.openJourney();
   };
@@ -463,7 +471,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     hide(starsEl, !on);
     hide(time.parentElement as HTMLElement, on);
     road.update(ctx.save());
-    if (!on) hide(road.el, true);
+    // The Journey's star road: hidden for an Elementals Trial (its stars are not the Journey's).
+    if (!on || isTrialId(c.id)) hide(road.el, true);
     // A level's Share moves to the hero's corner; the kicker is said by the ribbon (sr-only).
     if (on) heroShare.append(shareBtn);
     else headActions.prepend(shareBtn);
@@ -483,11 +492,11 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     hide(goals, true);
     if (!on) return;
     levelName.textContent = c.name;
-    level.setAttribute('aria-label', `Level ${c.id}, ${c.name}, ${c.passed ? starsLabel(c.stars) : 'not passed'}`);
+    level.setAttribute('aria-label', `${levelTag(c.id)}, ${c.name}, ${c.passed ? starsLabel(c.stars) : 'not passed'}`);
     starsEl.setAttribute('aria-label', starsLabel(c.passed ? c.stars : 0));
     goal.textContent = keepUnits(c.goalLine);
     goal.classList.toggle('is-win', c.passed);
-    if (nextLabelEl) nextLabelEl.dataset.sub = c.nextId !== null ? `LEVEL ${c.nextId}` : '';
+    if (nextLabelEl) nextLabelEl.dataset.sub = c.nextId !== null ? levelTag(c.nextId).toUpperCase() : '';
     renderGoals(c);
     // A passed level lights each star whose rule was met, in the goal cards' (and the HUD's) order;
     // without the rule bits, the first `stars` stars.
@@ -572,7 +581,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     // The ribbon: a level's verdict ("Level 38 Passed!" red, "So close!" blue), or an endless,
     // Daily or challenge run's new best; none otherwise.
     // A beaten challenge is the run's headline (pink), over a new best.
-    const words = c ? (c.passed ? `Level ${c.id} Passed!` : 'So close!') : win ? CHALLENGE_BEATEN : outcome.newBest ? `${bestWords}!` : '';
+    const words = c ? (c.passed ? `${levelTag(c.id)} Passed!` : 'So close!') : win ? CHALLENGE_BEATEN : outcome.newBest ? `${bestWords}!` : '';
     heroRibbon.band.textContent = words;
     heroRibbon.el.classList.toggle('ribbon--red', c ? c.passed : !win);
     heroRibbon.el.classList.toggle('ribbon--blue', c?.passed === false);

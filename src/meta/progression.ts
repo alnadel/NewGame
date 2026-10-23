@@ -238,6 +238,11 @@ export function nextOpenTrial(save: Pick<Save, 'elementals' | 'settings'>, n: nu
   return null;
 }
 
+/** The Elementals screen was opened (its Title square drops its NEW sticker). Pure. */
+export function markElementalsSeen(save: Save): Save {
+  return { ...save, elementals: { stars: save.elementals?.stars.slice() ?? Array<number>(TRIAL_COUNT).fill(0), seen: true } };
+}
+
 /** Stars earned across the Trials (of ELEMENTAL_STARS_MAX). */
 export function elementalStars(save: Pick<Save, 'elementals'>): number {
   return save.elementals?.stars.reduce((a, b) => a + b, 0) ?? 0;

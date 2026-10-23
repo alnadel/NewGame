@@ -12,6 +12,10 @@ import {
   campaignConfig as levelConfig,
   CONCEPTS,
   featMet,
+  HEROES,
+  levelTag,
+  trialDareValue,
+  trialDef,
   featValue,
   goalMet as coreGoalMet,
   goalValue as coreGoalValue,
@@ -26,6 +30,8 @@ import {
   type LevelStats,
   type RunConfig,
   type RunStats,
+  type TrialDareKind,
+  type TrialDef,
 } from '../core/index.ts';
 
 /** How long the run freezes on the FINISH stamp before the Results (s). */
@@ -51,7 +57,8 @@ type Stats = Pick<LevelStats, 'flakes' | 'snow'> & Partial<LevelStats>;
 export function campaignConfig(level: LevelDef, reducedMotion: boolean, tutorialDone: boolean, relaxed = false): RunConfig {
   const base: Partial<RunConfig> = { reducedMotion };
   if (level.id === 1 && !tutorialDone) base.lesson = true;
-  if (relaxed && level.goal.kind !== 'finish') base.relaxedGoal = true;
+  // An Elementals Trial is never relaxed (docs/ELEMENTALS.md §4.10).
+  if (relaxed && level.goal.kind !== 'finish' && !trialDef(level.id)) base.relaxedGoal = true;
   return levelConfig(level.id, base);
 }
 
@@ -127,11 +134,38 @@ export function dareMet(level: LevelDef, stats: Stats, seen: FeatSeen = NONE): b
   return false;
 }
 
+// --- Elementals Trials (docs/ELEMENTALS.md §3, §4.10): the same flow with the Trial's own words ----
+// (TrialDef.card), its Dare (trialDareValue) and Steady star (the lowest health, stats.minChill).
+
+/** A Dare counted in ticks (shown in seconds). */
+const dareSec = (k: TrialDareKind): boolean => k === 'blazeSave' || k === 'calm' || k === 'harmony';
+/** The intro card's chip glyph: the solo hero's, or the four elements for a relay or a duo. */
+export function trialGlyph(t: TrialDef): string {
+  return t.cast.length === 1 ? HEROES[t.cast[0] as keyof typeof HEROES].glyph : 'elementals';
+}
+/** The Dare's glyph on the card and the HUD pill (a bloom Dare keeps the sunflower). */
+const dareGlyph = (t: TrialDef): string => (t.dare.kind === 'blooms' ? 'sunflower' : trialGlyph(t));
+/** The Trial's Dare count so far. */
+export function trialDare(t: TrialDef, stats: Stats): number {
+  return trialDareValue(t.dare.kind, stats as LevelStats);
+}
+/** The Dare's label with its count so far: "Chain x5 · 3/5", "Harmony 3 s · 1.2/3 s". */
+export function trialDareText(t: TrialDef, stats: Stats): string {
+  return `${t.card.stars[1]} · ${countText(trialDare(t, stats), t.dare.target, dareSec(t.dare.kind))}`;
+}
+/** " · Next ★: Chain x5 (3/5)" for the first star a pass missed, or "". */
+function trialNextStar(t: TrialDef, stats: Stats): string {
+  const v = trialDare(t, stats);
+  if (v < t.dare.target) return ` · Next ★: ${t.card.stars[1]} (${countText(v, t.dare.target, dareSec(t.dare.kind))})`;
+  return stats.minChill !== undefined && stats.minChill < t.steady ? ` · Next ★: ${t.card.stars[2]}` : '';
+}
+
 /** The intro card's lines: "LEVEL 6", "Glass Garden", the concept line (icon id, name, blurb), the goal and the star rules. */
 export interface IntroCard {
   kicker: string;
   title: string;
-  concept: ConceptId | null;
+  /** A concept id, or a Trial's hero glyph ('ember' … 'elementals'). */
+  concept: ConceptId | string | null;
   conceptName: string;
   blurb: string;
   goal: string;
@@ -143,6 +177,11 @@ export interface IntroCard {
 }
 
 export function introCard(level: LevelDef, relaxed = false): IntroCard {
+  const t = trialDef(level.id);
+  if (t) {
+    const k = t.card;
+    return { kicker: levelTag(t.id).toUpperCase(), title: t.name, concept: trialGlyph(t), conceptName: k.chip, blurb: k.blurb, goal: k.goal, stars: [...k.stars], dare: k.dare, dareGlyph: dareGlyph(t) };
+  }
   const c = level.introduces ? CONCEPTS[level.introduces] : null;
   const f = level.feats[0];
   return {
@@ -160,6 +199,8 @@ export function introCard(level: LevelDef, relaxed = false): IntroCard {
 
 /** The star rules' short labels (CAMPAIGN_PLAN §3: pass, the flakes or the Dare, a cool run). */
 export function starRules(level: LevelDef, relaxed = false): [string, string, string] {
+  const t = trialDef(level.id);
+  if (t) return [...t.card.stars];
   const g = level.goal;
   const verb = goalFeat(g.kind);
   const pass = relaxed || g.kind === 'finish' ? 'Finish' : g.kind === 'snow' ? `${g.target} Snow` : verb ? verbGoalLabel(level, verb) : 'Finish';
@@ -188,6 +229,8 @@ export function conceptList(level: LevelDef): string {
 
 /** "Reach the finish", "Collect 8 flakes", "Score 20 Snow", or a verb goal's label ("1 SWING", "Bloom 1"…). */
 export function goalText(level: LevelDef, relaxed = false): string {
+  const t = trialDef(level.id);
+  if (t) return t.card.goal;
   const g = level.goal;
   const verb = goalFeat(g.kind);
   return relaxed || !verb ? (g.kind === 'snow' && !relaxed ? `Score ${g.target} Snow` : 'Reach the finish') : verb === 'flakes' ? `Collect ${g.target} flakes` : verbGoalLabel(level, verb);
@@ -229,6 +272,11 @@ export function countText(value: number, target: number, sec: boolean): string {
  */
 export function goalLine(level: LevelDef, stats: Stats, passed: boolean, relaxed = false, seen: FeatSeen = NONE, misses = 0): string {
   const g = level.goal;
+  const t = trialDef(level.id);
+  if (t) {
+    if (passed) return (g.kind === 'finish' ? 'Reached the finish' : `${t.card.goal} ✓`) + trialNextStar(t, stats);
+    return g.kind === 'finish' ? 'Out before the finish' : `Goal missed: ${t.card.goal} (${countText(goalValue(level, stats, seen), g.target, false)})`;
+  }
   const snow = Math.floor(stats.snow);
   const verb = relaxed ? undefined : goalFeat(g.kind);
   if (!passed) {
@@ -285,6 +333,12 @@ export const STAR_COOL_LOST = 4;
  * Nubs spent more than stars.sunSec in the sun). starsFor's rules.
  */
 export function starState(level: LevelDef, stats: Stats & Pick<RunStats, 'litTotal' | 'minChill'>, finished: boolean, relaxed = false, seen: FeatSeen = NONE): number {
+  const t = trialDef(level.id);
+  if (t) {
+    // A Trial: the goal, its Dare, and Steady (no body's health ever under `steady`).
+    const met = level.goal.kind === 'finish' ? finished : goalMetLive(level, stats, seen);
+    return (met ? STAR_GOAL : 0) | (trialDare(t, stats) >= t.dare.target ? STAR_FLAKES : 0) | (stats.minChill >= t.steady ? 0 : STAR_COOL_LOST);
+  }
   const goal = level.goal.kind === 'finish' || relaxed ? finished : goalMetLive(level, stats, seen);
   const two = level.feats.length > 0 ? dareMet(level, stats, seen) : stats.flakes >= level.stars.flakes;
   const cool = stats.minChill >= level.stars.minChill && stats.litTotal <= level.stars.sunSec;
@@ -323,6 +377,15 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
   out.glyph = null;
   out.sec = false;
   const g = level?.goal;
+  const t = level ? trialDef(level.id) : null;
+  if (t && level && (g?.kind === 'finish' || goalMetLive(level, stats, seen))) {
+    // A Trial counts its goal (T7's blooms) until it is met, then its Dare.
+    out.value = Math.min(trialDare(t, stats), t.dare.target);
+    out.target = t.dare.target;
+    out.glyph = dareGlyph(t);
+    out.sec = dareSec(t.dare.kind);
+    return out;
+  }
   const verb = g && !relaxed ? goalFeat(g.kind) : undefined;
   if (!level || !g || ((g.kind === 'finish' || relaxed) && level.feats.length === 0)) {
     out.value = Math.floor(stats.snow);

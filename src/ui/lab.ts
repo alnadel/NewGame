@@ -38,6 +38,7 @@ const VARIANTS: Record<LabScreen, readonly string[]> = {
   wardrobe: ['regular', 'hats', 'shades', 'poor'],
   journey: ['regular', 'fresh', 'unlock-all', 'far'],
   profile: ['regular', 'fresh', 'globes', 'globes-closed', 'streak'],
+  elementals: ['regular', 'fresh', 'unlock-all', 'done'],
   rotate: ['regular'],
 };
 /** A Title run's Day 1 in the lab. */
@@ -435,6 +436,9 @@ function mount(screen: LabScreen, variant: string): void {
     save.campaign.unlocked = 154;
     save.campaign.lastLevel = 153;
   }
+  if (screen === 'elementals' && variant === 'regular') save.elementals = { stars: [3, 1, 0, 0, 0, 0, 0, 0], seen: true };
+  if (screen === 'elementals' && variant === 'done') save.elementals = { stars: [3, 3, 2, 3, 1, 3, 2, 3], seen: true };
+  if (screen === 'elementals' && variant === 'unlock-all') save.settings.unlockAll = true;
   if (screen === 'profile' && (variant === 'globes' || variant === 'globes-closed')) save.gamify.globes = variant === 'globes' ? 3 : 2;
   if (screen === 'profile' && variant === 'streak') save.gamify.streak = { last: addDays(today, -1), days: 6, best: 9, freezeUsed: false };
   if (params.get('rm') === '1') save.settings.reducedMotion = 'on';
@@ -514,6 +518,7 @@ function mount(screen: LabScreen, variant: string): void {
     },
     uiSound: (name) => log('sound', name),
     renderWardrobePreview: placeholderPreview,
+    renderHeroPreview: (target) => placeholderPreview(target, save.equipped, 'nubs'),
   };
 
   ui = createUi(root, { callbacks, save, today, version: '0.1.0 (lab)' });
@@ -533,6 +538,7 @@ function mount(screen: LabScreen, variant: string): void {
     wardrobe: ['title', 'wardrobe'],
     journey: ['title', 'journey'],
     profile: ['title', 'profile'],
+    elementals: ['title', 'elementals'],
     rotate: ['title', 'play'],
   }[screen] as ScreenId[];
   for (const id of path) ui.show(id);

@@ -44,6 +44,8 @@ const ART = {
   crown: `<path d="M7 36 9 15l9 9 6-12 6 12 9-9 2 21Z" fill="#FFC21F" O/><path d="M9 31h30" stroke="#E98500" stroke-width="3" opacity=".6"/>`,
   check: duo('m10 25 9 9 19-19', 12, 5.5),
   close: duo('m13 13 22 22M35 13 13 35', 13, 6),
+  // The four elements in a diamond (the Elementals' square and cards): flame, leaf, drop, bolt.
+  elementals: `<path d="M24 3c6 5 8 10 4 14a5 5 0 0 1-8 0c-3-4-1-9 4-14Z" fill="#FF8A1F" O/><path d="M29 24c3-6 9-8 14-7-1 6-5 10-11 10-2 0-3-1-3-3Z" fill="#8BD650" O/><path d="M24 29c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11Z" fill="#5AB8FF" O/><path d="M13 14 6 26h6l-3 9 9-13h-6l3-8Z" fill="#FFE14D" O/>`,
   xp: `<path d="M24 4.5 40.5 14v20L24 43.5 7.5 34V14Z" fill="#9B5DF5" O/><path d="M24 10l11.5 6.8v14.4L24 38 12.5 31.2V16.8Z" fill="#B98AFF"/>`,
 } as const;
 

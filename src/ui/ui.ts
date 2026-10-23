@@ -18,6 +18,7 @@ import './styles/missions.css';
 import './styles/wardrobe.css';
 import './styles/profile.css';
 import './styles/journey.css';
+import './styles/elementals.css';
 import './a11y.css';
 import { shouldOfferRestoreSheet, welcomeBackDue } from '../meta/progression.ts';
 import type { Save, Settings } from '../meta/saveTypes.ts';
@@ -40,6 +41,7 @@ import { fitRibbon } from './widgets.ts';
 import type { Screen, UiContext } from './screen.ts';
 import { createDailyScreen } from './screens/daily.ts';
 import { createDyingScreen } from './screens/dying.ts';
+import { createElementalsScreen } from './screens/elementals.ts';
 import { createJourneyScreen } from './screens/journey.ts';
 import { createMissionsScreen } from './screens/missions.ts';
 import { createPauseScreen } from './screens/pause.ts';
@@ -163,6 +165,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     missions: createMissionsScreen(ctx),
     wardrobe: createWardrobeScreen(ctx),
     profile: createProfileScreen(ctx),
+    elementals: createElementalsScreen(ctx),
   };
 
   const screenLayer = h('div', 'screens');

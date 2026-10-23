@@ -1,6 +1,6 @@
 // Public types of the UI controller. See src/ui/README.md for how the game session drives it.
 
-import type { DayPlan, RunResult } from '../core/index.ts';
+import type { DayPlan, HeroId, RunResult } from '../core/index.ts';
 import type { Save, Settings } from '../meta/saveTypes.ts';
 import type { CosmeticId, Equipped } from '../meta/content.ts';
 import type { RunOutcome, ToastIcon, ToastTone } from '../meta/progression.ts';
@@ -18,7 +18,9 @@ export type ScreenId =
   | 'missions'
   | 'wardrobe'
   | 'journey'
-  | 'profile';
+  | 'profile'
+  // Elementals (docs/ELEMENTALS.md §4.10): the hero roster and the eight Trials.
+  | 'elementals';
 
 /**
  * The plain-language cue line above Nubs (ui.showCue):
@@ -55,8 +57,10 @@ export type UiSoundName =
  * Daily or challenge run names its target and the time reached.
  */
 export interface RunStatusView {
-  /** "Level 6 · Glass Garden", "Endless", "Daily Solstice", "Challenge". */
+  /** "Level 6 · Glass Garden", "Trial 3 · Thunder Alley", "Endless", "Daily Solstice", "Challenge". */
   title: string;
+  /** An Elementals Trial: the walking hero's tagline ("Strike new shade, fast."), shown under the title. */
+  tagline?: string;
   /** "Collect 4 flakes · 3/4", "Reach the finish · 62 %", "Beat Sam: Day 1 · 2:40 PM", "Best: Day 1 · 11:20 AM", or "". */
   goal: string;
   /** "Day 1 · 9:20 AM": the time reached (every mode). */
@@ -161,9 +165,10 @@ export interface UiCallbacks {
   nextLevel(): void;
   /**
    * Results > Map (or Back) on a Journey run, and the Title's Journey pill: leave the run for the
-   * Title scene behind the map. The UI is already on 'journey'.
+   * Title scene behind the map. The UI is already on 'journey' ('elementals' after a Trial's
+   * Results: `to` is then 'elementals').
    */
-  openJourney(): void;
+  openJourney(to?: 'journey' | 'elementals'): void;
   /** Results: Retry button, Space/Enter, or a tap on the map above the sheet. The UI is already on 'play'. */
   retry(): void;
   /** Back to the Title (Pause > Home, Results > Home). The UI is already on 'title'. */
@@ -226,6 +231,11 @@ export interface UiCallbacks {
    * Called whenever the try-on selection or the tab changes.
    */
   renderWardrobePreview(canvas: HTMLCanvasElement, equipped: Equipped, subject: 'nubs' | 'sun'): void;
+  /**
+   * Elementals: draw `hero` idling (Nubs in the saved outfit) on the screen's stage or a tile. The
+   * backing store is already sized to its CSS box × devicePixelRatio (max 2).
+   */
+  renderHeroPreview(canvas: HTMLCanvasElement, hero: HeroId): void;
 }
 
 export interface UiDeps {
@@ -237,8 +247,8 @@ export interface UiDeps {
   version: string;
 }
 
-/** Arguments of `show` per screen: only Results takes data. */
-export type ScreenArgs<K extends ScreenId> = K extends 'results' ? [view: ResultsView] : [];
+/** Arguments of `show` per screen: Results takes its data; the Elementals the Trial just played (an id). */
+export type ScreenArgs<K extends ScreenId> = K extends 'results' ? [view: ResultsView] : K extends 'elementals' ? [trial?: number] : [];
 
 export interface Ui {
   /** Switches screens (legal transitions only: illegal ones throw in dev and are ignored in prod). */

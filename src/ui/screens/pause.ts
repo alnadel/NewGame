@@ -38,9 +38,11 @@ export function createPauseScreen(ctx: UiContext): Screen {
 
   // The run so far (v1.4): the level or mode, its goal and progress, the time reached, star pips.
   const statusTitle = h('p', 'pause-st-title');
+  // An Elementals Trial: the walking hero's tagline under the title.
+  const statusTag = h('p', 'pause-st-goal');
   const statusGoal = h('p', 'pause-st-goal');
   const statusStars = h('ul', 'pause-st-stars');
-  const status = h('div', 'well pause-status', statusTitle, statusGoal, statusStars);
+  const status = h('div', 'well pause-status', statusTitle, statusTag, statusGoal, statusStars);
   const STAR_WORD = { earned: 'earned', open: 'still open', lost: 'lost' } as const;
   // Written out whole (never built at run time), so the build can shorten them (vite.config.ts).
   const STAR_CLASS = { earned: 'is-earned', open: 'is-open', lost: 'is-lost' } as const;
@@ -51,6 +53,8 @@ export function createPauseScreen(ctx: UiContext): Screen {
     card.classList.remove('has-stars');
     if (!v) return;
     statusTitle.textContent = v.title;
+    statusTag.textContent = v.tagline ?? '';
+    statusTag.hidden = !v.tagline;
     // "Day 1 · 6:47 AM" and "16 %" never break inside; the time may give way on short screens (ui.css).
     const nb = (t: string): string => t.replace(/ (AM|PM|%)/g, '\u00a0$1').replace(/Day (\d+) · /g, 'Day\u00a0$1\u00a0·\u00a0');
     statusGoal.replaceChildren(nb(v.goal), v.now ? h('span', 'pause-st-now', `${v.goal ? ' · ' : ''}now ${nb(v.now)}`) : '');

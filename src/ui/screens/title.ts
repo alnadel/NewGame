@@ -205,7 +205,13 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const reward = h('div', { class: 'title-reward-wrap has-dot', 'data-dot': '' }, h('span', { class: 'burst', deco: true }), rewardBtn);
   const walletValue = h('span', 'num');
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
-  const hud = h('div', 'title-hud', badgeSlot, reward, h('i', 'title-hud-gap'), chipSnow);
+  // Elementals (docs/ELEMENTALS.md §4.10): a violet square with a NEW sticker until the screen is opened.
+  const elementalsBtn = h('button', { class: 'btn btn--violet btn--sq elementals-btn pe', type: 'button', 'aria-label': 'Elementals', title: 'Elementals' }, artIcon('elementals'), newTag());
+  elementalsBtn.addEventListener('click', () => {
+    ctx.sound('tap');
+    ctx.go('elementals');
+  });
+  const hud = h('div', 'title-hud', badgeSlot, reward, h('i', 'title-hud-gap'), elementalsBtn, chipSnow);
 
   // --- Chips -------------------------------------------------------------------------------------
   // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
@@ -252,6 +258,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const dailyBtn = trayButton('Daily', 'daily', () => ctx.go('daily'), 'daily');
   const trayFor: Partial<Record<ScreenId, HTMLElement>> = {
     profile: badge.el,
+    elementals: elementalsBtn,
     journey: mapBtn,
     daily: dailyBtn,
     missions: trayButton('Missions', 'missions', () => ctx.go('missions'), 'missions'),
@@ -433,6 +440,8 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       if (isNew) g.el.setAttribute('aria-description', 'New');
     });
     hide(mapBtn, fresh);
+    hide(elementalsBtn, fresh || !isOpen(save, 'endless'));
+    elementalsBtn.classList.toggle('is-new', save.elementals?.seen !== true);
     hide(chipMissions, !featureUnlocked(save, 'missions'));
     hide(hud, fresh);
     badge.update(save);
