@@ -29,6 +29,7 @@ import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
+import { abilityBody, abilityHero, heroHealth, tagLocked } from './heroes.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
@@ -180,7 +181,7 @@ function remember(r: GuideRing, s: SimState): void {
   (r.next[h] as Uint8Array).set(s.guide.next);
   (r.lit[h] as Uint8Array).set(s.guide.lit);
   r.ticks[h] = s.guide.tick;
-  r.nubsLit[h] = s.nubs.f > 0 ? 1 : 0;
+  r.nubsLit[h] = s.trial !== null ? (s.nubs.safe && (s.mate === null || s.mate.safe) ? 0 : 1) : s.nubs.f > 0 ? 1 : 0;
   r.head = (h + 1) % RING;
 }
 
@@ -219,9 +220,36 @@ function noviceBot(): Bot {
   };
 }
 
-/** True when a Cold Snap can be cast this tick (the meter is full, none is on, the sun is up). */
+/**
+ * True when a Cold Snap can be cast this tick (the meter is full, none is on, the sun is up). On an
+ * Elementals Trial the snap bit casts the ability hero's power: also no timed ability on and no TAG
+ * within the lock (heroes.ts castHero).
+ */
 function snapReady(s: SimState): boolean {
-  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0;
+  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0 && (s.trial === null || (s.heroAbility === null && !tagLocked(s)));
+}
+
+/** The reactive bot's aim error on a Trial with a salt > 0 (σ, degrees). */
+const SALT_AIM_DEG = 4;
+
+/** A duo's Cold Snap smothers the partner too: the bots cast it only while the partner's health is at least this. */
+const SNAP_SPARE = 60;
+
+/**
+ * The panic rule's "in the sun": Nubs lit; on a Trial the ability hero's body outside its safe set
+ * (a duo's Cold Snap only while the partner can spare SNAP_SPARE health).
+ */
+function exposed(s: SimState): boolean {
+  if (s.trial === null) return s.nubs.f > 0;
+  const b = abilityBody(s);
+  const m = s.mate;
+  if (m !== null && abilityHero(s) === 'nubs' && heroHealth(b === m ? s.nubs : m) < SNAP_SPARE) return false;
+  return !b.safe;
+}
+
+/** The panic rule's gauge: Nubs' Chill; on a Trial the ability hero's health. */
+function gauge(s: SimState): number {
+  return s.trial === null ? s.nubs.chill : heroHealth(abilityBody(s));
 }
 
 function reactiveBot(ctx: BotHookCtx): Bot {
@@ -232,6 +260,7 @@ function reactiveBot(ctx: BotHookCtx): Bot {
   let seenGuide = -1;
   let target = -1;
   let started = false;
+  let rng: Rng | null = null;
   return {
     kind: 'reactive',
     next(s: SimState): InputFrame {
@@ -251,12 +280,18 @@ function reactiveBot(ctx: BotHookCtx): Bot {
         worldReactiveScore(ctx, s, score);
         const b = pickArc(score, cfg.blur, cfg.penalty, binOf(s.sun.theta));
         if (b >= 0) target = b;
+        // Elementals (docs/ELEMENTALS.md §3.9 G3): on a Trial a salt > 0 draws another hand, an aim
+        // error of N(0, SALT_AIM_DEG)° on each pick; salt 0 is the plain bot.
+        if (b >= 0 && ctx.salt > 0 && s.trial !== null) {
+          rng ??= rngFor(s.cfg.seed, 'bot', 'reactive', ctx.salt);
+          target = wrapDeg(b + SALT_AIM_DEG * gaussian(rng));
+        }
       }
       target = worldReactiveAim(ctx, s, target);
       const out = steer(f, s, target, cfg.rate, !started);
       started = true;
       // v1.5 Cold Snap: lit and low, with no safe angle close by (or nearly melted).
-      out.snap = mech && snapReady(s) && s.nubs.f > 0 && (s.nubs.chill < cfg.snapLast || (s.nubs.chill < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
+      out.snap = mech && snapReady(s) && exposed(s) && (gauge(s) < cfg.snapLast || (gauge(s) < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
       out.snap = econReactiveSnap(ctx, s, out.snap);
       return out;
     },
@@ -548,7 +583,7 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
     kind,
     next(s: SimState): InputFrame {
       const out = decide(s);
-      out.snap = snaps && snapReady(s) && s.nubs.f > 0 && s.nubs.chill < HUMAN_SNAP_CHILL;
+      out.snap = snaps && snapReady(s) && exposed(s) && gauge(s) < HUMAN_SNAP_CHILL;
       // humanFeat (v1.6): a snapSave Dare casts a ready snap in the sun (bots/dares.ts).
       if (feat && !out.snap && snapReady(s) && ctx.opts.dares) out.snap = ctx.opts.dares.humanSnap(s, false);
       return out;

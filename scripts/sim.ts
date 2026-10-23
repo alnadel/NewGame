@@ -66,10 +66,11 @@ import { step } from '../src/core/sim/step.ts';
 import { V16_RULES, type RunConfig, type SimState, type V16Rules } from '../src/core/sim/types.ts';
 import { ECON } from './sim16/econ.ts';
 import { WAIVERS, type Sim16Collector, type Sim16Ctx, type Sim16Job, type Sim16Module, type Sim16Row } from './sim16/registry.ts';
+import { TRIALS_MODULE } from './sim16/trials.ts';
 import { WORLD } from './sim16/world.ts';
 
 /** The v1.6 report modules (scripts/sim16/registry.ts). */
-const SIM16: readonly Sim16Module[] = [ECON, WORLD];
+const SIM16: readonly Sim16Module[] = [ECON, WORLD, TRIALS_MODULE];
 
 /** One row of the report: a bot on one kind of run. */
 type Job = Sim16Job;
