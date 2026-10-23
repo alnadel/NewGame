@@ -1100,8 +1100,8 @@ const NIGHT_STEPS = 16;
 
 /**
  * Elementals (docs/ELEMENTALS.md §4.9): another hero's art for the same two-layer cache (Nubs' own
- * art is the default, null). `key` quantizes what the layers show (flicker and variant frames
- * included, at ≤ 8 fps); `back` and `front` draw them at the origin in pose px; `live` draws the
+ * art is the default, null). `key` quantizes what the layers show (any variant frame included, at
+ * ≤ 8 fps); `back` and `front` draw them at the origin in pose px; `live` draws the
  * spring-chain parts between them each frame (≤ 2 strokes); `motion` adjusts the whole-sprite
  * transform; `death` draws the whole hero while it dies (every frame, like the melt).
  */
@@ -1217,7 +1217,8 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   const spritePose = sp.pose;
   // The stamp's stretch of the cached layers (1 unless a trial's zoom kept them).
   const r = pxPerU / px;
-  const redraw = Math.abs(p.time - sp.at) >= sp.cap;
+  // Under a cap, a changed key waits for its turn (a fresh sprite, NaN, never waits).
+  const redraw = sp.key !== sp.key || Math.abs(p.time - sp.at) >= sp.cap;
   sp.scale = px;
   sp.anim = a;
   sp.looks = looks;
