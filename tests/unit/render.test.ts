@@ -8,7 +8,9 @@ import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src
 import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
 import { createDecals, decorIn, FOOTPRINT_CLEAR, PUDDLE, TRAIL_CLEAR, trailDistance } from '../../src/render/decor.ts';
-import { createHalo, createShadeSplit, splitShade, updateHalo } from '../../src/render/halo.ts';
+import { createHalo, createShadeSplit, heroArcColor, splitShade, updateHalo } from '../../src/render/halo.ts';
+import { heroArt } from '../../src/render/heroes.ts';
+import { createNubsAnim, createPose } from '../../src/render/nubs.ts';
 import { addHeadline, addPlus, addSwing, createPops, POP_PHEW, updatePops, type Pops } from '../../src/render/particles.ts';
 import { MAP_FADE_S, MAP_LABEL_FADE_S, MAP_PULL_S, mapAlphas, mapSettleT, type MapOverlay } from '../../src/render/meltMap.ts';
 import { createPalette, nubsShadeAt, PLAIN_THEME, themeFor, updatePalette } from '../../src/render/palette.ts';
@@ -421,5 +423,84 @@ describe('chapter looks and the hot dial (v1.3)', () => {
     updateHalo(slow, 0.1, false, 100, 0, true);
     updateHalo(fast, 0.1, false, 10, 0, true);
     expect(fast.beat).toBeGreaterThan(slow.beat);
+  });
+});
+
+describe('Elementals hero art (sprite keys)', () => {
+  const HEROES = ['ember', 'sprout', 'volt', 'drip'] as const;
+
+  it('keeps Nubs on its own art, its pose defaults neutral', () => {
+    expect(heroArt('nubs')).toBeNull();
+    const p = createPose();
+    expect([p.c, p.safe, p.meter, p.power, p.hc, p.cause]).toEqual([0, true, 1, false, false, '']);
+  });
+
+  it('quantizes the look in place to 16 directions, so a tiny turn keeps the cached layers', () => {
+    for (const hero of HEROES) {
+      const art = heroArt(hero);
+      expect(art).not.toBeNull();
+      const a = createNubsAnim();
+      const p = createPose();
+      p.reducedMotion = true;
+      p.lookX = Math.cos(0.3);
+      p.lookY = Math.sin(0.3);
+      const k0 = art?.key(p, a) as number;
+      expect(Number.isInteger(k0)).toBe(true);
+      expect(Math.hypot(p.lookX, p.lookY)).toBeCloseTo(1, 9);
+      expect(Math.atan2(p.lookY, p.lookX)).toBeCloseTo(Math.PI / 8, 9);
+      p.lookX = Math.cos(0.32);
+      p.lookY = Math.sin(0.32);
+      expect(art?.key(p, a)).toBe(k0);
+      p.lookX = Math.cos(1.2);
+      p.lookY = Math.sin(1.2);
+      expect(art?.key(p, a)).not.toBe(k0);
+    }
+  });
+
+  it('changes the key with the hero state (light, low, ability) and high contrast', () => {
+    for (const hero of HEROES) {
+      const art = heroArt(hero);
+      const a = createNubsAnim();
+      const keys = new Set<number>();
+      const p = createPose();
+      p.reducedMotion = true;
+      const at = (patch: Partial<typeof p>) => {
+        Object.assign(p, { chill: 0.8, safe: true, c: 3, meter: 0.5, power: false, hc: false }, patch);
+        keys.add(art?.key(p, a) as number);
+      };
+      at({});
+      at({ chill: 0.1, meter: 0.1 });
+      at({ hc: true });
+      at({ safe: false, c: 8, meter: 0.95 });
+      expect(keys.size).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it('flickers Ember at ≤ 8 fps and not at all under reduced motion; the others hold still', () => {
+    for (const hero of HEROES) {
+      const art = heroArt(hero);
+      for (const rm of [false, true]) {
+        const a = createNubsAnim();
+        const p = createPose();
+        p.reducedMotion = rm;
+        let last = NaN;
+        let changes = 0;
+        for (let f = 0; f < 120; f++) {
+          p.time = f / 60;
+          const k = art?.key(p, a) as number;
+          if (f > 0 && k !== last) changes++;
+          last = k;
+        }
+        expect(changes).toBeLessThanOrEqual(hero === 'ember' && !rm ? 16 : 0);
+        if (hero === 'ember' && !rm) expect(changes).toBeGreaterThan(8);
+      }
+    }
+  });
+
+  it('colours the dial per hero (Drip warm when it runs hot)', () => {
+    const cols = new Set((['ember', 'sprout', 'volt', 'drip'] as const).map((h) => heroArcColor(h, true)));
+    expect(cols.size).toBe(4);
+    expect(heroArcColor('drip', false)).not.toBe(heroArcColor('drip', true));
+    expect(heroArcColor('ember', false)).toBe(heroArcColor('ember', true));
   });
 });

@@ -113,6 +113,19 @@ describe('hapticForEvent', () => {
       [{ e: 'snap', x: 0, y: 0, cloudId: 9 }, 'snap'],
       [{ e: 'snapEnd' }, null],
       [{ e: 'deepEnter' }, 'deep'],
+      // Elementals
+      [{ e: 'ability', hero: 'ember', kind: 'blaze', x: 0, y: 0 }, 'snap'],
+      [{ e: 'ability', hero: 'sprout', kind: 'seed', x: 0, y: 0 }, 'bloom'],
+      [{ e: 'ability', hero: 'volt', kind: 'thunder', x: 0, y: 0 }, 'crystal'],
+      [{ e: 'ability', hero: 'drip', kind: 'rain', x: 0, y: 0 }, 'snap'],
+      [{ e: 'abilityEnd', kind: 'rain' }, null],
+      [{ e: 'strike', chain: 1, gain: 1, thunder: false, x: 0, y: 0 }, null],
+      [{ e: 'strike', chain: 3, gain: 3, thunder: false, x: 0, y: 0 }, 'crystal'],
+      [{ e: 'strike', chain: 0, gain: 4, thunder: true, x: 0, y: 0 }, 'crystal'],
+      [{ e: 'heroPickup', hero: 'ember', delta: 5, x: 0, y: 0 }, 'flake'],
+      [{ e: 'tagSoon', to: 'volt', ticks: 60 }, null],
+      [{ e: 'tag', from: 'ember', to: 'volt', index: 1 }, 'phew'],
+      [{ e: 'tagClean', to: 'volt' }, null],
     ];
     for (const [ev, name] of cases) expect(hapticForEvent(ev)).toBe(name);
   });
