@@ -1324,6 +1324,27 @@ Accept when every existing e2e passes unchanged, §5.6's UI tests pass, and UI's
   feature code, not dead code."
 - The feature is **not** compiled out of `build:single`.
 
+**Measured at the Elementals merge (integrator):** `build:single` is **794,196 B (775.6 KiB), 15,956 B
+(15.6 KiB) over 778,240 B**. Each team measured its own branch on C0 (754,497 B, itself +7,183 B over
+747,314 B), and the merge adds exactly what the three add alone:
+
+| Owner | Added | Allowance | Over |
+|---|---|---|---|
+| CORE (C0 +7,183 B, hero sim +8,540 B) | +15,723 B | 9,216 B | +6,507 B |
+| ART | +19,117 B | 12,288 B | +6,829 B |
+| UI (JS +10,223 B, CSS +1,829 B) | +12,052 B | 8,192 B | +3,860 B |
+| Integration (preview, audio health, cue gates) | ≈ 0 B | ≈ 1,230 B | |
+
+By source map (minified JS added over C0): `core/sim/heroes.ts` 7.1 KB and `guide.ts` 1.1 (CORE);
+`render/heroes.ts` 7.2 KB, `halo.ts` 3.7, `renderer.ts` 2.1, `fx.ts` 1.3, `glyphs.ts` 1.2 and the
+audio recipes 1.0 (ART); `screens/elementals.ts` 4.7 KB, `moments.ts` 1.6, `progression.ts` 1.1 and
+`game/campaign.ts` 0.9 (UI). Every team cut its decoration first (§8.2). What is left is the hero
+rules, the copy that teaches them (§6), the dial patterns that keep colour from being the only channel
+(§5.5) and the screen, and nothing build-level is left to take (a JS target matching `cssTarget` saves
+260 B). Closing 15.6 KiB therefore means cutting specified features, so **the call is the lead's**:
+amend this budget to 780 KiB (798,720 B, leaving about 4.4 KiB for fixes) with the reason above, or
+order a cut list. Until then release gate 9 fails against 760 KiB.
+
 ### 5.4 Performance and draw budget
 
 **Sim:**

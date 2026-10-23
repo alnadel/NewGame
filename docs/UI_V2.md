@@ -1748,6 +1748,13 @@ changed (`--line` and `--line-sm` for the 42 ink outlines, `--gold-ball`, `--tr-
 fade mask), as did one shared rule each for the wells and the data-sub kicker; the probe reuses
 `.sr-only`, and two biome panel classes no screen used went.
 
+**Amended for Elementals** (`docs/ELEMENTALS.md` §5.3): **760 KiB (778,240 B)**, up from 730 KiB.
+Reason: "Elementals proof of concept (docs/ELEMENTALS.md): four playable heroes (sim rules, art, dial
+modes, cues) and eight Trials with their screen; shipped feature code, not dead code." The build was
+747,314 B before it. **Measured at the Elementals merge:** 794,196 B (775.6 KiB), 15,956 B over:
+CORE added 15.4 KiB, ART 18.7 and UI 11.8 against allowances of 9, 12 and 8 KiB, each after cutting
+its decoration. Open: the lead amends to 780 KiB or orders cuts (the breakdown is in §5.3 there).
+
 ---
 
 ## 14. Work split (five builders)
