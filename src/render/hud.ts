@@ -30,6 +30,11 @@
 // full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
 // (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
 //
+// Elementals (docs/ELEMENTALS.md §4.9): on a Trial the meter is the ability coin of the hero who casts
+// (its candy face and glyph: Ember red with a flame, Sprout green with a seedling, Volt violet with a
+// bolt, Drip blue with a drop; Nubs keeps the ice coin and flake), a timed ability drains its ring
+// white, and in the 3 s before a TAG the coin dims under a "TAG" chip (no ability can be cast).
+//
 // v1.6 (docs/V1_6_PLAN.md): the Flow Ring's charge runs round the multiplier coin (teal, gold as
 // ×5's buffer, hot while it bleeds; a trick flashes it). The Frost Bank's two charges are two small
 // coins hung under the meter that light in turn (the ring shows the next one filling; a spill shakes
@@ -39,7 +44,25 @@
 // (a boss finale's HP on a hot coin at its start).
 
 import type { MechView } from './renderer.ts';
-import { dayStartTick, dayTicks, FLARE_KEPT, FORECAST_IDS, hudClock, minutesOfDay, worldYAtTick, type Flare, type ForecastId, type SimState } from '../core/index.ts';
+import {
+  abilityHero,
+  dayStartTick,
+  dayTicks,
+  FLARE_KEPT,
+  FORECAST_IDS,
+  HERO_IDS,
+  HEROES,
+  hudClock,
+  levelShort,
+  minutesOfDay,
+  tagLocked,
+  TUNING,
+  worldYAtTick,
+  type Flare,
+  type ForecastId,
+  type HeroId,
+  type SimState,
+} from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { coin, displayFont, FACE, fontGen, INK, onDisplayFont, outlined, plate, slot, SLOT_2, SLOT_SUB, starSprite, type Face } from './candy.ts';
 import { cssa } from './color.ts';
@@ -463,7 +486,7 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   const dayKey = c ? -c.id : s.day;
   if (dayKey !== h.dayVal) {
     h.dayVal = dayKey;
-    h.dayText = c ? `L${c.id}` : `D${s.day}`;
+    h.dayText = c ? levelShort(c.id) : `D${s.day}`;
   }
   const dl = dayTicks(s.day);
   const key = s.day * 1000 + Math.floor(minutesOfDay(s.day, s.dayTick) / 10);
@@ -752,38 +775,45 @@ export function hudMeterHit(h: HudState, x: number, y: number): boolean {
 function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput, m: MechView): void {
   const k = hudScale(v);
   const n = m.pips > 1 ? 2 : 1;
+  const st = inp.s;
+  const hero: HeroId = st.trial !== null ? abilityHero(st) : 'nubs';
+  const locked = st.trial !== null && tagLocked(st);
+  // A hero's timed ability drains the ring as a snap does.
+  const timed = st.trial !== null && st.heroAbility !== null ? st.heroTicks / (st.heroAbility === 'blaze' ? TUNING.heroes.ember.blazeTicks : TUNING.heroes.drip.rainTicks) : 0;
+  const snapLeft = Math.max(m.snapLeft, timed);
   const r = METER_R * k;
   const x = (h.meterX = v.vx + v.vw - v.safe.right - METER_SIDE * k - r);
   const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - r;
   h.meterSpan = 0;
   h.meterY = y;
   h.meterR = METER_RING * k;
-  const snapping = m.snapLeft > 0;
+  const snapping = snapLeft > 0;
   const fullN = snapping ? 0 : Math.floor(Math.min(n, m.frost) + 0.001);
   if (fullN > h.meterFullN) h.meterPop = 0.45;
   h.meterFullN = fullN;
   const full = (h.meterFull = fullN > 0);
   const rm = inp.reducedMotion;
-  const a = inp.alpha;
+  const a = inp.alpha * (locked ? 0.45 : 1);
+  g.globalAlpha = a;
   // A full meter breathes, and pops (1 → 1.25 → 1) when a charge fills.
   const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
   const s = 1 + (rm ? 0 : 0.18 * Math.sin((Math.PI * h.meterPop) / 0.45)) + (full && !rm ? 0.03 * breathe : 0);
   if (full && !inp.hc) {
-    iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32);
+    const glow = hero === 'nubs' ? (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32)) : heroGlow(hero);
     const gr = r * (2.2 + 0.25 * breathe);
     g.globalAlpha = a * (0.55 + 0.45 * breathe);
-    g.drawImage(iceGlow, x - gr, y - gr, gr * 2, gr * 2);
+    g.drawImage(glow, x - gr, y - gr, gr * 2, gr * 2);
     g.globalAlpha = a;
   }
   // The coin and its track (one sprite per look), then the fill: the charge in progress (all of it
   // once both are full), or the snap draining white.
   const look = snapping ? 2 : full ? 1 : 0;
-  const mk = look * 2 + (inp.hc ? 1 : 0) + k * 10 + v.dpr * 1000;
-  if (h.meterKey !== mk || !h.meterBase) renderMeter(h, v, k, look, inp.hc, mk);
+  const mk = look * 2 + (inp.hc ? 1 : 0) + k * 10 + v.dpr * 1000 + HERO_IDS.indexOf(hero) * 1e5;
+  if (h.meterKey !== mk || !h.meterBase) renderMeter(h, v, k, look, inp.hc, mk, hero);
   const base = h.meterBase as Canvas2D;
   const bw = (base.width / v.dpr) * s;
   g.drawImage(base, x - bw / 2, y - bw / 2, bw, bw);
-  const f = snapping ? m.snapLeft : fullN >= n ? 1 : Math.max(0, Math.min(1, m.frost - fullN));
+  const f = snapping ? snapLeft : fullN >= n ? 1 : Math.max(0, Math.min(1, m.frost - fullN));
   if (f > 0) {
     g.lineCap = 'round';
     g.lineWidth = METER_RING_W * k * s;
@@ -830,7 +860,19 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     chip(g, h, x, cy, k, h.glassText, h.glassW, fullN > 0 || snapping ? 0.95 : 0.55, maxX);
   }
   h.lastGlassH = m.glassH;
-  if (full) {
+  if (locked) {
+    // No ability inside a TAG's telegraph: a "TAG" chip over the dimmed coin.
+    g.globalAlpha = inp.alpha;
+    g.font = h.chipFont;
+    const tw = g.measureText('TAG').width + 14 * k;
+    g.fillStyle = INK;
+    roundRect(g, x - tw / 2, top - 10 * k, tw, 20 * k, 10 * k);
+    g.fill();
+    g.fillStyle = '#FFFFFF';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('TAG', x, top + 0.5 * k);
+  } else if (full) {
     // "Swipe down": a white chevron with an ink outline, bobbing down over the meter.
     const cy = top + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
     const w = 8 * k;
@@ -866,8 +908,12 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   g.lineCap = 'butt';
 }
 
-/** The meter's coin sprite: the slot track of its ring and an ice coin with a snowflake (ready: deep blue; frozen during a snap). */
-function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean, key: number): void {
+/**
+ * The meter's coin sprite: the slot track of its ring and an ice coin with a snowflake (ready: deep
+ * blue; frozen during a snap); a hero's coin is its candy face with its glyph in white (frozen while
+ * its timed ability runs).
+ */
+function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean, key: number, hero: HeroId): void {
   const dpr = v.dpr;
   const half = (METER_RING + METER_RING_W / 2 + 3) * k;
   const size = Math.ceil(half * 2 * dpr);
@@ -877,9 +923,26 @@ function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean,
   const g = fresh(c, dpr);
   const o = size / dpr / 2;
   ring(g, o, METER_RING * k, METER_RING_W * k, k);
+  if (hero !== 'nubs') {
+    coin(g, o, o, METER_R * k, look === 2 ? METER_FROZEN : FACE[HEROES[hero].face], k, hc);
+    drawGlyph(g, hero, o, o, 32 * k, look === 2 ? undefined : '#FFFFFF');
+    return;
+  }
   coin(g, o, o, METER_R * k, look === 1 ? METER_READY : look === 2 ? METER_FROZEN : FACE.ice, k, hc);
   const f = 30 * k;
   g.drawImage(flake(), o - f / 2, o - f / 2, f, f);
+}
+
+const heroGlows = new Map<HeroId, Canvas2D>();
+/** A ready hero coin's glow, in its face colour. */
+function heroGlow(hero: HeroId): Canvas2D {
+  let c = heroGlows.get(hero);
+  if (!c) {
+    const f = FACE[HEROES[hero].face][1];
+    c = radialSprite(`${parseInt(f.slice(1, 3), 16)},${parseInt(f.slice(3, 5), 16)},${parseInt(f.slice(5, 7), 16)}`, 128, 0.8, 0.42, 0.32);
+    heroGlows.set(hero, c);
+  }
+  return c;
 }
 
 /** A ring track centred on (o, o): an ink band with the slot's colour inside it. */

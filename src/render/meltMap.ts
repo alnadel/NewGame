@@ -348,7 +348,8 @@ function drawPuddle(g: CanvasRenderingContext2D, v: View, s: SimState, a: number
   g.beginPath();
   g.arc(px, py, pr + 2, 0, TAU);
   g.stroke();
-  carrotIcon(g, px + 16, py - 18, a);
+  // An Elemental leaves no carrot.
+  if ((d.who ?? 'nubs') === 'nubs') carrotIcon(g, px + 16, py - 18, a);
   g.globalAlpha = 1;
 }
 

@@ -48,6 +48,8 @@ export interface NubsAnim {
   /** The face's look (unit screen vector), eased toward the sun or a flake ahead. */
   lookX: number;
   lookY: number;
+  /** Elementals: seconds left of Volt's strike flash (0 none). */
+  zap: number;
 }
 
 export function createNubsAnim(): NubsAnim {
@@ -69,6 +71,7 @@ export function createNubsAnim(): NubsAnim {
     hopNextH: 0,
     lookX: 1,
     lookY: 0,
+    zap: 0,
   };
   resetNubsAnim(a);
   return a;
@@ -106,6 +109,7 @@ export function resetNubsAnim(a: NubsAnim): void {
   a.phew = 0;
   a.hopT = -1;
   a.hopNext = -1;
+  a.zap = 0;
 }
 
 /** Advances springs and timers (dt in game seconds; sx = Nubs' screen x in CSS px; S = px per u). */
@@ -118,6 +122,7 @@ export function updateNubsAnim(a: NubsAnim, dt: number, sx: number, S: number, w
   a.glare = Math.max(0, a.glare - dt);
   a.happy = Math.max(0, a.happy - dt);
   a.phew = Math.max(0, a.phew - dt);
+  a.zap = Math.max(0, a.zap - dt);
   a.blinkIn -= dt;
   if (a.blinkIn <= 0) {
     a.blink = 0.12;
@@ -192,6 +197,17 @@ export interface NubsPose {
   /** Shade color for partial tinting. */
   shade: Rgb;
   reducedMotion: boolean;
+  /**
+   * Elementals (render/heroes.ts): the lit sum c (0..10), whether the body is in its hero's safe
+   * set, the raw meter 0..1 (Drip's T), its timed ability running, high contrast and how it died.
+   * Nubs' own art reads none of them.
+   */
+  c: number;
+  safe: boolean;
+  meter: number;
+  power: boolean;
+  hc: boolean;
+  cause: string;
 }
 
 export function createPose(): NubsPose {
@@ -217,6 +233,12 @@ export function createPose(): NubsPose {
     melt: -1,
     shade: hex('#C9D6F2'),
     reducedMotion: false,
+    c: 0,
+    safe: true,
+    meter: 1,
+    power: false,
+    hc: false,
+    cause: '',
   };
 }
 
@@ -311,7 +333,7 @@ export function looksFor(e: Equipped): Looks {
  * and the teardrop's squash and wobble below 30 % Chill. Kept out of the drawing itself so the
  * cached sprite layers stay still (see NubsSprite).
  */
-interface Motion {
+export interface Motion {
   sx: number;
   sy: number;
   rot: number;
@@ -322,9 +344,8 @@ interface Motion {
 
 const motion: Motion = { sx: 1, sy: 1, rot: 0, jx: 0, dy: 0 };
 
-function nubsMotion(p: NubsPose, a: NubsAnim, out: Motion): Motion {
+function nubsMotion(p: NubsPose, a: NubsAnim, out: Motion, low = p.chill < 0.3): Motion {
   const U = p.S * (0.6 + 0.4 * p.chill) * NUBS_SCALE;
-  const low = p.chill < 0.3;
   let sx = 1;
   let sy = 1;
   if (p.walking && !p.reducedMotion) sy += 0.04 * Math.sin(a.walkPhase);
@@ -1076,6 +1097,22 @@ const CHILL_STEPS = 40;
 const LOOK_STEP_DEG = 5;
 const NIGHT_STEPS = 16;
 
+/**
+ * Elementals (docs/ELEMENTALS.md §4.9): another hero's art for the same two-layer cache (Nubs' own
+ * art is the default, null). `key` quantizes what the layers show (flicker and variant frames
+ * included, at ≤ 8 fps); `back` and `front` draw them at the origin in pose px; `live` draws the
+ * spring-chain parts between them each frame (≤ 2 strokes); `motion` adjusts the whole-sprite
+ * transform; `death` draws the whole hero while it dies (every frame, like the melt).
+ */
+export interface CharArt {
+  key(p: NubsPose, a: NubsAnim): number;
+  back(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim): void;
+  front(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim): void;
+  live(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim): void;
+  motion(p: NubsPose, a: NubsAnim, m: Motion): void;
+  death(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim): void;
+}
+
 export interface NubsSprite {
   /** The composed image (x-ray, glare flash, melt). */
   canvas: Canvas2D;
@@ -1105,6 +1142,10 @@ export interface NubsSprite {
   /** Layer redraws and compositions so far (perf checks). */
   layerDraws: number;
   composes: number;
+  /** The pose the layers were drawn for (quantized), the art drawn this frame (null: Nubs) and whether its springs are baked into the front layer (a duo mate: no live strokes). */
+  readonly pose: NubsPose;
+  art: CharArt | null;
+  baked: boolean;
 }
 
 export function createNubsSprite(): NubsSprite {
@@ -1133,10 +1174,11 @@ export function createNubsSprite(): NubsSprite {
     dy: 0,
     layerDraws: 0,
     composes: 0,
+    pose: createPose(),
+    art: null,
+    baked: false,
   };
 }
-
-const spritePose = createPose();
 
 function prepare(c: Canvas2D, g: CanvasRenderingContext2D, w: number, h: number, ox: number, oy: number): void {
   if (c.width !== w || c.height !== h) {
@@ -1154,16 +1196,19 @@ function prepare(c: Canvas2D, g: CanvasRenderingContext2D, w: number, h: number,
  * Prepares this frame's sprite for the pose at `pxPerU` device px per u: refreshes the cached
  * layers if needed (see the note above) and, for the melt or a glare flash, composes the image.
  */
-export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks: Looks, pxPerU: number): void {
+export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks: Looks, pxPerU: number, art: CharArt | null = null): void {
   const w = Math.ceil(BOX_W * pxPerU);
   const h = Math.ceil(BOX_H * pxPerU);
   const ox = ORIGIN_X * pxPerU;
   const oy = ORIGIN_Y * pxPerU;
   const resized = sp.back.width !== w || sp.back.height !== h || sp.scale !== pxPerU;
+  const spritePose = sp.pose;
   sp.scale = pxPerU;
   sp.anim = a;
   sp.looks = looks;
   sp.composed = false;
+  if (art !== sp.art) sp.key = NaN;
+  sp.art = art;
 
   if (p.melt >= 0) {
     // The melt animates every frame: draw it whole, with no stamping transform.
@@ -1172,12 +1217,40 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
     spritePose.x = ox;
     spritePose.y = oy;
     spritePose.S = pxPerU;
-    drawNubs(sp.g, spritePose, a, looks);
+    if (art) art.death(sp.g, spritePose, a);
+    else drawNubs(sp.g, spritePose, a, looks);
     sp.sx = sp.sy = 1;
     sp.rot = sp.jx = sp.dy = 0;
     sp.key = NaN;
     sp.whole = true;
     sp.composed = true;
+    return;
+  }
+
+  if (art) {
+    // A hero (render/heroes.ts): its own key and layers, Nubs' springs, hop and bob.
+    const m = nubsMotion(p, a, motion, false);
+    art.motion(p, a, m);
+    sp.sx = m.sx;
+    sp.sy = m.sy;
+    sp.rot = m.rot;
+    sp.jx = m.jx;
+    sp.dy = m.dy;
+    Object.assign(spritePose, p);
+    spritePose.x = 0;
+    spritePose.y = 0;
+    spritePose.S = pxPerU;
+    const key = art.key(spritePose, a);
+    if (resized || key !== sp.key) {
+      sp.key = key;
+      prepare(sp.back, sp.backG, w, h, ox, oy);
+      art.back(sp.backG, spritePose, a);
+      prepare(sp.front, sp.frontG, w, h, ox, oy);
+      if (sp.baked) art.live(sp.frontG, spritePose, a);
+      art.front(sp.frontG, spritePose, a);
+      sp.layerDraws++;
+    }
+    sp.whole = false;
     return;
   }
 
@@ -1246,13 +1319,19 @@ function compose(sp: NubsSprite): void {
   const g = sp.g;
   g.drawImage(back, 0, 0);
   g.setTransform(1, 0, 0, 1, ox, oy);
-  drawTailsLayer(g, spritePose, sp.anim as NubsAnim, sp.looks as Looks, sp.geom);
+  liveLayer(g, sp);
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.drawImage(sp.front, 0, 0);
   g.setTransform(1, 0, 0, 1, ox, oy);
-  drawGlareFlash(g, sp.anim as NubsAnim, sp.geom);
+  if (!sp.art) drawGlareFlash(g, sp.anim as NubsAnim, sp.geom);
   sp.composed = true;
   sp.composes++;
+}
+
+/** The springs between the layers: Nubs' scarf tails, or a hero's live parts (none when baked). */
+function liveLayer(g: CanvasRenderingContext2D, sp: NubsSprite): void {
+  if (!sp.art) drawTailsLayer(g, sp.pose, sp.anim as NubsAnim, sp.looks as Looks, sp.geom);
+  else if (!sp.baked) sp.art.live(g, sp.pose, sp.anim as NubsAnim);
 }
 
 /**
@@ -1275,7 +1354,7 @@ export function drawNubsSprite(g: CanvasRenderingContext2D, sp: NubsSprite, x: n
   g.scale(sp.sx * k, sp.sy * k);
   g.drawImage(src, -ox, -oy, w, h);
   if (!whole) {
-    drawTailsLayer(g, spritePose, sp.anim as NubsAnim, sp.looks as Looks, sp.geom);
+    liveLayer(g, sp);
     g.drawImage(sp.front, -ox, -oy, w, h);
   }
   g.restore();
