@@ -68,6 +68,7 @@ const DASH = [4, 5];
 const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), sprout: hex('#8BD650'), volt: hex('#FFE14D'), drip: TEAL };
 const DRIP_WARM = hex('#FFB347');
 const BOTH = hex('#FFF2B0');
+const HOT_RED = hex('#E8303A');
 const DEAD = hex('#9AA0B4');
 const GAUGE: Readonly<Record<HeroId, readonly number[]>> = {
   nubs: [FROST, AMBER, HOT],
@@ -325,6 +326,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   g.arc(cx, cy, R, 0, TAU);
   g.stroke();
   const heat = h.heat * inp.fade;
+  // Beside Ember's amber arcs the hot ring burns red.
+  const hotC = hm !== null && (hm.lead === 'ember' || hm.mate === 'ember') ? HOT_RED : HOT;
   if (heat > 0.01) {
     // In the sun the ring burns: a hot rim with a glow that beats like a heart (steady under
     // reduced motion), so "Nubs is melting" reads at a glance, before any number does.
@@ -332,11 +335,11 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     const k = inp.reducedMotion ? 0.6 : Math.max(0, Math.sin(h.beat * TAU)) ** 3;
     if (inp.mech?.flarePhase !== 1) {
       g.lineWidth = 12 + 6 * k;
-      g.strokeStyle = cssa(HOT, (0.14 + 0.2 * k) * heat);
+      g.strokeStyle = cssa(hotC, (0.14 + 0.2 * k) * heat);
       g.stroke();
     }
     g.lineWidth = 2.5;
-    g.strokeStyle = cssa(HOT, 0.9 * heat);
+    g.strokeStyle = cssa(hotC, 0.9 * heat);
     g.stroke();
   }
 
@@ -745,6 +748,9 @@ function heroArcs(g: CanvasRenderingContext2D, inp: HaloInput, hm: HeroHalo, ga:
     g.stroke();
     g.beginPath();
     arcRuns(g, inp.now, cx, cy, R, 1);
+    g.lineWidth = 11;
+    g.strokeStyle = cssa(INK, 0.35 * ga);
+    g.stroke();
     g.lineWidth = 8;
     g.strokeStyle = cssa(BOTH, 0.95 * ga);
     g.stroke();
@@ -777,15 +783,20 @@ function heroArcs(g: CanvasRenderingContext2D, inp: HaloInput, hm: HeroHalo, ga:
       arcRuns(g, split.ending, cx, cy, R, 0);
       g.stroke();
     }
-    // The band (Sprout's in leaf dashes, its run kept whole by a lime edge), its inner edge.
+    // The band on an ink underlay (lime and yellow vanish on pale ground; Sprout's in leaf dashes,
+    // its run kept whole by a lime edge), then its inner edge.
+    const bw = kind === 'lasting' ? 8 : 5;
+    g.beginPath();
+    arcRuns(g, main, cx, cy, R, 1);
+    g.lineWidth = bw + 3;
+    g.strokeStyle = cssa(INK, 0.4 * a);
+    g.stroke();
     if (hero === 'sprout') {
       g.setLineDash(LEAF_DASH);
       g.lineCap = 'butt';
     }
-    g.lineWidth = kind === 'lasting' ? 8 : 5;
+    g.lineWidth = bw;
     g.strokeStyle = cssa(col, 0.95 * a);
-    g.beginPath();
-    arcRuns(g, main, cx, cy, R, 1);
     g.stroke();
     g.setLineDash(NO_DASH);
     g.lineWidth = hero === 'sprout' ? 2 : 1;
@@ -794,6 +805,26 @@ function heroArcs(g: CanvasRenderingContext2D, inp: HaloInput, hm: HeroHalo, ga:
     arcRuns(g, main, cx, cy, R - 4.5, 1);
     g.stroke();
     const n = runs(main);
+    // A narrow run (Sprout's edges) is a target, not a sliver: a dot in the hero's colour in a white disc.
+    g.beginPath();
+    let dots = 0;
+    for (let i = 0; i < n; i++) {
+      const b0 = runBuf[2 * i] as number;
+      const b1 = runBuf[2 * i + 1] as number;
+      if (b1 - b0 >= FLARE_DOT_DEG) continue;
+      const x = cx + Math.cos(-((b0 + b1) / 2) * DEG) * R;
+      const y = cy + Math.sin(-((b0 + b1) / 2) * DEG) * R;
+      g.moveTo(x + 5.5, y);
+      g.arc(x, y, 5.5, 0, TAU);
+      dots++;
+    }
+    if (dots > 0) {
+      g.fillStyle = cssa(0xffffff, 0.95 * a);
+      g.fill();
+      g.lineWidth = 1.5;
+      g.strokeStyle = cssa(col, a);
+      g.stroke();
+    }
     if (hero === 'ember' || warm) {
       // Ember: rays every 6° outside the band. Drip warming: white dots along it.
       g.lineWidth = warm ? 3 : 2;

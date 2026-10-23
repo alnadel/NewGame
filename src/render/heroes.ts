@@ -474,9 +474,9 @@ const VOLT: CharArt = {
     const ex = p.lookX * 1.1 * U;
     if (!p.hc && st !== 3) {
       // The eyes glow.
-      g.fillStyle = 'rgba(255,225,77,0.35)';
+      g.fillStyle = 'rgba(255,240,150,0.45)';
       g.beginPath();
-      ell(g, ex, ey, 6.4 * U, 3.2 * U);
+      for (const s of SIDES) ell(g, s * 2.9 * U + ex, ey, 2.6 * U, 2.8 * U);
       g.fill();
     }
     const mood = moodOf(st === 2 ? JOY : st === 3 ? SAD : CALM, a);

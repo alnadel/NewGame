@@ -167,6 +167,17 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
     case 'clusterSaved':
     case 'flareParry':
       return 'crystal';
+    // Elementals (docs/ELEMENTALS.md §4.9): BLAZE and CLOUDBURST thump like a snap, a SEED blooms,
+    // a strike rings like crystal from a ×3 chain (or a THUNDERCLAP), a TAG lands like PHEW, a hero's
+    // flake ticks like a flake.
+    case 'ability':
+      return ev.kind === 'seed' ? 'bloom' : ev.kind === 'thunder' ? 'crystal' : 'snap';
+    case 'strike':
+      return ev.chain >= 3 || ev.thunder ? 'crystal' : null;
+    case 'tag':
+      return 'phew';
+    case 'heroPickup':
+      return 'flake';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
       // the rest have no haptic. 'best' and 'ui' are played by the UI directly.

@@ -9,8 +9,28 @@
 // frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap"), a spill shakes the meter, a
 // cash-in pours from the badge into it; LANDING!, GLASS SAVED!, the PARRY! stamp, a flare's miss,
 // a Dare met (DARE ✓); the Day card names the day's Noon Heat when it rises.
+// Elementals (docs/ELEMENTALS.md §4.9): the abilities (BLAZE! stamp, a seeded sunflower popping up,
+// THUNDERCLAP!, CLOUDBURST!), Volt's strikes (a sky bolt and an "x3!" pop), a hero's flake, the TAG!
+// stamp in the incoming hero's face with a hop and 0.3 s of slow-mo, CLEAN!, each hero's fall; and on a
+// Trial the snowman's steam, sweat, breath and frost become each body's own emitters (Ember's sparks
+// in glare, Sprout's petals, Volt's drizzle when low, Drip's steam, glints, frost and rain).
 
-import { cloudCenter, cloudOffset, dayParams, dayTicks, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
+import {
+  cloudCenter,
+  cloudOffset,
+  dayParams,
+  dayTicks,
+  HEROES,
+  noonHeatAt,
+  queryCasters,
+  SEED_ID_BASE,
+  worldPlan,
+  type Caster,
+  type HeroId,
+  type NubsState,
+  type SimEvent,
+  type SimState,
+} from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -41,13 +61,15 @@ import {
   POP_MULT,
   POP_PHEW,
   POP_SNAP,
+  POP_STRIKE,
   POP_SWING,
   spawn,
 } from '../render/particles.ts';
-import { flashDetent, SWING_ARC_S } from '../render/halo.ts';
+import { flashDetent, heroArcColor, SWING_ARC_S } from '../render/halo.ts';
 import { POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
-import { hop } from '../render/nubs.ts';
+import { hop, resetNubsAnim } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
+import type { FaceName } from '../render/candy.ts';
 import type { MechView, RenderScene } from '../render/renderer.ts';
 import type { Cloud } from '../core/index.ts';
 import { registerBloom, resetBlooms } from '../render/flora.ts';
@@ -73,6 +95,8 @@ const SNOWFALL_S = 1.3;
 const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
 const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
 const LEAVES: readonly number[] = [0x7cb342, 0x9ccc65, 0xc0ca33, 0xf9a825, 0x8bc34a];
+const STRIKE_TEXT: readonly string[] = ['', 'x1!', 'x2!', 'x3!', 'x4!', 'x5!'];
+const seedBuf: Caster[] = [];
 
 /** Live particles of one kind. */
 function countKind(p: { cap: number; kind: Uint8Array; life: Float32Array }, kind: number): number {
@@ -112,6 +136,8 @@ export class Fx {
   /** v1.6: the run's first ring trick and first frost gain were shown. */
   private trickSeen = false;
   private gainSeen = false;
+  /** Elementals: each body's emitter accumulator (the lead's, a duo mate's). */
+  private readonly heroAcc = new Float64Array(2);
   private readonly c2 = new Float64Array(2);
 
   constructor(scene: RenderScene, clock: FixedClock) {
@@ -127,6 +153,8 @@ export class Fx {
     this.snowAcc = 0;
     this.deepT = -1e9;
     this.trickSeen = this.gainSeen = false;
+    this.heroAcc.fill(0);
+    resetNubsAnim(this.sc.mate);
     resetBlooms();
   }
 
@@ -135,6 +163,8 @@ export class Fx {
     const sc = this.sc;
     const nx = s.nubs.x;
     const ny = s.nubs.y;
+    // On a Trial, Nubs' own ring cues (shade in and out, glare) follow only Nubs.
+    const snowman = s.trial === null || s.nubs.hero === 'nubs';
     // The frame's frost gains pop as one (a snap's pour and the glass it lands come on one tick).
     let gainH = 0;
     for (const ev of events) {
@@ -158,6 +188,7 @@ export class Fx {
           // GO! high over his head (clear of the first runs' cue pill) and a hop as he sets off.
           addHeadline(sc.pops, 'GO!', POP_GO, 0.7, 1);
           hop(sc.nubs, 5);
+          hop(sc.mate, 5);
           break;
         }
         case 'flake': {
@@ -197,14 +228,14 @@ export class Fx {
           }
           break;
         case 'shadeEnter':
-          if (ev.litFor >= 0.25) {
+          if (snowman && ev.litFor >= 0.25) {
             addRing(sc.rings, nx, ny, 0, 40, 0.3, 2.2, 0.8, 0xffffff);
             sc.nubs.shiver = 0.14;
           }
           break;
         case 'shadeExit':
           // Out in the sun: a hot ring snaps out of the dial (at most one every 0.6 s at a ragged edge).
-          if (this.sunT <= 0) {
+          if (snowman && this.sunT <= 0) {
             addRing(sc.rings, nx, ny, 36, 48, 0.28, 2.5, 0.75, HOT);
             this.sunT = 0.6;
           }
@@ -268,6 +299,8 @@ export class Fx {
           sc.nubs.happy = 0.9;
           break;
         case 'glareTouch':
+          // Glare is Ember's food: no flash, no "!".
+          if (s.nubs.hero === 'ember') break;
           sc.nubs.glare = 0.25;
           addShake(sc.cam, 2, 0.1);
           addPop(sc.pops, '!', POP_BANG, 22, 160, 0.5);
@@ -384,6 +417,11 @@ export class Fx {
           // The push-in on the puddle: 1 → 1.18 from 80 to 600 ms, held into the Melt Map pull.
           holdZoom(sc.cam, 0.18, 0.08, 0.52);
           addRing(sc.rings, ev.info.x, ev.info.y, 6, 30, 0.9, 2, 0.8, 0xffffff);
+          const who = ev.info.who ?? 'nubs';
+          if (who !== 'nubs') {
+            this.fall(who, ev.info.heroCause ?? '', ev.info.x, ev.info.y);
+            break;
+          }
           for (let i = 0; i < 14; i++) {
             spawn(sc.particles, P_STEAM, nx + rnd(-8, 8), ny + rnd(-4, 4), rnd(4, 18), rnd(-10, 10), rnd(-4, 4), rnd(25, 45), rnd(0.8, 1.3), 3, 11, 0xffffff);
             // And a splash of meltwater thrown out around the puddle.
@@ -392,11 +430,138 @@ export class Fx {
           }
           break;
         }
+        // Elementals (docs/ELEMENTALS.md §4.9).
+        case 'ability':
+          this.ability(ev.kind, s);
+          break;
+        case 'abilityEnd':
+          for (let i = 0; i < 6; i++) spawn(sc.particles, P_PUFF, nx + rnd(-6, 6), ny + rnd(-3, 3), rnd(8, 20), rnd(-10, 10), rnd(-4, 4), rnd(10, 24), 0.6, 2.5, 7, 0xffffff);
+          break;
+        case 'strike':
+          // A strike: the sky bolt and the flash (render/heroes.ts), sparks, the chain's "x3!" and a hop.
+          sc.nubs.zap = 0.05;
+          this.burst(nx, ny, 24, 10 + 2 * ev.chain, 100, 0xffe14d);
+          if (ev.chain >= 2) addPop(sc.pops, STRIKE_TEXT[Math.min(5, ev.chain)] as string, POP_STRIKE, 0, 240, 0.8);
+          sc.nubs.happy = Math.max(sc.nubs.happy, 0.4);
+          hop(sc.nubs, ev.chain >= 3 ? 5 : 3);
+          addShake(sc.cam, 1 + 0.5 * ev.chain, 0.1);
+          break;
+        case 'heroPickup': {
+          // Ember hisses steam, Sprout sips (green), Drip frosts, Volt crackles.
+          const h = ev.hero;
+          for (let i = 0; i < 7; i++) {
+            const a = rnd(0, Math.PI * 2);
+            if (h === 'ember') spawn(sc.particles, P_PUFF, ev.x + rnd(-4, 4), ev.y + rnd(-3, 3), rnd(10, 24), rnd(-8, 8), rnd(-4, 4), rnd(20, 36), 0.7, 2.5, 7, 0xffffff);
+            else if (h === 'drip') spawn(sc.particles, P_FROST, nx + Math.cos(a) * rnd(4, 14), ny + Math.sin(a) * rnd(4, 14), 0, 0, 0, 0, 1, 3.2, 3.2, FROST);
+            else spawn(sc.particles, P_SPARKLE, nx, ny, 16, Math.cos(a) * 60, Math.sin(a) * 60, rnd(10, 40), 0.45, 3.5, 1.2, h === 'sprout' ? 0x8bd650 : 0xffe14d);
+          }
+          break;
+        }
+        case 'tag': {
+          // TAG!: the incoming hero's stamp, a hop, a ring and sparks in its colour, 0.3 s of slow-mo.
+          const c = heroArcColor(ev.to, true);
+          this.stamp('tag', 'TAG!', 0.7, HEROES[ev.to].face);
+          hop(sc.nubs, 8);
+          sc.nubs.happy = 0.9;
+          addRing(sc.rings, nx, ny, 6, 60, 0.45, 3.5, 0.9, c);
+          this.burst(nx, ny, 20, 16, 110, c);
+          if (!this.reducedMotion) this.clock.slowMo(0.5, 0.3);
+          break;
+        }
+        case 'tagClean':
+          addHeadline(sc.pops, 'CLEAN!', POP_PHEW, 1);
+          break;
         default:
           break;
       }
     }
     if (gainH > 0) this.gain(gainH);
+  }
+
+  /** An ability cast (Nubs' Cold Snap has its own 'snap'). */
+  private ability(kind: 'blaze' | 'seed' | 'thunder' | 'rain', s: SimState): void {
+    const sc = this.sc;
+    const x = s.nubs.x;
+    const y = s.nubs.y;
+    hop(sc.nubs, 6);
+    sc.nubs.happy = 0.9;
+    this.clock.addHitStop(0.04);
+    if (kind === 'blaze') {
+      this.stamp('blaze', 'BLAZE!', 0.6);
+      addRing(sc.rings, x, y, 6, 64, 0.5, 3.5, 0.95, 0xff8a1f);
+      this.burst(x, y, 20, 18, 110, 0xffb347);
+    } else if (kind === 'seed') {
+      // The sunflower springs up where it was sown (render/flora.ts pops it), in a puff of leaves.
+      addHeadline(sc.pops, 'SEED!', POP_MULT, 0.9);
+      const id = SEED_ID_BASE + (s.stats.seeds ?? 1) - 1;
+      const n = queryCasters(s.world, y - 20, y + 220, seedBuf);
+      for (let i = 0; i < n; i++) {
+        const c = seedBuf[i] as Caster;
+        if (c.id !== id) continue;
+        if (!this.reducedMotion) registerBloom(c.x, c.y, sc.worldTime);
+        addRing(sc.rings, c.x, c.y, 6, 34, 0.5, 3, 0.9, SUN_GOLD);
+        const v = sc.view;
+        for (let j = 0; j < 6; j++) {
+          const li = spawn(sc.particles, P_LEAF, v.ox + c.x * v.S, v.oy - c.y * v.S, 0, rnd(-90, 90), rnd(-80, -20), 0, rnd(0.8, 1.2), rnd(5, 7), 0, LEAVES[j % LEAVES.length] as number);
+          sc.particles.vrot[li] = rnd(-6, 6);
+        }
+      }
+    } else if (kind === 'thunder') {
+      addHeadline(sc.pops, 'THUNDERCLAP!', POP_STRIKE, 1);
+      addRing(sc.rings, x, y, 6, 72, 0.5, 3.5, 0.95, 0xffe14d);
+      addShake(sc.cam, 4, 0.2);
+    } else {
+      addHeadline(sc.pops, 'CLOUDBURST!', POP_DEEP, 1);
+      addRing(sc.rings, x, y, 6, 60, 0.5, 3, 0.9, ICE);
+      sc.banners.coolPulse = 0.4;
+    }
+  }
+
+  /** A hero falls (Nubs melts as ever): its particles where it stood. */
+  private fall(who: HeroId, cause: string, x: number, y: number): void {
+    const p = this.sc.particles;
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      if (who === 'ember') spawn(p, P_STEAM, x + rnd(-6, 6), y + rnd(-3, 3), rnd(6, 18), rnd(-8, 8), rnd(-4, 4), rnd(25, 45), rnd(0.8, 1.3), 3, 11, 0xffffff);
+      else if (who === 'volt') spawn(p, P_PUFF, x + rnd(-8, 8), y + rnd(-4, 4), rnd(10, 26), Math.cos(a) * 20, Math.sin(a) * 20, rnd(4, 14), 0.9, 3, 9, 0xffffff);
+      else if (who === 'drip' && cause === 'freeze') spawn(p, P_FROST, x + Math.cos(a) * rnd(6, 18), y + Math.sin(a) * rnd(6, 18), 0, 0, 0, 0, rnd(1, 1.6), 3.5, 3.5, FROST);
+      else if (who === 'drip') spawn(p, P_STEAM, x + rnd(-5, 5), y + rnd(-3, 3), rnd(10, 30), rnd(-4, 4), rnd(-3, 3), rnd(45, 70), rnd(1, 1.6), 3, 12, 0xffffff);
+      else if (i < 7) {
+        const v = this.sc.view;
+        const li = spawn(p, P_LEAF, v.ox + x * v.S + rnd(-12, 12), v.oy - y * v.S - rnd(20, 40), 0, rnd(-40, 40), 0, 0, rnd(1.4, 2), rnd(5, 7), 0, LEAVES[i % LEAVES.length] as number);
+        p.vrot[li] = rnd(-4, 4);
+      }
+    }
+    // Ember's last wisp of smoke rings out.
+    if (who === 'ember') addRing(this.sc.rings, x, y, 4, 26, 0.9, 2.5, 0.6, 0x8c8c8c);
+  }
+
+  /** A body's own continuous cues on a Trial (the emitter table in the header; Nubs keeps his). */
+  private heroCues(dt: number, s: SimState, nb: NubsState, i: number): void {
+    const p = this.sc.particles;
+    const acc = this.heroAcc;
+    const x = nb.x;
+    const y = nb.y;
+    const walk = s.params.v;
+    let rate = 0;
+    if (nb.hero === 'ember') rate = s.heroAbility === 'blaze' ? 14 : nb.safe && nb.c >= 6 ? 7 : 0;
+    else if (nb.hero === 'sprout') rate = nb.safe ? 1.2 : 0;
+    else if (nb.hero === 'volt') rate = nb.chill < 0.3 * nb.maxChill ? 6 : 0;
+    else if (nb.hero === 'drip') rate = s.heroAbility === 'rain' ? 26 : nb.chill > 70 ? 6 + (nb.chill - 70) / 3 : nb.chill >= 30 ? 1.5 : 3;
+    acc[i] = rate > 0 ? (acc[i] as number) + dt * rate : 0;
+    while ((acc[i] as number) >= 1) {
+      acc[i] = (acc[i] as number) - 1;
+      const a = rnd(0, Math.PI * 2);
+      if (nb.hero === 'ember') spawn(p, P_FIREFLY, x + rnd(-6, 6), y + rnd(-2, 4), rnd(18, 30), rnd(-8, 8), walk + rnd(-6, 6), rnd(20, 34), rnd(1, 1.5), 2, 2, 0xffc23d);
+      else if (nb.hero === 'sprout') {
+        const v = this.sc.view;
+        spawn(p, P_PETAL, v.ox + x * v.S + rnd(-6, 6), v.oy - y * v.S - 34 * v.S, 0, rnd(-20, 20), rnd(10, 30), 0, rnd(2, 3), rnd(3, 4.5), 0, PETALS[Math.floor(rnd(0, PETALS.length))] as number);
+      } else if (nb.hero === 'volt') spawn(p, P_DRIP, x + rnd(-7, 7), y + rnd(-2, 2), rnd(18, 24), 0, walk * 0.9, -10, 1, 1.2, 1, 0x9fb4d8);
+      else if (s.heroAbility === 'rain') spawn(p, P_DRIP, x + rnd(-10, 10), y + rnd(-4, 6), rnd(30, 40), 0, walk * 0.9, -30, 1, 1.3, 1, 0x7fc8ff);
+      else if (nb.chill > 70) spawn(p, P_STEAM, x + rnd(-6, 6), y + rnd(0, 5), rnd(36, 44), rnd(-5, 5), walk * rnd(0.9, 1), 34, 0.8, 2.5, 8, 0xffffff);
+      else if (nb.chill >= 30) spawn(p, P_SPARKLE, x + rnd(-8, 8), y + rnd(-3, 3), rnd(10, 34), 0, walk, 6, 0.5, 3.5, 1, 0xdff4ff);
+      else spawn(p, P_FROST, x + Math.cos(a) * rnd(4, 14), y + Math.sin(a) * rnd(4, 14), 0, 0, 0, 0, 1.2, 3.2, 3.2, FROST);
+    }
   }
 
   /**
@@ -450,10 +615,10 @@ export class Fx {
 
   /**
    * A stamp in the banner slot (HIGH NOON, PASSED SAM!, PAST YOUR RECENT BEST): it slams in and
-   * lands with a 3 u camera shake (none under reduced motion).
+   * lands with a 3 u camera shake (none under reduced motion); `face` dresses a TAG!.
    */
-  stamp(kind: StampKind, text: string, hold: number): void {
-    showStamp(this.sc.banners, kind, text, hold);
+  stamp(kind: StampKind, text: string, hold: number, face?: FaceName): void {
+    showStamp(this.sc.banners, kind, text, hold, face);
     this.stampImpact = STAMP_IN;
   }
 
@@ -475,6 +640,7 @@ export class Fx {
       sc.banners.stampStars = stars;
       this.confetti(64);
       hop(sc.nubs, 9);
+      hop(sc.mate, 9);
       sc.nubs.happy = 1;
       addZoomPulse(sc.cam, 0.06, 0.5);
       this.clock.addHitStop(0.06);
@@ -520,7 +686,11 @@ export class Fx {
     const p = sc.particles;
     const daylight = s.phase === 'day';
     const walk = daylight ? s.params.v : 0;
-    if (daylight && nb.f > 0) {
+    // A Trial's heroes have their own emitters (Nubs keeps the snowman's below).
+    const snowman = s.trial === null || nb.hero === 'nubs';
+    if (daylight && !snowman) this.heroCues(dt, s, nb, 0);
+    if (daylight && s.mate !== null) this.heroCues(dt, s, s.mate, 1);
+    if (daylight && snowman && nb.f > 0) {
       // Steam at 30·f per second, rising 30 u/s and growing 3 → 9 u over 0.8 s.
       this.steamAcc += dt * 30 * Math.min(2, nb.f);
       while (this.steamAcc >= 1) {
@@ -531,7 +701,7 @@ export class Fx {
     } else {
       this.steamAcc = 0;
     }
-    if (daylight && nb.chill < 60) {
+    if (daylight && snowman && nb.chill < 60) {
       this.sweatAcc += dt;
       if (this.sweatAcc >= 0.4) {
         this.sweatAcc = 0;
@@ -539,7 +709,7 @@ export class Fx {
         spawn(p, P_DRIP, nb.x + side * rnd(5, 8), nb.y + 2, rnd(34, 44), side * rnd(10, 22), walk * 0.9, rnd(30, 60), 1.2, 1.4, 1.2, 0x7fc8ff);
       }
     }
-    if (daylight && nb.f === 0) {
+    if (daylight && snowman && nb.f === 0) {
       // Cold breath: a small puff from the mouth every 1.6 s, drifting the way he looks.
       this.breathAcc += dt;
       if (this.breathAcc >= 1.6) {
@@ -555,7 +725,7 @@ export class Fx {
     const mech = this.mech;
     if (mech?.snapCloud && !this.reducedMotion) this.snowfall(dt, s, mech.snapCloud);
     else this.snowAcc = 0;
-    if (daylight && nb.f === 0) {
+    if (daylight && snowman && nb.f === 0) {
       // Frost sparkles: 2 per second on the ground within 16 u, living 1.2 s (5 in deep shade).
       this.frostAcc += dt * (mech?.deep ? 5 : 2);
       while (this.frostAcc >= 1) {
