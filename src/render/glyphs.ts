@@ -1,12 +1,15 @@
 // Small vector art stored as path ops and parsed once into Path2D objects: the glyphs (GR10: the
 // forecast marks of the HUD sticker and the postcard rows, the biome marks of the Day card, the
 // goal ring, the padlock and wind marks, one mark per campaign concept for the intro card and the
-// HUD) on a 14-unit grid centred on 0, and the ground decals of decor.ts. An op is
+// HUD) on a 14-unit grid centred on 0, the ground decals of decor.ts and the Elementals' bodies
+// (heroes.ts). An op is
 //   F<color> <path>  fill            E<color> <path>  fill (even-odd)
 //   S<color>/<width> <path>  stroke  D<color>/<width> <path>  dotted stroke (1.5 dashes)
+//   P<fill>/<line>/<width> <path>  fill, then stroke
 //   C <path>  clip (until R)         R  restore the clip
-// where <path> is SVG path data plus 'O x y r', a whole circle. '@' as the colour is the caller's
-// (the padlock). Strokes have round caps and joins.
+// where <path> is SVG path data plus 'O x y r', a whole circle ('O x y rx,ry' an ellipse). '@' as
+// the colour is the caller's (the padlock), '$n' colour n of the caller's palette. Strokes have
+// round caps and joins.
 
 /** Ids without a mark of their own get the goal ring; concept, forecast and biome marks share ids. */
 const GLYPHS: Readonly<Record<string, string>> = {
@@ -81,16 +84,19 @@ const HERO_TINT: Readonly<Record<string, string>> = { ember: '#FF6A1F', sprout: 
 export interface ArtOp {
   kind: string;
   color: string;
+  /** A 'P' op's stroke colour. */
+  line: string;
   width: number;
   path: Path2D | null;
 }
 
-/** 'O x y r' → two SVG arcs from the circle's rightmost point. */
+/** 'O x y r' (or 'O x y rx,ry') → two SVG arcs from its rightmost point. */
 function circles(d: string): string {
-  return d.replace(/O(-?[\d.]+) ?(-?[\d.]+) ?([\d.]+)/g, (_, x: string, y: string, r: string) => {
+  return d.replace(/O(-?[\d.]+) ?(-?[\d.]+) ?([\d.]+),?([\d.]+)?/g, (_, x: string, y: string, r: string, ry?: string) => {
     const a = Number(x) + Number(r);
     const b = Number(x) - Number(r);
-    return `M${a} ${y}A${r} ${r} 0 0 1 ${b} ${y}A${r} ${r} 0 0 1 ${a} ${y}`;
+    const q = ry ?? r;
+    return `M${a} ${y}A${r} ${q} 0 0 1 ${b} ${y}A${r} ${q} 0 0 1 ${a} ${y}`;
   });
 }
 
@@ -99,22 +105,31 @@ export function artOps(src: string): ArtOp[] {
   return src.split('|').map((op) => {
     const sp = op.indexOf(' ');
     const head = sp < 0 ? op : op.slice(0, sp);
-    const [color = '', width = '1'] = head.slice(1).split('/');
-    return { kind: head.charAt(0), color, width: Number(width), path: sp < 0 ? null : new Path2D(circles(op.slice(sp + 1))) };
+    const part = head.slice(1).split('/');
+    const p = head.charAt(0) === 'P';
+    return { kind: head.charAt(0), color: part[0] ?? '', line: p ? (part[1] as string) : '', width: Number(part[p ? 2 : 1] ?? 1), path: sp < 0 ? null : new Path2D(circles(op.slice(sp + 1))) };
   });
 }
 
 const DOTS = [1.5, 1.5];
 const NONE: number[] = [];
 
-/** Draws parsed art in the current transform ('@' takes `color`). */
-export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], color = '#2B2140'): void {
+/** Draws parsed art in the current transform ('@' takes `color`, '$n' colour n of `pal`). */
+export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], color = '#2B2140', pal?: readonly string[]): void {
   g.lineCap = 'round';
   g.lineJoin = 'round';
+  const col = (c: string): string => (c === '@' ? color : c.charAt(0) === '$' && pal ? (pal[+c.slice(1)] as string) : c);
   for (const op of ops) {
-    const c = op.color === '@' ? color : op.color;
+    const c = col(op.color);
     const p = op.path as Path2D;
     switch (op.kind) {
+      case 'P':
+        g.fillStyle = c;
+        g.fill(p);
+        g.strokeStyle = col(op.line);
+        g.lineWidth = op.width;
+        g.stroke(p);
+        break;
       case 'F':
       case 'E':
         g.fillStyle = c;
