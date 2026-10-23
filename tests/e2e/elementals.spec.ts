@@ -2,7 +2,8 @@
 // Endless is open (hidden on a fresh save), the roster and the Trial tiles show their lock states, a
 // tap on an open Trial plays it as a campaign run with its hero, its Results say "Trial 1", Retry
 // keeps the Trial and Map returns to the screen; the stored save keeps Trial stars apart from the
-// Journey's; ?trial=6 walks Nubs with Ember beside him; the reactive bot passes Trial 1.
+// Journey's; ?trial=6 walks Nubs with Ember beside him; ?hero= swaps a solo Trial's hero; the
+// reactive bot passes Trial 1.
 import { expect, test, type Page } from '@playwright/test';
 import { openGame, runCfg, screen, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
@@ -127,6 +128,21 @@ test('?trial=6 walks Nubs with Ember beside him; Back from its Results leads to 
   await page.keyboard.press('Escape');
   await waitForScreen(page, 'elementals');
   await expect(page.locator('.trial-tile[data-trial="6"]')).toHaveClass(/is-next/);
+});
+
+test('?hero= swaps a solo Trial\'s hero (QA); a relay ignores it', async ({ page }) => {
+  await page.goto('/?trial=3&hero=drip&test=1');
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'play');
+  expect((await state(page)).level).toBe(1003);
+  expect((await state(page)).hero).toBe('drip');
+  expect((await runCfg(page)).hero).toBe('drip');
+  await page.goto('/?trial=5&hero=drip&test=1');
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'play');
+  expect((await state(page)).hero).toBe('nubs');
+  expect((await state(page)).relay).toBe(0);
+  expect((await runCfg(page)).hero).toBeNull();
 });
 
 test('?trial=1 with the reactive bot passes, and the pass is kept apart from the Journey', async ({ page }) => {
