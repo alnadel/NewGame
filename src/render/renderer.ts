@@ -857,10 +857,13 @@ export class Renderer {
 
     // Depth-sorted objects, far (north) first, with Nubs inserted at his y.
     const looks = looksFor(inp.equipped);
+    // A trial's layers redraw at most 10 times a second, a duo's 5 each (§5.4: ≤ 12/s).
+    sc.nubsSprite.cap = trial ? (mate ? 0.2 : 0.1) : 0;
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr, trial ? heroArt(s.nubs.hero) : null);
     if (mate !== null) {
       // Its layer redraws count with the lead's (perf().nubsLayerDraws).
       const ms = sc.mateSprite;
+      ms.cap = 0.2;
       const d0 = ms.layerDraws;
       const c0 = ms.composes;
       renderNubsSprite(ms, mp, sc.mate, looks, v.S * v.dpr, heroArt(mate.hero));

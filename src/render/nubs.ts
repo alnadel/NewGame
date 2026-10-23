@@ -1147,6 +1147,13 @@ export interface NubsSprite {
   readonly pose: NubsPose;
   art: CharArt | null;
   baked: boolean;
+  /**
+   * Trials: the least time (s of pose time) between two layer redraws, and the pose time of the
+   * last one; while it is above 0 a zoom of up to 8 % stretches the cached layers instead of
+   * redrawing them. 0 (Nubs' runs): every change redraws at once.
+   */
+  cap: number;
+  at: number;
 }
 
 export function createNubsSprite(): NubsSprite {
@@ -1178,6 +1185,8 @@ export function createNubsSprite(): NubsSprite {
     pose: createPose(),
     art: null,
     baked: false,
+    cap: 0,
+    at: 0,
   };
 }
 
@@ -1198,17 +1207,21 @@ function prepare(c: Canvas2D, g: CanvasRenderingContext2D, w: number, h: number,
  * layers if needed (see the note above) and, for the melt or a glare flash, composes the image.
  */
 export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks: Looks, pxPerU: number, art: CharArt | null = null): void {
-  const w = Math.ceil(BOX_W * pxPerU);
-  const h = Math.ceil(BOX_H * pxPerU);
-  const ox = ORIGIN_X * pxPerU;
-  const oy = ORIGIN_Y * pxPerU;
-  const resized = sp.back.width !== w || sp.back.height !== h || sp.scale !== pxPerU;
+  if (art !== sp.art) sp.key = NaN;
+  const px = sp.cap > 0 && p.melt < 0 && sp.key === sp.key && Math.abs(pxPerU / sp.scale - 1) < 0.08 ? sp.scale : pxPerU;
+  const w = Math.ceil(BOX_W * px);
+  const h = Math.ceil(BOX_H * px);
+  const ox = ORIGIN_X * px;
+  const oy = ORIGIN_Y * px;
+  const resized = sp.back.width !== w || sp.back.height !== h || sp.scale !== px;
   const spritePose = sp.pose;
-  sp.scale = pxPerU;
+  // The stamp's stretch of the cached layers (1 unless a trial's zoom kept them).
+  const r = pxPerU / px;
+  const redraw = Math.abs(p.time - sp.at) >= sp.cap;
+  sp.scale = px;
   sp.anim = a;
   sp.looks = looks;
   sp.composed = false;
-  if (art !== sp.art) sp.key = NaN;
   sp.art = art;
 
   if (p.melt >= 0) {
@@ -1232,18 +1245,19 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
     // A hero (render/heroes.ts): its own key and layers, Nubs' springs, hop and bob.
     const m = nubsMotion(p, a, motion, false);
     art.motion(p, a, m);
-    sp.sx = m.sx;
-    sp.sy = m.sy;
+    sp.sx = m.sx * r;
+    sp.sy = m.sy * r;
     sp.rot = m.rot;
     sp.jx = m.jx;
     sp.dy = m.dy;
     Object.assign(spritePose, p);
     spritePose.x = 0;
     spritePose.y = 0;
-    spritePose.S = pxPerU;
+    spritePose.S = px;
     const key = art.key(spritePose, a);
-    if (resized || key !== sp.key) {
+    if (resized || (key !== sp.key && redraw)) {
       sp.key = key;
+      sp.at = p.time;
       prepare(sp.back, sp.backG, w, h, ox, oy);
       art.back(sp.backG, spritePose, a);
       prepare(sp.front, sp.frontG, w, h, ox, oy);
@@ -1256,8 +1270,8 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   }
 
   const m = nubsMotion(p, a, motion);
-  sp.sx = m.sx;
-  sp.sy = m.sy;
+  sp.sx = m.sx * r;
+  sp.sy = m.sy * r;
   sp.rot = m.rot;
   sp.jx = m.jx;
   sp.dy = m.dy;
@@ -1266,7 +1280,7 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
   Object.assign(spritePose, p);
   spritePose.x = 0;
   spritePose.y = 0;
-  spritePose.S = pxPerU;
+  spritePose.S = px;
   const chillQ = Math.round(Math.max(0, Math.min(1, p.chill)) * CHILL_STEPS);
   spritePose.chill = chillQ / CHILL_STEPS;
   // Keep the teardrop switch exact (it changes the body shape).
@@ -1296,8 +1310,9 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
     (p.sunUp ? 1 : 0);
 
   const G = nubsGeom(spritePose, sp.geom);
-  if (resized || key !== sp.key || looks !== sp.keyLooks) {
+  if (resized || looks !== sp.keyLooks || (key !== sp.key && redraw)) {
     sp.key = key;
+    sp.at = p.time;
     sp.keyLooks = looks;
     prepare(sp.back, sp.backG, w, h, ox, oy);
     drawBackLayer(sp.backG, spritePose, G);
