@@ -67,6 +67,11 @@ describe('screen transitions', () => {
     ['journey', 'play'],
     ['journey', 'title'],
     ['results', 'journey'],
+    // Elementals (docs/ELEMENTALS.md §4.10): from the Title, to a Trial or back, and a Trial's Results' Map.
+    ['title', 'elementals'],
+    ['elementals', 'play'],
+    ['elementals', 'title'],
+    ['results', 'elementals'],
   ];
   const illegal: [ScreenId, ScreenId][] = [
     ['journey', 'results'],
@@ -80,6 +85,11 @@ describe('screen transitions', () => {
     ['results', 'pause'],
     ['pause', 'dying'],
     ['daily', 'settings'],
+    ['elementals', 'journey'],
+    ['elementals', 'results'],
+    ['journey', 'elementals'],
+    ['pause', 'elementals'],
+    ['play', 'elementals'],
   ];
 
   it('allows the flows of archive/TECH_SPEC §13', () => {
@@ -418,6 +428,10 @@ describe('Journey labels (CAMPAIGN_PLAN §5)', () => {
     expect(resultsAnnouncement(passed)).toBe('Level 6, Glass Garden: passed with 2 of 3 stars. Reached the finish · 14 flakes');
     const failed: ResultsView = { result, outcome, campaign: { id: 6, name: 'Glass Garden', passed: false, stars: 0, nextId: 7, goalLine: 'Not enough flakes: 5 of 8' } };
     expect(resultsAnnouncement(failed)).toBe('Level 6, Glass Garden: not passed. Melted by You at 11:10 AM.');
+    // An Elementals Trial says "Trial 3" where a level says "Level 12".
+    expect(campaignKicker({ id: 1003, passed: true })).toBe('Trial 3 · Passed');
+    const trial: ResultsView = { result, outcome, campaign: { id: 1001, name: 'Kindling', passed: false, stars: 0, nextId: null, goalLine: 'Out before the finish' } };
+    expect(resultsAnnouncement(trial)).toBe('Trial 1, Kindling: not passed. Melted by You at 11:10 AM.');
   });
 });
 
