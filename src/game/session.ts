@@ -19,6 +19,7 @@ import {
   formatTimeOfDay,
   generateSome,
   HEROES,
+  heroHealth,
   isTrialId,
   lerpSnap,
   anyLevelDef,
@@ -95,6 +96,7 @@ import { requestPersistence } from '../platform/storage.ts';
 import { Renderer, type DebugDraw, type RenderInput, type RenderOptions, type RenderScreen } from '../render/renderer.ts';
 import { resetDeathBeat } from '../render/deathbeat.ts';
 import { renderWardrobePreview, resetNubsAnim } from '../render/nubs.ts';
+import { renderHeroPreview } from '../render/heroes.ts';
 import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
 import { createPostcardJob, postcardName, stepPostcard, type PostcardJob } from '../render/postcard.ts';
 import { renderSunPreview } from '../render/sun.ts';
@@ -564,9 +566,7 @@ export class Session {
         runStatus: () => this.runStatus(),
         renderWardrobePreview: (canvas, equipped, subject) =>
           subject === 'sun' ? renderSunPreview(canvas, equippedLooks(equipped).shades) : renderWardrobePreview(canvas, equipped),
-        // Elementals (docs/ELEMENTALS.md §4.11): Nubs in the saved outfit until ART lands
-        // render/heroes.ts renderHeroPreview(canvas, hero, equipped), which replaces this body at merge.
-        renderHeroPreview: (canvas) => renderWardrobePreview(canvas, store.get().equipped),
+        renderHeroPreview: (canvas, hero) => renderHeroPreview(canvas, hero, store.get().equipped),
         updateSave: (change) => {
           const next = change(store.get());
           store.set(next);
@@ -1091,6 +1091,8 @@ export class Session {
     const lit = s.nubs.f * 5;
     v.glareW = lit > 0 ? Math.min(1, (2 * s.nubs.glare) / lit) : 0;
     v.chill = s.nubs.chill;
+    // Elementals: the heartbeat and the calm scene read the lowest health of any body on a Trial.
+    v.health = s.trial !== null ? Math.min(heroHealth(s.nubs), s.mate !== null ? heroHealth(s.mate) : 100) : undefined;
     v.mult = s.nubs.mult;
     v.omega = s.sun.omega;
     // Campaign: the chapter's music palette, the finish line and the concept signatures.
@@ -1720,7 +1722,8 @@ export class Session {
       case 'frostReady':
         // v1.5: the meter is full; until the player has snapped twice this session, say how (not
         // under a snap, which no swipe can cast: the cast's own pour often refills a charge).
-        if (this.snapsSeen < 2 && this.s.snapTicks === 0) this.cue('snap-ready');
+        // Not on a Trial: its ability coin is not "Frost" (the hero tips teach the swipe there).
+        if (this.snapsSeen < 2 && this.s.snapTicks === 0 && this.s.trial === null) this.cue('snap-ready');
         break;
       case 'snap':
         this.snapsSeen++;
@@ -1729,7 +1732,7 @@ export class Session {
         break;
       case 'snapEnd':
         // A charge filled under the snap: now it can be cast.
-        if (this.snapsSeen < 2 && this.s.nubs.frost >= 1) this.cue('snap-ready');
+        if (this.snapsSeen < 2 && this.s.nubs.frost >= 1 && this.s.trial === null) this.cue('snap-ready');
         break;
       case 'swing':
         // The first SWING of a lifetime explains itself once (nothing else in the game names it).
@@ -1738,7 +1741,8 @@ export class Session {
       case 'lowChill':
         // The first scare of a new player. Inside the lesson it is a live warning that keeps the
         // drag instruction (A16) and lasts while Nubs is lit with Chill low (lessonCue).
-        if (this.lifetimeRuns > 2) break;
+        // Not on a Trial: "Find thick teal" is Nubs' rule (the hero tips teach each hero's).
+        if (this.lifetimeRuns > 2 || this.s.trial !== null) break;
         if (this.s.lessonOn) this.meltWarn = true;
         else this.cue('melting');
         break;
