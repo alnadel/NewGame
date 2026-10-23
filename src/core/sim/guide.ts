@@ -277,8 +277,11 @@ function centreWeights(x: number, y: number): void {
   for (let b = 0; b < BINS; b++) heroW0[b] = heroW0[b] === 1 ? 2 : tmp[b] === 1 ? 0 : 1;
 }
 
-/** Hero `h`'s safe mask for a body at (x, y) in the gathered scene (its lit sums in `lit`, already filled unless `fill`). */
-function bodyGuide(s: SimState, h: HeroId, x: number, y: number, lit: Uint8Array, fill: boolean, out: Uint8Array, vTheta: number, cool: boolean): void {
+/**
+ * Hero `h`'s safe mask for a body at (x, y) in the gathered scene (its lit sums in `lit`, already
+ * filled unless `fill`), with Volt's last strike and Drip's side (the run's own, unless given).
+ */
+function bodyGuide(s: SimState, h: HeroId, x: number, y: number, lit: Uint8Array, fill: boolean, out: Uint8Array, vTheta = s.voltTheta, cool = s.dripCool): void {
   if (fill) litMask(scene, x, y, false, lit, null);
   if (h === 'drip') centreWeights(x, y);
   heroMask(s, h, lit, heroW0, out, vTheta, cool);
@@ -291,37 +294,25 @@ function bodyGuide(s: SimState, h: HeroId, x: number, y: number, lit: Uint8Array
  * lead's alone without a mate); guide.next the same 0.6 s ahead; guide.tag the incoming hero's mask
  * (from the lead's lit sums, its state reset) during a TAG's telegraph. Volt's masks leave out its
  * dead zone; Drip's read its centre sample and side. A Blaze or a Cloudburst does not change them
- * (they show where the light is). deep, flake and flare stay 0.
+ * (they show where the light is). deep, flake and flare stay 0 (a Trial has no deep shade, glass or
+ * flares), and a Trial ends before night.
  */
 function heroGuide(s: SimState): void {
   const g = s.guide;
-  g.deep.fill(0);
-  g.flake.fill(0);
-  g.flare.fill(0);
-  g.flareTicks = -1;
   g.tag.fill(0);
   const nb = s.nubs;
   const m = s.mate;
-  if (!s.sunUp) {
-    g.now.fill(0);
-    g.next.fill(0);
-    g.glare.fill(0);
-    g.lit.fill(0);
-    g.lead.fill(0);
-    g.mate.fill(0);
-    return;
-  }
   const w = s.world;
   const margin = m !== null ? MARGIN + DUO_DX : MARGIN;
   const px = m !== null ? nb.x + DUO_DX : nb.x;
   gatherScene(w, scene, px, nb.y, margin, s.tAbs, s.eps, s.cot);
   litMask(scene, nb.x, nb.y, false, g.lit, g.glare);
-  bodyGuide(s, nb.hero, nb.x, nb.y, g.lit, false, g.lead, s.voltTheta, s.dripCool);
+  bodyGuide(s, nb.hero, nb.x, nb.y, g.lit, false, g.lead);
   const to = nextTagHero(s);
   const n = nextTagTicks(s);
   if (to !== null && n >= 0 && n <= TUNING.heroes.tagSoonTicks) bodyGuide(s, to, nb.x, nb.y, g.lit, false, g.tag, -1, true);
   if (m !== null) {
-    bodyGuide(s, m.hero, m.x, m.y, heroLit, true, g.mate, s.voltTheta, s.dripCool);
+    bodyGuide(s, m.hero, m.x, m.y, heroLit, true, g.mate);
     for (let b = 0; b < BINS; b++) g.now[b] = (g.lead[b] as number) & (g.mate[b] as number);
   } else {
     g.mate.fill(0);
@@ -336,8 +327,8 @@ function heroGuide(s: SimState): void {
   const x = trailX(w.trail, y);
   const eps = liftElevation(w, s.params, dayStartTick(s.day) + t, elevation(s.params, t / TICK_HZ));
   gatherScene(w, scene, x, y, margin, s.tAbs + AHEAD / TICK_HZ, eps, 1 / tanD(eps));
-  bodyGuide(s, nb.hero, m !== null ? x - DUO_DX : x, y, heroLit, true, g.next, s.voltTheta, s.dripCool);
+  bodyGuide(s, nb.hero, m !== null ? x - DUO_DX : x, y, heroLit, true, g.next);
   if (m === null) return;
-  bodyGuide(s, m.hero, x + DUO_DX, y, heroLit, true, heroOut, s.voltTheta, s.dripCool);
+  bodyGuide(s, m.hero, x + DUO_DX, y, heroLit, true, heroOut);
   for (let b = 0; b < BINS; b++) g.next[b] = (g.next[b] as number) & (heroOut[b] as number);
 }
