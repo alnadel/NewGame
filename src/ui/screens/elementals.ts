@@ -2,8 +2,8 @@
 // the Wardrobe. The stage previews a hero (cb.renderHeroPreview; the selected Trial's two heroes side
 // by side for a duo) with its element, tagline, three rules, ability line and a swatch of its dial
 // arc, and Play for the selected Trial (the last one played, else the first open one not passed).
-// The heroes follow as round candy coins on the Title tray's recipe (a locked one is a silhouette
-// that says what opens it; a tap previews the hero and highlights its Trials), then the Trials as
+// The heroes follow as round candy coins with their names hung under them (a locked one is a
+// silhouette with a lock that says what opens it; a tap previews the hero and highlights its Trials), then the Trials as
 // Wardrobe tiles in two columns: a "T3" disc, the name, the best stars and the cast's faces. A tap
 // on an open Trial plays it; a locked one says what opens it. Opening the screen marks it seen;
 // Trials and heroes opened since the last visit pop in, and a new hero joins the team with a toast.
@@ -71,7 +71,7 @@ export function createElementalsScreen(ctx: UiContext): Screen {
   const ability = h('p', 'preview-note');
   const rules = h('ul', { class: 'el-rules', 'aria-label': 'Rules' });
   const playBtn = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', size: 'lg', block: true, className: 'elementals-play', onPress: () => play(sel) });
-  const heroes = h('div', { class: 'tray', role: 'group', 'aria-label': 'Heroes' });
+  const heroes = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Heroes' });
   const grid = h('ul', { class: 'tile-grid panel el-grid', 'aria-label': 'Trials' });
   const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, ability, rules, playBtn), heroes, grid);
   // Arrow keys walk the tiles: along the hero row, across (±1) and down (±2) the Trial grid.
@@ -127,9 +127,9 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const on = x === id;
       const b = h(
         'button',
-        { class: `tile hero-tile tray-btn${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: pass ${intro}` },
-        h('span', `tray-disc candy ${open ? FACE[info.face] : 'f-locked'}`, c, h('span', { class: 'tray-lock lock-badge', deco: true }, icon('lock'))),
-        h('span', { class: 'tray-label', deco: true }, word),
+        { class: `tile hero-tile${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: pass ${intro}` },
+        h('span', `candy el-disc ${open ? FACE[info.face] : 'f-locked'}`, c, open ? null : h('span', { class: 'tray-lock lock-badge', deco: true }, icon('lock'))),
+        h('span', { class: 'gt el-name', deco: true }, word),
       );
       b.addEventListener('click', () => {
         if (!heroUnlocked(ctx.save(), x)) return deny(`${word} first.`);

@@ -315,7 +315,7 @@ for (const size of [
     await waitForScreen(page, 'elementals');
     await page.waitForTimeout(400);
     const sizes = await page.evaluate(() => ({
-      heroes: [...document.querySelectorAll('.scr-elementals .hero-tile .tray-disc')].map((e) => e.getBoundingClientRect()).map((b) => Math.min(b.width, b.height)),
+      heroes: [...document.querySelectorAll('.scr-elementals .hero-tile > .candy')].map((e) => e.getBoundingClientRect()).map((b) => Math.min(b.width, b.height)),
       trials: [...document.querySelectorAll('.scr-elementals .trial-tile')].map((e) => e.getBoundingClientRect()).map((b) => Math.min(b.width, b.height)),
       wide: document.documentElement.scrollWidth - innerWidth,
       body: (() => {

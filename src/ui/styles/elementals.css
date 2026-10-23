@@ -16,17 +16,28 @@
 
 .el-stage .btn { grid-column: 1 / -1; font-size: var(--fs-d-md); }
 
-/* The heroes: round coins (≥ 64 px) that scroll with the menu; the focus ring and the selected
-   one's ring on the coin, as the tray's. */
-.hero-tile { touch-action: auto; }
+/* The heroes: round candy coins (≥ 64 px) with their names hung under them, as the Title's tray;
+   the focus ring and the selected one's ring on the coin. */
+.el-heroes { display: flex; justify-content: center; gap: 4px; }
 
-.sui .hero-tile:focus-visible { box-shadow: none; }
+.hero-tile {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 88px;
+  padding: 2px 0 0;
+  border: 0;
+  background: none;
+}
 
-.hero-tile .tray-disc { --r: 50%; width: 64px; height: 64px; }
+.el-disc { --r: 50%; --lipH: 5px; display: grid; place-items: center; width: 64px; height: 64px; padding-bottom: 3px; }
 
-.hero-tile.is-selected .tray-disc { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
+.hero-tile.is-selected .el-disc { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
 
-.hero-tile .tray-label { white-space: normal; }
+.sui .hero-tile:focus-visible { outline: none; box-shadow: none; }
+
+.sui .hero-tile:focus-visible .el-disc { outline: 3px solid #fff; outline-offset: 3px; box-shadow: var(--sh), 0 0 0 9px var(--ink); }
+
+.el-name { position: relative; margin-top: -8px; font-size: 15px; line-height: 1.2; text-align: center; }
 
 .el-hcanvas { width: 52px; height: 52px; }
 
@@ -58,4 +69,4 @@
 .trial-tile .tray-lock { top: -6px; bottom: auto; }
 
 /* Opened since the last visit: the disc pops open (journey.css's keyframes). */
-.is-unlocked > :is(.node, .tray-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }
+.is-unlocked > :is(.node, .el-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }

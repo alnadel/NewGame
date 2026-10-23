@@ -301,11 +301,16 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
    *   then the tray discs and the mode pills shrink (is-tight, the labels tucked closer), then the
    *   chips row goes (the Profile stays a tap away on the rank badge), and only then the tray labels
    *   (the buttons keep their aria-labels): a new player needs the names more than the pips;
-   * - a tall challenge banner drops the goal tagline, shrinks the logo, drops the forecast chip,
+   * - the top bar tightens (gaps, the reward, the rank's name, the wallet) when the name would be cut;
+ * - a tall challenge banner drops the goal tagline, shrinks the logo, drops the forecast chip,
    *   then the tagline, to stay clear of the chips.
    */
   function fit(): void {
     if (!el.classList.contains('is-on')) return;
+    // The top bar tightens when the rank's name would be cut (the Elementals square, a waiting reward).
+    hud.classList.remove('is-tight');
+    const rank = hud.querySelector('.rank-name');
+    if (rank && rank.scrollWidth > rank.clientWidth + 1) hud.classList.add('is-tight');
     bottomCluster.classList.remove('no-labels', 'is-tight', 'no-chips');
     el.classList.remove('is-compact', 'no-tagline', 'no-forecast');
 
