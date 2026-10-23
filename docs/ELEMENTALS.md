@@ -668,6 +668,9 @@ number:
 
 Everything else in §1-§3 is fixed.
 
+**As built:** the pinned values, and the calibration beyond these bounds that the gates needed (higher
+drains on five trials, T4 without `flurry`, four recorded gate waivers), are in §8.2.
+
 ---
 
 ## 4. Contracts
@@ -1569,3 +1572,111 @@ characters, which `levelCardFit` checks at 360, 390 and 1280.
   guide-reading bot. CORE computes it per hero, so the render side never re-derives a hero rule.
 - **The ability lock before a TAG** replaces "end the snap at the hand-off". With v16 off a snap cloud
   is frozen and cannot be shortened, and the lock makes every TAG start clean.
+
+### 8.1 Merge record
+
+The three team branches merged into `claude/mobile-game-web-prototype-54l0ia` with `--no-ff` in the
+order of §4.0: `elementals/core` (144b224), `elementals/art` (b85207f), `elementals/ui` (8c346b3).
+No file conflicted. The integrator then applied the merge notes:
+- The Elementals screen draws ART's `renderHeroPreview(canvas, hero, save.equipped)` in place of the
+  §4.11 Wardrobe stub.
+- `fillAudioView` sets `health` on a Trial to the lowest health of any body, and clears it in every
+  other run (the view object is reused across runs).
+- Two Nubs-only cue lines stay off Trials: "Frost full! Swipe ↓ for a Cold Snap" (the ability coin is
+  never called Frost there) and "Melting! Find thick teal" (Nubs' rule; an Ember run used to show it
+  on its first scare). The hero tips (§6.3) teach each hero's rule and swipe instead.
+
+CORE reported no stubs to replace. ART's glyph ids (`nubs`, `ember`, `sprout`, `volt`, `drip`,
+`elementals`) cover every id the UI passes as `IntroCard.concept`, `dareGlyph`, `HudGoal.glyph` and
+tip glyphs.
+
+### 8.2 Deviations as built (from the team reports)
+
+**Pinned trials (CORE, calibration beyond §3.10).** At the spec's numbers G5 failed on all 40
+surveyed salts for T1, T6 and T8 (39 of 40 for T5), and humanDial passed 100% on T1, T3, T5 and T6.
+So the drain also rises, in steps of 2, where a trial was too easy. These values are in `TRIALS` with
+the measured gates beside them, and they replace the §3 tables:
+
+| Trial | Salt | Drain | Start | Dare | Other |
+|---|---|---|---|---|---|
+| T1 Kindling | 0 | 26 → 40 | 330 → 390 (within §3.10) | blazeSave 60 | |
+| T2 Dappled Lane | 0 | 24 → 16 (the §3.10 "too hard" rule) | 120 | blooms 2 → 5 (card "Bloom 5") | |
+| T3 Thunder Alley | 0 | 26 | 180 | chain 5 | |
+| T4 Steam and Frost | 0 | 24 → 36 | 240 | calm 720 → 1140 ticks (card "Calm 19 s") | concepts `[]`: no `flurry` |
+| T5 Day Shift | 0 | 26 → 40 | 120 | cleanTags 2 | |
+| T6 Fire and Ice | 2 | 18 → 30 | 180 | harmony 180 | |
+| T7 Shade Garden | 3 | 20 | 120 | harmony 240 | |
+| T8 Five Elements | 31 | 24 → 32 | 60 | cleanTags 4 | |
+
+- **T4 has no `flurry`.** Its 7-flake ice-cube clusters (−15 T each) froze every bot on every salt
+  (path bot 0/40, reactive at most 6/8, humanDial 0-19%). Normal flakes stay as ice cubes.
+- **Gate waivers** (`scripts/sim16/trials.ts` `GATE_WAIVERS`; `--check` prints WAIVED with the
+  value): T2 G5 and T7 G5 (humanDial collapses exactly where constant angles start to fail); T3 G4
+  (humanDial passes Volt 16/16 at every drain from 26 to 52); T5 G6 (its Dare "2 clean TAGs" is every
+  TAG, met on 63-100% of runs, and no higher target exists).
+- **Audit (G1).** Flakes the lead walks over are charged to Ember (−12) and Drip (−15), never melted:
+  leaving flakes out is not conservative for those two heroes. Drip's T grid uses buckets of one
+  step's change (k·D·0.1) instead of 1-unit buckets with `round()`, which lost up to 0.35 T a step.
+  A pickup taken before the audit's first row is charged on row 1.
+- **Path bot (G2).** A Drip leg steers closed-loop from its real T with a backward feasibility table
+  of the audit (the open-loop path drifted on the two-sided meter). Table legs follow the open-loop
+  path as specified.
+- **Core bots.** §4.8 said "no core bot changes", but the bots must cast through the snap bit and read
+  the heroes. Trial-only changes: `snapReady` also checks `heroAbility` and `tagLocked`; the panic rule
+  reads the ability body's `safe` and health (a duo's Cold Snap only while the partner has ≥ 60
+  health); humanDial's "lit" view is "some body unsafe"; `reactive` with salt > 0 aims with N(0, 4°)
+  error, so G3's 8 salts differ. Nubs runs are unchanged (goldens hold).
+- **Structure.** `applyHeroDaylight` and the `applyNight` skip are dispatched in `step.ts`, not as the
+  first lines of `applyDaylight`/`applyNight`. `heroGuide` lives in `guide.ts` (shared scratch), fed by
+  `heroMask` in `sim/heroes.ts`. The `--trials` module sits in `sim.ts`'s SIM16 array;
+  `registry.ts` holds only the types.
+- **Rule details.** The guide masks ignore Blaze and Cloudburst (they show where the light is), while
+  `nb.safe` counts Ember's c ≥ 5 during a Blaze and Drip as safe during a Cloudburst. `blazeTicks`
+  counts "raw rate ≤ 0", which equals c < 4 at every drain Ember casts at. The SEED `ability` event
+  carries the sunflower's x, y (for ART's pop-up).
+- **Unit test time.** G1/G2/G5 on the eight trials take about 17 s in `trials.test.ts`, not "a few
+  hundred ms" (G5 alone is 37 real runs a trial).
+
+**ART.**
+- **Cut for the bundle (§5.3's decoration first):** the per-hero emitter table (P_FIREFLY sparks,
+  P_PETAL, P_DRIP drizzle and rain, P_STEAM, glints, P_FROST), the hero death and pickup particles (a
+  puff in the hero's colour remains), Ember's three flicker frames and its coal, Drip's frost marks,
+  the sun pointer's Drip ring and the per-hero gauge palettes. Snowman steam, sweat, breath and frost
+  are switched off on hero bodies rather than replaced.
+- **Looks.** Ember's low state is a small dull flame; snuffed, it shrinks to a sleepy ember; its
+  smoke is three grey squiggles (`drawSizzle(…, smoke = true)`); its death token is its flame glyph.
+  Duo bodies draw at 0.85 scale so they never overlap 22 u apart. The hot ring burns red (#E8303A)
+  when Ember is on the dial. Hero gauges are the hero's colour when full, amber below 60 health and
+  hot below 25; Drip's thermometer is blue/green/red. Go runs narrower than 8° get a white target dot
+  ringed in the hero's colour.
+- **Events.** `heroPickup` has no fx of its own (the flake's fx and bell carry it; Ember adds a hiss,
+  `snapEnd` an octave down). `abilityEnd` is a small white burst. THUNDERCLAP plays no ability sound:
+  its `strike` event plays the strike recipe at gain 1.5.
+- **Budget guards beyond the spec.** Trial sprites redraw at most every 0.1 s (0.2 s for each body of
+  a duo), and zoom pulses up to 8% stretch the cached layers, to hold ≤ 12 layer redraws a second.
+  Nubs runs use cap 0 and draw exactly as before.
+- **High contrast.** The Harmony tether is hidden (no glows) and hero art drops translucent fills.
+- `renderHeroPreview` draws the hero idling with no stage (the UI owns the stage).
+- `render.spec` gives Trial 3 a fill ceiling of 235, not 190: the Thunder Alley town alone issues
+  about 200 fills 3 s after go and ART adds about 20 (measured 214-223). Set `FILL[3]` back to 190 if
+  CORE ever lightens that town. The trial frames run with no bot (the oracle's drags show the dial's
+  24 detent ticks).
+- "Nubs frame pixel-unchanged" has no whole-frame hash (random particles change frames run to run):
+  it rests on code review (Nubs paths are identical, the stamp stretch is exactly 1, cap 0) and on the
+  existing render specs.
+
+**UI.**
+- A v3 save with progress upgrades (`upgradeToV4`) with `elementals = { stars: zeros, seen: true }`,
+  like every v1.3 feature it marks seen, so a migrated save's first visit shows no NEW sticker. A
+  current v4 save still wears it until the screen is opened.
+- Merges and `absorb` never drop the field while a newer tab is open; an older build running alone
+  can still rewrite the save without it (the optional-field design cannot prevent that).
+- Interpretations: a tap on an open Trial tile starts it, and Play starts the selected Trial; the
+  locked hero's badge is a lock coin labelled "Pass Kindling"; a duo's stage shows both heroes with
+  the elemental partner's details; relay heroes' "go" tips come at their TAG (Nubs' at go on T5, at
+  his TAG on T8); the Pause tagline is a line under the title; the hero row and grid use their own
+  classes (`el-heroes`, `el-disc`, `el-name`) because reusing `.tray`/`.tray-btn` broke specs that
+  count them (only `.tray-lock.lock-badge` is shared, on locked tiles).
+
+**Bundle (all three teams).** Every team is over its §5.3 allowance after cutting decoration; see the
+measured record in §5.3.
