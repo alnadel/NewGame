@@ -799,7 +799,8 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
   const s = 1 + (rm ? 0 : 0.18 * Math.sin((Math.PI * h.meterPop) / 0.45)) + (full && !rm ? 0.03 * breathe : 0);
   if (full && !inp.hc) {
-    const glow = hero === 'nubs' ? (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32)) : heroGlow(hero);
+    // (A hero's coin glows white.)
+    const glow = hero === 'nubs' ? (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32)) : radialSprite('255,255,255', 128, 0.8, 0.42, 0.32);
     const gr = r * (2.2 + 0.25 * breathe);
     g.globalAlpha = a * (0.55 + 0.45 * breathe);
     g.drawImage(glow, x - gr, y - gr, gr * 2, gr * 2);
@@ -931,18 +932,6 @@ function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean,
   coin(g, o, o, METER_R * k, look === 1 ? METER_READY : look === 2 ? METER_FROZEN : FACE.ice, k, hc);
   const f = 30 * k;
   g.drawImage(flake(), o - f / 2, o - f / 2, f, f);
-}
-
-const heroGlows = new Map<HeroId, Canvas2D>();
-/** A ready hero coin's glow, in its face colour. */
-function heroGlow(hero: HeroId): Canvas2D {
-  let c = heroGlows.get(hero);
-  if (!c) {
-    const f = FACE[HEROES[hero].face][1];
-    c = radialSprite(`${parseInt(f.slice(1, 3), 16)},${parseInt(f.slice(3, 5), 16)},${parseInt(f.slice(5, 7), 16)}`, 128, 0.8, 0.42, 0.32);
-    heroGlows.set(hero, c);
-  }
-  return c;
 }
 
 /** A ring track centred on (o, o): an ink band with the slot's colour inside it. */

@@ -1041,20 +1041,21 @@ function drawMelt(g: CanvasRenderingContext2D, p: NubsPose, a: NubsAnim, looks: 
 
 /**
  * Heat squiggles above a lit Nubs: three wavy strokes rising and fading in a loop. Shape-coded (no
- * hue needed) and readable on the palest noon ground, where white steam disappears.
+ * hue needed) and readable on the palest noon ground, where white steam disappears. `smoke`: grey
+ * smoke over a snuffing Ember instead (render/heroes.ts), lit or not, above its flame.
  */
-export function drawSizzle(g: CanvasRenderingContext2D, p: NubsPose, time: number, glare: boolean): void {
-  if (!p.sunUp || p.f <= 0 || p.melt >= 0) return;
+export function drawSizzle(g: CanvasRenderingContext2D, p: NubsPose, time: number, glare: boolean, smoke = false): void {
+  if (!p.sunUp || (p.f <= 0 && !smoke) || p.melt >= 0) return;
   const size = 0.6 + 0.4 * p.chill;
   const U = p.S * size * NUBS_SCALE;
-  const k = Math.min(1, p.f);
+  const k = smoke ? 0.7 : Math.min(1, p.f);
   g.lineCap = 'round';
   g.lineWidth = Math.max(1.6, 1.7 * U);
-  g.strokeStyle = glare ? '#FF3D3D' : '#FF7A1A';
+  g.strokeStyle = smoke ? '#8C8C8C' : glare ? '#FF3D3D' : '#FF7A1A';
   for (let i = 0; i < 3; i++) {
     const ph = (time * 1.3 + i / 3) % 1;
     const x = p.x + (i - 1) * 7.5 * U;
-    const y0 = p.y - (25 + ph * 10 + (i === 1 ? 3 : 0)) * U;
+    const y0 = p.y - (25 + ph * 10 + (i === 1 ? 3 : 0) + (smoke ? 8 : 0)) * U;
     const h = 10 * U;
     g.globalAlpha = 0.95 * k * Math.sin(Math.PI * Math.min(1, ph * 1.15));
     g.beginPath();

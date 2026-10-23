@@ -11,7 +11,6 @@
 import {
   coolLine,
   dayTicks,
-  nextTagHero,
   nextTagTicks,
   nightTicks,
   PICKUP_ALIVE,
@@ -21,7 +20,6 @@ import {
   SAMPLE_DX,
   SAMPLE_DY,
   trailSlope,
-  TUNING,
   worldPlan,
   type Bud,
   type Caster,
@@ -57,8 +55,8 @@ import {
   type Footprints,
   type GroundPaint,
 } from './ground.ts';
-import { createHalo, createHaloIn, createHeroHalo, drawHalo, updateHalo, type HaloInput, type HaloState, type HeroHalo } from './halo.ts';
-import { drawNextChip, drawSkyBolt, drawSmoke, drawTagStones, drawTether, heroArt } from './heroes.ts';
+import { createHalo, createHaloIn, drawHalo, tagSoon, updateHalo, type HaloInput, type HaloState } from './halo.ts';
+import { drawNextChip, drawSkyBolt, drawTagStones, drawTether, heroArt } from './heroes.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,
@@ -314,11 +312,10 @@ export interface RenderScene {
   nubs: NubsAnim;
   pose: NubsPose;
   nubsSprite: NubsSprite;
-  /** Elementals: a duo's mate (springs, pose, sprite with its springs baked) and the Trial's dial. */
+  /** Elementals: a duo's mate (springs, pose, sprite with its springs baked). */
   mate: NubsAnim;
   matePose: NubsPose;
   mateSprite: NubsSprite;
-  heroHalo: HeroHalo;
   halo: HaloState;
   sun: SunGlyph;
   sunMood: SunMood;
@@ -399,7 +396,6 @@ export function createScene(): RenderScene {
     mate: createNubsAnim(),
     matePose: createPose(),
     mateSprite: Object.assign(createNubsSprite(), { baked: true }),
-    heroHalo: createHeroHalo(),
     halo: createHalo(),
     sun: createSunGlyph(),
     sunMood: 'smug',
@@ -830,11 +826,6 @@ export class Renderer {
       mp.x = v.ox + snap.mateX * v.S;
       mp.y = v.oy - snap.mateY * v.S;
       mp.w0 = mate.w[0] as number;
-      mp.w1 = mate.w[1] as number;
-      mp.w2 = mate.w[2] as number;
-      mp.w3 = mate.w[3] as number;
-      mp.w4 = mate.w[4] as number;
-      mp.f = mate.f;
       heroPose(mp, s, mate, mateHp, snap.mateChill, inp.highContrast);
       mp.melt = mateFell ? dying : -1;
       sc.mate.lookX = sc.nubs.lookX;
@@ -924,7 +915,7 @@ export class Renderer {
     if (inp.screen !== 'title') {
       // Nubs sizzles in the sun; Ember smokes out of the light; Volt's strike strikes from the sky.
       if (s.nubs.hero === 'nubs') drawSizzle(g, pose, time, s.nubs.glare > 0);
-      else if (s.nubs.hero === 'ember' && !s.nubs.safe && sunUp && pose.melt < 0) drawSmoke(g, pose, time);
+      else if (s.nubs.hero === 'ember' && !s.nubs.safe) drawSizzle(g, pose, time, false, true);
       else if (s.nubs.hero === 'volt' && sc.nubs.zap > 0 && !inp.reducedMotion) drawSkyBolt(g, pose.x, v.vy, pose.y - 24 * v.S, time);
     }
     drawHatPop(g, v, beat, inp.reducedMotion);
@@ -997,8 +988,10 @@ export class Renderer {
       hi.theta = theta;
       hi.dragging = inp.dragging;
       hi.dTheta = s.sun.dTheta;
-      hi.chill = snap.chill;
-      hi.maxChill = s.nubs.maxChill;
+      // A solo hero's gauge reads its health.
+      const heroGauge = trial !== null && s.nubs.hero !== 'nubs';
+      hi.chill = heroGauge ? hp : snap.chill;
+      hi.maxChill = heroGauge ? 100 : s.nubs.maxChill;
       hi.sunUp = sunUp;
       hi.guideAlpha = inp.guideAlpha;
       hi.now = s.guide.now;
@@ -1020,10 +1013,8 @@ export class Renderer {
       hi.deep = inp.mech.deep;
       hi.mech = inp.screen === 'title' ? null : inp.mech;
       hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
-      hi.hero = trial ? heroHalo(sc.heroHalo, s, hp, mateHp, snap.chill) : null;
+      hi.trial = trial ? s : null;
       drawHalo(g, sc.halo, hi);
-    } else {
-      sc.haloIn.hero = null;
     }
     g.restore();
 
@@ -1065,10 +1056,9 @@ export class Renderer {
       drawSun(g, sc.sun, mood, time, scale, sc.sunAlpha, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades, moonlit, eclipse);
       if (inp.mech.flarePhase > 0) drawFlareCue(g, sc.sun, scale, inp.mech.flarePhase, inp.mech.flareLeft, inp.mech.flareT, time, inp.reducedMotion, sc.sunAlpha);
       // A relay's telegraph: "NEXT ▸ EMBER 3" under the dial (over it while the sun is below), over the sun.
+      const tag = trial && inp.screen === 'play' && dying < 0 ? tagSoon(s) : null;
       const hh = sc.haloIn;
-      if (hh.hero?.tag && inp.screen === 'play' && dying < 0) {
-        drawNextChip(g, hh.hero.tag, nextTagTicks(s), hh.cx, hh.cy + (sc.sun.y > hh.cy ? -1 : 1) * (hh.R + 26), scale / 0.9);
-      }
+      if (tag) drawNextChip(g, tag, nextTagTicks(s), hh.cx, hh.cy + (sc.sun.y > hh.cy ? -1 : 1) * (hh.R + 26), scale / 0.9);
     }
 
     // HUD.
@@ -1105,26 +1095,6 @@ function heroPose(p: NubsPose, s: SimState, nb: NubsState, hp: number, meter: nu
   p.power = (s.heroAbility === 'blaze' && nb.hero === 'ember') || (s.heroAbility === 'rain' && nb.hero === 'drip');
   p.hc = hc;
   p.cause = s.death?.heroCause ?? '';
-}
-
-/** The Trial's dial input (filled in place). */
-function heroHalo(h: HeroHalo, s: SimState, hp: number, mateHp: number, meter: number): HeroHalo {
-  const t = s.trial;
-  const g = s.guide;
-  h.lead = s.nubs.hero;
-  h.mate = s.mate !== null ? s.mate.hero : null;
-  h.hp = hp;
-  h.mateHp = mateHp;
-  h.leadMask = g.lead;
-  h.mateMask = g.mate;
-  const n = nextTagTicks(s);
-  h.tag = n >= 0 && n <= TUNING.heroes.tagSoonTicks ? nextTagHero(s) : null;
-  h.tagMask = g.tag;
-  h.voltTheta = s.voltTheta;
-  h.dripCool = s.dripCool;
-  h.dripT = meter;
-  h.steadyT = t !== null ? t.steady / 2 : 0;
-  return h;
 }
 
 /** Stamps the walking body, and a duo's mate beside it. */

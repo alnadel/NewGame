@@ -37,7 +37,7 @@
 // and splits the gauge in two halves; a relay's telegraph dashes the incoming hero's arcs outside.
 // Nubs walking alone keeps the teal dial.
 
-import { coolLine, whiteLine, type HeroId } from '../core/index.ts';
+import { coolLine, heroHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
@@ -155,33 +155,18 @@ export interface HaloInput {
   deep: boolean;
   /** v1.6 layers (the MechView's deepBand, glass, land, flare and the flare's phase), null on the Title. */
   mech: MechView | null;
-  /** Elementals: the Trial's dial (render/renderer.ts fills it; its gauge reads `chill` as health), or null. */
-  hero: HeroHalo | null;
+  /**
+   * Elementals: on a Trial its sim state (the dial reads the heroes, their masks guide.lead, .mate and
+   * .tag, Volt's last strike and Drip's side and T from it; a solo hero's gauge reads `chill` as its
+   * health 0..100), else null.
+   */
+  trial: SimState | null;
 }
 
-/** What the dial shows on a Trial (docs/ELEMENTALS.md §4.9). */
-export interface HeroHalo {
-  /** The walking (lead) hero, the duo's mate (null solo) and their health 0..100. */
-  lead: HeroId;
-  mate: HeroId | null;
-  hp: number;
-  mateHp: number;
-  /** Duo: each body's own safe mask (guide.lead, guide.mate); `now` is where both are safe. */
-  leadMask: Uint8Array;
-  mateMask: Uint8Array;
-  /** A relay's telegraph: the incoming hero (null none) and its safe mask (guide.tag). */
-  tag: HeroId | null;
-  tagMask: Uint8Array;
-  /** Volt's last strike θ (−1 none); Drip's side (true: wants shade), T and the Steady band's cold end (T). */
-  voltTheta: number;
-  dripCool: boolean;
-  dripT: number;
-  steadyT: number;
-}
-
-export function createHeroHalo(): HeroHalo {
-  const none = new Uint8Array(360);
-  return { lead: 'nubs', mate: null, hp: 100, mateHp: 100, leadMask: none, mateMask: none, tag: null, tagMask: none, voltTheta: -1, dripCool: true, dripT: 50, steadyT: 0 };
+/** The incoming hero while a relay's TAG is telegraphed (TUNING.heroes.tagSoonTicks ahead), else null. */
+export function tagSoon(s: SimState): HeroId | null {
+  const n = nextTagTicks(s);
+  return n >= 0 && n <= TUNING.heroes.tagSoonTicks ? nextTagHero(s) : null;
 }
 
 /** A dial input to refill every frame. */
@@ -190,7 +175,7 @@ export function createHaloIn(): HaloInput {
   return {
     cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, maxChill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
     hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
-    bud: null, deep: false, mech: null, hero: null,
+    bud: null, deep: false, mech: null, trial: null,
   };
 }
 
@@ -312,12 +297,15 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   if (inp.fade <= 0.01) return;
   g.lineCap = 'butt';
   // A Trial's own dial (Nubs walking alone keeps the teal one): its band colour and ink underlay.
-  const hm = inp.hero;
-  const hd = hm !== null && (hm.lead !== 'nubs' || hm.mate !== null) ? hm : null;
-  const duo = hd !== null && hd.mate !== null;
-  const solo = hd !== null && !duo ? hd.lead : null;
-  const col = duo ? BOTH : hd ? heroArcColor(hd.lead, hd.dripCool) : TEAL;
+  const st = inp.trial;
+  const lead = st ? st.nubs.hero : 'nubs';
+  const mate = st?.mate?.hero;
+  const duo = mate !== undefined;
+  const hd = duo || lead !== 'nubs';
+  const solo = hd && !duo ? lead : null;
+  const col = duo ? BOTH : heroArcColor(lead, st ? st.dripCool : true);
   const under = hd ? 0.4 : 0;
+  const tag = st ? tagSoon(st) : null;
 
   // Track ring with a soft dark backing so it reads on pale ground.
   g.lineWidth = 4;
@@ -337,7 +325,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     // During a flare's warning the glow rests (the countdown outside is the one hot thing to read).
     const k = inp.reducedMotion ? 0.6 : Math.max(0, Math.sin(h.beat * TAU)) ** 3;
     // Beside Ember's amber arcs the hot ring burns red.
-    const hot = hm?.lead === 'ember' || hm?.mate === 'ember' ? HOT_RED : HOT;
+    const hot = lead === 'ember' || mate === 'ember' ? HOT_RED : HOT;
     if (inp.mech?.flarePhase !== 1) {
       g.lineWidth = 12 + 6 * k;
       g.strokeStyle = cssa(hot, (0.14 + 0.2 * k) * heat);
@@ -394,8 +382,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       const kind = ga > 0.01 ? splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split) : 'none';
       if (duo && ga > 0.01) {
         // A duo: each hero's own arcs, thin, the lead's inside the ring and the mate's outside.
-        thin(g, inp, hd.leadMask, R - 3, HERO_ARC[hd.lead], ga);
-        thin(g, inp, hd.mateMask, R + 5, HERO_ARC[hd.mate as HeroId], ga);
+        thin(g, inp, (st as SimState).guide.lead, R - 3, HERO_ARC[lead], ga);
+        thin(g, inp, (st as SimState).guide.mate, R + 5, HERO_ARC[mate], ga);
       }
       if (ga > 0.01) {
         g.setLineDash(DASH);
@@ -422,14 +410,14 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
           band(g, 8, cssa(col, 0.95 * ga), under * ga, solo === 'sprout');
           // The white inner edge: "go here" (a duo's in the lead's colour, Sprout's lime keeps its dashed run whole).
           g.lineWidth = solo === 'sprout' || duo ? 2 : 1;
-          g.strokeStyle = cssa(duo ? HERO_ARC[(hd as HeroHalo).lead] : solo === 'sprout' ? col : 0xffffff, 0.85 * ga);
+          g.strokeStyle = cssa(duo ? HERO_ARC[lead] : solo === 'sprout' ? col : 0xffffff, 0.85 * ga);
           g.beginPath();
           arcRuns(g, split.lasting, cx, cy, R - 4.5, 1);
           g.stroke();
         }
         if (solo && kind !== 'none') marks(g, inp, solo, kind === 'lasting' ? split.lasting : inp.now, col, ga);
       }
-      if (solo === 'volt' && (hd as HeroHalo).voltTheta >= 0) deadZone(g, inp, (hd as HeroHalo).voltTheta, Math.max(0.7, ga));
+      if (solo === 'volt' && (st as SimState).voltTheta >= 0) deadZone(g, inp, (st as SimState).voltTheta, Math.max(0.7, ga));
       const deepBand = inp.mech?.deepBand;
       if (deepBand) {
         // v1.6 deep shade: a darker band inside the teal, only where it is at least 3° wide; with the
@@ -460,13 +448,13 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineCap = 'butt';
     }
   }
-  if (inp.sunUp && hm?.tag && !inp.blind) {
+  if (inp.sunUp && tag && !inp.blind) {
     // A relay's telegraph: the incoming hero's arcs, dashed just outside the ring.
     g.setLineDash(DASH);
     g.lineWidth = 3;
-    g.strokeStyle = cssa(HERO_ARC[hm.tag], Math.max(0.7, A));
+    g.strokeStyle = cssa(HERO_ARC[tag], Math.max(0.7, A));
     g.beginPath();
-    arcRuns(g, hm.tagMask, cx, cy, R + 6, 0.5);
+    arcRuns(g, (st as SimState).guide.tag, cx, cy, R + 6, 0.5);
     g.stroke();
     g.setLineDash(NO_DASH);
   }
@@ -571,7 +559,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   // (a snap there pours nothing). A full tank hides it, a ration level's half tank too.
   const chill = Math.max(0, Math.min(100, inp.chill));
   const scorch = inp.mech ? inp.mech.scorch : 0;
-  if (duo || solo === 'drip') heroGauge(g, inp, hd as HeroHalo, Math.max(A, 0.9));
+  if (duo || solo === 'drip') heroGauge(g, inp, st as SimState, Math.max(A, 0.9));
   else if (chill < Math.min(100, inp.maxChill) - 1 || scorch > 0) {
     const gR = R - 8;
     const gA = Math.max(A, 0.9);
@@ -605,7 +593,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     if (chill > 0.5) {
       const red = chill < cl;
       const white = chill >= wl;
-      const gc = GAUGE[hd ? hd.lead : 'nubs'];
+      const gc = GAUGE[lead];
       const end = top + (TAU * chill) / 100;
       g.lineCap = 'round';
       g.lineWidth = 5;
@@ -855,21 +843,23 @@ function deadZone(g: CanvasRenderingContext2D, inp: HaloInput, t: number, a: num
  * two-ended thermometer (cold blue, a calm green band 30-70, hot red; the needle at T, notches at
  * the Steady band), always shown.
  */
-function heroGauge(g: CanvasRenderingContext2D, inp: HaloInput, hm: HeroHalo, gA: number): void {
+function heroGauge(g: CanvasRenderingContext2D, inp: HaloInput, st: SimState, gA: number): void {
   const { cx, cy } = inp;
   const gR = inp.R - 8;
   const p2 = Math.PI / 2;
+  const m = st.mate;
   g.lineCap = 'round';
   g.lineWidth = 5;
   g.strokeStyle = cssa(INK, 0.3 * gA);
   g.beginPath();
-  g.arc(cx, cy, gR, hm.mate ? 0 : 0.75 * Math.PI, hm.mate ? TAU : 2.25 * Math.PI);
+  g.arc(cx, cy, gR, m ? 0 : 0.75 * Math.PI, m ? TAU : 2.25 * Math.PI);
   g.stroke();
   g.lineWidth = 3;
-  if (hm.mate) {
+  if (m) {
     for (let s = 0; s < 2; s++) {
-      const hp = Math.max(0, Math.min(100, s ? hm.mateHp : hm.hp));
-      const c = GAUGE[s ? hm.mate : hm.lead];
+      const nb = s ? m : st.nubs;
+      const hp = Math.max(0, Math.min(100, heroHealth(nb)));
+      const c = GAUGE[nb.hero];
       g.strokeStyle = cssa(c[hp < 25 ? 2 : hp < 60 ? 1 : 0] as number, gA);
       g.beginPath();
       g.arc(cx, cy, gR, p2 + (s ? -0.1 : 0.1), p2 + (s ? -0.1 - 3 * hp / 100 : 0.1 + 3 * hp / 100), s > 0);
@@ -884,17 +874,19 @@ function heroGauge(g: CanvasRenderingContext2D, inp: HaloInput, hm: HeroHalo, gA
       g.stroke();
     }
     // Notches at the Steady band, then the needle: a white dot ringed in ink at T.
+    const sT = (st.trial?.steady ?? 0) / 2;
     g.beginPath();
-    for (let i = 0; i < 2 && hm.steadyT > 0; i++) {
-      at(g, inp, -135 - 2.7 * (i ? 100 - hm.steadyT : hm.steadyT), gR + 5, false);
-      at(g, inp, -135 - 2.7 * (i ? 100 - hm.steadyT : hm.steadyT), gR - 5, true);
+    for (let i = 0; i < 2 && sT > 0; i++) {
+      at(g, inp, -135 - 2.7 * (i ? 100 - sT : sT), gR + 5, false);
+      at(g, inp, -135 - 2.7 * (i ? 100 - sT : sT), gR - 5, true);
     }
     g.lineWidth = 1.5;
     g.strokeStyle = cssa(INK, gA);
     g.stroke();
+    const T = -135 - 2.7 * Math.max(0, Math.min(100, st.nubs.chill));
     g.beginPath();
-    at(g, inp, -135 - 2.7 * Math.max(0, Math.min(100, hm.dripT)), gR, false);
-    at(g, inp, -135 - 2.7 * Math.max(0, Math.min(100, hm.dripT)), gR, true);
+    at(g, inp, T, gR, false);
+    at(g, inp, T, gR, true);
     g.lineWidth = 9;
     g.stroke();
     g.lineWidth = 6;
