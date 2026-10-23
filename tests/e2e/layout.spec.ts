@@ -254,6 +254,7 @@ for (const pct of [150, 200]) {
       ['missions', () => page.locator('.tray-btn', { hasText: 'Missions' }).click()],
       ['wardrobe', () => page.locator('.tray-btn', { hasText: 'Wardrobe' }).click()],
       ['settings', () => page.locator('.tray-btn', { hasText: 'Settings' }).click()],
+      ['elementals', () => page.locator('.scr-title .elementals-btn').click()],
     ];
     for (const [id, open] of menus) {
       await open();
@@ -277,6 +278,58 @@ for (const pct of [150, 200]) {
       await page.getByRole('button', { name: 'Back' }).first().click();
       await waitForScreen(page, 'title');
     }
+  });
+}
+
+// Elementals (docs/ELEMENTALS.md §5.6): the Title's square keeps the top bar uncrowded (the rank's
+// name whole beside a waiting reward, nothing overlapping), and the screen's tiles are real targets
+// (hero coins ≥ 64 px, Trial tiles ≥ 48 px) with no sideways scroll.
+for (const size of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 1280, height: 800 },
+]) {
+  test(`Elementals at ${size.width}x${size.height}: the Title square fits, tiles are targets, no sideways scroll`, async ({ page }, info) => {
+    await page.setViewportSize(size);
+    // Rank 1 with today's reward waiting: the tightest top bar.
+    await seedSave(page, { v: 4, createdAt: 1, stats: { runs: 6, wallet: 40 }, campaign: { stars: [3, 2, 1], unlocked: 4 }, elementals: { stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true } });
+    await openGame(page);
+    await page.waitForTimeout(300);
+    const hud = await page.evaluate(() => {
+      const kids = [...document.querySelectorAll('.scr-title .title-hud > :not(.title-hud-gap)')].filter((e) => (e as HTMLElement).offsetWidth > 0);
+      const boxes = kids.map((e) => e.getBoundingClientRect());
+      const name = document.querySelector('.scr-title .rank-name') as HTMLElement;
+      return {
+        n: kids.length,
+        apart: boxes.every((b, i) => i === 0 || b.left >= (boxes[i - 1] as DOMRect).right - 1),
+        nameWhole: name.scrollWidth <= name.clientWidth + 1,
+        right: Math.max(...boxes.map((b) => b.right)),
+      };
+    });
+    expect(hud.n, 'rank, reward, Elementals and wallet').toBe(4);
+    expect(hud.apart, 'top bar items apart').toBe(true);
+    expect(hud.nameWhole, "the rank's name shows whole").toBe(true);
+    expect(hud.right).toBeLessThanOrEqual(size.width + 0.5);
+    await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
+    await page.locator('.scr-title .elementals-btn').click();
+    await waitForScreen(page, 'elementals');
+    await page.waitForTimeout(400);
+    const sizes = await page.evaluate(() => ({
+      heroes: [...document.querySelectorAll('.scr-elementals .hero-tile .tray-disc')].map((e) => e.getBoundingClientRect()).map((b) => Math.min(b.width, b.height)),
+      trials: [...document.querySelectorAll('.scr-elementals .trial-tile')].map((e) => e.getBoundingClientRect()).map((b) => Math.min(b.width, b.height)),
+      wide: document.documentElement.scrollWidth - innerWidth,
+      body: (() => {
+        const b = document.querySelector('.scr-elementals .menu-body') as HTMLElement;
+        return b.scrollWidth - b.clientWidth;
+      })(),
+    }));
+    expect(sizes.heroes).toHaveLength(5);
+    for (const d of sizes.heroes) expect(d, 'hero coin').toBeGreaterThanOrEqual(64);
+    expect(sizes.trials).toHaveLength(8);
+    for (const d of sizes.trials) expect(d, 'Trial tile').toBeGreaterThanOrEqual(48);
+    expect(sizes.wide, 'no sideways page scroll').toBeLessThanOrEqual(0);
+    expect(sizes.body, 'no sideways menu scroll').toBeLessThanOrEqual(0);
+    await info.attach(`elementals-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
   });
 }
 

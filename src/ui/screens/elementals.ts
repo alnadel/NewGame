@@ -122,11 +122,12 @@ export function createElementalsScreen(ctx: UiContext): Screen {
         g.putImageData(img, 0, 0);
       }
       const info = HEROES[x];
-      const word = open ? info.name : `Pass ${(TRIALS[info.intro - 1] as TrialDef).name}`;
+      const intro = (TRIALS[info.intro - 1] as TrialDef | undefined)?.name;
+      const word = open ? info.name : `Pass ${intro}`;
       const on = x === id;
       const b = h(
         'button',
-        { class: `tile hero-tile tray-btn${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: ${word.toLowerCase()}` },
+        { class: `tile hero-tile tray-btn${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: pass ${intro}` },
         h('span', `tray-disc candy ${open ? FACE[info.face] : 'f-locked'}`, c, h('span', { class: 'tray-lock lock-badge', deco: true }, icon('lock'))),
         h('span', { class: 'tray-label', deco: true }, word),
       );

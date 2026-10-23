@@ -43,6 +43,17 @@ for (const [label, trayLabel, id] of [
   });
 }
 
+test('Back from the Elementals returns to the Title', async ({ page }) => {
+  await seedSave(page, UNLOCKED_SAVE);
+  await openFromBlank(page);
+  await page.locator('.scr-title .elementals-btn').click();
+  await waitForScreen(page, 'elementals');
+  await page.waitForTimeout(100);
+  await back(page);
+  await waitForScreen(page, 'title');
+  await expectStillInGame(page);
+});
+
 test('Back from Results goes Home', async ({ page }) => {
   await openFromBlank(page);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
