@@ -26,6 +26,7 @@
 
 import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import type { LevelDef } from '../../src/config/campaign.ts';
+import type { ConceptId } from '../../src/config/concepts.ts';
 import type { HeroId } from '../../src/config/heroes.ts';
 import { hashString } from '../../src/config/rng.ts';
 import { TRIAL_IDS, trialDareValue, trialDef, type TrialDef } from '../../src/config/trials.ts';
@@ -84,6 +85,8 @@ export interface TrialVariant {
   readonly drain?: number;
   readonly startMinute?: number;
   readonly dareTarget?: number;
+  /** Tooling only (sweeps): another concept list. */
+  readonly concepts?: readonly ConceptId[];
 }
 
 /** The TrialDef of a variant (the pinned one itself when nothing differs). */
@@ -92,8 +95,9 @@ export function variantDef(v: TrialVariant): TrialDef {
   const drain = v.drain ?? t.drain;
   const startMinute = v.startMinute ?? t.startMinute;
   const target = v.dareTarget ?? t.dare.target;
-  if (v.salt === t.salt && drain === t.drain && startMinute === t.startMinute && target === t.dare.target) return t;
-  return Object.freeze({ ...t, salt: v.salt, seed: hashString(`trial-${t.id}-${v.salt}`), drain, startMinute, dare: Object.freeze({ kind: t.dare.kind, target }) });
+  const concepts = v.concepts ?? t.concepts;
+  if (v.salt === t.salt && drain === t.drain && startMinute === t.startMinute && target === t.dare.target && concepts === t.concepts) return t;
+  return Object.freeze({ ...t, salt: v.salt, seed: hashString(`trial-${t.id}-${v.salt}`), drain, startMinute, concepts, dare: Object.freeze({ kind: t.dare.kind, target }) });
 }
 
 /** The LevelDef of a trial variant (config/trials.ts trialLevel's fields). */
@@ -120,7 +124,7 @@ function levelOf(t: TrialDef): LevelDef {
 /** A trial variant's run config (its seed, drain and start) and world. */
 function variantBuild(t: TrialDef): RunBuild {
   const start = minuteStart(t.startMinute);
-  const cfg = { ...resolveLevelConfig(campaignConfig(t.id)), seed: t.seed, drain: t.drain, startDay: start.day, startT: start.dayTick / TICK_HZ };
+  const cfg = { ...resolveLevelConfig(campaignConfig(t.id)), seed: t.seed, drain: t.drain, startDay: start.day, startT: start.dayTick / TICK_HZ, mods: t.concepts };
   const world = createWorld(cfg, levelOf(t));
   return { cfg, world, targetY: worldYAtDayTick(world, start.day, start.dayTick) + TUNING.world.hardAhead };
 }
@@ -153,7 +157,7 @@ export function trialRun(t: TrialDef): SimState {
 }
 
 /** A world of trial `t` generated through its finish line (the audit's). */
-function auditWorld(t: TrialDef): World {
+export function auditWorld(t: TrialDef): World {
   const w = variantBuild(t).world;
   ensureGenerated(w, w.finishY + TUNING.world.chunkLen);
   return w;
@@ -171,6 +175,73 @@ export interface Audit {
   /** Step j0 − 1 (θ0) is path[0]; the path runs to the last audited step (a Volt leg is not). */
   readonly j0: number;
   readonly path: Int16Array;
+  /** Drip legs: the rows and the backward table the path bot steers by (null without Drip). */
+  readonly drip: DripPolicy | null;
+}
+
+/**
+ * The path bot's Drip leg (closed loop): ok[(r·nt + i)·360 + b] = 1 when (row r, bucket i, bin b)
+ * still has a path within the gate's band to the end of its Drip leg. An open-loop bin path drifts
+ * on a two-sided meter (the sun's moves between bins inside a step cost T the DP does not see), so
+ * the bot re-reads its real T each step and takes a reachable bin that keeps such a path.
+ */
+export interface DripPolicy {
+  readonly R: Rows;
+  readonly ok: Uint8Array;
+  readonly lo: number;
+  readonly hi: number;
+}
+
+/** The backward table of the Drip legs at health threshold h (the band h/2 < T < 100 − h/2). */
+function dripPolicy(R: Rows, h: number): DripPolicy {
+  const n = R.n;
+  const NT = R.nt;
+  const lo = h / 2;
+  const hi = 100 - h / 2;
+  const ok = new Uint8Array(n * NT * BINS);
+  const row = new Float64Array(BINS);
+  const out = new Float64Array(BINS);
+  for (let r = n - 2; r >= 0; r--) {
+    if (R.hero[r] !== 'drip') continue;
+    const legEnd = r + 1 >= n - 1 || R.hero[r + 1] !== 'drip';
+    for (let i = 0; i < NT; i++) {
+      const o = (r * NT + i) * BINS;
+      if (legEnd) {
+        // The leg's last row: every state in the band will do (a TAG resets the meter; the finish ends it).
+        const T = DR.start + (i - R.dM) * R.dA;
+        if (T > lo && T < hi) ok.fill(1, o, o + BINS);
+        continue;
+      }
+      for (let b = 0; b < BINS; b++) {
+        const L = dripLand(R, r + 1, b, i, lo, hi);
+        row[b] = L >= 0 && ok[((r + 1) * NT + L) * BINS + b] === 1 ? 1 : 0;
+      }
+      slidingMaxCircular(row, TURN, out);
+      for (let b = 0; b < BINS; b++) ok[o + b] = out[b] === 1 ? 1 : 0;
+    }
+  }
+  return { R, ok, lo, hi };
+}
+
+/** The Drip leg's next bin from (row r, real T, bin b): a reachable bin that keeps a path, landing nearest T 50; else the side T needs. */
+function dripNext(p: DripPolicy, r: number, T: number, b: number): number {
+  const R = p.R;
+  if (r + 1 >= R.n - 1) return b;
+  const i = Math.max(0, Math.min(R.nt - 1, Math.round((T - DR.start) / R.dA) + R.dM));
+  let best = -1;
+  let bestV = Infinity;
+  for (let k = -TURN; k <= TURN; k++) {
+    const c = (b + k + BINS) % BINS;
+    const L = dripLand(R, r + 1, c, i, p.lo, p.hi);
+    const alive = L >= 0 && (R.hero[r + 1] !== 'drip' || r + 2 >= R.n - 1 || p.ok[((r + 1) * R.nt + L) * BINS + c] === 1);
+    // Alive first, then landing nearest 50, then the least turn.
+    const v = (alive ? 0 : 1e6) + (L >= 0 ? Math.abs(L - R.dM) * 100 : 1e5 + Math.abs((T > DR.start ? 0 : 1) - (R.w0[(r + 1) * BINS + c] === 1 ? 1 : 0)) * 100) + Math.abs(k);
+    if (v < bestV) {
+      bestV = v;
+      best = c;
+    }
+  }
+  return best;
 }
 
 /** The lead's hero at absolute tick `tick` (cast[0], then each relay from its TAG tick). */
@@ -180,7 +251,7 @@ function heroAt(t: TrialDef, tick: number): HeroId {
   return h;
 }
 
-interface Rows {
+export interface Rows {
   readonly j0: number;
   /** Rows j0 − 1 … jEnd + 1 (index j − j0 + 1). */
   readonly n: number;
@@ -191,6 +262,15 @@ interface Rows {
   readonly hero: HeroId[];
   /** θ0's bin (row 0). */
   readonly theta0: number;
+  /** The meter change of the flakes and crystals the lead takes on each row, for a hero they hurt (Ember's hiss, Drip's ice cubes; 0 otherwise). */
+  readonly flake: Float64Array;
+  /**
+   * Drip's grid: buckets of one step's change dA = k·D·0.1 (so a step in shade, sun or glare moves
+   * exactly −1, +1 or +glareMul buckets), nt of them, bucket dM at the start (T 50).
+   */
+  readonly dA: number;
+  readonly dM: number;
+  readonly nt: number;
 }
 
 const scene = createMaskScene();
@@ -198,7 +278,7 @@ const shade = new Uint8Array(BINS);
 const glare = new Uint8Array(BINS);
 
 /** The audit's rows: per step the lit sums at the lead's centre (and the mate's), and the lead's centre-sample weight. */
-function auditRows(t: TrialDef, w: World): Rows {
+export function auditRows(t: TrialDef, w: World): Rows {
   const j0 = Math.ceil(w.startTick / STEP) + 1;
   let jEnd = j0;
   while (worldYAtTick(w, jEnd * STEP) < w.finishY) jEnd++;
@@ -224,15 +304,48 @@ function auditRows(t: TrialDef, w: World): Rows {
     glareMask(scene, xl, y, glare);
     for (let b = 0; b < BINS; b++) w0[o + b] = glare[b] === 1 ? 2 : shade[b] === 1 ? 0 : 1;
   }
-  return { j0, n, jEnd, lead, mate, w0, hero, theta0: binOf(w.theta0) };
+  const dA = t.drain * DR.k * DT_STEP;
+  const dM = Math.ceil(DR.start / dA);
+  return { j0, n, jEnd, lead, mate, w0, hero, theta0: binOf(w.theta0), flake: flakeRows(t, w, j0, n, hero), dA, dM, nt: 2 * dM + 1 };
 }
 
-/** Drip's per-step change at centre weight `w` (0 shade, 1 lit, 2 glare). */
-function dripDelta(D: number, w: number): number {
-  return D * DR.k * (w === 0 ? -1 : w === 1 ? 1 : DR.glareMul) * DT_STEP;
+const COLLECT2 = TUNING.nubs.collectRadius * TUNING.nubs.collectRadius;
+
+/**
+ * Per row, the meter change of the pickups the lead walks over on it, charged to a hero they hurt:
+ * every flake (a crystal twice) the sim would collect if it never melted, at Ember's hiss or Drip's
+ * ice cube; nothing for Nubs, Sprout or Volt (theirs help or do nothing, and the audit leaves out
+ * what helps). Melting is ignored, so the audit stays conservative for the heroes flakes hurt.
+ */
+function flakeRows(t: TrialDef, w: World, j0: number, n: number, hero: HeroId[]): Float64Array {
+  const out = new Float64Array(n);
+  const dx = t.duo !== null ? -DUO_DX : 0;
+  // From the first running tick (a pickup taken before row 1 is charged on row 1).
+  const t0 = w.startTick;
+  const t1 = (j0 - 1 + n) * STEP;
+  for (const p of w.pickups) {
+    if (p.kind === 'flower' || p.y < w.startY - 20 || p.y > w.finishY + 20) continue;
+    for (let k = t0; k < t1; k++) {
+      const y = worldYAtTick(w, k);
+      if (y < p.y - 20) continue;
+      if (y > p.y + 20) break;
+      const ex = trailX(w.trail, y) + dx - p.x;
+      if (ex * ex + (y - p.y) * (y - p.y) > COLLECT2) continue;
+      const r = Math.max(1, Math.min(n - 2, Math.round(k / STEP) - (j0 - 1)));
+      const h = hero[r] as HeroId;
+      const per = h === 'ember' ? TUNING.heroes.ember.flake : h === 'drip' ? DR.flake : 0;
+      out[r] = (out[r] as number) + per * (p.kind === 'crystal' ? 2 : 1);
+      break;
+    }
+  }
+  return out;
 }
 
-const NT = 101;
+/** Drip's per-step change in buckets at centre weight `w` (0 shade, 1 lit, 2 glare). */
+function dripSteps(w: number): number {
+  return w === 0 ? -1 : w === 1 ? 1 : DR.glareMul;
+}
+
 const win = new Float64Array(BINS);
 const src = new Float64Array(BINS);
 
@@ -249,13 +362,14 @@ function dp(t: TrialDef, R: Rows, D: number, regen: number, maxC: number, h: num
   const n = R.n;
   const tab = new Float64Array(n * BINS).fill(DEAD);
   const anyDrip = R.hero.includes('drip');
+  const NT = R.nt;
   const drip = anyDrip ? new Uint8Array(n * NT * BINS) : null;
   const lo = h / 2;
   const hi = 100 - h / 2;
   // Row 0 (step j0 − 1): θ0 at the first hero's start meter.
   const b0 = R.theta0;
   const first = R.hero[0] as HeroId;
-  if (first === 'drip') (drip as Uint8Array)[50 * BINS + b0] = 1;
+  if (first === 'drip') (drip as Uint8Array)[R.dM * BINS + b0] = 1;
   else tab[b0] = heroStart(first, maxC);
   let last = 0;
   for (let r = 1; r < n - 1; r++) {
@@ -296,7 +410,7 @@ function dp(t: TrialDef, R: Rows, D: number, regen: number, maxC: number, h: num
           slidingMaxCircular(src, TURN, win);
           for (let b = 0; b < BINS; b++) {
             if ((win[b] as number) !== 1) continue;
-            const L = dripLand(R, D, r, b, T, lo, hi);
+            const L = dripLand(R, r, b, T, lo, hi);
             if (L >= 0) {
               dr[ro + L * BINS + b] = 1;
               any = true;
@@ -308,7 +422,7 @@ function dp(t: TrialDef, R: Rows, D: number, regen: number, maxC: number, h: num
         slidingMaxCircular(src, TURN, win);
         for (let b = 0; b < BINS; b++) {
           if ((win[b] as number) === DEAD) continue;
-          const L = dripLand(R, D, r, b, DR.start, lo, hi);
+          const L = dripLand(R, r, b, R.dM, lo, hi);
           if (L >= 0) {
             dr[ro + L * BINS + b] = 1;
             any = true;
@@ -326,6 +440,7 @@ function dp(t: TrialDef, R: Rows, D: number, regen: number, maxC: number, h: num
         if (tm && R.mate) d = Math.min(d, tm[R.mate[po + b] as number] as number, tm[R.mate[o + b] as number] as number, tm[R.mate[o + BINS + b] as number] as number);
         let v = wv + d * DT_STEP;
         if (v > maxC) v = maxC;
+        v += R.flake[r] as number;
         if (v < h) continue;
         tab[o + b] = v;
         any = true;
@@ -337,16 +452,20 @@ function dp(t: TrialDef, R: Rows, D: number, regen: number, maxC: number, h: num
   return { ok: true, last, tab, drip };
 }
 
-/** Drip's landing bucket from T at bin b on row r (−1 when the step leaves the band lo..hi). */
-function dripLand(R: Rows, D: number, r: number, b: number, T: number, lo: number, hi: number): number {
-  const a = dripDelta(D, R.w0[(r - 1) * BINS + b] as number);
-  const c = dripDelta(D, R.w0[r * BINS + b] as number);
-  const e = dripDelta(D, R.w0[(r + 1) * BINS + b] as number);
-  const dmin = Math.min(a, c, e);
-  const dmax = Math.max(a, c, e);
-  if (!(T + dmin - 1 > lo && T + dmax + 1 < hi)) return -1;
-  const L = Math.round(T + c);
-  return L < 0 ? 0 : L > 100 ? 100 : L;
+/**
+ * Drip's landing bucket from bucket `i` at bin b on row r, or −1 when the step leaves the band:
+ * T + Δmin − 1 > lo and T + Δmax + 1 < hi over the three steps' centre weights (an ice cube taken on
+ * the row counts in Δmin), landing on the current step's change (the ice cube rounded down a bucket).
+ */
+export function dripLand(R: Rows, r: number, b: number, i: number, lo: number, hi: number): number {
+  const a = dripSteps(R.w0[(r - 1) * BINS + b] as number);
+  const c = dripSteps(R.w0[r * BINS + b] as number);
+  const e = dripSteps(R.w0[(r + 1) * BINS + b] as number);
+  const fl = Math.floor((R.flake[r] as number) / R.dA);
+  const T = DR.start + (i - R.dM) * R.dA;
+  if (!(T + (Math.min(a, c, e) + fl) * R.dA - 1 > lo && T + Math.max(a, c, e) * R.dA + 1 < hi)) return -1;
+  const L = i + c + fl;
+  return L < 0 || L >= R.nt ? -1 : L;
 }
 
 /** G1: the audit of trial `t` on its world (NaN margin and ok when nothing is audited: a Volt trial). */
@@ -356,7 +475,7 @@ export function audit(t: TrialDef, w: World = auditWorld(t)): Audit {
   const p1 = paramsAt(w, 1);
   const D = t.drain;
   const audited = R.hero[0] !== 'volt';
-  if (!audited) return { ok: true, margin: NaN, need, j0: R.j0, path: new Int16Array(0) };
+  if (!audited) return { ok: true, margin: NaN, need, j0: R.j0, path: new Int16Array(0), drip: null };
   let lo = -1;
   let hi = 100;
   // The largest threshold (0..100) a path keeps: binary search (a stricter bar only removes paths).
@@ -366,18 +485,21 @@ export function audit(t: TrialDef, w: World = auditWorld(t)): Audit {
     else hi = mid;
   }
   const margin = lo;
-  if (margin < 0) return { ok: false, margin: -1, need, j0: R.j0, path: new Int16Array(0) };
+  if (margin < 0) return { ok: false, margin: -1, need, j0: R.j0, path: new Int16Array(0), drip: null };
   const best = dp(t, R, D, p1.regen, p1.maxChill, margin);
-  return { ok: margin >= need, margin, need, j0: R.j0, path: backtrack(t, R, D, margin, best) };
+  // The Drip policy keeps the gate's band (the path bot needs a win, not the audit's best margin).
+  const drip = R.hero.includes('drip') ? dripPolicy(R, Math.min(margin, need)) : null;
+  return { ok: margin >= need, margin, need, j0: R.j0, path: backtrack(t, R, margin, best), drip };
 }
 
 /** The best path of a DP pass: bins per row 0..last, chosen backwards (a table row's best meter; Drip's T nearest 50). */
-function backtrack(t: TrialDef, R: Rows, D: number, h: number, o: DpOut): Int16Array {
+function backtrack(t: TrialDef, R: Rows, h: number, o: DpOut): Int16Array {
   const path = new Int16Array(o.last + 1);
   const lo = h / 2;
   const hi = 100 - h / 2;
   const dr = o.drip as Uint8Array;
   const isDrip = (r: number): boolean => R.hero[r] === 'drip';
+  const NT = R.nt;
   const reach = (r: number, T: number, b: number): boolean => dr[r * NT * BINS + T * BINS + b] === 1;
   // The final state: the best meter, or Drip's reachable T nearest 50.
   const L = o.last;
@@ -387,8 +509,8 @@ function backtrack(t: TrialDef, R: Rows, D: number, h: number, o: DpOut): Int16A
   for (let bb = 0; bb < BINS; bb++) {
     if (isDrip(L)) {
       for (let tt = 0; tt < NT; tt++) {
-        if (reach(L, tt, bb) && Math.abs(tt - 50) < best) {
-          best = Math.abs(tt - 50);
+        if (reach(L, tt, bb) && Math.abs(tt - R.dM) < best) {
+          best = Math.abs(tt - R.dM);
           b = bb;
           T = tt;
         }
@@ -410,7 +532,7 @@ function backtrack(t: TrialDef, R: Rows, D: number, h: number, o: DpOut): Int16A
         // From Drip: a Drip step must land on T; across a TAG any reachable state will do.
         for (let tt = 0; tt < NT; tt++) {
           if (!reach(r - 1, tt, c)) continue;
-          if (isDrip(r) && !tag && dripLand(R, D, r, b, tt, lo, hi) !== T) continue;
+          if (isDrip(r) && !tag && dripLand(R, r, b, tt, lo, hi) !== T) continue;
           pb = c;
           pT = tt;
           break;
@@ -420,7 +542,7 @@ function backtrack(t: TrialDef, R: Rows, D: number, h: number, o: DpOut): Int16A
       const v = o.tab[(r - 1) * BINS + c] as number;
       if (v === DEAD) continue;
       // From a table hero into Drip (a TAG): the start T must land on T.
-      if (isDrip(r) && dripLand(R, D, r, b, DR.start, lo, hi) !== T) continue;
+      if (isDrip(r) && dripLand(R, r, b, R.dM, lo, hi) !== T) continue;
       if (v > bestV) {
         bestV = v;
         pb = c;
@@ -506,15 +628,29 @@ function striker(): Player {
   };
 }
 
-/** The path bot (§3.9 G2): follows the audit's best θ path and casts nothing; a Volt leg is the striker's. */
+/**
+ * The path bot (§3.9 G2): follows the audit's best θ path and casts nothing; a Drip leg steers by the
+ * audit's backward table from its real T (closed loop, DripPolicy); a Volt leg is the striker's.
+ */
 function pathBot(a: Audit): Player {
   const f = frame();
   const strike = striker();
   let first = true;
+  let dripRow = -1;
+  let dripBin = 0;
   return (s) => {
     if (s.nubs.hero === 'volt' || a.path.length === 0) return strike(s);
     const r = Math.min(a.path.length - 1, Math.max(0, Math.round((s.tickAbs + 1) / STEP) - (a.j0 - 1)));
-    const out = steer(f, s, a.path[r] as number, 600, first);
+    let target = a.path[r] as number;
+    if (s.nubs.hero === 'drip' && a.drip !== null) {
+      // One decision per step, from the state at its start.
+      if (r !== dripRow) {
+        dripRow = r;
+        dripBin = dripNext(a.drip, Math.max(0, r - 1), s.nubs.chill, binOf(s.sun.theta));
+      }
+      target = dripBin;
+    }
+    const out = steer(f, s, target, 600, first);
     first = false;
     return out;
   };

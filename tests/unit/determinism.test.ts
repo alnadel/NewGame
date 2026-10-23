@@ -9,6 +9,7 @@ import { createBot } from '../../src/core/sim/bots.ts';
 import { createRun, prepareRun, prepareSome } from '../../src/core/sim/create.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runHeadless } from '../../src/core/sim/headless.ts';
+import { campaignConfig } from '../../src/core/level.ts';
 import { createReplay, playReplay, recordFrame } from '../../src/core/sim/replay.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { scriptedHashes, scriptedInput } from '../../scripts/golden.ts';
@@ -29,6 +30,30 @@ describe('determinism', () => {
   it('runHeadless(7, 3600, reactive) matches the golden hash (also checked in the browser e2e)', () => {
     expect(runHeadless(7, 3600, 'reactive')).toBe(golden.headless_7_3600_reactive);
   });
+
+  it('an Elementals duo (T6) and the grand relay (T8) replay bit for bit (docs/ELEMENTALS.md §5.2)', () => {
+    for (const id of [1006, 1008]) {
+      const cfg = campaignConfig(id);
+      const live = createRun(cfg);
+      const bot = createBot('reactive', 3);
+      const rec = createReplay(cfg);
+      const liveHashes: string[] = [];
+      for (let i = 0; i < 3000 && live.phase !== 'dead' && live.phase !== 'won'; i++) {
+        const f = bot.next(live);
+        recordFrame(rec, f);
+        step(live, f);
+        if ((i + 1) % 300 === 0) liveHashes.push(hashState(live));
+      }
+      expect(liveHashes.length).toBeGreaterThan(3);
+      const replayHashes: string[] = [];
+      const replayed = playReplay(rec, (s, i) => {
+        if ((i + 1) % 300 === 0) replayHashes.push(hashState(s));
+      });
+      expect(replayHashes).toEqual(liveHashes);
+      expect(hashState(replayed)).toBe(hashState(live));
+      expect(replayed.events).toEqual(live.events);
+    }
+  }, 60_000);
 
   it('a recorded run replays to the same state at every checkpoint', () => {
     const cfg = headlessConfig(21, 3);

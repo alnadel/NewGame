@@ -5,11 +5,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { campaignHashes, CHECK_EVERY, forecastHashes, GOLDEN_LEVELS, oracleHashes, rungHashes, SCRIPT_TICKS } from '../../scripts/golden.ts';
+import { campaignHashes, CHECK_EVERY, forecastHashes, GOLDEN_LEVELS, oracleHashes, rungHashes, SCRIPT_TICKS, trialHashes } from '../../scripts/golden.ts';
 
 const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../golden/hashes.json'), 'utf8'),
-) as { oracle3min: string[]; forecasts: Record<string, string>; rungs: string[]; campaign: Record<string, string> };
+) as { oracle3min: string[]; forecasts: Record<string, string>; rungs: string[]; campaign: Record<string, string>; trials: Record<string, string> };
 
 describe('golden hashes', () => {
   it('a 3-minute oracle run matches the golden hashes (equality with Node-made goldens is the determinism proof)', () => {
@@ -28,5 +28,9 @@ describe('golden hashes', () => {
     expect(got).toEqual(golden.campaign);
     for (const id of GOLDEN_LEVELS) expect(got[String(id)]?.startsWith('won:'), `level ${id}`).toBe(true);
   }, 120_000);
+
+  it('the reactive bot on every Elementals Trial matches the golden hashes (docs/ELEMENTALS.md §3.9)', () => {
+    expect(trialHashes()).toEqual(golden.trials);
+  }, 60_000);
 
 });
