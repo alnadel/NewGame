@@ -19,7 +19,7 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/perf.ts` | Frame-time governor, four levels (v1.1 GR4): 0 full → 1 crisp shadows → 2 DPR × 0.75 → 3 DPR × 0.625 and a 200-particle cap (never below 1 device px per CSS px). Late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `game/campaign.ts` | Campaign (Journey, v1.2) runs: a level's run config, the intro card's words and star rules, the Results goal line, the HUD goal pill and the stars so far (`starState`: the HUD pips and the Pause card) (CAMPAIGN_PLAN §4). |
-| `game/moments.ts` | v1.4 in-run moments: mission toasts ("MISSION ✓ 2/3", the save's active missions measured against the live run every 0.1 s, read-only on the save; scored runs only), the first three Journey levels' contextual tips (`LEVEL_TIPS`, shown until the level is passed), and the COMEBACK (Chill under the PHEW line while lit, then 0.75 s of held shade, no PHEW on the way in; once per dip). |
+| `game/moments.ts` | v1.4 in-run moments: mission toasts ("MISSION ✓ 2/3", the save's active missions measured against the live run every 0.1 s, read-only on the save; scored runs only), the first three Journey levels' contextual tips (`LEVEL_TIPS`, shown until the level is passed), and the COMEBACK (Chill under the PHEW line while lit, then 0.75 s of held shade, no PHEW on the way in; once per dip). Elementals: the Trials' `HERO_TIPS`, `RELAY_TIPS` and `DUO_TIPS` (docs/ELEMENTALS.md §6.3). |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
 | `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (every forecast, biome and concept glyph and the ground decals, stored as SVG path ops: `drawGlyph(id)`, `artOps`/`drawArt`) and `postcard.ts`. |
 
@@ -235,6 +235,28 @@ See CAMPAIGN_PLAN §4 for the contract; the core names (`CONCEPTS`, `levelDef`, 
   high contrast) and fills the air with spring petals, winter snow or blown leaves (`fx.ts`, none
   under reduced motion). Endless, Daily and challenge runs keep `PLAIN_THEME`.
 
+## Elementals (game side, docs/ELEMENTALS.md §4.10)
+
+A Trial (ids 1001..1008, core `trialLevel`, `trialDef`) runs through the campaign flow above with
+its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a debug run), and
+`?hero=<id>` swaps a solo Trial's hero (cfg.hero; an unscored debug run).
+- **`campaign.ts` variants**: `introCard` (kicker `levelTag` "TRIAL 3", the Trial's card chip, blurb,
+  goal and star rules, with the hero's glyph, or `'elementals'` for a relay or duo, from
+  `trialGlyph`), `starRules`, `goalText`, `goalLine` ("Reached the finish", "Out before the
+  finish", "Goal missed: Bloom 2 buds (1/2)"), `starState` (the goal, the Dare by `trialDareValue`,
+  and Steady: `stats.minChill` never under `steady`), and `hudGoal` (the goal until met, then the
+  Dare, ticks shown as seconds). `campaignConfig` never relaxes a Trial.
+- **Session**: Results > Map and Back after a Trial call `openJourney('elementals')`. Next goes to
+  the next open Trial (`nextOpenTrial`), else to the Elementals screen. The death recap tip is the
+  fallen hero's `deathTip` (Nubs' '' keeps today's recap tips). The Pause card's title reads
+  "Trial 3 · Thunder Alley" with the hero's tagline. `renderHeroPreview` is stubbed with
+  `renderWardrobePreview(canvas, equipped)`, Nubs in his outfit, until ART's export lands.
+- **Tips** (`moments.ts`): until a Trial is passed (`save.elementals`) it shows its first hero's
+  `HERO_TIPS` (go, a quarter in, the ability's charge or its own moment). A relay adds `RELAY_TIPS`
+  (go, and the first TAG's telegraph on `tagSoon`), and each later hero's 'go' tip comes on the
+  `tag` that hands it the walk (once). A duo shows `DUO_TIPS`, whose Cold Snap warning shows only on
+  T6. Trials toast no mission steps and no COMEBACK (a hero's meter is not Nubs' Chill).
+
 ## v1.3 game feel
 
 - **Danger at a glance**: while Nubs stands in the sun the halo ring burns hot (`#FF6A3D`) with a
@@ -370,13 +392,16 @@ show while no swipe can cast.
 
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
 (−1 outside endless), `drain, noonCloud, forecast, biome, lessonOn`, and in v1.2 `level` (−1
-outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locked`, `moonlit`), `forceDeath()`,
+outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locked`, `moonlit`, and for
+the Elementals `hero`, `mate` (a duo's, else null), `relay` (the relay index), `meters` (each body's
+meter) and `charge` (the ability's)), `forceDeath()`,
 `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; for tooling: `paused()`,
 `presses()`, `demo(name)` (fx and audio only: `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`,
 `cloud`, `glare`, `flake`, `best`, in v1.1 `passed`, `swing`, `highnoon`, `postcard`, and in v1.2
 `finish`), `campaign()` (the last Results' `ResultsView.campaign`, or null), `perf()`
 (frame, sim, generation and render ms, layer counters, the DPR, `govLevel`, `draws`, and in v1.1
-`fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()`, `cameraFx()`,
+`fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()` (with `hero`: cfg.hero
+or null), `cameraFx()`,
 `hudPb()`, `renderOptions({ mapOverlay, multiplyShadows, decor })`, `pixelAB(a, b)`,
 `mapProbe(mapT)` (whole device pixels of the world rect only), `mapCallouts()` (Melt Map callout
 boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`) and `bot(kind)`
