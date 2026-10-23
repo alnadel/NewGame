@@ -115,6 +115,26 @@
 
 .elementals-btn .new-tag { top: -9px; }
 
+/* Phones: the square, the gaps and the wallet tighten while the square shows, so the rank's name
+   still fits beside a waiting reward (the wallet as compact as the menus' counters). */
+@media (max-width: 399.98px) {
+  .title-hud:has(> .elementals-btn:not([hidden])) { gap: 6px; }
+
+  .title-hud > .btn.elementals-btn { --h: 46px; --r: 16px; --ic: 30px; }
+
+  .title-hud:has(> .elementals-btn:not([hidden])) > .chip--snow {
+    margin-left: 16px;
+    padding: 0 10px 0 24px;
+    font-size: var(--fs-d-md);
+  }
+
+  .title-hud:has(> .elementals-btn:not([hidden])) > .chip--snow > .ai { left: -18px; width: 40px; height: 40px; }
+}
+
+@media (max-width: 379.98px) {
+  .title-hud:has(> .elementals-btn:not([hidden])) .btn.title-reward { --h: 50px; --ic: 32px; }
+}
+
 /* The gift wiggles twice every 4 s. */
 .title-reward .ai { animation: gift-wiggle 4s ease-in-out 1s infinite; }
 

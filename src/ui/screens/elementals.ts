@@ -75,6 +75,7 @@ interface TrialTile {
 interface HeroTile {
   id: HeroId;
   btn: HTMLButtonElement;
+  disc: HTMLElement;
   canvas: HTMLCanvasElement;
   label: HTMLElement;
 }
@@ -128,8 +129,9 @@ export function createElementalsScreen(ctx: UiContext): Screen {
   // --- Hero tiles ----------------------------------------------------------------------------
   const heroes: HeroTile[] = HERO_IDS.map((id) => {
     const canvas = h('canvas', { class: 'el-hcanvas', deco: true });
+    const disc = h('span', `candy el-disc ${FACE[HEROES[id].face]}`, canvas);
     const label = h('span', { class: 'tag el-hname', deco: true });
-    const btn = h('button', { class: `tile hero-tile candy ${FACE[HEROES[id].face]}`, type: 'button', 'data-hero': id }, canvas, label);
+    const btn = h('button', { class: 'tile hero-tile', type: 'button', 'data-hero': id }, disc, label);
     btn.addEventListener('click', () => {
       const save = ctx.save();
       if (!heroUnlocked(save, id)) return deny(`Pass ${introOf(id).name} first.`);
@@ -138,7 +140,7 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       refresh();
       ctx.announce(`${HEROES[id].name}: ${HEROES[id].tagline}`);
     });
-    return { id, btn, canvas, label };
+    return { id, btn, disc, canvas, label };
   });
   const heroRow = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Heroes' }, ...heroes.map((x) => x.btn));
 
@@ -230,12 +232,12 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const state = !open ? `locked: pass ${blocker(save, t).name}` : stars > 0 ? starsLabel(stars) : 'not passed yet';
       btn.setAttribute('aria-label', `${levelTag(t.id)}, ${t.name}, ${castWords(t)}, ${state}`);
     }
-    for (const { id, btn, canvas, label } of heroes) {
+    for (const { id, btn, disc, canvas, label } of heroes) {
       const open = heroUnlocked(save, id);
       const on = id === (picked ?? featured(sel));
       btn.classList.toggle('is-locked', !open);
       // The locked face (and its hatch in high contrast) over the hero's own.
-      btn.classList.toggle('f-locked', !open);
+      disc.classList.toggle('f-locked', !open);
       btn.classList.toggle('is-selected', on);
       btn.setAttribute('aria-pressed', String(on));
       const intro = HEROES[id].intro > 0 ? introOf(id).name : '';

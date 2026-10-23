@@ -27,6 +27,12 @@ export interface ShadyState {
   gust: number;
   locked: boolean;
   moonlit: boolean;
+  /** Elementals (docs/ELEMENTALS.md §4.10): the walking hero, the duo's mate, the relay index, each body's meter, the ability charge. */
+  hero: string;
+  mate: string | null;
+  relay: number;
+  meters: number[];
+  charge: number;
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
@@ -144,6 +150,8 @@ export interface RunCfg {
   seed: number;
   dailyDate: string | null;
   drain: number;
+  /** Elementals: a solo Trial's ?hero= override, null otherwise. */
+  hero: string | null;
 }
 
 export interface ShadyPerf {

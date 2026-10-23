@@ -44,47 +44,58 @@
   .stage-spot.is-duo .preview-canvas { width: 64px; height: 64px; }
 }
 
-/* ===== Hero tiles: round candy coins in the hero's face, the name (or what opens it) hung under ===== */
+/* ===== Hero tiles: a round candy coin in the hero's face, its name (or what opens it) under it ===== */
 
 .el-heroes {
-  display: flex;
-  justify-content: space-between;
-  padding: 2px 0 34px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
 }
 
 .hero-tile {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.el-disc {
   --r: 50%;
   --lipH: 5px;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 64px;
   height: 64px;
-  padding: 0 0 5px;
+  padding-bottom: 5px;
   transition: var(--tr-up);
 }
 
-.hero-tile.is-selected { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
+.hero-tile.is-selected .el-disc { --sh: inset 0 -5px 0 var(--lip), var(--top-light), 0 0 0 4px #fff, 0 0 0 7px var(--ink); }
 
-.hero-tile:active { transform: translateY(3px); }
+.hero-tile:active .el-disc { transform: translateY(3px); }
+
+.sui .hero-tile:focus-visible { outline: none; }
+
+.sui .hero-tile:focus-visible .el-disc { outline: 3px solid #fff; outline-offset: 3px; box-shadow: var(--sh), 0 0 0 9px var(--ink); }
 
 .el-hcanvas { width: 52px; height: 52px; }
 
-/* Ink on cream at a fixed 15 px (like the tray's labels): five names share one phone row. */
+/* Ink on cream at a fixed 15 px (like the tray's labels), tucked over the coin's bottom edge. */
 .el-hname {
-  position: absolute;
+  position: relative;
   z-index: 2;
-  top: 52px;
-  left: 50%;
-  translate: -50% 0;
+  margin-top: -10px;
   padding: 0 6px 1px;
   font-size: 15px;
 }
 
-/* Locked: a gold badge that says what opens the hero ("Pass Kindling"), in two short lines. */
+/* Locked: a gold badge that says what opens the hero ("Pass Kindling"), wrapped to its column. */
 .el-hname.lock-badge {
   --ic: 12px;
-  width: 76px;
+  width: auto;
+  max-width: 100%;
   height: auto;
-  padding: 2px 4px 3px;
+  padding: 2px 5px 3px;
   border-radius: 10px;
   font: 800 var(--fs-2xs)/1.1 var(--font-body);
   text-align: center;
@@ -109,7 +120,7 @@
   justify-items: start;
   gap: 4px 9px;
   min-height: 84px;
-  padding: 9px 8px 10px;
+  padding: 9px 8px 10px 11px;
   border: var(--line);
   border-radius: 18px;
   background: var(--cream);
@@ -177,11 +188,11 @@
 }
 
 /* Opened since the last visit: the disc (or the hero) pops open (journey.css's keyframes). */
-:is(.trial-tile.is-unlocked .node, .hero-tile.is-unlocked) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }
+:is(.trial-tile, .hero-tile).is-unlocked :is(.node, .el-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }
 
-.sui.is-rm :is(.trial-tile, .hero-tile):active { transform: none; }
+.sui.is-rm :is(.trial-tile:active, .hero-tile:active .el-disc) { transform: none; }
 
-.sui.is-hc :is(.hero-tile, .el-face) { background: var(--face); }
+.sui.is-hc :is(.el-disc, .el-face) { background: var(--face); }
 
 @media (forced-colors: active) {
   .trial-tile.is-next { outline: 2px solid Highlight; outline-offset: 2px; }
