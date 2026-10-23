@@ -14,7 +14,7 @@ export interface SfxParams {
   key?: number;
   /** Pentatonic degree: 0..9 for bells, 0..4 for flowers. */
   degree?: number;
-  /** multUp: the multiplier (2..5); levelWin: the stars (1..3); swing: the chain. */
+  /** multUp: the multiplier (2..5); levelWin: the stars (1..3); swing: the chain; snapEnd: octaves down (Ember's hiss). */
   level?: number;
   /** Detent index (the click's pitch step); gust: the wind direction (±1); lock: 1 = released. */
   index?: number;
@@ -438,9 +438,9 @@ export const RECIPES = {
     seq(v, t + 0.12, root, [[0, 7], [0.03, 12], [0.06, 16], [0.09, 19]], 'bell', 0.04, 1.2, 1.4);
   },
 
-  /** The snap thins out: two quiet bells falling a fifth. */
+  /** The snap thins out: two quiet bells falling a fifth (`level` 2: an octave lower, Ember's hiss). */
   snapEnd(g, t, p) {
-    seq(g.voice('sfx', t), t, tonic5(p), [[0, 7], [0.14, 0]], 'bell', 0.035, 0.6, 1.3);
+    seq(g.voice('sfx', t), t, tonic5(p) / (p.level ?? 1), [[0, 7], [0.14, 0]], 'bell', 0.035, 0.6, 1.3);
   },
 
   /** Deep shade: a low soft "whoom" and a high bell, cool and quiet. */
@@ -468,6 +468,54 @@ export const RECIPES = {
     const v = g.voice('sfx', t);
     v.burst(g.white, t, 0.09, 0.001, 0.04, v.filter('bandpass', 3400, 1.4));
     seq(v, t + 0.03, tonic5(p), [[0, 12], [0.07, 19], [0.14, 24]], 'bell', 0.06, 0.9, 1.6);
+  },
+
+  // Elementals (docs/ELEMENTALS.md §4.9): the abilities, Volt's strikes and a relay's TAG.
+
+  /** BLAZE: a crackle whoomp, three bandpassed noise bursts over a sine rising an octave. */
+  blaze(g, t, p) {
+    const v = g.voice('sfx', t);
+    for (let i = 0; i < 3; i++) v.burst(g.white, t + i * 0.05, 0.1, 0.002, 0.06, v.filter('bandpass', 1500 + 900 * i, 1.4));
+    const f = tonic5(p) / 2;
+    glide(v.tone('sine', f, t, 0.14, 0.02, 0.4).frequency, t, f, f * 2, 0.3);
+  },
+
+  /** SEED: a sprout popping up, a sliding "pop" and a pluck up a fifth. */
+  seed(g, t, p) {
+    const v = g.voice('sfx', t);
+    glide(v.tone('sine', 300, t, 0.1, 0.003, 0.08).frequency, t, 300, 700, 0.06);
+    seq(v, t + 0.05, tonic5(p), [[0, 0], [0.07, 7]], 'pluck', 0.1, 0.3, 1.5);
+  },
+
+  /**
+   * A strike: a zap (a sawtooth diving through a bandpass and a crack of noise) on a bell one
+   * pentatonic degree higher per chain step (`degree`), so a ×5 chain plays a melody; `gain` 1.5 is
+   * a THUNDERCLAP.
+   */
+  strike(g, t, p) {
+    const v = g.voice('sfx', t);
+    const k = p.gain ?? 1;
+    const env = v.gain(GAIN_FLOOR, v.filter('bandpass', 2200, 0.8));
+    glide(v.osc('sawtooth', 1800, t, perc(env.gain, t, 0.06 * k, 0.002, 0.12), env).frequency, t, 1800, 300, 0.12);
+    v.burst(g.white, t, 0.08 * k, 0.001, 0.05, v.filter('highpass', 2500, 0.7));
+    bellTone(v, t + 0.03, degreeHz(p.day ?? 1, Math.min(9, p.degree ?? 0), 5, p.key ?? 0), 0.08, 0.7, 0.25);
+  },
+
+  /** CLOUDBURST: a run of droplet plinks falling down the scale. */
+  rain(g, t, p) {
+    const v = g.voice('sfx', t);
+    for (let i = 0; i < 6; i++) {
+      const f = degreeHz(p.day ?? 1, 9 - i, 5, p.key ?? 0);
+      glide(v.tone('sine', f * 1.6, t + i * 0.055, 0.06, 0.002, 0.07).frequency, t + i * 0.055, f * 1.6, f, 0.05);
+    }
+  },
+
+  /** TAG: a two-note chord (root and fifth), answered by the third and octave on bells. */
+  tag(g, t, p) {
+    const v = g.voice('sfx', t);
+    const root = tonic5(p);
+    seq(v, t, root, [[0, 0], [0, 7]], 'pluck', 0.1, 0.4);
+    seq(v, t + 0.12, root, [[0, 4], [0, 12]], 'bell', 0.05, 0.8, 1.4);
   },
 
   /** Error: two soft low blips a semitone apart, "nuh-uh". */

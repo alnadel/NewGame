@@ -4,7 +4,9 @@
 // hat (or his scarf's knot) pops off and lands beside the puddle, where it stays on the Melt Map.
 // During the map pull the grey fades back out, so the settled map is in full colour.
 
+import type { HeroId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
+import { renderTokenSprite } from './heroes.ts';
 import { HAT_BASE_X, HAT_BASE_Y, renderHatSprite, type Looks } from './nubs.ts';
 import { makeCanvas, type Canvas2D } from './sprites.ts';
 
@@ -38,14 +40,18 @@ export function createDeathBeat(): DeathBeat {
   return { t: -1, x: 0, y: 0, side: 1, hat: null, hatScale: 0, grad: null };
 }
 
-/** Starts the beat for a death at (x, y): the hat flies away from the sun (`ux` its x direction). */
-export function startDeathBeat(d: DeathBeat, x: number, y: number, ux: number, looks: Looks, pxPerU: number): void {
+/**
+ * Starts the beat for a death at (x, y): the hat flies away from the sun (`ux` its x direction); a
+ * fallen Elemental pops its token instead (a spark, a leaf, a bolt, a drop).
+ */
+export function startDeathBeat(d: DeathBeat, x: number, y: number, ux: number, looks: Looks, pxPerU: number, hero: HeroId = 'nubs'): void {
   d.t = 0;
   d.x = x;
   d.y = y;
   d.side = ux > 0 ? -1 : 1;
   d.hat ??= makeCanvas(1, 1);
-  renderHatSprite(d.hat, looks, pxPerU);
+  if (hero === 'nubs') renderHatSprite(d.hat, looks, pxPerU);
+  else renderTokenSprite(d.hat, hero, pxPerU);
   d.hatScale = pxPerU;
 }
 

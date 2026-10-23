@@ -16,10 +16,11 @@
 // resize, a contrast change or when the display font arrives); a frame blits it with a transform and
 // an alpha. No shadowBlur, no per-frame gradients.
 
-import { FORECASTS, type BiomeId, type ForecastId } from '../core/index.ts';
+import { FORECASTS, type BiomeId, type ForecastId, type HeroId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import { bodyFont, burst, candyRect, chip, coin, displayFont, FACE, fontGen, INK, INK_2, onDisplayFont, outlined, panel, plate, ribbon, RIBBON, starSprite, TEXT, well, type Face, type RibbonTone } from './candy.ts';
+import { bodyFont, burst, candyRect, chip, coin, displayFont, FACE, fontGen, INK, INK_2, onDisplayFont, outlined, panel, plate, ribbon, RIBBON, starSprite, TEXT, well, type Face, type FaceName, type RibbonTone } from './candy.ts';
 import { drawGlyph } from './glyphs.ts';
+import { drawHeroLegend } from './heroes.ts';
 import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -108,6 +109,8 @@ export interface Banners {
   /** The stamp: seconds since it appeared (−1 none), its look, text and hold time. */
   stamp: number;
   stampKind: StampKind;
+  /** Elementals: a TAG! stamp's face (the incoming hero's), else null. */
+  stampFace: Face | null;
   stampText: string;
   stampHold: number;
   /** Stars earned shown under a FINISH stamp (−1 none): they pop in one by one. */
@@ -182,7 +185,7 @@ export interface Toast {
   at: number;
 }
 
-export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost';
+export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost' | 'tag' | 'blaze';
 
 /** Stamp timing (s): slam in, then fade out (the hold is per stamp). */
 export const STAMP_IN = 0.22;
@@ -198,7 +201,12 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [Face, string]>> = {
   miss: [FACE.pink, ''],
   // v1.6 PARRY!: a blue plate on an ice burst.
   frost: [FACE.blue, '#CFEFFF'],
+  // Elementals: TAG! on the incoming hero's face (showStamp's), BLAZE! on red.
+  tag: [FACE.violet, '#FFFFFF'],
+  blaze: [FACE.red, '#FFD84A'],
 };
+/** Intro card glyphs drawn as a hero's dial legend. */
+const LEGEND: readonly string[] = ['ember', 'sprout', 'volt', 'drip'];
 /** The level card's slide-out (s). */
 const LEVEL_OUT_S = 0.3;
 /** The level card's slide-in (s). */
@@ -223,6 +231,7 @@ export function createBanners(): Banners {
     heatPhase: 0,
     stamp: -1,
     stampKind: 'noon',
+    stampFace: null,
     stampText: '',
     stampHold: 0,
     stampStars: -1,
@@ -303,15 +312,16 @@ export function dismissLevelCard(b: Banners): void {
   if (b.level >= 0 && b.levelOut < 0) b.levelOut = 0;
 }
 
-/** Shows a stamp (it replaces any stamp still on screen). */
-export function showStamp(b: Banners, kind: StampKind, text: string, hold: number): void {
+/** Shows a stamp (it replaces any stamp still on screen); `face` names a TAG!'s candy face. */
+export function showStamp(b: Banners, kind: StampKind, text: string, hold: number, face?: FaceName): void {
   b.stamp = 0;
   b.stampKind = kind;
   b.stampText = text;
   b.stampHold = hold;
   b.stampStars = -1;
+  b.stampFace = face ? FACE[face] : null;
   // A new stamp of the same words and look reuses its sprite; anything else redraws it.
-  b.stampId = stampId(kind, text);
+  b.stampId = stampId(kind, face ? `${text}|${face}` : text);
 }
 
 const stampIds = new Map<string, string>();
@@ -916,7 +926,9 @@ function renderCard(b: Banners, s: Sprite, dpr: number, k: number, hc: boolean, 
     let tx = x + 13 * k;
     if (b.levelConcept) {
       chip(g, x + 5 * k, y + 5 * k, 22 * k, 22 * k, 11 * k, '#FFFFFF', k, 2 * k);
-      drawGlyph(g, b.levelConcept, x + 16 * k, y + 16 * k, 15 * k);
+      // A solo Trial's chip coin is the hero's dial legend (its go arc's colour and pattern).
+      if (LEGEND.includes(b.levelConcept)) drawHeroLegend(g, b.levelConcept as HeroId, x + 16 * k, y + 16 * k, 9 * k);
+      else drawGlyph(g, b.levelConcept, x + 16 * k, y + 16 * k, 15 * k);
       tx = x + 35 * k;
     }
     g.textAlign = 'left';
@@ -1088,7 +1100,8 @@ function drawStamp(g: CanvasRenderingContext2D, b: Banners, v: View, cx: number,
 }
 
 function renderStamp(b: Banners, sp: Sprite, dpr: number, k: number, hc: boolean, maxW: number, id: string): void {
-  const [face, burstFill] = STAMP_LOOK[b.stampKind];
+  const [face0, burstFill] = STAMP_LOOK[b.stampKind];
+  const face = b.stampFace ?? face0;
   const pad = 20 * k;
   const mg = measureCtx();
   // Fit once per stamp: too wide shrinks the type (the plate and its burst keep their padding).

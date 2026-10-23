@@ -2,12 +2,12 @@
 // 20 fps with the puddle ring still pulsing), the world rect published for the DOM (K9), the Melt
 // Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
 // under reduced motion), the lazily painted ground tiles, the matched shadow composite (GR2) and
-// the death beat with its recap tip and callouts that never overlap (GR12), the postcard (GR14) and
-// the Daily par computed in idle slices (GR15).
+// the death beat with its recap tip and callouts that never overlap (GR12), the postcard (GR14),
+// the Daily par computed in idle slices (GR15) and the Elementals trial frames (docs/ELEMENTALS.md §5.4).
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
-import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
@@ -244,6 +244,36 @@ test.describe('shadow composite (GR2)', () => {
   });
 });
 
+/** Counts the game canvas's drawImage, fill and stroke calls (installed before the page's scripts). */
+async function countCalls(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const c: Record<string, number> = { drawImage: 0, fill: 0, stroke: 0 };
+    (window as unknown as { __calls: Record<string, number> }).__calls = c;
+    const P = CanvasRenderingContext2D.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+    for (const k of Object.keys(c)) {
+      const orig = P[k] as (...a: unknown[]) => unknown;
+      P[k] = function (this: CanvasRenderingContext2D, ...a: unknown[]) {
+        if (this.canvas instanceof HTMLCanvasElement && this.canvas.id === 'game') c[k] = (c[k] as number) + 1;
+        return orig.apply(this, a);
+      };
+    }
+  });
+}
+
+/** The counted calls per drawn frame over one second (and the frames drawn). */
+async function callsPerFrame(page: Page): Promise<Record<string, number>> {
+  return page.evaluate(async () => {
+    const w = window as unknown as { __calls: Record<string, number> };
+    const d0 = window.__SHADY_TEST__!.perf().draws;
+    const c0 = { ...w.__calls };
+    await new Promise((r) => setTimeout(r, 1000));
+    const n = window.__SHADY_TEST__!.perf().draws - d0;
+    const out: Record<string, number> = { frames: n };
+    for (const k of Object.keys(c0)) out[k] = ((w.__calls[k] as number) - (c0[k] as number)) / Math.max(1, n);
+    return out;
+  });
+}
+
 test.describe('draw-call budget', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
 
@@ -253,18 +283,7 @@ test.describe('draw-call budget', () => {
   test('a full-quality play frame stays within its canvas-call budget', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one run is enough');
     await seedSave(page, OPEN_SAVE);
-    await page.addInitScript(() => {
-      const c: Record<string, number> = { drawImage: 0, fill: 0, stroke: 0 };
-      (window as unknown as { __calls: Record<string, number> }).__calls = c;
-      const P = CanvasRenderingContext2D.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
-      for (const k of Object.keys(c)) {
-        const orig = P[k] as (...a: unknown[]) => unknown;
-        P[k] = function (this: CanvasRenderingContext2D, ...a: unknown[]) {
-          if (this.canvas instanceof HTMLCanvasElement && this.canvas.id === 'game') c[k] = (c[k] as number) + 1;
-          return orig.apply(this, a);
-        };
-      }
-    });
+    await countCalls(page);
     await openGame(page, 'test=1&perf=0&seed=42&day=1&t=9:00&plan=0');
     await keepAlive(page);
     // Frozen on one sim tick, not after a wall-clock wait: under CPU load a fixed wait froze an
@@ -291,16 +310,7 @@ test.describe('draw-call budget', () => {
     const frozenAt = await page.evaluate(() => window.__SHADY_TEST__!.state().minutes);
     expect(frozenAt).toBe(T);
     await page.waitForTimeout(300);
-    const per = await page.evaluate(async () => {
-      const w = window as unknown as { __calls: Record<string, number> };
-      const d0 = window.__SHADY_TEST__!.perf().draws;
-      const c0 = { ...w.__calls };
-      await new Promise((r) => setTimeout(r, 1000));
-      const n = window.__SHADY_TEST__!.perf().draws - d0;
-      const out: Record<string, number> = { frames: n };
-      for (const k of Object.keys(c0)) out[k] = ((w.__calls[k] as number) - (c0[k] as number)) / Math.max(1, n);
-      return out;
-    });
+    const per = await callsPerFrame(page);
     await info.attach('calls-per-frame', { body: JSON.stringify(per), contentType: 'application/json' });
     expect(per.frames).toBeGreaterThan(10);
     expect(per.drawImage, JSON.stringify(per)).toBeLessThanOrEqual(190);
@@ -310,6 +320,83 @@ test.describe('draw-call budget', () => {
     expect(per.fill, JSON.stringify(per)).toBeLessThanOrEqual(190);
     expect(per.stroke, JSON.stringify(per)).toBeLessThanOrEqual(77);
   });
+});
+
+test.describe('Elementals trial frames (§5.4)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+
+  /**
+   * Opens Trial n, starts it with a tap and lets it run 3 s untouched (no bot: its drags would show
+   * the dial's 24 detent ticks); returns the sprite layer redraws per second over those 3 s, then
+   * freezes time and counts one second of frames.
+   */
+  async function trialFrame(page: Page, n: number): Promise<{ per: Record<string, number>; layers: number; passes: number }> {
+    // A trial opens on its own play screen, waiting for the first touch.
+    await page.goto(`/?test=1&perf=0&trial=${n}`);
+    await waitForScreen(page, 'play');
+    await page.mouse.click(195, 380);
+    await waitForRunStart(page);
+    const layers = await page.evaluate(async () => {
+      const hook = window.__SHADY_TEST__!;
+      const l0 = hook.perf().nubsLayerDraws;
+      const t0 = performance.now();
+      await new Promise((r) => setTimeout(r, 3000));
+      const rate = ((hook.perf().nubsLayerDraws - l0) * 1000) / (performance.now() - t0);
+      hook.setTimeScale(0);
+      return rate;
+    });
+    await page.waitForTimeout(300);
+    const per = await callsPerFrame(page);
+    const passes = await page.evaluate(() => window.__SHADY_TEST__!.perf().fullScreenPasses);
+    return { per, layers, passes };
+  }
+
+  // Thunder Alley's town alone (CORE's world: ~25 walls, stalls and houses in view) issues ~200
+  // fills at that moment, the hero's art, dial and HUD about 20 of them: its fill ceiling allows the
+  // town (measured 214-223).
+  const FILL: Record<number, number> = { 3: 235 };
+
+  for (const n of [1, 3, 4, 6]) {
+    test(`Trial ${n}: the Nubs frame's ceilings, ≤ 3 passes and ≤ 12 sprite layer redraws a second`, async ({ page }, info) => {
+      test.skip(info.project.name !== 'mobile', 'one run is enough');
+      const errors = watchErrors(page);
+      await seedSave(page, OPEN_SAVE);
+      await countCalls(page);
+      const { per, layers, passes } = await trialFrame(page, n);
+      const row = JSON.stringify({ ...per, layers, passes });
+      await info.attach(`trial-${n}`, { body: row, contentType: 'application/json' });
+      expect(per.frames, row).toBeGreaterThan(10);
+      expect(per.drawImage, row).toBeLessThanOrEqual(190);
+      expect(per.fill, row).toBeLessThanOrEqual(FILL[n] ?? 190);
+      expect(per.stroke, row).toBeLessThanOrEqual(77);
+      expect(passes, row).toBeLessThanOrEqual(3);
+      expect(layers, row).toBeLessThanOrEqual(12);
+      expect(errors).toEqual([]);
+    });
+  }
+
+  // Reduced motion and high contrast together: no flicker (one static frame, so the layers redraw
+  // only when the look or the state changes) and no shake, within the same ceilings.
+  for (const n of [1, 6]) {
+    test(`Trial ${n} in reduced motion and high contrast: a still hero within the ceilings`, async ({ page }, info) => {
+      test.skip(info.project.name !== 'mobile', 'one run is enough');
+      const errors = watchErrors(page);
+      await seedSave(page, { ...OPEN_SAVE, settings: { unlockAll: true, reducedMotion: 'on', highContrast: true } });
+      await countCalls(page);
+      const { per, layers, passes } = await trialFrame(page, n);
+      const row = JSON.stringify({ ...per, layers, passes });
+      await info.attach(`trial-${n}-rm-hc`, { body: await page.screenshot(), contentType: 'image/png' });
+      expect(per.drawImage, row).toBeLessThanOrEqual(190);
+      expect(per.fill, row).toBeLessThanOrEqual(190);
+      expect(per.stroke, row).toBeLessThanOrEqual(77);
+      expect(passes, row).toBeLessThanOrEqual(3);
+      // No flicker: a solo hero redraws only for its look and state; a duo stays under the cap.
+      expect(layers, row).toBeLessThanOrEqual(n === 6 ? 12 : 6);
+      const fx = await page.evaluate(() => window.__SHADY_TEST__!.cameraFx());
+      expect(Math.abs(fx.shakeX) + Math.abs(fx.shakeY)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
 });
 
 test.describe('forecast signatures', () => {

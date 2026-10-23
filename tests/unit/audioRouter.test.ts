@@ -145,6 +145,46 @@ describe('SfxRouter events', () => {
     expect(t.names()).toEqual(['catch', 'crystal', 'noon', 'noonPassed', 'cloud', 'glare', 'gate']);
   });
 
+  it('gives every Elementals event a cue or an explicit silence', () => {
+    const t = setup();
+    const play = (ev: SimEvent): string[] => {
+      t.played.length = 0;
+      t.advance(500);
+      t.router.onEvents([ev], t.view);
+      return t.names();
+    };
+    expect(play({ e: 'ability', hero: 'ember', kind: 'blaze', x: 0, y: 0 })).toEqual(['blaze']);
+    expect(play({ e: 'ability', hero: 'sprout', kind: 'seed', x: 0, y: 0 })).toEqual(['seed']);
+    expect(play({ e: 'ability', hero: 'drip', kind: 'rain', x: 0, y: 0 })).toEqual(['rain']);
+    // A THUNDERCLAP sounds through its strike event.
+    expect(play({ e: 'ability', hero: 'volt', kind: 'thunder', x: 0, y: 0 })).toEqual([]);
+    expect(play({ e: 'abilityEnd', kind: 'blaze' })).toEqual(['snapEnd']);
+    expect(play({ e: 'tagSoon', to: 'drip', ticks: 90 })).toEqual(['detent']);
+    expect(play({ e: 'tag', from: 'ember', to: 'drip', index: 1 })).toEqual(['tag']);
+    expect(play({ e: 'tagClean', to: 'drip' })).toEqual(['phew']);
+    // The flake's bell rings from its own event; Ember hisses, the others add nothing.
+    expect(play({ e: 'heroPickup', hero: 'ember', delta: -5, x: 0, y: 0 })).toEqual(['snapEnd']);
+    expect(play({ e: 'heroPickup', hero: 'sprout', delta: 5, x: 0, y: 0 })).toEqual([]);
+  });
+
+  it('climbs the pentatonic scale with Volt\'s strike chain, a THUNDERCLAP louder', () => {
+    const t = setup();
+    for (let chain = 1; chain <= 7; chain++) {
+      t.router.onEvents([{ e: 'strike', chain, gain: chain, thunder: false, x: 0, y: 0 }], t.view);
+      t.advance(400);
+    }
+    t.router.onEvents([{ e: 'strike', chain: 0, gain: 4, thunder: true, x: 0, y: 0 }], t.view);
+    const strikes = t.played.filter((p) => p.name === 'strike');
+    expect(strikes.map((p) => p.params.degree)).toEqual([2, 3, 4, 5, 6, 6, 6, 1]);
+    expect(strikes.at(-1)?.params.gain).toBeGreaterThan(strikes[0]?.params.gain as number);
+  });
+
+  it('beats the heartbeat from a hero\'s health when the view has one', () => {
+    const t = setup({ chill: 90, health: 8 });
+    t.frames(1);
+    expect(t.names()).toContain('heartbeat');
+  });
+
   it('plays the death sweep on death', () => {
     const t = setup();
     const info = { day: 1, tDay: 20, minutes: 288, time: '10:48 AM', x: 0, y: 0, cause: 'plain' as const, line: 'Melted by You at 10:48 AM.' };

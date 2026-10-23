@@ -57,6 +57,8 @@ export interface AudioView {
   /** SimState.moonlit, and whether the 'fog' concept is active. */
   moonlit?: boolean;
   fog?: boolean;
+  /** Elementals: on a Trial the lowest health (0..100) of any body, read where Nubs' Chill is (the heartbeat, the calm arpeggio); absent elsewhere. */
+  health?: number;
 }
 
 /** A neutral view (title at dawn, day 1). Handy as the session's reusable view object. */
@@ -163,7 +165,8 @@ export function sceneFor(v: Readonly<AudioView>, out: Scene): Scene {
   if (night) out.crickets = 1;
   if (v.phase !== 'day') return out;
 
-  const calm = v.chill >= ARP_MIN_CHILL;
+  const hp = v.health ?? v.chill;
+  const calm = hp >= ARP_MIN_CHILL;
   const final = (v.progress ?? -1) >= FINAL_STRETCH;
   const level = arpLevel(v.mult);
   out.arp = calm ? Math.min(5, level + (final ? 1 : 0)) : 0;
@@ -171,7 +174,7 @@ export function sceneFor(v: Readonly<AudioView>, out: Scene): Scene {
   out.sizzle = sizzleAmount(v.f);
   out.sizzleHz = sizzleHz(v.f);
   out.crackle = crackleRate(v.f, v.glareW);
-  out.heartbeat = heartbeatPeriod(v.chill);
+  out.heartbeat = heartbeatPeriod(hp);
   if (v.moonlit) {
     // A moon sun: crickets and a music box instead of noon cicadas, the pad kept dusky.
     Object.assign(out, { crickets: 0.7, arpVoice: 'bell', padCutoff: Math.min(out.padCutoff, 800) });

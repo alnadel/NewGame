@@ -1,12 +1,15 @@
 // Small vector art stored as path ops and parsed once into Path2D objects: the glyphs (GR10: the
 // forecast marks of the HUD sticker and the postcard rows, the biome marks of the Day card, the
 // goal ring, the padlock and wind marks, one mark per campaign concept for the intro card and the
-// HUD) on a 14-unit grid centred on 0, and the ground decals of decor.ts. An op is
+// HUD) on a 14-unit grid centred on 0, the ground decals of decor.ts and the Elementals' bodies
+// (heroes.ts). An op is
 //   F<color> <path>  fill            E<color> <path>  fill (even-odd)
 //   S<color>/<width> <path>  stroke  D<color>/<width> <path>  dotted stroke (1.5 dashes)
+//   P<fill>/<line>/<width> <path>  fill, then stroke
 //   C <path>  clip (until R)         R  restore the clip
-// where <path> is SVG path data plus 'O x y r', a whole circle. '@' as the colour is the caller's
-// (the padlock). Strokes have round caps and joins.
+// where <path> is SVG path data plus 'O x y r', a whole circle ('O x y rx,ry' an ellipse). '@' as
+// the colour is the caller's (the padlock), '$n' colour n of the caller's palette. Strokes have
+// round caps and joins.
 
 /** Ids without a mark of their own get the goal ring; concept, forecast and biome marks share ids. */
 const GLYPHS: Readonly<Record<string, string>> = {
@@ -63,22 +66,36 @@ const GLYPHS: Readonly<Record<string, string>> = {
   flare: 'S#FF6A3D/1.6 O0 0 6.2|F#FFC23D O0 0 3.6|F#FFF4D6 O-1-1 1.2',
   brittle: 'F#D6F0FF M0-6.5L5.2 0L0 6.5L-5.2 0Z|S#4A9BD9/1 M0-6.5L5.2 0L0 6.5L-5.2 0Z|S#4A9BD9/1.2 M0-3.5L0 3.5M-3-1.75L3 1.75M-3 1.75L3-1.75|F#FFFFFF M4.5-6.5L5-5L6.5-4.5L5-4L4.5-2.5L4-4L2.5-4.5L4-5Z',
   ring: 'S#D9D3E2/2 O0 0 5.5|S#2EC4B6/2.2 M0-5.5A5.5 5.5 0 1 1-5.5 0|F#2B2140 O0 0 1.6',
+  // Elementals (docs/ELEMENTALS.md §4.9): the heroes ('@' takes the caller's colour, else HERO_TINT:
+  // white on their ability coins) and four elements in a diamond (relays and duos).
+  nubs: 'F#FFFFFF O0 2.4 4.2O0-3.6 3|S#4A6FA8/1.1 O0 2.4 4.2O0-3.6 3|F#FF8A2B M0.3-3.4L4-2.7L0.3-2.4Z|F#2B2140 O-1.1-4.3 0.5O1.2-4.3 0.5',
+  ember: 'F@ M0-6.8C2.6-3.6 5.2-0.8 4.4 2.4A4.4 4.4 0 0 1-4.4 2.4C-4.9-0.4-3.4-1.8-2.4-4C-1.2-2.4-0.7-3 0-6.8Z|F#FFD84A M0-0.2C1.5 1.4 2.5 2.6 2.3 3.6A2.3 2.3 0 0 1-2.3 3.6C-2.3 2.2-1 1.2 0-0.2Z',
+  sprout: 'S#3E8A2A/1.5 M0 6.5L0-1|F@ M0-1C-1-4.6-4.6-6.6-6.6-5.6C-6-2.4-3-0.8 0-1Z|F@ M0-1.6C1-5.4 4.8-7.2 6.6-6C6-2.8 3-1.2 0-1.6Z|F#8B5A2B O0 5 2.4',
+  volt: 'F@ M1.6-7L-4.6 1.2H-0.4L-2 7L4.6-1.4H0.4Z|S#2B2140/0.9 M1.6-7L-4.6 1.2H-0.4L-2 7L4.6-1.4H0.4Z',
+  drip: 'F@ M0-6.8Q5 0 4.6 2.2A4.6 4.6 0 0 1-4.6 2.2Q-5 0 0-6.8Z|F#FFFFFF O-1.7 1.6 1.1',
+  elementals: 'F#FF6A1F M0-7Q2.2-4.3 1.9-3.2A1.9 1.9 0 0 1-1.9-3.2Q-2.2-4.3 0-7Z|F#5DB531 M3-1.6Q6-3.6 7-0.2Q5.6 2 3 1.4Z|F#F5B700 M0.8 2.6L-1.6 5.2H0L-0.8 7.6L1.8 4.8H0.2Z|F#2F9BEA M-4.6-3Q-2.4 0-2.8 1A1.8 1.8 0 0 1-6.4 1Q-6.8 0-4.6-3Z',
   boss: 'F#FF6A3D M3.84-1.11L6.8 0L3.84 1.11M3.76 1.37L5.5 4L2.46 3.15M2.24 3.31L2.1 6.47L0.14 4M-0.14 4L-2.1 6.47L-2.24 3.31M-2.46 3.15L-5.5 4L-3.76 1.37M-3.84 1.11L-6.8 0L-3.84-1.11M-3.76-1.37L-5.5-4L-2.46-3.15M-2.24-3.31L-2.1-6.47L-0.14-4M0.14-4L2.1-6.47L2.24-3.31M2.46-3.15L5.5-4L3.76-1.37|F#FF6A3D O0 0 4|S#7A3B00/1.3 M-2.6-1.6L-0.8-0.6M2.6-1.6L0.8-0.6',
 };
+
+/** The '@' colour of a glyph drawn without one. */
+const HERO_TINT: Readonly<Record<string, string>> = { ember: '#FF6A1F', sprout: '#5DB531', volt: '#F5B700', drip: '#2F9BEA' };
 
 export interface ArtOp {
   kind: string;
   color: string;
+  /** A 'P' op's stroke colour. */
+  line: string;
   width: number;
   path: Path2D | null;
 }
 
-/** 'O x y r' → two SVG arcs from the circle's rightmost point. */
+/** 'O x y r' (or 'O x y rx,ry') → two SVG arcs from its rightmost point. */
 function circles(d: string): string {
-  return d.replace(/O(-?[\d.]+) ?(-?[\d.]+) ?([\d.]+)/g, (_, x: string, y: string, r: string) => {
+  return d.replace(/O(-?[\d.]+) ?(-?[\d.]+) ?([\d.]+),?([\d.]+)?/g, (_, x: string, y: string, r: string, ry?: string) => {
     const a = Number(x) + Number(r);
     const b = Number(x) - Number(r);
-    return `M${a} ${y}A${r} ${r} 0 0 1 ${b} ${y}A${r} ${r} 0 0 1 ${a} ${y}`;
+    const q = ry ?? r;
+    return `M${a} ${y}A${r} ${q} 0 0 1 ${b} ${y}A${r} ${q} 0 0 1 ${a} ${y}`;
   });
 }
 
@@ -87,22 +104,32 @@ export function artOps(src: string): ArtOp[] {
   return src.split('|').map((op) => {
     const sp = op.indexOf(' ');
     const head = sp < 0 ? op : op.slice(0, sp);
-    const [color = '', width = '1'] = head.slice(1).split('/');
-    return { kind: head.charAt(0), color, width: Number(width), path: sp < 0 ? null : new Path2D(circles(op.slice(sp + 1))) };
+    const part = head.slice(1).split('/');
+    const p = head.charAt(0) === 'P';
+    return { kind: head.charAt(0), color: part[0] ?? '', line: p ? (part[1] as string) : '', width: Number(part[p ? 2 : 1] ?? 1), path: sp < 0 ? null : new Path2D(circles(op.slice(sp + 1))) };
   });
 }
 
 const DOTS = [1.5, 1.5];
 const NONE: number[] = [];
 
-/** Draws parsed art in the current transform ('@' takes `color`). */
-export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], color = '#2B2140'): void {
+/** Draws parsed art in the current transform ('@' takes `color`, '$n' colour n of `pal`; `flat` skips translucent fills: shines, cheeks and glows). */
+export function drawArt(g: CanvasRenderingContext2D, ops: readonly ArtOp[], color = '#2B2140', pal?: readonly string[], flat = false): void {
   g.lineCap = 'round';
   g.lineJoin = 'round';
+  const col = (c: string): string => (c === '@' ? color : c.charAt(0) === '$' && pal ? (pal[+c.slice(1)] as string) : c);
   for (const op of ops) {
-    const c = op.color === '@' ? color : op.color;
+    const c = col(op.color);
     const p = op.path as Path2D;
+    if (flat && op.kind === 'F' && c.length === 5) continue;
     switch (op.kind) {
+      case 'P':
+        g.fillStyle = c;
+        g.fill(p);
+        g.strokeStyle = col(op.line);
+        g.lineWidth = op.width;
+        g.stroke(p);
+        break;
       case 'F':
       case 'E':
         g.fillStyle = c;
@@ -158,6 +185,6 @@ export function drawGlyph(g: CanvasRenderingContext2D, id: string, x: number, y:
   g.save();
   g.translate(x, y);
   g.scale(flip ? -k : k, k);
-  drawArt(g, ops, color);
+  drawArt(g, ops, color ?? HERO_TINT[id]);
   g.restore();
 }

@@ -583,6 +583,8 @@ export const POP_GO = 5;
 /** v1.5: DEEP (deep shade) and COLD SNAP! (BLOOM! wears the multiplier's gold). */
 export const POP_DEEP = 6;
 export const POP_SNAP = 7;
+/** Elementals: Volt's strike chain ("x3!") on a yellow burst. */
+export const POP_STRIKE = 8;
 
 /** A +N pop absorbs a new +N within this long of its last change (s); a SWING pop, within 1 s of its first. */
 const PLUS_MERGE_S = 0.45;
@@ -732,6 +734,7 @@ const BURST_H = 100;
 let burstGold: Canvas2D | null = null;
 let burstGreen: Canvas2D | null = null;
 let burstIce: Canvas2D | null = null;
+let burstZap: Canvas2D | null = null;
 function burstSprite(fill: string): Canvas2D {
   const c = makeCanvas(BURST_W, BURST_H);
   const g = ctx2d(c);
@@ -754,7 +757,7 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
     if (dur <= 0) continue;
     const t = p.t[i]!;
     const style = p.style[i]!;
-    const rise = style === POP_PHEW || style === POP_SWING || style === POP_SNAP ? 10 : 20;
+    const rise = style === POP_PHEW || style === POP_SWING || style === POP_SNAP || style === POP_STRIKE ? 10 : 20;
     const sx = v.ox + (nx + p.dx[i]!) * v.S;
     const sy = v.oy - (ny + OBLIQUE * p.z[i]!) * v.S - rise * Math.min(1, t / 0.55) * v.S * 0.9 - lift;
     let scale: number;
@@ -786,6 +789,12 @@ export function drawPops(g: CanvasRenderingContext2D, p: Pops, v: View, uiScale:
         size = style === POP_SNAP ? 30 : 18;
         fill = '#EAF7FF';
         if (style === POP_SNAP && !hc) back = burstIce ??= burstSprite('#9ED8FF');
+        break;
+      case POP_STRIKE:
+        scale = popScale(t, 0.15, 1.35);
+        size = 26;
+        fill = '#FFFFFF';
+        if (!hc) back = burstZap ??= burstSprite('#FFE14D');
         break;
       default:
         scale = popScale(t, 0.2, 1.2);
