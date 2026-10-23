@@ -476,24 +476,17 @@ describe('Elementals hero art (sprite keys)', () => {
     }
   });
 
-  it('flickers Ember at ≤ 8 fps and not at all under reduced motion; the others hold still', () => {
+  it('holds still over time: no per-frame layer redraws (the flicker frames were cut, §5.3)', () => {
     for (const hero of HEROES) {
       const art = heroArt(hero);
-      for (const rm of [false, true]) {
-        const a = createNubsAnim();
-        const p = createPose();
-        p.reducedMotion = rm;
-        let last = NaN;
-        let changes = 0;
-        for (let f = 0; f < 120; f++) {
-          p.time = f / 60;
-          const k = art?.key(p, a) as number;
-          if (f > 0 && k !== last) changes++;
-          last = k;
-        }
-        expect(changes).toBeLessThanOrEqual(hero === 'ember' && !rm ? 16 : 0);
-        if (hero === 'ember' && !rm) expect(changes).toBeGreaterThan(8);
+      const a = createNubsAnim();
+      const p = createPose();
+      const keys = new Set<number>();
+      for (let f = 0; f < 120; f++) {
+        p.time = f / 60;
+        keys.add(art?.key(p, a) as number);
       }
+      expect(keys.size).toBe(1);
     }
   });
 

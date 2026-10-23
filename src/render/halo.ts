@@ -66,18 +66,12 @@ const FLARE = hex('#FF6A3D');
 const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
-/** Elementals: each hero's go colour (Drip: teal cooling, amber warming), the duo's band, Volt's dead zone and gauges (full, under 60, under 25). */
+/** Elementals: each hero's go colour (Drip: teal cooling, amber warming), the duo's band, Volt's dead zone and Drip's thermometer (cold, steady, hot). */
 const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), sprout: hex('#8BD650'), volt: hex('#FFE14D'), drip: TEAL };
 const DRIP_WARM = hex('#FFB347');
 const BOTH = hex('#FFF2B0');
 const GREY = hex('#9AA0B4');
-const GAUGE: Readonly<Record<HeroId, readonly number[]>> = {
-  nubs: [FROST, AMBER, HOT],
-  ember: [hex('#FF7A1A'), DRIP_WARM, hex('#8C8C8C')],
-  sprout: [hex('#6CC04A'), hex('#B5A642'), hex('#8B5A2B')],
-  volt: [hex('#FFE14D'), hex('#B9A2E6'), hex('#8C8C8C')],
-  drip: [hex('#5AB8FF'), hex('#6CC04A'), hex('#FF5D3D')],
-};
+const THERMO_COL = [hex('#5AB8FF'), hex('#6CC04A'), hex('#FF5D3D')];
 const LEAF_DASH = [8, 6];
 
 /** A hero's go colour (Drip's by side: `cool` wants shade). */
@@ -593,7 +587,6 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     if (chill > 0.5) {
       const red = chill < cl;
       const white = chill >= wl;
-      const gc = GAUGE[lead];
       const end = top + (TAU * chill) / 100;
       g.lineCap = 'round';
       g.lineWidth = 5;
@@ -604,7 +597,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineWidth = 3;
       if (red) g.setLineDash([4, 3]);
       const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      g.strokeStyle = cssa(gc[red ? 2 : white ? 0 : 1] as number, gA * pulse);
+      // A hero's gauge is its own colour when full.
+      g.strokeStyle = cssa(red ? HOT : white ? (hd ? HERO_ARC[lead] : FROST) : AMBER, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
       g.stroke();
@@ -674,8 +668,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   const sy = cy + Math.sin(a) * R;
   const f = inp.fade;
   if (inp.sunUp) {
-    // Drip's pointer wears the colour of the side it wants.
-    sunPointer(g, cx, cy, R, inp.theta, f, inp.time, false, solo === 'drip' ? col : -1);
+    sunPointer(g, cx, cy, R, inp.theta, f, inp.time, false);
   } else {
     g.fillStyle = cssa(0xe8ecff, 0.5 * f);
     g.beginPath();
@@ -859,8 +852,7 @@ function heroGauge(g: CanvasRenderingContext2D, inp: HaloInput, st: SimState, gA
     for (let s = 0; s < 2; s++) {
       const nb = s ? m : st.nubs;
       const hp = Math.max(0, Math.min(100, heroHealth(nb)));
-      const c = GAUGE[nb.hero];
-      g.strokeStyle = cssa(c[hp < 25 ? 2 : hp < 60 ? 1 : 0] as number, gA);
+      g.strokeStyle = cssa(hp < 25 ? HOT : hp < 60 ? AMBER : HERO_ARC[nb.hero], gA);
       g.beginPath();
       g.arc(cx, cy, gR, p2 + (s ? -0.1 : 0.1), p2 + (s ? -0.1 - 3 * hp / 100 : 0.1 + 3 * hp / 100), s > 0);
       g.stroke();
@@ -868,7 +860,7 @@ function heroGauge(g: CanvasRenderingContext2D, inp: HaloInput, st: SimState, gA
   } else {
     // T 0..100 across 270° from the bottom left; the needle a white dot.
     for (let i = 0; i < 3; i++) {
-      g.strokeStyle = cssa(GAUGE.drip[i] as number, gA);
+      g.strokeStyle = cssa(THERMO_COL[i] as number, gA);
       g.beginPath();
       g.arc(cx, cy, gR, 0.75 * Math.PI + 0.0471 * THERMO[i]!, 0.75 * Math.PI + 0.0471 * THERMO[i + 1]!);
       g.stroke();
@@ -1150,7 +1142,7 @@ function drawV16(g: CanvasRenderingContext2D, inp: HaloInput, m: MechView, A: nu
 }
 
 /** The little sun on the ring at θ (rays, disc, an inward notch). `ghost` draws a pale copy. */
-function sunPointer(g: CanvasRenderingContext2D, cx: number, cy: number, R: number, theta: number, f: number, time: number, ghost: boolean, ring = -1): void {
+function sunPointer(g: CanvasRenderingContext2D, cx: number, cy: number, R: number, theta: number, f: number, time: number, ghost: boolean): void {
   const a = -theta * DEG;
   const sx = cx + Math.cos(a) * R;
   const sy = cy + Math.sin(a) * R;
@@ -1171,13 +1163,6 @@ function sunPointer(g: CanvasRenderingContext2D, cx: number, cy: number, R: numb
   g.fill();
   g.stroke();
   if (ghost) return;
-  if (ring >= 0) {
-    g.lineWidth = 2.5;
-    g.strokeStyle = cssa(ring, f);
-    g.beginPath();
-    g.arc(sx, sy, 8.5, 0, TAU);
-    g.stroke();
-  }
   // A tiny inward notch so it reads as a pointer.
   g.fillStyle = cssa(0xe8a21f, f);
   g.beginPath();

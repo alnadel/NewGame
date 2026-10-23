@@ -2,11 +2,11 @@
 // puff) and Drip (a water droplet), each a CharArt for Nubs' two-layer sprite cache (nubs.ts). A hero
 // is a state function, a palette per state and art strings (glyphs.ts ops in units of U = S·1.4 from
 // the ground point, '$n' its state's colour n) for the back and front layers, with a shared face; the
-// layers redraw only when the quantized state in their key changes (Ember's flicker frames, a shear
-// of its flame at 8 fps, none under reduced motion), and the spring-chain parts between them are the
-// only live drawing (a fill and at most two strokes). The states:
+// layers redraw only when the quantized state in their key changes, and the spring-chain parts
+// between them are the only live drawing (a fill and at most two strokes). Ember's flicker frames,
+// its coal and Drip's frost marks were cut for the bundle budget (§5.3). The states:
 //   Ember  calm / snuffing out of the light (smaller, dull red) / feasting in glare (20 % taller,
-//          white-hot) / guttering on a coal (low) / BLAZE; snuffed, it is a sleepy coal.
+//          white-hot) / guttering (low: small and dull) / BLAZE; snuffed, it sinks to a sleepy ember.
 //   Sprout calm / scorching in full sun (drooping leaves, brown bud) / dappled (leaves up, its bud
 //          open) / starving in full shade (pale) / curled (low); wilts flat.
 //   Volt   calm / leaking in the light (duller) / a strike's white flash / droopy grey (low);
@@ -100,8 +100,6 @@ interface Def {
   /** The face's eye line (U) and what Volt draws behind open eyes. */
   eye: number;
   under?: string;
-  /** Ember's flame shears by frame (its flicker). */
-  flick?: boolean;
   /**
    * Per state, the two live blades on the springs (null: none): [x (±), y, spring x scale, spring y
    * scale, width, fill's palette slot, line width]; Volt's are bolt tails instead.
@@ -119,9 +117,6 @@ function palOf(src: string): readonly string[] {
   return p;
 }
 
-/** Ember's flicker: its flame sheared about the ground by frame (8 fps). */
-const SHEAR = [0.07, -0.01, -0.08];
-const frameOf = (p: NubsPose): number => (p.reducedMotion ? 1 : Math.floor(p.time * 8) % 3);
 
 /** One layer of `d` at the pose's state (the face on the front layer). */
 function layer(g: CanvasRenderingContext2D, d: Def, p: NubsPose, a: NubsAnim, front: boolean): void {
@@ -130,11 +125,11 @@ function layer(g: CanvasRenderingContext2D, d: Def, p: NubsPose, a: NubsAnim, fr
   const U = p.S * NUBS_SCALE;
   const k = d.k[st] as number;
   g.save();
-  if (d.flick) g.transform(1, 0, SHEAR[frameOf(p)] as number, 1, 0, 0);
   g.scale(U * Math.min(1, k), U * k);
   art(g, (front ? d.front : d.back)[st] as string, pal);
   g.restore();
-  if (front) face(g, p, a, d.eye * (st === 3 && d.flick ? 0.6 : 1), +(d.mood[st] as string), pal[pal.length - 1] as string, d.under);
+  // A small flame (Ember guttering) carries its face down with it.
+  if (front) face(g, p, a, d.eye * (k < 0.6 ? 0.6 : 1), +(d.mood[st] as string), pal[pal.length - 1] as string, d.under);
 }
 
 function make(d: Def): CharArt {
@@ -144,7 +139,7 @@ function make(d: Def): CharArt {
       const q = ((Math.round((Math.atan2(p.lookY, p.lookX) * 8) / Math.PI) % 16) + 16) % 16;
       p.lookX = Math.cos((q * Math.PI) / 8);
       p.lookY = Math.sin((q * Math.PI) / 8);
-      return ((((d.st(p, a) * 3 + (d.flick ? frameOf(p) : 0)) * 16 + q) * 2 + (a.blink > 0 ? 1 : 0)) * 2 + (a.happy > 0 || a.phew > 0 ? 1 : 0)) * 2 + (p.hc ? 1 : 0);
+      return (((d.st(p, a) * 16 + q) * 2 + (a.blink > 0 ? 1 : 0)) * 2 + (a.happy > 0 || a.phew > 0 ? 1 : 0)) * 2 + (p.hc ? 1 : 0);
     },
     back: (g, p, a) => layer(g, d, p, a, false),
     front: (g, p, a) => layer(g, d, p, a, true),
@@ -190,7 +185,7 @@ function make(d: Def): CharArt {
       d.motion?.(p, a, m, d.st(p, a));
     },
     death(g, p) {
-      // It shrinks (or flattens), fades or rises, then dozes off (Ember on its coal, Drip in its ice).
+      // It shrinks (or flattens), fades or rises, then dozes off (Drip frozen in its ice).
       const [body, pal, sx, sy, fade, rise, eye, over] = d.die(p);
       const U = p.S * NUBS_SCALE;
       const e = deathT(p);
@@ -221,21 +216,19 @@ function make(d: Def): CharArt {
 const FLAME = 'P$0/$1/1.1 M0-34.6C2.6-24.2 9.5-18.1 8.6-8.6A8.6 8.6 0 0 1-8.6-8.6C-9.9-14.6-9-19.5-6.9-24.7Q-1.7-22.9 0-34.6Z';
 const CORE = 'F$2 M0-21.3C1.6-15.2 5.9-12.1 5.3-6.2A5.3 5.3 0 0 1-5.3-6.2C-6.1-9.9-5.6-12.5-4.3-15.5Q-1.1-14.5 0-21.3Z|F#FFF8 O-4.3-11.2 1.4,2.4';
 const HOT = `${CORE}|F#FFFD O0-6.9 2.8,3.6`;
-const COAL = 'P#521/#210/1.1 O0-3.8 7.6,4.6|S#F84/.7 M-4.5-2.6L-2.2-4.4-.4-3M1.5-6.4L3.2-4.2 5.2-4.8';
 const TONGUES = [6.8, -11.2, 1.4, -1.05, 2.4, 0, 0.8];
 const EMBER = make({
   st: (p) => (p.power ? 4 : p.chill < 0.3 ? 3 : !p.safe ? 1 : p.c >= 6 ? 2 : 0),
   pal: ['#F71,#821,#FD4,#410', '#C42,#821,#F95,#410', '#F92,#821,#FFE,#410', '#D52,#821,#FB4,#FC7', '#F82,#821,#FFE,#410'],
   mood: '01212',
-  // Feasting and blazing stand 20 % taller; guttering is a small flame on its coal (drawn at 1/0.55).
+  // Feasting and blazing stand 20 % taller; guttering is a small dull flame.
   k: [1, 1, 1.2, 0.55, 1.2],
-  back: [FLAME, FLAME, FLAME, `${FLAME}|P#521/#210/2 O0-6.9 13.8,8.4|S#F84/1.3 M-8.2-4.7L-4-8-.7-5.5M2.7-11.6L5.8-7.6 9.5-8.7`, FLAME],
+  back: [FLAME, FLAME, FLAME, FLAME, FLAME],
   front: [CORE, CORE, HOT, '', HOT],
   eye: -7.4,
-  flick: true,
   bl: [TONGUES, TONGUES, TONGUES, null, TONGUES],
-  // Snuffed: the flame sinks into its coal, which dozes off.
-  die: () => [FLAME, '#C42,#821,#FC7', 0, 0, 1, 0, -4.4, COAL],
+  // Snuffed: the flame sinks to nothing, dozing off.
+  die: () => [FLAME, '#C42,#821,#FC7', 0.2, 0.2, 1, 0, -4.4, ''],
   motion(_p, _a, m, st) {
     // Snuffing: 15 % smaller.
     if (st === 1) {
@@ -284,7 +277,6 @@ const VOLT = make({
 /** Drip: its tint by T (0 icy < 15, 1 frosty < 30, 2 calm ≤ 70, 3 warm ≤ 85, 4 hot), 5 a rain cloud (CLOUDBURST). */
 const DROP = 'P$0/$1/1.1 M0-32C3.1-21.6 9.5-15.8 9-9A9 9 0 0 1-9-9C-9.5-15.8-3.1-21.6 0-32Z';
 const SHINE = 'F#FFFD O-4-12.5 1.5,3O-2.4-18.2 .8';
-const FROSTY = `${SHINE}|S#FFF/.6 M-2.9-25h2.8M-2.2-26.2l1.4 2.4M-.8-26.2l-1.4 2.4M1.8-16h2.8M2.5-17.2l1.4 2.4M3.9-17.2l-1.4 2.4`;
 const SPLASH = [9, -5, 0.8, -0.6, 1.6, 0, 0.6];
 const DRIP = make({
   st(p) {
@@ -295,7 +287,7 @@ const DRIP = make({
   mood: '110112',
   k: [1, 1, 1, 1, 1, 1],
   back: [DROP, DROP, DROP, DROP, DROP, CLOUD],
-  front: [FROSTY, FROSTY, SHINE, SHINE, SHINE, ''],
+  front: [SHINE, SHINE, SHINE, SHINE, SHINE, ''],
   eye: -8.6,
   bl: [SPLASH, SPLASH, SPLASH, SPLASH, SPLASH, null],
   // Frozen solid in an ice cube, or boiled away: rising and thinning into the steam (no puddle).

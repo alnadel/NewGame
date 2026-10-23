@@ -735,6 +735,7 @@ const GLOSS = 'rgba(255,255,255,0.55)';
 let goldGlow: Canvas2D | null = null;
 let starGlow: Canvas2D | null = null;
 let iceGlow: Canvas2D | null = null;
+let heroGlow: Canvas2D | null = null;
 
 /** The elapsed fill: a level's green (top to bottom), or the day's dawn → noon → dusk across the ruler. */
 function fillGradient(g: CanvasRenderingContext2D, h: HudState, level: boolean): CanvasGradient {
@@ -800,7 +801,7 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const s = 1 + (rm ? 0 : 0.18 * Math.sin((Math.PI * h.meterPop) / 0.45)) + (full && !rm ? 0.03 * breathe : 0);
   if (full && !inp.hc) {
     // (A hero's coin glows white.)
-    const glow = hero === 'nubs' ? (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32)) : radialSprite('255,255,255', 128, 0.8, 0.42, 0.32);
+    const glow = hero === 'nubs' ? (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32)) : (heroGlow ??= radialSprite('255,255,255', 128, 0.8, 0.42, 0.32));
     const gr = r * (2.2 + 0.25 * breathe);
     g.globalAlpha = a * (0.55 + 0.45 * breathe);
     g.drawImage(glow, x - gr, y - gr, gr * 2, gr * 2);
