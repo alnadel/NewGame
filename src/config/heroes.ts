@@ -7,7 +7,7 @@ export type AbilityKind = 'snap' | 'blaze' | 'seed' | 'thunder' | 'rain';
 /** The candy face (render/candy.ts FACE key, kit.css face token) of a hero's coin, tile and stamp. */
 export type HeroFace = 'ice' | 'red' | 'green' | 'violet' | 'blue';
 /** How a hero's run ended (DeathInfo.heroCause). */
-export type HeroDeath = 'melt' | 'snuff' | 'douse' | 'hiss' | 'wilt' | 'scorch' | 'starve' | 'fizzle' | 'overload' | 'freeze' | 'boil';
+export type HeroDeath = 'melt' | 'snuff' | 'douse' | 'smother' | 'hiss' | 'wilt' | 'scorch' | 'starve' | 'fizzle' | 'overload' | 'freeze' | 'boil';
 
 export interface HeroInfo {
   readonly id: HeroId;
@@ -54,3 +54,6 @@ export const HEROES: Readonly<Record<HeroId, HeroInfo>> = Object.freeze({
   drip: hero('drip', 'Drip', 'Water', 'Not too hot, not too cold.', ['Sun warms', 'Shade cools', 'Both ends are fatal'], 'Temp', 'rain', 'CLOUDBURST', 'blue', 4,
     'Leave the sun (or the shade) before the needle hits the end.'),
 });
+
+/** The Results recap tip after a duo's Cold Snap smothered Ember (heroCause 'smother'). */
+export const SMOTHER_TIP = "The Cold Snap's cloud smothers Ember too. Snap only while Ember's flame is high.";

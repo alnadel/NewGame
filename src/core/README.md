@@ -1513,7 +1513,8 @@ the code decided where the spec left room. Every hero rule is gated on `s.trial 
   ticks of walking ahead, 30 u to the sun's side (the `ability` event's x, y is the flower's);
   THUNDERCLAP strikes at θ (dead zone and refractory ignored, ×1.5, a chain step).
 - **`applyHeroDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial).
-  Per body, lead first (`bodyTick`): the hero's rate (per s, in `nb.rate`) and safe set (`nb.safe`)
+  Per body, lead first (`bodyTick`; a duo's mate at `snapSmother` of the drain while a Cold Snap
+  rides): the hero's rate (per s, in `nb.rate`) and safe set (`nb.safe`)
   from `nb.c` (Drip: `nb.w[0]`), the lead's TAG grace (the rate floored at 0), the meter (clamped;
   Drip boils at 100 to 0 with `heroCause 'boil'`, and keeps its side with hysteresis; a Blazing
   Ember reads c ≥ 5 and a Cloudbursting Drip is safe while its ability runs), health into
@@ -1525,12 +1526,12 @@ the code decided where the spec left room. Every hero rule is gated on `s.trial 
   (`abilityEnd`), the clean-TAG watch, and the lit totals.
 - **Pickups** (`pickups.ts`): the lead's flake or crystal goes through `heroFlake` (Nubs +6/+35;
   Ember −12, steam for 0 in a Blaze, `heroCause 'hiss'` when it takes the last Heat; Sprout +8;
-  Drip −15; Volt Snow only; a crystal is ×2), with `heroPickup` for a non-Nubs collector. Snow,
+  Drip −15, `heroCause 'freeze'` when it takes the last warmth; Volt Snow only; a crystal is ×2), with `heroPickup` for a non-Nubs collector. Snow,
   `stats.flakes` and the `flake`/`crystal` events are as today; on a Trial a flake pays no charge
   (income is joy only).
 - **Death:** either body's meter at 0 in daylight ends the run (`step.ts`); `heroDeath` names the
   body (the lead wins a tie) in `who`/`heroCause`, keeps `deathCause`'s lines for Nubs and writes
-  §6.4's for the others (glare → cause `'glare'`, the cloud line → `'cloud'`, a named shader →
+  §6.4's for the others (glare → cause `'glare'`, the cloud and Cold Snap lines → `'cloud'`, a named shader →
   `'gap'`, else `'plain'`), plus " {Partner} can't go on alone." in a duo. `die()` leaves a duo's
   surviving meter alone.
 - **History, hash:** the Melt Map's chill slot holds the lead's health; `hashState` feeds the hero
@@ -1571,11 +1572,12 @@ nudge); `--survey N [--drain D] [--start M]` prints every gate on salts 0..N −
   constant angles fail, G6 the Dare met at the finish on 10-60% of the G3 + G4 runs.
 - **Calibration.** At the spec's numbers G5 and G4 failed on every surveyed salt for most trials
   (constant angles survived; humanDial passed 100%), so the drain also rises where a trial was too
-  easy (T1 40, T4 36, T5 40, T6 30, T8 32), T1 starts at 12:30, T2's drain fell to 16, T4 lost
-  'flurry' (its ice-cube clusters froze every bot on every salt) and two Dares were nudged (T2
-  blooms 5, T4 calm 19 s). Four gates no salt reaches are waived in `GATE_WAIVERS`: T2 G5, T7 G5
-  (humanDial fails exactly where constant angles start to), T3 G4 (humanDial passes Volt 16/16 at
-  every drain), T5 G6 (its Dare is every TAG). The measured numbers sit beside each trial.
+  easy (T1 40, T4 36, T5 40, T6 32, T8 32), T1 starts at 12:30, T2's drain fell to 18, T4 lost
+  'flurry' (its ice-cube clusters froze every bot on every salt), T2 and T7 lost 'giants' and
+  'dense' (one constant angle passed them; re-picked at salt 6) and two Dares were nudged (T2
+  blooms 5, T4 calm 19 s). Two gates no salt reaches are waived in `GATE_WAIVERS`: T3 G4 (humanDial
+  passes Volt 16/16 at every drain), T5 G6 (its Dare is every TAG). The measured numbers sit beside
+  each trial.
 - **Tests.** `tests/unit/heroes.test.ts` (rules, abilities, relay, duo, flakes, deaths, hash),
   `tests/unit/trials.test.ts` (the table, and G1, G2, G5 on the pinned trials), the `trials`
   golden key, T6/T8 replays in `determinism.test.ts`.

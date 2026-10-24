@@ -29,6 +29,7 @@ import {
   tagTick,
 } from '../../src/core/sim/heroes.ts';
 import { historyAt } from '../../src/core/sim/history.ts';
+import { effectiveDrain } from '../../src/core/sim/nubs.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT, type InputFrame, type NubsState, type SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
@@ -313,6 +314,22 @@ describe('Volt', () => {
     expect([s.voltTheta, s.voltTick, s.heroAbility]).toEqual([s.sun.theta, s.tick, null]);
     close(s.nubs.frost, 0.1);
   });
+
+  it("the fizzle line counts from the last strike, else from Volt's go or its TAG", () => {
+    const s = going(1003);
+    s.tick += 600;
+    s.nubs.chill = 0;
+    expect(heroDeath(s).line).toMatch(/: no new shade for 10 s\.$/);
+    s.voltTick = s.tick - 180;
+    expect(heroDeath(s).line).toMatch(/: no new shade for 3 s\.$/);
+    const r = going(1008);
+    r.relayIdx = 4;
+    r.nubs.hero = 'volt';
+    r.nubs.chill = 0;
+    r.tickAbs = tagTick(trialDef(1008) as TrialDef, 3) + 60;
+    expect(heroDeath(r)).toMatchObject({ who: 'volt', heroCause: 'fizzle' });
+    expect(heroDeath(r).line).toMatch(/: no new shade for 1 s\.$/);
+  });
 });
 
 describe('Drip', () => {
@@ -463,6 +480,22 @@ describe('duo (§2.2)', () => {
     expect(heroDeath(t)).toMatchObject({ who: 'nubs', heroCause: 'melt' });
     expect(heroDeath(t).line).toMatch(/^Melted by You at .* Ember can't go on alone\.$/);
   });
+
+  it("the Cold Snap's cloud smothers the mate at snapSmother of the drain, and its line says so", () => {
+    const s = going(1006);
+    s.nubs.frost = 1;
+    expect(castHero(s)).toBe(true);
+    expect(s.snapTicks).toBeGreaterThan(0);
+    const m = s.mate as NubsState;
+    m.chill = 50;
+    tick(s, 0, 0, 0);
+    close(m.rate, -0.55 * effectiveDrain(s));
+    m.chill = 1e-9;
+    for (let i = 0; i < 60 && s.phase === 'day'; i++) step(s, NO_INPUT);
+    expect(s.phase).toBe('dead');
+    expect(s.death).toMatchObject({ who: 'ember', heroCause: 'smother', cause: 'cloud' });
+    expect(s.death?.line).toMatch(/^Smothered by the Cold Snap at .* Nubs can't go on alone\.$/);
+  });
 });
 
 describe('flakes per hero', () => {
@@ -503,6 +536,18 @@ describe('flakes per hero', () => {
     expect([e.nubs.chill, e.heroCause]).toEqual([0, 'hiss']);
     expect(heroDeath(e)).toMatchObject({ who: 'ember', heroCause: 'hiss' });
     expect(heroDeath(e).line).toMatch(/^Hissed out by a snowflake at /);
+    // A flake on a meter already at 0 (the light took it this tick) is not the cause.
+    e.heroCause = null;
+    heroFlake(e, p, 1);
+    expect(e.heroCause).toBeNull();
+    // An ice cube that takes Drip's last warmth: frozen on it, wherever the light was.
+    const d = going(1004);
+    d.nubs.chill = 10;
+    d.nubs.w[0] = 1;
+    heroFlake(d, p, 1);
+    expect([d.nubs.chill, d.heroCause]).toEqual([0, 'freeze']);
+    expect(heroDeath(d)).toMatchObject({ who: 'drip', heroCause: 'freeze', cause: 'plain' });
+    expect(heroDeath(d).line).toMatch(/^Froze solid on an ice cube at .*\.$/);
   });
 });
 

@@ -30,6 +30,7 @@ import {
   prepareRun,
   prepareSome,
   rungConfig,
+  SMOTHER_TIP,
   splitMinutes,
   step,
   takeSnap,
@@ -1791,7 +1792,9 @@ export class Session {
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
     // A Trial's recap tip is the fallen hero's (Nubs keeps today's recap tips).
-    const heroTip = this.s.trial ? HEROES[result.death.who ?? this.s.nubs.hero].deathTip : '';
+    const d = result.death;
+    // A duo's Cold Snap that smothered Ember teaches the snap, not Ember's rule.
+    const heroTip = this.s.trial ? (d.heroCause === 'smother' ? SMOTHER_TIP : HEROES[d.who ?? this.s.nubs.hero].deathTip) : '';
     this.tip = heroTip || deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.

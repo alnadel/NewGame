@@ -653,6 +653,8 @@ const tuning = {
     lowHealth: 25,
     /** Duo Harmony: the ability hero's income × this while both heroes are safe. */
     harmonyMul: 2,
+    /** Duo: while Nubs' Cold Snap rides, the mate's meter runs at this share of the drain (§2.2: one snap costs Ember about 53 Heat at T6's drain 32, near the spec's 54 at drain 18). */
+    snapSmother: 0.55,
     nubs: { income: 0.05 },
     ember: { fade: 1, gain: 0.4, glare: 1.2, flake: -12, blazeTicks: 180, blazeFloor: 5, incomeSun: 0.04, incomeGlare: 0.25 },
     sprout: { starve: 0.4, grow: 0.6, scorch: 1, glare: 0.5, flake: 8, bandLo: 1, bandHi: 4, thumbReach: 24, seedAheadTicks: 84, seedLat: 30, income: 0.05 },

@@ -760,17 +760,11 @@ export async function gateG5(run: TrialRunner, v: TrialVariant): Promise<Gates['
  * their value; every other gate must pass.
  */
 export const GATE_WAIVERS: Readonly<Record<number, readonly number[]>> = Object.freeze({
-  // T2: G4 and G5 pull apart: where humanDial reaches 55% (drain 16) a constant angle survives on
-  // every salt; where constants fail (drain 24) humanDial passes 0-13% (Sprout's dappled band is a
-  // few degrees wide against the model's 10° aim error).
-  1002: [5],
   // T3: humanDial passes Volt 16/16 at every drain tried (26-52): it strikes fresh shade as it goes.
   1003: [4],
   // T5: the Dare is "2 clean TAGs" and the trial has two TAGs: met on 63-100% of runs, and no target
   // above 2 is reachable.
   1005: [6],
-  // T7: as T2: humanDial collapses (0-1/16 at drain 26-30) where constant angles start to fail.
-  1007: [5],
 });
 
 /** True when gate `n` (1..6) of trial `id` is waived. */

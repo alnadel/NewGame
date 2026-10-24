@@ -104,10 +104,11 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   trial(1, 'Kindling', 7, 0, 'meadow', 'dazzle', ['giants'], 390, 270, 40, ['ember'], [], null, PLAIN, { kind: 'blazeSave', target: 60 }, 40, [],
     'EMBER · Fire', 'Ember feeds on light and shade snuffs it. Swipe down to BLAZE through a shadow.', ['Blaze 1 s', 'Heat ≥ 40'],
     FINISH, undefined, undefined, 'Dare · Blaze through shade 1 s'),
-  // T2: salt 0; drain 24 → 16 (§3.10: humanDial 0-13% on every salt at 24); Dare blooms 2 → 5
-  // (§3.10 nudges: 79% at 2, 3 and 4). G1 margin 97/20 · G2 pass h86 · G5 waived (idle 60%, best θ110
-  // passes) · G3 8/8 · G4 11/16 · G6 58%.
-  trial(2, 'Dappled Lane', 15, 0, 'meadow', 'clear', ['giants'], 120, 300, 16, ['sprout'], [], null, BUDS, { kind: 'blooms', target: 5 }, 40, [],
+  // T2: salt 0 → 6, concepts ['giants'] → [] (with giants one constant angle passed, and no §3.10
+  // lever restored G5 inside humanDial's band); drain 24 → 18 (§3.10: humanDial 0-13% on every salt
+  // at 24); Dare blooms 2 → 5 (§3.10 nudges: 79% at 2, 3 and 4). G1 margin 93/20 · G2 pass h90 ·
+  // G5 idle 54%, best θ260 96% · G3 8/8 · G4 10/16 · G6 58%.
+  trial(2, 'Dappled Lane', 15, 6, 'meadow', 'clear', [], 120, 300, 18, ['sprout'], [], null, BUDS, { kind: 'blooms', target: 5 }, 40, [],
     'SPROUT · Leaf', 'Sprout feeds on the edge of a shadow. Swipe down to SEED a sunflower.', ['Bloom 5', 'Sap ≥ 40']),
   // T3: salt 0, as specified. G1 none (Volt) · G2 striker pass h87 · G5 idle 76%, best θ120 98% ·
   // G3 8/8 · G4 waived (16/16) · G6 50%.
@@ -123,14 +124,15 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   trial(5, 'Day Shift', 2, 0, 'oldtown', 'clear', [], 120, 480, 40, ['nubs', 'ember'], [{ minute: 300, to: 'ember' }, { minute: 480, to: 'nubs' }], null, PLAIN,
     { kind: 'cleanTags', target: 2 }, 35, [1],
     'NUBS ▸ EMBER ▸ NUBS', 'Ember takes over at 11 AM, Nubs at 2 PM. Flip the sun at every TAG.', ['2 clean TAGs', 'All ≥ 35']),
-  // T6: salt 2; drain 18 → 30 (G5 failed on 40 of 40 salts at 18, humanDial 16/16). G1 margin 82/15 ·
-  // G2 pass h84 · G5 idle 39%, best θ320 89% · G3 8/8 · G4 13/16 · G6 50%.
-  trial(6, 'Fire and Ice', 9, 2, 'meadow', 'clear', ['giants'], 180, 240, 30, ['nubs', 'ember'], [], { left: 'nubs', right: 'ember', ability: 'nubs' }, PLAIN,
+  // T6: salt 2; drain 18 → 32 (G5 failed on 40 of 40 salts at 18, humanDial 16/16); the duo snap
+  // smothers Ember at snapSmother. G1 margin 79/15 · G2 pass h83 · G5 idle 37%, best θ320 87% ·
+  // G3 8/8 · G4 13/16 · G6 46%.
+  trial(6, 'Fire and Ice', 9, 2, 'meadow', 'clear', ['giants'], 180, 240, 32, ['nubs', 'ember'], [], { left: 'nubs', right: 'ember', ability: 'nubs' }, PLAIN,
     { kind: 'harmony', target: 180 }, 30, [1],
     'NUBS + EMBER', 'Nubs wants shade, Ember wants light. Split one shadow between them.', ['Harmony 3 s', 'Both ≥ 30'], FINISH, 'Finish with both'),
-  // T7: salt 3, as specified. G1 margin 92/15 · G2 pass h92 · G5 waived (a constant angle passes) ·
-  // G3 8/8 · G4 9/16 · G6 33%.
-  trial(7, 'Shade Garden', 5, 3, 'meadow', 'clear', ['dense'], 120, 240, 20, ['nubs', 'sprout'], [], { left: 'nubs', right: 'sprout', ability: 'sprout' }, BUDS,
+  // T7: salt 3 → 6, concepts ['dense'] → [] (with dense one constant angle passed). G1 margin
+  // 92/15 · G2 pass h94 · G5 idle 39%, best θ20 80% · G3 8/8 · G4 9/16 · G6 13%.
+  trial(7, 'Shade Garden', 5, 6, 'meadow', 'clear', [], 120, 240, 20, ['nubs', 'sprout'], [], { left: 'nubs', right: 'sprout', ability: 'sprout' }, BUDS,
     { kind: 'harmony', target: 240 }, 30, [2],
     'NUBS + SPROUT', 'Shade for Nubs, the edge for Sprout. Blooms grow shade for both.', ['Harmony 4 s', 'Both ≥ 30'],
     { kind: 'blooms', target: 2 }, 'Bloom 2 buds', 'Bloom 2'),

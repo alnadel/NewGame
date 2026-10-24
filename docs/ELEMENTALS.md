@@ -1521,6 +1521,7 @@ characters, which `levelCardFit` checks at 360, 390 and 1280.
 | ember | snuff (named) | Snuffed in the shade of {name} at {time}. |
 | ember | douse (cloud covered it) | Doused by a passing cloud at {time}. |
 | ember | hiss (a flake took the last Heat) | Hissed out by a snowflake at {time}. |
+| ember | smother (the Cold Snap's cloud rode over it) | Smothered by the Cold Snap at {time}. |
 | ember | snuff (plain) | Snuffed out at {time}. |
 | sprout | wilt (c 5) | Wilted in full sun at {time}. |
 | sprout | scorch (glare) | Scorched by {name} at {time}. |
@@ -1528,11 +1529,15 @@ characters, which `levelCardFit` checks at 360, 390 and 1280.
 | volt | fizzle | Fizzled out at {time}: no new shade for {n} s. |
 | volt | overload (glare) | Overloaded by {name} at {time}. |
 | drip | freeze | Froze solid in the shade of {name} at {time}. |
+| drip | freeze (an ice cube took the last warmth) | Froze solid on an ice cube at {time}. |
 | drip | boil | Boiled away in full sun at {time}. |
 | drip | boil (glare) | Boiled away in the glare of {name} at {time}. |
 
 - When no name is known, "in the shade of {name}" becomes "in the shade".
 - In a duo, the line adds " {Partner} can't go on alone."
+- A smothered Ember's recap tip is `SMOTHER_TIP`: "The Cold Snap's cloud smothers Ember too. Snap
+  only while Ember's flame is high."
+- Volt's {n} counts from its last strike, else from the start of its turn (its TAG, else go).
 
 ### 6.5 Other strings
 
@@ -1621,20 +1626,30 @@ the measured gates beside them, and they replace the §3 tables:
 | Trial | Salt | Drain | Start | Dare | Other |
 |---|---|---|---|---|---|
 | T1 Kindling | 0 | 26 → 40 | 330 → 390 (within §3.10) | blazeSave 60 | |
-| T2 Dappled Lane | 0 | 24 → 16 (the §3.10 "too hard" rule) | 120 | blooms 2 → 5 (card "Bloom 5") | |
+| T2 Dappled Lane | 0 → 6 | 24 → 18 (the §3.10 "too hard" rule) | 120 | blooms 2 → 5 (card "Bloom 5") | concepts `[]`: no `giants` |
 | T3 Thunder Alley | 0 | 26 | 180 | chain 5 | |
 | T4 Steam and Frost | 0 | 24 → 36 | 240 | calm 720 → 1140 ticks (card "Calm 19 s") | concepts `[]`: no `flurry` |
 | T5 Day Shift | 0 | 26 → 40 | 120 | cleanTags 2 | |
-| T6 Fire and Ice | 2 | 18 → 30 | 180 | harmony 180 | |
-| T7 Shade Garden | 3 | 20 | 120 | harmony 240 | |
+| T6 Fire and Ice | 2 | 18 → 32 | 180 | harmony 180 | the snap smothers Ember at `snapSmother` |
+| T7 Shade Garden | 3 → 6 | 20 | 120 | harmony 240 | concepts `[]`: no `dense` |
 | T8 Five Elements | 31 | 24 → 32 | 60 | cleanTags 4 | |
 
 - **T4 has no `flurry`.** Its 7-flake ice-cube clusters (−15 T each) froze every bot on every salt
   (path bot 0/40, reactive at most 6/8, humanDial 0-19%). Normal flakes stay as ice cubes.
+- **T2 and T7 have no `giants` / `dense`** (fix round). With them one constant sun angle passed both
+  (G5 waived: best θ110 and θ80), so a player who set the sun once and stopped touching it won, and
+  no §3.10 lever restored G5 inside humanDial's band. Re-picked without the concept: T2 salt 6, drain
+  18 (G5 best θ260 96%, G4 10/16); T7 salt 6 (G5 best θ20 80%, G4 9/16).
 - **Gate waivers** (`scripts/sim16/trials.ts` `GATE_WAIVERS`; `--check` prints WAIVED with the
-  value): T2 G5 and T7 G5 (humanDial collapses exactly where constant angles start to fail); T3 G4
-  (humanDial passes Volt 16/16 at every drain from 26 to 52); T5 G6 (its Dare "2 clean TAGs" is every
-  TAG, met on 63-100% of runs, and no higher target exists).
+  value): T3 G4 (humanDial passes Volt 16/16 at every drain from 26 to 52; T3 is not passively
+  beatable, idle 76%); T5 G6 (its Dare "2 clean TAGs" is every TAG, met on 63-100% of runs, and no
+  higher target exists).
+- **The duo's Cold Snap smothers the mate at `TUNING.heroes.snapSmother` (0.55) of the drain** (fix
+  round). At the full drain 30 one snap cost Ember about 90 of 100 Heat, so casting the trial's only
+  ability was almost always fatal; at 0.55 a snap costs about 53 Heat at drain 32, as the spec's
+  drain 18 did, and §2.2's "use it while Ember has Heat to spare" holds again (the bots' SNAP_SPARE
+  60). At 0.55 × 30 humanDial passed 15/16 (above the 0.9 band), hence drain 32. Ember killed under
+  the snap reads "Smothered by the Cold Snap" (§6.4) with its own recap tip.
 - **Audit (G1).** Flakes the lead walks over are charged to Ember (−12) and Drip (−15), never melted:
   leaving flakes out is not conservative for those two heroes. Drip's T grid uses buckets of one
   step's change (k·D·0.1) instead of 1-unit buckets with `round()`, which lost up to 0.35 T a step.

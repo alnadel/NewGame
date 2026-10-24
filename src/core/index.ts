@@ -67,7 +67,7 @@ export type {
   Mechanics,
 } from '../config/campaign.ts';
 // Elementals (docs/ELEMENTALS.md §4.2-§4.3): the heroes and the Trials.
-export { HERO_IDS, HEROES } from '../config/heroes.ts';
+export { HERO_IDS, HEROES, SMOTHER_TIP } from '../config/heroes.ts';
 export type { AbilityKind, HeroDeath, HeroFace, HeroId, HeroInfo } from '../config/heroes.ts';
 export {
   anyLevelDef,

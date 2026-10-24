@@ -268,7 +268,8 @@ export function applyHeroDaylight(s: SimState): void {
   s.heroCause = null;
   voltEdge = null;
   bodyTick(s, nb, D, R, true);
-  if (m !== null) bodyTick(s, m, D, R, false);
+  // A duo's Cold Snap cloud smothers the mate at snapSmother of the drain (§2.2).
+  if (m !== null) bodyTick(s, m, s.snapTicks > 0 ? D * H.snapSmother : D, R, false);
   const ve = voltEdge as NubsState | null;
   if (ve !== null && (s.voltTheta < 0 || Math.abs(angleDiff(s.sun.theta, s.voltTheta)) >= V.deadDeg) && s.tick - s.voltTick >= V.gapTicks) strike(s, ve, 1);
   if (m !== null) {
@@ -397,7 +398,7 @@ export function updateRelay(s: SimState): void {
  * A flake (`k` 1) or crystal (`k` 2) the lead took on a Trial (§1.1-§1.5): Nubs +flakeChill (a
  * crystal +crystalChill) as today; Ember hisses (steam for 0 during a Blaze), Sprout sips, Drip gets
  * an ice cube, Volt gets Snow only; heroPickup reports a non-Nubs meter change. A hiss that takes the
- * last Heat is the death line's 'hiss'.
+ * last Heat is the death line's 'hiss', an ice cube that takes Drip's last warmth its 'freeze'.
  */
 export function heroFlake(s: SimState, p: Pickup, k: number): void {
   const nb = s.nubs;
@@ -411,7 +412,8 @@ export function heroFlake(s: SimState, p: Pickup, k: number): void {
   let v = Math.min(nb.maxChill, T + d);
   if (v <= 0) {
     v = 0;
-    if (h === 'ember') s.heroCause = 'hiss';
+    // Only a flake that took the last of the meter is the death line's (a body already out stays out).
+    if (T > 0) s.heroCause = h === 'ember' ? 'hiss' : h === 'drip' ? 'freeze' : s.heroCause;
   }
   nb.chill = v;
   s.events.push({ e: 'heroPickup', hero: h, delta: v - T, x: p.x, y: p.y });
@@ -449,6 +451,11 @@ export function heroDeath(s: SimState): DeathInfo {
       if (s.heroCause === 'hiss') {
         hc = 'hiss';
         line = `Hissed out by a snowflake${at}.`;
+      } else if (s.snapTicks > 0) {
+        // Nubs' Cold Snap cloud rides over both bodies (§2.2): it, not a caster, took the Heat.
+        hc = 'smother';
+        line = `Smothered by the Cold Snap${at}.`;
+        cause = 'cloud';
       } else if (nb.cloudId >= 0) {
         hc = 'douse';
         line = `Doused by a passing cloud${at}.`;
@@ -469,17 +476,23 @@ export function heroDeath(s: SimState): DeathInfo {
       if (nb.c === 0) cause = shade;
     } else if (h === 'volt') {
       hc = 'fizzle';
-      line = `Fizzled out${at}: no new shade for ${Math.round((s.tick - Math.max(0, s.voltTick)) / TICK_HZ)} s.`;
+      // From the last strike, else from this turn's start: its TAG on a relay, else go.
+      const from = s.voltTick >= 0 ? s.voltTick : s.relayIdx > 0 ? s.tick - (s.tickAbs - tagTick(s.trial as TrialDef, s.relayIdx - 1)) : TUNING.start.readyTicks;
+      line = `Fizzled out${at}: no new shade for ${Math.round((s.tick - from) / TICK_HZ)} s.`;
     } else if (s.heroCause === 'boil') {
       hc = 'boil';
       line = nb.w[0] === 2 ? `Boiled away in the glare of ${ball}${at}.` : `Boiled away in full sun${at}.`;
       if (nb.w[0] === 2) cause = 'glare';
+    } else if (s.heroCause === 'freeze') {
+      // An ice cube (a flake) took the last of Drip's warmth, wherever the light was.
+      hc = 'freeze';
+      line = `Froze solid on an ice cube${at}.`;
     } else {
       hc = 'freeze';
       line = `Froze solid${inShade}${at}.`;
       cause = shade;
     }
-    info ={ day: s.day, tDay: s.tDay, minutes: s.minutes, time, x: nb.x, y: nb.y, cause, line, heroCause: hc };
+    info = { day: s.day, tDay: s.tDay, minutes: s.minutes, time, x: nb.x, y: nb.y, cause, line, heroCause: hc };
     if (cause === 'glare') info.ballId = ballId;
     if (cause === 'gap') {
       info.lastId = nb.lastShaderId;
