@@ -166,6 +166,13 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     ctx.go('play');
     ctx.cb.retry();
   };
+  /** Elementals v2: an intro Trial picks up again at the telegraph of the TAG that began the lost leg. */
+  const retryTag = (): void => {
+    if (!armed) return;
+    armed = false;
+    ctx.go('play');
+    ctx.cb.retryTag?.();
+  };
   const home = (): void => {
     ctx.go('title');
     ctx.cb.home();
@@ -256,6 +263,8 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   // accessible names stay "Retry" and "Map").
   const mapBtn = button(ctx, { label: 'Map', icon: 'map', variant: 'blue', className: 'res-mapbtn res-sq', sound: 'back', onPress: map });
   mapBtn.querySelector('.btn-label')?.classList.add('tag');
+  const tagBtn = button(ctx, { label: 'Tag Stone', ariaLabel: 'Retry from the Tag Stone', icon: 'retry', variant: 'blue', className: 'res-sq', onPress: retryTag });
+  tagBtn.querySelector('.btn-label')?.classList.add('tag');
   // The full line is laid out invisibly so the paragraph has its final height from the first
   // frame; the typed copy is drawn over it. Screen readers get the sr-only copy at once.
   const deathFull = h('span', 'sr-only');
@@ -313,7 +322,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   // however many chips a run earns. measure() puts the chips first on a short screen.
   const scroll = h('div', 'res-scroll', goals, warmup, stats, tip, awards, missionList);
   // Retry | Next level | Map, left to right (Next level, the primary, gets the initial focus).
-  const actions = h('div', 'res-actions', retryBtn, nextBtn, mapBtn);
+  const actions = h('div', 'res-actions', retryBtn, tagBtn, nextBtn, mapBtn);
   // The score block stays pinned; stats and missions scroll (or the whole body, see sizing above).
   const body = h('div', 'res-body', top, scroll);
   const sheet = h('div', { class: 'panel res-sheet pe', role: 'region', 'aria-label': 'Run results' }, hero, body, actions);
@@ -481,6 +490,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     actions.classList.toggle('res-actions--campaign', on);
     hide(nextBtn, !nextUp);
     hide(mapBtn, !on);
+    hide(tagBtn, !c?.tagRetry);
     // Retry is the primary action unless Next level is; then it is a blue square with its tag.
     retryBtn.classList.toggle('btn--primary', !nextUp);
     retryBtn.classList.toggle('btn--blue', nextUp);
@@ -537,7 +547,7 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
   /** Retry (and Next level) live or not; the arming sweep plays while they wait. */
   function setArmed(on: boolean): void {
     armed = on;
-    for (const b of [retryBtn, nextBtn]) {
+    for (const b of [retryBtn, tagBtn, nextBtn]) {
       b.classList.toggle('is-arming', !on);
       b.classList.toggle('is-ready', on);
       setDisabled(b, !on);

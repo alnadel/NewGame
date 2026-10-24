@@ -121,6 +121,8 @@ export interface ResultsCampaign {
   starRules?: readonly [string, string, string];
   /** starState's bits for the run: 1 the goal met, 2 the flakes or Dare earned, 4 the cool run lost. */
   starBits?: number;
+  /** Elementals v2 (§7.11): an intro Trial lost in leg ≥ 1 offers "Retry from the Tag Stone". */
+  tagRetry?: boolean;
 }
 
 /** Title banner shown when the page was opened from a challenge link. */
@@ -178,6 +180,8 @@ export interface UiCallbacks {
   openJourney(to?: 'journey' | 'elementals'): void;
   /** Results: Retry button, Space/Enter, or a tap on the map above the sheet. The UI is already on 'play'. */
   retry(): void;
+  /** Results > Retry from the Tag Stone (ResultsCampaign.tagRetry). The UI is already on 'play'. */
+  retryTag?(): void;
   /** Back to the Title (Pause > Home, Results > Home). The UI is already on 'title'. */
   home(): void;
   /** Pause button, Escape/P, or the rotate overlay appearing mid-run. The UI is already on 'pause'. */

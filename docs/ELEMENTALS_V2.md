@@ -2124,9 +2124,13 @@ Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25
   the dial are gone. `drawTagStones` moved from `heroes.ts` to `trial.ts` (the sprite cache).
 
 **UI**
-- Cut list items 1-4 were all applied for size: there is no Retry from the Tag Stone (and no e2e
-  for it), no wheel steering on Drip legs (keys and drag steer), and no ghost easing. The TAG cue
-  line reads "{Name}'s turn." plus " The sun holds." with no verb text.
+- Cut list items 2-4 were applied for size: no wheel steering on Drip legs (keys and drag steer),
+  and no ghost easing. The TAG cue line reads "{Name}'s turn." plus " The sun holds." with no verb
+  text, and hangs below the dial (what lies ahead is above it). Item 1, Retry from the Tag Stone,
+  was cut at the merge and restored in the fix round (§7.11, with its e2e): Results shows it as a
+  "Tag Stone" square (its accessible name is the full line) after an intro Trial is lost in leg ≥ 1;
+  the replay ends with one lift frame on the telegraph's first tick (a drag released at 0 °/s, a hold
+  let go), so the player resumes from the Pause card with no finger down.
 - A tap or hold carries the ground point captured at pointerdown, not at recognition. The 300 ms
   and 12 px conversions to a sun press are measured from the press point, and the converted press
   replays its pointerdown quietly. A hold the sim already ended keeps its pointer slot until lift

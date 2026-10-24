@@ -13,6 +13,7 @@ import {
   CONCEPTS,
   createBot,
   createParJob,
+  createReplay,
   createRun,
   createSnap,
   dayTicks,
@@ -37,10 +38,12 @@ import {
   PLAN_START_DATE,
   prepareRun,
   prepareSome,
+  recordFrame,
   rungConfig,
   splitMinutes,
   step,
   tagLocked,
+  tagTick,
   takeSnap,
   TRIAL_BASE,
   TUNING,
@@ -53,6 +56,9 @@ import {
   type LevelDef,
   type ParJob,
   type RenderSnap,
+  VERB_RELEASE,
+  type InputFrame,
+  type Replay,
   type RunBuild,
   type RunConfig,
   type RunResult,
@@ -328,6 +334,8 @@ export class Session {
   /** Cues shown this run (bit per CueId: each at most once per run). */
   private cues = 0;
   /** The cue on the line as this session last set it (an expired timed cue still counts). */
+  /** An intro Trial's frames so far (Retry from the Tag Stone replays them); null on other runs. */
+  private rec: Replay | null = null;
   private cueShown: { id: CueId; dir: -1 | 1 | undefined } | null = null;
   /** An event cue (go, shade found, first SWING, ...) keeps the line until then (performance.now ms). */
   private cueHold = 0;
@@ -523,6 +531,7 @@ export class Session {
         nextLevel: sync(() => this.nextLevel()),
         openJourney: sync((to?: 'journey' | 'elementals') => this.openJourney(to)),
         retry: sync(() => this.retry()),
+        retryTag: sync(() => this.retryTag()),
         home: sync(() => this.home()),
         pause: sync(() => this.pause()),
         resume: sync(() => this.resume()),
@@ -910,6 +919,7 @@ export class Session {
         const f = this.bot ? this.bot.next(s) : (frames?.[i] ?? null);
         if (!f) break;
         step(s, f);
+        if (this.rec) recordFrame(this.rec, f);
         for (const ev of s.events) {
           events.push(ev);
           this.onTickEvent(ev);
@@ -1389,6 +1399,8 @@ export class Session {
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     this.input.dropVerbs();
+    // An intro Trial records its frames for Retry from the Tag Stone (§7.11).
+    this.rec = run.trial?.intro ? createReplay(run.cfg) : null;
     const botKind = this.params.bot ?? this.testBot;
     this.bot = botKind ? makeBot(botKind) : null;
     this.d.audio.resetRun();
@@ -1624,6 +1636,30 @@ export class Session {
     this.d.audio.ensure();
     this.input.tap();
     return true;
+  }
+
+  /**
+   * Results > Retry from the Tag Stone (§7.11, intro Trials lost in leg ≥ 1): replays this run's own
+   * frames headless on a fresh run of the Trial up to the telegraph of the TAG that began the lost
+   * leg (the same state the player had there), then waits on the Pause card for the player.
+   */
+  private retryTag(): void {
+    const t = this.s.trial;
+    const rec = this.rec;
+    if (t === null || rec === null || this.s.relayIdx < 1) return this.retry();
+    this.d.audio.ensure();
+    this.finishPrebuild();
+    const stop = tagTick(t, this.s.relayIdx - 1) - TUNING.elements.tagSoonTicks;
+    const run = this.makeRun('campaign', undefined, undefined, t.id);
+    let i = 0;
+    while (i < rec.frames.length && run.tickAbs < stop - 1) step(run, rec.frames[i++] as InputFrame);
+    // On the telegraph's first tick the finger that was down lifts (a sun drag at 0 °/s; a hold lets go).
+    const lift: InputFrame = { dTheta: 0, down: false, downEdge: false, upEdge: true, release: 0, key: 0, verb: VERB_RELEASE };
+    step(run, lift);
+    this.beginRun(run, false, false);
+    // The new run's recording starts with the frames that brought it here (a second retry works too).
+    this.rec?.frames.push(...rec.frames.slice(0, i), lift);
+    this.pauseIfPlaying();
   }
 
   private retry(): void {
@@ -2049,6 +2085,7 @@ export class Session {
       starRules: starRules(level, this.relaxed()),
       starBits: starState(level, result.stats, won !== null, this.relaxed(), this.featSeen),
     };
+    if (this.rec !== null && this.s.phase === 'dead' && this.s.relayIdx > 0) view.tagRetry = true;
     if (level.introduces) {
       // The sheet reads "New: {name} {blurb}"; a concept named after its level keeps just the blurb.
       const c = CONCEPTS[level.introduces];
@@ -2663,7 +2700,9 @@ export class Session {
     const bot = makeBot('reactive');
     if (!bot || s.el === null) return;
     for (let n = 0; n < 60_000 && s.relayIdx < i && s.phase !== 'dead' && s.phase !== 'won'; n++) {
-      step(s, bot.next(s));
+      const f = bot.next(s);
+      step(s, f);
+      if (this.rec) recordFrame(this.rec, f);
       for (const ev of s.events) this.onTickEvent(ev);
     }
     this.input.releaseAll();

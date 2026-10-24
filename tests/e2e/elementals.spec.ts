@@ -320,6 +320,28 @@ test('T1: the Results say Trial 1, Retry keeps it and Trials returns; the save k
   expect(errors).toEqual([]);
 });
 
+test('T3: a fall on Sprout\'s leg offers Retry from the Tag Stone, which picks up at the telegraph and waits on Pause', async ({ page }) => {
+  test.slow();
+  const errors = watchErrors(page);
+  // Nubs' leg by the reactive bot (its frames are recorded as the player's), then Sprout with no input.
+  await playLeg(page, 3, 1, 1);
+  await waitForScreen(page, 'results', 30_000);
+  expect((await state(page)).relay).toBe(1);
+  const btn = page.locator('.res-sheet').getByRole('button', { name: 'Retry from the Tag Stone' });
+  await expect(btn).toBeVisible();
+  await expect(btn).toBeEnabled({ timeout: 5_000 });
+  await btn.click();
+  await waitForScreen(page, 'pause');
+  const s = await state(page);
+  // The telegraph of the TAG at 340 (11:40 AM) opens 180 ticks (43.2 minutes) before it (TAG ticks
+  // fall on the 6-tick grid: within a minute).
+  expect([s.level, s.phase, s.relay, s.hero]).toEqual([1003, 'day', 0, 'nubs']);
+  expect(Math.abs(s.minutes - (340 - 43.2))).toBeLessThan(1);
+  await page.getByRole('button', { name: 'Resume' }).click();
+  await expect.poll(async () => (await state(page)).hero, { timeout: 10_000 }).toBe('sprout');
+  expect(errors).toEqual([]);
+});
+
 test('?trial=6 walks Nubs first; Back from its Results leads to the Elementals', async ({ page }) => {
   await page.goto('/?trial=6&test=1');
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
