@@ -274,7 +274,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 | `dismissChallenge()` | Forget the challenge and clear `#c=` (`history.replaceState`). |
 | `dragHandoff(e)` | A press that began on a Title tray button slid sideways > 10 px: start the run with catch semantics at `e.clientX/Y` and follow `e.pointerId` (listen on `window`; the button released capture). |
 | `uiSound(name)` | `'tap' 'back' 'toggle' 'slide' 'buy' 'equip' 'deny' 'stamp' 'unlock' 'count'`. Map to the GDD "UI tap" recipe (or richer ones) plus the 4 ms UI haptic. |
-| `renderHeroPreview(canvas, hero)` | The Elementals stage and hero coins: draw `hero` (a `HeroId`) on `canvas`; the screen sizes the backing store (CSS × DPR ≤ 2) and greys a locked hero's pixels itself. Until ART's `renderHeroPreview` lands, the session draws Nubs in his outfit (`renderWardrobePreview(…, 'nubs')`, §4.11). |
+| `renderHeroPreview(canvas, hero)` | The Elementals stage and hero coins: draw `hero` (a `HeroId`) on `canvas`; the screen sizes the backing store (CSS × DPR ≤ 2) and greys a locked hero's pixels itself. The session passes ART's `renderHeroPreview(canvas, hero, equipped)` (`render/heroes.ts`), which draws every element, Gust's kite included. |
 | `renderWardrobePreview(canvas, equipped, subject)` | Draw Nubs wearing `equipped` (`subject` 'nubs'), or the sun in `equipped.shades` on the Shades tab ('sun'); use `equippedLooks(equipped)`. The backing store is CSS size × DPR (≤ 2). Called on every try-on or tab change. |
 
 ## 5. Meta API (pure unless noted)
