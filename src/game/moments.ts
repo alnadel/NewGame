@@ -26,7 +26,7 @@ import { missionLabel, missionReward, missionTarget, missionValue, parseMissionI
 import type { MissionDef } from '../meta/content.ts';
 import { featureUnlocked } from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
-import { endToast, endToasts, showToast, type Banners } from '../render/banners.ts';
+import { clearToasts, endToast, endToasts, showToast, type Banners } from '../render/banners.ts';
 import { goalMetLive, trialGlyph } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
@@ -246,6 +246,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   /** A missed flare scorched the tank (a snap or nightfall heals it); a charge filled under a snap (its tip waits for the end). */
   let scorched = false;
   let frostLater = false;
+  /** A Trial began with its charge full (campaignConfig startFrost 1): no frostReady comes before the first cast. */
+  let frostStart = false;
 
   /** Shows the level's tip for `on` (a relay's 'tag' one: `who`'s), once per run (an `urgent` one ahead of any other toast). */
   const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string): void => {
@@ -265,7 +267,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       shadeAt = -1;
       level = relaxed ? null : lv;
       tips.length = 0;
-      scorched = frostLater = false;
+      scorched = frostLater = frostStart = false;
       const trial = lv ? trialDef(lv.id) : null;
       const fresh = lv !== null && !(trial ? save.elementals?.stars[trial.n - 1] : save.campaign.stars[lv.id - 1]);
       if (trial) {
@@ -314,14 +316,19 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'go':
         case 'cloudCapture':
           tip(ev.e === 'go' ? 'go' : 'cloud');
+          if (ev.e === 'go' && s.trial !== null && s.nubs.frost >= 1) frostStart = true;
           break;
         case 'tagSoon':
           tip('tagSoon');
           break;
         case 'tag':
-          // A relay hero's first turn: its 'go' tip.
+          // A relay hero's first turn: the TAG's telegraph and the last hero's tips are stale (dropped,
+          // on screen or waiting, and the lead's later ones spent); its own 'go' tip shows after the stamp.
+          clearToasts(banners);
+          for (let i = 0; i < tips.length; i++) if ((tips[i] as readonly [TipOn, string, string?])[0] !== 'tag') tipsShown |= 1 << i;
           tip('tag', TIP_HOLD, false, ev.to);
           break;
+
         case 'flake':
           tip('flake');
           if (level && goalMetLive(level, s.stats)) tip('goal');
@@ -361,8 +368,11 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'nightStart':
           scorched = false;
           break;
+        case 'ability':
         case 'snap':
-          tip('snap');
+          // Cast: a Trial's "swipe down" tip has nothing left to teach.
+          if (s.trial !== null) for (const t of tips) if (t[0] === 'frost') endToast(banners, t[1]);
+          if (ev.e === 'snap') tip('snap');
           break;
         case 'deepEnter':
           tip('deep');
@@ -396,7 +406,13 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       }
       if (tips.length > 0) {
         const p = levelProgress(s);
-        if (p >= 0.25) tip('p25');
+        if (p >= 0.25) {
+          // A Trial's starting charge, still unspent: its 'frost' tip takes the slot after 'go', queued
+          // ahead of p25 in the same tick so p25 cannot replace it (TIP_REST leaves a ~20 s Trial two tips).
+          if (frostStart && s.nubs.frost >= 1) tip('frost');
+          frostStart = false;
+          tip('p25');
+        }
         if (p >= 0.6) tip('p60');
         if ((snapBudTip || glassTip) && s.tick - budAt >= MISSION_EVERY) {
           // v1.6: a bud in reach under a snap; a glass flake's window on the dial.

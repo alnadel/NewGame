@@ -31,8 +31,8 @@
 // outward ray ticks and gold dots on the glare it feeds on, and no red glare; Sprout lime in leaf
 // dashes; Volt yellow with bolt notches beside a grey hatched dead zone round its last strike; Drip
 // teal while it wants shade, dotted amber while it wants sun, pulsing; a narrow run wears a target
-// dot), and the gauge is the hero's (its colours at 60 and 25; Drip's a two-ended thermometer,
-// always shown). A duo draws each hero's own arcs thin (the lead's inside the ring, the mate's
+// dot), and the gauge is frost-white like Nubs' (amber below 60, hot below 25, so the hero's colour
+// only ever means go; Drip's a two-ended thermometer, always shown). A duo draws each hero's own arcs thin (the lead's inside the ring, the mate's
 // outside), the band where both are happy in white-gold with the lead's colour on its inner edge,
 // and splits the gauge in two halves; a relay's telegraph dashes the incoming hero's arcs outside.
 // Nubs walking alone keeps the teal dial.
@@ -599,8 +599,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineWidth = 3;
       if (red) g.setLineDash([4, 3]);
       const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      // A hero's gauge is its own colour when full.
-      g.strokeStyle = cssa(red ? HOT : white ? (hd ? HERO_ARC[lead] : FROST) : AMBER, gA * pulse);
+      // A hero's gauge is frost-white like Nubs' when full: the hero's colour means only "go".
+      g.strokeStyle = cssa(red ? HOT : white ? FROST : AMBER, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
       g.stroke();

@@ -130,7 +130,9 @@ import {
   FINISH_FREEZE_S,
   FINISH_SKIP_S,
   goalLine,
+  goalTarget,
   goalText,
+  goalValue,
   hudGoal,
   introCard,
   missLine,
@@ -140,6 +142,7 @@ import {
   STAR_GOAL,
   starRules,
   starState,
+  trialDareCount,
   type HudGoal,
 } from './campaign.ts';
 import { formatScore } from '../core/format.ts';
@@ -1088,8 +1091,10 @@ export class Session {
     v.dayLength = s.params.dayLen;
     v.eps = s.eps;
     v.epsNoon = s.params.epsNoon;
-    v.f = s.nubs.f;
-    const lit = s.nubs.f * 5;
+    // The sizzle and crackle are Nubs' melting cue (the renderer's drawSizzle). On a Trial another
+    // hero's light is not its danger, so they stay silent there.
+    v.f = s.nubs.hero === 'nubs' ? s.nubs.f : 0;
+    const lit = v.f * 5;
     v.glareW = lit > 0 ? Math.min(1, (2 * s.nubs.glare) / lit) : 0;
     v.chill = s.nubs.chill;
     // Elementals: the heartbeat and the calm scene read the lowest health of any body on a Trial.
@@ -2359,12 +2364,23 @@ export class Session {
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
       const f = level.feats[0];
       const t = s.trial;
+      const pct = `${Math.round(levelProgress(s) * 100)} %`;
       if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
+      // A Trial: the Dare's count on its star while open; the goal line counts the goal itself
+      // (hudGoal's Trial branch turns to the Dare once the goal is a finish or met).
+      if (t && !(bits & STAR_FLAKES)) labels[1] = `${labels[1]} · ${trialDareCount(t, s.stats)}`;
+      const count = t
+        ? level.goal.kind === 'finish'
+          ? pct
+          : countText(Math.min(goalValue(level, s.stats, seen), goalTarget(level)), goalTarget(level), false)
+        : goal.target >= 0
+          ? countText(goal.value, goal.target, goal.sec)
+          : pct;
       return {
         title: `${levelTag(level.id)} · ${level.name}`,
-        // A Trial: the walking hero's tagline under the title (docs/ELEMENTALS.md §6.5).
-        ...(t ? { tagline: HEROES[s.nubs.hero].tagline } : {}),
-        goal: `${goalText(level, relaxed)} · ${goal.target >= 0 ? countText(goal.value, goal.target, goal.sec) : `${Math.round(levelProgress(s) * 100)} %`}`,
+        // A Trial: the walking hero's tagline under the title (docs/ELEMENTALS.md §6.5), a duo's both.
+        ...(t ? { tagline: s.mate ? `${HEROES[s.nubs.hero].tagline} ${HEROES[s.mate.hero].tagline}` : HEROES[s.nubs.hero].tagline } : {}),
+        goal: `${goalText(level, relaxed)} · ${count}`,
         now,
         stars: [
           { label: labels[0], state: bits & STAR_GOAL ? 'earned' : 'open' },

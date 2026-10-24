@@ -13,11 +13,12 @@ import {
   NO_INPUT,
   starsFor,
   step,
+  trialDef,
   trialLevel,
   type InputFrame,
   type SimEvent,
 } from '../../src/core/index.ts';
-import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState } from '../../src/game/campaign.ts';
+import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState, trialDareCount } from '../../src/game/campaign.ts';
 import { isDebugRun, parseParams } from '../../src/game/params.ts';
 import { campaignShareText } from '../../src/meta/share.ts';
 import { createBanners, dismissLevelCard, resetBanners, showLevelCard, showStamp, updateBanners } from '../../src/render/banners.ts';
@@ -313,6 +314,9 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     expect(goalLine(t1, { flakes: 0, snow: 0 }, true)).toBe('Reached the finish');
     expect(goalLine(t1, { flakes: 0, snow: 0 }, false)).toBe('Out before the finish');
     expect(goalLine(t7, { flakes: 0, snow: 0, blooms: 1 }, false)).toBe('Goal missed: Bloom 2 buds (1/2)');
+    expect(goalLine(t7, { flakes: 0, snow: 0, blooms: 2 }, false)).toBe('Out before the finish (Bloom 2 buds ✓)');
+    expect(trialDareCount(trialDef(1001)!, { flakes: 0, snow: 0, blazeTicks: 30 })).toBe('0.5/1 s');
+    expect(trialDareCount(trialDef(1005)!, { flakes: 0, snow: 0, cleanTags: 3 })).toBe('2/2');
   });
   it('stars: the goal, the Dare (trialDareValue) and Steady (no body under the bar); the HUD pill counts the Dare', () => {
     const st = (blazeTicks: number, minChill: number) => ({ flakes: 0, snow: 0, litTotal: 999, minChill, blazeTicks });

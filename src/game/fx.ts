@@ -404,7 +404,8 @@ export class Fx {
           // A fallen Elemental leaves no meltwater: a puff in its colour (its art shows the rest).
           const who = ev.info.who;
           if (who && who !== 'nubs') {
-            this.burst(nx, ny, 10, 14, 60, heroArcColor(who, true));
+            // At the body that fell (a duo's mate stands 22 u off the lead).
+            this.burst(ev.info.x, ev.info.y, 10, 14, 60, heroArcColor(who, true));
             break;
           }
           for (let i = 0; i < 14; i++) {
@@ -420,10 +421,15 @@ export class Fx {
           const [text, style, ring] = ABILITY[ev.kind];
           if (text) addHeadline(sc.pops, text, style, 1);
           else this.stamp('blaze', 'BLAZE!', 0.6);
-          addRing(sc.rings, nx, ny, 6, 64, 0.5, 3.5, 0.95, ring);
-          this.burst(nx, ny, 20, 16, 110, ring);
-          hop(sc.nubs, 6);
-          sc.nubs.happy = 0.9;
+          // At the caster: a duo's mate when the ability is its hero's (T7's Sprout).
+          const m = s.mate !== null && s.mate.hero === ev.hero ? s.mate : null;
+          const ax = m ? m.x : nx;
+          const ay = m ? m.y : ny;
+          addRing(sc.rings, ax, ay, 6, 64, 0.5, 3.5, 0.95, ring);
+          this.burst(ax, ay, 20, 16, 110, ring);
+          const anim = m ? sc.mate : sc.nubs;
+          hop(anim, 6);
+          anim.happy = 0.9;
           this.clock.addHitStop(0.04);
           // A SEED: its sunflower springs up where it was sown (render/flora.ts pops it).
           const id = SEED_ID_BASE + (s.stats.seeds ?? 1) - 1;

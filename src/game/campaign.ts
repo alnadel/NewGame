@@ -147,6 +147,10 @@ export function trialGlyph(t: TrialDef): string {
 export function trialDare(t: TrialDef, stats: Stats): number {
   return trialDareValue(t.dare.kind, stats as LevelStats);
 }
+/** A Trial's Dare count as its star reads it on the Pause card ("0.5/1 s", "1/2"; clamped at the target). */
+export function trialDareCount(t: TrialDef, stats: Stats): string {
+  return countText(Math.min(trialDare(t, stats), t.dare.target), t.dare.target, dareSec(t.dare.kind));
+}
 
 /** The intro card's lines: "LEVEL 6", "Glass Garden", the concept line (icon id, name, blurb), the goal and the star rules. */
 export interface IntroCard {
@@ -263,7 +267,11 @@ export function goalLine(level: LevelDef, stats: Stats, passed: boolean, relaxed
   const t = trialDef(level.id);
   if (t) {
     if (passed) return g.kind === 'finish' ? 'Reached the finish' : `${t.card.goal} ✓`;
-    return g.kind === 'finish' ? 'Out before the finish' : `Goal missed: ${t.card.goal} (${countText(goalValue(level, stats, seen), g.target, false)})`;
+    if (g.kind === 'finish') return 'Out before the finish';
+    // T7's blooms met but the run ended short of the line: the goal was not the miss.
+    return goalMetLive(level, stats, seen)
+      ? `Out before the finish (${t.card.goal} ✓)`
+      : `Goal missed: ${t.card.goal} (${countText(goalValue(level, stats, seen), g.target, false)})`;
   }
   const snow = Math.floor(stats.snow);
   const verb = relaxed ? undefined : goalFeat(g.kind);

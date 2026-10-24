@@ -414,6 +414,13 @@ export function endToasts(b: Banners): void {
   if (shown) b.toastT = Math.max(b.toastT, TOAST_IN + shown.hold);
 }
 
+/** A relay's TAG (under its stamp): every toast goes at once and the next tip need not wait out TIP_REST. */
+export function clearToasts(b: Banners): void {
+  b.toasts.length = 0;
+  b.toastT = -1;
+  b.tipAt = b.toastClock;
+}
+
 export function resetBanners(b: Banners): void {
   b.toasts.length = 0;
   b.toastT = -1;
@@ -814,7 +821,7 @@ function measureCard(b: Banners, w: number, k: number): void {
  * lines, compact wells, the goal and Dare chips in one row (or the goal chip goes), the goal chip
  * gone (the first well says the goal), then, unless `keepBlurb`, no blurb and no concept chip.
  */
-function fitCard(b: Banners, k: number, room: number, keepBlurb: boolean): boolean {
+function fitCard(b: Banners, k: number, room: number, keepBlurb: boolean, whole = false): boolean {
   const iw = cW - 2 * (CARD_INSET + CARD_PAD) * k;
   const n = cLines.length;
   const dare = cDare !== '';
@@ -822,7 +829,9 @@ function fitCard(b: Banners, k: number, room: number, keepBlurb: boolean): boole
   const two = Math.min(2, n);
   const steps = keepBlurb ? 5 : 7;
   for (let step = 0; step < steps; step++) {
-    cBlurbN = step === 0 ? n : step < 5 ? two : 0;
+    // `whole`: no line of the blurb goes (the ladder skips its first rung).
+    if (whole && step === 1) continue;
+    cBlurbN = step === 0 || whole ? n : step < 5 ? two : 0;
     cCompact = step >= 2;
     cChips = step >= 4 ? 2 : step === 3 ? row : 0;
     cShowConcept = step < 6;
@@ -849,12 +858,15 @@ export function levelCardFit(): { blurb: number; lines: number; compact: boolean
  * the blurb may go.
  */
 function sizeCard(b: Banners, v: View, scale: number, room: number): void {
-  const at = (f: number, keepBlurb: boolean): boolean => {
+  const at = (f: number, keepBlurb: boolean, whole = false): boolean => {
     measureCard(b, Math.round(Math.min(v.vw - 32, 352 * scale) * f), scale * f);
-    return fitCard(b, scale * f, room, keepBlurb);
+    return fitCard(b, scale * f, room, keepBlurb, whole);
   };
   if (b.levelConcept && b.levelBlurb) {
-    for (const f of [1, 0.9, 0.85, 1 / scale, 0.9 / scale]) if ((f >= 0.85 || scale > 1) && f <= 1 && at(f, true)) return;
+    const fs = [1, 0.9, 0.85, 1 / scale, 0.9 / scale].filter((f) => (f >= 0.85 || scale > 1) && f <= 1);
+    // A Trial's card (a hero's legend or the Elementals glyph) says its whole sentence (§6.2) before a line goes.
+    if (b.levelConcept === 'elementals' || LEGEND.includes(b.levelConcept)) for (const f of scale > 1 ? [...fs, 0.8 / scale] : fs) if (at(f, true, true)) return;
+    for (const f of fs) if (at(f, true)) return;
   }
   // Too tall even at the last fit: the whole card scales down, not below 0.8.
   for (let f = 1; f >= 0.8 - 1e-6; f -= 0.1) if (at(f, false)) return;

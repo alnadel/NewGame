@@ -1611,6 +1611,9 @@ No file conflicted. The integrator then applied the merge notes:
 - Two Nubs-only cue lines stay off Trials: "Frost full! Swipe ↓ for a Cold Snap" (the ability coin is
   never called Frost there) and "Melting! Find thick teal" (Nubs' rule; an Ember run used to show it
   on its first scare). The hero tips (§6.3) teach each hero's rule and swipe instead.
+- (Fix round) Nubs' melting sizzle and glare crackle stay off Trials too: `fillAudioView` feeds the
+  audio view's lit fraction only while Nubs leads, so Ember feasting in the sun no longer sounds
+  like Nubs melting.
 
 CORE reported no stubs to replace. ART's glyph ids (`nubs`, `ember`, `sprout`, `volt`, `drip`,
 `elementals`) cover every id the UI passes as `IntroCard.concept`, `dareGlyph`, `HudGoal.glyph` and
@@ -1682,8 +1685,9 @@ the measured gates beside them, and they replace the §3 tables:
 - **Looks.** Ember's low state is a small dull flame; snuffed, it shrinks to a sleepy ember; its
   smoke is three grey squiggles (`drawSizzle(…, smoke = true)`); its death token is its flame glyph.
   Duo bodies draw at 0.85 scale so they never overlap 22 u apart. The hot ring burns red (#E8303A)
-  when Ember is on the dial. Hero gauges are the hero's colour when full, amber below 60 health and
-  hot below 25; Drip's thermometer is blue/green/red. Go runs narrower than 8° get a white target dot
+  when Ember is on the dial. Solo hero gauges are frost-white when full (the hero's colour is kept
+  for go arcs: a full gauge in it read as "go everywhere"; fix round), amber below 60 health and hot
+  below 25; Drip's thermometer is blue/green/red. Go runs narrower than 8° get a white target dot
   ringed in the hero's colour.
 - **Events.** `heroPickup` has no fx of its own (the flake's fx and bell carry it; Ember adds a hiss,
   `snapEnd` an octave down). `abilityEnd` is a small white burst. THUNDERCLAP plays no ability sound:

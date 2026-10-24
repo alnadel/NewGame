@@ -394,10 +394,14 @@ describe('RunMoments', () => {
     m.onEvent({ e: 'go' }, s);
     expect(texts()).toEqual([RELAY_TIPS[0]![1], HERO_TIPS.nubs[0]![1]]);
     m.onEvent({ e: 'tagSoon', to: 'ember', ticks: 90 }, s);
+    expect(texts().slice(2)).toEqual([RELAY_TIPS[1]![1]]);
+    // The TAG drops the telegraph and Nubs' tips (on screen or waiting): only Ember's 'go' tip is left.
     m.onEvent({ e: 'tag', from: 'nubs', to: 'ember', index: 0 }, s);
+    expect(texts()).toEqual([HERO_TIPS.ember[0]![1]]);
+    expect(b.toasts[0]!.glyph).toBe('ember');
+    // T5 has no TAG tip for Nubs: his second turn clears Ember's.
     m.onEvent({ e: 'tag', from: 'ember', to: 'nubs', index: 1 }, s);
-    expect(texts().slice(2)).toEqual([RELAY_TIPS[1]![1], HERO_TIPS.ember[0]![1]]);
-    expect(b.toasts[3]!.glyph).toBe('ember');
+    expect(texts()).toEqual([]);
     // T6 (duo, Nubs' Cold Snap) warns of the Cold Snap's cloud when the charge is ready; T7 (duo, Seed) does not.
     for (const [id, warn] of [[1006, true], [1007, false]] as const) {
       resetBanners(b);
@@ -408,6 +412,25 @@ describe('RunMoments', () => {
       expect(b.toasts[0]!.glyph).toBe('elementals');
       m.onEvent({ e: 'frostReady' } as SimEvent, s);
       expect(texts().includes(DUO_TIPS[2]![1])).toBe(warn);
+    }
+    // The starting charge (frost 1 at go, so no frostReady before the first cast): the 'frost' tip
+    // queues ahead of p25 at a quarter of the way (T1 Ember's swipe, T6 the Cold Snap's warning).
+    save.elementals = { stars: [0, 0, 0, 0, 0, 0, 0, 0], seen: true };
+    for (const [id, frostTip, p25] of [
+      [1001, HERO_TIPS.ember[2]![1], HERO_TIPS.ember[1]![1]],
+      [1006, DUO_TIPS[2]![1], DUO_TIPS[1]![1]],
+    ] as const) {
+      resetBanners(b);
+      s = run(id);
+      s.nubs.frost = 1;
+      m.begin(save, trialLevel(id)!, true);
+      m.onEvent({ e: 'go' }, s);
+      s.nubs.y = s.world.startY + 0.3 * (s.world.finishY - s.world.startY);
+      m.update(s);
+      expect(texts().slice(1)).toEqual([frostTip, p25]);
+      // A cast drops it.
+      m.onEvent(id === 1001 ? ({ e: 'ability', hero: 'ember', kind: 'blaze', x: 0, y: 0 } as SimEvent) : ({ e: 'snap' } as SimEvent), s);
+      expect(texts().includes(frostTip)).toBe(false);
     }
   });
 });

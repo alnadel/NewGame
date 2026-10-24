@@ -36,7 +36,7 @@ export interface AudioView {
   /** Sun elevation ε and the day's εnoon (degrees). */
   eps: number;
   epsNoon: number;
-  /** Nubs' lit fraction f in [0, 2] (glare counts double) and its glare part in [0, 1]. */
+  /** Nubs' lit fraction f in [0, 2] (glare counts double; 0 when another hero leads a Trial) and its glare part in [0, 1]. */
   f: number;
   glareW: number;
   /** Current Chill (GDD thresholds are absolute: 40, 25, 10) and the Frost multiplier 1..5. */

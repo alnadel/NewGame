@@ -541,7 +541,7 @@ export function syncHud(h: HudState, v: View, inp: HudInput): void {
   }
   const mult = inp.mech ? inp.mech.mult : s.nubs.mult;
   const bk = mult * 4 + (inp.mech?.ring ? 2 : 0) + (inp.hc ? 1 : 0);
-  if (h.badgeKey !== bk) renderBadge(h, v, mult, inp.mech?.ring === true, inp.hc, bk);
+  if (s.trial === null && h.badgeKey !== bk) renderBadge(h, v, mult, inp.mech?.ring === true, inp.hc, bk);
   const glyph = c?.goalGlyph ?? null;
   const gk = h.iconS + (inp.hc ? 1e6 : 0);
   if (h.iconS > 0 && (h.goal === null || h.goalFor !== glyph || h.goalKey !== gk)) renderGoal(h, v, glyph, inp.hc, gk);
@@ -575,41 +575,44 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.drawImage(h.goal, h.iconX - gs / 2, cy - gs / 2, gs, gs);
   }
 
-  // The multiplier coin: pops 1 → 1.4 → 1 on ×up (elastic), shakes ±4 px on reset.
-  const m = inp.mech ? inp.mech.mult : s.nubs.mult;
-  let bs = 1;
-  if (h.multPop > 0) {
-    const t = 1 - h.multPop / 0.3;
-    bs = 1 + 0.4 * Math.sin(Math.PI * Math.min(1, t * 1.3)) * Math.exp(-t * 2);
-  }
-  // Under reduced motion the coin never shakes (the hot ring is the cue).
-  const shake = h.multShake > 0 && !rm ? Math.sin(h.multShake * 90) * 4 * (h.multShake / 0.2) : 0;
-  const bx = h.badgeX + shake;
-  const R = (h.badgeW / 2) * bs;
-  if (m >= 5 && !hc) {
-    // ×5 glows gold under its coin (a breathing sprite).
-    goldGlow ??= radialSprite('255,200,60', 128, 0.85, 0.45, 0.35);
-    const gr = R * (2 + (rm ? 0 : 0.18 * Math.sin(inp.time * 8)));
-    g.drawImage(goldGlow, bx - gr, cy - gr, gr * 2, gr * 2);
-  }
-  const badge = h.badge as Canvas2D;
-  const bw = (badge.width / v.dpr) * bs;
-  g.drawImage(badge, bx - bw / 2, cy - bw / 2, bw, bw);
-  const mech = inp.mech;
-  if (mech?.ring) {
-    // v1.6 Flow Ring: the charge runs clockwise round the coin from its top (×5: the buffer), on the
-    // slot track baked into the coin's sprite. A trick flashes the charge it has (thicker and
-    // brighter), never a full ring: full reads "about to level up".
-    const fl = h.ringFlash / RING_FLASH_S;
-    const fill = fl > 0 ? Math.max(0.04, mech.ringFill) : mech.ringFill;
-    if (fill > 0) {
-      g.lineCap = 'round';
-      g.lineWidth = (RING_W + 2 * fl) * k * bs;
-      g.strokeStyle = fl > 0 ? '#5FF2DF' : mech.bleed ? '#FF6A3D' : m >= 5 ? '#FFC23D' : '#2EE0C8';
-      g.beginPath();
-      g.arc(bx, cy, (h.badgeW / 2 + RING_GAP * k) * bs, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, fill));
-      g.stroke();
-      g.lineCap = 'butt';
+  // The multiplier coin: none on a Trial (buildLayer gives its room to the goal slot).
+  if (s.trial === null) {
+    // It pops 1 → 1.4 → 1 on ×up (elastic), shakes ±4 px on reset.
+    const m = inp.mech ? inp.mech.mult : s.nubs.mult;
+    let bs = 1;
+    if (h.multPop > 0) {
+      const t = 1 - h.multPop / 0.3;
+      bs = 1 + 0.4 * Math.sin(Math.PI * Math.min(1, t * 1.3)) * Math.exp(-t * 2);
+    }
+    // Under reduced motion the coin never shakes (the hot ring is the cue).
+    const shake = h.multShake > 0 && !rm ? Math.sin(h.multShake * 90) * 4 * (h.multShake / 0.2) : 0;
+    const bx = h.badgeX + shake;
+    const R = (h.badgeW / 2) * bs;
+    if (m >= 5 && !hc) {
+      // ×5 glows gold under its coin (a breathing sprite).
+      goldGlow ??= radialSprite('255,200,60', 128, 0.85, 0.45, 0.35);
+      const gr = R * (2 + (rm ? 0 : 0.18 * Math.sin(inp.time * 8)));
+      g.drawImage(goldGlow, bx - gr, cy - gr, gr * 2, gr * 2);
+    }
+    const badge = h.badge as Canvas2D;
+    const bw = (badge.width / v.dpr) * bs;
+    g.drawImage(badge, bx - bw / 2, cy - bw / 2, bw, bw);
+    const mech = inp.mech;
+    if (mech?.ring) {
+      // v1.6 Flow Ring: the charge runs clockwise round the coin from its top (×5: the buffer), on the
+      // slot track baked into the coin's sprite. A trick flashes the charge it has (thicker and
+      // brighter), never a full ring: full reads "about to level up".
+      const fl = h.ringFlash / RING_FLASH_S;
+      const fill = fl > 0 ? Math.max(0.04, mech.ringFill) : mech.ringFill;
+      if (fill > 0) {
+        g.lineCap = 'round';
+        g.lineWidth = (RING_W + 2 * fl) * k * bs;
+        g.strokeStyle = fl > 0 ? '#5FF2DF' : mech.bleed ? '#FF6A3D' : m >= 5 ? '#FFC23D' : '#2EE0C8';
+        g.beginPath();
+        g.arc(bx, cy, (h.badgeW / 2 + RING_GAP * k) * bs, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, fill));
+        g.stroke();
+        g.lineCap = 'butt';
+      }
     }
   }
 
@@ -1165,9 +1168,11 @@ function buildLayer(h: HudState, v: View, inp: HudInput, passed: number, night: 
   // With the Flow Ring on (the shipped rules) the coin is a little smaller and steps in, so the
   // ring keeps 6k off the edge; the count stops 2k short of the ring (6k short of a bare coin).
   const ring = inp.mech?.ring === true;
-  const mr = (ring ? MULT_R_RING : MULT_R) * k;
-  const mx = rx1 - (ring ? MULT_R_RING + 1 : MULT_R) * k;
-  const textEnd = ring ? mx - mr - (RING_GAP + RING_W / 2 + 2) * k : mx - mr - 6 * k;
+  // Elementals: a Trial has no multiplier (docs/ELEMENTALS.md §1.1), so no coin: the slot runs to the edge.
+  const noMult = s.trial !== null;
+  const mr = noMult ? 0 : (ring ? MULT_R_RING : MULT_R) * k;
+  const mx = noMult ? rx1 : rx1 - (ring ? MULT_R_RING + 1 : MULT_R) * k;
+  const textEnd = noMult ? rx1 - 14 * k : ring ? mx - mr - (RING_GAP + RING_W / 2 + 2) * k : mx - mr - 6 * k;
   const lx0 = v.vx + v.safe.left + 8 + 48 + 8;
   let medalR = 23 * k;
   let gap = 5 * k;

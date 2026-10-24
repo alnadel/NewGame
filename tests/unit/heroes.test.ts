@@ -30,6 +30,7 @@ import {
 } from '../../src/core/sim/heroes.ts';
 import { historyAt } from '../../src/core/sim/history.ts';
 import { effectiveDrain } from '../../src/core/sim/nubs.ts';
+import { createSnap, lerpSnap, takeSnap } from '../../src/core/sim/snapshot.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT, type InputFrame, type NubsState, type SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
@@ -415,8 +416,16 @@ describe('relay (§2.1)', () => {
     s.nubs.frost = 1;
     expect(castHero(s)).toBe(false);
     expect(s.guide.tag.some((v) => v === 1)).toBe(true);
+    const prev = createSnap();
+    const curr = createSnap();
+    const out = createSnap();
+    takeSnap(s, prev);
     step(s, NO_INPUT);
     expect(s.tickAbs).toBe(tag);
+    // The renderer never blends Nubs' Chill into Ember's Heat across the TAG.
+    takeSnap(s, curr);
+    lerpSnap(prev, curr, 0.1, out);
+    expect([out.relay, out.chill]).toEqual([1, curr.chill]);
     expect(s.events.find((e) => e.e === 'tag')).toEqual({ e: 'tag', from: 'nubs', to: 'ember', index: 0 });
     expect([s.nubs.hero, s.relayIdx, s.stats.tags, s.nubs.frost]).toEqual(['ember', 1, 1, 1]);
     expect(s.nubs.chill).toBe(100); // the start meter, and the grace holds it

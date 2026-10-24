@@ -243,7 +243,7 @@ its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a 
 - **`campaign.ts` variants**: `introCard` (kicker `levelTag` "TRIAL 3", the Trial's card chip, blurb,
   goal and star rules, with the hero's glyph, or `'elementals'` for a relay or duo, from
   `trialGlyph`), `starRules`, `goalText`, `goalLine` ("Reached the finish", "Out before the
-  finish", "Goal missed: Bloom 2 buds (1/2)"), `starState` (the goal, the Dare by `trialDareValue`,
+  finish", "Goal missed: Bloom 2 buds (1/2)", "Out before the finish (Bloom 2 buds ✓)"), `starState` (the goal, the Dare by `trialDareValue`,
   and Steady: `stats.minChill` never under `steady`), and `hudGoal` (the goal until met, then the
   Dare, ticks shown as seconds). `campaignConfig` never relaxes a Trial.
 - **Session**: Results > Map and Back after a Trial call `openJourney('elementals')`. Next goes to
