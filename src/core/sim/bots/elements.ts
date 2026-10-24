@@ -13,8 +13,8 @@
 // Policies by element (§6.3): Ember taps each own bramble or gate in the middle of its sweet window,
 // never under a shower, ice and walls past the TAG once burnLeft ≤ 30, and dries a puddle on its path
 // 60 ticks before it while Flame > 30. Sprout holds the most urgent unbridged crossing until its need,
-// then plots in arrival order while Sap > 25 beyond what the crossings still need (skipping a plot a
-// later wall's fire would reach downwind). Drip picks its lane every 6 ticks (puddles, stones, shade).
+// then plots in arrival order while Sap > 25 (skipping a plot a later wall's fire would reach
+// downwind). Drip picks its lane every 6 ticks (puddles, stones, shade).
 // Gust scores both swipe directions every 6 ticks by the weather's predicted overlap of the trail.
 // With a salt the reactive policy adds noise (tap timing ±6 ticks, steer ±3 u; the aim error is
 // bots.ts'); humanEl adds human timing and errors. Variants for the gates: tap on sight (G5c), a
@@ -39,7 +39,6 @@ import {
   needOf,
   nextTagTicks,
   pointLit,
-  relayY,
   walkerAt,
   weatherXAt,
 } from '../elements.ts';
@@ -60,7 +59,7 @@ export const REGRAB = 9;
 /** Ember dries a puddle on its path this many ticks before reaching it, while Flame is above DRY_FLAME. */
 const DRY_TICKS = 60;
 const DRY_FLAME = 30;
-/** Sprout pours into plots only while Sap stays above this (beyond what the crossings still need). */
+/** Sprout pours into plots only while Sap stays above this. */
 const PLOT_SAP = 25;
 /** Gust swipes at most once per this many ticks, when a swipe saves SWIPE_GAIN more than it costs and Lift is above SWIPE_LIFT. */
 const SWIPE_EVERY = 15;
@@ -357,7 +356,7 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
     let goal = 0;
     if (best >= 0) goal = needOf(el.objs[best] as ElObj);
     else {
-      const spare = s.nubs.chill - PLOT_SAP - reserve(s, el);
+      const spare = s.nubs.chill - PLOT_SAP;
       for (let i = 0; i < el.objs.length && spare > 0; i++) {
         const o = el.objs[i] as ElObj;
         if (o.kind !== 'plot' || o.state === EL_GONE || o.casterId >= 0 || o.size >= SP.treeMax) continue;
@@ -491,26 +490,6 @@ export function showered(s: SimState, el: ElState, o: ElObj, from: number, to: n
     }
   }
   return false;
-}
-
-/**
- * Sap the crossings of this leg still need beyond what the roots give back before each is first
- * holdable (the most of the running sums), so plots never starve a bridge.
- */
-function reserve(s: SimState, el: ElState): number {
-  const t = s.trial;
-  const end = t !== null && s.relayIdx < t.relays.length ? relayY(s, s.relayIdx) : Infinity;
-  let need = 0;
-  let most = 0;
-  for (let i = 0; i < el.objs.length; i++) {
-    const o = el.objs[i] as ElObj;
-    if ((o.kind !== 'gap' && o.kind !== 'stream') || o.state === EL_GONE || o.y < s.nubs.y || o.y > end) continue;
-    need += needOf(o) - o.size;
-    const at = arriveTicks(s, o.y - o.r - E.range);
-    const v = need - SP.root * DT * (at < 0 ? 0 : at);
-    if (v > most) most = v;
-  }
-  return most;
 }
 
 /** A plot a later fire would reach: downwind of a bramble or gate in an Ember stretch while the breeze spreads fire. */

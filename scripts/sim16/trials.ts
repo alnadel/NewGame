@@ -34,7 +34,7 @@ import { step } from '../../src/core/sim/step.ts';
 import type { InputFrame, SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
 import { TaskPool } from './dares.ts';
-import { audit, AUDIT_HEALTH, legAt, legHero, planPlayer, tickAtY, trialRun, variantDef, type Plan, type ThetaMode, type TrialVariant } from './elaudit.ts';
+import { audit, AUDIT_HEALTH, legAt, legHero, planPlayer, tickAtY, trialRun, variantDef, type ElMove, type Plan, type ThetaMode, type TrialVariant } from './elaudit.ts';
 import type { Sim16Ctx, Sim16Module } from './registry.ts';
 
 export { trialRun, variantDef, type TrialVariant } from './elaudit.ts';
@@ -304,6 +304,47 @@ export function gateG0(v: TrialVariant): G0Out {
     if (!(Math.abs(got - want) <= 2)) fails.push(`${o.kind} m${p.m} arrives ${Number.isNaN(got) ? 'never' : got.toFixed(1)} not ${want.toFixed(1)}`);
   }
   return { ok: fails.length === 0, fails };
+}
+
+/**
+ * Calibration (§3.2, §6.5): the dx moves (±8 u, smallest first) that clear every authored plot,
+ * puddle and stone of a variant off the generated prism parts, or null when one cannot be cleared.
+ */
+export function clearanceMoves(v: TrialVariant): ElMove[] | null {
+  const t = variantDef(v);
+  const s = trialRun(t);
+  const w = s.world;
+  const moves: ElMove[] = [...(v.moves ?? [])];
+  const r0 = { plot: E.objects.plotR, puddle: E.objects.puddleR, stone: E.objects.stoneR } as Record<string, number>;
+  const parts: { pts: Float64Array; n: number; y: number }[] = [];
+  for (const c of w.casters as readonly Caster[]) {
+    if (c.id >= RUNTIME_ID_BASE) continue;
+    for (const p of c.parts) if (p.t === 'prism') parts.push({ pts: p.pts, n: p.n, y: c.y });
+  }
+  const clear = (x: number, y: number, r: number): boolean => parts.every((p) => Math.abs(p.y - y) > 200 || distPointConvex(x, y, p.pts, p.n) - r >= E.objects.clearance);
+  for (let i = 0; i < t.objects.length; i++) {
+    const o = t.objects[i] as TrialDef['objects'][number];
+    const r = r0[o.k];
+    if (r === undefined) continue;
+    const y = worldYAtTick(w, tickAtMinute(o.m));
+    const tx = trailX(w.trail, y);
+    if (clear(tx + o.dx, y, r)) continue;
+    const base = (trialDef(t.id) as TrialDef).objects[i] as TrialDef['objects'][number];
+    let found = false;
+    for (let d = 1; d <= 8 && !found; d++) {
+      for (const sgn of [-1, 1]) {
+        const dx = base.dx + sgn * d;
+        if (Math.abs(dx - base.dx) > 8 || !clear(tx + dx, y, r)) continue;
+        const k = moves.findIndex((m) => m.i === i);
+        if (k >= 0) moves[k] = { ...moves[k], i, dx };
+        else moves.push({ i, dx });
+        found = true;
+        break;
+      }
+    }
+    if (!found) return null;
+  }
+  return moves;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -601,16 +642,37 @@ function nudgeDare(t: TrialDef, share: number): number {
   return next === t.dare.target ? t.dare.target + (up ? 1 : -1) : Math.max(1, next);
 }
 
-/** --pick: the first salt k = from..199 passing every gate (then the Dare nudged into its band). */
-async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, base: Partial<TrialVariant>): Promise<void> {
+/**
+ * --pick: the first salt k = from..199 passing every gate (then the Dare nudged into its band). With
+ * --sets '[{…}, …]' each salt tries those lever sets (§6.5) in order after `base`; a salt whose G0
+ * fails is skipped for all of them.
+ */
+async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, base: Partial<TrialVariant>, sets: readonly Partial<TrialVariant>[] = [{}]): Promise<void> {
   const t0 = trialDef(id) as TrialDef;
-  console.log(`\n--pick T${t0.n} from salt ${from}${Object.keys(base).length ? ` with ${JSON.stringify(base)}` : ''}`);
+  console.log(`\n--pick T${t0.n} from salt ${from}${Object.keys(base).length ? ` with ${JSON.stringify(base)}` : ''}${sets.length > 1 ? ` × ${sets.length} lever sets` : ''}`);
   for (let k = from; k < PICK_SALTS; k++) {
-    const v: TrialVariant = { ...base, id, salt: k };
-    const g = await gates(run, v, humanSalts, true);
-    const fails = report(g).split('\n').slice(1).filter((l) => l.includes('✗')).join(' ');
-    console.log(`  salt ${k}: ${g.failed === 0 ? 'PASS' : `G${g.failed === 0.5 ? 0 : g.failed}`}  ${fails.slice(0, 240)}`);
-    if (g.failed !== 0 && g.failed !== 6) continue;
+    let v0: TrialVariant = { ...base, id, salt: k };
+    // A plot, puddle or stone on a generated caster moves its dx first (±8 u), if that clears it.
+    const moves = clearanceMoves(v0);
+    if (moves !== null && moves.length > 0) v0 = { ...v0, moves };
+    const g0 = await run.g0(v0);
+    if (!g0.ok) {
+      if (sets.length === 1) console.log(`  salt ${k}: G0  ${g0.fails.slice(0, 3).join('; ')}`);
+      continue;
+    }
+    // The sets run from hardest to easiest: one that is still too easy (G5/G5b, or humanEl above its
+    // band) ends the salt, since every later set is easier still.
+    let g: Gates | null = null;
+    for (const set of sets) {
+      const v = { ...v0, ...set };
+      g = await gates(run, v, humanSalts, true);
+      const fails = report(g).split('\n').slice(1).filter((l) => l.includes('✗')).join(' ');
+      console.log(`  salt ${k}${sets.length > 1 ? ` ${JSON.stringify(set)}` : ''}: ${g.failed === 0 ? 'PASS' : `G${g.failed === 0.5 ? 0 : g.failed}`}  ${fails.slice(0, 200)}`);
+      if (g.failed === 0 || g.failed === 6) break;
+      const band = t0.n <= 4 ? HUMAN_BAND_SOLO : HUMAN_BAND_MIX;
+      if (g.failed === 5 || (g.failed === 4 && g.g4 !== null && g.g4.passes / humanSalts > (band[1] as number))) break;
+    }
+    if (g === null || (g.failed !== 0 && g.failed !== 6)) continue;
     let cur = g;
     for (let i = 0; i < 12 && cur.g6 && !cur.g6.ok; i++) {
       const target = nudgeDare(variantDef(cur.v), cur.g6.share);
@@ -638,7 +700,7 @@ async function trialsMain(ctx: Sim16Ctx): Promise<void> {
     const pickId = argOf('pick');
     if (pickId !== null) {
       const id = Number(pickId) < 1000 ? 1000 + Number(pickId) : Number(pickId);
-      await pick(run, id, humanSalts, Number(argOf('from') ?? 0), base);
+      await pick(run, id, humanSalts, Number(argOf('from') ?? 0), base, JSON.parse(argOf('sets') ?? '[{}]') as Partial<TrialVariant>[]);
       return;
     }
     const survey = argOf('survey');

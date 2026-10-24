@@ -275,7 +275,10 @@ export function growTarget(s: SimState, x: number, y: number): number {
   return best;
 }
 
-/** Drip's lane [lo, hi] (u from the trail centre) at the walker's y, into out[0], out[1] (§3.7). */
+/**
+ * Drip's lane [lo, hi] (u from the trail centre) at the walker's y, into out[0], out[1] (§3.7). Each
+ * prism part narrows it by its footprint inside the band y ± 8 (the polygon, not its bounding box).
+ */
 export function laneOf(s: SimState, out: Float64Array): void {
   let lo = -DR.range;
   let hi = DR.range;
@@ -292,8 +295,31 @@ export function laneOf(s: SimState, out: Float64Array): void {
       // Only the ground-standing parts: slabs and canopy discs float, Drip passes under them.
       const p = parts[k] as Part;
       if (p.t !== 'prism' || p.minY > y + LANE_DY || p.maxY < y - LANE_DY) continue;
-      const x0 = p.minX - tx;
-      const x1 = p.maxX - tx;
+      // The footprint's x-extent inside the band y ± LANE_DY (its vertices there and its edges' crossings of the band's rims).
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      const pts = p.pts;
+      for (let j = 0, n = p.n; j < n; j++) {
+        const ax = pts[2 * j] as number;
+        const ay = pts[2 * j + 1] as number;
+        const m = j + 1 < n ? j + 1 : 0;
+        const bx = pts[2 * m] as number;
+        const by = pts[2 * m + 1] as number;
+        if (ay >= y - LANE_DY && ay <= y + LANE_DY) {
+          if (ax < x0) x0 = ax;
+          if (ax > x1) x1 = ax;
+        }
+        for (let e = -LANE_DY; e <= LANE_DY; e += 2 * LANE_DY) {
+          const r = y + e;
+          if ((ay - r) * (by - r) >= 0) continue;
+          const x = ax + ((bx - ax) * (r - ay)) / (by - ay);
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+        }
+      }
+      x0 -= tx;
+      x1 -= tx;
+      if (x0 > x1) continue;
       if (x0 > 0) hi = Math.min(hi, x0 - DR.clear);
       else if (x1 < 0) lo = Math.max(lo, x1 + DR.clear);
     }
