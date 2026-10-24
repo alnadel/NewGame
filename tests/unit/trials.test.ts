@@ -79,7 +79,8 @@ describe('the trial table (§5)', () => {
     });
     expect(TRIALS.map((t) => t.intro)).toEqual(['ember', 'drip', 'sprout', 'gust', null, null, null]);
     expect(TRIALS.map((t) => t.requires)).toEqual([[], [], [], [], [1, 2], [3, 4], [5, 6]]);
-    expect(TRIALS.map((t) => t.objects.length)).toEqual([8, 13, 9, 9, 16, 15, 25]);
+    // §5's lists, plus the one object calibration added to T6's and to T7's Gust leg (§6.5).
+    expect(TRIALS.map((t) => t.objects.length)).toEqual([8, 13, 9, 9, 16, 16, 26]);
     expect(trialDef(1007)?.breeze).toBe(-16);
     expect(trialDef(1004)?.objects[0]).toEqual({ k: 'rain', m: 312, dx: -100, r: 55, drift: 20 });
     for (const id of [0, 1, 200, 201, 1000, 1008, 1001.5, NaN, undefined]) expect(isTrialId(id)).toBe(false);
@@ -133,7 +134,7 @@ describe('a trial loads and walks', () => {
       const s = createRun(cfg);
       expect(s.trial).toBe(t);
       expect(s.nubs.hero).toBe(t.cast[0]);
-      expect(s.nubs.chill).toBe(100);
+      expect(s.nubs.chill).toBe(t.tune.legStart[0] || 100);
       expect(s.nubs.frost).toBe(1);
       expect(s.stats.minChill).toBe(100);
       expect(s.stats.burns).toBe(0);
@@ -172,4 +173,19 @@ describe('a trial loads and walks', () => {
     expect(s.nubs.hero).toBe('nubs');
     expect(s.stats.cleanTags).toBeUndefined();
   });
+});
+
+describe('every pinned trial passes G0, G1, G2 and G5 (§6.4, §9.6)', () => {
+  it('placement and authoring, the audits, the path bot, the anti-trivial runs', async () => {
+    const { gates, report, runHere } = await import('../../scripts/sim16/trials.ts');
+    const fails: string[] = [];
+    for (const t of TRIALS) {
+      // G5 without G5b's 36 constant angles (`--trials --check` runs those); no G3/G4/G6/G7 bots.
+      const g = await gates(runHere, { id: t.id, salt: t.salt }, 0, false, [0, 5]);
+      // T7's one known G5 failure (config/trials.ts): Drip's leg passes unsteered, and nothing else.
+      const g5 = g.g5?.ok === true || (t.id === 1007 && g.g5?.why === 'leg 4 with its verb off passes');
+      if (![g.g0?.ok, g.g1?.ok, g.g2?.ok, g5].every((ok) => ok === true)) fails.push(report(g));
+    }
+    expect(fails).toEqual([]);
+  }, 60_000);
 });

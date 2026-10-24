@@ -1514,70 +1514,107 @@ the old paths byte for byte (the goldens' other keys are unchanged).
 
 - **`updateRelay`** right after `syncTime`: `tagSoon` exactly `tagSoonTicks` before a TAG; at
   `tagTick(t, i)` (the relay's minute on the 6-tick grid) the walker becomes the incoming element at
-  its leg start meter, the leg fields reset (spent, hold, leg tick, the lane unless Drip walks on),
-  the grace and the clean-TAG watch start, and `tag` fires. The charge carries.
+  its leg start meter (`tune.legStart[leg]`, else `TUNING.elements.start`), the leg fields reset
+  (spent, hold, leg tick, the lane unless Drip walks on), the grace starts, the clean-TAG watch
+  starts only into Nubs, Ember or Drip, and `tag` fires. The charge carries.
 - **`updateSnap`** casts the Cold Snap on a Trial only while Nubs walks and no TAG is within
-  `tagSoonTicks` (`tagLocked`).
-- **The sun holds** (`updateSun`, the `lock` concept's path) while Drip or Gust walks and the clock
-  runs: from the first tick after their TAG until the next one.
-- **`updateElements`** after the snap (the C0c skeleton: verbs cost nothing yet): a tap
-  (`VERB_TAP`, or `VERB_KEY_BURN` for the key) sets Ember's `burnTarget` burning for its burn time;
-  a hold (`VERB_HOLD`/`VERB_KEY_HOLD`) makes Sprout's `growTarget` the held site and `VERB_RELEASE`
-  lets go; a swipe (`VERB_WEST`/`VERB_EAST`) adds ∓/±`kick` to the wind (clamped, `stats.gusts`);
-  Drip's `steer` (or its keys) moves `dxTarget` within ±`range`, `dx` slides toward it at `slide`
-  and is clamped to the lane (`laneOf`), and the walker's x is `trailX(y) + dx` (any other leg
-  slides back to 0). Then the wind decays (`keep`); weather wakes within `wake`, drifts with its own
-  drift plus `gain · windAt`, and is gone `prune` off the trail or `behind` the walker, its rain
-  proxy cloud (`kind 'rain'`, z 0, made by `createEl`) following it and removed with it; fires count
-  down and burn out (a bramble or gate is gone, ice becomes a puddle, a puddle dries up, a plot and
-  its tree are gone; `stats.burns`); the hold pours `invest`/s into its site (up to its need; it
-  ends within `near` of Sprout), every site grows toward its size (×2 lit or wet, ×1.5 more wet;
-  light bits on guide ticks), a crossing's bridge completes at its need and a plot of at least
-  `treeMin` Sap stands as a tree caster once grown and let go (`stats.trees`). Contacts, costs,
-  feeds, fire spread, douse and veils are CORE's branch work.
-- **`applyElDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial): the
-  walker's rate on Nubs' trial rule (`−D·f + R·max(0, 1 − f)`, f = c/5), floored at 0 by the TAG
-  grace, `nb.safe` (strict shade), steady health (`elHealth`: meter plus what the leg spent) into
-  `stats.minChill` and `lowChill`, `keepMemory`, the Cold Snap's income on Nubs legs, the clean-TAG
-  watch, the lit totals and the leg tick.
-- **Pickups:** on a Trial only Nubs' Chill takes a flake or crystal, and a flake pays no charge.
-- **Death and win:** `elDead` ends the run on a fall or Nubs' Chill at 0 (the skeleton: the other
-  life meters bottom out at 0 until CORE's branch gives them their rates and deaths); `elDeath` is
-  `deathCause` with `who` and `heroCause 'melt'`. At the finish `stats.grove` is `groveCount`
-  (standing trees on plots not burned).
-- **History, hash:** the Melt Map's chill slot holds the walker's steady health; `hashState` feeds
-  the trial block (relay, grace, lane, wind, hold, spent, leg, fall, every object's fields and the
-  element counters) only on a Trial.
-- **Reads** (`elements.ts`, final signatures, no allocation; every countdown to the contact edge):
-  `walkerAt`, `windAt`, `weatherXAt`, `weatherGood`, `arriveTicks`, `contactTicks`, `needOf`,
-  `bridged`, `burnLeft`, `burnSweet`, `growLeft`, `burnTarget`, `growTarget`, `laneOf`, `pointLit`
-  (real), `veiled` (false until the branch adds fog veils), plus `heroHealth`, `elHealth`, `tagTick`,
-  `nextTagTicks`, `nextTagHero`, `tagLocked`, `relayY`. Event `obj` fields are indices in
-  `s.el.objs`.
-- **Replays:** `recordFrame` copies `verb` only when set, `vx`/`vy` only with a tap or hold, `steer`
-  only when set, so a Nubs replay is byte-identical.
-- **`elFixture(s)`** (debug builds only, `?elfix=1`): every object kind in each of its states ahead
-  of the walker, for art review.
+  `tagSoonTicks` (`tagLocked`). **The sun holds** (`updateSun`) while Drip or Gust walks.
+- **`updateElements`** after the snap, in this order: the frame's verb (a tap `VERB_TAP`/key burn
+  sets Ember's `burnTarget` burning at `cost · tune.costMul`, refused with a `fizz` when Flame is at
+  or below the cost; a hold makes Sprout's `growTarget` the held site, a release lets go; a swipe
+  adds ±`kick` to the wind, halved by `fogMuffle` while Gust stands in fog, at `swipe · costMul`
+  Lift, refused when Lift is at or below it); Drip's steer and lane (`laneOf`: the ground-standing
+  prism parts' footprint inside ±8 u of the walker's y, not their bounds, minus `clear`; `dx`
+  slides toward `dxTarget` at `slide` and is clamped to the lane), the walker's x; the wind's decay
+  (`keep`); weather wake, drift (`drift + gain · windAt`), prune and its rain proxy cloud; fires
+  (douse under rain, spread at half burn when `|windAt| ≥ spreadAt` to burnables downwind, burn-out:
+  bramble/gate gone, ice → puddle, puddle dried, plot and tree gone, `stats.burns`); plants (the
+  hold pours `invest`/s up to the site's need, from Sap; growth ×`litMul` lit or wet, ×`rainMul`
+  more wet, light bits on guide ticks;
+  bridges at `need`, trees at ≥ `treeMin` once let go, `stats.trees`). No allocation.
+- **`applyElDaylight`** replaces `applyDaylight`: the walker's rate (Nubs: today's trial rule;
+  Ember: `refill·f − fade·(1−f)` with f = min(c, 5)/5, minus `douse` in a puddle and `rain` under
+  rain; Drip: `grow·max(0, 1 − c/5) − evap·evapMul·c/5 (+ rain)`; Sprout: `root (+ rain)`; Gust:
+  `air` outside weather, else `−soak` in rain and `−fog` in fog), floored at 0 by the TAG grace,
+  `nb.safe` (§1.2), the contact table (§3.3: walls bump 30 or feed Ember its `paid` back on its own
+  fire, gaps fell, streams carry, swim or sweep, puddles douse Ember or feed Drip once, stones feed
+  Ember and sting Drip once, all floated over by Gust), steady health (`elHealth`) into
+  `stats.minChill` and `lowChill` (Sap never), `cloudRide` ticks for Nubs under rain, the Cold Snap's
+  income on Nubs legs, the clean-TAG watch, memory, lit totals and the leg tick.
+- **Death and win:** `elDead` (§7.8): a fall, or a life meter (not Sap) at 0. `elDeath` names the
+  cause (`heroCause`: fall, swept, crash with its wall, snuff, douse, rain, evaporate, sizzle, soak,
+  fog; Nubs keeps today's melt line) and its line; `stats.grove` (`groveCount`) at the finish.
+- **Reads** (`elements.ts`, no allocation): `walkerAt`, `windAt`, `weatherXAt` (stepping, 600 ticks
+  at most), `weatherGood`, `arriveTicks`, `contactTicks`, `needOf`, `bridged`, `burnLeft`,
+  `burnSweet`, `growLeft`, `burnTarget`, `growTarget` (veiled sites excluded), `laneOf`, `pointLit`,
+  `veiled` (fog over the target, or the trail-cover rule), `inWeather`, `heroHealth`, `elHealth`,
+  `tagTick`, `nextTagTicks`, `nextTagHero`, `tagLocked`, `relayY`, `standTree`, `elStart`.
+- **History, hash, replays:** the Melt Map's chill slot holds the walker's steady health;
+  `hashState` feeds the trial block (relay, grace, lane, wind, hold, spent, leg, fall and every
+  object's fields) only on a Trial; `recordFrame` copies `verb` only when set, `vx`/`vy` only with a
+  tap or hold and `steer` only when set (a Nubs replay keeps the seven original fields).
+- **`elFixture(s)`** (debug builds, `?elfix=1`): every object kind in each state, for art review.
 
 ### 17.3 The guide on a Trial
 
-Every leg reads Nubs' masks (`updateGuide` as in a Journey run); `elGuide` fills `guide.tag` with
-Nubs' strict shade at the walker while a TAG is telegraphed, else zeros.
+`updateGuide` fills Nubs' masks at the walker as in a Journey run; `elGuide` then makes the dial
+per element (§4): Ember's `now`/`next` are light (lit ≥ 2), Sprout's the bins that light its focus
+site (`siteMask`), Drip's and Gust's nothing (the sun holds). During a TAG's telegraph `guide.tag`
+is the incoming element's: into Drip, the **Drip mask** (§4.4): `elTagMask` adds one point a tick
+from `MASK_LEAD` ticks before the TAG (time samples × the lanes −20/0/+20 u, current casters and
+rain proxies), and `elTagMarks` marks the bins shaded on at least max(`min`, `rel` · best) of the
+samples; into Ember light, into Sprout its first site's light, into Nubs Nubs' strict shade.
 
-### 17.4 Bots
+### 17.4 Bots (`sim/bots/elements.ts`, trial-only)
 
-The reactive and human models read `guide.now`/`next` unchanged; on a Trial `snapReady` also
-needs Nubs walking and no TAG lock, the panic rule reads the walker's steady health, and the
-reactive bot with a salt > 0 aims with an N(0, 4°) error per pick. The reactive bot hands each
-element leg to `elPolicy` (`sim/bots/elements.ts`; the skeleton: Ember taps each wall when
-`burnSweet` and dries puddles on its path, Sprout holds the nearest unbridged crossing to its need
-and then a bare plot into a tree, Drip steers toward the nearest puddle ahead, Gust swipes weather
-predicted on the trail away at most every 15 ticks), so `?bot=reactive` and the session's
-`testSkipToLeg` walk every leg of every Trial to the finish.
+All of them keep the **bot input contract** (§6.3): a tap ends the drag, presses `TAP_PRESS` (6)
+ticks and sends one `verb 1` frame; a hold presses `HOLD_PRESS` (13) ticks, sends `verb 2` and
+then `verb 3`; the sun is re-grabbed ≥ `REGRAB` (9) ticks later (`createHand`, `handPress`,
+`handRelease`, `handCut`, `handFrame`). `createElPolicy(opts)` plays the element legs:
+Ember taps own brambles/gates mid sweet window (never under a predicted shower, `showered`), ice and
+walls past the TAG once `burnLeft ≤ 30`, dries a puddle on its path at `contactTicks ≤ 60` while
+Flame > 30; Sprout holds the most urgent unbridged crossing to its need, then pours plots in arrival
+order up to `treeMin` each while Sap > 25 (short pours carry on; downwind plots skipped unless the
+option asks); Drip picks a lane every 6 ticks (+30 a reachable puddle, −20 a stone, +0.2 a shaded
+tick), steering through a short queue; Gust scores both swipe ways every 6 ticks by the weather's
+predicted cost in meter units (`harm`, sleeping weather included), swipes when one cuts it by more
+than its cost, and pushes a helpful rain cloud of a later stretch (T4's ride cloud, T6's and T7's
+garden clouds) over the trail whenever that adds no more harm than a swipe, spending Lift down to
+one swipe once its own weather is past. Options: `salt` noise, `human` timing (reaction, first
+exposure per element, tap and hold timing, aim and steer error, wrong and late swipes), `spam`
+(G5d), `off` legs and `tapOnSight` (G5). `reactive` delegates element legs to it and aims Nubs at
+`guide.tag` before a Drip leg; `humanEl` (BOT_KINDS) is the humanDial model on Nubs legs plus the
+policy with `human` timing.
 
-### 17.5 Proof: `node scripts/sim.ts --trials` (`scripts/sim16/trials.ts`)
+### 17.5 Proof: `node scripts/sim.ts --trials` (`scripts/sim16/elaudit.ts`, `trials.ts`)
 
-The module shell: one row per trial with G1-G6 on Nubs' rule for every leg (the audit is a
-turn-limited survival DP carrying the alive bins across each TAG at the incoming start meter);
-`--check`, `--pick <n>` (salt search and the Dare nudge) and `--survey N`. ELEMENTALS_V2 §6
-replaces the audits and gates per verb.
+`elaudit.ts` makes each variant's **plan**: chained per-leg replays from go (plants pinned to their
+latest stand tick for shade-seeking legs, earliest ×3 for Ember); rows per 6-tick step from
+`gatherScene` + `litMask` with runtime casters and rain proxies; the turn-limited θ DP
+(`slidingMaxCircular`, min-of-three, turn limit 0 on tap and pour steps) for Nubs and Ember (Ember's
+taps scheduled first, `emberSchedule`); Sprout's latest-hold schedule and Sap ledger (the margin is
+the crossings' ledger; the path bot's plots get `treeMin` each while the ledger keeps a reserve);
+Drip's lane DP (33 lanes, consumed bits for puddles and stones, contacts along the segment in world
+coordinates) from every marked bin of the mask on a 5° grid; held legs commit the end bin that
+maximizes min(held, next) among the marks. `planPlayer` plays a plan under the input contract (or
+with a constant θ, a leg's verb off, a spam Gust, a tap-on-sight Ember). `trials.ts` runs the gates
+G0-G7 and G5b (§6.4) in a worker pool, `--check` (with `WAIVERS`: a G3/G4/G6/G7 failure kept with
+its measured reason, pending the lead), `--pick <n>` (salts from `--from` to `--to`, `clearanceMoves`
+first, lever `--sets`, the Dare nudge), `--survey N`, `--variant '<json>'` (drain, legStart,
+costMul, evapMul, dareTarget, moves, add) and `--perf`. The pins and their measured gates are in
+`config/trials.ts` beside each trial.
+
+### 17.6 The pins (`config/trials.ts`; measured with `--trials --check --perf`)
+
+| Trial | Salt | Levers | Gates |
+|---|---|---|---|
+| T1 Kindling | 468 | drain 34, legs 80/60/80, costMul 1.2 | all pass; G6 96% waived (every finisher burns all 7) |
+| T2 Puddle Run | 187 | drain 28, legs 100/50/80, evapMul 1.2, Dare 7 | all pass; G6 88% waived (every finisher drinks all 7) |
+| T3 Green Bridge | 3584 | drain 34, legs 80/80/80 | all pass |
+| T4 Weather Vane | 605 | drain 34, legs 80/80/80 | all pass; G6 83% waived (every finisher rides) |
+| T5 Steam | 1113 | drain 34, legs 80/60/50/80, costMul and evapMul 1.2, Dare 5, puddles 425/492 8 u out | G4 100% and G6 92% waived |
+| T6 Rain Garden | 73 | drain 34, legs 80/65/100/80, costMul 1.2, rain r330 added | **fails G5b** (a fixed sun walks the 8:30 AM opening leg in every salt to 20000), G6 0%, G7 |
+| T7 Five Elements | 20 | drain 36, legs 80/70/100/60/50/80, evapMul 1.2, rain r196 added, Dare 3 | **fails G5** (Drip's leg passes unsteered: its melted-ice puddles lie on the trail under a held shade), G5b, G6 0%, G7 |
+
+Every waiver needs the lead (`WAIVERS` in `scripts/sim16/trials.ts`). `--perf`: every Trial tick
+≤ 0.7× and guide refresh ≤ 0.7× a Nubs run's; `createRun` ≤ 26 ms unprepared, ≤ 0.4 ms prepared.
