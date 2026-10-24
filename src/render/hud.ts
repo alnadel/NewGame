@@ -60,9 +60,10 @@ import {
   type ForecastId,
   type HeroId,
   type SimState,
+  windAt,
 } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
-import { coin, displayFont, FACE, fontGen, INK, onDisplayFont, outlined, plate, slot, SLOT_2, SLOT_SUB, starSprite, type Face } from './candy.ts';
+import { chip as pill, coin, displayFont, FACE, fontGen, INK, onDisplayFont, outlined, plate, slot, SLOT_2, SLOT_SUB, starSprite, type Face } from './candy.ts';
 import { cssa } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
 import { ctx2d, flake, makeCanvas, radialSprite, roundRect, type Canvas2D } from './sprites.ts';
@@ -725,9 +726,67 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.stroke();
     }
   }
-  h.meterShown = inp.mech?.meter === true;
-  if (inp.mech?.meter) drawFrostMeter(g, h, v, inp, inp.mech);
+  // The Cold Snap's coin shows on Nubs' legs; another element's leg shows its meter pill there.
+  const hero = s.nubs.hero;
+  h.meterShown = inp.mech?.meter === true && hero === 'nubs';
+  if (h.meterShown) drawFrostMeter(g, h, v, inp, inp.mech as MechView);
+  else if (s.el !== null && hero !== 'nubs') meterPill(g, v, inp, hero);
+  if (s.el !== null) windChip(g, h, v, inp);
   g.globalAlpha = 1;
+}
+
+/**
+ * Elementals v2: the walking element's meter pill in the coin slot (its glyph and number on its
+ * face colour). It never sets meterShown, so a tap there is plain world (hudMeterHit is false).
+ */
+function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, hero: HeroId): void {
+  const k = hudScale(v);
+  const r = 20 * k;
+  const x1 = v.vx + v.vw - v.safe.right - METER_SIDE * k + 6 * k;
+  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - METER_R * k;
+  const w = 92 * k;
+  g.globalAlpha = inp.alpha;
+  pill(g, x1 - w, y - r, w, 2 * r, r, FACE[HEROES[hero].face][1], k, 3 * k);
+  coin(g, x1 - w + r, y, r - 3 * k, FACE.cloud, k, inp.hc);
+  drawGlyph(g, hero, x1 - w + r, y, 24 * k);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  outlined(g, String(Math.round(inp.s.nubs.chill)), x1 - w / 2 + r, y + k, 24 * k);
+}
+
+/**
+ * Elementals v2: the wind chip under the row's right end while Gust walks or a wind blows: an
+ * arrow per 15 u/s of windAt the way it blows, the breeze's share dimmed.
+ */
+function windChip(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
+  const s = inp.s;
+  const w = windAt(s);
+  if (s.nubs.hero !== 'gust' && Math.abs(w) < 1) return;
+  const k = hudScale(v);
+  const n = Math.abs(w) < 1 ? 0 : Math.max(1, Math.min(4, Math.round(Math.abs(w) / 15)));
+  const b = (s.trial as { breeze: number }).breeze;
+  const nb = b * w > 0 ? Math.min(n, Math.round(Math.abs(b) / 15)) : 0;
+  const cw = 30 * k + n * 12 * k;
+  const x0 = v.vx + v.vw - v.safe.right - 10 * k - cw;
+  const y = h.bottom + 10 * k;
+  g.globalAlpha = inp.alpha;
+  pill(g, x0, y - 12 * k, cw, 24 * k, 12 * k, INK, k, 2 * k);
+  drawGlyph(g, 'gusts', x0 + 14 * k, y, 15 * k, undefined, w < 0);
+  const d = w < 0 ? -1 : 1;
+  for (let i = 0; i < n; i++) {
+    // Arrows from the trailing end, the breeze's first and dimmed.
+    const cx = x0 + 34 * k + (d > 0 ? i : n - 1 - i) * 12 * k;
+    g.globalAlpha = inp.alpha * (i < nb ? 0.45 : 1);
+    g.fillStyle = '#FFFFFF';
+    g.beginPath();
+    g.moveTo(cx - d * 4 * k, y - 6 * k);
+    g.lineTo(cx + d * 4 * k, y);
+    g.lineTo(cx - d * 4 * k, y + 6 * k);
+    g.lineTo(cx - d * 1 * k, y);
+    g.closePath();
+    g.fill();
+  }
+  g.globalAlpha = inp.alpha;
 }
 
 const HEAT_BAND = 'rgba(255,61,43,0.6)';

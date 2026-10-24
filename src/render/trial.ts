@@ -147,8 +147,8 @@ function flames(g: CanvasRenderingContext2D, xs: readonly number[], y: number, f
   }
 }
 
-const BRAMBLE = [-31, -8, 10.5, -15, -11, 11.5, 0, -8, 11, 15, -11, 11.5, 31, -8, 10.5];
-const SPIKES = 'M-38-12l-4-2M-27-18l-2-4M-12-22l-1-4M5-19l1-4M18-22l2-4M33-16l4-2M-42-4h-3M42-4h3M-20-6l-2 3M10-4l2 3';
+const BRAMBLE = [-31, -9, 11.5, -15, -13, 12.5, 0, -9, 12, 15, -13, 12.5, 31, -9, 11.5];
+const SPIKES = 'M-39-14l-5-3M-28-20l-3-5M-13-25l-1-5M4-21l1-5M18-25l2-5M34-17l5-3M-43-5h-4M43-5h4M-22-8l-3 3M8-5l3 3M24-10l3 2';
 const ICE = 'M-40 2L-38-10L-33-22L-27-11L-22-27L-15-12L-10-20L-4-9L2-25L9-11L14-19L20-8L26-24L32-10L36-17L40 2Z';
 const ICE_FACETS = 'F#FFFB M-33-22L-31-8L-27-11ZM-22-27L-19-9L-15-12ZM2-25L5-9L9-11ZM26-24L28-8L32-10Z|S#8CCBF0/1 M-22-27L-21 0M2-25L3 0M26-24L25 0M-10-20L-9 0';
 
@@ -173,7 +173,7 @@ function wallArt(g: CanvasRenderingContext2D, kind: ElKind, f: number): void {
       if (p < 2) ell(g, 0, -2, 40 + (p ? 0 : 1.6), 6 + (p ? 0 : 1.6));
       g.fill();
     }
-    art(g, `S#5A3418/1.5 ${SPIKES}${burnt ? '' : '|F#E8463C O-22-9 2O-6-15 2O9-6 2O24-12 2'}`, []);
+    art(g, `S#5A3418/2 ${SPIKES}${burnt ? '' : '|F#E8463C O-22-10 2.4O-6-17 2.4O9-7 2.4O24-14 2.4'}`, []);
   } else if (kind === 'gate') {
     // A wooden gate: two posts, pointed planks, two rails and a brace.
     g.lineWidth = 1.2;
@@ -373,30 +373,34 @@ export function drawElGround(g: CanvasRenderingContext2D, v: View, s: SimState, 
         if (dry) c.scale(0.75, 0.75);
         art(c, `P${dry ? '#A8DCF5' : '#5CC0F2'}/#2D88C6/1.4 O0 0 15,11|F#8AD6FA O-2-2 10,6|F#FFFC O-6-4 3.5,1.6|S#FFF8/1 O4 3 6,3.2`, []);
       }), o.x, o.y);
-    } else if (kd === 'stone') {
-      const f = o.hit ? 2 : rm ? 0 : Math.floor(time * 3) % 2;
-      blit(g, v, spr('st' + f, k, 40, 40, 20, 22, (c) => {
-        if (f < 2) {
-          const gr = c.createRadialGradient(0, -1, 2, 0, -1, 19);
-          gr.addColorStop(0, `rgba(255,140,40,${f ? 0.75 : 0.5})`);
-          gr.addColorStop(1, 'rgba(255,140,40,0)');
-          c.fillStyle = gr;
-          c.fillRect(-20, -21, 40, 40);
-        }
-        art(c, f < 2 ? `P#5A4038/#2E1E1A/1.3 O0-2 9.5,7.5|F#7A5A4E O-2-5 5,3|S${f ? '#FFE07A' : '#FF9A2E'}/1.7 M-6-1L-2-3L1 0L5-4M-1-3L0-7` : 'P#8C8682/#4A4440/1.3 O0-2 9.5,7.5|S#5E5854/1.4 M-6-1L-2-3L1 0L5-4', []);
-      }), o.x, o.y);
     }
   }
 }
 
-/** The walls, over the shadow layer and under the casters: intact, burning (three frames), ice melting; Ember's own fires glow. */
+/** The walls and hot stones, over the shadow layer and under the casters: intact, burning (three frames), ice melting; Ember's own fires glow. */
 export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, time: number, rm: boolean): void {
   const el = s.el;
   if (el === null) return;
   const k = scaleOf(v);
   for (let i = el.objs.length - 1; i >= 0; i--) {
     const o = el.objs[i] as ElObj;
-    if (o.state === EL_GONE || !isWall(o.kind) || o.y < v.y0 - 40 || o.y > v.y1 + 80) continue;
+    if (o.state === EL_GONE || o.y < v.y0 - 40 || o.y > v.y1 + 80) continue;
+    if (o.kind === 'stone') {
+      // A hot stone glows over the shade (spent: grey).
+      const f = o.hit ? 2 : rm ? 0 : Math.floor(time * 3) % 2;
+      blit(g, v, spr('st' + f, k, 52, 52, 26, 28, (c) => {
+        if (f < 2) {
+          const gr = c.createRadialGradient(0, -1, 3, 0, -1, 25);
+          gr.addColorStop(0, `rgba(255,120,30,${f ? 0.8 : 0.6})`);
+          gr.addColorStop(1, 'rgba(255,120,30,0)');
+          c.fillStyle = gr;
+          c.fillRect(-26, -27, 52, 52);
+        }
+        art(c, f < 2 ? `P#7A3426/#2E1414/1.4 O0-2 9.5,7.5|F#A04A32 O-2-5 5,3|S${f ? '#FFF0A0' : '#FFB040'}/1.9 M-6-1L-2-3L1 0L5-4M-1-3L0-7|S#FF9A3A/1.3 M-4-14q2-3 0-6M3-15q2-3 0-6` : 'P#8C8682/#4A4440/1.3 O0-2 9.5,7.5|S#5E5854/1.4 M-6-1L-2-3L1 0L5-4', []);
+      }), o.x, o.y);
+      continue;
+    }
+    if (!isWall(o.kind)) continue;
     const burning = o.state === EL_BURNING;
     const x = trailX(s.world.trail, o.y);
     if (burning && o.paid > 0 && o.kind !== 'ice' && walkerAt(s, edgeOf(o)) === 'ember') {
@@ -464,8 +468,8 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
       const x0 = lumpBox[0] as number;
       const y0 = lumpBox[1] as number;
       // Streaks fall from the body to the footprint (one path; still under reduced motion).
-      g.strokeStyle = 'rgba(170,210,255,0.75)';
-      g.lineWidth = Math.max(1, 1.3 * S);
+      g.strokeStyle = 'rgba(120,180,255,0.9)';
+      g.lineWidth = Math.max(1.2, 1.8 * S);
       g.beginPath();
       for (let j = 0; j < 9; j++) {
         const fx = ((j * 0.618) % 1) * 2 - 1;
@@ -473,10 +477,12 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
         const x = v.ox + (o.x + fx * 0.8 * o.r) * S;
         const y = v.oy - (o.y + fy * ry * 0.8 + RAIN_LIFT * (1 - (fy + 1) / 2)) * S;
         g.moveTo(x, y);
-        g.lineTo(x - 2 * S, y + 9 * S);
+        g.lineTo(x - 2.5 * S, y + 12 * S);
       }
       g.stroke();
-      g.globalAlpha = 0.92;
+      // The body fades to 0.3 over the walker (as clouds do), so it never hides who walks under it.
+      const d = Math.hypot(o.x - s.nubs.x, o.y + RAIN_LIFT - ny - 24) - 0.8 * o.r;
+      g.globalAlpha = 0.92 * (0.3 + 0.7 * Math.max(0, Math.min(1, d / 50)));
       blit(g, v, spr('rn' + o.id, k, (lumpBox[2] as number) - x0, (lumpBox[3] as number) - y0, -x0, -y0, (cg) => rainArt(cg, c)), o.x, o.y, RAIN_LIFT);
       g.globalAlpha = 1;
     } else {
@@ -487,17 +493,27 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
       if (Math.abs(o.x - tx) < o.r && ny < o.y + ry) {
         // The trail beyond the bank is veiled while it covers the trail.
         if (!veilBand) {
-          veilBand = makeCanvas(4, 64);
+          // Soft at its sides and its far end, 0.6 over the trail.
+          veilBand = makeCanvas(32, 64);
           const vg = ctx2d(veilBand);
           const lg = vg.createLinearGradient(0, 64, 0, 0);
           lg.addColorStop(0, 'rgba(236,240,246,0)');
-          lg.addColorStop(0.35, 'rgba(236,240,246,0.6)');
-          lg.addColorStop(1, 'rgba(236,240,246,0.6)');
+          lg.addColorStop(0.25, 'rgba(236,240,246,0.6)');
+          lg.addColorStop(0.7, 'rgba(236,240,246,0.6)');
+          lg.addColorStop(1, 'rgba(236,240,246,0)');
           vg.fillStyle = lg;
-          vg.fillRect(0, 0, 4, 64);
+          vg.fillRect(0, 0, 32, 64);
+          const sg = vg.createLinearGradient(0, 0, 32, 0);
+          sg.addColorStop(0, '#0000');
+          sg.addColorStop(0.3, '#000');
+          sg.addColorStop(0.7, '#000');
+          sg.addColorStop(1, '#0000');
+          vg.globalCompositeOperation = 'destination-in';
+          vg.fillStyle = sg;
+          vg.fillRect(0, 0, 32, 64);
         }
-        const top = Math.max(v.vy, v.oy - (o.y + 520) * S);
-        g.drawImage(veilBand, v.ox + (tx - 46) * S, top, 92 * S, fy - top);
+        const top = v.oy - (o.y + 330) * S;
+        g.drawImage(veilBand, v.ox + (tx - 70) * S, top, 140 * S, fy + ry * S - top);
       }
       g.drawImage(fogS, fx - o.r * 1.25 * S, fy - ry * 1.25 * S, o.r * 2.5 * S, ry * 2.5 * S);
       if (!rm) {
@@ -634,23 +650,23 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.setLineDash([]);
   }
 
-  // Fires: a shrinking arc over each burning wall (its time left); a douse chevron on Ember's puddles.
-  g.beginPath();
-  let arcs = false;
-  for (let i = 0; i < n; i++) {
-    const o = objs[i] as ElObj;
-    if (o.state !== EL_BURNING || o.y < v.y0 || o.y > v.y1) continue;
-    const tot = (E.ember.burnTicks as Readonly<Record<string, number>>)[o.kind] ?? 60;
-    const x = v.ox + (isWall(o.kind) ? trailX(tr, o.y) : o.x) * S;
-    const y = v.oy - (o.y + (isWall(o.kind) ? 34 : 18)) * S;
-    const a = (TAU * o.t) / tot;
-    g.moveTo(x, y - 6 * S);
-    g.arc(x, y, 6 * S, -Math.PI / 2, -Math.PI / 2 + a);
-    arcs = true;
-  }
-  if (arcs) {
-    g.lineWidth = 2.5 * lw;
-    g.strokeStyle = '#FFE7B0';
+  // Fires: a shrinking arc over each burning object (its time left, on a dark track); a douse chevron on Ember's puddles.
+  for (let p = 0; p < 2; p++) {
+    g.beginPath();
+    let arcs = false;
+    for (let i = 0; i < n; i++) {
+      const o = objs[i] as ElObj;
+      if (o.state !== EL_BURNING || o.y < v.y0 || o.y > v.y1) continue;
+      const tot = (E.ember.burnTicks as Readonly<Record<string, number>>)[o.kind] ?? 60;
+      const x = v.ox + (isWall(o.kind) ? trailX(tr, o.y) : o.x) * S;
+      const y = v.oy - (o.y + (isWall(o.kind) ? 38 : 22)) * S;
+      g.moveTo(x, y - 6 * S);
+      g.arc(x, y, 6 * S, -Math.PI / 2, -Math.PI / 2 + (p ? (TAU * o.t) / tot : TAU));
+      arcs = true;
+    }
+    if (!arcs) break;
+    g.lineWidth = (p ? 3 : 6) * lw;
+    g.strokeStyle = p ? '#FFE7B0' : cssa(0x2b2140, 0.55);
     g.stroke();
   }
   g.fillStyle = '#3FAEF7';

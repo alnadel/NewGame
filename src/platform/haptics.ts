@@ -167,9 +167,24 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
     case 'clusterSaved':
     case 'flareParry':
       return 'crystal';
-    // Elementals: a TAG lands like PHEW.
+    // Elementals: a TAG lands like PHEW; v2's verbs and objects reuse the patterns (docs/ELEMENTALS_V2.md §7.10).
     case 'tag':
       return 'phew';
+    case 'burn':
+    case 'feed':
+      return 'catch';
+    case 'bump':
+      return 'crystal';
+    case 'grow':
+      return ev.on ? 'bud' : null;
+    case 'grown':
+      return 'bloom';
+    case 'drink':
+      return 'flake';
+    case 'sizzle':
+      return 'glare';
+    case 'gust':
+      return 'detent';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
       // the rest have no haptic. 'best' and 'ui' are played by the UI directly.

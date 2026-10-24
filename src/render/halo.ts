@@ -33,7 +33,7 @@
 // element's colour only ever means go); a relay's telegraph dashes the incoming element's arcs
 // outside. Nubs keeps the teal dial.
 
-import { coolLine, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
+import { coolLine, elHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
@@ -63,7 +63,16 @@ const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
 /** Elementals: each element's go colour. */
-const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), drip: TEAL, sprout: hex('#8BD650'), gust: TEAL };
+const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), drip: hex('#3FAEF7'), sprout: hex('#8BD650'), gust: hex('#A99CC6') };
+/** Elementals v2: an element's gauge from full to low (§2): its colour, below 60, below 25 (Sprout's Sap has no danger colours). */
+const GAUGE: Readonly<Record<HeroId, readonly number[]>> = {
+  nubs: [],
+  ember: [hex('#FF7A1A'), hex('#FFB347'), hex('#8C8C8C')],
+  drip: [hex('#3FAEF7'), AMBER, hex('#FF5D3D')],
+  sprout: [hex('#6CC04A'), hex('#6CC04A'), hex('#6CC04A')],
+  gust: [hex('#F4F1FB'), AMBER, hex('#FF5D3D')],
+};
+const LILAC = hex('#A99CC6');
 const LEAF_DASH = [8, 6];
 
 /** An element's go colour. */
@@ -331,7 +340,9 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.stroke();
   }
 
-  if (inp.sunUp && !inp.blind) {
+  // Drip's and Gust's legs hold the sun: the padlock, and no go arcs.
+  const held = st !== null && inp.locked;
+  if (inp.sunUp && !inp.blind && !held) {
     // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
     const ga = inp.guideAlpha * A;
     // The v1.6 rule layers (landing, deep band) read a rule, not the teal guide: like the other v1.6
@@ -427,7 +438,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineCap = 'butt';
     }
   }
-  if (inp.sunUp && tag && !inp.blind) {
+  if (inp.sunUp && tag && !inp.blind && !held) {
     // A relay's telegraph: the incoming element's arcs, dashed just outside the ring.
     g.setLineDash(DASH);
     g.lineWidth = 3;
@@ -437,7 +448,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.stroke();
     g.setLineDash(NO_DASH);
   }
-  if (inp.sunUp && solo !== 'ember') {
+  if (inp.sunUp && solo !== 'ember' && !held) {
     // Glare arcs: red with hatching, always shown (but to Ember, which feeds on glare: its gold dots).
     let anyGlare = false;
     for (let b = 0; b < 360; b++) {
@@ -562,27 +573,28 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     // An element's gauge turns at 60 and 25 health.
     const wl = hd ? 60 : whiteLine(inp.maxChill);
     const cl = hd ? 25 : coolLine(inp.maxChill);
-    for (const line of [wl, cl]) {
+    for (const line of lead === 'sprout' ? [] : [wl, cl]) {
       const a = top + (TAU * line) / 100;
       g.moveTo(cx + Math.cos(a) * (gR - 3), cy + Math.sin(a) * (gR - 3));
       g.lineTo(cx + Math.cos(a) * (gR + 3), cy + Math.sin(a) * (gR + 3));
     }
     g.stroke();
     if (chill > 0.5) {
-      const red = chill < cl;
+      // An element's low cue follows its steady health (its taps and swipes are not damage; never Sap).
+      const red = hd ? lead !== 'sprout' && elHealth(st as SimState) < 25 : chill < cl;
       const white = chill >= wl;
       const end = top + (TAU * chill) / 100;
       g.lineCap = 'round';
       g.lineWidth = 5;
-      g.strokeStyle = cssa(INK, 0.35 * gA);
+      g.strokeStyle = lead === 'gust' ? cssa(LILAC, 0.9 * gA) : cssa(INK, 0.35 * gA);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
       g.stroke();
       g.lineWidth = 3;
       if (red) g.setLineDash([4, 3]);
       const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      // An element's gauge is frost-white like Nubs' when full: its colour means only "go".
-      g.strokeStyle = cssa(red ? HOT : white ? FROST : AMBER, gA * pulse);
+      // An element's gauge is its meter in its colours (§2).
+      g.strokeStyle = cssa(hd ? (GAUGE[lead][chill < 25 ? 2 : chill < 60 ? 1 : 0] as number) : red ? HOT : white ? FROST : AMBER, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
       g.stroke();

@@ -28,6 +28,7 @@ import {
   type RenderSnap,
   type SimState,
   type World,
+  windAt,
 } from '../core/index.ts';
 import { sunLockedAt } from '../core/sim/sun.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
@@ -356,6 +357,8 @@ export interface RenderScene {
    * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
    */
   passes: number;
+  /** The walking body's alpha (a fall fades it out). */
+  fallA: number;
   /** The HUD's and the dial's inputs, refilled each frame (no allocation). */
   hudIn: HudInput;
   haloIn: HaloInput;
@@ -416,6 +419,7 @@ export function createScene(): RenderScene {
     friendFor: -1,
     friendWorld: null,
     passes: 0,
+    fallA: 1,
     haloIn: createHaloIn(),
     hudIn: {
       s: null as unknown as SimState,
@@ -832,7 +836,22 @@ export class Renderer {
     const looks = looksFor(inp.equipped);
     // A trial's layers redraw at most 10 times a second (≤ 12/s).
     sc.nubsSprite.cap = trial ? 0.1 : 0;
+    // A fall into a gap (or a stream sweeping the walker away) is drawn on the living sprite: it
+    // shrinks, drops (or slides off) and fades out.
+    const fall = dying >= 0 ? (s.death?.heroCause ?? '') : '';
+    const fell = fall === 'fall' || fall === 'swept';
+    if (fell) pose.melt = -1;
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr, trial ? heroArt(s.nubs.hero) : null);
+    sc.fallA = 1;
+    if (fell) {
+      const e = Math.min(1, dying / 0.7);
+      const sp = sc.nubsSprite;
+      sp.sx *= 1 - 0.8 * e;
+      sp.sy *= 1 - 0.8 * e;
+      if (fall === 'fall') sp.dy -= e * 12 * v.S;
+      else sp.jx += e * 36 * v.S;
+      sc.fallA = 1 - e;
+    }
     const beat = sc.death;
     if (dying >= 0 && beat.t < 0) startDeathBeat(beat, snap.nubsX, snap.nubsY, ux, looks, v.S * v.dpr, trial ? who : 'nubs');
     else if (beat.t >= 0) beat.t += adt;
@@ -1017,7 +1036,8 @@ export class Renderer {
       // A relay's telegraph: "NEXT ▸ EMBER 3" under the dial (over it while the sun is below), over the sun.
       const tag = trial && inp.screen === 'play' && dying < 0 ? tagSoon(s) : null;
       const hh = sc.haloIn;
-      if (tag) drawNextChip(g, tag, nextTagTicks(s), hh.cx, hh.cy + (sc.sun.y > hh.cy ? -1 : 1) * (hh.R + 26), scale / 0.9);
+      const side = sc.sun.y > hh.cy ? -1 : 1;
+      if (tag) drawNextChip(g, tag, nextTagTicks(s), hh.cx, hh.cy + side * (hh.R + 26), scale / 0.9, side);
     }
 
     // HUD.
@@ -1045,11 +1065,20 @@ function heroPose(p: NubsPose, s: SimState, nb: NubsState, hp: number, meter: nu
   p.meter = meter / 100;
   p.hc = hc;
   p.cause = s.death?.heroCause ?? '';
+  const el = s.el;
+  const h = nb.hero;
+  const t = el ? el.touch : 0;
+  p.act = !el ? 0 : h === 'ember' ? +((t & 3) !== 0) : h === 'sprout' ? +(el.hold >= 0) : h === 'gust' ? ((t & 2) !== 0 ? 1 : (t & 4) !== 0 ? 2 : 0) : 0;
+  const lean = !el ? 0 : h === 'drip' ? (el.dxTarget - el.dx) / 10 : h === 'gust' ? windAt(s) / 45 : 0;
+  p.lean = Math.max(-1, Math.min(1, lean));
 }
 
 /** Stamps the walking body. */
 function drawBodies(g: CanvasRenderingContext2D, sc: RenderScene, dpr: number): void {
+  const a = g.globalAlpha;
+  g.globalAlpha = a * sc.fallA;
   drawNubsSprite(g, sc.nubsSprite, sc.pose.x, sc.pose.y, dpr);
+  g.globalAlpha = a;
 }
 const pickBuf: Pickup[] = [];
 
