@@ -333,9 +333,9 @@ export class Session {
   private readonly hintIn: HintInput;
   /** Cues shown this run (bit per CueId: each at most once per run). */
   private cues = 0;
-  /** The cue on the line as this session last set it (an expired timed cue still counts). */
   /** An intro Trial's frames so far (Retry from the Tag Stone replays them); null on other runs. */
   private rec: Replay | null = null;
+  /** The cue on the line as this session last set it (an expired timed cue still counts). */
   private cueShown: { id: CueId; dir: -1 | 1 | undefined } | null = null;
   /** An event cue (go, shade found, first SWING, ...) keeps the line until then (performance.now ms). */
   private cueHold = 0;
