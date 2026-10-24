@@ -4,7 +4,11 @@
 // Elementals: on a Trial the walker wears its element's art (render/heroes.ts); the Nubs-only cues
 // follow health and the element's own state (the vignette, the sun's moods, the hot ring, the
 // sizzle, which becomes Ember's smoke); the relay's Tag Stones stand on the trail and its NEXT chip
-// counts the telegraph down under the dial.
+// counts the telegraph down under the dial. v2 (docs/ELEMENTALS_V2.md §7.10): the Trial's objects
+// (render/trial.ts) are drawn in four passes: the ground ones under the shadow layer, the walls and
+// hot stones over it (under the casters and the walker), fires, rain and fog over the clouds, and
+// the telegraphs over the whole world, under the dial. A held sun (Drip, Gust) shows no drag on the
+// dial; a fall shrinks, drops and fades the walker.
 
 import {
   coolLine,
@@ -56,8 +60,8 @@ import {
   type GroundPaint,
 } from './ground.ts';
 import { createHalo, createHaloIn, drawHalo, tagSoon, updateHalo, type HaloInput, type HaloState } from './halo.ts';
-import { drawNextChip, drawTagStones, heroArt } from './heroes.ts';
-import { drawElAir, drawElCues, drawElGround, drawElWalls } from './trial.ts';
+import { drawNextChip, heroArt } from './heroes.ts';
+import { drawElAir, drawElCues, drawElGround, drawElWalls, drawTagStones } from './trial.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,

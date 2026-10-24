@@ -11,7 +11,10 @@
 // a Dare met (DARE ✓); the Day card names the day's Noon Heat when it rises.
 // Elementals: the TAG! stamp in the incoming element's face with a hop and 0.3 s of slow-mo,
 // CLEAN!, an element's fall. The snowman's steam, sweat, breath and frost stay his: an element's
-// states show in its art.
+// states show in its art. v2 (docs/ELEMENTALS_V2.md §7.10): a fire's sparks (water for ice and
+// puddles), ash and steam puffs, Ember feeding ("+n"), a grey puff for a refused verb, BUMP!, a hold's
+// ring, BRIDGE!/TREE!, Drip's splash ("+30"), a hot stone's steam or sparks, a gust's wind streaks
+// (none under reduced motion); no zoom pulses while another element walks (§1.4).
 
 import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';

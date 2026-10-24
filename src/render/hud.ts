@@ -30,10 +30,12 @@
 // full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
 // (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
 //
-// Elementals (docs/ELEMENTALS.md §4.9): on a Trial the meter is the ability coin of the hero who casts
-// (its candy face and glyph: Ember red with a flame, Sprout green with a seedling, Volt violet with a
-// bolt, Drip blue with a drop; Nubs keeps the ice coin and flake), a timed ability drains its ring
-// white, and in the 3 s before a TAG the coin dims under a "TAG" chip (no ability can be cast).
+// Elementals v2 (docs/ELEMENTALS_V2.md §7.10): on a Trial the Cold Snap's coin shows only on Nubs'
+// legs (in the 3 s before a TAG it dims under a "TAG" chip: no snap then); another element's leg
+// shows a non-interactive meter pill in its place (its glyph and number on its face colour, one
+// cached sprite; it never sets meterShown, so a tap there is plain world). A wind chip under the
+// row's right end shows an arrow per 15 u/s of the wind the way it blows, the breeze's share dimmed,
+// while Gust walks or a wind blows.
 //
 // v1.6 (docs/V1_6_PLAN.md): the Flow Ring's charge runs round the multiplier coin (teal, gold as
 // ×5's buffer, hot while it bleeds; a trick flashes it). The Frost Bank's two charges are two small
@@ -745,31 +747,37 @@ function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, hero: He
   const x = v.vx + v.vw - v.safe.right - METER_SIDE * k + 3 * k - w;
   const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - METER_R * k;
   // The pill and its glyph are one sprite per element and scale; the number is drawn over it.
-  const key = hero + k + v.dpr;
-  if (pillKey !== key) {
-    pillKey = key;
-    pillC = sized(pillC, (w + 6 * k) * v.dpr, (2 * r + 6 * k) * v.dpr);
-    const pg = fresh(pillC, v.dpr);
+  const c = cached(0, hero + k, v, w + 6 * k, 2 * r + 6 * k, (pg) => {
     pill(pg, 2 * k, 2 * k, w, 2 * r, r, FACE[HEROES[hero].face][1], k, 3 * k);
     pg.fillStyle = '#FFFFFF';
     pg.beginPath();
     pg.arc(2 * k + r, 2 * k + r, r - 5 * k, 0, TAU);
     pg.fill();
     drawGlyph(pg, hero, 2 * k + r, 2 * k + r, 24 * k);
-  }
-  const c = pillC as Canvas2D;
+  });
   g.globalAlpha = inp.alpha;
   g.drawImage(c, x - 2 * k, y - r - 2 * k, c.width / v.dpr, c.height / v.dpr);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   outlined(g, String(Math.round(inp.s.nubs.chill)), x + w / 2 + r, y + k, 24 * k);
 }
-let pillC: Canvas2D | null = null;
-let pillKey = '';
+
+/** HUD sprite `i` (0 the meter pill, 1 the wind chip), redrawn only when its key or the dpr changes. */
+function cached(i: number, key: string, v: View, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): Canvas2D {
+  let c = sprC[i];
+  if (!c || sprK[i] !== key + v.dpr) {
+    sprK[i] = key + v.dpr;
+    c = sprC[i] = sized(c, w * v.dpr, h * v.dpr);
+    draw(fresh(c, v.dpr));
+  }
+  return c;
+}
+const sprC: (Canvas2D | null)[] = [];
+const sprK: string[] = [];
 
 /**
  * Elementals v2: the wind chip under the row's right end while Gust walks or a wind blows: an
- * arrow per 15 u/s of windAt the way it blows, the breeze's share dimmed.
+ * arrow per 15 u/s of windAt the way it blows, the breeze's share dimmed (one cached sprite).
  */
 function windChip(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput): void {
   const s = inp.s;
@@ -780,26 +788,25 @@ function windChip(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInp
   const b = (s.trial as { breeze: number }).breeze;
   const nb = b * w > 0 ? Math.min(n, Math.round(Math.abs(b) / 15)) : 0;
   const cw = 30 * k + n * 12 * k;
-  const x0 = v.vx + v.vw - v.safe.right - 10 * k - cw;
-  const y = h.bottom + 10 * k;
-  g.globalAlpha = inp.alpha;
-  pill(g, x0, y - 12 * k, cw, 24 * k, 12 * k, INK, k, 2 * k);
-  drawGlyph(g, 'gusts', x0 + 14 * k, y, 15 * k, undefined, w < 0);
   const d = w < 0 ? -1 : 1;
-  for (let i = 0; i < n; i++) {
-    // Arrows from the trailing end, the breeze's first and dimmed.
-    const cx = x0 + 34 * k + (d > 0 ? i : n - 1 - i) * 12 * k;
-    g.globalAlpha = inp.alpha * (i < nb ? 0.45 : 1);
-    g.fillStyle = '#FFFFFF';
-    g.beginPath();
-    g.moveTo(cx - d * 4 * k, y - 6 * k);
-    g.lineTo(cx + d * 4 * k, y);
-    g.lineTo(cx - d * 4 * k, y + 6 * k);
-    g.lineTo(cx - d * 1 * k, y);
-    g.closePath();
-    g.fill();
-  }
+  const c = cached(1, `${n}${nb}${d}${k}`, v, cw + 4 * k, 30 * k, (cg) => {
+    pill(cg, 2 * k, 2 * k, cw, 24 * k, 12 * k, INK, k, 2 * k);
+    drawGlyph(cg, 'gusts', 16 * k, 14 * k, 15 * k, undefined, d < 0);
+    cg.fillStyle = '#FFFFFF';
+    for (let i = 0; i < n; i++) {
+      // Arrows from the trailing end, the breeze's first and dimmed.
+      const cx = 36 * k + (d > 0 ? i : n - 1 - i) * 12 * k;
+      cg.globalAlpha = i < nb ? 0.45 : 1;
+      cg.beginPath();
+      cg.moveTo(cx - d * 4 * k, 8 * k);
+      cg.lineTo(cx + d * 4 * k, 14 * k);
+      cg.lineTo(cx - d * 4 * k, 20 * k);
+      cg.lineTo(cx - d * k, 14 * k);
+      cg.fill();
+    }
+  });
   g.globalAlpha = inp.alpha;
+  g.drawImage(c, v.vx + v.vw - v.safe.right - 12 * k - cw, h.bottom - 4 * k, c.width / v.dpr, c.height / v.dpr);
 }
 
 const HEAT_BAND = 'rgba(255,61,43,0.6)';

@@ -1,19 +1,25 @@
-// The Elementals' art: Ember (a flame), Sprout (a seedling) and Drip (a water droplet), each a
-// CharArt for Nubs' two-layer sprite cache (nubs.ts). An element is a state function, a palette per
-// state and art strings (glyphs.ts ops in units of U = S·1.4 from the ground point, '$n' its state's
-// colour n) for the back and front layers, with a shared face; the layers redraw only when the
-// quantized state in their key changes, and the spring-chain parts between them are the only live
-// drawing (a fill and at most two strokes). The states:
-//   Ember  calm / snuffing out of the light (smaller, dull red) / feasting in glare (20 % taller,
-//          white-hot) / guttering (low: small and dull); snuffed, it sinks to a sleepy ember.
-//   Sprout calm / scorching in full sun (drooping leaves, brown bud) / dappled (leaves up, its bud
-//          open) / starving in full shade (pale) / curled (low); wilts flat.
-//   Drip   a clear blue droplet; it dries away.
-// Also the Elementals screen's preview, the death beat's tokens, the Tag Stones and the relay's NEXT
-// chip.
+// The Elementals' art (docs/ELEMENTALS_V2.md §7.10): Ember (a flame), Sprout (a seedling), Drip (a
+// water droplet) and Gust (a kite spirit), each a CharArt for Nubs' two-layer sprite cache (nubs.ts).
+// An element is a state function, a palette per state and art strings (glyphs.ts ops in units of
+// U = S·1.4 from the ground point, '$n' its state's colour n) for the back and front layers, with a
+// shared face; the layers redraw only when the quantized state in their key changes, and the
+// spring-chain parts between them are the only live drawing (a fill and at most two strokes). The
+// states (the pose's act and lean come from s.el, render/renderer.ts heroPose):
+//   Ember  calm / snuffing out of the light (smaller, dull red) / feasting in full light (20 %
+//          taller, white-hot) / guttering (low) / doused (in a puddle or rain: dull, steaming);
+//          snuffed, it sinks to a sleepy ember (doused: a grey one under its steam).
+//   Sprout calm / holding (leaves up like arms, joyful) / low Sap (drooping, pale); wilts flat.
+//   Drip   a clear blue droplet scaled 0.85 + 0.25·size (the contacts keep a fixed radius), leaning
+//          the way it slides, bulging as it drinks, flashing orange on a hot stone, worried when
+//          low; it dries away (or sizzles away) into the air.
+//   Gust   a diamond kite on its spars in the cloud face's colours, a ribbon tail on the springs,
+//          leaning with the wind and bobbing on the air; soaked (dark, dripping), fogged
+//          (squinting, grey), low (sagging); grounded, it falls flat on the trail.
+// A fall into a gap or a stream sweeping the walker away is drawn by the renderer on the living
+// sprite. Also the Elementals screen's preview, the death beat's tokens, the Tag Stones and the
+// relay's NEXT chip (with its SUN HOLDS badge into Drip or Gust).
 
-import { HEROES, relayY, trailX, type HeroId, type SimState, type TrialRelay } from '../core/index.ts';
-import type { View } from '../game/camera.ts';
+import { HEROES, type HeroId } from '../core/index.ts';
 import type { Equipped } from '../meta/content.ts';
 import { chip, displayFont, FACE, INK as INK_C, outlined } from './candy.ts';
 import { artOps, drawArt, drawGlyph, type ArtOp } from './glyphs.ts';
@@ -271,12 +277,12 @@ const DRIP = make({
  * springs) floating over the trail. 0 calm, 1 soaked (dark, dripping), 2 fogged (squinting, grey),
  * 3 low (sagging).
  */
-const KITE = 'P$0/$1/1.3 M0-43L12.5-29L0-14L-12.5-29Z|F#FFF8 M0-43L-12.5-29L0-29Z|F$3 M0-14L12.5-29L0-29Z|S$1/.8 M0-42V-15M-11.5-29H11.5|F#F9B7 O-6.4-24.6 1.8,1.1O6.4-24.6 1.8,1.1';
+const KITE = 'P$0/$1/1.6 M0-43L12.5-29L0-14L-12.5-29Z|F#FFF8 M0-43L-12.5-29L0-29Z|F$3 M0-14L12.5-29L0-29Z|S$1/.8 M0-42V-15M-11.5-29H11.5|F#F9B7 O-6.4-24.6 1.8,1.1O6.4-24.6 1.8,1.1';
 const RIBBON = [1, -14.5, 1.3, 1.4, 2, 4, 0.7];
 const GUST = make({
   st: (p) => (p.act === 1 ? 1 : p.act === 2 ? 2 : p.meter < 0.3 ? 3 : 0),
   // Body, line, (the fallen kite's ink), shade facet, ribbon, face ink.
-  pal: ['#F4F1FB,#7E6FA8,#000,#DCD5EC,#FF9EB0,#2B2140', '#B7C1D6,#4E5A7A,#000,#97A3BC,#8FA0C8,#1E2434', '#E2E2E8,#8A8A9A,#000,#C8C8D2,#C9B8C0,#2B2140', '#E8E2F2,#7E6FA8,#000,#CFC6E2,#E89AAA,#2B2140'],
+  pal: ['#F4F1FB,#6A5A9C,#000,#DCD5EC,#FF9EB0,#2B2140', '#B7C1D6,#4E5A7A,#000,#97A3BC,#8FA0C8,#1E2434', '#E2E2E8,#8A8A9A,#000,#C8C8D2,#C9B8C0,#2B2140', '#E8E2F2,#7E6FA8,#000,#CFC6E2,#E89AAA,#2B2140'],
   mood: '0131',
   k: [1, 0.95, 1, 0.9],
   back: [KITE, KITE, KITE, KITE],
@@ -303,27 +309,6 @@ export function heroArt(hero: HeroId): CharArt | null {
 // ---------------------------------------------------------------------------------------------
 // Around the sprites (the renderer draws these each frame)
 // ---------------------------------------------------------------------------------------------
-
-/** A relay's Tag Stones on the trail (render only): a standing stone with the next hero's glyph; passed ones fade. */
-export function drawTagStones(g: CanvasRenderingContext2D, v: View, s: SimState): void {
-  const r = (s.trial as { relays: readonly TrialRelay[] }).relays;
-  const S = v.S;
-  for (let i = 0; i < r.length; i++) {
-    const wy = relayY(s, i);
-    if (wy < v.y0 - 30 || wy > v.y1 + 30) continue;
-    const x = v.ox + trailX(s.world.trail, wy) * S;
-    const y = v.oy - wy * S;
-    g.globalAlpha = i < s.relayIdx ? 0.45 : 1;
-    g.save();
-    g.translate(x, y);
-    g.scale(S, S);
-    art(g, STONE, []);
-    g.restore();
-    drawGlyph(g, (r[i] as TrialRelay).to, x, y - 10 * S, 13 * S);
-  }
-  g.globalAlpha = 1;
-}
-const STONE = 'F#3244 O0 0 11,3.5|P#BBC/#436/1.4 M-8 0V-12A8 8 0 0 1 8-12V0Z';
 
 let nextText = '';
 let nextKey = '';

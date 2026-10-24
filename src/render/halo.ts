@@ -28,10 +28,12 @@
 // target dot (the glass layer hides).
 // Elementals (HaloInput.trial): on a Trial the arcs are the walking element's go arcs, drawn as the
 // teal ones in its colour on an ink underlay, with its pattern (Ember amber with outward ray ticks
-// and gold dots on the glare it feeds on, and no red glare; Sprout lime in leaf dashes; a narrow run
-// wears a target dot), and the gauge is frost-white like Nubs' (amber below 60, hot below 25, so the
-// element's colour only ever means go); a relay's telegraph dashes the incoming element's arcs
-// outside. Nubs keeps the teal dial.
+// and no red glare; Sprout lime in leaf dashes; a narrow run wears a target dot); Drip's and Gust's
+// legs hold the sun: the padlock and no arcs. The gauge is the walker's meter in its colours
+// (docs/ELEMENTALS_V2.md §2: Flame orange, amber below 60, ash below 25; Size blue, amber, red; Sap
+// green, no danger colours; Lift sky white on a lilac rim, amber, red), dashed and pulsing below a
+// steady health of 25 (never for Sap); a relay's telegraph dashes the incoming element's arcs
+// outside (Drip's in its blue). Nubs keeps the teal dial.
 
 import { coolLine, elHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';

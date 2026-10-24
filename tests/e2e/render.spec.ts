@@ -355,8 +355,8 @@ test.describe('Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4)', () => 
   }
 
   // Steam's world (five cottages in view) and its chapter's snow (Flurry Fields: ~24 flakes) issue
-  // 200 fills at that moment before any trial art (measured at C0c); the trial's objects, cues and
-  // meter pill add about 6: its fill ceiling allows the world (measured 206-207).
+  // 200 fills at that moment before any trial art (measured at C0c); the trial's objects, Tag Stones
+  // and HUD chips are cached sprites, so its frame measures 195-198: its fill ceiling allows the world.
   const FILL: Record<number, number> = { 5: 216 };
 
   for (const n of [1, 2, 3, 4, 5, 6, 7]) {

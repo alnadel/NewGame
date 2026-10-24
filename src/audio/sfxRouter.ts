@@ -1,6 +1,9 @@
 // SimEvents (and campaign view edges) → sound cues, with throttles for the bursty ones and music
 // ducks under the big moments, plus the per-frame drive of every continuous layer (via Scene).
 // Pure logic: it talks to the WebAudio side through RouterOutput, so tests drive it with a fake.
+// Elementals v2 (docs/ELEMENTALS_V2.md §7.10): every verb and object event has a cue or an explicit
+// silence, the rain patters while the walker is under it (the touch event's bit 2), and a Trial's
+// sun hold plays no lock cue (the view's health marks a Trial).
 
 import type { SimEvent } from '../core/sim/events.ts';
 import type { SfxName, SfxParams } from './recipes.ts';

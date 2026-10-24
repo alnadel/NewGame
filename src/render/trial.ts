@@ -4,7 +4,7 @@
 //   ground (under the shadow layer): Drip's widened path over its stretch, gaps (a dark chasm) and
 //     streams (blue water) with a vine bridge growing across from the near bank, soil plots with a
 //     sapling that grows in steps (the tree is a real caster), puddles (drying: paler), hot stones
-//     (two shimmer frames; spent: grey);
+//     (two shimmer frames; spent: grey); the relay's Tag Stones;
 //   walls (over the shadow layer, under the casters): brambles (thorns), gates (planks), ice
 //     (crystal), burning in three flame frames at ≤ 8 fps (one under reduced motion), ice melting;
 //     Ember's own fires glow;
@@ -43,9 +43,11 @@ import {
   type ElKind,
   type ElObj,
   type SimState,
+  type TrialRelay,
 } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { cssa } from './color.ts';
+import { drawGlyph } from './glyphs.ts';
 import { art } from './heroes.ts';
 import { ctx2d, makeCanvas, radialSprite, type Canvas2D } from './sprites.ts';
 
@@ -60,6 +62,7 @@ const AMBER = 0xffb347;
 const RED = 0xff4d3d;
 const GREEN = 0x5fd35a;
 const LIME = 0x8bd650;
+// Walls and crossings stand across the trail (§3.3: authored at dx 0), so their x is the trail's.
 
 interface Spr {
   c: Canvas2D;
@@ -277,6 +280,23 @@ function frameOf(time: number, rm: boolean, i: number): number {
   return rm ? 1 : 1 + ((Math.floor(time * 8) + i) % 3);
 }
 
+/** A relay's Tag Stones on the trail: a standing stone with the incoming element's glyph (one sprite each); passed ones fade. */
+export function drawTagStones(g: CanvasRenderingContext2D, v: View, s: SimState): void {
+  const r = (s.trial as { relays: readonly TrialRelay[] }).relays;
+  const k = scaleOf(v);
+  for (let i = 0; i < r.length; i++) {
+    const wy = relayY(s, i);
+    if (wy < v.y0 - 30 || wy > v.y1 + 30) continue;
+    const h = (r[i] as TrialRelay).to;
+    g.globalAlpha = i < s.relayIdx ? 0.45 : 1;
+    blit(g, v, spr('ts' + h, k, 26, 26, 13, 22, (c) => {
+      art(c, 'F#3244 O0 0 11,3.5|P#BBC/#436/1.4 M-8 0V-12A8 8 0 0 1 8-12V0Z', []);
+      drawGlyph(c, h, 0, -10, 13);
+    }), trailX(s.world.trail, wy), wy);
+  }
+  g.globalAlpha = 1;
+}
+
 /**
  * The ground layer, under the shadow layer (so shade falls on it): Drip's widened path over its
  * stretch, crossings and their bridges, plots and saplings, puddles and stones.
@@ -311,7 +331,7 @@ export function drawElGround(g: CanvasRenderingContext2D, v: View, s: SimState):
     if (isCross(kd)) {
       const st = kd === 'stream';
       const r = o.r;
-      const x = trailX(tr, o.y);
+      const x = o.x;
       blit(g, v, spr(kd + r, k, 96, 2 * r + 12, 48, r + 6, (c) => crossArt(c, st, r)), x, o.y);
       const f = Math.min(1, o.grown / needOf(o));
       if (f > 0) {
@@ -374,35 +394,39 @@ export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, t
       }), o.x, o.y);
       continue;
     }
-    // A fire burns over the casters (drawElAir), so a canopy never hides it.
+    // Fires are drawFires'.
     if (!isWall(o.kind) || (o.state === EL_BURNING && o.kind !== 'ice')) continue;
     const kd = o.kind;
     const f = o.state === EL_BURNING ? 4 : 0;
-    blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), trailX(s.world.trail, o.y), o.y);
+    blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), o.x, o.y);
   }
+  drawFires(g, v, s, k, time, rm, true);
 }
 
-/** The burning brambles, gates and plots (three flame frames), over the casters; Ember's own fires glow. */
-function drawFires(g: CanvasRenderingContext2D, v: View, s: SimState, k: number, time: number, rm: boolean): void {
+/**
+ * The burning brambles, gates and plots (three flame frames); Ember's own fires glow. Over the
+ * casters (so a canopy never hides a fire), except the ones just ahead of the walker (`near`), which
+ * stand behind it with the walls.
+ */
+function drawFires(g: CanvasRenderingContext2D, v: View, s: SimState, k: number, time: number, rm: boolean, near: boolean): void {
   const objs = (s.el as { objs: ElObj[] }).objs;
   for (let i = objs.length - 1; i >= 0; i--) {
     const o = objs[i] as ElObj;
-    if (o.state !== EL_BURNING || o.kind === 'ice' || o.kind === 'puddle' || o.y < v.y0 - 40 || o.y > v.y1 + 80) continue;
+    const d = o.y - s.nubs.y;
+    if (o.state !== EL_BURNING || o.kind === 'ice' || o.kind === 'puddle' || o.y < v.y0 - 40 || o.y > v.y1 + 80 || (d > 0 && d < 70) !== near) continue;
     const kd = o.kind;
     const f = frameOf(time, rm, i);
-    const plot = kd === 'plot';
-    const x = plot ? o.x : trailX(s.world.trail, o.y);
     if (o.paid > 0 && walkerAt(s, edgeOf(o)) === 'ember') {
       // Ember's own fire glows: it will take the flame back when it walks through.
       const r = 62 * v.S;
       g.globalCompositeOperation = 'lighter';
-      g.drawImage(radialSprite('255,140,50', 64, 0.6), v.ox + x * v.S - r, v.oy - o.y * v.S - r * 0.7, 2 * r, r);
+      g.drawImage(radialSprite('255,140,50', 64, 0.6), v.ox + o.x * v.S - r, v.oy - o.y * v.S - r * 0.7, 2 * r, r);
       g.globalCompositeOperation = 'source-over';
     }
-    if (plot) {
+    if (kd === 'plot') {
       const p = plotStep(o);
-      blit(g, v, spr(`pl${p}${f}`, k, 44, 64, 22, 50, (c) => plotArt(c, p, f)), x, o.y);
-    } else blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), x, o.y);
+      blit(g, v, spr(`pl${p}${f}`, k, 44, 64, 22, 50, (c) => plotArt(c, p, f)), o.x, o.y);
+    } else blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), o.x, o.y);
   }
 }
 
@@ -429,7 +453,7 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
   const el = s.el;
   if (el === null) return;
   const k = scaleOf(v);
-  drawFires(g, v, s, k, time, rm);
+  drawFires(g, v, s, k, time, rm, false);
   const S = v.S;
   const tr = s.world.trail;
   const ny = s.nubs.y;
@@ -498,10 +522,10 @@ const gcs = new Int8Array(64);
 let hatch: CanvasPattern | null = null;
 
 /** The ring around o (screen px): walls and crossings an ellipse across the trail, circles r + 6. */
-function ringPath(g: CanvasRenderingContext2D, v: View, s: SimState, o: ElObj, grow: number): void {
+function ringPath(g: CanvasRenderingContext2D, v: View, o: ElObj, grow: number): void {
   const S = v.S;
   const wide = isWall(o.kind) || isCross(o.kind);
-  const x = v.ox + (wide ? trailX(s.world.trail, o.y) : o.x) * S;
+  const x = v.ox + o.x * S;
   const y = v.oy - (o.y + (isWall(o.kind) ? 6 : 0)) * S;
   ell(g, x, y, ((wide ? 48 : o.r + 6) + grow) * S, ((isWall(o.kind) ? 15 : o.r + 6) + grow) * S);
 }
@@ -546,7 +570,7 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.beginPath();
     for (let i = 0; i < n; i++) {
       const o = objs[i] as ElObj;
-      if (o.state !== EL_GONE && !isWeather(o.kind) && o.y > v.y0 && o.y < v.y1) ringPath(g, v, s, o, -4);
+      if (o.state !== EL_GONE && !isWeather(o.kind) && o.y > v.y0 && o.y < v.y1) ringPath(g, v, o, -4);
     }
     g.lineWidth = 2;
     g.strokeStyle = '#2B2140';
@@ -561,9 +585,9 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
       if (ring[i] !== want) continue;
       any = true;
       const o = objs[i] as ElObj;
-      ringPath(g, v, s, o, p === 3 ? 2 * pulse : 0);
+      ringPath(g, v, o, p === 3 ? 2 * pulse : 0);
       if (want === 4) {
-        const x = v.ox + (isWall(o.kind) ? trailX(tr, o.y) : o.x) * S;
+        const x = v.ox + o.x * S;
         const y = v.oy - (o.y + 6) * S;
         const d = 7 * S;
         g.moveTo(x - d, y - d);
@@ -587,7 +611,7 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     for (let i = 0; i < n; i++) {
       const o = objs[i] as ElObj;
       if (o.state !== EL_BURNING) continue;
-      const x = v.ox + (isWall(o.kind) ? trailX(tr, o.y) : o.x) * S;
+      const x = v.ox + o.x * S;
       const y = v.oy - (o.y + (isWall(o.kind) ? 38 : 22)) * S;
       g.moveTo(x, y - 6 * S);
       g.arc(x, y, 6 * S, -Math.PI / 2, -Math.PI / 2 + (p ? (TAU * o.t) / ((E.ember.burnTicks as Readonly<Record<string, number>>)[o.kind] ?? 60) : TAU));
@@ -643,12 +667,11 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
       if ((o.light & 2) !== 0) mark(g, WET, x, y - (rm ? 14 : 12 + ((time * 1.5) % 1) * 4) * S, k);
     }
     if (!isCross(o.kind) || o.y < ny) continue;
-    const tx = v.ox + trailX(tr, o.y) * S;
-    if (bridged(o)) mark(g, CHECK, tx + 30 * S, y, k);
+    if (bridged(o)) mark(g, CHECK, x + 30 * S, y, k);
     else if (growLeft(s, o) < 0 && walkerAt(s, o.y) !== 'gust') {
-      mark(g, CHEVRONS, tx, y + (o.r + 9) * S, k);
+      mark(g, CHEVRONS, x, y + (o.r + 9) * S, k);
       g.fillStyle = cssa(RED, 1);
-      g.fillText('!', tx - 32 * S, y);
+      g.fillText('!', x - 32 * S, y);
     }
   }
 
@@ -697,7 +720,7 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     const y = v.oy - o.y * S;
     if (c > 2) {
       // Above the view: a chevron at its x on the play area's top, with its drift's arrow.
-      const ex = Math.max(v.vx + 14, Math.min(v.vx + v.vw - 14, v.ox + o.x * S));
+      const ex = Math.max(v.vx + 26, Math.min(v.vx + v.vw - 26, v.ox + o.x * S));
       const dir = o.drift + (o.kind === 'rain' ? E.gust.rainGain : E.gust.fogGain) * windAt(s);
       mark(g, EDGE, ex, top, 1, col);
       if (Math.abs(dir) > 1) mark(g, ARROW, ex, top, 1, col, dir);
