@@ -268,22 +268,28 @@ its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a 
   Sprout, the rain ride Gust). `campaignConfig` never relaxes a Trial.
 - **Session**: `canSnap` only while Nubs walks and no TAG is due. Every `tag` calls `input.cut` and
   announces the hand-off on the cue line (aria-live, CueId `tag-<element>`: "Drip's turn. The sun
-  holds."). Results > Map and Back after a Trial call `openJourney('elementals')`; Next goes to the
+  holds.", hung below the dial so what lies ahead stays clear). Results > Map and Back after a Trial call `openJourney('elementals')`; Next goes to the
   next open Trial (`nextOpenTrial`), else to the Elementals screen. The recap tip is `CAUSE_TIPS`
-  (`'<element>:<cause>'`, then `'<cause>'`), else the element's `deathTip` (Nubs melting keeps
-  today's recap tips). The Pause card reads "Trial 3 · Green Bridge", the walking element's tagline
+  (`'<element>:<cause>'`, then `'<cause>'`; Sprout short of Sap for the bridge that took it:
+  `'sprout:sap'`), else the element's `deathTip` (Nubs melting keeps today's recap tips). On T7 the
+  HUD and Pause count the grove standing now (`liveStats`: `stats.grove` is set at the finish). The Pause card reads "Trial 3 · Green Bridge", the walking element's tagline
   and "{verbLine} · {keyLine}". `fillAudioView`'s health is the walker's steady health (`elHealth`;
   Sprout's Sap never beats). The drag ghost and the lesson hint are off while an element plays its
   own verb; on an intro Trial the DOM ghost plays the intro verb (tap, hold, steer, a swipe) on the
   first target of the leg in reach (Ember's once the tap is due, `burnSweet`), anchored on the last
-  drawn frame (`ui.setGhostAt`), until the first verb of the run lands. Retry from the Tag Stone is
-  cut for the bundle budget (§9.3, the first item of UI's cut list).
+  drawn frame (`ui.setGhostAt`), until the first verb of the run lands. **Retry from the Tag Stone**
+  (intro Trials): the run's frames are recorded (`recordFrame`, bot frames too); after a loss in
+  leg ≥ 1 the Results offer it, and `retryTag()` replays them headless on a fresh run to the
+  telegraph of the TAG that began the lost leg, lifts the finger there (a drag at 0 °/s, a hold let
+  go) and waits on the Pause card. A new run drops verbs left queued from the last (`dropVerbs`).
 - **Tips** (`moments.ts`, §10.3): until a Trial is passed (`save.elementals2`) it shows its
   elements' `ELEMENT_TIPS` while each walks ('tag' as its first leg begins, Nubs' on his second;
   'target', 'low', 'water', 'stone', 'plot' when the moment comes, looked for every 6 ticks), the
   hand-off `RELAY_TIPS` (the first telegraph into Drip, into Gust, and into any other) and a mixer's
-  `MIXER_TIPS` at go. A TAG clears every toast and spends the outgoing element's tips. Trials toast
-  no mission steps and no COMEBACK.
+  `MIXER_TIPS` at go. A TAG clears every toast and spends the outgoing element's tips. A moment's
+  tip is queued only when it can show at once (no toast up or waiting, the rest over, no TAG due),
+  so none shows after its moment; a Trial rests 2 s between tips (`tipPace`). Trials toast no
+  mission steps and no COMEBACK.
 
 ## v1.3 game feel
 
