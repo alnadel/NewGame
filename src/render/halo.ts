@@ -33,7 +33,8 @@
 // (docs/ELEMENTALS_V2.md §2: Flame orange, amber below 60, ash below 25; Size blue, amber, red; Sap
 // green, no danger colours; Lift sky white on a lilac rim, amber, red), dashed and pulsing below a
 // steady health of 25 (never for Sap); a relay's telegraph dashes the incoming element's arcs
-// outside (Drip's in its blue). Nubs keeps the teal dial.
+// outside, thick, on a pulsing band of their colour (Drip's in its blue), and the walker's coming
+// dashes step aside meanwhile. Nubs keeps the teal dial.
 
 import { coolLine, elHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';
@@ -64,6 +65,8 @@ const FLARE = hex('#FF6A3D');
 const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
+/** A relay telegraph's dashes (longer than the coming arcs' DASH, so the two never read alike). */
+const TAG_DASH = [7, 4];
 /** Elementals: each element's go colour. */
 const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: 0xff8a1f, drip: 0x3faef7, sprout: 0x8bd650, gust: 0xa99cc6 };
 /** Elementals v2: an element's gauge from full to low (§2): its colour, below 60, below 25 (Sprout's Sap has no danger colours). */
@@ -379,13 +382,16 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     } else {
       const kind = ga > 0.01 ? splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split) : 'none';
       if (ga > 0.01) {
-        g.setLineDash(DASH);
-        g.lineWidth = 2;
-        g.strokeStyle = cssa(col, 0.35 * ga);
-        g.beginPath();
-        arcRuns(g, split.coming, cx, cy, R + 6, 0);
-        g.stroke();
-        g.setLineDash(NO_DASH);
+        // A relay's telegraph owns the dashed band outside the ring: the walker's coming arcs step aside.
+        if (!tag) {
+          g.setLineDash(DASH);
+          g.lineWidth = 2;
+          g.strokeStyle = cssa(col, 0.35 * ga);
+          g.beginPath();
+          arcRuns(g, split.coming, cx, cy, R + 6, 0);
+          g.stroke();
+          g.setLineDash(NO_DASH);
+        }
         if (kind === 'fallback') {
           g.lineCap = 'round';
           g.beginPath();
@@ -441,12 +447,19 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
   if (inp.sunUp && tag && !inp.blind && !held) {
-    // A relay's telegraph: the incoming element's arcs, dashed just outside the ring.
-    g.setLineDash(DASH);
-    g.lineWidth = 3;
-    g.strokeStyle = cssa(HERO_ARC[tag], Math.max(0.7, A));
+    // A relay's telegraph: the incoming element's arcs just outside the ring, thick dashes on a soft
+    // band of their colour that pulses (steady under reduced motion; thicker in high contrast).
+    const ta = Math.max(0.7, A);
+    const T = inp.hc ? 1.5 : 1;
+    const k = inp.reducedMotion ? 1 : 0.6 + 0.4 * Math.abs(Math.sin(inp.time * TAU * 1.25));
     g.beginPath();
-    arcRuns(g, (st as SimState).guide.tag, cx, cy, R + 6, 0.5);
+    arcRuns(g, (st as SimState).guide.tag, cx, cy, R + 7, 0.5);
+    g.lineWidth = 9 * T;
+    g.strokeStyle = cssa(HERO_ARC[tag], 0.35 * ta * k);
+    g.stroke();
+    g.setLineDash(TAG_DASH);
+    g.lineWidth = 4.5 * T;
+    g.strokeStyle = cssa(HERO_ARC[tag], ta);
     g.stroke();
     g.setLineDash(NO_DASH);
   }
