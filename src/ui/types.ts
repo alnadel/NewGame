@@ -28,7 +28,8 @@ export type ScreenId =
  * - `drag`: "Drag ← to swing the sun" (or "Hold ←" for keyboard players) until replaced or cleared.
  * - `shade-found`: "Shade! Thick teal = safe" (1.4 s). `melting`: "Melting! Find thick teal" (1.6 s).
  */
-export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing' | 'snap-ready';
+/** Elementals v2: `tag-<element>` announces a TAG ("Drip's turn: Drag: steer Drip. The sun holds."). */
+export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing' | 'snap-ready' | `tag-${HeroId}`;
 
 export type RunKind = 'endless' | 'daily' | 'challenge' | 'campaign';
 
@@ -59,8 +60,10 @@ export type UiSoundName =
 export interface RunStatusView {
   /** "Level 6 · Glass Garden", "Trial 3 · Thunder Alley", "Endless", "Daily Solstice", "Challenge". */
   title: string;
-  /** An Elementals Trial: the walking hero's tagline ("Strike new shade, fast."), shown under the title. */
+  /** An Elementals Trial: the walking element's tagline ("Burn a way through."), shown under the title. */
   tagline?: string;
+  /** An Elementals Trial: how the walking element plays ("Tap: burn a wall · ↑ burns the next wall · ← → turn the sun"). */
+  verb?: string;
   /** "Collect 4 flakes · 3/4", "Reach the finish · 62 %", "Beat Sam: Day 1 · 2:40 PM", "Best: Day 1 · 11:20 AM", or "". */
   goal: string;
   /** "Day 1 · 9:20 AM": the time reached (every mode). */
@@ -133,7 +136,11 @@ export interface ChallengeBanner {
 }
 
 /** Ghost-thumb hint: a looping left-right swipe (Title) or a one-way swipe (in-play hint). */
-export type GhostMode = 'off' | 'both' | 'left' | 'right';
+/**
+ * The ghost hand: 'both' swings both ways, 'left'/'right' drags once; Elementals v2 (§7.9) adds the
+ * intro verbs ('tap', 'hold', 'steer'; a swipe is 'left'/'right'), played where setGhostAt anchors it.
+ */
+export type GhostMode = 'off' | 'both' | 'left' | 'right' | 'tap' | 'hold' | 'steer';
 
 export interface ToastOptions {
   icon?: ToastIcon;
@@ -279,6 +286,8 @@ export interface Ui {
   /** The Results postcard's thumbnail (an object URL of the ready PNG), or null while it is built. */
   setPostcard(thumbUrl: string | null): void;
   setGhostThumb(mode: GhostMode): void;
+  /** Elementals v2 (§7.9): anchors the ghost's fingertip at (x, y) CSS px in the world column (NaN: its place under Nubs). */
+  setGhostAt(x: number, y: number): void;
   /** The frost meter is drawn in the corner: the ghost hand's swing stops short of it. */
   ghostClearMeter(on: boolean): void;
   /**

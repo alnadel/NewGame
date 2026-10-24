@@ -128,6 +128,34 @@
   50% { opacity: 0.45; }
 }
 
+/* Elementals v2 (docs/ELEMENTALS_V2.md §7.9): an intro element's verb, played on its next target
+   (ui.setGhostAt: --gx/--gy in the column): a tap, a hold, a short sideways drag (Drip's steer) or a
+   swipe ('left'/'right'), with its word under the hand. */
+.ghost[data-mode='tap'],
+.ghost[data-mode='hold'],
+.ghost[data-mode='steer'] { display: flex; }
+
+.ghost.is-at {
+  --reach: 40px;
+  top: var(--gy);
+  transform: translate(calc(var(--gx) - 50%), -32px);
+}
+
+.ghost.is-at .ghost-word { display: flex; }
+.ghost[data-mode='tap'] .ghost-arrow,
+.ghost[data-mode='hold'] .ghost-arrow { display: none; }
+.ghost[data-mode='steer'] .ghost-hand { animation: ghost-swing 1.6s ease-in-out infinite; }
+.ghost[data-mode='tap'] .ghost-hand { animation: ghost-tap 1.2s ease-in-out infinite; }
+.ghost[data-mode='hold'] .ghost-hand { animation: ghost-hold 2s ease-in-out infinite; }
+
+@keyframes ghost-tap {
+  30%, 45% { transform: scale(0.8); }
+}
+
+@keyframes ghost-hold {
+  15%, 80% { transform: scale(0.8); }
+}
+
 .ghost-word {
   display: none;
   align-items: center;
