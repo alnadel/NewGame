@@ -3,11 +3,12 @@
 // objects, Drip's offset, Gust's wind, Sprout's hold, the leg's spending). Every rule here runs only
 // on a Trial (s.el !== null). The pure reads take no allocation; createEl runs once per run.
 //
-// Skeleton stage (C0c): the objects live (the sun holds on Drip and Gust legs; taps burn, holds grow
-// and swipes blow at no cost; Drip steers in its lane; weather wakes, drifts and is pruned with its
-// rain shade proxies; fires burn out; plants grow into bridges and trees), the reads are real except
-// veiled, and every walker's meter runs on Nubs' trial rule. Costs, feeds, contacts, fire spread,
-// douse, veils, Sprout's safe, the guide and the element deaths land with CORE's branch.
+// As built: the sun holds on Drip and Gust legs; taps and swipes pay their cost (or fizz), holds pour
+// Sap; each element's meter runs its own rate (§2) with the TAG grace; contacts (§3.3) bump, feed,
+// douse, drink and sizzle, and an unbridged crossing takes the walker; fire spreads downwind, is
+// doused by rain and burns out; weather wakes, drifts and is pruned with its rain shade proxies, and
+// fog veils; plants grow into bridges and trees; the Drip mask (§4.4) fills one point a tick;
+// elDeath writes the §10.4 lines.
 
 import { HEROES, type HeroDeath, type HeroId } from '../../config/heroes.ts';
 import type { ElKind, TrialDef } from '../../config/trials.ts';
