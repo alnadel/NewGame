@@ -174,13 +174,13 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
     'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3584, { legStart: [80, 80, 80] }),
   // T4 pin: salt 605 (from a scan of salts on Nubs' opening leg: 0..199 held none that a constant
   // sun angle could not walk with a ±20 Nubs lever); drain 28 → 34 and Nubs' legs 100 → 80 (too
-  // easy); Dare 60 → 75 ticks (+25%, its bound; G6 above its band). Gust 80 → 90 lets the east/30
-  // spam Gust through (G5d). Measured: G1 82/bots/83, G2 low 80, G3 8/8, G4 12/16 (75%), G5d every
-  // spam Gust grounded in Gust's leg, G5b best θ290 dies at 24%, G6 cloudRide ≥ 75 83% (WAIVERS:
-  // every finisher's Gust brings the ride cloud on).
+  // easy). Gust 80 → 90 lets the east/30 spam Gust through (G5d). Measured: G1 82/bots/83, G2 low
+  // 80, G3 8/8, G4 12/16 (75%), G5d every spam Gust grounded in Gust's leg, G5b best θ290 dies at
+  // 24%, G6 cloudRide ≥ 60 83% (WAIVERS: every finisher's Gust brings the ride cloud on; the +25%
+  // target, 75, still measured 83%).
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
-    'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 75], 30, [],
-    "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1.25 s', 'Ride a rain cloud 1.25 s', '', 605, { legStart: [80, 80, 80] }),
+    'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 60], 30, [],
+    "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1 s', 'Ride a rain cloud 1 s', '', 605, { legStart: [80, 80, 80] }),
   // T5 pin: salt 1113 (found by the G5b scan: 0..1112 held no salt whose sun could not stay fixed);
   // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60, Drip 70 → 50, costMul and evapMul 1.2 (too
   // easy: each element leg passed with its verb off); puddles 425 −18 → −26 and 492 18 → 26 (8 u

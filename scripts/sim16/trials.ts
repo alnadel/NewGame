@@ -65,9 +65,9 @@ export const WAIVERS: Readonly<Record<string, string>> = {
   // reaches ±32 u at 220 u/s, and G0 keeps the lane ≥ ±12 u, so a puddle cannot be made missable
   // inside the dx ±8 u lever; the target is already at its +25% bound (6 → 7).
   'T2 G6': 'every finisher drinks every puddle (88% of G3/G4 runs meet drinks ≥ 7)',
-  // Measured on the pin: 20 of 24 runs ride ≥ 75 ticks (83%); the target is at its +25% bound and the
-  // cloud's 119 u footprint gives every rider up to 102 ticks once Gust pushes it over the trail.
-  'T4 G6': 'every finisher rides the pushed cloud (83% of G3/G4 runs meet cloudRide ≥ 75)',
+  // Measured on the pin: 20 of 24 runs ride ≥ 60 ticks (83%), and as many at the +25% target (75):
+  // the cloud's 119 u footprint gives every rider up to 102 ticks once Gust pushes it over the trail.
+  'T4 G6': 'every finisher rides the pushed cloud (83% of G3/G4 runs meet cloudRide ≥ 60, 83% ≥ 75)',
 };
 const WAIVABLE: readonly number[] = [3, 4, 6, 7];
 
