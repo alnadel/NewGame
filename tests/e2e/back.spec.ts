@@ -44,7 +44,8 @@ for (const [label, trayLabel, id] of [
 }
 
 test('Back from the Elementals returns to the Title', async ({ page }) => {
-  await seedSave(page, UNLOCKED_SAVE);
+  // The Elementals open once the first-run lesson is passed (docs/ELEMENTALS_V2.md §5.0).
+  await seedSave(page, { v: 4, createdAt: 1, stats: { runs: 3 }, flags: { tutorialDone: true } });
   await openFromBlank(page);
   await page.locator('.scr-title .elementals-btn').click();
   await waitForScreen(page, 'elementals');

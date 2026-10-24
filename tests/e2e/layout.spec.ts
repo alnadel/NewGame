@@ -281,7 +281,7 @@ for (const pct of [150, 200]) {
   });
 }
 
-// Elementals (docs/ELEMENTALS.md §5.6): the Title's pill sits under the logo, whole and a real
+// Elementals (docs/ELEMENTALS_V2.md §7.11): the Title's pill sits under the logo, whole and a real
 // target, clear of Nubs' goal bubble and the modes (the top bar keeps the rank's name whole beside a
 // waiting reward), and the screen's tiles are real targets (hero coins ≥ 64 px, Trial tiles ≥ 48 px)
 // with no sideways scroll.
@@ -293,7 +293,7 @@ for (const size of [
   test(`Elementals at ${size.width}x${size.height}: the Title pill fits, tiles are targets, no sideways scroll`, async ({ page }, info) => {
     await page.setViewportSize(size);
     // Rank 1 with today's reward waiting: the tightest top bar.
-    await seedSave(page, { v: 4, createdAt: 1, stats: { runs: 6, wallet: 40 }, campaign: { stars: [3, 2, 1], unlocked: 4 }, elementals: { stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true } });
+    await seedSave(page, { v: 4, createdAt: 1, stats: { runs: 6, wallet: 40 }, campaign: { stars: [3, 2, 1], unlocked: 4 }, elementals2: { stars: [2, 0, 0, 0, 0, 0, 0], seen: true }, flags: { tutorialDone: true } });
     await openGame(page);
     await page.waitForTimeout(300);
     const hud = await page.evaluate(() => {
@@ -351,7 +351,7 @@ for (const size of [
     }));
     expect(sizes.heroes).toHaveLength(5);
     for (const d of sizes.heroes) expect(d, 'hero coin').toBeGreaterThanOrEqual(64);
-    expect(sizes.trials).toHaveLength(8);
+    expect(sizes.trials).toHaveLength(7);
     for (const d of sizes.trials) expect(d, 'Trial tile').toBeGreaterThanOrEqual(48);
     expect(sizes.wide, 'no sideways page scroll').toBeLessThanOrEqual(0);
     expect(sizes.body, 'no sideways menu scroll').toBeLessThanOrEqual(0);

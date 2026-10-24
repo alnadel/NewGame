@@ -4,6 +4,8 @@
 import { svgFromMarkup } from './dom.ts';
 
 const FILL = 'fill="currentColor" stroke="none"';
+/** A sideways drag (the Journey's drag concept and Nubs' gesture). */
+const DRAG = `<path d="M2.8 12h18.4"/><path d="m6.2 8.6-3.4 3.4 3.4 3.4M17.8 8.6l3.4 3.4-3.4 3.4"/><circle cx="12" cy="12" r="2.2" ${FILL}/>`;
 
 const ICONS = {
   daily: `<rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15.3" r="2.5" ${FILL}/>`,
@@ -56,7 +58,7 @@ const ICONS = {
   map: `<path d="M3.6 6.2v13.2l5.6-2.2 5.6 2.2 5.6-2.2V4l-5.6 2.2L9.2 4Z"/><path d="M9.2 4v15.4M14.8 6.2v13.2"/>`,
   tree: `<path d="M12 3.2 6.6 10.4h2.6L5.4 15.6h4.8L7.4 19.4h9.2l-2.8-3.8h4.8l-3.8-5.2h2.6Z" fill="currentColor" fill-opacity=".18"/><path d="M12 19.4v2"/>`,
   town: `<path d="M3.6 20.4h16.8"/><path d="M4.6 20.4v-8.2l4-3.2 4 3.2v8.2"/><path d="M12.6 12.2V6.6h5.6v13.8"/><path d="M14.8 9.4h1.2M14.8 12.6h1.2M14.8 15.8h1.2M7.6 15.6h2"/>`,
-  drag: `<path d="M2.8 12h18.4"/><path d="m6.2 8.6-3.4 3.4 3.4 3.4M17.8 8.6l3.4 3.4-3.4 3.4"/><circle cx="12" cy="12" r="2.2" ${FILL}/>`,
+  drag: DRAG,
   cloud: `<path d="M7 18.4a3.6 3.6 0 0 1-.6-7.1 4.8 4.8 0 0 1 9.3-1.3 3.4 3.4 0 0 1 1.5 6.5"/><path d="M7 18.4h10.2"/>`,
   wind: `<path d="M3.4 9h9.2a2.4 2.4 0 1 0-2.4-2.4"/><path d="M3.4 13h13.2a2.6 2.6 0 1 1-2.6 2.6"/><path d="M3.4 17h5.4"/>`,
   fog: `<path d="M4 8.4h10M7 12.4h13M4 16.4h9M16 16.4h3"/>`,
@@ -88,6 +90,13 @@ const ICONS = {
   // v1.4: the Snow Globe (rewards: chapters, ranks, the streak).
   globe: `<circle cx="12" cy="10" r="7"/><path d="M6.2 15.6 5 20.6h14l-1.2-5"/><path d="M12 6.8v6.4M9.2 8.4l5.6 3.2M9.2 11.6l5.6-3.2" stroke-width="1.6"/>`,
   basket: `<path d="M3.8 9.6h16.4l-1.6 9.6a1.6 1.6 0 0 1-1.6 1.4H7a1.6 1.6 0 0 1-1.6-1.4Z"/><path d="M8.4 9.6 11 4M15.6 9.6 13 4M9.4 13.4v3.6M12 13.4v3.6M14.6 13.4v3.6"/>`,
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the one gesture set (HEROES[h].gesture): drag the
+  // sun, tap (a press and its ring), hold (a ring filling), steer (a drop slid sideways), swipe.
+  'g-drag': DRAG,
+  'g-tap': `<circle cx="12" cy="12" r="2.8" ${FILL}/><circle cx="12" cy="12" r="7.4"/>`,
+  'g-hold': `<circle cx="12" cy="12" r="2.8" ${FILL}/><path d="M12 4.6A7.4 7.4 0 1 1 4.6 12"/>`,
+  'g-steer': `<path d="M12 6.4s3.4 3.6 3.4 6a3.4 3.4 0 0 1-6.8 0c0-2.4 3.4-6 3.4-6Z"/><path d="M5.6 9.6 3.2 12l2.4 2.4M18.4 9.6l2.4 2.4-2.4 2.4"/>`,
+  'g-swipe': `<path d="M3.6 12h13.6M13.6 8l4 4-4 4M3.6 7.6h5M3.6 16.4h5"/>`,
 } as const;
 
 export type IconName = keyof typeof ICONS;

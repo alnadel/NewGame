@@ -1,10 +1,11 @@
-// Elementals: the element roster and the Trials, laid out like the Wardrobe. The stage previews an
-// element (cb.renderHeroPreview) with its element word, tagline and three rules, and Play for the
-// selected Trial (the last one played, else the first open one not passed).
-// The heroes follow as round candy coins with their names hung under them (a locked one is a
-// silhouette with a lock that says what opens it; a tap previews the hero, highlights its Trials and
-// points Play at its next one), then the Trials as Wardrobe tiles in two columns: a "T3" disc, the
-// name, the best stars and the cast's faces (the roster's art, small). A tap
+// Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the five elements and the seven Trials, laid out like
+// the Wardrobe. The stage previews an element (cb.renderHeroPreview) with its element word, tagline,
+// three rules and its verb row (the gesture icon, how it plays, its keys), and Play for the selected
+// Trial (the last one played, else the first open one not passed).
+// The elements follow as round candy coins with their names hung under them (a locked one is a
+// silhouette with a lock that says what opens it; a tap previews the element, highlights its Trials
+// and points Play at its next one), then the Trials as Wardrobe tiles in two columns: a "T3" disc,
+// the name, the best stars and the cast's faces in leg order (the roster's art, small). A tap
 // on an open Trial plays it; a locked one says what opens it. Opening the screen marks it seen;
 // Trials and heroes opened since the last visit pop in, and a new hero joins the team with a toast.
 // refresh() rebuilds the tiles from the save and puts the focus back on the tile that had it.
@@ -14,7 +15,7 @@ import type { Save } from '../../meta/saveTypes.ts';
 import { ELEMENTAL_STARS_MAX, elementalStars, heroUnlocked, markElementalsSeen, trialBest, trialOpen } from '../../meta/progression.ts';
 import { artIcon } from '../art-icons.ts';
 import { fitCanvas as fit, h, setChildren } from '../dom.ts';
-import { icon } from '../icons.ts';
+import { icon, type IconName } from '../icons.ts';
 import { starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
 import { button, menuHeader, setButtonLabel } from '../widgets.ts';
@@ -54,10 +55,11 @@ export function createElementalsScreen(ctx: UiContext): Screen {
   const name = h('p', 'preview-name gt-ink');
   const tagline = h('p', 'preview-note');
   const rules = h('ul', { class: 'el-rules', 'aria-label': 'Rules' });
+  const verb = h('p', 'el-verb');
   const playBtn = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', size: 'lg', block: true, className: 'elementals-play', onPress: () => play(sel) });
   const heroes = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Heroes' });
   const grid = h('ul', { class: 'tile-grid panel el-grid', 'aria-label': 'Trials' });
-  const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, rules, playBtn), heroes, grid);
+  const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, rules, verb, playBtn), heroes, grid);
   // Arrow keys walk the tiles: along the hero row, across (±1) and down (±2) the Trial grid; down
   // from a hero to its first Trial, up from the grid's top row to the selected hero.
   body.addEventListener('keydown', (e) => {
@@ -96,6 +98,7 @@ export function createElementalsScreen(ctx: UiContext): Screen {
     setChildren(name, hero.name, ' ', h('span', 'tag', hero.element));
     tagline.textContent = hero.tagline;
     setChildren(rules, ...hero.rules.map((r) => h('li', 'tag', r)));
+    setChildren(verb, icon(hero.gesture as IconName), hero.verbLine, h('small', null, hero.keyLine));
     setButtonLabel(playBtn, `Play ${levelShort(sel.id)} · ${sel.name}`);
 
     // The heroes: a locked one is a silhouette (elementals.css) with its lock, and says what opens it.
@@ -134,9 +137,9 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const open = trialOpen(save, t.n);
       const best = trialBest(save, t.n);
       const cls = `tile trial-tile${open ? '' : ' is-locked'}${best ? ' is-done' : ''}${t === sel ? ' is-next is-selected' : ''}${picked && t.cast.includes(picked) ? ' is-hl' : ''}${fresh[i] ? ' is-unlocked' : ''}`;
-      // The cast's faces, the roster's art in small coins: a relay in walking order, back to Nubs too
-      // (T5); five (T8) go without arrows to stay on one line.
-      const who = t.relays.length ? [t.cast[0] as HeroId, ...t.relays.map((r) => r.to)] : t.cast;
+      // The cast's faces in leg order, the roster's art in small coins; five (T7) go without arrows to
+      // stay on one line.
+      const who = t.cast;
       const cast = who.flatMap((x, k) => {
         const c = fit(h('canvas', { deco: true }), 18);
         ctx.cb.renderHeroPreview(c, x);
@@ -145,7 +148,7 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const state = open ? (best ? starsLabel(best) : 'not passed yet') : `locked: pass ${blocker(save, t)}`;
       const b = h(
         'button',
-        { class: cls, type: 'button', 'data-trial': t.n, 'aria-disabled': String(!open), 'aria-label': `${levelTag(t.id)}, ${t.name}, ${who.map((x) => HEROES[x].name).join(', then ')}, ${state}` },
+        { class: cls, type: 'button', 'data-trial': t.n, 'aria-disabled': String(!open), 'aria-label': `${levelTag(t.id)}, ${t.name}, ${who.map((x) => HEROES[x].name).join(', ')}, ${state}` },
         h('span', 'node candy', levelShort(t.id)),
         h('span', 'tile-name gt-ink', t.name),
         h('span', 'el-stars', ...[0, 1, 2].map((k) => artIcon(k < best ? 'star' : 'starEmpty'))),
