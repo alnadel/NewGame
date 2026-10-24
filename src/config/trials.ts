@@ -192,12 +192,33 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
     'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-26 i436 t452:10 t474:-14 u492:26 t512:-4 u530:-17 t546:16', ['drinks', 5], 25, [1, 2],
     'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 5', 'Drink 5 puddles', '', 1113,
     { legStart: [80, 60, 50, 80], costMul: 1.2, evapMul: 1.2 }),
-  trial(6, 'Rain Garden', 9, 'meadow', 150, 490, 28, 0, [[246, 'gust'], [390, 'sprout'], [576, 'nubs']], null,
-    'f280:90:70:-14 r300:130:55:0 r312:-110:60:22 f352:-80:75:14 r360:-150:55:0 f402:60:70:-10 r414:120:85:6 p418:44 x464:0:14 s500:0:16 p520:-44 x545:0:16 p590:44 p606:-44 p620:44', ['trees', 3], 25, [3, 4],
-    'Clear the fog for Sprout and blow the rain onto its path: rain feeds plants.', 'Grow 3 trees', 'Grow 3 trees'),
-  trial(7, 'Five Elements', 17, 'meadow', 60, 600, 30, -16, [[156, 'gust'], [264, 'sprout'], [384, 'ember'], [498, 'drip'], [598, 'nubs']], null,
-    'r186:125:55:-4 r206:120:55:16 f214:-110:70:30 r236:100:60:0 r248:-150:55:16 f276:-30:70:16 r288:150:80:8 p288:44 p330:-44 x338:0:14 s364:0:14 p410:-44 b413 p416:44 u428 r446:133:55:-24 g446 b468 t480 i522 u532:-18 i546 t556:12 u570:16 t582:-10', ['grove', 4], 25, [5, 6],
-    'Five elements, one day. The breeze spreads fire west: keep four trees.', '4 trees standing', 'Keep 4 trees standing', 'ALL FIVE ELEMENTS'),
+  // T6 pin (best found; FAILS G5b, G6 and G7, see below): salt 73; drain 28 → 34, Nubs' legs 100
+  // → 80, Gust 80 → 65 and costMul 1.2, Sprout 80 → 100; one object added to Gust's leg, the rain
+  // r330:82:90:0 (a wide cloud waiting east: without it Gust's leg passed with no swipe at all and
+  // the west spam Gusts passed); plots 606 −44 → −43 and 620 44 → 40 (G0 clearance). Measured: G1
+  // 83/bots/44/83 (Sap low 44 on the crossings, 16 with 2 plots), G2 low 62, G3 8/8, G4 11/16 (69%),
+  // G5 idle, both verbs off and the four spams fail; G5b: a constant θ20 walks it (the 8:30 AM
+  // opening leg keeps a fixed-sun shade line in every salt scanned, 0..20000, even at drain 42);
+  // G6 trees ≥ 3 0% (2 trees at most); G7 the hand-off swipes add no Sap (44 vs 44).
+  trial(6, 'Rain Garden', 9, 'meadow', 150, 490, 34, 0, [[246, 'gust'], [390, 'sprout'], [576, 'nubs']], null,
+    'f280:90:70:-14 r300:130:55:0 r312:-110:60:22 r330:82:90:0 f352:-80:75:14 r360:-150:55:0 f402:60:70:-10 r414:120:85:6 p418:44 x464:0:14 s500:0:16 p520:-44 x545:0:16 p590:44 p606:-43 p620:40', ['trees', 3], 25, [3, 4],
+    'Clear the fog for Sprout and blow the rain onto its path: rain feeds plants.', 'Grow 3 trees', 'Grow 3 trees', '', 73,
+    { legStart: [80, 65, 100, 80], costMul: 1.2 }),
+  // T7 pin (best found; FAILS G5, G5b, G6 and G7, see below): salt 20; drain 30 → 36, Nubs' legs
+  // 100 → 80, Gust 80 → 70, Sprout 80 → 100, Ember 80 → 60, Drip 70 → 50, evapMul 1.2; one object
+  // added to Gust's leg, the rain r196:82:90:16 (waiting east: the west spam Gusts passed without
+  // it); the garden plot 288 44 → 52 (toward its cloud), stones 556 12 → 4 and 582 −10 → −2 and
+  // puddle 570 16 → 24 (an unsteered Drip met them), puddle 532 −18 → −14 (G0 clearance); Dare 4 → 3
+  // (−25%; G6 0% at 4). Measured: G1 83/bots/60/60/46/83 (Drip marks: chosen 45° 50, worst 200° 46),
+  // G2 low 50, G3 8/8, G4 11/16 (69%), G5 idle, the Gust, Sprout and Ember legs with their verb off
+  // and the four spams fail, but Drip's leg passes unsteered (its two melted-ice puddles lie on the
+  // trail and the held sun shades it: no lever inside §6.5 moves either); G5b: a constant θ0 walks it
+  // (the 7:00 AM opening leg); G6 grove ≥ 3 0%; G7 plot 410 burns, but the hand-off swipes add only
+  // 2 Sap (58 vs 60).
+  trial(7, 'Five Elements', 17, 'meadow', 60, 600, 36, -16, [[156, 'gust'], [264, 'sprout'], [384, 'ember'], [498, 'drip'], [598, 'nubs']], null,
+    'r186:125:55:-4 r196:82:90:16 r206:120:55:16 f214:-110:70:30 r236:100:60:0 r248:-150:55:16 f276:-30:70:16 r288:150:80:8 p288:52 p330:-44 x338:0:14 s364:0:14 p410:-44 b413 p416:44 u428 r446:133:55:-24 g446 b468 t480 i522 u532:-14 i546 t556:4 u570:24 t582:-2', ['grove', 3], 25, [5, 6],
+    'Five elements, one day. The breeze spreads fire west: keep three trees.', '3 trees standing', 'Keep 3 trees standing', 'ALL FIVE ELEMENTS', 20,
+    { legStart: [80, 70, 100, 60, 50, 80], evapMul: 1.2 }),
 ]);
 
 /** True for an integer trial id 1001..1007. */
