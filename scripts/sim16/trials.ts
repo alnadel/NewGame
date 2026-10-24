@@ -1,375 +1,84 @@
-// Elementals `node scripts/sim.ts --trials` (CORE): proves each Trial winnable on its pinned seed,
-// and finds that seed. The module shell of docs/ELEMENTALS_V2.md §6: the per-verb audits, the
-// element bots and the v2 gates replace the Nubs-only gates here.
+// Elementals v2 `node scripts/sim.ts --trials` (CORE; docs/ELEMENTALS_V2.md §6): proves each Trial
+// winnable on its pinned seed, and finds that seed.
 //
-//   node scripts/sim.ts --trials [--id 1001,…] [--check] [--pick <id>] [--salts 16] [--workers W]
+//   node scripts/sim.ts --trials [--id 1001,…] [--check] [--pick <id>] [--salts 16] [--perf] [--workers W]
 //
-// One row per trial: seed and salt, the audit's margin (G1), the path bot's verdict and lowest
-// health (G2), the reactive bot's wins on 8 salts (G3), humanDial's pass rate on --salts salts (G4),
-// the anti-trivial gate (G5: idle and the best of 36 constant angles fail) and the Dare's share of
-// the G3 and G4 runs (G6). --check exits 1 when any gate fails. --pick <id> searches k = 0..199 for
-// the first salt that passes every gate, moving the Dare target 25% toward the band when G6 fails
-// on the pick; it prints what to pin in src/config/trials.ts and changes nothing.
-//
-// The audit (G1) is a read-only, turn-limited survival DP cloned from bake.ts glareFreeLine: 360
-// bins on the validator's 6-tick grid from θ0 to the finish line, TUNING.validator.turnBins per step
-// (slidingMaxCircular), rows from gatherScene + litMask at the walker's centre, the step delta of
-// Nubs' trial rate at lit sum c · 0.1 with min-of-three pessimism (the least of the previous,
-// current and next step's deltas), every leg on Nubs' rule (each element's own rule is §6.2's),
-// carrying the alive bins across a TAG at the incoming element's start meter (health ≥ 20). The
-// Cold Snap, the TAG grace and flakes are left out, so the audit is conservative. The margin
-// printed is the highest health threshold a path keeps.
+// One block per trial: seed and salt, G0 (placement and authoring), each leg's audit margin (G1, with
+// the Drip mask's chosen, worst and best marked bin), the path bot's verdict and lowest steady health
+// (G2, also from the worst marked bin), the reactive bot's wins on 8 salts (G3), humanEl's pass rate on
+// --salts salts (G4), the anti-trivial runs (G5: idle, each element leg with its verb off, T1's
+// tap-on-sight Ember, the spam Gusts; G5b: the plan's verbs at the best of 36 constant angles), the
+// Dare's share of the G3 and G4 runs (G6) and the mixers' interaction runs (G7). --check exits 1 on
+// any failed gate. --pick <id> tries salts 0..199 in order and prints the first that passes every gate
+// (moving the Dare target 25% toward the band when only G6 fails); it changes nothing. --variant
+// '<json>' plays a calibration variant (drain, legStart, costMul, evapMul, moves, dareTarget). --perf
+// adds the µs per tick and per guide refresh against a Nubs run of the same length. The audits, plans
+// and players live in elaudit.ts; the bots in src/core/sim/bots (build:single drops all of it).
 
 import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import type { LevelDef } from '../../src/config/campaign.ts';
-import type { ConceptId } from '../../src/config/concepts.ts';
 import type { HeroId } from '../../src/config/heroes.ts';
-import { hashString } from '../../src/config/rng.ts';
 import { TRIAL_IDS, trialDareValue, trialDef, type TrialDef } from '../../src/config/trials.ts';
 import { TUNING } from '../../src/config/tuning.ts';
-import { DT, TICK_HZ } from '../../src/core/clock.ts';
-import { angleDiff, tanD, wrapDeg } from '../../src/core/dmath.ts';
-import { paramsAt, worldElevation, worldYAtDayTick, worldYAtTick } from '../../src/core/gen/plan.ts';
-import { gatherScene } from '../../src/core/gen/store.ts';
-import { slidingMaxCircular } from '../../src/core/gen/validator.ts';
-import { createWorld, ensureGenerated, type World } from '../../src/core/gen/world.ts';
-import { BINS, binOf, createMaskScene, litMask } from '../../src/core/intervals.ts';
-import { campaignConfig, levelOutcome, levelProgress, minuteStart, resolveLevelConfig } from '../../src/core/level.ts';
+import { TICK_HZ, tickAtMinute } from '../../src/core/clock.ts';
+import { distPointConvex } from '../../src/core/geom.ts';
+import { worldYAtTick } from '../../src/core/gen/plan.ts';
+import { campaignConfig, levelOutcome, levelProgress } from '../../src/core/level.ts';
+import { EL_GONE, RUNTIME_ID_BASE, type Caster, type ElObj, type ElState } from '../../src/core/objects.ts';
 import { createBot } from '../../src/core/sim/bots.ts';
-import { createRun, type RunBuild } from '../../src/core/sim/create.ts';
+import type { ElPolicyOpts } from '../../src/core/sim/bots/elements.ts';
+import { createRun } from '../../src/core/sim/create.ts';
+import { laneOf, tagTick } from '../../src/core/sim/elements.ts';
 import { updateGuide } from '../../src/core/sim/guide.ts';
-import { heroStart, tagTick } from '../../src/core/sim/elements.ts';
-import { computeCoverage } from '../../src/core/sim/nubs.ts';
-import { step, syncTime } from '../../src/core/sim/step.ts';
+import { step } from '../../src/core/sim/step.ts';
 import type { InputFrame, SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
 import { TaskPool } from './dares.ts';
+import { audit, AUDIT_HEALTH, legAt, legHero, planPlayer, tickAtY, trialRun, variantDef, type Plan, type ThetaMode, type TrialVariant } from './elaudit.ts';
 import type { Sim16Ctx, Sim16Module } from './registry.ts';
 
-const STEP = TUNING.validator.stepTicks;
-const TURN = TUNING.validator.turnBins;
-const DT_STEP = STEP / TICK_HZ;
-const DEAD = -1e9;
-const MARGIN = TUNING.nubs.sampleOffset + 1;
-/** Health the audit's best path keeps (G1). */
-export const AUDIT_HEALTH = 20;
-/** The reactive bot's salts (G3) and the wins it needs; humanDial's default salts (G4). */
+export { trialRun, variantDef, type TrialVariant } from './elaudit.ts';
+
+const E = TUNING.elements;
+/** The reactive bot's salts (G3) and the wins it needs; humanEl's default salts (G4). */
 export const REACTIVE_SALTS = 8;
 export const REACTIVE_WINS = 7;
 export const HUMAN_SALTS = 16;
-/** G4 humanDial pass-rate bands (T1-T4 intros, T5-T7 mixers) and the G6 Dare band. */
+/** G4 humanEl pass-rate bands (T1-T4 intros, T5-T7 mixers) and the G6 Dare band. */
 const HUMAN_BAND_SOLO: readonly [number, number] = [0.75, 0.95];
 const HUMAN_BAND_MIX: readonly [number, number] = [0.45, 0.9];
 const DARE_BAND: readonly [number, number] = [0.1, 0.6];
+/** G5(c): the tap-on-sight Ember keeps a steady-health margin at least this much lower than the path bot. */
+const ON_SIGHT_GAP = 15;
+/** G7: a mixer without its interaction keeps a Sprout Sap margin at least this much lower. */
+const SAP_GAP = 10;
+/** G5(d): the four spam Gusts. */
+const SPAMS: readonly { dir: -1 | 1; every: number }[] = [
+  { dir: 1, every: 30 },
+  { dir: -1, every: 30 },
+  { dir: 1, every: 90 },
+  { dir: -1, every: 90 },
+];
 /** --pick: salts tried. */
 const PICK_SALTS = 200;
-
-// ---------------------------------------------------------------------------------------------
-// Trial variants (calibration) and their runs
-
-/** A trial as calibration tries it: the pinned TrialDef with another salt, drain, start or Dare target (plain data: crosses workers). */
-export interface TrialVariant {
-  readonly id: number;
-  readonly salt: number;
-  readonly drain?: number;
-  readonly startMinute?: number;
-  readonly dareTarget?: number;
-  /** Tooling only (sweeps): another concept list. */
-  readonly concepts?: readonly ConceptId[];
-}
-
-/** The TrialDef of a variant (the pinned one itself when nothing differs). */
-export function variantDef(v: TrialVariant): TrialDef {
-  const t = trialDef(v.id) as TrialDef;
-  const drain = v.drain ?? t.drain;
-  const startMinute = v.startMinute ?? t.startMinute;
-  const target = v.dareTarget ?? t.dare.target;
-  const concepts = v.concepts ?? t.concepts;
-  if (v.salt === t.salt && drain === t.drain && startMinute === t.startMinute && target === t.dare.target && concepts === t.concepts) return t;
-  return Object.freeze({ ...t, salt: v.salt, seed: hashString(`trial-${t.id}-${v.salt}`), drain, startMinute, concepts, dare: Object.freeze({ kind: t.dare.kind, target }) });
-}
-
-/** The LevelDef of a trial variant (config/trials.ts trialLevel's fields). */
-function levelOf(t: TrialDef): LevelDef {
-  return Object.freeze({
-    id: t.id,
-    chapter: t.chapter,
-    name: t.name,
-    seed: t.seed,
-    biome: t.biome,
-    forecast: t.forecast,
-    concepts: t.concepts,
-    introduces: null,
-    startMinute: t.startMinute,
-    lengthMinutes: t.lengthMinutes,
-    goal: t.goal,
-    stars: Object.freeze({ flakes: 1e9, minChill: t.steady, sunSec: 1e9 }),
-    drain: t.drain,
-    feats: [],
-    flares: [],
-  });
-}
-
-/** A trial variant's run config (its seed, drain and start) and world. */
-function variantBuild(t: TrialDef): RunBuild {
-  const start = minuteStart(t.startMinute);
-  const cfg = { ...resolveLevelConfig(campaignConfig(t.id)), seed: t.seed, drain: t.drain, startDay: start.day, startT: start.dayTick / TICK_HZ, mods: t.concepts };
-  const world = createWorld(cfg, levelOf(t));
-  return { cfg, world, targetY: worldYAtDayTick(world, start.day, start.dayTick) + TUNING.world.hardAhead };
-}
-
-/**
- * A fresh run of trial `t` (its own world). The pinned trial is campaignConfig's run as the game
- * plays it; a variant is built on its own world and, since createRun resolves the config from the
- * pinned trial, gets its trial, seed, drain and start put back before the first tick.
- */
-export function trialRun(t: TrialDef): SimState {
-  if (t === trialDef(t.id)) return createRun(campaignConfig(t.id));
-  const b = variantBuild(t);
-  const s = createRun(b.cfg, b);
-  const m = s as { -readonly [K in keyof SimState]: SimState[K] };
-  m.trial = t;
-  s.cfg.seed = t.seed;
-  s.cfg.drain = t.drain;
-  const start = minuteStart(t.startMinute);
-  if (s.day !== start.day || s.dayTick !== start.dayTick) {
-    s.day = start.day;
-    s.dayTick = start.dayTick;
-    syncTime(s);
-    s.nextHistoryY = s.nubs.y;
-    ensureGenerated(s.world, s.nubs.y + TUNING.world.hardAhead);
-    computeCoverage(s);
-  }
-  updateGuide(s);
-  return s;
-}
-
-/** A world of trial `t` generated through its finish line (the audit's). */
-export function auditWorld(t: TrialDef): World {
-  const w = variantBuild(t).world;
-  ensureGenerated(w, w.finishY + TUNING.world.chunkLen);
-  return w;
-}
-
-// ---------------------------------------------------------------------------------------------
-// The audit (G1)
-
-/** The audit of a trial: its margin (the highest health threshold a path keeps) and that path. */
-export interface Audit {
-  readonly ok: boolean;
-  readonly margin: number;
-  /** The threshold the gate asks for (AUDIT_HEALTH). */
-  readonly need: number;
-  /** Step j0 − 1 (θ0) is path[0]; the path runs to the last audited step. */
-  readonly j0: number;
-  readonly path: Int16Array;
-}
-
-/** The walker's leg at absolute tick `tick` (0 from go, then one more at each relay's TAG tick). */
-function legAt(t: TrialDef, tick: number): number {
-  let leg = 0;
-  for (let i = 0; i < t.relays.length; i++) if (tagTick(t, i) <= tick) leg = i + 1;
-  return leg;
-}
-
-/** Leg `leg`'s element and its start meter (tune.legStart, else the element's). */
-function legHero(t: TrialDef, leg: number): HeroId {
-  return leg === 0 ? (t.cast[0] as HeroId) : (t.relays[leg - 1] as { to: HeroId }).to;
-}
-
-export interface Rows {
-  readonly j0: number;
-  /** Rows j0 − 1 … jEnd + 1 (index j − j0 + 1). */
-  readonly n: number;
-  readonly jEnd: number;
-  readonly lit: Uint8Array;
-  /** Per row: the walker's leg and that leg's start meter. */
-  readonly leg: number[];
-  readonly start: number[];
-  /** θ0's bin (row 0). */
-  readonly theta0: number;
-}
-
-const scene = createMaskScene();
-
-/** The audit's rows: per step the lit sums at the walker's centre. */
-export function auditRows(t: TrialDef, w: World): Rows {
-  const j0 = Math.ceil(w.startTick / STEP) + 1;
-  let jEnd = j0;
-  while (worldYAtTick(w, jEnd * STEP) < w.finishY) jEnd++;
-  const n = jEnd - j0 + 3;
-  const lit = new Uint8Array(n * BINS);
-  const leg: number[] = [];
-  const start: number[] = [];
-  for (let r = 0; r < n; r++) {
-    const tick = (j0 - 1 + r) * STEP;
-    const l = legAt(t, tick);
-    leg.push(l);
-    start.push(t.tune.legStart[l] || heroStart(legHero(t, l)));
-    const eps = worldElevation(w, tick);
-    const o = r * BINS;
-    if (eps <= 0) continue;
-    const y = worldYAtTick(w, tick);
-    const x = trailX(w.trail, y);
-    gatherScene(w, scene, x, y, MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps), false);
-    litMask(scene, x, y, false, lit.subarray(o, o + BINS), null);
-  }
-  return { j0, n, jEnd, lit, leg, start, theta0: binOf(w.theta0) };
-}
-
-/** Nubs' trial rate (per s) at lit sum c = 0..10 (core sim/heroes.ts applyHeroDaylight's expression). */
-function rates(D: number, R: number): Float64Array {
-  const t = new Float64Array(11);
-  for (let c = 0; c <= 10; c++) t[c] = -D * (c / 5) + R * Math.max(0, 1 - c / 5);
-  return t;
-}
-
-const win = new Float64Array(BINS);
-const src = new Float64Array(BINS);
-
-/** One DP pass at health threshold `h`: per step the meter per bin (DEAD when lost). */
-interface DpOut {
-  readonly ok: boolean;
-  readonly last: number;
-  readonly tab: Float64Array;
-}
-
-function dp(R: Rows, tl: Float64Array, maxC: number, h: number): DpOut {
-  const n = R.n;
-  const tab = new Float64Array(n * BINS).fill(DEAD);
-  // Row 0 (step j0 − 1): θ0 at the first leg's start meter.
-  tab[R.theta0] = R.start[0] as number;
-  let last = 0;
-  for (let r = 1; r < n - 1; r++) {
-    const tag = R.leg[r] !== R.leg[r - 1];
-    const po = (r - 1) * BINS;
-    const o = r * BINS;
-    // The source row: the previous step's meter, or at a TAG its alive bins at the incoming start.
-    for (let b = 0; b < BINS; b++) {
-      const v = tab[po + b] as number;
-      src[b] = v === DEAD ? DEAD : tag ? (R.start[r] as number) : v;
-    }
-    let any = false;
-    slidingMaxCircular(src, TURN, win);
-    for (let b = 0; b < BINS; b++) {
-      const wv = win[b] as number;
-      if (wv === DEAD) continue;
-      const d = Math.min(tl[R.lit[po + b] as number] as number, tl[R.lit[o + b] as number] as number, tl[R.lit[o + BINS + b] as number] as number);
-      let v = wv + d * DT_STEP;
-      if (v > maxC) v = maxC;
-      if (v < h) continue;
-      tab[o + b] = v;
-      any = true;
-    }
-    if (!any) return { ok: false, last: r, tab };
-    last = r;
-  }
-  return { ok: true, last, tab };
-}
-
-/** G1: the audit of trial `t` on its world. */
-export function audit(t: TrialDef, w: World = auditWorld(t)): Audit {
-  const R = auditRows(t, w);
-  const p1 = paramsAt(w, 1);
-  const tl = rates(t.drain, p1.regen);
-  let lo = -1;
-  let hi = 100;
-  // The largest threshold (0..100) a path keeps: binary search (a stricter bar only removes paths).
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (dp(R, tl, p1.maxChill, mid).ok) lo = mid;
-    else hi = mid;
-  }
-  const margin = lo;
-  if (margin < 0) return { ok: false, margin: -1, need: AUDIT_HEALTH, j0: R.j0, path: new Int16Array(0) };
-  const best = dp(R, tl, p1.maxChill, margin);
-  return { ok: margin >= AUDIT_HEALTH, margin, need: AUDIT_HEALTH, j0: R.j0, path: backtrack(t, best) };
-}
-
-/** The best path of a DP pass: bins per row 0..last, chosen backwards (each row's best meter). */
-function backtrack(t: TrialDef, o: DpOut): Int16Array {
-  const path = new Int16Array(o.last + 1);
-  const L = o.last;
-  let b = -1;
-  let best = -Infinity;
-  for (let bb = 0; bb < BINS; bb++) {
-    const v = o.tab[L * BINS + bb] as number;
-    if (v !== DEAD && v > best) {
-      best = v;
-      b = bb;
-    }
-  }
-  path[L] = b;
-  for (let r = L; r >= 1; r--) {
-    let pb = -1;
-    let bestV = DEAD;
-    for (let k = -TURN; k <= TURN; k++) {
-      const c = (b + k + BINS) % BINS;
-      const v = o.tab[(r - 1) * BINS + c] as number;
-      if (v !== DEAD && v > bestV) {
-        bestV = v;
-        pb = c;
-      }
-    }
-    if (pb < 0) throw new Error(`audit backtrack lost the path at row ${r} (trial ${t.id})`);
-    b = pb;
-    path[r - 1] = b;
-  }
-  return path;
-}
-
-// ---------------------------------------------------------------------------------------------
-// Scripted players: the path bot (G2), idle and constant angles (G5)
-
-type Player = (s: SimState) => InputFrame;
-
-function frame(): InputFrame {
-  return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
-}
-
-/** Finger held, turning toward `target` (°) at ≤ rate °/s (the first call touches down). */
-function steer(f: InputFrame, s: SimState, target: number, rate: number, first: boolean): InputFrame {
-  const cur = wrapDeg(s.sun.theta + s.sun.lag);
-  const max = rate * DT;
-  const d = angleDiff(target, cur);
-  f.dTheta = Math.round((d > max ? max : d < -max ? -max : d) * 1024) / 1024;
-  f.down = true;
-  f.downEdge = first;
-  f.upEdge = false;
-  f.release = 0;
-  f.key = 0;
-  f.snap = false;
-  return f;
-}
-
-/** A constant angle θ, reached during the start beat and held; casts nothing. */
-function constant(theta: number): Player {
-  const f = frame();
-  let first = true;
-  return (s) => {
-    const out = steer(f, s, theta, 600, first);
-    first = false;
-    return out;
-  };
-}
-
-/** The path bot (G2): follows the audit's best θ path and casts nothing. */
-function pathBot(a: Audit): Player {
-  const f = frame();
-  let first = true;
-  return (s) => {
-    const r = Math.min(a.path.length - 1, Math.max(0, Math.round((s.tickAbs + 1) / STEP) - (a.j0 - 1)));
-    const out = steer(f, s, a.path.length ? (a.path[r] as number) : s.sun.theta, 600, first);
-    first = false;
-    return out;
-  };
-}
+const TICK_CAP = 12000;
 
 // ---------------------------------------------------------------------------------------------
 // Runs (in the worker pool)
+// ---------------------------------------------------------------------------------------------
 
-/** Who plays a run: a core bot with its salt, or a scripted player. */
-export type TrialPlayer = { readonly bot: 'reactive' | 'humanDial' | 'idle'; readonly salt: number } | { readonly bot: 'path' } | { readonly bot: 'const'; readonly theta: number };
+/** Who plays a run: a core bot with its salt, or the plan of the variant's audit under some change. */
+export type TrialPlayer =
+  | { readonly bot: 'reactive' | 'humanEl' | 'idle'; readonly salt: number; readonly el?: ElPolicyOpts }
+  | {
+      readonly bot: 'path';
+      /** The plan made from the worst marked bin before each Drip leg (G2). */
+      readonly worst?: boolean;
+      readonly theta?: ThetaMode;
+      readonly off?: readonly number[];
+      readonly spam?: { readonly dir: -1 | 1; readonly every: number };
+      readonly tapOnSight?: boolean;
+    };
 
 export interface TrialRunTask {
   readonly v: TrialVariant;
@@ -379,26 +88,42 @@ export interface TrialRunTask {
 export interface TrialRunOut {
   readonly won: boolean;
   readonly passed: boolean;
-  /** The walker's lowest health (stats.minChill) and where the run ended (0..1). */
+  /** The lowest steady health of the run (stats.minChill) and per leg (Sprout: its lowest Sap); where it ended (0..1) and in which leg. */
   readonly health: number;
+  readonly legLow: readonly number[];
   readonly progress: number;
+  readonly leg: number;
   /** The Dare's count, and whether it is met at the finish (star 2). */
   readonly dare: number;
   readonly dareMet: boolean;
+  readonly trees: number;
+  readonly grove: number;
+  /** The authored minutes of the plots whose tree stands at the end. */
+  readonly standing: readonly number[];
   readonly line: string;
+  /** No plan for this variant (its audit failed). */
+  readonly noPlan?: boolean;
 }
 
-/** Per worker: the last audit (the path bot's), keyed by variant. */
-let auditFor = '';
-let auditMemo: Audit | null = null;
+/** Per worker: the last audits, keyed by variant and worst flag. */
+const audits = new Map<string, Plan>();
 
-export function auditOf(v: TrialVariant): Audit {
-  const key = JSON.stringify(v);
-  if (key !== auditFor || !auditMemo) {
-    auditFor = key;
-    auditMemo = audit(variantDef(v));
+export function auditOf(v: TrialVariant, worst = false): Plan {
+  const key = JSON.stringify([v, worst]);
+  let a = audits.get(key);
+  if (!a) {
+    if (audits.size > 16) audits.clear();
+    a = audit(v, worst);
+    audits.set(key, a);
   }
-  return auditMemo;
+  return a;
+}
+
+/** The authored minute of each placed object (createEl's y order, ties in list order). */
+function minutesOf(s: SimState, t: TrialDef): number[] {
+  const placed = t.objects.map((p, i) => ({ m: p.m, i, y: worldYAtTick(s.world, tickAtMinute(p.m)) }));
+  placed.sort((a, b) => a.y - b.y || a.i - b.i);
+  return placed.map((p) => p.m);
 }
 
 /** Plays one run of a trial variant to its finish line or a failure. */
@@ -406,123 +131,441 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
   const t = variantDef(task.v);
   const s = trialRun(t);
   const p = task.p;
-  let next: Player;
-  if (p.bot === 'path') next = pathBot(auditOf(task.v));
-  else if (p.bot === 'const') next = constant(p.theta);
-  else {
-    const b = createBot(p.bot, p.salt);
+  let next: (s: SimState) => InputFrame;
+  if (p.bot === 'path') {
+    const plan = auditOf(task.v, p.worst === true);
+    if (plan.theta === null) return { won: false, passed: false, health: 0, legLow: [], progress: 0, leg: 0, dare: 0, dareMet: false, trees: 0, grove: 0, standing: [], line: plan.why, noPlan: true };
+    next = planPlayer(plan, { theta: p.theta ?? { k: 'plan' }, off: p.off, spam: p.spam, tapOnSight: p.tapOnSight });
+  } else {
+    const b = createBot(p.bot, p.salt, true, { el: p.el });
     next = (st) => b.next(st);
   }
-  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < 12000) step(s, next(s));
+  const low: number[] = [];
+  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < TICK_CAP) {
+    step(s, next(s));
+    if (s.ready > 0 || s.phase !== 'day') continue;
+    const el = s.el as ElState;
+    const h = s.nubs.hero === 'sprout' ? s.nubs.chill : Math.min(100, s.nubs.chill + el.spent);
+    const L = s.relayIdx;
+    if (low[L] === undefined || h < (low[L] as number)) low[L] = h;
+  }
   const o = levelOutcome(s.level as LevelDef, s);
   const dare = trialDareValue(t.dare.kind, s.stats);
-  return { won: s.phase === 'won', passed: o.passed, health: s.stats.minChill, progress: levelProgress(s), dare, dareMet: o.passed && dare >= t.dare.target, line: s.death?.line ?? '' };
+  const mins = minutesOf(s, t);
+  const standing: number[] = [];
+  (s.el as ElState).objs.forEach((ob, i) => {
+    if (ob.kind === 'plot' && ob.state !== EL_GONE && ob.casterId >= 0) standing.push(mins[i] as number);
+  });
+  return {
+    won: s.phase === 'won',
+    passed: o.passed,
+    health: s.stats.minChill,
+    legLow: low.map((v) => Math.round(v * 10) / 10),
+    progress: levelProgress(s),
+    leg: s.relayIdx,
+    dare,
+    dareMet: o.passed && dare >= t.dare.target,
+    trees: s.stats.trees ?? 0,
+    grove: s.stats.grove ?? 0,
+    standing,
+    line: s.death?.line ?? '',
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// G0: placement and authoring (§5.0, §6.4)
+// ---------------------------------------------------------------------------------------------
+
+export interface G0Out {
+  readonly ok: boolean;
+  readonly fails: readonly string[];
+}
+
+const secs = (ticks: number): number => ticks / TICK_HZ;
+
+export function gateG0(v: TrialVariant): G0Out {
+  const t = variantDef(v);
+  const s = trialRun(t);
+  const w = s.world;
+  const el = s.el as ElState;
+  const fails: string[] = [];
+  const start = s.tickAbs;
+  const finish = tickAtY(s, w.finishY);
+  const legs = t.relays.length + 1;
+  const from = (L: number): number => (L === 0 ? start : tagTick(t, L - 1));
+  const to = (L: number): number => (L < t.relays.length ? tagTick(t, L) : finish);
+  const mins = minutesOf(s, t);
+  // Every authored object placed, inside the run.
+  if (el.objs.length !== t.objects.length) fails.push('objects missing');
+  for (const o of el.objs) if (o.y <= s.nubs.y || o.y >= w.finishY) fails.push(`object at y ${o.y.toFixed(0)} outside the run`);
+  // No plot, puddle or stone within `clearance` of a generated caster's prism part.
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (o.kind !== 'plot' && o.kind !== 'puddle' && o.kind !== 'stone') continue;
+    for (const c of w.casters as readonly Caster[]) {
+      if (c.id >= RUNTIME_ID_BASE || Math.abs(c.y - o.y) > 200) continue;
+      for (const p of c.parts) {
+        if (p.t !== 'prism') continue;
+        const d = distPointConvex(o.x, o.y, p.pts, p.n) - o.r;
+        if (d < E.objects.clearance) fails.push(`${o.kind} m${mins[i]} ${d.toFixed(1)} u from ${c.name}`);
+      }
+    }
+  }
+  // Leg lengths: opening ≥ 6.5 s, element legs ≥ 6.5 s, a closing Nubs leg ≥ 4 s.
+  for (let L = 0; L < legs; L++) {
+    const len = secs(to(L) - from(L));
+    const min = L === legs - 1 && legHero(t, L) === 'nubs' ? 4 : 6.5;
+    if (len < min - 1e-9) fails.push(`leg ${L} ${len.toFixed(2)} s < ${min}`);
+  }
+  // Crossings r 12-18.
+  for (const o of el.objs) if ((o.kind === 'gap' || o.kind === 'stream') && (o.r < E.objects.crossMin || o.r > E.objects.crossMax)) fails.push(`crossing r ${o.r}`);
+  const edge = (o: ElObj): number => {
+    const k = o.kind;
+    return k === 'bramble' || k === 'gate' || k === 'ice' ? o.y - E.objects.wallDepth / 2 : k === 'gap' || k === 'stream' ? o.y - o.r : k === 'rain' || k === 'fog' ? o.y : o.y - o.r - E.objects.touch;
+  };
+  const contact = (o: ElObj): number => tickAtY(s, edge(o));
+  const inWindow = (o: ElObj): number => tickAtY(s, edge(o) - E.range);
+  // The intro element's first object ≥ 2 s into its leg.
+  if (t.intro !== null) {
+    const L = t.relays.findIndex((r) => r.to === t.intro) + 1;
+    const first = el.objs.map(contact).filter((c) => c >= from(L) && c < to(L)).sort((a, b) => a - b)[0];
+    if (first === undefined || secs(first - from(L)) < 2 - 1e-9) fails.push(`intro's first object ${first === undefined ? 'missing' : `${secs(first - from(L)).toFixed(2)} s`} into its leg`);
+  }
+  for (let L = 0; L < legs; L++) {
+    const hero = legHero(t, L);
+    // Sprout: the first crossing ≥ need/grow + 2.5 s after the TAG; every crossing ≥ need/grow + 0.3 s after first holdable + 1 s.
+    if (hero === 'sprout') {
+      let firstDone = false;
+      for (const o of el.objs) {
+        if (o.kind !== 'gap' && o.kind !== 'stream') continue;
+        const c = contact(o);
+        if (c < from(L) || c >= to(L)) continue;
+        const grow = (2 * o.r) / E.sprout.grow;
+        if (!firstDone && secs(c - from(L)) < grow + 2.5 - 1e-9) fails.push(`Sprout's first crossing ${secs(c - from(L)).toFixed(2)} s < ${(grow + 2.5).toFixed(2)}`);
+        firstDone = true;
+        const hold = Math.max(from(L), inWindow(o));
+        if (secs(c - hold) - 1 < grow + 0.3 - 1e-9) fails.push(`crossing r${o.r} holdable ${secs(hold - from(L)).toFixed(2)} contact ${secs(c - from(L)).toFixed(2)}`);
+      }
+    }
+    // Cross-leg targets: ≥ 1.5 s in the window during the targeting leg.
+    if (hero === 'ember' || hero === 'sprout') {
+      for (const o of el.objs) {
+        const wall = o.kind === 'bramble' || o.kind === 'gate' || o.kind === 'ice';
+        if (!(hero === 'ember' ? wall : o.kind === 'plot')) continue;
+        const c = contact(o);
+        if (c < to(L) || legAt(t, c) !== L + 1) continue;
+        const inside = secs(to(L) - Math.max(from(L), inWindow(o)));
+        if (inside < 1.5 - 1e-9) fails.push(`${o.kind} past the TAG in the window ${inside.toFixed(2)} s`);
+      }
+    }
+    // Gust: its own weather ≥ 2 s between max(wake, TAG) and arrival; hand-off weather wakes ≥ 4 s before the leg ends.
+    if (hero === 'gust') {
+      for (const o of el.objs) {
+        if (o.kind !== 'rain' && o.kind !== 'fog') continue;
+        const arr = tickAtY(s, o.y);
+        const wake = Math.max(start, tickAtY(s, o.y - E.weather.wake));
+        if (arr >= from(L) && arr < to(L) && secs(arr - Math.max(wake, from(L))) < 2 - 1e-9) fails.push(`weather at Gust ${secs(arr - from(L)).toFixed(1)} s: ${secs(arr - Math.max(wake, from(L))).toFixed(2)} s to push`);
+        if (arr >= to(L) && legAt(t, arr) === L + 1 && secs(to(L) - wake) < 4 - 1e-9) fails.push(`hand-off weather wakes ${secs(to(L) - wake).toFixed(2)} s before the TAG`);
+      }
+    }
+  }
+  // Left-alone weather arrives at dx + effectiveDrift · min(wake time, seconds from go) ±2 u; Drip's lane ≥ ±12 u.
+  const lane = new Float64Array(2);
+  const wx = new Float64Array(el.objs.length).fill(NaN);
+  const idle = createBot('idle');
+  let narrow = 0;
+  while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < TICK_CAP) {
+    s.nubs.chill = s.nubs.maxChill;
+    for (const o of el.objs) if (o.kind === 'gap' || o.kind === 'stream') o.hit = true;
+    step(s, idle.next(s));
+    for (let i = 0; i < el.objs.length; i++) {
+      const o = el.objs[i] as ElObj;
+      if ((o.kind === 'rain' || o.kind === 'fog') && Number.isNaN(wx[i] as number) && s.nubs.y >= o.y) wx[i] = o.x - trailX(w.trail, o.y);
+    }
+    if (s.nubs.hero === 'drip') {
+      laneOf(s, lane);
+      if ((lane[0] as number) > -12 || (lane[1] as number) < 12) narrow++;
+    }
+  }
+  if (narrow > 0) fails.push(`Drip's lane under ±12 u on ${narrow} ticks`);
+  const placed = t.objects.map((p, i) => ({ p, i, y: worldYAtTick(w, tickAtMinute(p.m)) })).sort((a, b) => a.y - b.y || a.i - b.i);
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (o.kind !== 'rain' && o.kind !== 'fog') continue;
+    const p = (placed[i] as { p: TrialDef['objects'][number] }).p;
+    const eff = (p.drift ?? 0) + (o.kind === 'rain' ? E.gust.rainGain : E.gust.fogGain) * t.breeze;
+    const want = p.dx + eff * Math.min(E.weather.wake / 70, secs(tickAtMinute(p.m) - start));
+    const got = wx[i] as number;
+    if (!(Math.abs(got - want) <= 2)) fails.push(`${o.kind} m${p.m} arrives ${Number.isNaN(got) ? 'never' : got.toFixed(1)} not ${want.toFixed(1)}`);
+  }
+  return { ok: fails.length === 0, fails };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The worker
+// ---------------------------------------------------------------------------------------------
+
+/** A worker task: a run, an audit summary, G0, or the --perf timing of a trial. */
+type Task = TrialRunTask | { readonly audit: TrialVariant; readonly worst?: boolean } | { readonly g0: TrialVariant } | { readonly perf: number };
+
+export interface AuditOut {
+  readonly ok: boolean;
+  readonly why: string;
+  readonly legs: readonly { hero: HeroId; margin: number; note: string }[];
+  readonly drip: Plan['drip'];
+}
+
+function auditSummary(v: TrialVariant, worst = false): AuditOut {
+  const a = auditOf(v, worst);
+  return { ok: a.ok, why: a.why, legs: a.legs.map((l) => ({ hero: l.hero, margin: Math.round(l.margin * 10) / 10, note: l.note })), drip: a.drip };
 }
 
 if (!isMainThread && workerData === 'trials') {
-  parentPort?.on('message', (task: TrialRunTask | { audit: TrialVariant }) => {
-    if ('audit' in task) {
-      const a = auditOf(task.audit);
-      parentPort?.postMessage({ ok: a.ok, margin: a.margin, need: a.need });
-    } else {
-      parentPort?.postMessage(playTrial(task));
-    }
+  parentPort?.on('message', (task: Task) => {
+    if ('audit' in task) parentPort?.postMessage(auditSummary(task.audit, task.worst));
+    else if ('g0' in task) parentPort?.postMessage(gateG0(task.g0));
+    else if ('perf' in task) parentPort?.postMessage(perfOf(task.perf));
+    else parentPort?.postMessage(playTrial(task));
   });
 }
 
 // ---------------------------------------------------------------------------------------------
 // Gates
+// ---------------------------------------------------------------------------------------------
+
+/** A runner of worker tasks: the pool, or this thread (the unit tests). */
+export interface TrialRunner {
+  run(task: TrialRunTask): Promise<TrialRunOut>;
+  audit(v: TrialVariant, worst?: boolean): Promise<AuditOut>;
+  g0(v: TrialVariant): Promise<G0Out>;
+}
+
+export const runHere: TrialRunner = {
+  run: (task) => Promise.resolve(playTrial(task)),
+  audit: (v, worst) => Promise.resolve(auditSummary(v, worst)),
+  g0: (v) => Promise.resolve(gateG0(v)),
+};
 
 export interface Gates {
   readonly v: TrialVariant;
-  readonly g1: { ok: boolean; margin: number; need: number } | null;
-  readonly g2: { ok: boolean; out: TrialRunOut } | null;
-  readonly g5: { ok: boolean; idle: TrialRunOut; best: TrialRunOut; bestTheta: number } | null;
+  readonly g0: G0Out | null;
+  readonly g1: AuditOut | null;
+  readonly g2: { ok: boolean; out: TrialRunOut; worst: TrialRunOut | null } | null;
+  readonly g5: { ok: boolean; idle: TrialRunOut; offs: TrialRunOut[]; sight: { path: number; sight: number } | null; spams: TrialRunOut[]; constBest: TrialRunOut; constTheta: number; why: string } | null;
   readonly g3: { ok: boolean; wins: number; outs: TrialRunOut[] } | null;
   readonly g4: { ok: boolean; passes: number; outs: TrialRunOut[] } | null;
   readonly g6: { ok: boolean; share: number } | null;
-  /** The first gate that failed (0: none). */
+  readonly g7: { ok: boolean; what: string } | null;
+  /** The first gate that failed (0: none; 0.5 is G0; 5 is G5 or G5b; 7 is G7). */
   readonly failed: number;
 }
 
-/** A runner of trial tasks: the worker pool, or this thread (the unit tests). */
-export type TrialRunner = (task: TrialRunTask) => Promise<TrialRunOut>;
-export const runHere: TrialRunner = (task) => Promise.resolve(playTrial(task));
-
-/** G2 for one run: the path bot passes. */
-export function g2Ok(_t: TrialDef, o: TrialRunOut): boolean {
-  return o.passed;
+/** The legs of a trial walked by elements (not Nubs). */
+export function elementLegs(t: TrialDef): number[] {
+  const out: number[] = [];
+  for (let L = 0; L <= t.relays.length; L++) if (legHero(t, L) !== 'nubs') out.push(L);
+  return out;
 }
 
-/** G5: idle and every constant angle (every 10°) fail. */
-export async function gateG5(run: TrialRunner, v: TrialVariant): Promise<Gates['g5'] & object> {
-  const outs = await Promise.all([run({ v, p: { bot: 'idle', salt: 0 } }), ...Array.from({ length: 36 }, (_, i) => run({ v, p: { bot: 'const', theta: 10 * i } }))]);
-  const idle = outs[0] as TrialRunOut;
-  let best = 1;
-  for (let i = 2; i <= 36; i++) if ((outs[i] as TrialRunOut).progress > (outs[best] as TrialRunOut).progress) best = i;
-  return { ok: outs.every((o) => !o.passed), idle, best: outs[best] as TrialRunOut, bestTheta: 10 * (best - 1) };
+/** G5 and G5b: idle; every element leg's verb off; T1's tap-on-sight Ember; the spam Gusts; the plan's verbs at the best constant angle. */
+export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOut): Promise<NonNullable<Gates['g5']>> {
+  const t = variantDef(v);
+  const why: string[] = [];
+  const idle = await run.run({ v, p: { bot: 'idle', salt: 0 } });
+  if (idle.passed) why.push('idle passes');
+  const offs = await Promise.all(elementLegs(t).map((L) => run.run({ v, p: { bot: 'path', off: [L] } })));
+  offs.forEach((o, k) => o.passed && why.push(`leg ${elementLegs(t)[k]} with its verb off passes`));
+  let sight: { path: number; sight: number } | null = null;
+  if (t.id === 1001) {
+    const L = elementLegs(t)[0] as number;
+    const o = await run.run({ v, p: { bot: 'path', tapOnSight: true } });
+    const pathLow = path.legLow[L] ?? 0;
+    const sightLow = o.won || o.leg > L ? (o.legLow[L] ?? 0) : -1;
+    sight = { path: pathLow, sight: sightLow };
+    if (sightLow > pathLow - ON_SIGHT_GAP) why.push(`tap on sight keeps ${sightLow.toFixed(0)} vs ${pathLow.toFixed(0)}`);
+  }
+  const gustLegs = elementLegs(t).filter((L) => legHero(t, L) === 'gust');
+  const spams = gustLegs.length > 0 ? await Promise.all(SPAMS.map((sp) => run.run({ v, p: { bot: 'path', spam: sp } }))) : [];
+  spams.forEach((o, k) => {
+    const sp = SPAMS[k] as { dir: number; every: number };
+    if (o.won || !gustLegs.includes(o.leg)) why.push(`spam ${sp.dir > 0 ? 'east' : 'west'}/${sp.every} ${o.won ? 'passes' : `fails in leg ${o.leg}`}`);
+  });
+  const consts = await Promise.all(Array.from({ length: 36 }, (_, i) => run.run({ v, p: { bot: 'path', theta: { k: 'const', theta: 10 * i } } })));
+  let best = 0;
+  for (let i = 1; i < 36; i++) if ((consts[i] as TrialRunOut).progress > (consts[best] as TrialRunOut).progress) best = i;
+  if (consts.some((o) => o.passed)) why.push(`constant θ${10 * consts.findIndex((o) => o.passed)} passes`);
+  return { ok: why.length === 0, idle, offs, sight, spams, constBest: consts[best] as TrialRunOut, constTheta: 10 * best, why: why.join('; ') };
+}
+
+/** G7, the mixers' interactions (§6.4). */
+export async function gateG7(run: TrialRunner, v: TrialVariant, base: AuditOut, path: TrialRunOut): Promise<NonNullable<Gates['g7']>> {
+  const t = variantDef(v);
+  const sap = (a: AuditOut): number => {
+    const l = a.legs.find((x) => x.hero === 'sprout');
+    return a.ok && l ? l.margin : -1;
+  };
+  if (t.id === 1005) {
+    const w = { ...v, mod: { keepIce: true } };
+    const o = await run.run({ v: w, p: { bot: 'path' } });
+    return { ok: !o.passed, what: `no melt for Drip: ${o.noPlan ? 'no plan' : o.passed ? 'PASSES' : `fails leg ${o.leg}`}` };
+  }
+  if (t.id === 1006) {
+    const w = { ...v, mod: { noHandoff: true } };
+    const a = await run.audit(w);
+    const o = await run.run({ v: w, p: { bot: 'path' } });
+    const lower = sap(a) <= sap(base) - SAP_GAP;
+    const fewer = !o.passed || o.trees < 3;
+    return { ok: lower && fewer, what: `no hand-off swipes: Sap ${sap(a).toFixed(0)} vs ${sap(base).toFixed(0)}, trees ${o.trees} (path ${path.trees})` };
+  }
+  if (t.id === 1007) {
+    const burn = await run.run({ v: { ...v, mod: { downwind: true } }, p: { bot: 'path' } });
+    const gone = !burn.standing.includes(410);
+    const w = { ...v, mod: { noHandoff: true } };
+    const a = await run.audit(w);
+    const lower = sap(a) <= sap(base) - SAP_GAP;
+    return { ok: gone && lower, what: `plot 410 ${gone ? 'burnt' : 'STANDS'}; no hand-off swipes: Sap ${sap(a).toFixed(0)} vs ${sap(base).toFixed(0)}` };
+  }
+  return { ok: true, what: '' };
 }
 
 /**
- * Every gate of a trial variant, in order: G1 (the audit, in this thread), G2, G5, G3 with G4, G6.
- * `failed` is the first failing gate. With `stop` the first failure ends the evaluation (the seed
- * search).
+ * Every gate of a trial variant, in order: G0, G1, G2, G5 and G5b, G3 with G4, G6, G7. `failed` is the
+ * first failing gate; with `stop` the first failure ends the evaluation (the seed search). `only`
+ * limits the optional gates (0, 3/4/6, 5, 7) to those listed (G1 and G2 always run).
  */
-export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMAN_SALTS, stop = false): Promise<Gates> {
+export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMAN_SALTS, stop = false, only: readonly number[] | null = null): Promise<Gates> {
   const t = variantDef(v);
   let failed = 0;
   const fail = (n: number, ok: boolean): boolean => {
     if (!ok && failed === 0) failed = n;
     return stop && failed !== 0;
   };
-  const a = auditOf(v);
-  const g1 = { ok: a.ok, margin: a.margin, need: a.need };
-  const done = (g: Omit<Gates, 'v' | 'failed'>): Gates => ({ v, ...g, failed });
-  if (fail(1, g1.ok)) return done({ g1, g2: null, g5: null, g3: null, g4: null, g6: null });
-  const o2 = await run({ v, p: { bot: 'path' } });
-  const g2 = { ok: g2Ok(t, o2), out: o2 };
-  if (fail(2, g2.ok)) return done({ g1, g2, g5: null, g3: null, g4: null, g6: null });
-  const g5 = await gateG5(run, v);
-  if (g5 && fail(5, g5.ok)) return done({ g1, g2, g5, g3: null, g4: null, g6: null });
-  const [r3, r4] = await Promise.all([
-    Promise.all(Array.from({ length: REACTIVE_SALTS }, (_, salt) => run({ v, p: { bot: 'reactive', salt } }))),
-    Promise.all(Array.from({ length: humanSalts }, (_, salt) => run({ v, p: { bot: 'humanDial', salt } }))),
-  ]);
-  const wins = r3.filter((o) => o.passed).length;
-  const passes = r4.filter((o) => o.passed).length;
-  const band = t.n <= 4 ? HUMAN_BAND_SOLO : HUMAN_BAND_MIX;
-  const share = passes / humanSalts;
-  const g3 = { ok: wins >= REACTIVE_WINS, wins, outs: r3 };
-  const g4 = { ok: share >= band[0] && share <= band[1], passes, outs: r4 };
-  if (fail(3, g3.ok) || fail(4, g4.ok)) return done({ g1, g2, g5, g3, g4, g6: null });
-  const all = [...r3, ...r4];
-  const dareShare = all.filter((o) => o.dareMet).length / all.length;
-  const g6 = { ok: dareShare >= DARE_BAND[0] && dareShare <= DARE_BAND[1], share: dareShare };
-  fail(6, g6.ok);
-  return done({ g1, g2, g5, g3, g4, g6 });
+  const want = (n: number): boolean => only === null || only.includes(n);
+  const g: { -readonly [K in keyof Gates]: Gates[K] } = { v, g0: null, g1: null, g2: null, g5: null, g3: null, g4: null, g6: null, g7: null, failed: 0 };
+  const done = (): Gates => ({ ...g, failed });
+  if (want(0)) {
+    g.g0 = await run.g0(v);
+    if (fail(0.5, g.g0.ok)) return done();
+  }
+  g.g1 = await run.audit(v);
+  if (fail(1, g.g1.ok)) return done();
+  const path = await run.run({ v, p: { bot: 'path' } });
+  const worst = t.cast.includes('drip') ? await run.run({ v, p: { bot: 'path', worst: true } }) : null;
+  g.g2 = { ok: path.passed && path.health >= AUDIT_HEALTH && (worst === null || worst.passed), out: path, worst };
+  if (fail(2, g.g2.ok)) return done();
+  if (want(5)) {
+    g.g5 = await gateG5(run, v, path);
+    if (fail(5, g.g5.ok)) return done();
+  }
+  if (want(3) || want(4) || want(6)) {
+    const [r3, r4] = await Promise.all([
+      Promise.all(Array.from({ length: REACTIVE_SALTS }, (_, salt) => run.run({ v, p: { bot: 'reactive', salt } }))),
+      Promise.all(Array.from({ length: humanSalts }, (_, salt) => run.run({ v, p: { bot: 'humanEl', salt } }))),
+    ]);
+    const wins = r3.filter((o) => o.passed).length;
+    const passes = r4.filter((o) => o.passed).length;
+    const band = t.n <= 4 ? HUMAN_BAND_SOLO : HUMAN_BAND_MIX;
+    const share = passes / humanSalts;
+    g.g3 = { ok: wins >= REACTIVE_WINS, wins, outs: r3 };
+    g.g4 = { ok: share >= (band[0] as number) - 1e-9 && share <= (band[1] as number) + 1e-9, passes, outs: r4 };
+    if (fail(3, g.g3.ok) || fail(4, g.g4.ok)) return done();
+    const all = [...r3, ...r4];
+    const dareShare = all.filter((o) => o.dareMet).length / all.length;
+    g.g6 = { ok: dareShare >= DARE_BAND[0] && dareShare <= DARE_BAND[1], share: dareShare };
+    if (fail(6, g.g6.ok)) return done();
+  }
+  if (want(7) && t.n >= 5) {
+    g.g7 = await gateG7(run, v, g.g1, path);
+    fail(7, g.g7.ok);
+  }
+  return done();
 }
 
 const pct = (x: number): string => `${Math.round(100 * x)}%`;
-const fx = (x: number): string => (Number.isNaN(x) ? '—' : x.toFixed(0));
+const f0 = (x: number): string => (Number.isFinite(x) ? x.toFixed(0) : '—');
+const mark = (ok: boolean | undefined): string => (ok === undefined ? ' ' : ok ? '✓' : '✗');
 
-/** One report row of a variant's gates. */
-function row(g: Gates): string {
+/** One report block of a variant's gates. */
+export function report(g: Gates): string {
   const t = variantDef(g.v);
-  const mark = (_n: number, ok: boolean | undefined): string => (ok === undefined ? ' ' : ok ? '✓' : '✗');
-  const parts = [
-    `T${t.n} ${t.name.padEnd(15)} seed ${String(t.seed).padStart(10)} salt ${String(t.salt).padStart(3)} D${t.drain} @${t.startMinute}`,
-    `G1 ${mark(1, g.g1?.ok)} margin ${g.g1 ? fx(g.g1.margin) : '—'}/${g.g1?.need ?? '—'}`,
-    `G2 ${mark(2, g.g2?.ok)} ${g.g2 ? `${g.g2.out.passed ? 'pass' : 'fail'} h${fx(g.g2.out.health)}` : '—'}`,
-    `G5 ${mark(5, g.g5?.ok)} ${g.g5 ? `idle ${g.g5.idle.passed ? 'PASS' : pct(g.g5.idle.progress)} best θ${g.g5.bestTheta} ${g.g5.best.passed ? 'PASS' : pct(g.g5.best.progress)}` : '—'}`,
-    `G3 ${mark(3, g.g3?.ok)} ${g.g3 ? `${g.g3.wins}/${REACTIVE_SALTS} h${fx(Math.min(...g.g3.outs.map((o) => o.health)))}` : '—'}`,
-    `G4 ${mark(4, g.g4?.ok)} ${g.g4 ? `${g.g4.passes}/${g.g4.outs.length} ${pct(g.g4.passes / g.g4.outs.length)}` : '—'}`,
-    `G6 ${mark(6, g.g6?.ok)} ${g.g6 ? `dare ${pct(g.g6.share)} (${t.dare.kind} ${t.dare.target})` : '—'}`,
-  ];
-  return parts.join(' | ');
+  const head = `T${t.n} ${t.name.padEnd(13)} seed ${String(t.seed).padStart(10)} salt ${String(t.salt).padStart(3)} D${t.drain}${g.failed ? `  FAILS G${g.failed === 0.5 ? 0 : g.failed}` : '  all gates pass'}`;
+  const lines = [head];
+  if (g.g0) lines.push(`  G0 ${mark(g.g0.ok)} ${g.g0.ok ? 'placement and authoring' : g.g0.fails.slice(0, 6).join('; ')}`);
+  if (g.g1) {
+    const legs = g.g1.legs.map((l, i) => `${i}:${l.hero} ${l.hero === 'gust' ? 'bots' : f0(l.margin)}${l.note ? ` (${l.note.trim()})` : ''}`).join(' | ');
+    const drip = g.g1.drip.map((d) => ` Drip leg ${d.leg}: chosen ${d.chosen}° (${d.margins[d.marks.indexOf(d.chosen)]}), worst ${d.worst}° (${Math.min(...d.margins)}), best ${Math.max(...d.margins)}`).join(';');
+    lines.push(`  G1 ${mark(g.g1.ok)} ${legs}${drip}${g.g1.ok ? '' : `  [${g.g1.why}]`}`);
+  }
+  if (g.g2) lines.push(`  G2 ${mark(g.g2.ok)} path ${g.g2.out.passed ? 'pass' : `FAIL leg ${g.g2.out.leg}`} low ${f0(g.g2.out.health)} legs ${g.g2.out.legLow.map(f0).join('/')}${g.g2.worst ? `; worst bin ${g.g2.worst.passed ? 'pass' : 'FAIL'} low ${f0(g.g2.worst.health)}` : ''}${g.g2.out.line ? ` (${g.g2.out.line})` : ''}`);
+  if (g.g5) {
+    const offs = g.g5.offs.map((o) => (o.passed ? 'PASS' : `L${o.leg}`)).join(',');
+    const spams = g.g5.spams.map((o) => (o.won ? 'PASS' : `L${o.leg}`)).join(',');
+    lines.push(`  G5 ${mark(g.g5.ok)} idle ${g.g5.idle.passed ? 'PASS' : pct(g.g5.idle.progress)}; verb off ${offs}${g.g5.sight ? `; on sight ${f0(g.g5.sight.sight)} vs ${f0(g.g5.sight.path)}` : ''}${spams ? `; spam ${spams}` : ''}; G5b best θ${g.g5.constTheta} ${g.g5.constBest.passed ? 'PASS' : pct(g.g5.constBest.progress)}${g.g5.why ? `  [${g.g5.why}]` : ''}`);
+  }
+  if (g.g3) lines.push(`  G3 ${mark(g.g3.ok)} reactive ${g.g3.wins}/${REACTIVE_SALTS} low ${f0(Math.min(...g.g3.outs.map((o) => o.health)))}`);
+  if (g.g4) lines.push(`  G4 ${mark(g.g4.ok)} humanEl ${g.g4.passes}/${g.g4.outs.length} ${pct(g.g4.passes / g.g4.outs.length)}  deaths: ${deaths(g.g4.outs)}`);
+  if (g.g6) lines.push(`  G6 ${mark(g.g6.ok)} dare ${t.dare.kind} ≥ ${t.dare.target}: ${pct(g.g6.share)}`);
+  if (g.g7) lines.push(`  G7 ${mark(g.g7.ok)} ${g.g7.what}`);
+  return lines.join('\n');
+}
+
+/** How the failed runs ended (leg and the death line's first words), counted. */
+function deaths(outs: readonly TrialRunOut[]): string {
+  const m = new Map<string, number>();
+  for (const o of outs) {
+    if (o.passed) continue;
+    const k = `L${o.leg} ${o.line.replace(/ at .*$/, '')}`;
+    m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return [...m].map(([k, n]) => `${n}× ${k}`).join(', ') || 'none';
+}
+
+// ---------------------------------------------------------------------------------------------
+// --perf: µs per tick and per guide refresh against a Nubs run of the same length
+// ---------------------------------------------------------------------------------------------
+
+function perfOf(id: number): { trialTick: number; nubsTick: number; trialGuide: number; nubsGuide: number } {
+  const time = (s: SimState, n: number, next: (s: SimState) => InputFrame): [number, number] => {
+    let tick = 0;
+    let guide = 0;
+    let k = 0;
+    let g = 0;
+    for (let i = 0; i < n && s.phase !== 'dead' && s.phase !== 'won'; i++) {
+      const f = next(s);
+      const a = performance.now();
+      step(s, f);
+      tick += performance.now() - a;
+      k++;
+      if (i % 30 === 0) {
+        const b = performance.now();
+        updateGuide(s);
+        guide += performance.now() - b;
+        g++;
+      }
+    }
+    return [(1000 * tick) / Math.max(1, k), (1000 * guide) / Math.max(1, g)];
+  };
+  const t = trialDef(id) as TrialDef;
+  const ticks = Math.round((t.lengthMinutes / 14.4) * TICK_HZ);
+  // Twice each, the second timed (the first warms the JIT).
+  let tt = 0;
+  let tg = 0;
+  let nt = 0;
+  let ng = 0;
+  for (let rep = 0; rep < 2; rep++) {
+    const s = createRun(campaignConfig(id));
+    const b = createBot('reactive');
+    [tt, tg] = time(s, ticks, (st) => b.next(st));
+    const n = createRun(campaignConfig(12));
+    const bn = createBot('reactive');
+    [nt, ng] = time(n, ticks, (st) => bn.next(st));
+  }
+  return { trialTick: tt, nubsTick: nt, trialGuide: tg, nubsGuide: ng };
 }
 
 // ---------------------------------------------------------------------------------------------
 // The mode
+// ---------------------------------------------------------------------------------------------
 
 function argOf(name: string): string | null {
   const i = process.argv.indexOf(`--${name}`);
@@ -531,88 +574,70 @@ function argOf(name: string): string | null {
 
 /** The Dare target moved 25% of the way that brings its share into the band, rounded to whole counts. */
 function nudgeDare(t: TrialDef, share: number): number {
-  const unit = 1;
   const up = share > DARE_BAND[1];
-  const next = t.dare.target * (up ? 1.25 : 0.75);
-  const r = Math.max(unit, Math.round(next / unit) * unit);
-  return r === t.dare.target ? t.dare.target + (up ? unit : -unit) : r;
+  const next = Math.round(t.dare.target * (up ? 1.25 : 0.75));
+  return next === t.dare.target ? t.dare.target + (up ? 1 : -1) : Math.max(1, next);
 }
 
-/** --pick: the first salt k = 0..199 passing every gate. */
-async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, drain0?: number, start0?: number): Promise<void> {
-  const base = trialDef(id) as TrialDef;
-  const drain = drain0 ?? base.drain;
-  const startMinute = start0 ?? base.startMinute;
-  console.log(`\n--pick T${base.n}: drain ${drain}, start ${startMinute}`);
-  let easy = 0;
-  let hard = 0;
-  let found: Gates | null = null;
+/** --pick: the first salt k = from..199 passing every gate (then the Dare nudged into its band). */
+async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, base: Partial<TrialVariant>): Promise<void> {
+  const t0 = trialDef(id) as TrialDef;
+  console.log(`\n--pick T${t0.n} from salt ${from}${Object.keys(base).length ? ` with ${JSON.stringify(base)}` : ''}`);
   for (let k = from; k < PICK_SALTS; k++) {
-    const v: TrialVariant = { id, salt: k, drain, startMinute };
+    const v: TrialVariant = { ...base, id, salt: k };
     const g = await gates(run, v, humanSalts, true);
-    if (g.failed === 0 || g.failed === 6) {
-      found = g;
-      console.log(`  k ${k}: ${row(g)}`);
-      break;
+    const fails = report(g).split('\n').slice(1).filter((l) => l.includes('✗')).join(' ');
+    console.log(`  salt ${k}: ${g.failed === 0 ? 'PASS' : `G${g.failed === 0.5 ? 0 : g.failed}`}  ${fails.slice(0, 240)}`);
+    if (g.failed !== 0 && g.failed !== 6) continue;
+    let cur = g;
+    for (let i = 0; i < 12 && cur.g6 && !cur.g6.ok; i++) {
+      const target = nudgeDare(variantDef(cur.v), cur.g6.share);
+      cur = await gates(run, { ...cur.v, dareTarget: target }, humanSalts);
+      console.log(`  Dare → ${target}: ${cur.g6 ? pct(cur.g6.share) : '—'}`);
     }
-    if (g.failed === 5) easy++;
-    else hard++;
-    console.log(`  k ${k}: G${g.failed} ✗  ${row(g).split(' | ').slice(1).join(' | ')}`);
-  }
-  if (found) {
-    let g = found;
-    let target = variantDef(g.v).dare.target;
-    for (let i = 0; i < 12 && g.g6 && !g.g6.ok; i++) {
-      target = nudgeDare(variantDef(g.v), g.g6.share);
-      g = await gates(run, { ...g.v, dareTarget: target }, humanSalts);
-      console.log(`  Dare ${variantDef(g.v).dare.kind} → ${target}: ${row(g)}`);
-    }
-    const t = variantDef(g.v);
-    console.log(`\nPIN T${t.n}: salt ${t.salt} (seed ${t.seed}), drain ${t.drain}, start ${t.startMinute}, dare ${t.dare.kind} ${t.dare.target}${g.failed ? `  (still failing G${g.failed})` : ''}`);
-    console.log(`  ${row(g)}`);
+    console.log(`\n${report(cur)}\nPIN T${t0.n}: ${JSON.stringify({ ...cur.v, id: undefined })}`);
     return;
   }
-  console.log(`\nno salt passes T${base.n} (G5 failed on ${easy}, G1-G4 on ${hard})`);
+  console.log(`\nno salt in ${from}..${PICK_SALTS - 1} passes T${t0.n}`);
 }
 
 async function trialsMain(ctx: Sim16Ctx): Promise<void> {
   const t0 = performance.now();
   const humanSalts = Number(argOf('salts') ?? HUMAN_SALTS);
-  const pool = new TaskPool<TrialRunTask, TrialRunOut>(new URL(import.meta.url), 'trials', ctx.workers);
-  const run: TrialRunner = (task) => pool.run(task);
+  const pool = new TaskPool<Task, unknown>(new URL(import.meta.url), 'trials', ctx.workers);
+  const run: TrialRunner = {
+    run: (task) => pool.run(task) as Promise<TrialRunOut>,
+    audit: (v, worst) => pool.run({ audit: v, worst }) as Promise<AuditOut>,
+    g0: (v) => pool.run({ g0: v }) as Promise<G0Out>,
+  };
+  const ids = (argOf('id') ?? TRIAL_IDS.join(',')).split(',').map((x) => (Number(x) < 1000 ? 1000 + Number(x) : Number(x)));
   try {
-    const survey = argOf('survey');
-    if (survey !== null) {
-      // Tooling: every gate on salts 0..N − 1 (no short cut), one row each, to see what calibration can reach.
-      const ids = (argOf('id') ?? TRIAL_IDS.join(',')).split(',').map((x) => (Number(x) < 1000 ? 1000 + Number(x) : Number(x)));
-      for (const id of ids) {
-        const t = trialDef(id) as TrialDef;
-        const drain = Number(argOf('drain') ?? t.drain);
-        const startMinute = Number(argOf('start') ?? t.startMinute);
-        const rows = await Promise.all(Array.from({ length: Number(survey) }, (_, k) => gates(run, { id, salt: k, drain, startMinute }, humanSalts)));
-        for (const g of rows) console.log(`${g.failed ? `G${g.failed}` : 'OK'} ${row(g)}`);
-      }
-      return;
-    }
+    const base = JSON.parse(argOf('variant') ?? '{}') as Partial<TrialVariant>;
     const pickId = argOf('pick');
     if (pickId !== null) {
       const id = Number(pickId) < 1000 ? 1000 + Number(pickId) : Number(pickId);
-      const num = (name: string): number | undefined => (argOf(name) === null ? undefined : Number(argOf(name)));
-      await pick(run, id, humanSalts, num('from') ?? 0, num('drain'), num('start'));
+      await pick(run, id, humanSalts, Number(argOf('from') ?? 0), base);
       return;
     }
-    const ids = (argOf('id') ?? TRIAL_IDS.join(',')).split(',').map((x) => (Number(x) < 1000 ? 1000 + Number(x) : Number(x)));
-    console.log(`Elementals Trials: G1 audit, G2 path bot, G5 idle and 36 constant angles, G3 reactive ${REACTIVE_WINS}/${REACTIVE_SALTS}, G4 humanDial on ${humanSalts} salts, G6 Dare share\n`);
-    const all = await Promise.all(ids.map((id) => gates(run, { id, salt: (trialDef(id) as TrialDef).salt }, humanSalts)));
+    const only = argOf('gates')?.split(',').map(Number) ?? null;
+    console.log(`Elementals Trials: G0 authoring, G1 audits, G2 path bot, G5/G5b anti-trivial, G3 reactive ${REACTIVE_WINS}/${REACTIVE_SALTS}, G4 humanEl on ${humanSalts} salts, G6 Dare share, G7 mixers\n`);
+    const all = await Promise.all(ids.map((id) => gates(run, { ...base, id, salt: base.salt ?? (trialDef(id) as TrialDef).salt }, humanSalts, false, only)));
     let bad = 0;
     for (const g of all) {
-      console.log(row(g));
+      console.log(report(g));
       if (g.failed) {
         bad++;
-        if (ctx.check) ctx.fail(`T${variantDef(g.v).n} G${g.failed}`);
+        if (ctx.check) ctx.fail(`T${variantDef(g.v).n} G${g.failed === 0.5 ? 0 : g.failed}`);
       }
     }
-    console.log(`\n${bad === 0 ? 'All trials pass every gate' : `${bad} trial(s) fail a gate`}. (${((performance.now() - t0) / 1000).toFixed(1)} s, ${pool.played} runs)`);
+    if (process.argv.includes('--perf')) {
+      console.log('\n--perf (µs): trial tick vs Nubs tick, trial guide vs Nubs guide');
+      for (const id of ids) {
+        const p = (await pool.run({ perf: id })) as ReturnType<typeof perfOf>;
+        console.log(`  T${id - 1000}: tick ${p.trialTick.toFixed(1)} vs ${p.nubsTick.toFixed(1)} (×${(p.trialTick / p.nubsTick).toFixed(2)}), guide ${p.trialGuide.toFixed(1)} vs ${p.nubsGuide.toFixed(1)} (×${(p.trialGuide / p.nubsGuide).toFixed(2)})`);
+      }
+    }
+    console.log(`\n${bad === 0 ? 'All trials pass every gate' : `${bad} trial(s) fail a gate`}. (${((performance.now() - t0) / 1000).toFixed(1)} s, ${pool.played} tasks)`);
   } finally {
     await pool.close();
   }
@@ -624,3 +649,4 @@ export const TRIALS_MODULE: Sim16Module = {
   modes: { trials: trialsMain },
 };
 
+export { audit, legAt, planPlayer };
