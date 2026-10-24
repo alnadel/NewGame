@@ -347,8 +347,8 @@ test('?trial=6 walks Nubs first; Back from its Results leads to the Elementals',
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'play');
   const s = await state(page);
-  // T6's pin starts Nubs' opening leg at 80 (tune.legStart, docs/ELEMENTALS_V2.md §13).
-  expect([s.level, s.hero, s.meter, s.verb]).toEqual([1006, 'nubs', 80, 'sun']);
+  // T6's pin starts Nubs' opening leg at 60 (tune.legStart, docs/ELEMENTALS_V2.md §13.3).
+  expect([s.level, s.hero, s.meter, s.verb]).toEqual([1006, 'nubs', 60, 'sun']);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
   await page.keyboard.press('Escape');

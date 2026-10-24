@@ -144,10 +144,10 @@ function trial(
 }
 
 /**
- * The seven trials (§5.1-§5.7), in n order, pinned by `node scripts/sim.ts --trials --pick <n>` (§6.5):
- * each pin's levers carry the gates measured on it (G1 audit margins per leg, G2 path low, G3
- * reactive wins, G4 humanEl passes, G5b best constant angle, G6 Dare share). The global pass moved
- * TUNING.elements first (tuning.ts).
+ * The seven trials (§5.1-§5.7), in n order, pinned by `node scripts/sim.ts --trials --pick <n>` (§6.5;
+ * T6 and T7 re-authored by the lead's decisions, §13.3): each pin's levers carry the gates measured on
+ * it (G1 audit margins per leg, G2 path low, G3 reactive wins, G4 humanEl passes, G5b best constant
+ * angle, G6 Dare share). The global pass moved TUNING.elements first (tuning.ts).
  */
 export const TRIALS: readonly TrialDef[] = Object.freeze([
   // T1 pin: salt 468 (the G5b scan: salts whose sun cannot stay fixed, then humanEl in its band);
@@ -194,33 +194,40 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
     'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-26 i436 t452:10 t474:-14 u492:26 t512:-4 u530:-17 t546:16', ['drinks', 5], 25, [1, 2],
     'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 5', 'Drink 5 puddles', '', 1113,
     { legStart: [80, 60, 50, 80], costMul: 1.2, evapMul: 1.2 }),
-  // T6 pin (best found; FAILS G5b, G6 and G7, see below): salt 73; drain 28 → 34, Nubs' legs 100
-  // → 80, Gust 80 → 65 and costMul 1.2, Sprout 80 → 100; one object added to Gust's leg, the rain
-  // r330:82:90:0 (a wide cloud waiting east: without it Gust's leg passed with no swipe at all and
-  // the west spam Gusts passed); plots 606 −44 → −43 and 620 44 → 40 (G0 clearance). Measured: G1
-  // 83/bots/44/83 (Sap low 44 on the crossings, 16 with 2 plots), G2 low 62, G3 8/8, G4 11/16 (69%),
-  // G5 idle, both verbs off and the four spams fail; G5b: a constant θ20 walks it (the 8:30 AM
-  // opening leg keeps a fixed-sun shade line in every salt scanned, 0..20000, even at drain 42);
-  // G6 trees ≥ 3 0% (2 trees at most); G7 the hand-off swipes add no Sap (44 vs 44).
-  trial(6, 'Rain Garden', 9, 'meadow', 150, 490, 34, 0, [[246, 'gust'], [390, 'sprout'], [576, 'nubs']], null,
-    'f280:90:70:-14 r300:130:55:0 r312:-110:60:22 r330:82:90:0 f352:-80:75:14 r360:-150:55:0 f402:60:70:-10 r414:120:85:6 p418:44 x464:0:14 s500:0:16 p520:-44 x545:0:16 p590:44 p606:-43 p620:40', ['trees', 3], 25, [3, 4],
-    'Clear the fog for Sprout and blow the rain onto its path: rain feeds plants.', 'Grow 3 trees', 'Grow 3 trees', '', 73,
-    { legStart: [80, 65, 100, 80], costMul: 1.2 }),
-  // T7 pin (best found; FAILS G5, G5b, G6 and G7, see below): salt 20; drain 30 → 36, Nubs' legs
-  // 100 → 80, Gust 80 → 70, Sprout 80 → 100, Ember 80 → 60, Drip 70 → 50, evapMul 1.2; one object
-  // added to Gust's leg, the rain r196:82:90:16 (waiting east: the west spam Gusts passed without
-  // it); the garden plot 288 44 → 52 (toward its cloud), stones 556 12 → 4 and 582 −10 → −2 and
-  // puddle 570 16 → 24 (an unsteered Drip met them), puddle 532 −18 → −14 (G0 clearance); Dare 4 → 3
-  // (−25%; G6 0% at 4). Measured: G1 83/bots/60/60/46/83 (Drip marks: chosen 45° 50, worst 200° 46),
-  // G2 low 50, G3 8/8, G4 11/16 (69%), G5 idle, the Gust, Sprout and Ember legs with their verb off
-  // and the four spams fail, but Drip's leg passes unsteered (its two melted-ice puddles lie on the
-  // trail and the held sun shades it: no lever inside §6.5 moves either); G5b: a constant θ0 walks it
-  // (the 7:00 AM opening leg); G6 grove ≥ 3 0%; G7 plot 410 burns, but the hand-off swipes add only
-  // 2 Sap (58 vs 60).
-  trial(7, 'Five Elements', 17, 'meadow', 60, 600, 36, -16, [[156, 'gust'], [264, 'sprout'], [384, 'ember'], [498, 'drip'], [598, 'nubs']], null,
-    'r186:125:55:-4 r196:82:90:16 r206:120:55:16 f214:-110:70:30 r236:100:60:0 r248:-150:55:16 f276:-30:70:16 r288:150:80:8 p288:52 p330:-44 x338:0:14 s364:0:14 p410:-44 b413 p416:44 u428 r446:133:55:-24 g446 b468 t480 i522 u532:-14 i546 t556:4 u570:24 t582:-2', ['grove', 3], 25, [5, 6],
-    'Five elements, one day. The breeze spreads fire west: keep three trees.', '3 trees standing', 'Keep 3 trees standing', 'ALL FIVE ELEMENTS', 20,
-    { legStart: [80, 70, 100, 60, 50, 80], evapMul: 1.2 }),
+  // T6 pin, re-authored by the lead's decisions (docs/ELEMENTALS_V2.md §13.3): the Nubs legs move
+  // toward midday (start 150 → 226, 8:30 → 9:46 AM; the closing leg 3:36-4:40 → 3:28-4:28 PM), Gust's
+  // leg 10.0 → 8.0 s and Sprout's 12.9 → 9.1 s, every object re-timed in its leg. Gust's weather: a
+  // cloud drifting in from the west (r355), one waiting east (r365), one drifting in from the east
+  // (r372), a fog drifting on (f394), one waiting west (r413): east early, west late (the first pin's
+  // added r330 is gone). The hand-off: a small fog a west wind clears (f449:-35:55:6) and the garden
+  // cloud waiting east, r461:140:100:0 (dry left alone; the hand-off's west swipes put it over Sprout
+  // and the garden plot). Two crossings (gap, stream: r14) and six plots. Salt 198; drain 34 → 38;
+  // legStart [60, 60, 65, 80] (Nubs 80 → 60, Gust 65 → 60, Sprout 100 → 65: below the Sap cap the
+  // garden rain counts); costMul 1.2 → 1; plots 464 44 → 43 and 561 44 → 56 (G0 clearance).
+  // Measured: G1 63/bots/65/83 (Sap low 65, 13 with 3 plots), G2 low 37, G3 8/8, G4 13/16 (81%), G5
+  // idle, both verbs off and the four spams fail, G5b best θ190 dies at 23%, G6 trees ≥ 3 21%, G7
+  // without the hand-off swipes Sap 41 vs 65 and 2 trees (the plan 3).
+  trial(6, 'Rain Garden', 9, 'meadow', 226, 402, 38, 0, [[322, 'gust'], [437, 'sprout'], [568, 'nubs']], null,
+    'r355:-110:60:22 r365:130:55:0 r372:110:60:-24 f394:-80:75:14 r413:-150:55:0 f449:-35:55:6 r461:140:100:0 p464:43 x511:0:14 p530:-44 s548:0:14 p561:56 p582:44 p597:-43 p610:40', ['trees', 3], 25, [3, 4],
+    'Clear the fog for Sprout and blow the rain onto its path: rain feeds plants.', 'Grow 3 trees', 'Grow 3 trees', '', 198,
+    { legStart: [60, 60, 65, 80] }),
+  // T7 pin, re-authored by the lead's decisions (§13.3): the Nubs legs move toward midday (start
+  // 60 → 86, 7:00 → 7:26 AM; the closing leg 3:58-5:00 → 3:50-4:50 PM), the element legs 7.5/8.3/7.9/
+  // 6.9 → 6.9/7.8/6.9/6.7 s, every object re-timed in its leg. Gust's leg is T6's with its drifts set
+  // against the −16 breeze (the first pin's added r196 is gone); the hand-off fog f294:-60:55:16 (a
+  // west wind clears it) and the garden cloud waiting east, r306:140:100:16; crossings r14 → r12.
+  // Drip's stretch (G5, Drip's leg must need its steer): the second ice wall is now an on-trail hot
+  // stone (t540) and the puddles lie off the walking line (u529:-22, u562:24), so an unsteered Drip
+  // meets three stones and only the melted ice's puddle. Salt 1266; drain 36 → 42; legStart [60, 60,
+  // 70, 50, 40, 60] (Nubs 80 → 60 both, Gust 70 → 60, Sprout 100 → 70, Ember 60 → 50, Drip 50 → 40);
+  // evapMul 1.2; plot 340 −44 → −36 (G0 clearance). Measured: G1 63/bots/67/50/38/63 (Drip marks:
+  // chosen 85° 39, worst 105° 38), G2 low 27 (worst bin 27), G3 8/8, G4 11/16 (69%), G5 idle, every
+  // element leg with its verb off (Drip's too) and the four spams fail, G5b best θ320 dies at 97%,
+  // G6 grove ≥ 3 33%, G7 plot 420 burns and without the hand-off swipes Sap 52 vs 67.
+  trial(7, 'Five Elements', 17, 'meadow', 86, 564, 42, -16, [[182, 'gust'], [282, 'sprout'], [394, 'ember'], [494, 'drip'], [590, 'nubs']], null,
+    'r214:-110:60:38 r222:130:55:16 r230:110:60:-8 f245:-80:75:24 r263:-150:55:16 f294:-60:55:16 r306:140:100:16 p309:44 p340:-36 x355:0:12 s383:0:12 p420:-44 b423 p426:44 u437 r453:133:55:-24 g453 b472 t483 i518 u529:-22 t540:0 t552:3 u562:24 t575:-2', ['grove', 3], 25, [5, 6],
+    'Five elements, one day. The breeze spreads fire west: keep three trees.', '3 trees standing', 'Keep 3 trees standing', 'ALL FIVE ELEMENTS', 1266,
+    { legStart: [60, 60, 70, 50, 40, 60], evapMul: 1.2 }),
 ]);
 
 /** True for an integer trial id 1001..1007. */

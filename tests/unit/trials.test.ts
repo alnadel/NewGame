@@ -79,8 +79,8 @@ describe('the trial table (§5)', () => {
     });
     expect(TRIALS.map((t) => t.intro)).toEqual(['ember', 'drip', 'sprout', 'gust', null, null, null]);
     expect(TRIALS.map((t) => t.requires)).toEqual([[], [], [], [], [1, 2], [3, 4], [5, 6]]);
-    // §5's lists, plus the one object calibration added to T6's and to T7's Gust leg (§6.5).
-    expect(TRIALS.map((t) => t.objects.length)).toEqual([8, 13, 9, 9, 16, 16, 26]);
+    // §5's lists (T6 and T7 as re-authored by the lead's decisions, §13.3).
+    expect(TRIALS.map((t) => t.objects.length)).toEqual([8, 13, 9, 9, 16, 15, 25]);
     expect(trialDef(1007)?.breeze).toBe(-16);
     expect(trialDef(1004)?.objects[0]).toEqual({ k: 'rain', m: 312, dx: -100, r: 55, drift: 20 });
     for (const id of [0, 1, 200, 201, 1000, 1008, 1001.5, NaN, undefined]) expect(isTrialId(id)).toBe(false);
@@ -182,9 +182,7 @@ describe('every pinned trial passes G0, G1, G2 and G5 (§6.4, §9.6)', () => {
     for (const t of TRIALS) {
       // G5 without G5b's 36 constant angles (`--trials --check` runs those); no G3/G4/G6/G7 bots.
       const g = await gates(runHere, { id: t.id, salt: t.salt }, 0, false, [0, 5]);
-      // T7's one known G5 failure (config/trials.ts): Drip's leg passes unsteered, and nothing else.
-      const g5 = g.g5?.ok === true || (t.id === 1007 && g.g5?.why === 'leg 4 with its verb off passes');
-      if (![g.g0?.ok, g.g1?.ok, g.g2?.ok, g5].every((ok) => ok === true)) fails.push(report(g));
+      if (![g.g0?.ok, g.g1?.ok, g.g2?.ok, g.g5?.ok].every((ok) => ok === true)) fails.push(report(g));
     }
     expect(fails).toEqual([]);
   }, 60_000);
