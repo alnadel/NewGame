@@ -875,10 +875,11 @@ interface DripRows {
   readonly rain: Uint8Array;
   readonly lo: Float64Array;
   readonly hi: Float64Array;
-  /** The walker's y per step. */
+  /** The walker's y and the trail's x at it, per step. */
   readonly y: Float64Array;
-  /** Puddles and stones (dx from the trail at their y, y, reach r + touch, +30 or −20). */
-  readonly objs: { dx: number; y: number; r: number; d: number }[];
+  readonly tx: Float64Array;
+  /** Puddles and stones (world x and y, reach r + touch, +30 or −20). */
+  readonly objs: { x: number; y: number; r: number; d: number }[];
   readonly start: number;
 }
 
@@ -893,6 +894,7 @@ function dripRows(plan: Plan, leg: number): DripRows | null {
   const lo = new Float64Array(n);
   const hi = new Float64Array(n);
   const ys = new Float64Array(n);
+  const txs = new Float64Array(n);
   const lane = new Float64Array(2);
   const tmp = new Uint8Array(BINS);
   let objs: DripRows['objs'] = [];
@@ -909,7 +911,8 @@ function dripRows(plan: Plan, leg: number): DripRows | null {
         for (const o of el.objs) {
           if ((o.kind !== 'puddle' && o.kind !== 'stone') || o.state === EL_GONE || o.hit) continue;
           if (o.y < st.nubs.y || o.y > worldYAtTick(st.world, lp.to) + 20) continue;
-          objs.push({ dx: o.x - trailX(st.world.trail, o.y), y: o.y, r: o.r + O.touch, d: o.kind === 'puddle' ? DR.puddle : -DR.stone });
+          // Conservative by a unit: a puddle counts only when the path is clearly on it, a stone whenever it might graze it.
+          objs.push({ x: o.x, y: o.y, r: o.r + O.touch + (o.kind === 'puddle' ? -1 : 1), d: o.kind === 'puddle' ? DR.puddle : -DR.stone });
         }
       }
       const y = st.nubs.y;
@@ -918,6 +921,7 @@ function dripRows(plan: Plan, leg: number): DripRows | null {
       lo[k] = lane[0] as number;
       hi[k] = lane[1] as number;
       const tx = trailX(st.world.trail, y);
+      txs[k] = tx;
       for (let l = 0; l < LANES; l++) {
         const x = tx + laneU(l);
         litAt(st, x, y, tmp);
@@ -927,7 +931,7 @@ function dripRows(plan: Plan, leg: number): DripRows | null {
     },
   });
   if (s === null) return null;
-  return { n, lit, rain, lo, hi, y: ys, objs, start: legStartOf(plan.t, leg) };
+  return { n, lit, rain, lo, hi, y: ys, tx: txs, objs, start: legStartOf(plan.t, leg) };
 }
 
 /** Distance from (px, py) to the segment (ax, ay)–(bx, by). */
@@ -998,7 +1002,7 @@ function dripDp(D: DripRows, b: number, h: number, path: Float64Array | null, ev
           for (let a = 0; a < act.length; a++) {
             if ((bits & (1 << a)) !== 0) continue;
             const o = D.objs[act[a] as number] as DripRows['objs'][number];
-            if (segDist(o.dx, o.y, PL, y0, L, y1) <= o.r) {
+            if (segDist(o.x, o.y, (D.tx[k - 1] as number) + PL, y0, (D.tx[k] as number) + L, y1) <= o.r) {
               v += o.d;
               bits |= 1 << a;
             }
@@ -1021,6 +1025,7 @@ function dripDp(D: DripRows, b: number, h: number, path: Float64Array | null, ev
     let i = best;
     for (let k = n - 1; k >= 0; k--) {
       path[k] = laneU(Math.floor(i / NB) % LANES);
+      if (dbgVals) dbgVals[k] = val[i] as number;
       i = from[i] as number;
       if (i < 0 && k > 0) {
         for (let kk = k - 1; kk >= 0; kk--) path[kk] = 0;
@@ -1029,6 +1034,12 @@ function dripDp(D: DripRows, b: number, h: number, path: Float64Array | null, ev
     }
   }
   return true;
+}
+
+/** Tooling: the best lane path's Size per step (set to an array to receive it). */
+export let dbgVals: Float64Array | null = null;
+export function setDbgVals(a: Float64Array | null): void {
+  dbgVals = a;
 }
 
 function dripMargin(D: DripRows, b: number, evapMul: number): number {
@@ -1172,7 +1183,7 @@ export function audit(v: TrialVariant, worst = false): Plan {
       }
       committed[L] = worst && worstK >= 0 ? worstK : bestK;
       if (dr) {
-        dr.chosen = bestK;
+        dr.chosen = committed[L] as number;
         dr.worst = worstK;
       }
       set = new Float64Array(BINS).fill(DEAD);

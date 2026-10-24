@@ -658,13 +658,13 @@ const tuning = {
     bump: 30,
     nubs: { income: 0.05 },
     ember: {
-      refill: 10, fade: 4, douse: 45, rain: 25, stone: 12, nowTicks: 30,
-      cost: { bramble: 12, gate: 22, ice: 18, puddle: 8 },
+      refill: 8, fade: 4, douse: 45, rain: 25, stone: 12, nowTicks: 30,
+      cost: { bramble: 14, gate: 26, ice: 21, puddle: 9 },
       burnTicks: { bramble: 54, gate: 84, ice: 60, puddle: 30, plot: 90 },
     },
-    sprout: { root: 5, rain: 15, invest: 50, grow: 12, litMul: 2, rainMul: 1.5, treeMin: 20, treeMax: 60 },
-    drip: { grow: 6, evap: 14, rain: 10, puddle: 30, stone: 20, stream: 25, range: 32, clear: 8, slide: 220, keyRate: 90, keyFine: 45 },
-    gust: { air: 4, soak: 30, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
+    sprout: { root: 6, rain: 18, invest: 50, grow: 12, litMul: 2, rainMul: 1.5, treeMin: 20, treeMax: 60 },
+    drip: { grow: 6, evap: 16, rain: 10, puddle: 30, stone: 20, stream: 25, range: 32, clear: 8, slide: 220, keyRate: 90, keyFine: 45 },
+    gust: { air: 4, soak: 36, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
     /** Weather drifts once the walker is within `wake` u of its y; it is gone `prune` u off the trail or `behind` u behind the walker. */
     weather: { wake: 400, prune: 420, behind: 300, ryRatio: 0.66 },
     /** Fire spreads (once, at half its burn) to burnables within reach/reachY when |windAt| ≥ spreadAt, downwind (or within `upwind` u upwind). */

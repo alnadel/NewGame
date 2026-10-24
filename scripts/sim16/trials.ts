@@ -48,7 +48,7 @@ export const HUMAN_SALTS = 16;
 const HUMAN_BAND_SOLO: readonly [number, number] = [0.75, 0.95];
 const HUMAN_BAND_MIX: readonly [number, number] = [0.45, 0.9];
 const DARE_BAND: readonly [number, number] = [0.1, 0.6];
-/** G5(c): the tap-on-sight Ember keeps a steady-health margin at least this much lower than the path bot. */
+/** G5(c): the tap-on-sight Ember keeps a margin (its lowest Flame) at least this much lower than the path bot's. */
 const ON_SIGHT_GAP = 15;
 /** G7: a mixer without its interaction keeps a Sprout Sap margin at least this much lower. */
 const SAP_GAP = 10;
@@ -91,6 +91,8 @@ export interface TrialRunOut {
   /** The lowest steady health of the run (stats.minChill) and per leg (Sprout: its lowest Sap); where it ended (0..1) and in which leg. */
   readonly health: number;
   readonly legLow: readonly number[];
+  /** The lowest raw meter per leg (Ember's Flame itself, spending not added back). */
+  readonly meterLow: readonly number[];
   readonly progress: number;
   readonly leg: number;
   /** The Dare's count, and whether it is met at the finish (star 2). */
@@ -134,13 +136,14 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
   let next: (s: SimState) => InputFrame;
   if (p.bot === 'path') {
     const plan = auditOf(task.v, p.worst === true);
-    if (plan.theta === null) return { won: false, passed: false, health: 0, legLow: [], progress: 0, leg: 0, dare: 0, dareMet: false, trees: 0, grove: 0, standing: [], line: plan.why, noPlan: true };
+    if (plan.theta === null) return { won: false, passed: false, health: 0, legLow: [], meterLow: [], progress: 0, leg: 0, dare: 0, dareMet: false, trees: 0, grove: 0, standing: [], line: plan.why, noPlan: true };
     next = planPlayer(plan, { theta: p.theta ?? { k: 'plan' }, off: p.off, spam: p.spam, tapOnSight: p.tapOnSight });
   } else {
     const b = createBot(p.bot, p.salt, true, { el: p.el });
     next = (st) => b.next(st);
   }
   const low: number[] = [];
+  const raw: number[] = [];
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < TICK_CAP) {
     step(s, next(s));
     if (s.ready > 0 || s.phase !== 'day') continue;
@@ -148,6 +151,7 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
     const h = s.nubs.hero === 'sprout' ? s.nubs.chill : Math.min(100, s.nubs.chill + el.spent);
     const L = s.relayIdx;
     if (low[L] === undefined || h < (low[L] as number)) low[L] = h;
+    if (raw[L] === undefined || s.nubs.chill < (raw[L] as number)) raw[L] = s.nubs.chill;
   }
   const o = levelOutcome(s.level as LevelDef, s);
   const dare = trialDareValue(t.dare.kind, s.stats);
@@ -161,6 +165,7 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
     passed: o.passed,
     health: s.stats.minChill,
     legLow: low.map((v) => Math.round(v * 10) / 10),
+    meterLow: raw.map((v) => Math.round(v * 10) / 10),
     progress: levelProgress(s),
     leg: s.relayIdx,
     dare,
@@ -225,10 +230,10 @@ export function gateG0(v: TrialVariant): G0Out {
   };
   const contact = (o: ElObj): number => tickAtY(s, edge(o));
   const inWindow = (o: ElObj): number => tickAtY(s, edge(o) - E.range);
-  // The intro element's first object ≥ 2 s into its leg.
+  // The intro element's first object ≥ 2 s into its leg (where the walker reaches its y, as §5's tables count).
   if (t.intro !== null) {
     const L = t.relays.findIndex((r) => r.to === t.intro) + 1;
-    const first = el.objs.map(contact).filter((c) => c >= from(L) && c < to(L)).sort((a, b) => a - b)[0];
+    const first = el.objs.map((o) => tickAtY(s, o.y)).filter((c) => c >= from(L) && c < to(L)).sort((a, b) => a - b)[0];
     if (first === undefined || secs(first - from(L)) < 2 - 1e-9) fails.push(`intro's first object ${first === undefined ? 'missing' : `${secs(first - from(L)).toFixed(2)} s`} into its leg`);
   }
   for (let L = 0; L < legs; L++) {
@@ -377,10 +382,12 @@ export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOu
   offs.forEach((o, k) => o.passed && why.push(`leg ${elementLegs(t)[k]} with its verb off passes`));
   let sight: { path: number; sight: number } | null = null;
   if (t.id === 1001) {
+    // Measured on Flame itself: steady health adds spending back (§1.2), so it cannot tell a
+    // tap-on-sight Ember from a just-in-time one unless it runs dry (a recorded deviation).
     const L = elementLegs(t)[0] as number;
     const o = await run.run({ v, p: { bot: 'path', tapOnSight: true } });
-    const pathLow = path.legLow[L] ?? 0;
-    const sightLow = o.won || o.leg > L ? (o.legLow[L] ?? 0) : -1;
+    const pathLow = path.meterLow[L] ?? 0;
+    const sightLow = o.won || o.leg > L ? (o.meterLow[L] ?? 0) : -1;
     sight = { path: pathLow, sight: sightLow };
     if (sightLow > pathLow - ON_SIGHT_GAP) why.push(`tap on sight keeps ${sightLow.toFixed(0)} vs ${pathLow.toFixed(0)}`);
   }
@@ -509,6 +516,21 @@ export function report(g: Gates): string {
   return lines.join('\n');
 }
 
+/** One line of a variant's gates (the survey). */
+function compact(g: Gates): string {
+  const t = variantDef(g.v);
+  const parts = [`T${t.n} s${String(t.salt).padStart(3)} ${g.failed ? `G${g.failed === 0.5 ? 0 : g.failed}` : 'OK'}`];
+  if (g.g0) parts.push(`G0${mark(g.g0.ok)}${g.g0.ok ? '' : g.g0.fails.length}`);
+  if (g.g1) parts.push(`G1${mark(g.g1.ok)} ${g.g1.legs.map((l) => (l.hero === 'gust' ? 'g' : f0(l.margin))).join('/')}`);
+  if (g.g2) parts.push(`G2${mark(g.g2.ok)} ${f0(g.g2.out.health)}${g.g2.worst ? `,${g.g2.worst.passed ? f0(g.g2.worst.health) : 'X'}` : ''}`);
+  if (g.g5) parts.push(`G5${mark(g.g5.ok)} off ${g.g5.offs.map((o) => (o.passed ? 'P' : '.')).join('')}${g.g5.sight ? ` sight ${f0(g.g5.sight.sight)}/${f0(g.g5.sight.path)}` : ''}${g.g5.spams.length ? ` spam ${g.g5.spams.map((o) => (o.won ? 'P' : '.')).join('')}` : ''} const ${g.g5.constBest.passed ? 'P' : '.'}`);
+  if (g.g3) parts.push(`G3 ${g.g3.wins}`);
+  if (g.g4) parts.push(`G4 ${g.g4.passes}`);
+  if (g.g6) parts.push(`G6 ${pct(g.g6.share)}`);
+  if (g.g7) parts.push(`G7${mark(g.g7.ok)}`);
+  return parts.join(' | ');
+}
+
 /** How the failed runs ended (leg and the death line's first words), counted. */
 function deaths(outs: readonly TrialRunOut[]): string {
   const m = new Map<string, number>();
@@ -617,6 +639,16 @@ async function trialsMain(ctx: Sim16Ctx): Promise<void> {
     if (pickId !== null) {
       const id = Number(pickId) < 1000 ? 1000 + Number(pickId) : Number(pickId);
       await pick(run, id, humanSalts, Number(argOf('from') ?? 0), base);
+      return;
+    }
+    const survey = argOf('survey');
+    if (survey !== null) {
+      // Tooling: every gate on salts --from..--from + N − 1 (no short cut), one compact line each.
+      const from = Number(argOf('from') ?? 0);
+      for (const id of ids) {
+        const rows = await Promise.all(Array.from({ length: Number(survey) }, (_, k) => gates(run, { ...base, id, salt: from + k }, humanSalts)));
+        for (const g of rows) console.log(compact(g));
+      }
       return;
     }
     const only = argOf('gates')?.split(',').map(Number) ?? null;
