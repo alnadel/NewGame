@@ -52,6 +52,19 @@ const DARE_BAND: readonly [number, number] = [0.1, 0.6];
 const ON_SIGHT_GAP = 15;
 /** G7: a mixer without its interaction keeps a Sprout Sap margin at least this much lower. */
 const SAP_GAP = 10;
+/**
+ * Waivers (§6.5): a G3, G4, G6 or G7 failure a Trial may keep, each with its measured reason. Every
+ * entry needs the lead's sign-off before the merge; G0, G1, G2 and G5/G5b take none. A waived gate
+ * still prints its row (marked "waived") and no longer fails --check.
+ */
+export const WAIVERS: Readonly<Record<string, string>> = {
+  // Measured on the pin: 21 of 24 G3/G4 runs drink all 7 (88%). Every puddle sits within ±22 u, Drip
+  // reaches ±32 u at 220 u/s, and G0 keeps the lane ≥ ±12 u, so a puddle cannot be made missable
+  // inside the dx ±8 u lever; the target is already at its +25% bound (6 → 7).
+  'T2 G6': 'every finisher drinks every puddle (88% of G3/G4 runs meet drinks ≥ 7)',
+};
+const WAIVABLE: readonly number[] = [3, 4, 6, 7];
+
 /** G5(d): the four spam Gusts. */
 const SPAMS: readonly { dir: -1 | 1; every: number }[] = [
   { dir: 1, every: 30 },
@@ -397,13 +410,15 @@ export interface Gates {
   readonly g0: G0Out | null;
   readonly g1: AuditOut | null;
   readonly g2: { ok: boolean; out: TrialRunOut; worst: TrialRunOut | null } | null;
-  readonly g5: { ok: boolean; idle: TrialRunOut; offs: TrialRunOut[]; sight: { path: number; sight: number } | null; spams: TrialRunOut[]; constBest: TrialRunOut; constTheta: number; why: string } | null;
+  readonly g5: { ok: boolean; idle: TrialRunOut; offs: TrialRunOut[]; sight: { path: number; sight: number } | null; spams: TrialRunOut[]; constBest: TrialRunOut | null; constTheta: number; why: string } | null;
   readonly g3: { ok: boolean; wins: number; outs: TrialRunOut[] } | null;
   readonly g4: { ok: boolean; passes: number; outs: TrialRunOut[] } | null;
   readonly g6: { ok: boolean; share: number } | null;
   readonly g7: { ok: boolean; what: string } | null;
   /** The first gate that failed (0: none; 0.5 is G0; 5 is G5 or G5b; 7 is G7). */
   readonly failed: number;
+  /** Failed gates kept by WAIVERS ("G4: reason"). */
+  readonly waived: readonly string[];
 }
 
 /** The legs of a trial walked by elements (not Nubs). */
@@ -414,7 +429,7 @@ export function elementLegs(t: TrialDef): number[] {
 }
 
 /** G5 and G5b: idle; every element leg's verb off; T1's tap-on-sight Ember; the spam Gusts; the plan's verbs at the best constant angle. */
-export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOut): Promise<NonNullable<Gates['g5']>> {
+export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOut, constants = true): Promise<NonNullable<Gates['g5']>> {
   const t = variantDef(v);
   const why: string[] = [];
   const idle = await run.run({ v, p: { bot: 'idle', salt: 0 } });
@@ -438,11 +453,12 @@ export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOu
     const sp = SPAMS[k] as { dir: number; every: number };
     if (o.won || !gustLegs.includes(o.leg)) why.push(`spam ${sp.dir > 0 ? 'east' : 'west'}/${sp.every} ${o.won ? 'passes' : `fails in leg ${o.leg}`}`);
   });
-  const consts = await Promise.all(Array.from({ length: 36 }, (_, i) => run.run({ v, p: { bot: 'path', theta: { k: 'const', theta: 10 * i } } })));
+  // G5b (skipped when `constants` is false: the unit test's G5 alone).
+  const consts = constants ? await Promise.all(Array.from({ length: 36 }, (_, i) => run.run({ v, p: { bot: 'path', theta: { k: 'const', theta: 10 * i } } }))) : [];
   let best = 0;
-  for (let i = 1; i < 36; i++) if ((consts[i] as TrialRunOut).progress > (consts[best] as TrialRunOut).progress) best = i;
+  for (let i = 1; i < consts.length; i++) if ((consts[i] as TrialRunOut).progress > (consts[best] as TrialRunOut).progress) best = i;
   if (consts.some((o) => o.passed)) why.push(`constant θ${10 * consts.findIndex((o) => o.passed)} passes`);
-  return { ok: why.length === 0, idle, offs, sight, spams, constBest: consts[best] as TrialRunOut, constTheta: 10 * best, why: why.join('; ') };
+  return { ok: why.length === 0, idle, offs, sight, spams, constBest: (consts[best] as TrialRunOut | undefined) ?? null, constTheta: 10 * best, why: why.join('; ') };
 }
 
 /** G7, the mixers' interactions (§6.4). */
@@ -481,15 +497,23 @@ export async function gateG7(run: TrialRunner, v: TrialVariant, base: AuditOut, 
  * first failing gate; with `stop` the first failure ends the evaluation (the seed search). `only`
  * limits the optional gates (0, 3/4/6, 5, 7) to those listed (G1 and G2 always run).
  */
+/**
+ * Every gate of a variant, in G0, G1, G2, G5, G3/G4, G6, G7 order. `stop` returns at the first
+ * failure; `only` limits the run to those gates (G1 and G2 always run; 5.5 adds G5b's constant
+ * angles to G5, which `only` null includes).
+ */
 export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMAN_SALTS, stop = false, only: readonly number[] | null = null): Promise<Gates> {
   const t = variantDef(v);
   let failed = 0;
+  const waived: string[] = [];
   const fail = (n: number, ok: boolean): boolean => {
-    if (!ok && failed === 0) failed = n;
+    const why = WAIVERS[`T${t.n} G${n}`];
+    if (!ok && why !== undefined && WAIVABLE.includes(n)) waived.push(`G${n}: ${why}`);
+    else if (!ok && failed === 0) failed = n;
     return stop && failed !== 0;
   };
   const want = (n: number): boolean => only === null || only.includes(n);
-  const g: { -readonly [K in keyof Gates]: Gates[K] } = { v, g0: null, g1: null, g2: null, g5: null, g3: null, g4: null, g6: null, g7: null, failed: 0 };
+  const g: { -readonly [K in keyof Gates]: Gates[K] } = { v, g0: null, g1: null, g2: null, g5: null, g3: null, g4: null, g6: null, g7: null, failed: 0, waived };
   const done = (): Gates => ({ ...g, failed });
   if (want(0)) {
     g.g0 = await run.g0(v);
@@ -502,7 +526,7 @@ export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMA
   g.g2 = { ok: path.passed && path.health >= AUDIT_HEALTH && (worst === null || worst.passed), out: path, worst };
   if (fail(2, g.g2.ok)) return done();
   if (want(5)) {
-    g.g5 = await gateG5(run, v, path);
+    g.g5 = await gateG5(run, v, path, want(5.5));
     if (fail(5, g.g5.ok)) return done();
   }
   if (want(3) || want(4) || want(6)) {
@@ -536,7 +560,7 @@ const mark = (ok: boolean | undefined): string => (ok === undefined ? ' ' : ok ?
 /** One report block of a variant's gates. */
 export function report(g: Gates): string {
   const t = variantDef(g.v);
-  const head = `T${t.n} ${t.name.padEnd(13)} seed ${String(t.seed).padStart(10)} salt ${String(t.salt).padStart(3)} D${t.drain}${g.failed ? `  FAILS G${g.failed === 0.5 ? 0 : g.failed}` : '  all gates pass'}`;
+  const head = `T${t.n} ${t.name.padEnd(13)} seed ${String(t.seed).padStart(10)} salt ${String(t.salt).padStart(3)} D${t.drain}${g.failed ? `  FAILS G${g.failed === 0.5 ? 0 : g.failed}` : g.waived.length ? `  passes (${g.waived.map((w) => w.split(':')[0]).join(', ')} waived)` : '  all gates pass'}`;
   const lines = [head];
   if (g.g0) lines.push(`  G0 ${mark(g.g0.ok)} ${g.g0.ok ? 'placement and authoring' : g.g0.fails.slice(0, 6).join('; ')}`);
   if (g.g1) {
@@ -548,12 +572,14 @@ export function report(g: Gates): string {
   if (g.g5) {
     const offs = g.g5.offs.map((o) => (o.passed ? 'PASS' : `L${o.leg}`)).join(',');
     const spams = g.g5.spams.map((o) => (o.won ? 'PASS' : `L${o.leg}`)).join(',');
-    lines.push(`  G5 ${mark(g.g5.ok)} idle ${g.g5.idle.passed ? 'PASS' : pct(g.g5.idle.progress)}; verb off ${offs}${g.g5.sight ? `; on sight ${f0(g.g5.sight.sight)} vs ${f0(g.g5.sight.path)}` : ''}${spams ? `; spam ${spams}` : ''}; G5b best θ${g.g5.constTheta} ${g.g5.constBest.passed ? 'PASS' : pct(g.g5.constBest.progress)}${g.g5.why ? `  [${g.g5.why}]` : ''}`);
+    const cb = g.g5.constBest;
+    lines.push(`  G5 ${mark(g.g5.ok)} idle ${g.g5.idle.passed ? 'PASS' : pct(g.g5.idle.progress)}; verb off ${offs}${g.g5.sight ? `; on sight ${f0(g.g5.sight.sight)} vs ${f0(g.g5.sight.path)}` : ''}${spams ? `; spam ${spams}` : ''}${cb ? `; G5b best θ${g.g5.constTheta} ${cb.passed ? 'PASS' : pct(cb.progress)}` : ''}${g.g5.why ? `  [${g.g5.why}]` : ''}`);
   }
   if (g.g3) lines.push(`  G3 ${mark(g.g3.ok)} reactive ${g.g3.wins}/${REACTIVE_SALTS} low ${f0(Math.min(...g.g3.outs.map((o) => o.health)))}`);
   if (g.g4) lines.push(`  G4 ${mark(g.g4.ok)} humanEl ${g.g4.passes}/${g.g4.outs.length} ${pct(g.g4.passes / g.g4.outs.length)}  deaths: ${deaths(g.g4.outs)}`);
   if (g.g6) lines.push(`  G6 ${mark(g.g6.ok)} dare ${t.dare.kind} ≥ ${t.dare.target}: ${pct(g.g6.share)}`);
   if (g.g7) lines.push(`  G7 ${mark(g.g7.ok)} ${g.g7.what}`);
+  for (const w of g.waived) lines.push(`  waived ${w} (needs the lead)`);
   return lines.join('\n');
 }
 
@@ -564,7 +590,7 @@ function compact(g: Gates): string {
   if (g.g0) parts.push(`G0${mark(g.g0.ok)}${g.g0.ok ? '' : g.g0.fails.length}`);
   if (g.g1) parts.push(`G1${mark(g.g1.ok)} ${g.g1.legs.map((l) => (l.hero === 'gust' ? 'g' : f0(l.margin))).join('/')}`);
   if (g.g2) parts.push(`G2${mark(g.g2.ok)} ${f0(g.g2.out.health)}${g.g2.worst ? `,${g.g2.worst.passed ? f0(g.g2.worst.health) : 'X'}` : ''}`);
-  if (g.g5) parts.push(`G5${mark(g.g5.ok)} off ${g.g5.offs.map((o) => (o.passed ? 'P' : '.')).join('')}${g.g5.sight ? ` sight ${f0(g.g5.sight.sight)}/${f0(g.g5.sight.path)}` : ''}${g.g5.spams.length ? ` spam ${g.g5.spams.map((o) => (o.won ? 'P' : '.')).join('')}` : ''} const ${g.g5.constBest.passed ? 'P' : '.'}`);
+  if (g.g5) parts.push(`G5${mark(g.g5.ok)} off ${g.g5.offs.map((o) => (o.passed ? 'P' : '.')).join('')}${g.g5.sight ? ` sight ${f0(g.g5.sight.sight)}/${f0(g.g5.sight.path)}` : ''}${g.g5.spams.length ? ` spam ${g.g5.spams.map((o) => (o.won ? 'P' : '.')).join('')}` : ''} const ${g.g5.constBest === null ? '-' : g.g5.constBest.passed ? 'P' : '.'}`);
   if (g.g3) parts.push(`G3 ${g.g3.wins}`);
   if (g.g4) parts.push(`G4 ${g.g4.passes}`);
   if (g.g6) parts.push(`G6 ${pct(g.g6.share)}`);
@@ -645,12 +671,13 @@ function nudgeDare(t: TrialDef, share: number): number {
 /**
  * --pick: the first salt k = from..199 passing every gate (then the Dare nudged into its band). With
  * --sets '[{…}, …]' each salt tries those lever sets (§6.5) in order after `base`; a salt whose G0
- * fails is skipped for all of them.
+ * fails is skipped for all of them. --to N searches salts up to N − 1 instead of 199 (T3, T6 and T7:
+ * their plots at ±44 u clear the generated casters on only 3-7% of salts, so 0..199 holds too few).
  */
-async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, base: Partial<TrialVariant>, sets: readonly Partial<TrialVariant>[] = [{}]): Promise<void> {
+async function pick(run: TrialRunner, id: number, humanSalts: number, from: number, base: Partial<TrialVariant>, sets: readonly Partial<TrialVariant>[] = [{}], to = PICK_SALTS): Promise<void> {
   const t0 = trialDef(id) as TrialDef;
   console.log(`\n--pick T${t0.n} from salt ${from}${Object.keys(base).length ? ` with ${JSON.stringify(base)}` : ''}${sets.length > 1 ? ` × ${sets.length} lever sets` : ''}`);
-  for (let k = from; k < PICK_SALTS; k++) {
+  for (let k = from; k < to; k++) {
     let v0: TrialVariant = { ...base, id, salt: k };
     // A plot, puddle or stone on a generated caster moves its dx first (±8 u), if that clears it.
     const moves = clearanceMoves(v0);
@@ -682,7 +709,7 @@ async function pick(run: TrialRunner, id: number, humanSalts: number, from: numb
     console.log(`\n${report(cur)}\nPIN T${t0.n}: ${JSON.stringify({ ...cur.v, id: undefined })}`);
     return;
   }
-  console.log(`\nno salt in ${from}..${PICK_SALTS - 1} passes T${t0.n}`);
+  console.log(`\nno salt in ${from}..${to - 1} passes T${t0.n}`);
 }
 
 async function trialsMain(ctx: Sim16Ctx): Promise<void> {
@@ -700,7 +727,7 @@ async function trialsMain(ctx: Sim16Ctx): Promise<void> {
     const pickId = argOf('pick');
     if (pickId !== null) {
       const id = Number(pickId) < 1000 ? 1000 + Number(pickId) : Number(pickId);
-      await pick(run, id, humanSalts, Number(argOf('from') ?? 0), base, JSON.parse(argOf('sets') ?? '[{}]') as Partial<TrialVariant>[]);
+      await pick(run, id, humanSalts, Number(argOf('from') ?? 0), base, JSON.parse(argOf('sets') ?? '[{}]') as Partial<TrialVariant>[], Number(argOf('to') ?? PICK_SALTS));
       return;
     }
     const survey = argOf('survey');

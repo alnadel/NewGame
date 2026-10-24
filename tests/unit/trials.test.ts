@@ -133,7 +133,7 @@ describe('a trial loads and walks', () => {
       const s = createRun(cfg);
       expect(s.trial).toBe(t);
       expect(s.nubs.hero).toBe(t.cast[0]);
-      expect(s.nubs.chill).toBe(100);
+      expect(s.nubs.chill).toBe(t.tune.legStart[0] || 100);
       expect(s.nubs.frost).toBe(1);
       expect(s.stats.minChill).toBe(100);
       expect(s.stats.burns).toBe(0);

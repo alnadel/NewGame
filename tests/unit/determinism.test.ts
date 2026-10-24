@@ -45,6 +45,8 @@ describe('determinism', () => {
         if ((i + 1) % 150 === 0) liveHashes.push(hashState(live));
       }
       expect(liveHashes.length).toBeGreaterThan(3);
+      // The recording carries the element verbs (taps or holds with their points, steers, swipes).
+      expect(rec.frames.some((f) => (f.verb ?? 0) > 0)).toBe(true);
       const replayHashes: string[] = [];
       const replayed = playReplay(rec, (s, i) => {
         if ((i + 1) % 150 === 0) replayHashes.push(hashState(s));
@@ -54,6 +56,22 @@ describe('determinism', () => {
       expect(replayed.events).toEqual(live.events);
     }
   }, 60_000);
+
+  it('a Nubs replay records only the original seven fields (§7.9), equal to the frames played', () => {
+    const cfg = headlessConfig(23, 3);
+    const live = createRun(cfg);
+    const bot = createBot('reactive');
+    const rec = createReplay(cfg);
+    const seven = ['dTheta', 'down', 'downEdge', 'upEdge', 'release', 'key', 'snap'];
+    for (let i = 0; i < 1800 && live.phase !== 'dead'; i++) {
+      const f = bot.next(live);
+      recordFrame(rec, f);
+      const c = rec.frames[i]!;
+      for (const k of Object.keys(c)) expect(seven).toContain(k);
+      expect([c.dTheta, c.down, c.downEdge, c.upEdge, c.release, c.key, c.snap === true]).toEqual([f.dTheta, f.down, f.downEdge, f.upEdge, f.release, f.key, f.snap === true]);
+      step(live, f);
+    }
+  });
 
   it('a recorded run replays to the same state at every checkpoint', () => {
     const cfg = headlessConfig(21, 3);

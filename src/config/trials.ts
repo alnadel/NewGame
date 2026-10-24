@@ -129,12 +129,13 @@ function trial(
   dareLine: string,
   chip = '',
   salt = 0,
+  tune: Partial<TrialTune> = TUNE,
 ): TrialDef {
   const id = TRIAL_BASE + n;
   const walkers: HeroId[] = ['nubs', ...relays.map((r) => r[1])];
   return Object.freeze({
     id, n, name, chapter, salt, seed: hashString(`trial-${id}-${salt}`), biome, forecast: 'clear', concepts: [], startMinute, lengthMinutes, drain,
-    cast: [...new Set(walkers)], relays: relays.map(([minute, to]) => Object.freeze({ minute, to })), intro, breeze, objects: objects(src), tune: TUNE, mech: MECH,
+    cast: [...new Set(walkers)], relays: relays.map(([minute, to]) => Object.freeze({ minute, to })), intro, breeze, objects: objects(src), tune: tune === TUNE ? TUNE : Object.freeze({ ...TUNE, ...tune }), mech: MECH,
     goal: FINISH, dare: { kind: dare[0], target: dare[1] }, steady, requires,
     card: Object.freeze({
       chip: chip || walkers.join(' ▸ ').toUpperCase(), blurb, goal: 'Reach the finish', stars: ['Finish', star, `All ≥ ${steady}`] as const, dare: `Dare · ${dareLine}`,
@@ -142,17 +143,34 @@ function trial(
   });
 }
 
-/** The seven trials (§5.1-§5.7), in n order; salts 0 until `node scripts/sim.ts --trials --pick <n>` pins them. */
+/**
+ * The seven trials (§5.1-§5.7), in n order, pinned by `node scripts/sim.ts --trials --pick <n>` (§6.5):
+ * each pin's levers carry the gates measured on it (G1 audit margins per leg, G2 path low, G3
+ * reactive wins, G4 humanEl passes, G5b best constant angle, G6 Dare share). The global pass moved
+ * TUNING.elements first (tuning.ts).
+ */
 export const TRIALS: readonly TrialDef[] = Object.freeze([
-  trial(1, 'Kindling', 7, 'meadow', 240, 400, 28, 0, [[340, 'ember'], [556, 'nubs']], 'ember',
+  // T1 pin: salt 193; drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 70 and costMul 1.2 (each
+  // lever set easier than this one was too easy: G5/G5b). Measured: G1 78/70/83, G2 low 70, G3 8/8, G4 14/16 (88%), G5c on sight
+  // 11 vs 69, G5b best θ330 dies at 23%, G6 burns ≥ 7 33%.
+  trial(1, 'Kindling', 7, 'meadow', 240, 400, 34, 0, [[340, 'ember'], [556, 'nubs']], 'ember',
     'b376 b405 t434 g448 b477 g506 b535 i580', ['burns', 7], 30, [],
-    'Tap each wall just before Ember gets there. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls'),
-  trial(2, 'Puddle Run', 5, 'meadow', 60, 400, 26, 0, [[160, 'drip'], [376, 'nubs']], 'drip',
-    'u189:-18 t203:-4 u218:20 t232:10 u246:-8 t261:-20 u275:22 t290:14 u304 t318:-10 u333:-22 t344:24 u354:12', ['drinks', 6], 30, [],
-    'Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones.', 'Drink 6', 'Drink 6 puddles'),
-  trial(3, 'Green Bridge', 15, 'meadow', 240, 400, 28, 0, [[340, 'sprout'], [556, 'nubs']], 'sprout',
+    'Tap each wall just before Ember gets there. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls', '', 193, { legStart: [80, 70, 80], costMul: 1.2 }),
+  // T2 pin: salt 187; drain 26 → 28; Drip 70 → 50 and evapMul 1.2 (G5b: the held sun at a constant
+  // angle walked Drip's leg), Nubs' closing leg 100 → 80; Dare 6 → 7 (+17%; G6 above its band).
+  // Measured: G1 100/28/74 (Drip marks: chosen 45° 50, worst 310° 28), G2 low 49 (worst bin 37), G3
+  // 8/8, G4 15/16 (94%), G5b best θ340 dies at 99%, G6 drinks ≥ 7 88% (WAIVERS: every puddle is in
+  // Drip's reach, so every finisher drinks them all).
+  trial(2, 'Puddle Run', 5, 'meadow', 60, 400, 28, 0, [[160, 'drip'], [376, 'nubs']], 'drip',
+    'u189:-18 t203:-4 u218:20 t232:10 u246:-8 t261:-20 u275:22 t290:14 u304 t318:-10 u333:-22 t344:24 u354:12', ['drinks', 7], 30, [],
+    'Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones.', 'Drink 7', 'Drink all 7 puddles', '', 187, { legStart: [100, 50, 80], evapMul: 1.2 }),
+  // T3 pin: salt 3292 (salts 0..199: 6 clear G0's plot clearance and none fails a constant sun
+  // angle, so --pick ran past 199); drain 28 → 34 and Nubs' legs 100 → 80 (too easy); Sprout 80 → 100
+  // (G6: no bot had Sap left for 2 trees). Measured: G1 76/3/83 (Sap low 3), G2 low 76, G3 8/8, G4
+  // 12/16 (75%), G5b best θ130 dies at 19%, G6 trees ≥ 2 33%.
+  trial(3, 'Green Bridge', 15, 'meadow', 240, 400, 34, 0, [[340, 'sprout'], [556, 'nubs']], 'sprout',
     'p369:44 x408:0:12 s450:0:14 p476:-44 x502:0:16 s530:0:12 p572:44 p586:-44 p600:44', ['trees', 2], 30, [],
-    'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees'),
+    'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3292, { legStart: [80, 100, 80] }),
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 28, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
     'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 60], 30, [],
     "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1 s', 'Ride a rain cloud 1 s'),
