@@ -336,9 +336,6 @@ test.describe('Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4)', () => 
     await page.mouse.click(195, 380);
     await waitForRunStart(page);
     if (!query.includes('elfix')) await skipToLeg(page, 1);
-    // The core bot that fast-forwarded may leave the sun mid-drag (no lift reaches the sim, so the
-    // dial would show its detent ticks): a tap far from every target ends that drag.
-    await page.mouse.click(60, 760);
     const layers = await page.evaluate(async (ms) => {
       const hook = window.__SHADY_TEST__!;
       const l0 = hook.perf().nubsLayerDraws;

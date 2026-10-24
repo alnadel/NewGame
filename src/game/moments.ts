@@ -100,7 +100,7 @@ export const RELAY_TIPS: readonly (readonly [TipOn, string, HeroId?])[] = [
 export const MIXER_TIPS: Readonly<Record<number, Tips>> = {
   5: [['go', 'Melt the ice past the Tag Stone for Drip. Wait out the shower before you burn.']],
   6: [['go', 'Blow the fog off Sprout\'s path and the rain onto it: rain feeds Sprout.']],
-  7: [['go', 'The breeze blows west and fire spreads with it. Keep four trees standing!']],
+  7: [['go', 'The breeze blows west and fire spreads with it. Keep three trees standing!']],
 };
 
 /**

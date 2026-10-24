@@ -241,8 +241,8 @@ test("T4: Gust's left swipe blows the wind west (the sun holds)", async ({ page 
   await page.mouse.up();
   await expect.poll(async () => (await state(page)).el!.wind, { timeout: 5000 }).toBeLessThan(0);
   const after = await state(page);
-  // A swipe costs 8 Lift (CORE's branch; the C0c skeleton's swipes are free).
-  expect([0, 8]).toContain(after.el!.spent);
+  // A swipe costs 8 Lift (T4 keeps costMul 1).
+  expect(after.el!.spent).toBe(8);
   expect(after.theta).toBe(theta);
 });
 
@@ -325,7 +325,8 @@ test('?trial=6 walks Nubs first; Back from its Results leads to the Elementals',
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'play');
   const s = await state(page);
-  expect([s.level, s.hero, s.meter, s.verb]).toEqual([1006, 'nubs', 100, 'sun']);
+  // T6's pin starts Nubs' opening leg at 80 (tune.legStart, docs/ELEMENTALS_V2.md §13).
+  expect([s.level, s.hero, s.meter, s.verb]).toEqual([1006, 'nubs', 80, 'sun']);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
   await page.keyboard.press('Escape');

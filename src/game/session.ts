@@ -2646,6 +2646,8 @@ export class Session {
       for (const ev of s.events) this.onTickEvent(ev);
     }
     this.input.releaseAll();
+    // The bot's last frame may leave the sun mid-drag (no lift reaches the sim): a tap at 0 °/s ends it.
+    if (s.sun.mode === 'dragging') this.input.tap();
     takeSnap(s, this.prev);
     takeSnap(s, this.curr);
   }
