@@ -290,7 +290,8 @@ for (const size of [
         expect(p.snowShown, 'the Snow tile stays in view above the actions').toBe(true);
         expect(p.chipTop, 'the first award chip is there').toBeGreaterThan(0);
         chipTop ??= p.chipTop;
-        expect(Math.abs(p.chipTop - chipTop), 'the first award chip never moves').toBeLessThanOrEqual(1);
+        // Sub-pixel layout settles by up to about 1.2 px as stamps land; a scroll moves it far more.
+        expect(Math.abs(p.chipTop - chipTop), 'the first award chip never moves').toBeLessThanOrEqual(2);
       } else {
         expect(p.firstChipShown, 'the first award chip stays in view').toBe(true);
       }
