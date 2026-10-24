@@ -357,12 +357,14 @@ export function renderHeroPreview(canvas: HTMLCanvasElement, hero: HeroId, equip
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, canvas.width, canvas.height);
   const p = createPose();
-  Object.assign(p, { S: canvas.height / 64, c: 3, meter: 0.5, lookX: 0.55, lookY: 0.35, reducedMotion: true });
+  // Gust's kite flies above its anchor: smaller and lower, so its face sits in the coin's middle.
+  const kite = hero === 'gust';
+  Object.assign(p, { S: (canvas.height / 64) * (kite ? 0.8 : 1), c: 3, meter: 0.5, lookX: 0.55, lookY: 0.35, reducedMotion: true });
   const a = createNubsAnim();
   a.happy = 1;
   for (let i = 0; i < 30; i++) updateNubsAnim(a, 1 / 30, 0, p.S, false, 0);
   h.key(p, a);
-  g.translate(canvas.width / 2, canvas.height * 0.8);
+  g.translate(canvas.width / 2, canvas.height * (kite ? 0.98 : 0.8));
   h.back(g, p, a);
   h.live(g, p, a);
   h.front(g, p, a);

@@ -579,8 +579,10 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     const ahead = edgeOf(o) - ny;
     if (ahead > E.range || ahead <= 0) continue;
     if (hero === 'ember') {
-      if (isWall(o.kind)) ring[i] = burnLeft(s, o) < 0 ? 4 : burnSweet(s, o) ? 3 : i === keyT ? 2 : 1;
-      else if (o.kind === 'puddle' && ahead >= E.near && edgeOf(o) < tagY && Math.abs(o.x - trailX(tr, o.y)) <= O.puddleR + O.touch) ring[i] = i === keyT ? 2 : 1;
+      // Walls and Ember's puddles alike: too late (red, crossed), tap now (pulsing), the key's next, a target.
+      if (isWall(o.kind) || (o.kind === 'puddle' && ahead >= E.near && edgeOf(o) < tagY && Math.abs(o.x - trailX(tr, o.y)) <= O.puddleR + O.touch)) {
+        ring[i] = burnLeft(s, o) < 0 ? 4 : burnSweet(s, o) ? 3 : i === keyT ? 2 : 1;
+      }
     } else if (hero === 'sprout' && ahead >= E.near && (isCross(o.kind) ? !bridged(o) : o.kind === 'plot' && o.casterId < 0)) {
       ring[i] = i === keyT ? 2 : 1;
     }
