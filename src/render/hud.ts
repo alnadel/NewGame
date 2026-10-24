@@ -741,17 +741,31 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
 function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, hero: HeroId): void {
   const k = hudScale(v);
   const r = 20 * k;
-  const x1 = v.vx + v.vw - v.safe.right - METER_SIDE * k + 6 * k;
-  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - METER_R * k;
   const w = 92 * k;
+  const x = v.vx + v.vw - v.safe.right - METER_SIDE * k + 3 * k - w;
+  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - METER_R * k;
+  // The pill and its glyph are one sprite per element and scale; the number is drawn over it.
+  const key = hero + k + v.dpr;
+  if (pillKey !== key) {
+    pillKey = key;
+    pillC = sized(pillC, (w + 6 * k) * v.dpr, (2 * r + 6 * k) * v.dpr);
+    const pg = fresh(pillC, v.dpr);
+    pill(pg, 2 * k, 2 * k, w, 2 * r, r, FACE[HEROES[hero].face][1], k, 3 * k);
+    pg.fillStyle = '#FFFFFF';
+    pg.beginPath();
+    pg.arc(2 * k + r, 2 * k + r, r - 5 * k, 0, TAU);
+    pg.fill();
+    drawGlyph(pg, hero, 2 * k + r, 2 * k + r, 24 * k);
+  }
+  const c = pillC as Canvas2D;
   g.globalAlpha = inp.alpha;
-  pill(g, x1 - w, y - r, w, 2 * r, r, FACE[HEROES[hero].face][1], k, 3 * k);
-  coin(g, x1 - w + r, y, r - 3 * k, FACE.cloud, k, inp.hc);
-  drawGlyph(g, hero, x1 - w + r, y, 24 * k);
+  g.drawImage(c, x - 2 * k, y - r - 2 * k, c.width / v.dpr, c.height / v.dpr);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  outlined(g, String(Math.round(inp.s.nubs.chill)), x1 - w / 2 + r, y + k, 24 * k);
+  outlined(g, String(Math.round(inp.s.nubs.chill)), x + w / 2 + r, y + k, 24 * k);
 }
+let pillC: Canvas2D | null = null;
+let pillKey = '';
 
 /**
  * Elementals v2: the wind chip under the row's right end while Gust walks or a wind blows: an

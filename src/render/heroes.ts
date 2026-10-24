@@ -15,7 +15,7 @@
 import { HEROES, relayY, trailX, type HeroId, type SimState, type TrialRelay } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import type { Equipped } from '../meta/content.ts';
-import { chip, displayFont, FACE, outlined } from './candy.ts';
+import { chip, displayFont, FACE, INK as INK_C, outlined } from './candy.ts';
 import { artOps, drawArt, drawGlyph, type ArtOp } from './glyphs.ts';
 import { createNubsAnim, createPose, HAT_BASE_X, HAT_BASE_Y, NUBS_SCALE, renderWardrobePreview, updateNubsAnim, type CharArt, type Motion, type NubsAnim, type NubsPose } from './nubs.ts';
 import { ctx2d, type Canvas2D } from './sprites.ts';
@@ -354,7 +354,6 @@ export function drawNextChip(g: CanvasRenderingContext2D, hero: HeroId, ticks: n
   g.textAlign = 'center';
   outlined(g, 'SUN HOLDS', cx + 8 * k, by, 13 * k);
 }
-const INK_C = '#2B2140';
 
 /** The token that pops off a fallen element (its glyph: a spark of flame, a leaf, a drop), placed as nubs.ts renderHatSprite places the hat. */
 export function renderTokenSprite(c: Canvas2D, hero: HeroId, pxPerU: number): void {

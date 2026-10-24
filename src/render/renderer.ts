@@ -700,7 +700,9 @@ export class Renderer {
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
     // The hot ring: Nubs in the sun; on a Trial the walker not safe.
     const hot = trial ? !s.nubs.safe : s.nubs.f > 0;
-    updateHalo(sc.halo, udt, inp.dragging, chillCue, s.sun.dTheta, walking && sunUp && hot && inp.screen === 'play', inp.mech.deep && walking);
+    // A held sun (Drip's and Gust's legs) takes no drag: no detent ticks or arrow, even with a finger down.
+    const dragging = inp.dragging && !(trial && s.sun.locked);
+    updateHalo(sc.halo, udt, dragging, chillCue, s.sun.dTheta, walking && sunUp && hot && inp.screen === 'play', inp.mech.deep && walking);
     sc.relief = Math.max(0, sc.relief - adt);
     sc.sunWorried = Math.max(0, sc.sunWorried - adt);
     if (inp.screen === 'play' && walking) {
@@ -964,7 +966,7 @@ export class Renderer {
       hi.cy = pose.y;
       hi.R = 40 * v.S;
       hi.theta = theta;
-      hi.dragging = inp.dragging;
+      hi.dragging = dragging;
       hi.dTheta = s.sun.dTheta;
       // An element's gauge reads its health.
       const heroGauge = trial !== null && s.nubs.hero !== 'nubs';

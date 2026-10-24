@@ -63,16 +63,16 @@ const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
 /** Elementals: each element's go colour. */
-const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), drip: hex('#3FAEF7'), sprout: hex('#8BD650'), gust: hex('#A99CC6') };
+const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: 0xff8a1f, drip: 0x3faef7, sprout: 0x8bd650, gust: 0xa99cc6 };
 /** Elementals v2: an element's gauge from full to low (§2): its colour, below 60, below 25 (Sprout's Sap has no danger colours). */
 const GAUGE: Readonly<Record<HeroId, readonly number[]>> = {
   nubs: [],
-  ember: [hex('#FF7A1A'), hex('#FFB347'), hex('#8C8C8C')],
-  drip: [hex('#3FAEF7'), AMBER, hex('#FF5D3D')],
-  sprout: [hex('#6CC04A'), hex('#6CC04A'), hex('#6CC04A')],
-  gust: [hex('#F4F1FB'), AMBER, hex('#FF5D3D')],
+  ember: [0xff7a1a, 0xffb347, 0x8c8c8c],
+  drip: [0x3faef7, AMBER, 0xff5d3d],
+  sprout: [0x6cc04a, 0x6cc04a, 0x6cc04a],
+  gust: [0xf4f1fb, AMBER, 0xff5d3d],
 };
-const LILAC = hex('#A99CC6');
+const LILAC = 0xa99cc6;
 const LEAF_DASH = [8, 6];
 
 /** An element's go colour. */

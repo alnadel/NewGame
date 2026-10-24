@@ -156,6 +156,47 @@ describe('SfxRouter events', () => {
     expect(play({ e: 'tagSoon', to: 'drip', ticks: 90 })).toEqual(['detent']);
     expect(play({ e: 'tag', from: 'ember', to: 'drip', index: 1 })).toEqual(['tag']);
     expect(play({ e: 'tagClean', to: 'drip' })).toEqual(['phew']);
+    // v2 (§7.10): the verbs and the objects.
+    expect(play({ e: 'burn', obj: 0, kind: 'bramble', x: 0, y: 0, cost: 12, spread: false })).toEqual(['burn']);
+    expect(play({ e: 'burnOut', obj: 0, kind: 'bramble', x: 0, y: 0 })).toEqual([]);
+    expect(play({ e: 'feed', obj: 0, delta: 12, x: 0, y: 0 })).toEqual(['burn']);
+    expect(t.played[0]?.params.level).toBe(2);
+    expect(play({ e: 'doused', obj: 0, x: 0, y: 0 })).toEqual(['snapEnd']);
+    expect(play({ e: 'fizz', x: 0, y: 0, reason: 'low' })).toEqual(['uiError']);
+    expect(play({ e: 'bump', obj: 0, kind: 'gate', hero: 'nubs', delta: -30, x: 0, y: 0 })).toEqual(['bump']);
+    expect(play({ e: 'fall', obj: 0, hero: 'sprout', x: 0, y: 0 })).toEqual(['fall']);
+    expect(play({ e: 'grow', obj: 0, on: true, x: 0, y: 0 })).toEqual(['grow']);
+    expect(play({ e: 'grow', obj: 0, on: false, x: 0, y: 0 })).toEqual([]);
+    expect(play({ e: 'grown', obj: 0, tree: true, x: 0, y: 0 })).toEqual(['bloom']);
+    expect(play({ e: 'drink', obj: 0, delta: 30, x: 0, y: 0 })).toEqual(['drink']);
+    expect(play({ e: 'sizzle', obj: 0, hero: 'drip', delta: -20, x: 0, y: 0 })).toEqual(['snapEnd']);
+    expect(play({ e: 'sizzle', obj: 0, hero: 'ember', delta: 12, x: 0, y: 0 })).toEqual(['bell']);
+    expect(play({ e: 'gust', dir: -1, wind: -30, cost: 8 })).toEqual(['gust']);
+    expect(t.played[0]?.params.index).toBe(-1);
+    expect(play({ e: 'touch', bits: 0 })).toEqual([]);
+  });
+
+  it('patters while the walker is under rain (touch bit 2), and stops when it leaves', () => {
+    const t = setup();
+    t.router.onEvents([{ e: 'touch', bits: 2 }], t.view);
+    t.frames(1);
+    const drops = t.names().filter((n) => n === 'drink').length;
+    expect(drops).toBeGreaterThanOrEqual(5);
+    expect(drops).toBeLessThanOrEqual(7);
+    t.router.onEvents([{ e: 'touch', bits: 1 }], t.view);
+    t.played.length = 0;
+    t.frames(1);
+    expect(t.names()).not.toContain('drink');
+  });
+
+  it("plays no lock cue on a Trial: the sun's hold is the TAG's moment", () => {
+    const t = setup({ health: 80 });
+    t.frames(0.1);
+    t.view.locked = true;
+    t.frames(0.2);
+    t.view.locked = false;
+    t.frames(0.2);
+    expect(t.names()).not.toContain('lock');
   });
 
   it('beats the heartbeat from a hero\'s health when the view has one', () => {

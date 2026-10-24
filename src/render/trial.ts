@@ -54,9 +54,8 @@ const O = E.objects;
 const TAU = Math.PI * 2;
 /** A rain cloud's body floats this far (u, up the screen) over its footprint. */
 const RAIN_LIFT = 50;
-/** Ember's sweet band reaches the gate's burn-walk ahead (84 ticks at 70 u/s); the bramble's ends at 63. */
+/** Ember's sweet band reaches the gate's burn-walk ahead (84 ticks at 70 u/s). */
 const BAND_FAR = (E.ember.burnTicks.gate * 70) / 60;
-const BAND_MID = (E.ember.burnTicks.bramble * 70) / 60;
 const AMBER = 0xffb347;
 const RED = 0xff4d3d;
 const GREEN = 0x5fd35a;
@@ -342,7 +341,7 @@ export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, t
   const S = v.S;
   if (s.nubs.hero === 'ember' && s.phase === 'day') {
     // Ember's sweet band on the ground: hatched across the trail from `near` to the gate's burn-walk
-    // ahead, a line at the bramble's.
+    // ahead (a bramble's ends at 63 u).
     if (!hatch) {
       const hc2 = makeCanvas(10, 10);
       const hg = ctx2d(hc2);
@@ -361,8 +360,6 @@ export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, t
     g.translate(x0, y0);
     g.fillStyle = hatch as CanvasPattern;
     g.fillRect(0, 0, (2 * O.wallHalf + 8) * S, (BAND_FAR - E.near) * S);
-    g.fillStyle = 'rgba(255,150,40,0.8)';
-    g.fillRect(0, (BAND_FAR - BAND_MID) * S - 1, (2 * O.wallHalf + 8) * S, 2);
     g.restore();
   }
   for (let i = el.objs.length - 1; i >= 0; i--) {
@@ -373,7 +370,7 @@ export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, t
       const f = o.hit ? 2 : rm ? 0 : Math.floor(time * 3) % 2;
       blit(g, v, spr('st' + f, k, 52, 52, 26, 28, (c) => {
         if (f < 2) c.drawImage(radialSprite('255,120,30', 64, f ? 0.8 : 0.6), -26, -27, 52, 52);
-        art(c, f < 2 ? `P#7A3426/#2E1414/1.4 O0-2 9.5,7.5|F#A04A32 O-2-5 5,3|S${f ? '#FFF0A0' : '#FFB040'}/1.9 M-6-1L-2-3L1 0L5-4M-1-3L0-7|S#FF9A3A/1.3 M-4-14q2-3 0-6M3-15q2-3 0-6` : 'P#8C8682/#4A4440/1.3 O0-2 9.5,7.5|S#5E5854/1.4 M-6-1L-2-3L1 0L5-4', []);
+        art(c, `P$0/$1/1.4 O0-2 9.5,7.5|S$2/1.9 M-6-1L-2-3L1 0L5-4M-1-3L0-7${f < 2 ? '|S#FF9A3A/1.3 M-4-14q2-3 0-6M3-15q2-3 0-6' : ''}`, f > 1 ? ['#8C8682', '#4A4440', '#5E5854'] : ['#7A3426', '#2E1414', f ? '#FFF0A0' : '#FFB040']);
       }), o.x, o.y);
       continue;
     }
