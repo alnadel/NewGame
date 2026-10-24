@@ -1483,49 +1483,70 @@ afternoon flare (an 80-point scorch), crossed sun its 20-Chill tank could not af
 
 ## 17. Elementals (docs/ELEMENTALS_V2.md)
 
-The Elemental Trials are being rebuilt as v2 (docs/ELEMENTALS_V2.md, binding): each element plays
-its own verb inside a run that stays a walk to the finish. The v1 sun-variant heroes (Ember's light
-table, Sprout's edge band, Volt, Drip's two-ended temperature, the swipe-down abilities, duos, the
-green thumb, `?hero=`) are gone (§8, the C0a demolition). Every element rule is gated on
-`s.trial !== null`: Endless, Daily, challenge and Journey runs take the old paths byte for byte
-(the goldens' other keys are unchanged).
+The Elemental Trials are v2 (docs/ELEMENTALS_V2.md, binding): each element plays its own verb
+inside a run that stays a walk to the finish, against its own world objects. The v1 sun-variant
+heroes (Ember's light table, Sprout's edge band, Volt, Drip's two-ended temperature, the swipe-down
+abilities, duos, the green thumb, `?hero=`) are gone (§8, the C0a demolition). Every element rule
+is gated on `s.trial !== null` (`s.el !== null`): Endless, Daily, challenge and Journey runs take
+the old paths byte for byte (the goldens' other keys are unchanged).
 
-### 17.1 Data and runs
+### 17.1 Data and runs (the C0b contract)
 
-- **Config.** `config/heroes.ts` (`HeroId`, `HERO_IDS`, `HEROES`); `config/trials.ts` (`TRIALS`,
-  `isTrialId`, `trialDef`, `trialLevel`, `anyLevelDef`, `levelTag`/`levelShort`, `trialDareValue`,
-  `trialStars`); `TUNING.heroes` (the relay's numbers).
+- **Config.** `config/heroes.ts`: `HeroId` (`nubs`, `ember`, `drip`, `sprout`, `gust`), `HERO_IDS`,
+  `HEROES` (§10.1 copy: name, element, tagline, three rule chips, meter word, `verb`, verb and key
+  lines, `sunHeld` for the steer and blow verbs, glyph, gesture icon, face, intro trial, death tip),
+  `CAUSE_TIPS`. `config/trials.ts`: `TRIALS` (§5, ids 1001..1007; a trial's cast is Nubs then each
+  relay's newcomer, its card chip the walkers in order), `EL_KINDS`, the object places
+  (`objects`, authored as compact `<code><minute>[:dx[:r[:drift]]]` strings), `TrialTune`,
+  `isTrialId`, `trialDef`, `trialLevel`, `anyLevelDef`, `levelTag`/`levelShort`, `trialDareValue`
+  (the run's counter of the Dare kind: `burns`, `drinks`, `trees`, `grove`, `cloudRide`),
+  `trialStars`. `TUNING.elements` (§2.6) holds every element number.
 - **Runs.** `campaignConfig(id)` takes a trial id (the trial's mechanics, `v16: V16_NONE`,
-  `startFrost: 1`). `createRun` sets `s.trial`, the walker's element (`cast[0]`) at `heroStart`,
-  `stats.minChill = 100` (the walker's lowest health) and the relay counters at 0.
+  `startFrost: 1`). `prepareRun` and `createRun` build a trial's world through `finishY + hardAhead`
+  (ignoring `ahead`). `createRun` sets `s.trial`, the walker (`cast[0]`) at `elStart`,
+  `stats.minChill = 100` (the walker's lowest steady health), the element counters at 0, and
+  `s.el = createEl(s)`: the objects at their places (y at the minute's walk, x on the trail plus dx;
+  y-sorted, ids `EL_ID_BASE + i`), the lane, wind, hold and leg fields, and the Drip mask buffer
+  when Drip is cast. Rain proxies are clouds of kind `'rain'`; grown trees are casters
+  `TREE_ID_BASE + i` (`removeCaster` takes one out).
 
-### 17.2 The step on a Trial (`sim/heroes.ts`)
+### 17.2 The step on a Trial (`sim/elements.ts`, §7.7-§7.8)
 
 - **`updateRelay`** right after `syncTime`: `tagSoon` exactly `tagSoonTicks` before a TAG; at
-  `tagTick(t, i)` (the relay's minute on the 6-tick grid) the walker becomes the incoming element
-  at its start meter, the grace and the clean-TAG watch start, and `tag` fires. The charge carries.
+  `tagTick(t, i)` (the relay's minute on the 6-tick grid) the walker becomes the incoming element at
+  its leg start meter, the leg fields reset (spent, hold, leg tick, the lane unless Drip walks on),
+  the grace and the clean-TAG watch start, and `tag` fires. The charge carries.
 - **`updateSnap`** casts the Cold Snap on a Trial only while Nubs walks and no TAG is within
   `tagSoonTicks` (`tagLocked`).
-- **`applyHeroDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial): the
+- **`updateElements`** after the snap (the C0b stub is empty; C0c adds the skeleton).
+- **`applyElDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial): the
   walker's rate on Nubs' trial rule (`−D·f + R·max(0, 1 − f)`, f = c/5), floored at 0 by the TAG
-  grace, `nb.safe` (strict shade), health into `stats.minChill` and `lowChill`, `keepMemory`, the
-  Cold Snap's income on Nubs legs, the clean-TAG watch and the lit totals.
+  grace, `nb.safe` (strict shade), steady health (`elHealth`: meter plus what the leg spent) into
+  `stats.minChill` and `lowChill`, `keepMemory`, the Cold Snap's income on Nubs legs, the clean-TAG
+  watch, the lit totals and the leg tick.
 - **Pickups:** on a Trial only Nubs' Chill takes a flake or crystal, and a flake pays no charge.
-- **Death:** the walker's meter at 0 in daylight ends the run; `heroDeath` is `deathCause` with
-  `who` and `heroCause 'melt'`.
-- **History, hash:** the Melt Map's chill slot holds the walker's health; `hashState` feeds the
-  trial block only on a Trial.
+- **Death and win:** `elDead` (a fall, or a walker other than Sprout at 0) ends the run; `elDeath`
+  is `deathCause` with `who` and `heroCause 'melt'`. At the finish `stats.grove` is `groveCount`.
+- **History, hash:** the Melt Map's chill slot holds the walker's steady health; `hashState` feeds
+  the trial block (relay, grace, lane, wind, hold, spent, leg, fall, every object's fields and the
+  element counters) only on a Trial.
+- **Reads** (`elements.ts`, final signatures; C0b returns neutral values): `walkerAt`, `windAt`,
+  `weatherXAt`, `weatherGood`, `arriveTicks`, `contactTicks`, `needOf`, `bridged`, `burnLeft`,
+  `burnSweet`, `growLeft`, `veiled`, `burnTarget`, `growTarget`, `laneOf`, `pointLit`, plus
+  `heroHealth`, `elHealth`, `tagTick`, `nextTagTicks`, `nextTagHero`, `tagLocked`, `relayY`.
+- **`elFixture(s)`** (debug builds only, `?elfix=1`): every object kind in each of its states ahead
+  of the walker, for art review.
 
 ### 17.3 The guide on a Trial
 
-Every leg reads Nubs' masks (`updateGuide` as in a Journey run); during a telegraph `guide.tag`
-holds Nubs' strict shade at the walker.
+Every leg reads Nubs' masks (`updateGuide` as in a Journey run); `elGuide` fills `guide.tag` with
+Nubs' strict shade at the walker while a TAG is telegraphed, else zeros.
 
 ### 17.4 Bots
 
 The reactive and human models read `guide.now`/`next` unchanged; on a Trial `snapReady` also
-needs Nubs walking and no TAG lock, the panic rule reads the walker (unsafe instead of lit, health
-instead of Chill), and the reactive bot with a salt > 0 aims with an N(0, 4°) error per pick.
+needs Nubs walking and no TAG lock, the panic rule reads the walker's steady health, and the
+reactive bot with a salt > 0 aims with an N(0, 4°) error per pick.
 
 ### 17.5 Proof: `node scripts/sim.ts --trials` (`scripts/sim16/trials.ts`)
 

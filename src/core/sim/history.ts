@@ -1,7 +1,7 @@
 // Melt Map history: a ring of (x, y, chill, f) samples, one every 20 u of Nubs' y.
 
 import { TUNING } from '../../config/tuning.ts';
-import { heroHealth } from './heroes.ts';
+import { elHealth } from './elements.ts';
 import type { SimState } from './types.ts';
 
 const CAP = TUNING.history.capacity;
@@ -13,8 +13,8 @@ export function pushHistory(s: SimState): void {
     const o = (s.historyCount % CAP) * 4;
     s.history[o] = nb.x;
     s.history[o + 1] = nb.y;
-    // Elementals: on a Trial the chill slot holds the lead's health (0..100).
-    s.history[o + 2] = s.trial !== null ? heroHealth(nb) : nb.chill;
+    // Elementals: on a Trial the chill slot holds the walker's steady health (0..100).
+    s.history[o + 2] = s.el !== null ? elHealth(s) : nb.chill;
     s.history[o + 3] = nb.f;
     s.historyCount++;
     s.nextHistoryY += TUNING.history.every;

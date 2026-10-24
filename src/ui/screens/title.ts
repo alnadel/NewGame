@@ -55,7 +55,7 @@ const BUBBLE_TAIL = 14;
 /** The bubble joins the flow under the logo when it would come this close to the items above (px). */
 const BUBBLE_ROOM = 8;
 /** The Elementals pill's faces: the four new heroes and their candy faces (class names whole: vite.config.ts shortens them). */
-const ELEMENTAL_FACES: readonly (readonly [HeroId, string])[] = [['ember', 'f-red'], ['sprout', 'f-green'], ['volt', 'f-violet'], ['drip', 'f-blue']];
+const ELEMENTAL_FACES: readonly (readonly [HeroId, string])[] = [['ember', 'f-red'], ['drip', 'f-blue'], ['sprout', 'f-green'], ['gust', 'f-cloud']];
 /** Play's icon: a green triangle on a white coin. */
 const PLAY_COIN = '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M17 10 38 24 17 38Z" fill="#43B226" stroke="#2A1B45" stroke-width="4.5" stroke-linejoin="round"/></svg>';
 

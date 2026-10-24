@@ -223,6 +223,20 @@ export function insertCaster(w: World, c: Caster): void {
   if (c.maxZ > w.maxZ) w.maxZ = c.maxZ;
 }
 
+/**
+ * Elementals v2 (docs/ELEMENTALS_V2.md §3.2): removes a runtime caster (a Sprout tree burned by fire,
+ * ids ≥ TREE_ID_BASE; a generated caster is never removed). maxZ keeps its high-water mark.
+ */
+export function removeCaster(w: World, id: number): void {
+  const cs = w.casters;
+  for (let i = 0; i < cs.length; i++) {
+    if ((cs[i] as Caster).id !== id) continue;
+    cs.splice(i, 1);
+    w.byId.delete(id);
+    return;
+  }
+}
+
 export function insertPickup(w: World, p: Pickup): void {
   insertSorted(w.pickups, p);
 }

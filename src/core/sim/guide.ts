@@ -6,8 +6,9 @@
 // guide.flake (the bins that shade the nearest alive glass flake in its melt window) and, during a
 // flare's warning, guide.flare (full shade at the flare's first hold tick) with guide.flareTicks.
 //
-// Elementals: on a Trial every leg reads Nubs' masks, and during a TAG's telegraph guide.tag holds
-// where to aim the sun for the incoming element (Nubs' strict shade at the walker).
+// Elementals v2 (docs/ELEMENTALS_V2.md §7.8): on a Trial elGuide follows the Nubs masks; the contract
+// stage reads Nubs' masks on every leg and, during a TAG's telegraph, guide.tag holds where to aim
+// the sun for the incoming element (Nubs' strict shade at the walker).
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ } from '../clock.ts';
@@ -19,7 +20,7 @@ import { eclipseAt } from '../gen/world.ts';
 import { BINS, createMaskScene, glareMask, litMask, shadeMask } from '../intervals.ts';
 import { PICKUP_ALIVE, SNAP_ID_BASE, type Flare, type Pickup } from '../objects.ts';
 import { trailX } from '../trail.ts';
-import { tagLocked } from './heroes.ts';
+import { tagLocked } from './elements.ts';
 import { updateBudGuide, updateLandGuide } from './mechanics.ts';
 import { meltBudgetOf } from './pickups.ts';
 import type { SimState } from './types.ts';
@@ -91,10 +92,14 @@ export function updateGuide(s: SimState): void {
   flakeGuide(s);
   flareGuide(s);
   nextGuide(s);
-  if (s.trial !== null) {
-    if (tagLocked(s)) g.tag.set(g.now);
-    else g.tag.fill(0);
-  }
+  if (s.el !== null) elGuide(s);
+}
+
+/** A Trial's layers over the Nubs masks (§7.8): guide.tag during a TAG's telegraph, else all 0. */
+function elGuide(s: SimState): void {
+  const g = s.guide;
+  if (tagLocked(s)) g.tag.set(g.now);
+  else g.tag.fill(0);
 }
 
 /** guide.next: 0.6 s ahead (Nubs' position, the elevation and the clouds then; today's daylight only). */

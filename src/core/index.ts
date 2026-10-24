@@ -67,8 +67,8 @@ export type {
   Mechanics,
 } from '../config/campaign.ts';
 // Elementals: the elements and the Trials.
-export { HERO_IDS, HEROES } from '../config/heroes.ts';
-export type { HeroDeath, HeroFace, HeroId, HeroInfo } from '../config/heroes.ts';
+export { CAUSE_TIPS, HERO_IDS, HEROES } from '../config/heroes.ts';
+export type { HeroDeath, HeroFace, HeroId, HeroInfo, Verb } from '../config/heroes.ts';
 export {
   anyLevelDef,
   isTrialId,
@@ -83,7 +83,7 @@ export {
   TRIALS,
   trialStars,
 } from '../config/trials.ts';
-export type { TrialDareKind, TrialDef, TrialRelay } from '../config/trials.ts';
+export type { ElKind, ElPlace, TrialDareKind, TrialDef, TrialRelay, TrialTune } from '../config/trials.ts';
 
 // Clock and formatting
 export {
@@ -127,7 +127,11 @@ export {
   PICKUP_MELTED,
   PICKUP_TAKEN,
   RUNTIME_ID_BASE,
-  SEED_ID_BASE,
+  EL_BURNING,
+  EL_GONE,
+  EL_ID_BASE,
+  EL_IDLE,
+  TREE_ID_BASE,
   SNAP_ID_BASE,
 } from './objects.ts';
 export type {
@@ -135,6 +139,8 @@ export type {
   Cloud,
   CloudKind,
   DiscPart,
+  ElObj,
+  ElState,
   Flare,
   FlareState,
   GazingBall,
@@ -202,7 +208,7 @@ export { campaignConfig, levelOutcome, levelProgress, minuteStart, resolveLevelC
 export { createRun, prepareRun, prepareSome } from './sim/create.ts';
 export type { RunBuild } from './sim/create.ts';
 export { step } from './sim/step.ts';
-export { NO_INPUT, V16_ALL, V16_NONE, V16_RULES, V16_SHIP } from './sim/types.ts';
+export { NO_INPUT, V16_ALL, V16_NONE, V16_RULES, V16_SHIP, VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_KEY_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST } from './sim/types.ts';
 export type { GuideState, InputFrame, NubsState, Phase, RunConfig, SimState, SunMode, SunState, V16Rules } from './sim/types.ts';
 export type {
   DeathCause,
@@ -222,7 +228,33 @@ export { meltBudgetOf } from './sim/pickups.ts';
 export { debugFlare, flarePhaseAt } from './sim/flares.ts';
 export { glassInWindow } from './sim/guide.ts';
 export { createSnap, lerpSnap, takeSnap } from './sim/snapshot.ts';
-export { heroHealth, heroStart, nextTagHero, nextTagTicks, relayY, tagLocked } from './sim/heroes.ts';
+export {
+  arriveTicks,
+  bridged,
+  burnLeft,
+  burnSweet,
+  burnTarget,
+  contactTicks,
+  elFixture,
+  elHealth,
+  growLeft,
+  growTarget,
+  heroHealth,
+  heroStart,
+  laneOf,
+  needOf,
+  nextTagHero,
+  nextTagTicks,
+  pointLit,
+  relayY,
+  tagLocked,
+  tagTick,
+  veiled,
+  walkerAt,
+  weatherGood,
+  weatherXAt,
+  windAt,
+} from './sim/elements.ts';
 export type { RenderSnap } from './sim/snapshot.ts';
 export { historyAt, historyLength } from './sim/history.ts';
 export { buildRunResult } from './sim/result.ts';

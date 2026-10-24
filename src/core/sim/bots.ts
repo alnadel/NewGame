@@ -29,7 +29,7 @@ import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
-import { heroHealth, tagLocked } from './heroes.ts';
+import { elHealth, tagLocked } from './elements.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
@@ -40,7 +40,7 @@ export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'r
 
 /** v1.6 reactive-bot policies (docs/V1_6_PLAN.md §2.2): today's play, timed greed, greed all day, never gold. */
 export type BotPolicy = 'plain' | 'chase' | 'naive' | 'safe';
-export const BOT_POLICIES: readonly BotPolicy[] = Object.freeze(['plain', 'chase', 'naive', 'safe'] as BotPolicy[]);
+export const BOT_POLICIES: readonly BotPolicy[] = /* @__PURE__ */ Object.freeze(['plain', 'chase', 'naive', 'safe'] as BotPolicy[]);
 
 /** v1.6 bot options (`sim --decisions`, `--policy`); unset = today's behaviour. */
 export interface BotOptions {
@@ -236,9 +236,9 @@ function exposed(s: SimState): boolean {
   return s.trial === null ? s.nubs.f > 0 : !s.nubs.safe;
 }
 
-/** The panic rule's gauge: Nubs' Chill; on a Trial the walker's health. */
+/** The panic rule's gauge: Nubs' Chill; on a Trial the walker's steady health. */
 function gauge(s: SimState): number {
-  return s.trial === null ? s.nubs.chill : heroHealth(s.nubs);
+  return s.trial === null ? s.nubs.chill : elHealth(s);
 }
 
 function reactiveBot(ctx: BotHookCtx): Bot {

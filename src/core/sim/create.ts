@@ -10,7 +10,7 @@ import { resolveLevelConfig } from '../level.ts';
 import { syncTime } from './step.ts';
 import { computeCoverage } from './nubs.ts';
 import { updateGuide } from './guide.ts';
-import { heroStart } from './heroes.ts';
+import { createEl, elStart } from './elements.ts';
 import type { RunStats } from './events.ts';
 import type { NubsState, RunConfig, SimState } from './types.ts';
 
@@ -180,7 +180,8 @@ export function prepareRun(cfg0: RunConfig): RunBuild {
   return {
     cfg: { ...cfg },
     world,
-    targetY: worldYAtDayTick(world, day, dayTick) + TUNING.world.hardAhead,
+    // Elementals v2: a Trial's whole world is built ahead (step() never generates during a Trial).
+    targetY: (trialDef(cfg.level ?? 0) ? world.finishY : worldYAtDayTick(world, day, dayTick)) + TUNING.world.hardAhead,
   };
 }
 
@@ -196,7 +197,8 @@ export function prepareSome(b: RunBuild, budget: number): boolean {
  * completes the hard guarantee (Nubs + TUNING.world.hardAhead) on it, so a smaller `ahead` (≥ the
  * view and the shadow reach, e.g. 1100 for the Title) only moves generation work later: the world is
  * the same either way. With `build` (from prepareRun() with the same config) its world is used and
- * only the rest of it is generated now.
+ * only the rest of it is generated now. Elementals v2 (docs/ELEMENTALS_V2.md §3.2): a Trial's world is
+ * generated through finishY + hardAhead whatever `ahead` asks, then its objects are placed (s.el).
  */
 export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUNING.world.hardAhead): SimState {
   const cfg = resolveLevelConfig(cfg0);
@@ -204,10 +206,10 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
   const { day, dayTick } = startOf(cfg);
   const params = paramsAt(world, day);
   const maxChill = params.maxChill;
-  // Elementals: a Trial's walker starts as cast[0] at its element's meter.
+  // Elementals: a Trial's walker starts as cast[0] at its leg's start meter.
   const trial = trialDef(cfg.level ?? 0);
   const hero = trial === null ? 'nubs' : trial.cast[0] ?? 'nubs';
-  const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? (trial === null ? maxChill : heroStart(hero, maxChill))));
+  const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? (trial === null ? maxChill : elStart(trial))));
   const theta0 = world.theta0;
   const bank = world.v16.bank;
   const frostH = !world.mech.snap ? 0 : bank ? startFrostH(world, cfg) : Math.floor(100 * Math.min(1, Math.max(0, cfg.startFrost ?? startFrost(world, cfg))));
@@ -300,17 +302,19 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     lessonShade: 0,
     lessonGrace: 0,
     trial,
+    el: null,
     relayIdx: 0,
     tagGrace: 0,
     tagWatch: 0,
   };
   if (trial !== null) {
-    // Trials: minChill holds the walker's lowest health; the relay counters start at 0.
-    Object.assign(s.stats, { minChill: 100, tags: 0, cleanTags: 0 });
+    // Trials: minChill holds the lowest steady health of any life meter; the element counters start at 0.
+    Object.assign(s.stats, { minChill: 100, burns: 0, bumps: 0, drinks: 0, trees: 0, grove: 0, cloudRide: 0, tags: 0, cleanTags: 0, gusts: 0 });
   }
   syncTime(s);
   s.nextHistoryY = s.nubs.y;
-  ensureGenerated(world, s.nubs.y + ahead);
+  ensureGenerated(world, trial !== null ? world.finishY + TUNING.world.hardAhead : s.nubs.y + ahead);
+  if (trial !== null) (s as { el: SimState['el'] }).el = createEl(s);
   computeCoverage(s);
   updateGuide(s);
   return s;

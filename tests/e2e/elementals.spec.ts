@@ -164,7 +164,7 @@ test('?trial=6 walks Nubs; Back from its Results leads to the Elementals', async
   const s = await state(page);
   expect(s.level).toBe(1006);
   expect(s.hero).toBe('nubs');
-  expect(s.meters).toHaveLength(1);
+  expect(s.meter).toBe(100);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
   await page.keyboard.press('Escape');

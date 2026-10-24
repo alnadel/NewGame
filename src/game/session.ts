@@ -5,6 +5,7 @@
 import {
   biomeAtY,
   buildRunResult,
+  burnTarget,
   COMFORT_MAX,
   CONCEPTS,
   createBot,
@@ -16,8 +17,10 @@ import {
   deathTip,
   effectiveDrain,
   effectiveNoonCloud,
+  elFixture,
   formatTimeOfDay,
   generateSome,
+  growTarget,
   HEROES,
   heroHealth,
   isTrialId,
@@ -35,6 +38,7 @@ import {
   takeSnap,
   TRIAL_BASE,
   TUNING,
+  veiled,
   worldPlan,
   type Bot,
   type BotKind,
@@ -47,6 +51,7 @@ import {
   type RunResult,
   type SimEvent,
   type SimState,
+  type Verb,
 } from '../core/index.ts';
 import { createAudioView, type AudioView, type ScreenMode, type ShadyAudio } from '../audio/index.ts';
 import type { Haptics } from '../platform/haptics.ts';
@@ -175,6 +180,11 @@ const PAR_TICKS = 6;
  */
 function makeBot(kind: BotKind): Bot | null {
   return import.meta.env.MODE === 'single' ? null : createBot(kind);
+}
+
+/** Elementals v2 (?elfix=1): every object kind and state on a Trial run, for art review; bot builds only (makeBot's gate). */
+function fixture(s: SimState): void {
+  if (s.el !== null) elFixture(s);
 }
 
 function idle(fn: () => void): void {
@@ -602,6 +612,21 @@ export class Session {
       // a pause or a menu), and the meter only where it is drawn.
       canSnap: () => this.ui.current() === 'play' && !this.paused && this.runActive && this.s.phase === 'day' && this.s.ready === 0,
       meterHit: (x, y) => hudMeterHit(this.renderer.scene.hud, x, y),
+      // Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the walking element's verb, the last drawn
+      // frame's ground mapping (camera.ts: sx = ox + x·S, sy = oy − y·S) and the targets under a press.
+      verb: () => this.verbNow(),
+      toWorld: (x, y, out) => {
+        const v = this.renderer.scene.view;
+        if (x < v.vx || x > v.vx + v.vw || y < v.vy || y > v.vy + v.vh) return false;
+        out[0] = (x - v.ox) / v.S;
+        out[1] = (v.oy - y) / v.S;
+        return true;
+      },
+      uPerPx: () => 1 / this.renderer.scene.view.S,
+      canTarget: (wx, wy) => {
+        const verb = this.verbNow();
+        return verb === 'burn' ? burnTarget(this.s, wx, wy) >= 0 : verb === 'grow' ? growTarget(this.s, wx, wy) >= 0 : false;
+      },
     });
     this.mech.route = (ev) => {
       const list = [ev];
@@ -1146,6 +1171,7 @@ export class Session {
    */
   private makeRun(kind: RunKind, date?: string, ahead?: number, level?: number): SimState {
     const run = createRun(this.runConfig(kind, date, level), undefined, ahead);
+    if (import.meta.env.MODE !== 'single' && this.params.elfix) fixture(run);
     this.rungOf.set(run, this.cfgRung);
     if (this.cfgWarmup) this.warmups.add(run);
     if (this.cfgLevel) this.levelOf.set(run, this.cfgLevel);
@@ -1690,10 +1716,20 @@ export class Session {
   // Events, daily bookkeeping, death and results
   // -------------------------------------------------------------------------------------------
 
+  /** The walking element's verb: HEROES[hero].verb on a Trial past the start beat, else 'sun' (§7.9). */
+  private verbNow(): Verb {
+    const s = this.s;
+    return s.el !== null && s.phase === 'day' && s.ready === 0 ? HEROES[s.nubs.hero].verb : 'sun';
+  }
+
   private onTickEvent(ev: SimEvent): void {
     this.moments.onEvent(ev, this.s);
     this.mech.onEvent(ev);
     switch (ev.e) {
+      case 'tag':
+        // §4.1: a TAG ends the verb slot, and the sun press too when a held-sun leg (steer, blow) is involved.
+        this.input.cut(HEROES[ev.from].sunHeld || HEROES[ev.to].sunHeld);
+        break;
       case 'feat':
         this.featSeen.set(ev.kind, ev.value);
         break;
@@ -2500,12 +2536,55 @@ export class Session {
       gust: s.sun.gust,
       locked: s.sun.locked,
       moonlit: s.moonlit,
-      // Elementals: the walking element, the relay index, its meter and the Cold Snap charge.
+      // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the walking element, the relay index, the Cold
+      // Snap charge, the walker's meter and verb, the sun hold and turn, and the Trial's objects.
       hero: s.nubs.hero,
       relay: s.relayIdx,
-      meters: [s.nubs.chill],
       charge: s.nubs.frost,
+      meter: s.nubs.chill,
+      verb: HEROES[s.nubs.hero].verb,
+      sunHeld: s.el !== null && s.sun.locked,
+      omega: s.sun.omega,
+      el:
+        s.el === null
+          ? null
+          : {
+              dx: s.el.dx,
+              wind: s.el.wind,
+              hold: s.el.hold,
+              spent: s.el.spent,
+              objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, veiled: veiled(s, o) })),
+              burns: s.stats.burns ?? 0,
+              drinks: s.stats.drinks ?? 0,
+              trees: s.stats.trees ?? 0,
+              bumps: s.stats.bumps ?? 0,
+            },
     };
+  }
+
+  /** Test hook (§7.11): CSS px of a ground point on the last drawn frame. */
+  testWorldToScreen(x: number, y: number): { x: number; y: number } {
+    if (SINGLE) throw new Error('test hook');
+    const v = this.renderer.scene.view;
+    return { x: v.ox + x * v.S, y: v.oy - y * v.S };
+  }
+
+  /**
+   * Test hook (§7.11): fast-forwards the Trial headless with the core reactive bot until relayIdx is
+   * `i` (its events routed as in play), then hands back to the input.
+   */
+  testSkipToLeg(i: number): void {
+    if (SINGLE) throw new Error('test hook');
+    const s = this.s;
+    const bot = makeBot('reactive');
+    if (!bot || s.el === null) return;
+    for (let n = 0; n < 60_000 && s.relayIdx < i && s.phase !== 'dead' && s.phase !== 'won'; n++) {
+      step(s, bot.next(s));
+      for (const ev of s.events) this.onTickEvent(ev);
+    }
+    this.input.releaseAll();
+    takeSnap(s, this.prev);
+    takeSnap(s, this.curr);
   }
 
   /** Test hook: sets the run's Snow (HUD layout checks with long numbers). */

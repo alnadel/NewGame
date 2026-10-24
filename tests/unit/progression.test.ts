@@ -1033,7 +1033,7 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     base.campaign.misses[1] = 1;
     const journey = structuredClone(base.campaign);
     const first = applyRunResult(base, trial(3, true, 2), opts());
-    expect(first.save.elementals).toEqual({ stars: [0, 0, 2, 0, 0, 0, 0, 0], seen: false });
+    expect(first.save.elementals).toEqual({ stars: [0, 0, 2, 0, 0, 0, 0], seen: false });
     // The Journey's stars, unlocked level, misses, last level, n/600 and Continue never change.
     expect(first.save.campaign).toEqual(journey);
     expect(totalStars(first.save)).toBe(2);
@@ -1073,40 +1073,44 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     expect(fail.outcome.bonusSnow).toBe(0);
   });
 
-  it('opens Trials and heroes by the §3.0 order, and toasts each new Trial on the Results', () => {
+  it('opens Trials and elements in the v2 order, and toasts each new Trial on the Results', () => {
     let s = quiet();
-    const open = (): number[] => [1, 2, 3, 4, 5, 6, 7, 8].filter((n) => trialOpen(s, n));
+    const open = (): number[] => [1, 2, 3, 4, 5, 6, 7].filter((n) => trialOpen(s, n));
     expect(open()).toEqual([1, 2, 3, 4]);
     expect(heroUnlocked(s, 'nubs')).toBe(true);
     expect(heroUnlocked(s, 'ember')).toBe(false);
     const t1 = applyRunResult(s, trial(1, true, 1), opts());
     s = t1.save;
-    expect(open()).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(open()).toEqual([1, 2, 3, 4]);
     expect(heroUnlocked(s, 'ember')).toBe(true);
-    expect(t1.outcome.toasts.map((t) => t.text)).toEqual(expect.arrayContaining(['New trial: Day Shift', 'New trial: Fire and Ice', 'Ember joins the team!']));
-    // A repeat pass opens nothing new: no hero chip.
+    expect(t1.outcome.toasts.map((t) => t.text)).toContain('Ember joins the team!');
+    // A repeat pass opens nothing new: no element chip.
     expect(applyRunResult(s, trial(1, true, 2), opts()).outcome.toasts.map((t) => t.text)).not.toContain('Ember joins the team!');
-    expect(t1.outcome.campaign?.unlockedNext).toBe(true);
-    s = applyRunResult(s, trial(2, true, 2), opts()).save;
-    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(heroUnlocked(s, 'sprout')).toBe(true);
+    expect(t1.outcome.campaign?.unlockedNext).toBe(false);
+    const t2 = applyRunResult(s, trial(2, true, 2), opts());
+    s = t2.save;
+    expect(open()).toEqual([1, 2, 3, 4, 5]);
+    expect(t2.outcome.toasts.map((t) => t.text)).toEqual(expect.arrayContaining(['New trial: Steam', 'Drip joins the team!']));
+    expect(t2.outcome.campaign?.unlockedNext).toBe(true);
     const t3 = applyRunResult(s, trial(3, true, 3), opts());
-    expect(t3.outcome.toasts.map((t) => t.text)).toContain('Volt joins the team!');
+    expect(t3.outcome.toasts.map((t) => t.text)).toContain('Sprout joins the team!');
     s = t3.save;
-    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(open()).toEqual([1, 2, 3, 4, 5]);
     const t4 = applyRunResult(s, trial(4, true, 3), opts());
     s = t4.save;
-    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(t4.outcome.toasts.map((t) => t.text)).toContain('New trial: Five Elements');
-    expect(heroUnlocked(s, 'volt') && heroUnlocked(s, 'drip')).toBe(true);
-    expect(elementalStars(s)).toBe(9);
-    expect(ELEMENTAL_STARS_MAX).toBe(24);
+    expect(open()).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(t4.outcome.toasts.map((t) => t.text)).toContain('New trial: Rain Garden');
+    expect(heroUnlocked(s, 'gust') && heroUnlocked(s, 'drip')).toBe(true);
+    s = applyRunResult(applyRunResult(s, trial(5, true, 1), opts()).save, trial(6, true, 1), opts()).save;
+    expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(elementalStars(s)).toBe(11);
+    expect(ELEMENTAL_STARS_MAX).toBe(21);
     expect(nextOpenTrial(s, 1)).toBe(2);
-    expect(nextOpenTrial(s, 8)).toBeNull();
+    expect(nextOpenTrial(s, 7)).toBeNull();
     // The testing toggle opens every Trial and hero.
     const all = quiet();
     all.settings.unlockAll = true;
-    expect([1, 2, 3, 4, 5, 6, 7, 8].every((n) => trialOpen(all, n))).toBe(true);
+    expect([1, 2, 3, 4, 5, 6, 7].every((n) => trialOpen(all, n))).toBe(true);
     expect(heroUnlocked(all, 'drip')).toBe(true);
     expect(nextOpenTrial(quiet(), 4)).toBeNull();
     expect(trialOpen(quiet(), 9)).toBe(false);
@@ -1114,8 +1118,8 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
 
   it('a reset zeroes the Trials (a merge must not bring them back)', () => {
     const s = quiet();
-    s.elementals = { stars: [3, 3, 0, 0, 0, 0, 0, 0], seen: true };
-    expect(resetProgress(s).elementals).toEqual({ stars: Array(8).fill(0), seen: false });
+    s.elementals = { stars: [3, 3, 0, 0, 0, 0, 0], seen: true };
+    expect(resetProgress(s).elementals).toEqual({ stars: Array(7).fill(0), seen: false });
     expect('elementals' in resetProgress(quiet())).toBe(false);
   });
 });

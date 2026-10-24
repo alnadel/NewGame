@@ -6,6 +6,8 @@
 
 import type { BiomeId } from '../config/days.ts';
 import type { CasterKind } from '../config/casters.ts';
+import type { HeroDeath } from '../config/heroes.ts';
+import type { ElKind } from '../config/trials.ts';
 
 export type { BiomeId, CasterKind };
 
@@ -80,8 +82,11 @@ export interface Caster {
   readonly chunk: number;
 }
 
-/** 'snap': the v1.5 Cold Snap cloud (z 0: its shadow lies right under it whatever θ is). */
-export type CloudKind = 'overtaker' | 'waiter' | 'parked' | 'snap';
+/**
+ * 'snap': the v1.5 Cold Snap cloud (z 0: its shadow lies right under it whatever θ is). 'rain':
+ * Elementals v2, a rain cloud's shade proxy (z 0, made only on Trials; render/clouds.ts skips it).
+ */
+export type CloudKind = 'overtaker' | 'waiter' | 'parked' | 'snap' | 'rain';
 
 /** A cloud at altitude z. Its position is analytic in absolute time (s since Day 1 dawn). */
 export interface Cloud {
@@ -154,9 +159,75 @@ export const BUD_ID_BASE = 0x20000000;
 /** v1.6: flakes placed two chunks behind the casters (like buds) take ids from here (CORE-2, T7). */
 export const FLAKE_ID_BASE = 0x30000000;
 export const RUNTIME_ID_BASE = 0x40000000;
-/** Elementals (docs/ELEMENTALS.md §1.3): Sprout's seeded sunflowers, SEED_ID_BASE + the run's seed count. */
-export const SEED_ID_BASE = 0x50000000;
+/**
+ * Elementals v2 (docs/ELEMENTALS_V2.md §3.1): trial object i (and a rain cloud's shade proxy) is
+ * EL_ID_BASE + i, a plot's tree caster TREE_ID_BASE + i; both sit above RUNTIME_ID_BASE (the
+ * validator ignores them) and below SNAP_ID_BASE (never mistaken for the snap cloud).
+ */
+export const EL_ID_BASE = 0x50000000;
+export const TREE_ID_BASE = 0x58000000;
 export const SNAP_ID_BASE = 0x60000000;
+
+/** ElObj.state. */
+export const EL_IDLE = 0;
+export const EL_BURNING = 1;
+export const EL_GONE = 2;
+
+/** A trial object at run time (docs/ELEMENTALS_V2.md §3). Only step() writes it. */
+export interface ElObj {
+  readonly id: number;
+  /** 'ice' turns into 'puddle' when it melts. */
+  kind: ElKind;
+  /** Centre x: weather drifts, the rest never move. */
+  x: number;
+  readonly y: number;
+  /** Puddle, stone, plot, weather: radius (weather: rx); crossing: half-length along y. */
+  r: number;
+  /** Weather drift (u/s); 0 for the rest. */
+  readonly drift: number;
+  state: 0 | 1 | 2;
+  /** Burn, melt or dry ticks left (0 none). */
+  t: number;
+  /** Flame Ember paid for the fire now burning here (0: none, or a spread fire). */
+  paid: number;
+  /** Sites: Sap poured in, and growth so far (≤ size). */
+  size: number;
+  grown: number;
+  /** Sites: bit 0 lit, bit 1 under rain (refreshed every 6 ticks while growing). */
+  light: number;
+  /** A plot's tree caster (−1 none). */
+  casterId: number;
+  /** A wall, crossing or stone already touched (it acts once). */
+  hit: boolean;
+  /** Weather: drifting. */
+  awake: boolean;
+}
+
+/** Everything a v2 Trial adds to a run (null in every Nubs run). */
+export interface ElState {
+  /** The trial's objects, y-sorted; never re-sorted (weather moves only in x). */
+  readonly objs: ElObj[];
+  /** The walker's lateral offset (u, + east) and Drip's steer target. */
+  dx: number;
+  dxTarget: number;
+  /** Gust's wind (u/s, + east), decaying; windAt() adds the breeze. */
+  wind: number;
+  /** The site a hold is pouring into (index in objs, −1 none). */
+  hold: number;
+  /** Meter Ember's taps and Gust's swipes paid this leg, less Ember's feeds (steady health, §1.2). */
+  spent: number;
+  /** The walker's contacts this tick: 1 puddle, 2 rain, 4 fog, 8 stone. */
+  touch: number;
+  /** Ticks since the walking element's leg began. */
+  legTick: number;
+  /** An unbridged crossing took the walker this tick. */
+  fell: boolean;
+  /** What ended the run (heroDeath's line) and the object that did (−1 none). */
+  cause: HeroDeath | null;
+  causeObj: number;
+  /** Drip's pre-TAG mask buffer (§4.4; derived, not hashed; empty when the Trial has no Drip leg). */
+  readonly tagMask: Uint8Array;
+}
 
 /**
  * v1.5 Sunflower bud (docs/V1_5_PLAN.md). A bud beside the trail blooms into a tall sunflower (a

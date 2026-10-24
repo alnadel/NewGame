@@ -637,16 +637,42 @@ const tuning = {
     },
   },
 
-  /** Elementals: the relay's numbers. Read only on Trials (s.trial !== null). */
-  heroes: {
-    /** Relay: the telegraph before a TAG (ticks); the Cold Snap cannot be cast inside it. */
+  /**
+   * Elementals v2 (docs/ELEMENTALS_V2.md §2-§4): the elements' factors, verbs and objects. Read only on
+   * Trials (s.el !== null). Rates are per second; the sim applies rate · DT per tick.
+   */
+  elements: {
+    /** Each element's meter (0..100) when its leg begins (a Trial's tune.legStart may override per leg). */
+    start: { nubs: 100, ember: 80, sprout: 80, drip: 70, gust: 80 },
+    /** A TAG's telegraph (ticks; no Cold Snap inside it), the incoming meter's no-fall grace and the clean-TAG window. */
     tagSoonTicks: 180,
-    /** After a TAG the incoming meter cannot fall for tagGraceTicks; the TAG is clean when the walker is safe within tagCleanTicks. */
     tagGraceTicks: 30,
     tagCleanTicks: 30,
-    /** Health (0..100) below which lowChill fires. */
+    /** Steady health below which lowChill fires. */
     lowHealth: 25,
+    /** Verbs act on objects whose contact edge is `near`..`range` u ahead, footprint within `reach` u of the point. */
+    near: 12,
+    range: 340,
+    reach: 32,
+    /** Meter a walker loses walking into a wall. */
+    bump: 30,
     nubs: { income: 0.05 },
+    ember: {
+      refill: 10, fade: 4, douse: 45, rain: 25, stone: 12, nowTicks: 30,
+      cost: { bramble: 12, gate: 22, ice: 18, puddle: 8 },
+      burnTicks: { bramble: 54, gate: 84, ice: 60, puddle: 30, plot: 90 },
+    },
+    sprout: { root: 5, rain: 15, invest: 50, grow: 12, litMul: 2, rainMul: 1.5, treeMin: 20, treeMax: 60 },
+    drip: { grow: 6, evap: 14, rain: 10, puddle: 30, stone: 20, stream: 25, range: 32, clear: 8, slide: 220, keyRate: 90, keyFine: 45 },
+    gust: { air: 4, soak: 30, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
+    /** Weather drifts once the walker is within `wake` u of its y; it is gone `prune` u off the trail or `behind` u behind the walker. */
+    weather: { wake: 400, prune: 420, behind: 300, ryRatio: 0.66 },
+    /** Fire spreads (once, at half its burn) to burnables within reach/reachY when |windAt| ≥ spreadAt, downwind (or within `upwind` u upwind). */
+    fire: { spreadAt: 15, reach: 64, reachY: 48, upwind: 8 },
+    /** Object geometry (u): wall/crossing half-width and wall depth, radii, contact slack, authoring clearance, crossing radius bounds. */
+    objects: { wallHalf: 38, wallDepth: 8, puddleR: 14, stoneR: 9, plotR: 16, touch: 4, clearance: 6, crossMin: 12, crossMax: 18 },
+    /** The pre-TAG mask for an incoming Drip leg (§4.4): seconds sampled, tick step, lane offsets, mark thresholds. */
+    tagMask: { secs: 6, step: 12, lanes: [-20, 0, 20], min: 0.5, rel: 0.8 },
   },
 };
 

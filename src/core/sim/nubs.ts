@@ -391,7 +391,7 @@ function lessonFloor(s: SimState): number {
 /**
  * A body's daylight memory: glare touches (the clean-ball count), the death line's memory of who
  * shaded it, and cloud captures and rides. Nubs keeps it every daylight tick; on Trials every body
- * does (sim/heroes.ts).
+ * does (sim/elements.ts).
  */
 export function keepMemory(s: SimState, nb: NubsState): void {
   const st = s.stats;

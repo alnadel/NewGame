@@ -327,23 +327,23 @@ describe('migrate', () => {
     expect(migrate({ v: 3, campaign: 'nope' }, NOW).save.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
   });
 
-  it('keeps the Elementals only when the save has them: 8 Trials of 0..3 stars and a seen mark', () => {
+  it('keeps the Elementals only when the save has them: 7 Trials of 0..3 stars and a seen mark', () => {
     // defaults() has none, and migrate keeps it that way (deep-equal).
     expect('elementals' in defaults(NOW)).toBe(false);
     expect(migrate(JSON.stringify(defaults(NOW)), NOW).save).toEqual(defaults(NOW));
     expect('elementals' in migrate({ v: 4, stats: { runs: 3 } }, NOW).save).toBe(false);
-    const ok = migrate({ v: 4, elementals: { stars: [3, 2, 1, 0, 0, 0, 0, 1], seen: true } }, NOW).save;
-    expect(ok.elementals).toEqual({ stars: [3, 2, 1, 0, 0, 0, 0, 1], seen: true });
-    // Clamped to 8 entries of 0..3 and a boolean.
+    const ok = migrate({ v: 4, elementals: { stars: [3, 2, 1, 0, 0, 0, 1], seen: true } }, NOW).save;
+    expect(ok.elementals).toEqual({ stars: [3, 2, 1, 0, 0, 0, 1], seen: true });
+    // Clamped to 7 entries of 0..3 and a boolean.
     const bad = migrate({ v: 4, elementals: { stars: [9, -1, 'x', 2.7, 1, 1, 1, 1, 3, 3], seen: 'yes' } }, NOW).save;
-    expect(bad.elementals).toEqual({ stars: [3, 0, 0, 2, 1, 1, 1, 1], seen: false });
-    expect(migrate({ v: 4, elementals: {} }, NOW).save.elementals).toEqual({ stars: Array(8).fill(0), seen: false });
+    expect(bad.elementals).toEqual({ stars: [3, 0, 0, 2, 1, 1, 1], seen: false });
+    expect(migrate({ v: 4, elementals: {} }, NOW).save.elementals).toEqual({ stars: Array(7).fill(0), seen: false });
     // Not an object: dropped.
     expect('elementals' in migrate({ v: 4, elementals: 'nope' }, NOW).save).toBe(false);
     // The Journey never sees a Trial.
     expect(ok.campaign).toEqual(defaults(NOW).campaign);
     // A v3 save with progress upgrades with the Title square seen (its first visit marks nothing new).
-    expect(migrate({ v: 3, stats: { runs: 4 } }, NOW).save.elementals).toEqual({ stars: Array(8).fill(0), seen: true });
+    expect(migrate({ v: 3, stats: { runs: 4 } }, NOW).save.elementals).toEqual({ stars: Array(7).fill(0), seen: true });
     expect('elementals' in migrate({ v: 3 }, NOW).save).toBe(false);
   });
 

@@ -9,6 +9,7 @@ import type { ForecastId } from '../../config/forecasts.ts';
 import type { HeroId } from '../../config/heroes.ts';
 import type { TrialDef } from '../../config/trials.ts';
 import type { World } from '../gen/store.ts';
+import type { ElState } from '../objects.ts';
 import type { DeathInfo, HourGlyph, RunMode, RunStats, SimEvent } from './events.ts';
 
 /** One 60 Hz tick of player input, produced by src/game/input.ts (V1_PLAN §3.1). */
@@ -27,10 +28,27 @@ export interface InputFrame {
   key: -2 | -1 | 0 | 1 | 2;
   /** v1.5: a Cold Snap was asked for this tick (a swipe down, or the Down/S key). Absent = false. */
   snap?: boolean;
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.4): all optional; 0 and absent mean the same; never set in a Nubs run.
+  /** The element verb this tick (VERB_*). */
+  verb?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  /** The ground point (u, quantized to 1/8) of a pointer tap (verb 1) or hold (verb 2). Read only with those verbs. */
+  vx?: number;
+  vy?: number;
+  /** Drip: requested slide this tick (u, + east, quantized to 1/64). */
+  steer?: number;
 }
 
+/** InputFrame.verb: a tap, a hold and its release, a swipe west or east, the Up/W key's burn and hold. */
+export const VERB_TAP = 1;
+export const VERB_HOLD = 2;
+export const VERB_RELEASE = 3;
+export const VERB_WEST = 4;
+export const VERB_EAST = 5;
+export const VERB_KEY_BURN = 6;
+export const VERB_KEY_HOLD = 7;
+
 /** A frame with no input. */
-export const NO_INPUT: Readonly<InputFrame> = Object.freeze({
+export const NO_INPUT: Readonly<InputFrame> = /* @__PURE__ */ Object.freeze({
   dTheta: 0,
   down: false,
   downEdge: false,
@@ -273,12 +291,12 @@ export interface NubsState {
   frostH: number;
   /** The last tick a SWING paid frost (at most once per TUNING.bank.swingEveryTicks). */
   swingFrostTick: number;
-  // Elementals (docs/ELEMENTALS.md §4.4).
-  /** Elementals: the element walking now (a relay changes it); 'nubs' in every Nubs run. */
+  // Elementals (docs/ELEMENTALS_V2.md §1.2).
+  /** The element walking now (a relay changes it); 'nubs' in every Nubs run. */
   hero: HeroId;
   /** Integer lit sum Σw, 0..10 (computeCoverage, every run). */
   c: number;
-  /** Trials only: the meter's rate this tick (per s; pickups excluded) and whether the walker is safe. 0 / false otherwise. */
+  /** Trials only: the meter's continuous rate this tick (per s) and whether the walker is safe (§1.2). 0 / false otherwise. */
   rate: number;
   safe: boolean;
 }
@@ -443,9 +461,11 @@ export interface SimState {
    * is never dropped from 12 Chill to the full drain at once. Nightfall clears it.
    */
   lessonGrace: number;
-  // Elementals. Nubs runs: trial null, the rest at defaults, never read.
-  /** The Trial being played, or null: the gate for every element rule. */
+  // Elementals (docs/ELEMENTALS_V2.md §7.4). Nubs runs: trial null, el null, the rest at defaults, never read.
+  /** The Trial being played, or null. */
   readonly trial: TrialDef | null;
+  /** Everything a v2 Trial adds (core/sim/elements.ts), or null: the gate for every element rule. */
+  readonly el: ElState | null;
   /** Relay: index of the next relay in trial.relays; TAG grace and clean-TAG watch ticks left. */
   relayIdx: number;
   tagGrace: number;

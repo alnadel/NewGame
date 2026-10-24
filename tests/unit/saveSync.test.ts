@@ -411,7 +411,7 @@ describe('Elementals across builds', () => {
     seedSave(browser, 3);
     const a = open(browser.tab());
     a.update((sv) => {
-      sv.elementals = { stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true };
+      sv.elementals = { stars: [2, 0, 0, 0, 0, 0, 0], seen: true };
     });
     a.flush();
     // The older build's tab reads the save and writes it back a run later, without the field.
@@ -421,7 +421,7 @@ describe('Elementals across builds', () => {
     older.revs.push('old');
     browser.tab().storage.set(SAVE_KEY, JSON.stringify(older));
     browser.settle();
-    expect(a.get().elementals).toEqual({ stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true });
+    expect(a.get().elementals).toEqual({ stars: [2, 0, 0, 0, 0, 0, 0], seen: true });
     expect(a.get().stats.runs).toBe(4);
     // And the merge is written back for every tab.
     expect(disk(browser).elementals?.stars[0]).toBe(2);

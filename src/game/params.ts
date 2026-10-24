@@ -41,9 +41,14 @@ export interface Params {
   plan: boolean | null;
   /**
    * Opens this campaign level (1..200) directly: a normal campaign run unless other debug params are
-   * present. Elementals: ?trial=1..8 opens Trial n as level 1000 + n (it wins over ?level=).
+   * present. Elementals: ?trial=1..7 opens Trial n as level 1000 + n (it wins over ?level=).
    */
   level: number | null;
+  /**
+   * Elementals v2 (docs/ELEMENTALS_V2.md §7.1): ?elfix=1 puts a Trial's objects into every kind and
+   * state (core elFixture) for art review; builds with bots only (the session's makeBot gate).
+   */
+  elfix: boolean;
   /** v1.6 rules switched by ?on=bank,… and ?off=flares,… (cfg.v16, over the shipped V16_SHIP); null when neither. */
   rules: Partial<V16Rules> | null;
 }
@@ -102,6 +107,7 @@ export function parseParams(search: string, today: string = localDate()): Params
     rung: rung !== null && rung >= 0 && rung <= COMFORT_MAX ? Math.floor(rung) : null,
     plan: plan === '1' ? true : plan === '0' ? false : null,
     level: tn ?? (level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null),
+    elfix: import.meta.env.MODE !== 'single' && q.get('elfix') === '1',
     rules,
   };
 }
@@ -122,7 +128,8 @@ export function startTFor(t: string | null, day: number): number | null {
 
 /**
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
- * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward or a guide override. Such runs are not scored, saved, shared or counted as Daily tries (they work in production
+ * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward, a guide override or a Trial's
+ * object fixture (?elfix=1). Such runs are not scored, saved, shared or counted as Daily tries (they work in production
  * builds for QA). ?seed, ?mode=daily&date, ?level, ?trial, ?mute, ?debug, ?test and ?perf don't make
  * a run a debug run.
  */
@@ -138,6 +145,7 @@ export function isDebugRun(p: Params): boolean {
     p.forecast !== null ||
     p.rung !== null ||
     p.plan !== null ||
-    p.rules !== null
+    p.rules !== null ||
+    p.elfix
   );
 }

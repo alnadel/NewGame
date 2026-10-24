@@ -27,11 +27,27 @@ export interface ShadyState {
   gust: number;
   locked: boolean;
   moonlit: boolean;
-  /** Elementals: the walking element, the relay index, its meter, the Cold Snap charge. */
+  /** Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the walking element, the relay index, the Cold Snap charge. */
   hero: string;
   relay: number;
-  meters: number[];
   charge: number;
+  /** The walker's meter (s.nubs.chill), its verb, the sun held on a Trial, and ω (°/s). */
+  meter: number;
+  verb: 'sun' | 'burn' | 'grow' | 'steer' | 'blow';
+  sunHeld: boolean;
+  omega: number;
+  /** A Trial's element state (null in a Nubs run). */
+  el: null | {
+    dx: number;
+    wind: number;
+    hold: number;
+    spent: number;
+    objs: { k: string; x: number; y: number; state: number; size: number; grown: number; veiled: boolean }[];
+    burns: number;
+    drinks: number;
+    trees: number;
+    bumps: number;
+  };
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
@@ -137,6 +153,16 @@ export function challengeCode(c: object): string {
   return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
 }
 
+/** Elementals v2: CSS px of a ground point (u) on the last drawn frame. */
+export async function worldToScreen(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
+  return page.evaluate(([wx, wy]) => window.__SHADY_TEST__!.testWorldToScreen(wx as number, wy as number), [x, y]);
+}
+
+/** Elementals v2: fast-forwards the Trial with the core reactive bot to leg `i`, then hands back to the input. */
+export async function skipToLeg(page: Page, i: number): Promise<void> {
+  await page.evaluate((n) => window.__SHADY_TEST__!.testSkipToLeg(n), i);
+}
+
 export async function runCfg(page: Page): Promise<RunCfg> {
   return page.evaluate(() => window.__SHADY_TEST__!.runCfg());
 }
@@ -196,6 +222,8 @@ declare global {
       screen(): string;
       state(): ShadyState;
       forceDeath(): void;
+      testWorldToScreen(x: number, y: number): { x: number; y: number };
+      testSkipToLeg(i: number): void;
       runHeadless(seed: number, ticks: number, bot: string): string;
       setTimeScale(n: number): void;
       audioState(): string;

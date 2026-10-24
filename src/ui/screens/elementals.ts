@@ -20,7 +20,7 @@ import type { Screen, UiContext } from '../screen.ts';
 import { button, menuHeader, setButtonLabel } from '../widgets.ts';
 
 /** Each candy face's class, written out whole (vite.config.ts shortens class names). */
-const FACE: Readonly<Record<HeroFace, string>> = { ice: 'f-ice', red: 'f-red', green: 'f-green', violet: 'f-violet', blue: 'f-blue' };
+const FACE: Readonly<Record<HeroFace, string>> = { ice: 'f-ice', red: 'f-red', blue: 'f-blue', green: 'f-green', cloud: 'f-cloud' };
 
 /** The hero a Trial is about (the stage's): the first elemental in its cast. */
 const featured = (t: TrialDef): HeroId => t.cast.find((x) => x !== 'nubs') ?? 'nubs';

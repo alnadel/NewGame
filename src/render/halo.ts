@@ -63,7 +63,7 @@ const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
 /** Elementals: each element's go colour. */
-const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), sprout: hex('#8BD650'), volt: TEAL, drip: TEAL };
+const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), drip: TEAL, sprout: hex('#8BD650'), gust: TEAL };
 const LEAF_DASH = [8, 6];
 
 /** An element's go colour. */
@@ -150,10 +150,10 @@ export interface HaloInput {
   hc: boolean;
 }
 
-/** The incoming element while a relay's TAG is telegraphed (TUNING.heroes.tagSoonTicks ahead), else null. */
+/** The incoming element while a relay's TAG is telegraphed (TUNING.elements.tagSoonTicks ahead), else null. */
 export function tagSoon(s: SimState): HeroId | null {
   const n = nextTagTicks(s);
-  return n >= 0 && n <= TUNING.heroes.tagSoonTicks ? nextTagHero(s) : null;
+  return n >= 0 && n <= TUNING.elements.tagSoonTicks ? nextTagHero(s) : null;
 }
 
 /** A dial input to refill every frame. */

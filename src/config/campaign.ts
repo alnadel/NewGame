@@ -218,7 +218,11 @@ export interface LevelStats {
   readonly snapSavedTicks?: number;
   readonly gateShaded?: number;
   // Elementals Trial Dares (config/trials.ts trialDareValue); a missing value counts as 0.
-  readonly cleanTags?: number;
+  readonly burns?: number;
+  readonly drinks?: number;
+  readonly trees?: number;
+  readonly grove?: number;
+  readonly cloudRide?: number;
 }
 
 /** The chapter of level `id`. */
@@ -723,8 +727,8 @@ function offerFeats(l: LevelDef, bake: LevelBake | null): readonly FeatSpec[] {
  * snap are the verbs the players who seek them reach and the others do not; the other kinds come
  * to good shade play by themselves on most levels (a measured Dare is sized above that, `sizeDare`).
  */
-const CORE_DARES: readonly FeatKind[] = Object.freeze(['blooms', 'swings', 'snapSave'] as FeatKind[]);
-const SHADE_DARES: readonly FeatKind[] = Object.freeze(['flakes', 'deep'] as FeatKind[]);
+const CORE_DARES: readonly FeatKind[] = /* @__PURE__ */ Object.freeze(['blooms', 'swings', 'snapSave'] as FeatKind[]);
+const SHADE_DARES: readonly FeatKind[] = /* @__PURE__ */ Object.freeze(['flakes', 'deep'] as FeatKind[]);
 
 /** The bake's training decision streams per human model (humanDial, humanFeat): scripts/sim16/dares.ts SIZE_SALTS. */
 export const DARE_PLAYERS = 10;
@@ -735,7 +739,7 @@ const DARE_SEEK_MIN = 7;
 /** …and for the minor kinds (beyond the core verbs and flakes), which dare a few levels each: this many. */
 const DARE_SEEK_MIN_MINOR = 8;
 /** Each kind's least target (deep and snapSave in ticks). */
-const DARE_FLOOR: Readonly<Record<FeatKind, number>> = Object.freeze({
+const DARE_FLOOR: Readonly<Record<FeatKind, number>> = /* @__PURE__ */ Object.freeze({
   blooms: 1, swings: 1, deep: DEEP_MIN_TICKS, snapSave: 60, parry: 1, brittle: 1, flakes: 3, clean: 1, ride: 1, gates: 1, flip: 1, still: 1, ring: 3,
 });
 /**
@@ -744,13 +748,13 @@ const DARE_FLOOR: Readonly<Record<FeatKind, number>> = Object.freeze({
  * humanDial only (review of economy iteration 2: on every boss it parried every kept flare, so no
  * parry target could sit above it).
  */
-export const ORACLE_PLANS: readonly FeatKind[] = Object.freeze(['parry', 'brittle'] as FeatKind[]);
+export const ORACLE_PLANS: readonly FeatKind[] = /* @__PURE__ */ Object.freeze(['parry', 'brittle'] as FeatKind[]);
 /** Dares counted in ticks: sized in whole tenths of a second, clear of the non-seekers by 12 ticks and 10%. */
 const tickDare = (k: FeatKind): boolean => k === 'deep' || k === 'snapSave';
 /** Dares met or not (their value is 0 or 1). */
 const binaryDare = (k: FeatKind): boolean => k === 'ride' || k === 'flip';
 /** The goal kinds whose counter is a Dare kind's (the gate goal counts the arch shaded, the Dare deep; flip within 60 ticks, the Dare 12). */
-const GOAL_COUNTS_AS: Readonly<Partial<Record<GoalKind, FeatKind>>> = Object.freeze({
+const GOAL_COUNTS_AS: Readonly<Partial<Record<GoalKind, FeatKind>>> = /* @__PURE__ */ Object.freeze({
   deep: 'deep', clean: 'clean', swings: 'swings', blooms: 'blooms', snapSave: 'snapSave', brittle: 'brittle', parry: 'parry', flakes: 'flakes',
 });
 
@@ -841,7 +845,7 @@ export function dareCandidates(l: LevelDef, bake: LevelBake | null, first: FeatK
  * levels every player collects the flakes, so that Dare is a plain one). This keeps the kinds that
  * dare only a few levels to the levels where they need their verb.
  */
-const FALLBACK_DARES: readonly (readonly [FeatKind, number])[] = Object.freeze([
+const FALLBACK_DARES: readonly (readonly [FeatKind, number])[] = /* @__PURE__ */ Object.freeze([
   ['blooms', 2],
   ['snapSave', 2],
   ['swings', 2],

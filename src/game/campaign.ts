@@ -138,10 +138,10 @@ export function dareMet(level: LevelDef, stats: Stats, seen: FeatSeen = NONE): b
 // (TrialDef.card), its Dare (trialDareValue) and Steady star (the lowest health, stats.minChill).
 
 /** A Dare counted in ticks (shown in seconds). */
-const dareSec = (k: TrialDareKind): boolean => k === 'blazeSave' || k === 'calm' || k === 'harmony';
-/** The intro card's chip glyph: the solo hero's, or the four elements for a relay or a duo. */
+const dareSec = (k: TrialDareKind): boolean => k === 'cloudRide';
+/** The intro card's chip glyph: the intro element's, or the elements together on a mixer (docs/ELEMENTALS_V2.md §10.2). */
 export function trialGlyph(t: TrialDef): string {
-  return t.cast.length === 1 ? HEROES[t.cast[0] as keyof typeof HEROES].glyph : 'elementals';
+  return t.intro ? HEROES[t.intro].glyph : 'elementals';
 }
 /** The Trial's Dare count so far. */
 export function trialDare(t: TrialDef, stats: Stats): number {

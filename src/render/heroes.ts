@@ -254,7 +254,7 @@ const DRIP = make({
   },
 });
 
-const ARTS: Readonly<Record<HeroId, CharArt | null>> = { nubs: null, ember: EMBER, sprout: SPROUT, volt: null, drip: DRIP };
+const ARTS: Readonly<Record<HeroId, CharArt | null>> = { nubs: null, ember: EMBER, drip: DRIP, sprout: SPROUT, gust: null };
 
 /** The art of `hero` for the sprite cache (null: Nubs' own). */
 export function heroArt(hero: HeroId): CharArt | null {

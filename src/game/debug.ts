@@ -17,6 +17,10 @@ export interface ShadyTestHook {
   runHeadless(seed: number, ticks: number, bot: string): string;
   setTimeScale(n: number): void;
   audioState(): string;
+  /** Elementals v2 (docs/ELEMENTALS_V2.md §7.11): CSS px of a ground point on the last drawn frame. */
+  testWorldToScreen(x: number, y: number): { x: number; y: number };
+  /** Elementals v2: fast-forwards the Trial with the core reactive bot until relayIdx is `i`, then hands back to the input. */
+  testSkipToLeg(i: number): void;
   /** Extras for tooling. */
   paused(): boolean;
   presses(): number;
@@ -136,6 +140,8 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     screen: () => session.ui.current(),
     state: () => session.testState(),
     forceDeath: () => session.forceDeath(),
+    testWorldToScreen: (x, y) => session.testWorldToScreen(x, y),
+    testSkipToLeg: (i) => session.testSkipToLeg(i),
     // The single-file build ships no bots (session.ts makeBot): there it reports no hash.
     runHeadless: (seed, ticks, bot) => (import.meta.env.MODE === 'single' ? '' : runHeadless(seed, ticks, bot as BotKind)),
     setTimeScale: (n) => {

@@ -5,6 +5,7 @@ import type { FeatKind } from '../../config/campaign.ts';
 import type { ConceptId } from '../../config/concepts.ts';
 import type { DayPlan, NoonCloud } from '../../config/days.ts';
 import type { HeroDeath, HeroId } from '../../config/heroes.ts';
+import type { ElKind } from '../../config/trials.ts';
 
 export type HourGlyph = 'cool' | 'warm' | 'hot' | 'melt';
 
@@ -94,10 +95,34 @@ export type SimEvent =
   // Dares (CORE-2): a Dare's live count changed; a Dare was met.
   | { e: 'feat'; kind: FeatKind; value: number; target: number }
   | { e: 'featMet'; kind: FeatKind }
-  // Elementals: relay TAGs.
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.5): relay TAGs and the element verbs and objects.
   | { e: 'tagSoon'; to: HeroId; ticks: number }
   | { e: 'tag'; from: HeroId; to: HeroId; index: number }
-  | { e: 'tagClean'; to: HeroId };
+  | { e: 'tagClean'; to: HeroId }
+  /** A fire, melt or drying starts. */
+  | { e: 'burn'; obj: number; kind: ElKind; x: number; y: number; cost: number; spread: boolean }
+  /** Done ('ice' already turned 'puddle'). */
+  | { e: 'burnOut'; obj: number; kind: ElKind; x: number; y: number }
+  /** Ember walked through its own fire. */
+  | { e: 'feed'; obj: number; delta: number; x: number; y: number }
+  /** Rain put a fire out. */
+  | { e: 'doused'; obj: number; x: number; y: number }
+  /** A tap or swipe the meter cannot afford. */
+  | { e: 'fizz'; x: number; y: number; reason: 'low' }
+  | { e: 'bump'; obj: number; kind: ElKind; hero: HeroId; delta: number; x: number; y: number }
+  /** The death follows on this tick. */
+  | { e: 'fall'; obj: number; hero: HeroId; x: number; y: number }
+  /** A hold starts or ends. */
+  | { e: 'grow'; obj: number; on: boolean; x: number; y: number }
+  /** A bridge completes / a tree stands. */
+  | { e: 'grown'; obj: number; tree: boolean; x: number; y: number }
+  /** Drip drank a puddle or swam a stream. */
+  | { e: 'drink'; obj: number; delta: number; x: number; y: number }
+  /** A hot stone: Drip −, Ember +. */
+  | { e: 'sizzle'; obj: number; hero: HeroId; delta: number; x: number; y: number }
+  | { e: 'gust'; dir: -1 | 1; wind: number; cost: number }
+  /** el.touch changed. */
+  | { e: 'touch'; bits: number };
 
 export type SimEventName = SimEvent['e'];
 
@@ -132,7 +157,7 @@ export interface RunStats {
   phewMinChill: number;
   /**
    * Lowest Chill during daylight (the starting Chill when never lit; campaign star 3). On Trials:
-   * the walker's lowest health (0..100) during daylight, from 100.
+   * the lowest steady health (0..100) any life meter reached, from 100 (docs/ELEMENTALS_V2.md §1.2).
    */
   minChill: number;
   /** v1.5: sunflowers bloomed, Cold Snaps cast, seconds in deep shade (absent = 0). */
@@ -179,10 +204,21 @@ export interface RunStats {
   lockWindows?: number;
   gustHeld?: number;
   gustWindows?: number;
-  // Elementals: written only on Trials (created at 0 there), absent in Nubs runs.
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.5): created at 0 on Trials, absent in Nubs runs.
+  /** Walls and plots cleared by fire (burn-out or feed) and ice melted; walls smashed; puddles drunk and streams swum. */
+  burns?: number;
+  bumps?: number;
+  drinks?: number;
+  /** Trees grown, and those still standing at the finish. */
+  trees?: number;
+  grove?: number;
+  /** Nubs' ticks inside a rain footprint. */
+  cloudRide?: number;
   /** Relay TAGs, and the clean ones. */
   tags?: number;
   cleanTags?: number;
+  /** Gust's swipes. */
+  gusts?: number;
 }
 
 export type RunMode = 'endless' | 'daily' | 'challenge' | 'campaign';

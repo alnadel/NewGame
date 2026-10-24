@@ -38,7 +38,7 @@ import { campaignConfig, levelOutcome, levelProgress, minuteStart, resolveLevelC
 import { createBot } from '../../src/core/sim/bots.ts';
 import { createRun, type RunBuild } from '../../src/core/sim/create.ts';
 import { updateGuide } from '../../src/core/sim/guide.ts';
-import { heroStart, tagTick } from '../../src/core/sim/heroes.ts';
+import { heroStart, tagTick } from '../../src/core/sim/elements.ts';
 import { computeCoverage } from '../../src/core/sim/nubs.ts';
 import { step, syncTime } from '../../src/core/sim/step.ts';
 import type { InputFrame, SimState } from '../../src/core/sim/types.ts';
@@ -165,11 +165,16 @@ export interface Audit {
   readonly path: Int16Array;
 }
 
-/** The walker's element at absolute tick `tick` (cast[0], then each relay from its TAG tick). */
-function heroAt(t: TrialDef, tick: number): HeroId {
-  let h = t.cast[0] as HeroId;
-  for (let i = 0; i < t.relays.length; i++) if (tagTick(t, i) <= tick) h = (t.relays[i] as { to: HeroId }).to;
-  return h;
+/** The walker's leg at absolute tick `tick` (0 from go, then one more at each relay's TAG tick). */
+function legAt(t: TrialDef, tick: number): number {
+  let leg = 0;
+  for (let i = 0; i < t.relays.length; i++) if (tagTick(t, i) <= tick) leg = i + 1;
+  return leg;
+}
+
+/** Leg `leg`'s element and its start meter (tune.legStart, else the element's). */
+function legHero(t: TrialDef, leg: number): HeroId {
+  return leg === 0 ? (t.cast[0] as HeroId) : (t.relays[leg - 1] as { to: HeroId }).to;
 }
 
 export interface Rows {
@@ -178,7 +183,9 @@ export interface Rows {
   readonly n: number;
   readonly jEnd: number;
   readonly lit: Uint8Array;
-  readonly hero: HeroId[];
+  /** Per row: the walker's leg and that leg's start meter. */
+  readonly leg: number[];
+  readonly start: number[];
   /** θ0's bin (row 0). */
   readonly theta0: number;
 }
@@ -192,10 +199,13 @@ export function auditRows(t: TrialDef, w: World): Rows {
   while (worldYAtTick(w, jEnd * STEP) < w.finishY) jEnd++;
   const n = jEnd - j0 + 3;
   const lit = new Uint8Array(n * BINS);
-  const hero: HeroId[] = [];
+  const leg: number[] = [];
+  const start: number[] = [];
   for (let r = 0; r < n; r++) {
     const tick = (j0 - 1 + r) * STEP;
-    hero.push(heroAt(t, tick));
+    const l = legAt(t, tick);
+    leg.push(l);
+    start.push(t.tune.legStart[l] || heroStart(legHero(t, l)));
     const eps = worldElevation(w, tick);
     const o = r * BINS;
     if (eps <= 0) continue;
@@ -204,7 +214,7 @@ export function auditRows(t: TrialDef, w: World): Rows {
     gatherScene(w, scene, x, y, MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps), false);
     litMask(scene, x, y, false, lit.subarray(o, o + BINS), null);
   }
-  return { j0, n, jEnd, lit, hero, theta0: binOf(w.theta0) };
+  return { j0, n, jEnd, lit, leg, start, theta0: binOf(w.theta0) };
 }
 
 /** Nubs' trial rate (per s) at lit sum c = 0..10 (core sim/heroes.ts applyHeroDaylight's expression). */
@@ -227,18 +237,17 @@ interface DpOut {
 function dp(R: Rows, tl: Float64Array, maxC: number, h: number): DpOut {
   const n = R.n;
   const tab = new Float64Array(n * BINS).fill(DEAD);
-  // Row 0 (step j0 − 1): θ0 at the first element's start meter.
-  tab[R.theta0] = heroStart(R.hero[0] as HeroId, maxC);
+  // Row 0 (step j0 − 1): θ0 at the first leg's start meter.
+  tab[R.theta0] = R.start[0] as number;
   let last = 0;
   for (let r = 1; r < n - 1; r++) {
-    const hero = R.hero[r] as HeroId;
-    const tag = hero !== R.hero[r - 1];
+    const tag = R.leg[r] !== R.leg[r - 1];
     const po = (r - 1) * BINS;
     const o = r * BINS;
     // The source row: the previous step's meter, or at a TAG its alive bins at the incoming start.
     for (let b = 0; b < BINS; b++) {
       const v = tab[po + b] as number;
-      src[b] = v === DEAD ? DEAD : tag ? heroStart(hero, maxC) : v;
+      src[b] = v === DEAD ? DEAD : tag ? (R.start[r] as number) : v;
     }
     let any = false;
     slidingMaxCircular(src, TURN, win);

@@ -31,8 +31,8 @@ describe('determinism', () => {
     expect(runHeadless(7, 3600, 'reactive')).toBe(golden.headless_7_3600_reactive);
   });
 
-  it('an Elementals relay (T5) and the grand relay (T8) replay bit for bit', () => {
-    for (const id of [1005, 1008]) {
+  it('the Elementals mixer (T5) and the finale (T7) replay bit for bit', () => {
+    for (const id of [1005, 1007]) {
       const cfg = campaignConfig(id);
       const live = createRun(cfg);
       const bot = createBot('reactive', 3);

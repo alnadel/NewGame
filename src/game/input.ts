@@ -19,8 +19,12 @@
 //   sets InputFrame.snap on the next tick; only while host.canSnap() (a run in play, not the hold,
 //   the intro card or a menu). A swipe that snaps takes back the turn its press made and releases
 //   at 0 °/s, so it never coasts the sun.
+// - Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the host names the walking element's verb (verb()),
+//   maps CSS px to the ground (toWorld, uPerPx) and says whether a press starts on a target
+//   (canTarget); until the verb slots land every verb is played as 'sun' (today's press). cut() ends
+//   the presses a TAG hands over.
 
-import type { InputFrame } from '../core/index.ts';
+import type { InputFrame, Verb } from '../core/index.ts';
 
 const EDGE_PX = 20;
 const BOTTOM_EXTRA = 16;
@@ -59,6 +63,15 @@ export interface InputHost {
   canSnap?(): boolean;
   /** v1.5: (x, y) in CSS px is on the HUD's frost meter. */
   meterHit?(x: number, y: number): boolean;
+  // Elementals v2 (§7.9): all optional; absent = today's behaviour.
+  /** The walking element's verb now: HEROES[s.nubs.hero].verb on a Trial past the start beat, else 'sun'. */
+  verb?(): Verb;
+  /** CSS px → ground point (u) on the last drawn frame (§1.4); false outside the world viewport. */
+  toWorld?(x: number, y: number, out: Float64Array): boolean;
+  /** World units per CSS px on the last drawn frame (Drip's finger-exact steer). */
+  uPerPx?(): number;
+  /** True when a press at this ground point starts on a target now (core burnTarget/growTarget ≥ 0 for the verb). */
+  canTarget?(wx: number, wy: number): boolean;
 }
 
 /** Interactive elements whose own keyboard handling wins over the game's rotation keys. */
@@ -339,6 +352,23 @@ export class Input {
     this.keyR = false;
     this.shift = false;
     this.clearPending();
+  }
+
+  /**
+   * Called on every 'tag' (§4.1): ends the verb slot (none yet: every press is a sun press); with
+   * `all` (a TAG to or from a steer or blow leg) also ends the sun press, released at 0 °/s.
+   */
+  cut(all: boolean): void {
+    if (!all || !this.held) return;
+    try {
+      if (this.host.canvas.hasPointerCapture(this.active)) this.host.canvas.releasePointerCapture(this.active);
+    } catch {
+      // ignore
+    }
+    this.held = false;
+    this.active = -1;
+    this.upEdge = true;
+    this.release = 0;
   }
 
   /** Forgets accumulated motion and edges (the finger state is kept). */

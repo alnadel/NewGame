@@ -7,10 +7,11 @@
 // only created far enough ahead that they can't affect play yet.
 
 import { CASTER_KINDS } from '../../config/casters.ts';
-import { HERO_IDS } from '../../config/heroes.ts';
+import { HERO_IDS, type HeroDeath } from '../../config/heroes.ts';
+import { EL_KINDS } from '../../config/trials.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { worldYAtTick } from '../gen/plan.ts';
-import { FLARE_KEPT, type Bud, type Caster, type Pickup } from '../objects.ts';
+import { FLARE_KEPT, type Bud, type Caster, type ElObj, type Pickup } from '../objects.ts';
 import type { SimState } from './types.ts';
 
 /** Casters and pickups up to this far ahead of Nubs are hashed (well inside the validated horizon). */
@@ -23,6 +24,8 @@ const PICKUP_HASH_AHEAD = 600;
 const FLARE_HASH_AHEAD = 600;
 
 const PHASES = ['hold', 'day', 'night', 'dead', 'won'];
+/** Elementals v2: the hash index of a Trial's death cause (HeroDeath order). */
+const DEATHS: readonly HeroDeath[] = ['melt', 'fall', 'crash', 'snuff', 'douse', 'rain', 'swept', 'evaporate', 'sizzle', 'soak', 'fog'];
 const MODES = ['idle', 'dragging', 'chasing', 'coasting'];
 
 const dv = new DataView(new ArrayBuffer(8));
@@ -172,9 +175,15 @@ export function hashState(s: SimState): string {
   ]) {
     feed(v);
   }
-  // Elementals: Trials only, so every Nubs-run hash still holds.
-  if (s.trial !== null) {
-    for (const v of [HERO_IDS.indexOf(nb.hero), s.relayIdx, s.tagGrace, s.tagWatch, st.tags ?? 0, st.cleanTags ?? 0]) feed(v);
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.8): Trials only, so every Nubs-run hash still holds; the
+  // Drip mask (derived) is never hashed.
+  const el = s.el;
+  if (el !== null) {
+    for (const v of [HERO_IDS.indexOf(nb.hero), s.relayIdx, s.tagGrace, s.tagWatch, el.dx, el.dxTarget, el.wind, el.hold, el.spent, el.touch, el.legTick, el.fell ? 1 : 0, el.cause === null ? -1 : DEATHS.indexOf(el.cause)]) feed(v);
+    for (const o of el.objs as ElObj[]) {
+      for (const v of [EL_KINDS.indexOf(o.kind), o.x, o.state, o.t, o.paid, o.size, o.grown, o.light, o.casterId, o.hit ? 1 : 0, o.awake ? 1 : 0]) feed(v);
+    }
+    for (const v of [st.burns, st.bumps, st.drinks, st.trees, st.grove, st.cloudRide, st.tags, st.cleanTags, st.gusts]) feed(v ?? 0);
   }
   const flareLimit = nb.y + FLARE_HASH_AHEAD;
   for (const f of s.world.flares) {

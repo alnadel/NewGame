@@ -25,7 +25,7 @@ import { BUD_ID_BASE, RUNTIME_ID_BASE, SNAP_ID_BASE, type Bud, type Cloud } from
 import { rngFor } from '../rng.ts';
 import { trailX } from '../trail.ts';
 import type { SimEvent } from './events.ts';
-import { tagLocked } from './heroes.ts';
+import { tagLocked } from './elements.ts';
 import { ringTrick } from './nubs.ts';
 import type { InputFrame, SimState } from './types.ts';
 
