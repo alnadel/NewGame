@@ -193,14 +193,16 @@ export function elTagMask(s: SimState): void {
   const y = worldYAtTick(w, tick);
   const x = trailX(w.trail, y) + (TM.lanes[p % MASK_L] as number);
   const eps = worldElevation(w, tick);
-  const row = el.tagMask.subarray(p * BINS, (p + 1) * BINS);
+  // Offset writes into the buffer (a subarray view would allocate every tick).
+  const m = el.tagMask;
+  const o = p * BINS;
   if (eps <= 0) {
-    row.fill(1);
+    m.fill(1, o, o + BINS);
     return;
   }
   gatherScene(w, pointScene, x, y, MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps), true, SNAP_ID_BASE);
   litMask(pointScene, x, y, false, litNext, null);
-  for (let b = 0; b < BINS; b++) row[b] = (litNext[b] as number) <= 1 ? 1 : 0;
+  for (let b = 0; b < BINS; b++) m[o + b] = (litNext[b] as number) <= 1 ? 1 : 0;
 }
 
 /**

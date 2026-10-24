@@ -56,8 +56,8 @@ const O = E.objects;
 const TAU = Math.PI * 2;
 /** A rain cloud's body floats this far (u, up the screen) over its footprint. */
 const RAIN_LIFT = 50;
-/** Ember's sweet band reaches the gate's burn-walk ahead (84 ticks at 70 u/s). */
-const BAND_FAR = (E.ember.burnTicks.gate * 70) / 60;
+/** Ember's sweet band reaches the gate's burn-walk ahead (83 ticks at 70 u/s: the tap lands a tick later, core burnSweet). */
+const BAND_FAR = ((E.ember.burnTicks.gate - 1) * 70) / 60;
 const AMBER = 0xffb347;
 const RED = 0xff4d3d;
 const GREEN = 0x5fd35a;

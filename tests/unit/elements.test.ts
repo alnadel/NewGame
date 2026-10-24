@@ -42,7 +42,7 @@ import { effectiveDrain } from '../../src/core/sim/nubs.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { createReplay, playReplay, recordFrame } from '../../src/core/sim/replay.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
+import { VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_KEY_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
 
 const E = TUNING.elements;
@@ -262,6 +262,20 @@ describe('Ember (§2.2, §3.4)', () => {
     expect([s.stats.bumps, b.state]).toEqual([bumps + 1, EL_GONE]);
   });
 
+  it('refunds a tap on the sweet window\'s far tick (the tap lands next tick and still feeds)', () => {
+    // Offsets across one tick of walking, so the window's first tick lands anywhere in its last step.
+    for (const [k, dy] of [['bramble', 200], ['bramble', 200.6], ['gate', 200.3], ['gate', 200.9]] as const) {
+      const s = runTo(1001, 'ember', 1);
+      const [a] = place(s, [{ k, dy }]) as [ElObj];
+      s.nubs.chill = 90;
+      until(s, () => burnSweet(s, a), 300);
+      step(s, frame({ verb: VERB_KEY_BURN }));
+      expect(a.state).toBe(EL_BURNING);
+      const seen = collect(s, () => a.state === EL_GONE, 120);
+      expect(seen.some((e) => e.e === 'feed' && e.obj === 0)).toBe(true);
+    }
+  });
+
   it('passes a wall burning from spread fire without a refund, and melting ice still bumps', () => {
     const s = runTo(1001, 'ember', 1);
     const [g, ice] = place(s, [
@@ -412,6 +426,23 @@ describe('Sprout (§2.4, §3.5)', () => {
     until(s, () => el(s).hold < 0, 200);
     expect(g.y - g.r - s.nubs.y).toBeLessThan(E.near + 2);
     expect(bridged(g)).toBe(true);
+  });
+
+  it('never targets a site already poured to its need (the key moves on to the next one)', () => {
+    const s = runTo(1003, 'sprout', 1);
+    const [p, g] = place(s, [
+      { k: 'plot', dy: 120, dx: 44 },
+      { k: 'gap', dy: 220, r: 12 },
+    ]) as [ElObj, ElObj];
+    s.nubs.chill = 80;
+    expect(growTarget(s, NaN, NaN)).toBe(1);
+    step(s, frame({ verb: VERB_KEY_HOLD }));
+    until(s, () => g.size >= needOf(g), 60);
+    step(s, frame({ verb: VERB_RELEASE }));
+    expect(bridged(g)).toBe(false);
+    expect(growTarget(s, trailX(s.world.trail, g.y), g.y)).toBe(-1);
+    expect(growTarget(s, NaN, NaN)).toBe(0);
+    expect(p.size).toBe(0);
   });
 
   it('pours no more Sap than it holds, and its hold ends at the TAG', () => {

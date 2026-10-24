@@ -144,7 +144,8 @@ the sun, a drag always does. A steer or a swipe is a drag, so Drip's and Gust's 
     Stone), or a puddle on Ember's own path (`|o.x − trailX(o.y)| ≤ puddleR + touch`, 18 u) that
     Ember reaches before the next TAG. **Plots are never targets**: fire reaches them only by
     spreading (§3.4).
-  - Sprout: an unbridged crossing, or a plot without a standing tree.
+  - Sprout: an unbridged crossing, or a plot without a standing tree, that can still take Sap
+    (`size < need`).
 - **Pointer verbs** act on the eligible object whose footprint is within `reach` (32 u) of the point
   (walls and crossings: the distance to their rectangle, `trailX(o.y) ± wallHalf` by the contact
   depth; circles: centre distance minus `r`). Walls win over puddles, crossings over plots; then the
@@ -192,8 +193,9 @@ the sun, a drag always does. A steer or a swipe is a drag, so Drip's and Gust's 
     first and costs its price, and one not tapped costs a 30 bump. Melting ice is still ice and
     bumps; ice must finish melting before contact.
   - **The windows** (`burnLeft`, `burnSweet`, §7.7): on Ember's own bramble or gate the sweet window
-    opens when its contact edge is `burnTicks · 70/60` u ahead (63 u bramble, 98 u gate) and closes at
-    `near` (a 0.73 s and a 1.23 s window); after that it is too late. On ice and on any wall another
+    opens when its contact edge is `(burnTicks − 1) · 70/60` u ahead (≈ 61.8 u bramble, ≈ 96.8 u gate:
+    the tap lands a tick after the frame shown, and the fire burns out before contacts on its last
+    tick) and closes at `near` (a 0.71 s and a 1.21 s window); after that it is too late. On ice and on any wall another
     element will reach, the tap must come at least `burnTicks` before that walker's contact (the fire
     must be out); "tap now" is the last `nowTicks` (30) before that deadline.
   - **Key ↑/W** burns the nearest target ahead (walls first).
@@ -244,7 +246,8 @@ the sun, a drag always does. A steer or a swipe is a drag, so Drip's and Gust's 
 - **Rate (per s):** `root + rain·[under rain] − invest·[pouring into a site]`, `root 5`, `rain 15`,
   `invest 50`. Light does nothing to Sap.
 - **Verb: HOLD** on a site ahead (§1.4): a **crossing** (gap or stream) not yet bridged, or a
-  **plot** (a soil patch beside the trail) without a standing tree.
+  **plot** (a soil patch beside the trail) without a standing tree, that can still take Sap
+  (`size < need`).
   - While held, Sap pours into the site at 50/s (never more than Sap holds, never past the site's
     maximum: a crossing's `need = 2·r`; a plot's `treeMax` 60).
   - **Longer hold = bigger plant.** The site's `size` is the Sap poured in.
@@ -2110,7 +2113,7 @@ Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25
   over the canopies. Walls and hot stones are drawn over the shadow layer (unshaded, the stones
   glow) and under the casters. Walls and crossings are drawn at their own `o.x`, which relies on
   §3.3's dx 0.
-- Ember's sweet band is one hatched ground band from `near` to 98 u, with no line per bramble. The
+- Ember's sweet band is one hatched ground band from `near` to ≈ 96.8 u (the gate's window), with no line per bramble. The
   meter pill is a cached glyph and number, not a ring. The fog veil is a stretched radial sprite at
   alpha 0.6 over the trail ±80 u, up to 330 u past the bank. Edge markers show only when the whole
   footprint is above the play area, clamped 26 px inside the view.

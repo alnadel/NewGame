@@ -188,9 +188,10 @@ export function burnLeft(s: SimState, o: ElObj): number {
 /** A tap now is just in time (an own bramble/gate in its sweet window; else 0 ≤ burnLeft ≤ nowTicks). */
 export function burnSweet(s: SimState, o: ElObj): boolean {
   if (ownWall(s, o)) {
-    // The fire is still burning when Ember gets there: burnTicks of walking at most, and not inside `near`.
+    // The fire is still burning when Ember gets there, and not inside `near`: the tap lands on the next
+    // tick and the fire burns out before contacts on its last, so it covers burnTicks − 1 ticks of walking.
     const d = edgeOf(o) - s.nubs.y;
-    return d >= E.near && d <= burnTicksOf(o) * pace(s);
+    return d >= E.near && d <= (burnTicksOf(o) - 1) * pace(s);
   }
   const l = burnLeft(s, o);
   return l >= 0 && l <= EM.nowTicks;
@@ -262,6 +263,8 @@ export function growTarget(s: SimState, x: number, y: number): number {
     if (o.state === EL_GONE) continue;
     const cross = isCrossing(o.kind);
     if (cross ? bridged(o) : o.kind !== 'plot' || o.casterId >= 0) continue;
+    // A site already poured to its maximum takes no more Sap: never a target (a hold there would pour nothing).
+    if (o.size >= needOf(o)) continue;
     const ahead = edgeOf(o) - s.nubs.y;
     if (ahead < E.near || ahead > E.range || veiled(s, o)) continue;
     const rank = cross ? 0 : 1;
