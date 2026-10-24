@@ -162,8 +162,10 @@ export interface Banners {
   toastHide: number;
   /** Seconds since the banners were made (updateBanners): when each toast was queued (Toast.at). */
   toastClock: number;
-  /** No tip starts before this toastClock (TIP_REST after the last toast, holdToasts); missions and urgent tips may. */
+  /** No tip starts before this toastClock (tipRest after the last toast, holdToasts); missions and urgent tips may. */
   tipAt: number;
+  /** The rest between tips (s): TIP_REST, shorter on a Trial (tipPace). */
+  tipRest: number;
   /** The toast on screen's wrapped lines and the width they were wrapped for. */
   toastLines: string[];
   toastWrapW: number;
@@ -262,6 +264,7 @@ export function createBanners(): Banners {
     toastHide: 0,
     toastClock: 0,
     tipAt: 0,
+    tipRest: TIP_REST,
     toastLines: [],
     toastWrapW: 0,
   };
@@ -347,6 +350,13 @@ const TIP_YIELD_S = 1.5;
  * shows: at most one tip in about ten seconds.
  */
 const TIP_REST = 6;
+/** A Trial's rest between tips (s): its moments come fast, and a tip that waits is stale. */
+const TRIAL_TIP_REST = 2;
+
+/** Sets the rest between tips for the run (a Trial's is shorter). */
+export function tipPace(b: Banners, trial: boolean): void {
+  b.tipRest = trial ? TRIAL_TIP_REST : TIP_REST;
+}
 /**
  * A waiting tip queued this recently (s) is never replaced by a newer one: the newer waits behind it
  * (two tips of one moment, such as a snap's gauge tip and the bud under it, both show).
@@ -475,7 +485,7 @@ export function updateBanners(b: Banners, dt: number, lowChill: boolean): void {
     if (b.toastT > TOAST_IN + (b.toasts[0]?.hold ?? 0) + TOAST_OUT) {
       b.toasts.shift();
       b.toastT = -1;
-      holdToasts(b, TIP_REST);
+      holdToasts(b, b.tipRest);
     }
   }
   const next = b.toasts[0];
@@ -495,12 +505,15 @@ function easeOutBack(t: number): number {
   return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2;
 }
 
-/** Banners and cards, below the HUD band (`top` CSS px); `hc`: high contrast (no bursts, flat faces). */
-export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, top: number, scale: number, reducedMotion: boolean, hc = false): void {
+/**
+ * Banners and cards, below the HUD band (`top` CSS px); `hc`: high contrast (no bursts, flat faces);
+ * `toastTop`: where toasts hang (below the wind chip on a Trial).
+ */
+export function drawBanners(g: CanvasRenderingContext2D, b: Banners, v: View, top: number, scale: number, reducedMotion: boolean, hc = false, toastTop = top): void {
   const cx = v.vx + v.vw / 2;
   // A toast already showing fades away under a card or stamp that arrives after it (PARRY!, a Day card).
   const toast = b.toastT >= 0 && b.toastHide < 0.99 ? b.toasts[0] : undefined;
-  if (toast) drawToast(g, b, toast, v, top, scale, reducedMotion, hc);
+  if (toast) drawToast(g, b, toast, v, toastTop, scale, reducedMotion, hc);
   if (b.night >= 0) {
     const t = b.night;
     const a = Math.min(1, t / 0.5, (2.4 - t) / 0.6);

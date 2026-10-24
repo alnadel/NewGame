@@ -31,6 +31,7 @@ import {
   growTarget,
   levelProgress,
   queryBuds,
+  tagLocked,
   trialDef,
   TUNING,
   type Bud,
@@ -44,7 +45,7 @@ import { missionLabel, missionReward, missionTarget, missionValue, parseMissionI
 import type { MissionDef } from '../meta/content.ts';
 import { featureUnlocked } from '../meta/gamify.ts';
 import type { Save } from '../meta/saveTypes.ts';
-import { clearToasts, endToast, endToasts, showToast, type Banners } from '../render/banners.ts';
+import { clearToasts, endToast, endToasts, showToast, tipPace, type Banners } from '../render/banners.ts';
 import { goalMetLive, trialGlyph } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
@@ -313,10 +314,14 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       }
       wet |= o.light & 2;
     }
+    // A moment's tip is queued only when it can show now (the slot free, no hand-off coming): one that
+    // waited would show after its moment had passed.
     const mine = (on: TipOn, now: boolean): void => {
-      if (now) tip(on, TIP_HOLD, false, h);
+      if (now && banners.toasts.length === 0 && banners.toastClock >= banners.tipAt && !tagLocked(s)) tip(on, TIP_HOLD, false, h);
     };
-    mine('target', h === 'ember' ? burnTarget(s, NaN, 0) >= 0 : h === 'sprout' ? growTarget(s, NaN, 0) >= 0 : h === 'drip' ? puddle : weather);
+    // Sprout's 'target' is a crossing (they rank first): its plots have their own tip.
+    const site = h === 'sprout' ? s.el?.objs[growTarget(s, NaN, 0)]?.kind : undefined;
+    mine('target', h === 'ember' ? burnTarget(s, NaN, 0) >= 0 : h === 'sprout' ? site === 'gap' || site === 'stream' : h === 'drip' ? puddle : weather);
     mine('low', elHealth(s) < 40);
     mine('water', h === 'ember' ? puddle || rain : wet !== 0);
     mine('stone', stone);
@@ -333,6 +338,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       tips.length = 0;
       scorched = frostLater = false;
       const trial = lv ? trialDef(lv.id) : null;
+      tipPace(banners, trial !== null);
       const fresh = lv !== null && !(trial ? save.elementals2?.stars[trial.n - 1] : save.campaign.stars[lv.id - 1]);
       if (fresh && trial) {
         // A Trial's tips until it is passed: the mixer's, the hand-offs', then each element's (its glyph and walker).

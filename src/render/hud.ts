@@ -97,6 +97,8 @@ export interface HudState {
   noonSparkle: number;
   /** Bottom of the HUD band (CSS px), for the sun glyph and banners. */
   bottom: number;
+  /** Bottom of the wind chip under the band (CSS px; 0 none): toasts hang below it. */
+  windBottom: number;
 
   // Cached text and the inputs the row layer was built from (−1/NaN = never).
   clockKey: number;
@@ -216,6 +218,7 @@ export function createHud(): HudState {
     snowPop: 0,
     noonSparkle: 0,
     bottom: 64,
+    windBottom: 0,
     clockKey: -1,
     clock: '',
     snowVal: -1,
@@ -732,6 +735,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   h.meterShown = inp.mech?.meter === true && hero === 'nubs';
   if (h.meterShown) drawFrostMeter(g, h, v, inp, inp.mech as MechView);
   else if (s.el !== null && hero !== 'nubs') meterPill(g, v, inp, hero);
+  h.windBottom = 0;
   if (s.el !== null) windChip(g, h, v, inp);
   g.globalAlpha = 1;
 }
@@ -807,6 +811,7 @@ function windChip(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInp
   });
   g.globalAlpha = inp.alpha;
   g.drawImage(c, v.vx + v.vw - v.safe.right - 12 * k - cw, h.bottom - 4 * k, c.width / v.dpr, c.height / v.dpr);
+  h.windBottom = h.bottom + 22 * k;
 }
 
 const HEAT_BAND = 'rgba(255,61,43,0.6)';
