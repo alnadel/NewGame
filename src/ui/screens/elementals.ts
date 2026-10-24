@@ -179,7 +179,7 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       body.scrollTop = 0;
       refresh();
       fresh = [];
-      if (!save.elementals?.seen) ctx.cb.updateSave(markElementalsSeen);
+      if (!save.elementals2?.seen) ctx.cb.updateSave(markElementalsSeen);
     },
     refresh,
     back: () => ctx.go('title'),

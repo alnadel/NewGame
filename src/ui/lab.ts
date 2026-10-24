@@ -436,8 +436,8 @@ function mount(screen: LabScreen, variant: string): void {
     save.campaign.unlocked = 154;
     save.campaign.lastLevel = 153;
   }
-  if (screen === 'elementals' && variant === 'regular') save.elementals = { stars: [3, 1, 0, 0, 0, 0, 0, 0], seen: true };
-  if (screen === 'elementals' && variant === 'done') save.elementals = { stars: [3, 3, 2, 3, 1, 3, 2, 3], seen: true };
+  if (screen === 'elementals' && variant === 'regular') save.elementals2 = { stars: [3, 1, 0, 0, 0, 0, 0], seen: true };
+  if (screen === 'elementals' && variant === 'done') save.elementals2 = { stars: [3, 3, 2, 3, 1, 3, 2], seen: true };
   if (screen === 'elementals' && variant === 'unlock-all') save.settings.unlockAll = true;
   if (screen === 'profile' && (variant === 'globes' || variant === 'globes-closed')) save.gamify.globes = variant === 'globes' ? 3 : 2;
   if (screen === 'profile' && variant === 'streak') save.gamify.streak = { last: addDays(today, -1), days: 6, best: 9, freezeUsed: false };

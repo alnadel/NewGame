@@ -375,27 +375,27 @@ describe('mergeSaves', () => {
     expect(m.pars['2026-10-13']).toBe(400);
   });
 
-  it('Elementals: Trial stars take the larger per Trial, seen either; a side without them keeps the other\'s', () => {
+  it('Elementals v2: Trial stars take the larger per Trial, seen either; a side without them keeps the other\'s', () => {
     const base = defaults(NOW);
     const local = structuredClone(base);
     const remote = structuredClone(base);
-    local.elementals = { stars: [3, 1, 0, 0, 0, 0, 0, 0], seen: true };
-    remote.elementals = { stars: [1, 2, 2, 0, 0, 0, 0, 0], seen: false };
+    local.elementals2 = { stars: [3, 1, 0, 0, 0, 0, 0], seen: true };
+    remote.elementals2 = { stars: [1, 2, 2, 0, 0, 0, 0], seen: false };
     const m = mergeSaves(base, local, remote);
-    expect(m.elementals).toEqual({ stars: [3, 2, 2, 0, 0, 0, 0, 0], seen: true });
+    expect(m.elementals2).toEqual({ stars: [3, 2, 2, 0, 0, 0, 0], seen: true });
     // No common ancestor: joined the same way.
-    expect(mergeSaves(null, local, remote).elementals).toEqual({ stars: [3, 2, 2, 0, 0, 0, 0, 0], seen: true });
-    // An undefined remote (a build from before the Elementals) keeps local, never deletes it.
+    expect(mergeSaves(null, local, remote).elementals2).toEqual({ stars: [3, 2, 2, 0, 0, 0, 0], seen: true });
+    // An undefined remote (a build from before Elementals v2) keeps local, never deletes it.
     const old = structuredClone(base);
-    expect(mergeSaves(base, local, old).elementals).toEqual(local.elementals);
-    expect(mergeSaves(null, local, old).elementals).toEqual(local.elementals);
-    expect(mergeSaves(base, old, remote).elementals).toEqual(remote.elementals);
+    expect(mergeSaves(base, local, old).elementals2).toEqual(local.elementals2);
+    expect(mergeSaves(null, local, old).elementals2).toEqual(local.elementals2);
+    expect(mergeSaves(base, old, remote).elementals2).toEqual(remote.elementals2);
     const withEl = structuredClone(base);
-    withEl.elementals = { stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true };
-    expect(mergeSaves(withEl, local, old).elementals).toEqual(local.elementals);
+    withEl.elementals2 = { stars: [2, 0, 0, 0, 0, 0, 0], seen: true };
+    expect(mergeSaves(withEl, local, old).elementals2).toEqual(local.elementals2);
     // Neither side has them: still absent.
-    expect('elementals' in mergeSaves(base, base, old)).toBe(false);
-    expect('elementals' in mergeSaves(null, base, old)).toBe(false);
+    expect('elementals2' in mergeSaves(base, base, old)).toBe(false);
+    expect('elementals2' in mergeSaves(null, base, old)).toBe(false);
   });
 });
 
@@ -411,20 +411,20 @@ describe('Elementals across builds', () => {
     seedSave(browser, 3);
     const a = open(browser.tab());
     a.update((sv) => {
-      sv.elementals = { stars: [2, 0, 0, 0, 0, 0, 0], seen: true };
+      sv.elementals2 = { stars: [2, 0, 0, 0, 0, 0, 0], seen: true };
     });
     a.flush();
     // The older build's tab reads the save and writes it back a run later, without the field.
     const older = disk(browser) as Save & { revs: string[] };
-    delete older.elementals;
+    delete older.elementals2;
     older.stats.runs += 1;
     older.revs.push('old');
     browser.tab().storage.set(SAVE_KEY, JSON.stringify(older));
     browser.settle();
-    expect(a.get().elementals).toEqual({ stars: [2, 0, 0, 0, 0, 0, 0], seen: true });
+    expect(a.get().elementals2).toEqual({ stars: [2, 0, 0, 0, 0, 0, 0], seen: true });
     expect(a.get().stats.runs).toBe(4);
     // And the merge is written back for every tab.
-    expect(disk(browser).elementals?.stars[0]).toBe(2);
+    expect(disk(browser).elementals2?.stars[0]).toBe(2);
     expect(disk(browser).stats.runs).toBe(4);
   });
 });

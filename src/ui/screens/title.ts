@@ -472,7 +472,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     hide(mapBtn, fresh);
     // A challenge's banner takes the top's room (its run is the point of the link).
     hide(elementalsBtn, ctx.challenge() !== null);
-    elementalsBtn.classList.toggle('is-new', save.elementals?.seen !== true);
+    elementalsBtn.classList.toggle('is-new', save.elementals2?.seen !== true);
     if (!facesDrawn) faces.forEach((c, i) => ctx.cb.renderHeroPreview(c, (ELEMENTAL_FACES[i] as readonly [HeroId, string])[0]));
     facesDrawn = true;
     hide(chipMissions, !featureUnlocked(save, 'missions'));

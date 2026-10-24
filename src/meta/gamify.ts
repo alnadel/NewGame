@@ -613,7 +613,7 @@ export function backfillXp(save: Pick<Save, 'stats' | 'campaign' | 'unlocks'>): 
  * The v3 → v4 step on a validated save (mutated): XP back-filled, a Snow Globe per 5 ranks reached,
  * every feature v1.3 showed unlocked and seen when the save has any progress (the Daily from 3
  * runs, as it was), and the items and trophies it holds marked seen. The Elementals' Title square
- * starts seen there too (docs/ELEMENTALS.md §4.10): the first visit after the upgrade marks nothing
+ * starts seen there too (docs/ELEMENTALS_V2.md §7.11, elementals2): the first visit after the upgrade marks nothing
  * new.
  */
 export function upgradeToV4(save: Save): void {
@@ -623,7 +623,7 @@ export function upgradeToV4(save: Save): void {
   if (save.stats.runs > 0) {
     const daily = save.stats.runs >= 3 || Object.keys(save.daily).length > 0;
     g.features = FEATURES.filter((f) => f !== 'daily' || daily);
-    save.elementals = { stars: Array<number>(TRIAL_COUNT).fill(0), seen: true };
+    save.elementals2 = { stars: Array<number>(TRIAL_COUNT).fill(0), seen: true };
   }
   storeFeatures(save);
   g.seenFeatures = [...g.features];

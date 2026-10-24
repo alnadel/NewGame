@@ -327,24 +327,36 @@ describe('migrate', () => {
     expect(migrate({ v: 3, campaign: 'nope' }, NOW).save.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
   });
 
-  it('keeps the Elementals only when the save has them: 7 Trials of 0..3 stars and a seen mark', () => {
+  it('keeps Elementals v2 only when the save has them: 7 Trials of 0..3 stars and a seen mark', () => {
     // defaults() has none, and migrate keeps it that way (deep-equal).
-    expect('elementals' in defaults(NOW)).toBe(false);
+    expect('elementals2' in defaults(NOW)).toBe(false);
     expect(migrate(JSON.stringify(defaults(NOW)), NOW).save).toEqual(defaults(NOW));
-    expect('elementals' in migrate({ v: 4, stats: { runs: 3 } }, NOW).save).toBe(false);
-    const ok = migrate({ v: 4, elementals: { stars: [3, 2, 1, 0, 0, 0, 1], seen: true } }, NOW).save;
-    expect(ok.elementals).toEqual({ stars: [3, 2, 1, 0, 0, 0, 1], seen: true });
+    expect(migrate(defaults(NOW), NOW).save).toEqual(defaults(NOW));
+    expect('elementals2' in migrate({ v: 4, stats: { runs: 3 } }, NOW).save).toBe(false);
+    const ok = migrate({ v: 4, elementals2: { stars: [3, 2, 1, 0, 0, 0, 1], seen: true } }, NOW).save;
+    expect(ok.elementals2).toEqual({ stars: [3, 2, 1, 0, 0, 0, 1], seen: true });
     // Clamped to 7 entries of 0..3 and a boolean.
-    const bad = migrate({ v: 4, elementals: { stars: [9, -1, 'x', 2.7, 1, 1, 1, 1, 3, 3], seen: 'yes' } }, NOW).save;
-    expect(bad.elementals).toEqual({ stars: [3, 0, 0, 2, 1, 1, 1], seen: false });
-    expect(migrate({ v: 4, elementals: {} }, NOW).save.elementals).toEqual({ stars: Array(7).fill(0), seen: false });
+    const bad = migrate({ v: 4, elementals2: { stars: [9, -1, 'x', 2.7, 1, 1, 1, 1, 3, 3], seen: 'yes' } }, NOW).save;
+    expect(bad.elementals2).toEqual({ stars: [3, 0, 0, 2, 1, 1, 1], seen: false });
+    expect(migrate({ v: 4, elementals2: {} }, NOW).save.elementals2).toEqual({ stars: Array(7).fill(0), seen: false });
     // Not an object: dropped.
-    expect('elementals' in migrate({ v: 4, elementals: 'nope' }, NOW).save).toBe(false);
+    expect('elementals2' in migrate({ v: 4, elementals2: 'nope' }, NOW).save).toBe(false);
     // The Journey never sees a Trial.
     expect(ok.campaign).toEqual(defaults(NOW).campaign);
-    // A v3 save with progress upgrades with the Title square seen (its first visit marks nothing new).
-    expect(migrate({ v: 3, stats: { runs: 4 } }, NOW).save.elementals).toEqual({ stars: Array(7).fill(0), seen: true });
-    expect('elementals' in migrate({ v: 3 }, NOW).save).toBe(false);
+    // A v3 save with progress upgrades with the Title pill seen (its first visit marks nothing new).
+    expect(migrate({ v: 3, stats: { runs: 4 } }, NOW).save.elementals2).toEqual({ stars: Array(7).fill(0), seen: true });
+    expect('elementals2' in migrate({ v: 3 }, NOW).save).toBe(false);
+  });
+
+  it("drops v1's `elementals` (its Trials were replaced) and never emits it", () => {
+    const v1 = migrate({ v: 4, stats: { runs: 5 }, elementals: { stars: [3, 3, 3, 3, 3, 3, 3, 3], seen: true } }, NOW).save;
+    expect('elementals' in v1).toBe(false);
+    expect('elementals2' in v1).toBe(false);
+    expect(v1.stats.runs).toBe(5);
+    // Next to a v2 field, only the v2 field is kept.
+    const both = migrate({ v: 4, elementals: { stars: [3, 3, 3, 3, 3, 3, 3, 3], seen: true }, elementals2: { stars: [1, 0, 0, 0, 0, 0, 0], seen: false } }, NOW).save;
+    expect(both.elementals2).toEqual({ stars: [1, 0, 0, 0, 0, 0, 0], seen: false });
+    expect(JSON.stringify(both)).not.toContain('"elementals"');
   });
 
   it('round-trips a rich v3 save unchanged', () => {
