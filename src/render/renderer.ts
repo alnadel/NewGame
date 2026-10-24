@@ -22,6 +22,7 @@ import {
   type Bud,
   type Caster,
   type Cloud,
+  type ElState,
   type HeroId,
   type NubsState,
   type Pickup,
@@ -732,7 +733,7 @@ export class Renderer {
     else sc.decor.drawn = 0;
     drawFootprints(g, sc.footprints, v, sc.pal);
     // A Trial's ground objects (under the shadow layer, so shade falls on them).
-    drawElGround(g, v, s, time, inp.reducedMotion);
+    drawElGround(g, v, s);
     if (trial !== null && trial.relays.length > 0) drawTagStones(g, v, s);
     // A challenge run: the friend's puddle where the sender melted.
     const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;
@@ -1065,12 +1066,11 @@ function heroPose(p: NubsPose, s: SimState, nb: NubsState, hp: number, meter: nu
   p.meter = meter / 100;
   p.hc = hc;
   p.cause = s.death?.heroCause ?? '';
-  const el = s.el;
+  const el = s.el as ElState;
   const h = nb.hero;
-  const t = el ? el.touch : 0;
-  p.act = !el ? 0 : h === 'ember' ? +((t & 3) !== 0) : h === 'sprout' ? +(el.hold >= 0) : h === 'gust' ? ((t & 2) !== 0 ? 1 : (t & 4) !== 0 ? 2 : 0) : 0;
-  const lean = !el ? 0 : h === 'drip' ? (el.dxTarget - el.dx) / 10 : h === 'gust' ? windAt(s) / 45 : 0;
-  p.lean = Math.max(-1, Math.min(1, lean));
+  const t = el.touch;
+  p.act = h === 'sprout' ? +(el.hold >= 0) : h === 'gust' ? (t & 2 ? 1 : t & 4 ? 2 : 0) : t & 3;
+  p.lean = Math.max(-1, Math.min(1, h === 'gust' ? windAt(s) / 45 : (el.dxTarget - el.dx) / 10));
 }
 
 /** Stamps the walking body. */

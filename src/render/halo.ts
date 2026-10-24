@@ -718,8 +718,9 @@ function at(g: CanvasRenderingContext2D, inp: HaloInput, a: number, r: number, l
 }
 
 /**
- * An element's pattern on its go arcs `m` (see the header): Ember's ray ticks every 6° and gold food
- * dots, and a target dot on every run under 8°.
+ * An element's pattern on its go arcs `m` (see the header): Ember's ray ticks every 6° and a target
+ * dot on every run under 8°. (v1's gold food dots on glare went with v1's Ember: in v2 glare is
+ * plain full light.)
  */
 function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uint8Array, col: number, a: number): void {
   const R = inp.R;
@@ -739,23 +740,8 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
     g.strokeStyle = cssa(col, a);
     g.stroke();
   }
-  // Dots (round caps on points): Ember's food, the glare that is also safe, gold outside its rays...
+  // A narrow run is a target, not a sliver: a white dot ringed in the element's colour.
   let k = 0;
-  g.beginPath();
-  for (let b = 0; b < 360 && hero === 'ember'; b += 6) {
-    if (inp.glare[b] !== 0 && m[b] !== 0) {
-      at(g, inp, b, R + 14, false);
-      at(g, inp, b, R + 14, true);
-      k++;
-    }
-  }
-  if (k > 0) {
-    g.lineWidth = 6 * T;
-    g.strokeStyle = cssa(GOLD_FOOD, a);
-    g.stroke();
-  }
-  // ...and a narrow run is a target, not a sliver: a white dot ringed in the element's colour.
-  k = 0;
   g.beginPath();
   for (let i = 0; i < n; i++) {
     const b0 = runBuf[2 * i] as number;
@@ -775,7 +761,6 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
     g.stroke();
   }
 }
-const GOLD_FOOD = hex('#FFD84A');
 
 /**
  * The glass rim (px outside R): clear of the bud glow at R + 11, 6 px outside the drag arrow at

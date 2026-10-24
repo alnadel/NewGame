@@ -71,6 +71,7 @@ const SUN_GOLD: number = 0xffc23d;
 const ICE: number = 0x5ab8ff;
 const EMBER: number = 0xff8a1f;
 const LIME: number = 0x8bd650;
+const ASH: number = 0x8c8c8c;
 /** A DEEP pop shows at most this often (s). */
 const DEEP_POP_GAP = 4;
 /** Snow falling from the Cold Snap's cloud: flakes per second, and how long one takes to land (s). */
@@ -429,25 +430,17 @@ export class Fx {
           break;
         // Elementals v2 (docs/ELEMENTALS_V2.md §7.10): the objects' moments.
         case 'burn':
-          // A fire starts: flame sparks (melting ice and a drying puddle: water).
-          this.burst(ev.x, ev.y, 8, 12, 70, ev.kind === 'ice' || ev.kind === 'puddle' ? ICE : EMBER);
+        case 'feed':
+          // A fire starts (melting ice or a drying puddle: water); Ember feeds on its own fire: "+n".
+          if (ev.e === 'feed') addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
+          this.burst(ev.x, ev.y, 8, 12, 70, ev.e === 'burn' && (ev.kind === 'ice' || ev.kind === 'puddle') ? ICE : EMBER);
           break;
         case 'burnOut':
         case 'doused':
-          // Ash (ice melts into a splash); a doused fire's steam.
-          for (let i = 0; i < 8; i++) {
-            const wet = ev.e === 'doused' || ev.kind === 'puddle';
-            spawn(sc.particles, wet ? P_STEAM : P_PUFF, ev.x + rnd(-14, 14), ev.y + rnd(-4, 4), rnd(2, 10), rnd(-10, 10), rnd(-4, 4), rnd(14, 30), 0.8, 3, wet ? 9 : 6, wet ? 0xffffff : 0x8c8c8c);
-          }
-          break;
-        case 'feed':
-          // Ember takes its own fire back: the flame leaps into it.
-          this.burst(nx, ny, 16, 14, 90, EMBER);
-          addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
-          break;
         case 'fizz':
-          // The meter cannot afford it: a small grey puff.
-          for (let i = 0; i < 5; i++) spawn(sc.particles, P_PUFF, nx + rnd(-5, 5), ny, rnd(16, 26), rnd(-12, 12), 0, rnd(10, 20), 0.5, 2, 5, 0x9a9a9a);
+          // Ash (a melt or a drying ends in steam); a doused fire's steam; a refused verb's grey puff.
+          if (ev.e === 'fizz') this.puff(nx, ny, ASH);
+          else this.puff(ev.x, ev.y, ev.e === 'burnOut' && ev.kind !== 'puddle' ? ASH : 0xffffff);
           break;
         case 'bump':
           // The wall shatters, the walker hops: BUMP!
@@ -466,19 +459,17 @@ export class Fx {
           break;
         case 'drink':
           // A splash and the size it grew; Drip bulges for a moment (its art).
-          for (let i = 0; i < 10; i++) {
-            const a = (i / 10) * Math.PI * 2;
-            spawn(sc.particles, P_DRIP, nx, ny, rnd(4, 12), Math.cos(a) * rnd(30, 55), Math.sin(a) * rnd(30, 55), rnd(30, 60), 0.9, 1.6, 1.4, 0x7fc8ff);
-          }
+          this.puff(nx, ny, ICE);
           addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.3);
           break;
         case 'sizzle':
           // A hot stone: Drip flashes and steams; Ember sparks.
-          if (ev.hero === 'drip') {
+          if (ev.hero !== 'drip') this.burst(nx, ny, 10, 10, 80, 0xffd36b);
+          else {
             sc.nubs.glare = 0.25;
-            for (let i = 0; i < 8; i++) spawn(sc.particles, P_STEAM, nx + rnd(-6, 6), ny, rnd(8, 20), rnd(-8, 8), s.params.v, rnd(25, 40), 0.7, 2.5, 8, 0xffffff);
-          } else this.burst(nx, ny, 10, 10, 80, 0xffd36b);
+            this.puff(nx, ny, 0xffffff);
+          }
           break;
         case 'gust':
           // Wind streaks across the view the way it blows (none under reduced motion).
@@ -749,6 +740,11 @@ export class Fx {
         spawn(p, P_FIREFLY, nb.x + Math.cos(a) * r, nb.y + Math.sin(a) * r, rnd(8, 30), Math.cos(h) * 12, Math.sin(h) * 12, 0, rnd(5, 8), 2.5, 2.5, 0xfff2a0);
       }
     }
+  }
+
+  /** Eight puffs rising off (x, y): ash, steam or a splash. */
+  private puff(x: number, y: number, color: number): void {
+    for (let i = 0; i < 8; i++) spawn(this.sc.particles, P_PUFF, x + rnd(-12, 12), y + rnd(-4, 4), rnd(2, 12), rnd(-12, 12), rnd(-4, 4), rnd(14, 30), 0.8, 3, 8, color);
   }
 
   /** n wind streaks flying across the view the way `dir` blows (+1 east), at most 14 at once. */

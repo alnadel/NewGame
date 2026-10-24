@@ -49,7 +49,6 @@ import {
   dayTicks,
   FLARE_KEPT,
   FORECAST_IDS,
-  HERO_IDS,
   HEROES,
   hudClock,
   levelShort,
@@ -795,7 +794,6 @@ const GLOSS = 'rgba(255,255,255,0.55)';
 let goldGlow: Canvas2D | null = null;
 let starGlow: Canvas2D | null = null;
 let iceGlow: Canvas2D | null = null;
-let heroGlow: Canvas2D | null = null;
 
 /** The elapsed fill: a level's green (top to bottom), or the day's dawn → noon → dusk across the ruler. */
 function fillGradient(g: CanvasRenderingContext2D, h: HudState, level: boolean): CanvasGradient {
@@ -837,7 +835,6 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const k = hudScale(v);
   const n = m.pips > 1 ? 2 : 1;
   const st = inp.s;
-  const hero: HeroId = st.nubs.hero;
   const locked = st.trial !== null && tagLocked(st);
   const snapLeft = m.snapLeft;
   const r = METER_R * k;
@@ -858,8 +855,7 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
   const s = 1 + (rm ? 0 : 0.18 * Math.sin((Math.PI * h.meterPop) / 0.45)) + (full && !rm ? 0.03 * breathe : 0);
   if (full && !inp.hc) {
-    // (A hero's coin glows white.)
-    const glow = hero === 'nubs' ? (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32)) : (heroGlow ??= radialSprite('255,255,255', 128, 0.8, 0.42, 0.32));
+    const glow = (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32));
     const gr = r * (2.2 + 0.25 * breathe);
     g.globalAlpha = a * (0.55 + 0.45 * breathe);
     g.drawImage(glow, x - gr, y - gr, gr * 2, gr * 2);
@@ -868,8 +864,8 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   // The coin and its track (one sprite per look), then the fill: the charge in progress (all of it
   // once both are full), or the snap draining white.
   const look = snapping ? 2 : full ? 1 : 0;
-  const mk = look * 2 + (inp.hc ? 1 : 0) + k * 10 + v.dpr * 1000 + HERO_IDS.indexOf(hero) * 1e5;
-  if (h.meterKey !== mk || !h.meterBase) renderMeter(h, v, k, look, inp.hc, mk, hero);
+  const mk = look * 2 + (inp.hc ? 1 : 0) + k * 10 + v.dpr * 1000;
+  if (h.meterKey !== mk || !h.meterBase) renderMeter(h, v, k, look, inp.hc, mk);
   const base = h.meterBase as Canvas2D;
   const bw = (base.width / v.dpr) * s;
   g.drawImage(base, x - bw / 2, y - bw / 2, bw, bw);
@@ -973,7 +969,7 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
  * blue; frozen during a snap); a hero's coin is its candy face with its glyph in white (frozen while
  * its timed ability runs).
  */
-function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean, key: number, hero: HeroId): void {
+function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean, key: number): void {
   const dpr = v.dpr;
   const half = (METER_RING + METER_RING_W / 2 + 3) * k;
   const size = Math.ceil(half * 2 * dpr);
@@ -983,11 +979,6 @@ function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean,
   const g = fresh(c, dpr);
   const o = size / dpr / 2;
   ring(g, o, METER_RING * k, METER_RING_W * k, k);
-  if (hero !== 'nubs') {
-    coin(g, o, o, METER_R * k, look === 2 ? METER_FROZEN : FACE[HEROES[hero].face], k, hc);
-    drawGlyph(g, hero, o, o, 32 * k, look === 2 ? undefined : '#FFFFFF');
-    return;
-  }
   coin(g, o, o, METER_R * k, look === 1 ? METER_READY : look === 2 ? METER_FROZEN : FACE.ice, k, hc);
   const f = 30 * k;
   g.drawImage(flake(), o - f / 2, o - f / 2, f, f);

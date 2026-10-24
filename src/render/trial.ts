@@ -57,7 +57,6 @@ const RAIN_LIFT = 50;
 /** Ember's sweet band reaches the gate's burn-walk ahead (84 ticks at 70 u/s); the bramble's ends at 63. */
 const BAND_FAR = (E.ember.burnTicks.gate * 70) / 60;
 const BAND_MID = (E.ember.burnTicks.bramble * 70) / 60;
-const INK = '#2B2140';
 const AMBER = 0xffb347;
 const RED = 0xff4d3d;
 const GREEN = 0x5fd35a;
@@ -147,8 +146,10 @@ function flames(g: CanvasRenderingContext2D, xs: readonly number[], y: number, f
   }
 }
 
-const BRAMBLE = [-31, -9, 11.5, -15, -13, 12.5, 0, -9, 12, 15, -13, 12.5, 31, -9, 11.5];
+const BRAMBLE = 'F$0 O-31-9 13.1O-15-13 14.1O0-9 13.6O15-13 14.1O31-9 13.1O0-2 41.6,7.6|F$1 O-31-9 11.5O-15-13 12.5O0-9 12O15-13 12.5O31-9 11.5O0-2 40,6|F$2 O-34-13 4,3.2O-18-17 4,3.2O-3-13 4,3.2O12-17 4,3.2O28-13 4,3.2';
 const SPIKES = 'M-39-14l-5-3M-28-20l-3-5M-13-25l-1-5M4-21l1-5M18-25l2-5M34-17l5-3M-43-5h-4M43-5h4M-22-8l-3 3M8-5l3 3M24-10l3 2';
+/** The gate's eight pointed planks. */
+const PLANKS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => `M${-33 + i * 8.25} 0v-19l3.6-4 3.6 4v19Z`).join('');
 const ICE = 'M-40 2L-38-10L-33-22L-27-11L-22-27L-15-12L-10-20L-4-9L2-25L9-11L14-19L20-8L26-24L32-10L36-17L40 2Z';
 const ICE_FACETS = 'F#FFFB M-33-22L-31-8L-27-11ZM-22-27L-19-9L-15-12ZM2-25L5-9L9-11ZM26-24L28-8L32-10Z|S#8CCBF0/1 M-22-27L-21 0M2-25L3 0M26-24L25 0M-10-20L-9 0';
 
@@ -161,47 +162,10 @@ function wallArt(g: CanvasRenderingContext2D, kind: ElKind, f: number): void {
   g.fill();
   if (kind === 'bramble') {
     // A thorny hedge: dark lumps, lit tops, brown thorns and red berries.
-    const cols = burnt ? ['#2A1E16', '#4A3A2A', '#6A4A30'] : ['#2B4A1A', '#4E8A2E', '#79B547'];
-    for (let p = 0; p < 3; p++) {
-      g.fillStyle = cols[p] as string;
-      g.beginPath();
-      for (let i = 0; i < BRAMBLE.length; i += 3) {
-        const r = BRAMBLE[i + 2] as number;
-        if (p < 2) ell(g, BRAMBLE[i] as number, BRAMBLE[i + 1] as number, r + (p ? 0 : 1.6), r + (p ? 0 : 1.6));
-        else ell(g, (BRAMBLE[i] as number) - 3, (BRAMBLE[i + 1] as number) - 4, 4, 3.2);
-      }
-      if (p < 2) ell(g, 0, -2, 40 + (p ? 0 : 1.6), 6 + (p ? 0 : 1.6));
-      g.fill();
-    }
-    art(g, `S#5A3418/2 ${SPIKES}${burnt ? '' : '|F#E8463C O-22-10 2.4O-6-17 2.4O9-7 2.4O24-14 2.4'}`, []);
+    art(g, `${BRAMBLE}|S#5A3418/2 ${SPIKES}${burnt ? '' : '|F#E8463C O-22-10 2.4O-6-17 2.4O9-7 2.4O24-14 2.4'}`, burnt ? ['#2A1E16', '#4A3A2A', '#6A4A30'] : ['#2B4A1A', '#4E8A2E', '#79B547']);
   } else if (kind === 'gate') {
-    // A wooden gate: two posts, pointed planks, two rails and a brace.
-    g.lineWidth = 1.2;
-    g.strokeStyle = '#5A3418';
-    g.fillStyle = burnt ? '#3A2A20' : '#7A4A26';
-    g.beginPath();
-    g.rect(-41, -27, 6, 29);
-    g.rect(35, -27, 6, 29);
-    g.fill();
-    g.stroke();
-    g.fillStyle = burnt ? '#5A3A26' : '#E0A866';
-    g.beginPath();
-    for (let x = -33; x < 33; x += 8.25) {
-      g.moveTo(x, 0);
-      g.lineTo(x, -19);
-      g.lineTo(x + 3.6, -23);
-      g.lineTo(x + 7.2, -19);
-      g.lineTo(x + 7.2, 0);
-      g.closePath();
-    }
-    g.fill();
-    g.stroke();
-    g.fillStyle = burnt ? '#4A3020' : '#B87A42';
-    g.beginPath();
-    g.rect(-38, -17, 76, 4);
-    g.rect(-38, -7, 76, 4);
-    g.fill();
-    g.stroke();
+    // A wooden gate: two posts, pointed planks, two rails.
+    art(g, `P$0/#5A3418/1.2 M-41-27h6v29h-6ZM35-27h6v29h-6Z|P$1/#5A3418/1.2 ${PLANKS}|P$2/#5A3418/1.2 M-38-17h76v4h-76ZM-38-7h76v4h-76Z`, burnt ? ['#3A2A20', '#5A3A26', '#4A3020'] : ['#7A4A26', '#E0A866', '#B87A42']);
   } else {
     // Ice: a row of crystal shards (melting: sunk, glassy and dripping over a spreading puddle).
     if (f === 4) {
@@ -227,20 +191,8 @@ function crossArt(g: CanvasRenderingContext2D, stream: boolean, r: number): void
   g.beginPath();
   g.roundRect(-44, -r, 88, 2 * r, 6);
   g.fill();
-  if (stream) {
-    // Ripples running across.
-    g.strokeStyle = '#A8E2FF';
-    g.lineWidth = 1.5;
-    g.lineCap = 'round';
-    g.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const x = -36 + i * 14;
-      const y = -r * 0.5 + (i % 2) * r * 0.8;
-      g.moveTo(x - 4, y);
-      g.quadraticCurveTo(x, y - 2.5, x + 4, y);
-    }
-    g.stroke();
-  } else {
+  if (stream) art(g, 'S#A8E2FF/1.5 M-40-5q4-2.5 8 0M-26 4q4-2.5 8 0M-12-5q4-2.5 8 0M2 4q4-2.5 8 0M16-5q4-2.5 8 0M30 4q4-2.5 8 0', []);
+  else {
     // The far wall of the chasm catches some light; pebbles on the rim.
     g.fillStyle = '#4A3446';
     g.beginPath();
@@ -280,27 +232,37 @@ function bridgeArt(g: CanvasRenderingContext2D, r: number): void {
 function plotArt(g: CanvasRenderingContext2D, s: number, f: number): void {
   art(g, 'P#6E4A30/#4A2E1A/1.3 O0 0 17,13|S#563820/1.2 M-10-5h20M-13 0h26M-9 5h18', []);
   if (s > 0) {
-    const h = 4 + 5 * s;
-    const l = 2 + 1.3 * s;
-    g.strokeStyle = f ? '#3A2A20' : '#4E8A2E';
-    g.lineWidth = 1.6 + 0.3 * s;
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(0, -1);
-    g.quadraticCurveTo(1.5, -h / 2, 0, -h);
-    g.stroke();
-    g.fillStyle = f ? '#4A3A2A' : '#7CC24A';
-    g.beginPath();
-    g.ellipse(-l, -h * 0.65, l, l * 0.5, -0.5, 0, TAU);
-    g.ellipse(l, -h * 0.8, l, l * 0.5, 0.5, 0, TAU);
-    if (s > 3) ell(g, 0, -h - 1.5, 2.4, 2.4);
-    g.fill();
+    // The sapling grows in steps (a bud from step 4); burning, it chars.
+    g.save();
+    g.scale(0.45 + 0.2 * s, 0.45 + 0.2 * s);
+    art(g, `S$0/1.8 M0 0Q1.5-6 0-12|F$1 M0-7q-6-3-8 1q5 2 8-1ZM0-9q6-3 8 1q-5 2-8-1Z${s > 3 ? 'O0-13.5 2.4' : ''}`, f ? ['#3A2A20', '#4A3A2A'] : ['#4E8A2E', '#7CC24A']);
+    g.restore();
   }
   if (f) flames(g, [-8, 4], -2, f);
 }
 
 /** The arrival ghosts' and edge markers' colours by weatherGood: harmful, neither, helpful. */
 const GOOD_COL = [RED, 0xffffff, GREEN];
+/** The cues' marks (u; edge markers in CSS px), '@' their colour. */
+const DOUSE = 'F#3FAEF7 M0-11Q5-4 0-2Q-5-4 0-11ZM-5 0L0 5L5 0V3L0 8L-5 3Z';
+const WET = 'F#5AB8FF M-9-3Q-6.6 0-9 2Q-11.4 0-9-3ZM0-7Q2.4-4 0-2Q-2.4-4 0-7ZM9-3Q11.4 0 9 2Q6.6 0 9-3Z';
+const CHECK = 'S#3FBF3A/3.2 M-5 0L-1 4L6-5';
+const CHEVRONS = 'S#FF4D3D/3 M-8 3L0-2L8 3M-8 9L0 4L8 9';
+const EDGE = 'P@/#2B2140/1.5 M0 2L10 13H3.5V19H-3.5V13H-10Z';
+const ARROW = 'P@/#2B2140/1.5 M13 20L21 25L13 30Z';
+const DROP = 'F@ M0-7Q4.5 0 0 3Q-4.5 0 0-7Z';
+const PUSH = 'F@ M0-7L11 0L0 7Z';
+const MARK_COL = [''];
+
+/** Art `src` stamped at screen (x, y), `k` px per unit, mirrored when `flip` < 0 ('@' is `col`). */
+function mark(g: CanvasRenderingContext2D, src: string, x: number, y: number, k: number, col = '#FFFFFF', flip = 1): void {
+  MARK_COL[0] = col;
+  g.save();
+  g.translate(x, y);
+  g.scale(flip < 0 ? -k : k, k);
+  art(g, src, MARK_COL);
+  g.restore();
+}
 
 // ---------------------------------------------------------------------------------------------
 // Drawing passes (the renderer calls them in its draw order)
@@ -320,7 +282,7 @@ function frameOf(time: number, rm: boolean, i: number): number {
  * The ground layer, under the shadow layer (so shade falls on it): Drip's widened path over its
  * stretch, crossings and their bridges, plots and saplings, puddles and stones.
  */
-export function drawElGround(g: CanvasRenderingContext2D, v: View, s: SimState, time: number, rm: boolean): void {
+export function drawElGround(g: CanvasRenderingContext2D, v: View, s: SimState): void {
   const el = s.el;
   const t = s.trial;
   if (el === null || t === null) return;
@@ -334,15 +296,11 @@ export function drawElGround(g: CanvasRenderingContext2D, v: View, s: SimState, 
     const b = Math.min(i + 1 < t.relays.length ? relayY(s, i + 1) : 1e9, v.y1 + 40);
     if (b <= a) continue;
     g.beginPath();
-    for (let y = a; ; y += 24) {
-      const yy = Math.min(y, b);
-      g.lineTo(v.ox + (trailX(tr, yy) - O.wallHalf) * S, v.oy - yy * S);
-      if (yy >= b) break;
-    }
-    for (let y = b; ; y -= 24) {
-      const yy = Math.max(y, a);
-      g.lineTo(v.ox + (trailX(tr, yy) + O.wallHalf) * S, v.oy - yy * S);
-      if (yy <= a) break;
+    for (let j = -1; j < 2; j += 2) {
+      for (let y = j < 0 ? a : b; j < 0 ? y < b + 24 : y > a - 24; y -= 24 * j) {
+        const yy = Math.max(a, Math.min(b, y));
+        g.lineTo(v.ox + (trailX(tr, yy) + j * O.wallHalf) * S, v.oy - yy * S);
+      }
     }
     g.fillStyle = 'rgba(150,205,240,0.28)';
     g.fill();
@@ -363,10 +321,9 @@ export function drawElGround(g: CanvasRenderingContext2D, v: View, s: SimState, 
         const ch = b.c.height * f;
         g.drawImage(b.c, 0, b.c.height - ch, b.c.width, ch, v.ox + (x - b.x) * S, v.oy - o.y * S + (b.h * (1 - f) - b.y) * S, b.w * S, b.h * f * S);
       }
-    } else if (kd === 'plot') {
+    } else if (kd === 'plot' && o.state !== EL_BURNING) {
       const p = plotStep(o);
-      const f = o.state === EL_BURNING ? frameOf(time, rm, i) : 0;
-      blit(g, v, spr(`pl${p}${f}`, k, 44, 64, 22, 50, (c) => plotArt(c, p, f)), o.x, o.y);
+      blit(g, v, spr(`pl${p}0`, k, 44, 64, 22, 50, (c) => plotArt(c, p, 0)), o.x, o.y);
     } else if (kd === 'puddle') {
       const dry = o.state === EL_BURNING;
       blit(g, v, spr(dry ? 'pd1' : 'pd0', k, 34, 28, 17, 14, (c) => {
@@ -382,6 +339,32 @@ export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, t
   const el = s.el;
   if (el === null) return;
   const k = scaleOf(v);
+  const S = v.S;
+  if (s.nubs.hero === 'ember' && s.phase === 'day') {
+    // Ember's sweet band on the ground: hatched across the trail from `near` to the gate's burn-walk
+    // ahead, a line at the bramble's.
+    if (!hatch) {
+      const hc2 = makeCanvas(10, 10);
+      const hg = ctx2d(hc2);
+      hg.strokeStyle = 'rgba(255,160,40,0.6)';
+      hg.lineWidth = 3;
+      hg.beginPath();
+      hg.moveTo(-2, 12);
+      hg.lineTo(12, -2);
+      hg.stroke();
+      hatch = g.createPattern(hc2, 'repeat');
+    }
+    const ny = s.nubs.y;
+    const x0 = v.ox + (trailX(s.world.trail, ny + (E.near + BAND_FAR) / 2) - O.wallHalf - 4) * S;
+    const y0 = v.oy - (ny + BAND_FAR) * S;
+    g.save();
+    g.translate(x0, y0);
+    g.fillStyle = hatch as CanvasPattern;
+    g.fillRect(0, 0, (2 * O.wallHalf + 8) * S, (BAND_FAR - E.near) * S);
+    g.fillStyle = 'rgba(255,150,40,0.8)';
+    g.fillRect(0, (BAND_FAR - BAND_MID) * S - 1, (2 * O.wallHalf + 8) * S, 2);
+    g.restore();
+  }
   for (let i = el.objs.length - 1; i >= 0; i--) {
     const o = el.objs[i] as ElObj;
     if (o.state === EL_GONE || o.y < v.y0 - 40 || o.y > v.y1 + 80) continue;
@@ -389,35 +372,43 @@ export function drawElWalls(g: CanvasRenderingContext2D, v: View, s: SimState, t
       // A hot stone glows over the shade (spent: grey).
       const f = o.hit ? 2 : rm ? 0 : Math.floor(time * 3) % 2;
       blit(g, v, spr('st' + f, k, 52, 52, 26, 28, (c) => {
-        if (f < 2) {
-          const gr = c.createRadialGradient(0, -1, 3, 0, -1, 25);
-          gr.addColorStop(0, `rgba(255,120,30,${f ? 0.8 : 0.6})`);
-          gr.addColorStop(1, 'rgba(255,120,30,0)');
-          c.fillStyle = gr;
-          c.fillRect(-26, -27, 52, 52);
-        }
+        if (f < 2) c.drawImage(radialSprite('255,120,30', 64, f ? 0.8 : 0.6), -26, -27, 52, 52);
         art(c, f < 2 ? `P#7A3426/#2E1414/1.4 O0-2 9.5,7.5|F#A04A32 O-2-5 5,3|S${f ? '#FFF0A0' : '#FFB040'}/1.9 M-6-1L-2-3L1 0L5-4M-1-3L0-7|S#FF9A3A/1.3 M-4-14q2-3 0-6M3-15q2-3 0-6` : 'P#8C8682/#4A4440/1.3 O0-2 9.5,7.5|S#5E5854/1.4 M-6-1L-2-3L1 0L5-4', []);
       }), o.x, o.y);
       continue;
     }
-    if (!isWall(o.kind)) continue;
-    const burning = o.state === EL_BURNING;
-    const x = trailX(s.world.trail, o.y);
-    if (burning && o.paid > 0 && o.kind !== 'ice' && walkerAt(s, edgeOf(o)) === 'ember') {
+    // A fire burns over the casters (drawElAir), so a canopy never hides it.
+    if (!isWall(o.kind) || (o.state === EL_BURNING && o.kind !== 'ice')) continue;
+    const kd = o.kind;
+    const f = o.state === EL_BURNING ? 4 : 0;
+    blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), trailX(s.world.trail, o.y), o.y);
+  }
+}
+
+/** The burning brambles, gates and plots (three flame frames), over the casters; Ember's own fires glow. */
+function drawFires(g: CanvasRenderingContext2D, v: View, s: SimState, k: number, time: number, rm: boolean): void {
+  const objs = (s.el as { objs: ElObj[] }).objs;
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const o = objs[i] as ElObj;
+    if (o.state !== EL_BURNING || o.kind === 'ice' || o.kind === 'puddle' || o.y < v.y0 - 40 || o.y > v.y1 + 80) continue;
+    const kd = o.kind;
+    const f = frameOf(time, rm, i);
+    const plot = kd === 'plot';
+    const x = plot ? o.x : trailX(s.world.trail, o.y);
+    if (o.paid > 0 && walkerAt(s, edgeOf(o)) === 'ember') {
       // Ember's own fire glows: it will take the flame back when it walks through.
       const r = 62 * v.S;
       g.globalCompositeOperation = 'lighter';
       g.drawImage(radialSprite('255,140,50', 64, 0.6), v.ox + x * v.S - r, v.oy - o.y * v.S - r * 0.7, 2 * r, r);
       g.globalCompositeOperation = 'source-over';
     }
-    const f = burning ? (o.kind === 'ice' ? 4 : frameOf(time, rm, i)) : 0;
-    const kd = o.kind;
-    blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), x, o.y);
+    if (plot) {
+      const p = plotStep(o);
+      blit(g, v, spr(`pl${p}${f}`, k, 44, 64, 22, 50, (c) => plotArt(c, p, f)), x, o.y);
+    } else blit(g, v, spr(kd + f, k, 88, 56, 44, 44, (c) => wallArt(c, kd, f)), x, o.y);
   }
 }
 
-let veilBand: Canvas2D | null = null;
-const lumpBox = new Float64Array(4);
 
 /** A rain cloud's dark body from its proxy cloud's lumps (u, centre at the origin). */
 function rainArt(g: CanvasRenderingContext2D, cl: Cloud): void {
@@ -441,6 +432,7 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
   const el = s.el;
   if (el === null) return;
   const k = scaleOf(v);
+  drawFires(g, v, s, k, time, rm);
   const S = v.S;
   const tr = s.world.trail;
   const ny = s.nubs.y;
@@ -454,19 +446,6 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
       for (let j = cs.length - 1; j >= 0; j--) if ((cs[j] as Cloud).id === o.id) cl = cs[j] as Cloud;
       if (cl === null) continue;
       const c = cl;
-      // The body: its bounds from the lumps.
-      lumpBox[0] = lumpBox[1] = 1e9;
-      lumpBox[2] = lumpBox[3] = -1e9;
-      const l = c.lumps;
-      for (let j = 0; j + 2 < l.length; j += 3) {
-        const r = (l[j + 2] as number) + 4;
-        lumpBox[0] = Math.min(lumpBox[0] as number, (l[j] as number) - r);
-        lumpBox[1] = Math.min(lumpBox[1] as number, -(l[j + 1] as number) - r);
-        lumpBox[2] = Math.max(lumpBox[2] as number, (l[j] as number) + r);
-        lumpBox[3] = Math.max(lumpBox[3] as number, -(l[j + 1] as number) + r + 4);
-      }
-      const x0 = lumpBox[0] as number;
-      const y0 = lumpBox[1] as number;
       // Streaks fall from the body to the footprint (one path; still under reduced motion).
       g.strokeStyle = 'rgba(120,180,255,0.9)';
       g.lineWidth = Math.max(1.2, 1.8 * S);
@@ -483,7 +462,9 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
       // The body fades to 0.3 over the walker (as clouds do), so it never hides who walks under it.
       const d = Math.hypot(o.x - s.nubs.x, o.y + RAIN_LIFT - ny - 24) - 0.8 * o.r;
       g.globalAlpha = 0.92 * (0.3 + 0.7 * Math.max(0, Math.min(1, d / 50)));
-      blit(g, v, spr('rn' + o.id, k, (lumpBox[2] as number) - x0, (lumpBox[3] as number) - y0, -x0, -y0, (cg) => rainArt(cg, c)), o.x, o.y, RAIN_LIFT);
+      // The body (its lumps stay within rx + ry of its centre).
+      const b = c.rx + c.ry + 6;
+      blit(g, v, spr('rn' + o.id, k, 2 * b, 2 * b, b, b, (cg) => rainArt(cg, c)), o.x, o.y, RAIN_LIFT);
       g.globalAlpha = 1;
     } else {
       const fogS = radialSprite('236,240,246', 128, 0.95, 0.6, 0.85);
@@ -491,29 +472,9 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
       const fy = v.oy - o.y * S;
       const tx = trailX(tr, o.y);
       if (Math.abs(o.x - tx) < o.r && ny < o.y + ry) {
-        // The trail beyond the bank is veiled while it covers the trail.
-        if (!veilBand) {
-          // Soft at its sides and its far end, 0.6 over the trail.
-          veilBand = makeCanvas(32, 64);
-          const vg = ctx2d(veilBand);
-          const lg = vg.createLinearGradient(0, 64, 0, 0);
-          lg.addColorStop(0, 'rgba(236,240,246,0)');
-          lg.addColorStop(0.25, 'rgba(236,240,246,0.6)');
-          lg.addColorStop(0.7, 'rgba(236,240,246,0.6)');
-          lg.addColorStop(1, 'rgba(236,240,246,0)');
-          vg.fillStyle = lg;
-          vg.fillRect(0, 0, 32, 64);
-          const sg = vg.createLinearGradient(0, 0, 32, 0);
-          sg.addColorStop(0, '#0000');
-          sg.addColorStop(0.3, '#000');
-          sg.addColorStop(0.7, '#000');
-          sg.addColorStop(1, '#0000');
-          vg.globalCompositeOperation = 'destination-in';
-          vg.fillStyle = sg;
-          vg.fillRect(0, 0, 32, 64);
-        }
+        // The trail beyond the bank is veiled while it covers the trail: a soft 0.6 haze over it.
         const top = v.oy - (o.y + 330) * S;
-        g.drawImage(veilBand, v.ox + (tx - 70) * S, top, 140 * S, fy + ry * S - top);
+        g.drawImage(radialSprite('236,240,246', 64, 0.6, 0.7, 0.6), v.ox + (tx - 80) * S, top, 160 * S, fy + ry * S - top);
       }
       g.drawImage(fogS, fx - o.r * 1.25 * S, fy - ry * 1.25 * S, o.r * 2.5 * S, ry * 2.5 * S);
       if (!rm) {
@@ -527,12 +488,13 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
   }
 }
 
-/** Per object, the ring its cue wears this frame (0 none). */
-const R_DASH = 1;
-const R_NEXT = 2;
-const R_NOW = 3;
-const R_LATE = 4;
+/** Per object, the ring its cue wears this frame: 0 none, 1 dashed (a target), 2 the key's next, 3 tap now, 4 too late. */
 const ring = new Uint8Array(64);
+/** The ring passes: an ink underlay, the white dashes, the key's next target, tap now (pulsing), too late. */
+const RING_W = [4.5, 2.2, 3, 3, 3.2];
+const RING_C = [0x2b2140, 0xffffff, 0xffffff, AMBER, RED];
+const RING_A = [0.35, 1, 0.95, 1, 0.95];
+const DASHES = [7, 6];
 /** Per object, its arrival ghost's x and colour class (−1 none; weatherGood + 1, + 3 above the view). */
 const gxs = new Float64Array(64);
 const gcs = new Int8Array(64);
@@ -544,8 +506,7 @@ function ringPath(g: CanvasRenderingContext2D, v: View, s: SimState, o: ElObj, g
   const wide = isWall(o.kind) || isCross(o.kind);
   const x = v.ox + (wide ? trailX(s.world.trail, o.y) : o.x) * S;
   const y = v.oy - (o.y + (isWall(o.kind) ? 6 : 0)) * S;
-  const ry = (isWall(o.kind) ? 15 : isCross(o.kind) ? o.r + 6 : o.r + 6) + grow;
-  ell(g, x, y, (wide ? 48 : o.r + 6) * S + grow * S, ry * S);
+  ell(g, x, y, ((wide ? 48 : o.r + 6) + grow) * S, ((isWall(o.kind) ? 15 : o.r + 6) + grow) * S);
 }
 
 /**
@@ -567,31 +528,6 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
   g.lineCap = 'round';
   g.lineJoin = 'round';
 
-  if (hero === 'ember') {
-    // The sweet band: hatched across the trail from `near` to the gate's burn-walk ahead (a line at the bramble's).
-    if (!hatch) {
-      const hc2 = makeCanvas(10, 10);
-      const hg = ctx2d(hc2);
-      hg.strokeStyle = 'rgba(255,170,60,0.55)';
-      hg.lineWidth = 3;
-      hg.beginPath();
-      hg.moveTo(-2, 12);
-      hg.lineTo(12, -2);
-      hg.stroke();
-      hatch = g.createPattern(hc2, 'repeat');
-    }
-    const by = ny + (E.near + BAND_FAR) / 2;
-    const x0 = v.ox + (trailX(tr, by) - O.wallHalf - 4) * S;
-    const y0 = v.oy - (ny + BAND_FAR) * S;
-    g.save();
-    g.translate(x0, y0);
-    g.fillStyle = hatch as CanvasPattern;
-    g.fillRect(0, 0, (2 * O.wallHalf + 8) * S, (BAND_FAR - E.near) * S);
-    g.fillStyle = 'rgba(255,170,60,0.7)';
-    g.fillRect(0, (BAND_FAR - BAND_MID) * S - 1, (2 * O.wallHalf + 8) * S, 2);
-    g.restore();
-  }
-
   // Each object's ring this frame.
   const keyT = hero === 'ember' ? burnTarget(s, NaN, NaN) : hero === 'sprout' ? growTarget(s, NaN, NaN) : -1;
   const tagY = s.trial !== null && s.relayIdx < s.trial.relays.length ? relayY(s, s.relayIdx) : 1e9;
@@ -602,15 +538,26 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     const ahead = edgeOf(o) - ny;
     if (ahead > E.range || ahead <= 0) continue;
     if (hero === 'ember') {
-      if (isWall(o.kind)) ring[i] = burnLeft(s, o) < 0 ? R_LATE : burnSweet(s, o) ? R_NOW : i === keyT ? R_NEXT : R_DASH;
-      else if (o.kind === 'puddle' && ahead >= E.near && edgeOf(o) < tagY && Math.abs(o.x - trailX(tr, o.y)) <= O.puddleR + O.touch) ring[i] = i === keyT ? R_NEXT : R_DASH;
+      if (isWall(o.kind)) ring[i] = burnLeft(s, o) < 0 ? 4 : burnSweet(s, o) ? 3 : i === keyT ? 2 : 1;
+      else if (o.kind === 'puddle' && ahead >= E.near && edgeOf(o) < tagY && Math.abs(o.x - trailX(tr, o.y)) <= O.puddleR + O.touch) ring[i] = i === keyT ? 2 : 1;
     } else if (hero === 'sprout' && ahead >= E.near && (isCross(o.kind) ? !bridged(o) : o.kind === 'plot' && o.casterId < 0)) {
-      ring[i] = i === keyT ? R_NEXT : R_DASH;
+      ring[i] = i === keyT ? 2 : 1;
     }
+  }
+  if (hc) {
+    // High contrast outlines every object on the ground in ink.
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const o = objs[i] as ElObj;
+      if (o.state !== EL_GONE && !isWeather(o.kind) && o.y > v.y0 && o.y < v.y1) ringPath(g, v, s, o, -4);
+    }
+    g.lineWidth = 2;
+    g.strokeStyle = '#2B2140';
+    g.stroke();
   }
   // Dashed rings on an ink underlay; the key's next target solid white; tap now pulsing amber; too late red with a cross.
   for (let p = 0; p < 5; p++) {
-    const want = p < 2 ? R_DASH : p - 0;
+    const want = p < 2 ? 1 : p;
     let any = false;
     g.beginPath();
     for (let i = 0; i < n; i++) {
@@ -618,7 +565,7 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
       any = true;
       const o = objs[i] as ElObj;
       ringPath(g, v, s, o, p === 3 ? 2 * pulse : 0);
-      if (want === R_LATE) {
+      if (want === 4) {
         const x = v.ox + (isWall(o.kind) ? trailX(tr, o.y) : o.x) * S;
         const y = v.oy - (o.y + 6) * S;
         const d = 7 * S;
@@ -629,70 +576,33 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
       }
     }
     if (!any) continue;
-    if (p === 0) {
-      g.lineWidth = 4.5 * lw;
-      g.strokeStyle = cssa(0x2b2140, 0.35);
-    } else if (p === 1) {
-      g.setLineDash([7, 6]);
-      g.lineWidth = 2.2 * lw;
-      g.strokeStyle = '#FFFFFF';
-    } else if (p === 2) {
-      g.lineWidth = 3 * lw;
-      g.strokeStyle = cssa(0xffffff, 0.95);
-    } else if (p === 3) {
-      g.lineWidth = (3 + 2 * pulse) * lw;
-      g.strokeStyle = cssa(AMBER, 0.75 + 0.25 * pulse);
-    } else {
-      g.lineWidth = 3.2 * lw;
-      g.strokeStyle = cssa(RED, 0.95);
-    }
+    if (p === 1) g.setLineDash(DASHES);
+    g.lineWidth = ((RING_W[p] as number) + (p === 3 ? 2 * pulse : 0)) * lw;
+    g.strokeStyle = cssa(RING_C[p] as number, p === 3 ? 0.75 + 0.25 * pulse : (RING_A[p] as number));
     g.stroke();
     g.setLineDash([]);
   }
 
-  // Fires: a shrinking arc over each burning object (its time left, on a dark track); a douse chevron on Ember's puddles.
+  // Fires: a shrinking arc over each burning object (its time left, on a dark track).
   for (let p = 0; p < 2; p++) {
+    let any = false;
     g.beginPath();
-    let arcs = false;
     for (let i = 0; i < n; i++) {
       const o = objs[i] as ElObj;
-      if (o.state !== EL_BURNING || o.y < v.y0 || o.y > v.y1) continue;
-      const tot = (E.ember.burnTicks as Readonly<Record<string, number>>)[o.kind] ?? 60;
+      if (o.state !== EL_BURNING) continue;
       const x = v.ox + (isWall(o.kind) ? trailX(tr, o.y) : o.x) * S;
       const y = v.oy - (o.y + (isWall(o.kind) ? 38 : 22)) * S;
       g.moveTo(x, y - 6 * S);
-      g.arc(x, y, 6 * S, -Math.PI / 2, -Math.PI / 2 + (p ? (TAU * o.t) / tot : TAU));
-      arcs = true;
+      g.arc(x, y, 6 * S, -Math.PI / 2, -Math.PI / 2 + (p ? (TAU * o.t) / ((E.ember.burnTicks as Readonly<Record<string, number>>)[o.kind] ?? 60) : TAU));
+      any = true;
     }
-    if (!arcs) break;
+    if (!any) break;
     g.lineWidth = (p ? 3 : 6) * lw;
     g.strokeStyle = p ? '#FFE7B0' : cssa(0x2b2140, 0.55);
     g.stroke();
   }
-  g.fillStyle = '#3FAEF7';
-  g.beginPath();
-  for (let i = 0; i < n; i++) {
-    const o = objs[i] as ElObj;
-    if (hero !== 'ember' || o.kind !== 'puddle' || ring[i] === 0) continue;
-    const x = v.ox + o.x * S;
-    const y = v.oy - (o.y + 20) * S;
-    const d = 5 * S;
-    // A drop over a down chevron: "this douses Ember".
-    g.moveTo(x, y - 2.2 * d);
-    g.quadraticCurveTo(x + d, y - 0.8 * d, x, y - 0.4 * d);
-    g.quadraticCurveTo(x - d, y - 0.8 * d, x, y - 2.2 * d);
-    g.moveTo(x - d, y);
-    g.lineTo(x, y + d);
-    g.lineTo(x + d, y);
-    g.lineTo(x + d, y + 0.6 * d);
-    g.lineTo(x, y + 1.6 * d);
-    g.lineTo(x - d, y + 0.6 * d);
-    g.closePath();
-  }
-  g.fill();
 
-  // Sites: the hold's ring filling to its need and the glowing line to it; growth bars and wet drops;
-  // a check on a bridged crossing, red chevrons and "!" on one that will not be ready.
+  // Sites: the hold's ring filling to its need and the glowing line to it.
   const hold = hero === 'sprout' ? el.hold : -1;
   if (hold >= 0 && hold < n) {
     const o = objs[hold] as ElObj;
@@ -703,82 +613,46 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.beginPath();
     g.moveTo(v.nx, v.ny - 14 * S);
     g.lineTo(x, y);
-    const R = (isCross(o.kind) ? o.r + 10 : o.r + 9) * S;
+    const R = (o.r + 9) * S;
     g.moveTo(x, y - R);
-    g.arc(x, y, R, -Math.PI / 2, -Math.PI / 2 + (TAU * Math.min(1, o.size / needOf(o))));
+    g.arc(x, y, R, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, o.size / needOf(o)));
     g.stroke();
   }
-  g.font = `900 ${Math.round(13 * S)}px system-ui, sans-serif`;
+
+  // Marks: a douse chevron on Ember's puddles; growth bars and wet drops on growing sites; a check on
+  // a bridged crossing ahead, red chevrons and "!" on one that will not be ready.
+  g.font = `900 ${Math.round(14 * S)}px system-ui, sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  let checks = false;
-  let late = false;
+  const k = S * lw;
   for (let i = 0; i < n; i++) {
     const o = objs[i] as ElObj;
-    if (o.state === EL_GONE || !(isCross(o.kind) || o.kind === 'plot') || o.y < v.y0 - 20 || o.y > v.y1 + 20) continue;
-    const need = needOf(o);
+    if (o.state === EL_GONE || o.y < v.y0 - 20 || o.y > v.y1 + 20) continue;
     const x = v.ox + o.x * S;
     const y = v.oy - o.y * S;
-    if (o.size > 0 && o.grown < need && !(o.kind === 'plot' && o.casterId >= 0)) {
-      // The growth bar: poured (pale) and grown (green) against the site's need.
+    if (ring[i] && o.kind === 'puddle') mark(g, DOUSE, x, y - 18 * S, k);
+    if (!(isCross(o.kind) || o.kind === 'plot')) continue;
+    const need = needOf(o);
+    if (o.size > 0 && o.grown < need && o.casterId < 0) {
+      // The growth bar: poured (pale) and grown (green) against the site's need; wet: drops over it.
       const w = 26 * S;
-      const by = y + (isCross(o.kind) ? o.r + 8 : o.r + 5) * S;
+      const by = y + (o.r + 6) * S;
       g.fillStyle = cssa(0x2b2140, 0.7);
-      g.beginPath();
-      g.roundRect(x - w / 2 - 1.5, by - 1.5, w + 3, 5 * S + 3, 3 * S);
-      g.fill();
+      g.fillRect(x - w / 2 - 1.5, by - 1.5, w + 3, 5 * S + 3);
       g.fillStyle = '#D8F5B8';
-      g.fillRect(x - w / 2, by, (w * Math.min(1, o.size / need)), 5 * S);
+      g.fillRect(x - w / 2, by, w * Math.min(1, o.size / need), 5 * S);
       g.fillStyle = '#5FC33A';
-      g.fillRect(x - w / 2, by, (w * Math.min(1, o.grown / need)), 5 * S);
-      if ((o.light & 2) !== 0) {
-        // Wet: drops over the site.
-        g.fillStyle = '#5AB8FF';
-        g.beginPath();
-        for (let j = -1; j <= 1; j++) {
-          const dx = x + j * 9 * S;
-          const dy = y - (14 + (j & 1) * 4 + (rm ? 0 : ((time * 1.5 + j * 0.3) % 1) * 4)) * S;
-          g.moveTo(dx, dy - 3.5 * S);
-          g.quadraticCurveTo(dx + 2.4 * S, dy, dx, dy + 1.5 * S);
-          g.quadraticCurveTo(dx - 2.4 * S, dy, dx, dy - 3.5 * S);
-        }
-        g.fill();
-      }
+      g.fillRect(x - w / 2, by, w * Math.min(1, o.grown / need), 5 * S);
+      if ((o.light & 2) !== 0) mark(g, WET, x, y - (rm ? 14 : 12 + ((time * 1.5) % 1) * 4) * S, k);
     }
     if (!isCross(o.kind) || o.y < ny) continue;
-    if (bridged(o)) checks = true;
-    else if (growLeft(s, o) < 0 && walkerAt(s, o.y) !== 'gust') late = true;
-  }
-  for (let p = 0; p < 2; p++) {
-    if (p === 0 ? !checks : !late) continue;
-    g.beginPath();
-    for (let i = 0; i < n; i++) {
-      const o = objs[i] as ElObj;
-      if (o.state === EL_GONE || !isCross(o.kind) || o.y < ny || o.y > v.y1 + 20 || bridged(o) !== (p === 0)) continue;
-      if (p === 1 && (growLeft(s, o) >= 0 || walkerAt(s, o.y) === 'gust')) continue;
-      const x = v.ox + (trailX(tr, o.y) + 30) * S;
-      const y = v.oy - o.y * S;
-      const d = 5 * S;
-      if (p === 0) {
-        g.moveTo(x - d, y);
-        g.lineTo(x - d * 0.2, y + d * 0.8);
-        g.lineTo(x + d * 1.2, y - d);
-      } else {
-        // Red chevrons pointing at the gap from the near side, and a "!".
-        for (let j = 0; j < 2; j++) {
-          const cy = y + (o.r + 9 + j * 6) * S;
-          const cx = v.ox + trailX(tr, o.y) * S;
-          g.moveTo(cx - 8 * S, cy + 3 * S);
-          g.lineTo(cx, cy - 2 * S);
-          g.lineTo(cx + 8 * S, cy + 3 * S);
-        }
-        g.fillStyle = cssa(RED, 1);
-        g.fillText('!', x - 60 * S, y);
-      }
+    const tx = v.ox + trailX(tr, o.y) * S;
+    if (bridged(o)) mark(g, CHECK, tx + 30 * S, y, k);
+    else if (growLeft(s, o) < 0 && walkerAt(s, o.y) !== 'gust') {
+      mark(g, CHEVRONS, tx, y + (o.r + 9) * S, k);
+      g.fillStyle = cssa(RED, 1);
+      g.fillText('!', tx - 32 * S, y);
     }
-    g.lineWidth = 3.2 * lw;
-    g.strokeStyle = p === 0 ? '#3FBF3A' : cssa(RED, 1);
-    g.stroke();
   }
 
   // Drip: a ghost dot where the finger holds its target.
@@ -804,8 +678,9 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     let any = false;
     g.beginPath();
     for (let i = 0; i < n; i++) {
+      const gc = gcs[i] as number;
+      if (gc !== c && !(c < 0 && gc >= 0 && gc < 3)) continue;
       const o = objs[i] as ElObj;
-      if (gcs[i] !== c && !(c < 0 && (gcs[i] as number) >= 0 && (gcs[i] as number) < 3)) continue;
       any = true;
       ell(g, v.ox + (gxs[i] as number) * S, v.oy - o.y * S, o.r * S, E.weather.ryRatio * o.r * S);
     }
@@ -815,61 +690,29 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.stroke();
   }
   g.setLineDash([]);
-  g.strokeStyle = INK;
-  g.lineWidth = 1.5;
-  for (let c = 0; c < 6; c++) {
-    let any = false;
-    g.beginPath();
-    for (let i = 0; i < n; i++) {
-      if (gcs[i] !== c) continue;
-      const o = objs[i] as ElObj;
-      const gx = gxs[i] as number;
-      const tx = trailX(tr, o.y);
+  for (let i = 0; i < n; i++) {
+    const c = gcs[i] as number;
+    if (c < 0) continue;
+    const o = objs[i] as ElObj;
+    const gx = gxs[i] as number;
+    const tx = trailX(tr, o.y);
+    const col = cssa(GOOD_COL[c % 3] as number, 1);
+    const y = v.oy - o.y * S;
+    if (c > 2) {
+      // Above the view: a chevron at its x on the play area's top, with its drift's arrow.
+      const ex = Math.max(v.vx + 14, Math.min(v.vx + v.vw - 14, v.ox + o.x * S));
+      const dir = o.drift + (o.kind === 'rain' ? E.gust.rainGain : E.gust.fogGain) * windAt(s);
+      mark(g, EDGE, ex, top, 1, col);
+      if (Math.abs(dir) > 1) mark(g, ARROW, ex, top, 1, col, dir);
+    } else if (c === 0 && Math.abs(gx - tx) < o.r) {
+      g.fillStyle = col;
+      g.fillText('!', v.ox + tx * S, y);
+    } else if (c === 2) {
+      // Helpful: a drop mark; off the trail, an arrow toward it ("push me here").
       const x = v.ox + gx * S;
-      const y = v.oy - o.y * S;
-      if (c > 2) {
-        // Above the view: a chevron at its x on the play area's top, with its drift's arrow.
-        const ex = Math.max(v.vx + 14, Math.min(v.vx + v.vw - 14, v.ox + o.x * S));
-        const dir = o.drift + (o.kind === 'rain' ? E.gust.rainGain : E.gust.fogGain) * windAt(s);
-        g.moveTo(ex, top + 2);
-        g.lineTo(ex + 10, top + 13);
-        g.lineTo(ex + 3.5, top + 13);
-        g.lineTo(ex + 3.5, top + 19);
-        g.lineTo(ex - 3.5, top + 19);
-        g.lineTo(ex - 3.5, top + 13);
-        g.lineTo(ex - 10, top + 13);
-        g.closePath();
-        if (Math.abs(dir) > 1) {
-          const d = dir > 0 ? 1 : -1;
-          g.moveTo(ex + d * 13, top + 20);
-          g.lineTo(ex + d * 21, top + 25);
-          g.lineTo(ex + d * 13, top + 30);
-          g.closePath();
-        }
-        any = true;
-      } else if (c === 0 && Math.abs(gx - tx) < o.r) {
-        g.fillStyle = cssa(RED, 1);
-        g.fillText('!', v.ox + tx * S, y);
-      } else if (c === 2) {
-        // Helpful: a drop mark; off the trail, an arrow toward it ("push me here").
-        g.moveTo(x, y - 7 * S);
-        g.quadraticCurveTo(x + 4.5 * S, y, x, y + 3 * S);
-        g.quadraticCurveTo(x - 4.5 * S, y, x, y - 7 * S);
-        if (Math.abs(gx - tx) >= o.r) {
-          const d = tx > gx ? 1 : -1;
-          const ax = x + d * (o.r + 4) * S;
-          g.moveTo(ax, y - 7 * S);
-          g.lineTo(ax + d * 11 * S, y);
-          g.lineTo(ax, y + 7 * S);
-          g.closePath();
-        }
-        any = true;
-      }
+      mark(g, DROP, x, y, k, col);
+      if (Math.abs(gx - tx) >= o.r) mark(g, PUSH, x + (tx > gx ? 1 : -1) * (o.r + 4) * S, y, k, col, tx - gx);
     }
-    if (!any) continue;
-    g.fillStyle = cssa(GOOD_COL[c % 3] as number, 1);
-    g.fill();
-    if (c > 2) g.stroke();
   }
   g.lineCap = 'butt';
 }
