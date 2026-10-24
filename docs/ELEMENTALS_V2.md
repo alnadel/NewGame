@@ -2000,7 +2000,7 @@ lever with its reason), deviations, gate results and the final `build:single`.
 | `elementals2/art` (7dc1114) | 808,585 B | +20,366 over C0c | 20,480 B: pass (114 B left) |
 | `elementals2/ui` (3d9e2f1) | 798,077 B | +9,858 over C0c | 7,168 B: **2,690 B over** after its whole cut list |
 | merged (c12be45) | 824,831 B | +42,857 over C0b | 41,984 B summed: 873 B over, from the 5,456 B reserve |
-| **release (this record)** | **FINAL_B B** | | **≤ 829,440 B: pass (FINAL_LEFT B under)** |
+| **release (this record)** | **824,832 B** | | **≤ 829,440 B: pass (4,608 B under)** |
 
 The merged build is 795 B less than the four measurements added up, because 1,293 B of core
 `elements.ts` that ART's reads pull in were counted in both CORE's and ART's branch deltas.
@@ -2154,5 +2154,5 @@ Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25
 | 5 | `sim --campaign --bot all --tries 3` | pass: oracle 200/200, reactive 100/100 on 1-100, every hard gate (the MISS rows are the Journey's unchanged advisories) |
 | 6 | `sim --trials --check` and `--perf` | **fails (exit 1): T6 G5b; T7 G5 and G5b** (13.3). T1-T5 pass with the five waivers awaiting the lead. `--perf`: Trial tick 0.40-0.66× and guide refresh 0.46-0.66× a Nubs run's (≤ 1.25 and ≤ 1.3) |
 | 7 | `bench-step` and `--gen` (vs 6b23531) | pass: step 1.006 (≤ 1.10), guide 0.983 (≤ 1.5); `--gen` p99 0.979, over 1 ms 0.825, over 2 ms 0.833 (≤ 1.1), 0.974× ms/chunk |
-| 8 | `npm run e2e`, both projects | E2E_RESULT |
-| 9 | `build:single` | pass: FINAL_B B ≤ 829,440 B; the amendment is recorded (13.1) |
+| 8 | `npm run e2e`, both projects | pass: 396 passed, 44 skipped, 0 failed, 0 flaky (2 workers, 18.7 min; nothing needed a re-run) |
+| 9 | `build:single` | pass: 824,832 B ≤ 829,440 B; the amendment is recorded (13.1) |

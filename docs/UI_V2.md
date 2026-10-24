@@ -1764,7 +1764,7 @@ Reason: "Elementals v2 (docs/ELEMENTALS_V2.md): four elements with their own ver
 world objects (walls, crossings, plants, puddles, stones, weather, fog, fire), seven Trials; v1's
 sun-variant heroes removed (≈ 16.3 KiB freed); allowances sized from v1's measured costs; shipped
 feature code, not dead code." C0a + C0b measured 781,974 B. **Measured at the Elementals v2 merge:**
-FINAL_B B (FINAL_KIB KiB), FINAL_LEFT B under. CORE added 13,428 B, ART 20,366 and UI 9,858 against
+824,832 B (805.5 KiB), 4,608 B under. CORE added 13,428 B, ART 20,366 and UI 9,858 against
 allowances of 14,336, 20,480 and 7,168 B; UI's 2,690 B over, left after its whole cut list, came from
 the integration reserve (`docs/ELEMENTALS_V2.md` §13.1).
 
