@@ -60,8 +60,9 @@ export const REGRAB = 9;
 /** Ember dries a puddle on its path this many ticks before reaching it, while Flame is above DRY_FLAME. */
 const DRY_TICKS = 60;
 const DRY_FLAME = 30;
-/** Sprout pours into plots only while Sap stays above this. */
+/** Sprout pours into plots only while Sap stays above PLOT_SAP, and starts a plot's hold with at least PLOT_MIN to pour. */
 const PLOT_SAP = 25;
+const PLOT_MIN = 5;
 /** Gust swipes at most once per this many ticks, when a swipe saves SWIPE_GAIN more than it costs and Lift is above SWIPE_LIFT. */
 const SWIPE_EVERY = 15;
 const SWIPE_GAIN = 2;
@@ -362,12 +363,13 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       const spare = s.nubs.chill - PLOT_SAP;
       for (let i = 0; i < el.objs.length && spare > 0; i++) {
         const o = el.objs[i] as ElObj;
-        // Each plot is planted with the Sap that stands a tree (treeMin), then the next one.
+        // Each plot is poured up to the Sap that stands a tree (treeMin) while Sap stays above
+        // PLOT_SAP (a short pour carries on at the next hold), then the next one.
         if (o.kind !== 'plot' || o.state === EL_GONE || o.casterId >= 0 || o.size >= SP.treeMin) continue;
-        if (o.size + spare < SP.treeMin || downwind(s, el, o)) continue;
+        if (spare < PLOT_MIN || downwind(s, el, o)) continue;
         if (growTarget(s, o.x, o.y) !== i || !ready(s, i)) continue;
         best = i;
-        goal = SP.treeMin;
+        goal = Math.min(SP.treeMin, o.size + spare);
         break;
       }
     }
@@ -445,8 +447,9 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
     // §6.3's T4 rule, for every helpful rain of a later stretch (T4's ride cloud, T6's and T7's
     // garden clouds): push it over the trail, unless that swipe adds more harm than it costs (the
     // others still ahead).
+    // A ride swipe waits until windMax would not clip its kick.
     let dir = rideDir(s, el);
-    if (dir !== 0 && harm(s, el, dir * kick) <= now + G.swipe) return swipe(s, f, dir);
+    if (dir !== 0 && dir * el.wind <= G.windMax - kick && harm(s, el, dir * kick) <= now + G.swipe) return swipe(s, f, dir);
     dir = 0;
     const east = harm(s, el, kick);
     const west = harm(s, el, -kick);

@@ -164,13 +164,13 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   trial(2, 'Puddle Run', 5, 'meadow', 60, 400, 28, 0, [[160, 'drip'], [376, 'nubs']], 'drip',
     'u189:-18 t203:-4 u218:20 t232:10 u246:-8 t261:-20 u275:22 t290:14 u304 t318:-10 u333:-22 t344:24 u354:12', ['drinks', 7], 30, [],
     'Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones.', 'Drink 7', 'Drink all 7 puddles', '', 187, { legStart: [100, 50, 80], evapMul: 1.2 }),
-  // T3 pin: salt 3292 (salts 0..199: 6 clear G0's plot clearance and none fails a constant sun
-  // angle, so --pick ran past 199); drain 28 → 34 and Nubs' legs 100 → 80 (too easy); Sprout 80 → 100
-  // (G6: no bot had Sap left for 2 trees). Measured: G1 76/3/83 (Sap low 3), G2 low 76, G3 8/8, G4
-  // 12/16 (75%), G5b best θ130 dies at 19%, G6 trees ≥ 2 33%.
+  // T3 pin: salt 3584 (salts 0..199: 6 clear G0's plot clearance and none fails a constant sun
+  // angle, so --pick ran past 199); drain 28 → 34 and Nubs' legs 100 → 80 (too easy: a constant
+  // angle walked them). Measured: G1 83/39/83 (Sap low 39 on the crossings, 12 with 2 plots), G2 low
+  // 81, G3 8/8, G4 13/16 (81%), G5b best θ310 dies at 22%, G6 trees ≥ 2 33%.
   trial(3, 'Green Bridge', 15, 'meadow', 240, 400, 34, 0, [[340, 'sprout'], [556, 'nubs']], 'sprout',
     'p369:44 x408:0:12 s450:0:14 p476:-44 x502:0:16 s530:0:12 p572:44 p586:-44 p600:44', ['trees', 2], 30, [],
-    'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3292, { legStart: [80, 100, 80] }),
+    'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3584, { legStart: [80, 80, 80] }),
   // T4 pin: salt 605 (from a scan of salts on Nubs' opening leg: 0..199 held none that a constant
   // sun angle could not walk with a ±20 Nubs lever); drain 28 → 34 and Nubs' legs 100 → 80 (too
   // easy); Dare 60 → 75 ticks (+25%; G6 75% at 60). Gust 80 → 90 lets the east/30 spam Gust
@@ -179,9 +179,17 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
     'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 75], 30, [],
     "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1.25 s', 'Ride a rain cloud 1.25 s', '', 605, { legStart: [80, 80, 80] }),
-  trial(5, 'Steam', 11, 'meadow', 120, 504, 28, 0, [[216, 'ember'], [390, 'drip'], [564, 'nubs']], null,
-    'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-18 i436 t452:10 t474:-14 u492:18 t512:-4 u530:-16 t546:16', ['drinks', 4], 25, [1, 2],
-    'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 4', 'Drink 4 puddles'),
+  // T5 pin: salt 1113 (found by the G5b scan: 0..1112 held no salt whose sun could not stay fixed);
+  // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60, Drip 70 → 50, costMul and evapMul 1.2 (too
+  // easy: each element leg passed with its verb off); puddles 425 −18 → −26 and 492 18 → 26 (8 u
+  // from the trail: an unsteered Drip drank them) and 530 −16 → −17 (G0 clearance); Dare 4 → 5
+  // (+25%; G6 above its band). Measured: G1 83/60/32/83 (Drip marks: chosen 45° 49, worst 300° 32),
+  // G2 low 50 (worst bin 42), G3 8/8, G4 8/16 (50%), G5b best θ290 dies at 71%, G6 drinks ≥ 5 29%,
+  // G7 the ice left standing kills Drip.
+  trial(5, 'Steam', 11, 'meadow', 120, 504, 34, 0, [[216, 'ember'], [390, 'drip'], [564, 'nubs']], null,
+    'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-26 i436 t452:10 t474:-14 u492:26 t512:-4 u530:-17 t546:16', ['drinks', 5], 25, [1, 2],
+    'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 5', 'Drink 5 puddles', '', 1113,
+    { legStart: [80, 60, 50, 80], costMul: 1.2, evapMul: 1.2 }),
   trial(6, 'Rain Garden', 9, 'meadow', 150, 490, 28, 0, [[246, 'gust'], [390, 'sprout'], [576, 'nubs']], null,
     'f280:90:70:-14 r300:130:55:0 r312:-110:60:22 f352:-80:75:14 r360:-150:55:0 f402:60:70:-10 r414:120:85:6 p418:44 x464:0:14 s500:0:16 p520:-44 x545:0:16 p590:44 p606:-44 p620:44', ['trees', 3], 25, [3, 4],
     'Clear the fog for Sprout and blow the rain onto its path: rain feeds plants.', 'Grow 3 trees', 'Grow 3 trees'),
