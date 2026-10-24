@@ -1067,10 +1067,11 @@ export class Renderer {
     } else {
       sc.hud.meterShown = false;
     }
-    // Toasts, stamps and cards are play's alone: a pause card never sits over a live tip (their timers hold).
-    if (inp.screen === 'play') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion, inp.highContrast, Math.max(sc.hud.bottom, sc.hud.windBottom));
+    // Screen particles (leaves, petals, snow, confetti) under the banners: a tip's words stay clear.
     drawScreenParticles(g, sc.particles, v.dpr);
     g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    // Toasts, stamps and cards are play's alone: a pause card never sits over a live tip (their timers hold).
+    if (inp.screen === 'play') drawBanners(g, sc.banners, v, sc.hud.bottom, hudScale(v), inp.reducedMotion, inp.highContrast, Math.max(sc.hud.bottom, sc.hud.windBottom));
   }
 }
 

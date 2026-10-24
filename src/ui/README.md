@@ -228,8 +228,8 @@ lesson is passed; T5 needs T1 and T2, T6 T3 and T4, T7 T5 and T6. An open tile s
 (`startRun('campaign', undefined, 1000 + n)`); a locked one toasts "Pass Kindling first.". Arrow keys
 walk the element row and the grid, down from an element to its first Trial and up from the grid's
 top row to the selected element. Trials and elements opened since the last visit pop open
-(`.is-unlocked`), with "Ember joins the team!" and the unlock sound (the Results of the pass that
-unlocked one say it too). `show('elementals', id)` selects that Trial (Results > Trials and Back
+(`.is-unlocked`) with the unlock sound ("Ember joins the team!" is said once, on the Results of the
+pass that unlocked it). `show('elementals', id)` selects that Trial (Results > Trials and Back
 after a Trial). A Trial's Results print `levelTag` ("Trial 3"), hide the star road, say "Next
 trial" and lead "Trials" (the Elementals glyph) and Back here; its Pause card adds the walking
 element's tagline and "{verbLine} · {keyLine}" under the title, and no dozing Nubs. In play the

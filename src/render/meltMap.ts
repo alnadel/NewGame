@@ -299,7 +299,7 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
     }
     g.stroke();
   }
-  // Pins for the named casters.
+  // Pins for the named casters (Nubs' melt lines only: an element's death names no landmark).
   const d = s.death;
   calloutCount = 0;
   if (d) {
@@ -310,11 +310,11 @@ export function drawMeltMap(g: CanvasRenderingContext2D, v: View, s: SimState, m
       [d.nextId, d.nextName],
     ];
     for (const [id, name] of pins) {
-      if (id === undefined || !name) continue;
+      if (id === undefined || !name || (d.who ?? 'nubs') !== 'nubs') continue;
       const c = s.world.byId.get(id);
       if (c) pin(g, v, c, name, s.nubs.x, a, o.labelA, top, limit);
     }
-    if (d.ballId !== undefined) {
+    if (d.ballId !== undefined && (d.who ?? 'nubs') === 'nubs') {
       const ball = s.world.balls.find((b) => b.id === d.ballId);
       const c = ball ? s.world.byId.get(ball.casterId) : undefined;
       if (c) pin(g, v, c, c.name, s.nubs.x, a, o.labelA, top, limit);

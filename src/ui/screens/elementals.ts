@@ -7,7 +7,8 @@
 // and points Play at its next one), then the Trials as Wardrobe tiles in two columns: a "T3" disc,
 // the name, the best stars and the cast's faces in leg order (the roster's art, small). A tap
 // on an open Trial plays it; a locked one says what opens it. Opening the screen marks it seen;
-// Trials and heroes opened since the last visit pop in, and a new hero joins the team with a toast.
+// Trials and heroes opened since the last visit pop in with the unlock sound (the Results of the pass
+// already said "{Name} joins the team!").
 // refresh() rebuilds the tiles from the save and puts the focus back on the tile that had it.
 
 import { HERO_IDS, HEROES, levelShort, levelTag, TRIAL_BASE, TRIALS, type HeroFace, type HeroId, type TrialDef } from '../../core/index.ts';
@@ -58,7 +59,7 @@ export function createElementalsScreen(ctx: UiContext): Screen {
   const rules = h('ul', { class: 'el-rules', 'aria-label': 'Rules' });
   const verb = h('p', 'el-verb');
   const playBtn = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', size: 'lg', block: true, className: 'elementals-play', onPress: () => play(sel) });
-  const heroes = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Heroes' });
+  const heroes = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Elements' });
   const grid = h('ul', { class: 'tile-grid panel el-grid', 'aria-label': 'Trials' });
   const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, rules, verb, playBtn), heroes, grid);
   // Arrow keys walk the tiles: along the hero row, across (±1) and down (±2) the Trial grid; down
@@ -111,7 +112,8 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const intro = TRIALS[info.intro - 1] as TrialDef | undefined;
       // A locked hero's label stays short ("Pass T1"); its aria-label and the toast name the Trial.
       const word = open ? info.name : `Pass ${levelShort(intro?.id ?? 0)}`;
-      const on = x === id;
+      // The stage may feature a locked element (the selected Trial's), but its tile is never the selection.
+      const on = open && x === id;
       const b = h(
         'button',
         { class: `tile hero-tile${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: pass ${intro?.name}` },
@@ -174,11 +176,10 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       // The last Trial played, else the first open one not passed yet.
       sel = last ?? TRIALS.find((t) => trialOpen(save, t.n) && !trialBest(save, t.n)) ?? (TRIALS[0] as TrialDef);
       picked = null;
-      // What opened since the last visit pops in; a new hero joins the team.
+      // What opened since the last visit pops in (a new hero was announced on the Results of its pass).
       const now = opened();
       fresh = now.map((o, i) => o && seen[i] === false);
       seen = now;
-      for (const x of HERO_IDS.filter((_, i) => fresh[TRIALS.length + i])) ctx.toast(`${HEROES[x].name} joins the team!`, { icon: 'star', tone: 'gold', duration: 3200 });
       if (fresh.includes(true)) ctx.sound('unlock');
       body.scrollTop = 0;
       refresh();
