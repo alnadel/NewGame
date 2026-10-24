@@ -3,7 +3,9 @@
 // shared by the palette and the cached sprite (quantized night, G15), the shadow path's winding
 // (GR1), the matched shadow composite (GR2), the noon boss (GR10) and the ground decals (GR11).
 import { describe, expect, it } from 'vitest';
-import { createBot, createRun, dayTicks, headlessConfig, queryCasters, step, validatedY, type Caster, type SimState } from '../../src/core/index.ts';
+import { campaignConfig, createBot, createRun, dayTicks, elFixture, headlessConfig, queryCasters, step, validatedY, type Caster, type Cloud, type SimState } from '../../src/core/index.ts';
+import { drawClouds } from '../../src/render/clouds.ts';
+import { drawElAir, drawElCues, drawElGround, drawElWalls } from '../../src/render/trial.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src/game/camera.ts';
 import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
@@ -427,12 +429,12 @@ describe('chapter looks and the hot dial (v1.3)', () => {
 });
 
 describe('Elementals hero art (sprite keys)', () => {
-  const HEROES = ['ember', 'sprout', 'drip'] as const;
+  const HEROES = ['ember', 'sprout', 'drip', 'gust'] as const;
 
   it('keeps Nubs on its own art, its pose defaults neutral', () => {
     expect(heroArt('nubs')).toBeNull();
     const p = createPose();
-    expect([p.c, p.safe, p.meter, p.hc, p.cause]).toEqual([0, true, 1, false, '']);
+    expect([p.c, p.safe, p.meter, p.hc, p.cause, p.act, p.lean]).toEqual([0, true, 1, false, '', 0, 0]);
   });
 
   it('quantizes the look in place to 16 directions, so a tiny turn keeps the cached layers', () => {
@@ -457,26 +459,35 @@ describe('Elementals hero art (sprite keys)', () => {
     }
   });
 
-  it('changes the key with the element state (light, low) and high contrast', () => {
-    for (const hero of ['ember', 'sprout'] as const) {
+  it("changes the key with each element's v2 states (§7.10) and high contrast", () => {
+    // Ember: calm, out of the light, feasting, low, doused; Drip: calm, sizzling, low; Sprout: calm,
+    // holding, low Sap; Gust: calm, soaked, fogged, low.
+    const STATES: Record<(typeof HEROES)[number], Partial<ReturnType<typeof createPose>>[]> = {
+      ember: [{}, { safe: false, c: 0 }, { c: 6 }, { chill: 0.1 }, { act: 1 }, { hc: true }],
+      drip: [{}, { meter: 0.1 }, { hc: true }],
+      sprout: [{}, { act: 1 }, { meter: 0.1 }, { hc: true }],
+      gust: [{}, { act: 1 }, { act: 2 }, { meter: 0.1 }, { hc: true }],
+    };
+    for (const hero of HEROES) {
       const art = heroArt(hero);
       const a = createNubsAnim();
       const keys = new Set<number>();
-      const p = createPose();
-      p.reducedMotion = true;
-      const at = (patch: Partial<typeof p>) => {
-        Object.assign(p, { chill: 0.8, safe: true, c: 3, meter: 0.5, hc: false }, patch);
+      for (const patch of STATES[hero]) {
+        const p = createPose();
+        Object.assign(p, { reducedMotion: true, chill: 0.8, safe: true, c: 3, meter: 0.6 }, patch);
         keys.add(art?.key(p, a) as number);
-      };
-      at({});
-      at({ chill: 0.1, meter: 0.1 });
-      at({ hc: true });
-      at({ safe: false, c: 8, meter: 0.95 });
-      expect(keys.size).toBeGreaterThanOrEqual(4);
+      }
+      expect(keys.size, hero).toBe(STATES[hero].length);
     }
+    // Drip's sizzle flash is a state of its own (a hot stone's flash, timed by the glare timer).
+    const a = createNubsAnim();
+    const p = createPose();
+    const calm = heroArt('drip')?.key(p, a);
+    a.glare = 0.2;
+    expect(heroArt('drip')?.key(p, a)).not.toBe(calm);
   });
 
-  it('holds still over time: no per-frame layer redraws (the flicker frames were cut, §5.3)', () => {
+  it('holds still over time: no per-frame layer redraws', () => {
     for (const hero of HEROES) {
       const art = heroArt(hero);
       const a = createNubsAnim();
@@ -490,8 +501,130 @@ describe('Elementals hero art (sprite keys)', () => {
     }
   });
 
-  it('colours the dial per element (Ember amber, Sprout lime, Nubs teal)', () => {
-    const cols = new Set((['nubs', 'ember', 'sprout'] as const).map((h) => heroArcColor(h)));
-    expect(cols.size).toBe(3);
+  it("scales Drip by its size and leans it and Gust without redrawing (the walk's motion)", () => {
+    const m = { sx: 1, sy: 1, rot: 0, jx: 0, dy: 0 };
+    const a = createNubsAnim();
+    const p = createPose();
+    p.reducedMotion = true;
+    p.meter = 0;
+    heroArt('drip')?.motion(p, a, m);
+    expect(m.sx).toBeCloseTo(0.85, 9);
+    Object.assign(m, { sx: 1, sy: 1, rot: 0 });
+    p.meter = 1;
+    p.lean = 1;
+    heroArt('drip')?.motion(p, a, m);
+    expect(m.sx).toBeCloseTo(1.1, 9);
+    expect(m.rot).toBeGreaterThan(0);
+    Object.assign(m, { sx: 1, sy: 1, rot: 0 });
+    p.lean = -1;
+    heroArt('gust')?.motion(p, a, m);
+    expect(m.rot).toBeLessThan(0);
+  });
+
+  it('colours the dial per element: five distinct go colours', () => {
+    const cols = new Set((['nubs', 'ember', 'sprout', 'drip', 'gust'] as const).map((h) => heroArcColor(h)));
+    expect(cols.size).toBe(5);
+  });
+});
+
+/**
+ * A stand-in 2D canvas for node: every context call is counted and does nothing (gradients and
+ * patterns are inert objects), so the render passes can run headless.
+ */
+function fakeCanvas(): { made: () => number; calls: Record<string, number>; g: CanvasRenderingContext2D; restore: () => void } {
+  const calls: Record<string, number> = {};
+  // Only the main context counts (sprite canvases draw into their own).
+  const ctx = (main = false): CanvasRenderingContext2D => {
+    const t: Record<string, unknown> = {};
+    return new Proxy(t, {
+      get: (_, k: string) =>
+        k in t
+          ? t[k]
+          : (..._a: unknown[]) => {
+              if (main) calls[k] = (calls[k] ?? 0) + 1;
+              return k === 'measureText' ? { width: 10 } : k.startsWith('create') ? { addColorStop() {} } : undefined;
+            },
+      set: (_, k: string, v: unknown) => {
+        t[k] = v;
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+  };
+  let made = 0;
+  const G = globalThis as unknown as Record<string, unknown>;
+  const saved = [G.document, G.Path2D];
+  G.document = {
+    createElement: () => {
+      made++;
+      return { width: 0, height: 0, getContext: () => ctx() };
+    },
+  };
+  G.Path2D = class {};
+  return {
+    made: () => made,
+    calls,
+    g: ctx(true),
+    restore: () => {
+      G.document = saved[0];
+      G.Path2D = saved[1];
+    },
+  };
+}
+
+describe('Elementals v2 trial objects (render/trial.ts)', () => {
+  it('stamps every object state from cached sprites: one drawImage each, no new canvas on the next frame', () => {
+    const env = fakeCanvas();
+    try {
+      const s = createRun(campaignConfig(1001));
+      elFixture(s);
+      const v = createView();
+      layoutView(v, 390, 844, 1, { top: 0, right: 0, bottom: 0, left: 0 });
+      setPlayCamera(v, createCameraFx(), s.nubs.x, s.nubs.y + 180);
+      const frame = (): number => {
+        const d0 = env.calls.drawImage ?? 0;
+        drawElGround(env.g, v, s);
+        drawElWalls(env.g, v, s, 0, true);
+        drawElAir(env.g, v, s, 0, true);
+        return (env.calls.drawImage ?? 0) - d0;
+      };
+      const first = frame();
+      const made = env.made();
+      expect(made).toBeGreaterThan(10);
+      const second = frame();
+      expect(env.made()).toBe(made);
+      expect(second).toBe(first);
+      // One stamp per object, plus the half-grown and complete bridges, Ember's own-fire glow and
+      // the fog bank (reduced motion: no wisps); never more.
+      const objs = (s.el as { objs: unknown[] }).objs.length;
+      expect(second).toBeGreaterThanOrEqual(objs - 4);
+      expect(second).toBeLessThanOrEqual(objs + 4);
+      // The cues stroke at most ten paths (§9.4), here with every kind of ring at once.
+      const s0 = env.calls.stroke ?? 0;
+      drawElCues(env.g, v, s, 0, true, false, false, 60);
+      expect((env.calls.stroke ?? 0) - s0).toBeLessThanOrEqual(10);
+    } finally {
+      env.restore();
+    }
+  });
+
+  it("drawClouds skips a Trial's rain proxies (trial.ts draws the rain body over its footprint)", () => {
+    const env = fakeCanvas();
+    try {
+      const s = createRun(campaignConfig(1004));
+      const rain = s.world.clouds.filter((c) => c.kind === 'rain');
+      expect(rain.length).toBeGreaterThan(0);
+      const v = createView();
+      layoutView(v, 390, 844, 1, { top: 0, right: 0, bottom: 0, left: 0 });
+      Object.assign(v, { x0: -1e6, x1: 1e6, y0: -1e6, y1: 1e6 });
+      const draws = (clouds: Cloud[]): number => {
+        const d0 = env.calls.drawImage ?? 0;
+        drawClouds(env.g, v, { ...s.world, clouds }, s.tAbs + 30, 1e5, 1e5, 0);
+        return (env.calls.drawImage ?? 0) - d0;
+      };
+      expect(draws(rain)).toBe(0);
+      expect(draws(rain.map((c) => ({ ...c, kind: 'parked' as const })))).toBeGreaterThan(0);
+    } finally {
+      env.restore();
+    }
   });
 });

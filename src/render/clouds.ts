@@ -117,6 +117,8 @@ export function drawClouds(
   const scale = Math.min(3, v.k * v.dpr);
   for (let i = 0; i < n; i++) {
     const cl = buf[i] as Cloud;
+    // A Trial's rain cloud is drawn by render/trial.ts over its footprint (this is its shade proxy).
+    if (cl.kind === 'rain') continue;
     cloudCenter(cl, tAbs, c2);
     let x = c2[0] as number;
     let y = (c2[1] as number) + OBLIQUE * cl.z;

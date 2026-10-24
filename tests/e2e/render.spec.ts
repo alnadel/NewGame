@@ -3,11 +3,11 @@
 // Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
 // under reduced motion), the lazily painted ground tiles, the matched shadow composite (GR2) and
 // the death beat with its recap tip and callouts that never overlap (GR12), the postcard (GR14),
-// the Daily par computed in idle slices (GR15) and the Elementals trial frames (docs/ELEMENTALS.md §5.4).
+// the Daily par computed in idle slices (GR15) and the Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4).
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
-import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
+import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, skipToLeg, state, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
@@ -322,42 +322,45 @@ test.describe('draw-call budget', () => {
   });
 });
 
-test.describe('Elementals trial frames (§5.4)', () => {
+test.describe('Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4)', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
 
   /**
-   * Opens Trial n, starts it with a tap and lets it run 3 s untouched (no bot: its drags would show
-   * the dial's 24 detent ticks); returns the sprite layer redraws per second over those 3 s, then
-   * freezes time and counts one second of frames.
+   * Opens Trial n, starts it with a tap, fast-forwards to leg 1 (testSkipToLeg; ?elfix=1 stays on
+   * leg 0 with every object state just ahead) and lets it run untouched; returns the sprite layer
+   * redraws per second over that time, then freezes time and counts one second of frames.
    */
-  async function trialFrame(page: Page, n: number): Promise<{ per: Record<string, number>; layers: number; passes: number }> {
-    // A trial opens on its own play screen, waiting for the first touch.
-    await page.goto(`/?test=1&perf=0&trial=${n}`);
+  async function trialFrame(page: Page, n: number, query = '', secs = 3): Promise<{ per: Record<string, number>; layers: number; passes: number }> {
+    await page.goto(`/?test=1&perf=0&trial=${n}${query}`);
     await waitForScreen(page, 'play');
     await page.mouse.click(195, 380);
     await waitForRunStart(page);
-    const layers = await page.evaluate(async () => {
+    if (!query.includes('elfix')) await skipToLeg(page, 1);
+    // The core bot that fast-forwarded may leave the sun mid-drag (no lift reaches the sim, so the
+    // dial would show its detent ticks): a tap far from every target ends that drag.
+    await page.mouse.click(60, 760);
+    const layers = await page.evaluate(async (ms) => {
       const hook = window.__SHADY_TEST__!;
       const l0 = hook.perf().nubsLayerDraws;
       const t0 = performance.now();
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, ms));
       const rate = ((hook.perf().nubsLayerDraws - l0) * 1000) / (performance.now() - t0);
       hook.setTimeScale(0);
       return rate;
-    });
+    }, secs * 1000);
     await page.waitForTimeout(300);
     const per = await callsPerFrame(page);
     const passes = await page.evaluate(() => window.__SHADY_TEST__!.perf().fullScreenPasses);
     return { per, layers, passes };
   }
 
-  // Thunder Alley's town alone (CORE's world: ~25 walls, stalls and houses in view) issues ~200
-  // fills at that moment, the hero's art, dial and HUD about 20 of them: its fill ceiling allows the
-  // town (measured 214-223).
-  const FILL: Record<number, number> = { 3: 235 };
+  // Steam's world (five cottages in view) and its chapter's snow (Flurry Fields: ~24 flakes) issue
+  // 200 fills at that moment before any trial art (measured at C0c); the trial's objects, Tag Stones
+  // and HUD chips are cached sprites, so its frame measures 195-198: its fill ceiling allows the world.
+  const FILL: Record<number, number> = { 5: 216 };
 
-  for (const n of [1, 3, 4, 6]) {
-    test(`Trial ${n}: the Nubs frame's ceilings, ≤ 3 passes and ≤ 12 sprite layer redraws a second`, async ({ page }, info) => {
+  for (const n of [1, 2, 3, 4, 5, 6, 7]) {
+    test(`Trial ${n}, 3 s into leg 1: the Nubs frame's ceilings, ≤ 3 passes and ≤ 12 sprite layer redraws a second`, async ({ page }, info) => {
       test.skip(info.project.name !== 'mobile', 'one run is enough');
       const errors = watchErrors(page);
       await seedSave(page, OPEN_SAVE);
@@ -375,10 +378,30 @@ test.describe('Elementals trial frames (§5.4)', () => {
     });
   }
 
-  // Reduced motion and high contrast together: no flicker (one static frame, so the layers redraw
-  // only when the look or the state changes) and no shake, within the same ceilings.
-  for (const n of [1, 6]) {
-    test(`Trial ${n} in reduced motion and high contrast: a still hero within the ceilings`, async ({ page }, info) => {
+  test('?elfix=1: every object kind and state in one frame, within the ceilings', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one run is enough');
+    const errors = watchErrors(page);
+    await seedSave(page, OPEN_SAVE);
+    await countCalls(page);
+    const { per, passes } = await trialFrame(page, 1, '&elfix=1', 0.4);
+    const row = JSON.stringify({ ...per, passes });
+    await info.attach('elfix', { body: await page.screenshot(), contentType: 'image/png' });
+    const el = (await state(page)).el!;
+    // The fixture's kinds, and the states the art draws: burning, half-grown, wet.
+    expect(new Set(el.objs.map((o) => o.k))).toEqual(new Set(['bramble', 'gate', 'ice', 'gap', 'stream', 'puddle', 'stone', 'plot', 'rain', 'fog']));
+    expect(el.objs.some((o) => o.state === 1)).toBe(true);
+    expect(el.objs.some((o) => o.grown > 0 && o.grown < o.size)).toBe(true);
+    expect(per.drawImage, row).toBeLessThanOrEqual(190);
+    expect(per.fill, row).toBeLessThanOrEqual(190);
+    expect(per.stroke, row).toBeLessThanOrEqual(77);
+    expect(passes, row).toBeLessThanOrEqual(3);
+    expect(errors).toEqual([]);
+  });
+
+  // Reduced motion and high contrast together: one still flame frame, no wisps, no hop, no shake;
+  // high contrast outlines the objects and thickens the cues, within the same ceilings.
+  for (const n of [2, 4]) {
+    test(`Trial ${n} in reduced motion and high contrast: a still frame within the ceilings`, async ({ page }, info) => {
       test.skip(info.project.name !== 'mobile', 'one run is enough');
       const errors = watchErrors(page);
       await seedSave(page, { ...OPEN_SAVE, settings: { unlockAll: true, reducedMotion: 'on', highContrast: true } });
@@ -390,8 +413,8 @@ test.describe('Elementals trial frames (§5.4)', () => {
       expect(per.fill, row).toBeLessThanOrEqual(190);
       expect(per.stroke, row).toBeLessThanOrEqual(77);
       expect(passes, row).toBeLessThanOrEqual(3);
-      // No flicker: a solo hero redraws only for its look and state; a duo stays under the cap.
-      expect(layers, row).toBeLessThanOrEqual(n === 6 ? 12 : 6);
+      // No flicker: the walker redraws only for its look and state.
+      expect(layers, row).toBeLessThanOrEqual(6);
       const fx = await page.evaluate(() => window.__SHADY_TEST__!.cameraFx());
       expect(Math.abs(fx.shakeX) + Math.abs(fx.shakeY)).toBe(0);
       expect(errors).toEqual([]);

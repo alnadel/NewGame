@@ -72,12 +72,13 @@ const GLYPHS: Readonly<Record<string, string>> = {
   ember: 'F@ M0-6.8C2.6-3.6 5.2-0.8 4.4 2.4A4.4 4.4 0 0 1-4.4 2.4C-4.9-0.4-3.4-1.8-2.4-4C-1.2-2.4-0.7-3 0-6.8Z|F#FFD84A M0-0.2C1.5 1.4 2.5 2.6 2.3 3.6A2.3 2.3 0 0 1-2.3 3.6C-2.3 2.2-1 1.2 0-0.2Z',
   sprout: 'S#3E8A2A/1.5 M0 6.5L0-1|F@ M0-1C-1-4.6-4.6-6.6-6.6-5.6C-6-2.4-3-0.8 0-1Z|F@ M0-1.6C1-5.4 4.8-7.2 6.6-6C6-2.8 3-1.2 0-1.6Z|F#8B5A2B O0 5 2.4',
   drip: 'F@ M0-6.8Q5 0 4.6 2.2A4.6 4.6 0 0 1-4.6 2.2Q-5 0 0-6.8Z|F#FFFFFF O-1.7 1.6 1.1',
+  gust: 'F@ M0-6.8L5.2-1L0 4.2L-5.2-1Z|S#FFFFFF/.9 M0-6V3.4M-4.4-1H4.4|S#FF8FA8/1.5 M0 4.2Q2.4 5.4 0 6.8',
   elementals: 'F#FF6A1F M0-7Q2.2-4.3 1.9-3.2A1.9 1.9 0 0 1-1.9-3.2Q-2.2-4.3 0-7Z|F#5DB531 M3-1.6Q6-3.6 7-0.2Q5.6 2 3 1.4Z|F#F5B700 M0.8 2.6L-1.6 5.2H0L-0.8 7.6L1.8 4.8H0.2Z|F#2F9BEA M-4.6-3Q-2.4 0-2.8 1A1.8 1.8 0 0 1-6.4 1Q-6.8 0-4.6-3Z',
   boss: 'F#FF6A3D M3.84-1.11L6.8 0L3.84 1.11M3.76 1.37L5.5 4L2.46 3.15M2.24 3.31L2.1 6.47L0.14 4M-0.14 4L-2.1 6.47L-2.24 3.31M-2.46 3.15L-5.5 4L-3.76 1.37M-3.84 1.11L-6.8 0L-3.84-1.11M-3.76-1.37L-5.5-4L-2.46-3.15M-2.24-3.31L-2.1-6.47L-0.14-4M0.14-4L2.1-6.47L2.24-3.31M2.46-3.15L5.5-4L3.76-1.37|F#FF6A3D O0 0 4|S#7A3B00/1.3 M-2.6-1.6L-0.8-0.6M2.6-1.6L0.8-0.6',
 };
 
 /** The '@' colour of a glyph drawn without one. */
-const HERO_TINT: Readonly<Record<string, string>> = { ember: '#FF6A1F', sprout: '#5DB531', drip: '#2F9BEA' };
+const HERO_TINT: Readonly<Record<string, string>> = { ember: '#FF6A1F', sprout: '#5DB531', drip: '#2F9BEA', gust: '#9B8BD0' };
 
 export interface ArtOp {
   kind: string;

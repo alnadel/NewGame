@@ -117,6 +117,21 @@ describe('hapticForEvent', () => {
       [{ e: 'tagSoon', to: 'drip', ticks: 60 }, null],
       [{ e: 'tag', from: 'ember', to: 'drip', index: 1 }, 'phew'],
       [{ e: 'tagClean', to: 'drip' }, null],
+      // Elementals v2 (§7.10): the patterns are reused.
+      [{ e: 'burn', obj: 0, kind: 'gate', x: 0, y: 0, cost: 22, spread: false }, 'catch'],
+      [{ e: 'feed', obj: 0, delta: 22, x: 0, y: 0 }, 'catch'],
+      [{ e: 'burnOut', obj: 0, kind: 'gate', x: 0, y: 0 }, null],
+      [{ e: 'doused', obj: 0, x: 0, y: 0 }, null],
+      [{ e: 'fizz', x: 0, y: 0, reason: 'low' }, null],
+      [{ e: 'bump', obj: 0, kind: 'ice', hero: 'drip', delta: -30, x: 0, y: 0 }, 'crystal'],
+      [{ e: 'fall', obj: 0, hero: 'nubs', x: 0, y: 0 }, null],
+      [{ e: 'grow', obj: 0, on: true, x: 0, y: 0 }, 'bud'],
+      [{ e: 'grow', obj: 0, on: false, x: 0, y: 0 }, null],
+      [{ e: 'grown', obj: 0, tree: false, x: 0, y: 0 }, 'bloom'],
+      [{ e: 'drink', obj: 0, delta: 30, x: 0, y: 0 }, 'flake'],
+      [{ e: 'sizzle', obj: 0, hero: 'drip', delta: -20, x: 0, y: 0 }, 'glare'],
+      [{ e: 'gust', dir: 1, wind: 30, cost: 8 }, 'detent'],
+      [{ e: 'touch', bits: 2 }, null],
     ];
     for (const [ev, name] of cases) expect(hapticForEvent(ev)).toBe(name);
   });

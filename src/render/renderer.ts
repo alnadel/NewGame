@@ -4,7 +4,11 @@
 // Elementals: on a Trial the walker wears its element's art (render/heroes.ts); the Nubs-only cues
 // follow health and the element's own state (the vignette, the sun's moods, the hot ring, the
 // sizzle, which becomes Ember's smoke); the relay's Tag Stones stand on the trail and its NEXT chip
-// counts the telegraph down under the dial.
+// counts the telegraph down under the dial. v2 (docs/ELEMENTALS_V2.md §7.10): the Trial's objects
+// (render/trial.ts) are drawn in four passes: the ground ones under the shadow layer, the walls and
+// hot stones over it (under the casters and the walker), fires, rain and fog over the clouds, and
+// the telegraphs over the whole world, under the dial. A held sun (Drip, Gust) shows no drag on the
+// dial; a fall shrinks, drops and fades the walker.
 
 import {
   coolLine,
@@ -22,12 +26,14 @@ import {
   type Bud,
   type Caster,
   type Cloud,
+  type ElState,
   type HeroId,
   type NubsState,
   type Pickup,
   type RenderSnap,
   type SimState,
   type World,
+  windAt,
 } from '../core/index.ts';
 import { sunLockedAt } from '../core/sim/sun.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera, updateCameraFx, type CameraFx, type View } from '../game/camera.ts';
@@ -54,7 +60,8 @@ import {
   type GroundPaint,
 } from './ground.ts';
 import { createHalo, createHaloIn, drawHalo, tagSoon, updateHalo, type HaloInput, type HaloState } from './halo.ts';
-import { drawNextChip, drawTagStones, heroArt } from './heroes.ts';
+import { drawNextChip, heroArt } from './heroes.ts';
+import { drawElAir, drawElCues, drawElGround, drawElWalls, drawTagStones } from './trial.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,
@@ -355,6 +362,8 @@ export interface RenderScene {
    * atmosphere, the Melt Map wash, the death desaturation): at most 3 (A12).
    */
   passes: number;
+  /** The walking body's alpha (a fall fades it out). */
+  fallA: number;
   /** The HUD's and the dial's inputs, refilled each frame (no allocation). */
   hudIn: HudInput;
   haloIn: HaloInput;
@@ -415,6 +424,7 @@ export function createScene(): RenderScene {
     friendFor: -1,
     friendWorld: null,
     passes: 0,
+    fallA: 1,
     haloIn: createHaloIn(),
     hudIn: {
       s: null as unknown as SimState,
@@ -694,7 +704,9 @@ export class Renderer {
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
     // The hot ring: Nubs in the sun; on a Trial the walker not safe.
     const hot = trial ? !s.nubs.safe : s.nubs.f > 0;
-    updateHalo(sc.halo, udt, inp.dragging, chillCue, s.sun.dTheta, walking && sunUp && hot && inp.screen === 'play', inp.mech.deep && walking);
+    // A held sun (Drip's and Gust's legs) takes no drag: no detent ticks or arrow, even with a finger down.
+    const dragging = inp.dragging && !(trial && s.sun.locked);
+    updateHalo(sc.halo, udt, dragging, chillCue, s.sun.dTheta, walking && sunUp && hot && inp.screen === 'play', inp.mech.deep && walking);
     sc.relief = Math.max(0, sc.relief - adt);
     sc.sunWorried = Math.max(0, sc.sunWorried - adt);
     if (inp.screen === 'play' && walking) {
@@ -726,6 +738,8 @@ export class Renderer {
     if (this.options.decor && inp.govLevel < 3) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);
     else sc.decor.drawn = 0;
     drawFootprints(g, sc.footprints, v, sc.pal);
+    // A Trial's ground objects (under the shadow layer, so shade falls on them).
+    drawElGround(g, v, s);
     if (trial !== null && trial.relays.length > 0) drawTagStones(g, v, s);
     // A challenge run: the friend's puddle where the sender melted.
     const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;
@@ -755,6 +769,8 @@ export class Renderer {
         sc.passes++;
       }
     }
+    // A Trial's walls stand over the shade, under the casters and the walker.
+    drawElWalls(g, v, s, time, inp.reducedMotion);
     // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
     // source-over fill stays exact), the depth sort below.
     // (A campaign level's finish banner is a world caster of kind 'finish'; casters.ts draws it.)
@@ -827,7 +843,22 @@ export class Renderer {
     const looks = looksFor(inp.equipped);
     // A trial's layers redraw at most 10 times a second (≤ 12/s).
     sc.nubsSprite.cap = trial ? 0.1 : 0;
+    // A fall into a gap (or a stream sweeping the walker away) is drawn on the living sprite: it
+    // shrinks, drops (or slides off) and fades out.
+    const fall = dying >= 0 ? (s.death?.heroCause ?? '') : '';
+    const fell = fall === 'fall' || fall === 'swept';
+    if (fell) pose.melt = -1;
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr, trial ? heroArt(s.nubs.hero) : null);
+    sc.fallA = 1;
+    if (fell) {
+      const e = Math.min(1, dying / 0.7);
+      const sp = sc.nubsSprite;
+      sp.sx *= 1 - 0.8 * e;
+      sp.sy *= 1 - 0.8 * e;
+      if (fall === 'fall') sp.dy -= e * 12 * v.S;
+      else sp.jx += e * 36 * v.S;
+      sc.fallA = 1 - e;
+    }
     const beat = sc.death;
     if (dying >= 0 && beat.t < 0) startDeathBeat(beat, snap.nubsX, snap.nubsY, ux, looks, v.S * v.dpr, trial ? who : 'nubs');
     else if (beat.t >= 0) beat.t += adt;
@@ -870,6 +901,7 @@ export class Renderer {
     }
     drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapCloud, ux, uy, snap.cot);
+    drawElAir(g, v, s, time, inp.reducedMotion);
     drawAirParticles(g, sc.particles, v);
     if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {
@@ -924,6 +956,8 @@ export class Renderer {
       if (drawMeltMap(g, v, s, sc.map, o)) sc.passes++;
     }
 
+    // A Trial's telegraphs, over the world (canopies and clouds included) and under the dial.
+    if (inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause')) drawElCues(g, v, s, time, inp.reducedMotion, inp.highContrast, inp.dragging, sc.hud.bottom + 6);
     // Debug geometry.
     if (import.meta.env.MODE !== 'single' && inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 
@@ -936,7 +970,7 @@ export class Renderer {
       hi.cy = pose.y;
       hi.R = 40 * v.S;
       hi.theta = theta;
-      hi.dragging = inp.dragging;
+      hi.dragging = dragging;
       hi.dTheta = s.sun.dTheta;
       // An element's gauge reads its health.
       const heroGauge = trial !== null && s.nubs.hero !== 'nubs';
@@ -1009,7 +1043,8 @@ export class Renderer {
       // A relay's telegraph: "NEXT ▸ EMBER 3" under the dial (over it while the sun is below), over the sun.
       const tag = trial && inp.screen === 'play' && dying < 0 ? tagSoon(s) : null;
       const hh = sc.haloIn;
-      if (tag) drawNextChip(g, tag, nextTagTicks(s), hh.cx, hh.cy + (sc.sun.y > hh.cy ? -1 : 1) * (hh.R + 26), scale / 0.9);
+      const side = sc.sun.y > hh.cy ? -1 : 1;
+      if (tag) drawNextChip(g, tag, nextTagTicks(s), hh.cx, hh.cy + side * (hh.R + 26), scale / 0.9, side);
     }
 
     // HUD.
@@ -1037,11 +1072,19 @@ function heroPose(p: NubsPose, s: SimState, nb: NubsState, hp: number, meter: nu
   p.meter = meter / 100;
   p.hc = hc;
   p.cause = s.death?.heroCause ?? '';
+  const el = s.el as ElState;
+  const h = nb.hero;
+  const t = el.touch;
+  p.act = h === 'sprout' ? +(el.hold >= 0) : h === 'gust' ? (t & 2 ? 1 : t & 4 ? 2 : 0) : t & 3;
+  p.lean = Math.max(-1, Math.min(1, h === 'gust' ? windAt(s) / 45 : (el.dxTarget - el.dx) / 10));
 }
 
 /** Stamps the walking body. */
 function drawBodies(g: CanvasRenderingContext2D, sc: RenderScene, dpr: number): void {
+  const a = g.globalAlpha;
+  g.globalAlpha = a * sc.fallA;
   drawNubsSprite(g, sc.nubsSprite, sc.pose.x, sc.pose.y, dpr);
+  g.globalAlpha = a;
 }
 const pickBuf: Pickup[] = [];
 

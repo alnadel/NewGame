@@ -11,7 +11,10 @@
 // a Dare met (DARE ✓); the Day card names the day's Noon Heat when it rises.
 // Elementals: the TAG! stamp in the incoming element's face with a hop and 0.3 s of slow-mo,
 // CLEAN!, an element's fall. The snowman's steam, sweat, breath and frost stay his: an element's
-// states show in its art.
+// states show in its art. v2 (docs/ELEMENTALS_V2.md §7.10): a fire's sparks (water for ice and
+// puddles), ash and steam puffs, Ember feeding ("+n"), a grey puff for a refused verb, BUMP!, a hold's
+// ring, BRIDGE!/TREE!, Drip's splash ("+30"), a hot stone's steam or sparks, a gust's wind streaks
+// (none under reduced motion); no zoom pulses while another element walks (§1.4).
 
 import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
@@ -69,6 +72,9 @@ const TEAL: number = 0x2ec4b6;
 const GOLD: number = 0xffd36b;
 const SUN_GOLD: number = 0xffc23d;
 const ICE: number = 0x5ab8ff;
+const EMBER: number = 0xff8a1f;
+const LIME: number = 0x8bd650;
+const ASH: number = 0x8c8c8c;
 /** A DEEP pop shows at most this often (s). */
 const DEEP_POP_GAP = 4;
 /** Snow falling from the Cold Snap's cloud: flakes per second, and how long one takes to land (s). */
@@ -117,6 +123,8 @@ export class Fx {
   private trickSeen = false;
   private gainSeen = false;
   private readonly c2 = new Float64Array(2);
+  /** Zoom pulses are on (Nubs walks). */
+  private zoom = true;
 
   constructor(scene: RenderScene, clock: FixedClock) {
     this.sc = scene;
@@ -139,8 +147,10 @@ export class Fx {
     const sc = this.sc;
     const nx = s.nubs.x;
     const ny = s.nubs.y;
-    // On a Trial, Nubs' own ring cues (shade in and out, glare) follow only Nubs.
+    // On a Trial, Nubs' own ring cues (shade in and out, glare) follow only Nubs; so do the zoom
+    // pulses (§1.4: another element's taps and holds read the plain camera).
     const snowman = s.nubs.hero === 'nubs';
+    this.zoom = snowman;
     // The frame's frost gains pop as one (a snap's pour and the glass it lands come on one tick).
     let gainH = 0;
     for (const ev of events) {
@@ -270,7 +280,7 @@ export class Fx {
           break;
         }
         case 'cloudCapture':
-          addZoomPulse(sc.cam, 0.04, 0.4);
+          if (snowman) addZoomPulse(sc.cam, 0.04, 0.4);
           sc.nubs.happy = 0.9;
           break;
         case 'glareTouch':
@@ -421,6 +431,53 @@ export class Fx {
         case 'tagClean':
           addHeadline(sc.pops, 'CLEAN!', POP_PHEW, 1);
           break;
+        // Elementals v2 (docs/ELEMENTALS_V2.md §7.10): the objects' moments.
+        case 'burn':
+        case 'feed':
+          // A fire starts (melting ice or a drying puddle: water); Ember feeds on its own fire: "+n".
+          if (ev.e === 'feed') addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
+          this.burst(ev.x, ev.y, 8, 12, 70, ev.e === 'burn' && (ev.kind === 'ice' || ev.kind === 'puddle') ? ICE : EMBER);
+          break;
+        case 'burnOut':
+        case 'doused':
+        case 'fizz':
+          // Ash (a melt or a drying ends in steam); a doused fire's steam; a refused verb's grey puff.
+          if (ev.e === 'fizz') this.puff(nx, ny, ASH);
+          else this.puff(ev.x, ev.y, ev.e === 'burnOut' && ev.kind !== 'puddle' ? ASH : 0xffffff);
+          break;
+        case 'bump':
+          // The wall shatters, the walker hops: BUMP!
+          this.burst(ev.x, ev.y, 8, 16, 110, ev.kind === 'ice' ? 0xbfe6ff : ev.kind === 'gate' ? 0xc98b4e : 0x5e9a36);
+          addHeadline(sc.pops, 'BUMP!', POP_BANG, 0.8);
+          hop(sc.nubs, 6);
+          addShake(sc.cam, 3, 0.15);
+          break;
+        case 'grow':
+          // A hold starts: a lime ring at the site (the glow line is the telegraph's).
+          if (ev.on) addRing(sc.rings, ev.x, ev.y, 4, 22, 0.35, 2.5, 0.9, LIME);
+          break;
+        case 'grown':
+          addHeadline(sc.pops, ev.tree ? 'TREE!' : 'BRIDGE!', POP_MULT, 0.9);
+          this.burst(ev.x, ev.y, 12, 14, 70, LIME);
+          break;
+        case 'drink':
+          // A splash and the size it grew; Drip bulges for a moment (its art).
+          this.puff(nx, ny, ICE);
+          addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
+          sc.nubs.happy = Math.max(sc.nubs.happy, 0.3);
+          break;
+        case 'sizzle':
+          // A hot stone: Drip flashes and steams; Ember sparks.
+          if (ev.hero !== 'drip') this.burst(nx, ny, 10, 10, 80, 0xffd36b);
+          else {
+            sc.nubs.glare = 0.25;
+            this.puff(nx, ny, 0xffffff);
+          }
+          break;
+        case 'gust':
+          // Wind streaks across the view the way it blows (none under reduced motion).
+          if (!this.reducedMotion) this.streaks(ev.dir, 8);
+          break;
         default:
           break;
       }
@@ -466,7 +523,7 @@ export class Fx {
     sc.nubs.happy = 0.9;
     hop(sc.nubs, 6);
     this.clock.addHitStop(0.05);
-    addZoomPulse(sc.cam, 0.04, 0.4);
+    if (this.zoom) addZoomPulse(sc.cam, 0.04, 0.4);
   }
 
   /** n sparkles bursting out of (x, y, z) at about `speed` u/s. */
@@ -506,7 +563,7 @@ export class Fx {
       this.confetti(64);
       hop(sc.nubs, 9);
       sc.nubs.happy = 1;
-      addZoomPulse(sc.cam, 0.06, 0.5);
+      if (this.zoom) addZoomPulse(sc.cam, 0.06, 0.5);
       this.clock.addHitStop(0.06);
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2;
@@ -653,11 +710,7 @@ export class Fx {
       this.gustAcc += dt * 16;
       while (this.gustAcc >= 1) {
         this.gustAcc -= 1;
-        if (countKind(p, P_GUST) >= 14) continue;
-        const dir = gust > 0 ? -1 : 1;
-        const speed = rnd(760, 1100);
-        const gi = spawn(p, P_GUST, dir > 0 ? v.vx - 40 : v.vx + v.vw + 40, v.vy + rnd(0.1, 0.92) * v.vh, 0, dir * speed, 0, 0, (v.vw + 120) / speed + 0.2, rnd(60, 130), rnd(1.6, 3), 0xffffff);
-        p.vrot[gi] = 0;
+        this.streaks(gust > 0 ? -1 : 1, 1);
       }
     } else {
       this.gustAcc = 0;
@@ -689,6 +742,22 @@ export class Fx {
         const h = rnd(0, Math.PI * 2);
         spawn(p, P_FIREFLY, nb.x + Math.cos(a) * r, nb.y + Math.sin(a) * r, rnd(8, 30), Math.cos(h) * 12, Math.sin(h) * 12, 0, rnd(5, 8), 2.5, 2.5, 0xfff2a0);
       }
+    }
+  }
+
+  /** Eight puffs rising off (x, y): ash, steam or a splash. */
+  private puff(x: number, y: number, color: number): void {
+    for (let i = 0; i < 8; i++) spawn(this.sc.particles, P_PUFF, x + rnd(-12, 12), y + rnd(-4, 4), rnd(2, 12), rnd(-12, 12), rnd(-4, 4), rnd(14, 30), 0.8, 3, 8, color);
+  }
+
+  /** n wind streaks flying across the view the way `dir` blows (+1 east), at most 14 at once. */
+  private streaks(dir: number, n: number): void {
+    const p = this.sc.particles;
+    const v = this.sc.view;
+    for (let i = 0; i < n && countKind(p, P_GUST) < 14; i++) {
+      const speed = rnd(760, 1100);
+      const gi = spawn(p, P_GUST, dir > 0 ? v.vx - 40 : v.vx + v.vw + 40, v.vy + rnd(0.1, 0.92) * v.vh, 0, dir * speed, 0, 0, (v.vw + 120) / speed + 0.2, rnd(60, 130), rnd(1.6, 3), 0xffffff);
+      p.vrot[gi] = 0;
     }
   }
 

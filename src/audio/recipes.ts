@@ -470,30 +470,42 @@ export const RECIPES = {
     seq(v, t + 0.03, tonic5(p), [[0, 12], [0.07, 19], [0.14, 24]], 'bell', 0.06, 0.9, 1.6);
   },
 
-  // Elementals: the v1 ability cues (kept for the element verbs) and a relay's TAG.
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.10): the verbs' and objects' cues and a relay's TAG.
 
-  /** BLAZE: a crackle whoomp, three bandpassed noise bursts over a sine rising an octave. */
-  blaze(g, t, p) {
+  /** A fire starts: a crackle whoomp, three bandpassed noise bursts over a sine rising an octave (`level` 2: Ember feeding on its own fire, an octave up). */
+  burn(g, t, p) {
     const v = g.voice('sfx', t);
     for (let i = 0; i < 3; i++) v.burst(g.white, t + i * 0.05, 0.1, 0.002, 0.06, v.filter('bandpass', 1500 + 900 * i, 1.4));
-    const f = tonic5(p) / 2;
+    const f = (tonic5(p) / 2) * (p.level ?? 1);
     glide(v.tone('sine', f, t, 0.14, 0.02, 0.4).frequency, t, f, f * 2, 0.3);
   },
 
-  /** SEED: a sprout popping up, a sliding "pop" and a pluck up a fifth. */
-  seed(g, t, p) {
+  /** A hold starts growing: a sprout popping up, a sliding "pop" and a pluck up a fifth. */
+  grow(g, t, p) {
     const v = g.voice('sfx', t);
     glide(v.tone('sine', 300, t, 0.1, 0.003, 0.08).frequency, t, 300, 700, 0.06);
     seq(v, t + 0.05, tonic5(p), [[0, 0], [0.07, 7]], 'pluck', 0.1, 0.3, 1.5);
   },
 
-  /** CLOUDBURST: a run of droplet plinks falling down the scale. */
-  rain(g, t, p) {
+  /** Drip drinks: three droplet plinks falling down the scale (`level` 1: one soft plink at `degree`, the rain's patter). */
+  drink(g, t, p) {
     const v = g.voice('sfx', t);
-    for (let i = 0; i < 6; i++) {
-      const f = degreeHz(p.day ?? 1, 9 - i, 5, p.key ?? 0);
-      glide(v.tone('sine', f * 1.6, t + i * 0.055, 0.06, 0.002, 0.07).frequency, t + i * 0.055, f * 1.6, f, 0.05);
+    for (let i = 0; i < (p.level ?? 3); i++) {
+      const f = degreeHz(p.day ?? 1, (p.degree ?? 9) - i, 5, p.key ?? 0);
+      glide(v.tone('sine', f * 1.6, t + i * 0.055, 0.06 * (p.gain ?? 1), 0.002, 0.07).frequency, t + i * 0.055, f * 1.6, f, 0.05);
     }
+  },
+
+  /** A wall smashed: a soft low thud under a puff of muffled noise. */
+  bump(g, t) {
+    const v = g.voice('sfx', t);
+    glide(v.tone('sine', 130, t, 0.2, 0.004, 0.2).frequency, t, 130, 60, 0.16);
+    v.burst(g.white, t, 0.09, 0.002, 0.09, v.filter('lowpass', 700, 0.8));
+  },
+
+  /** A fall: a soft triangle sliding down two octaves as it fades. */
+  fall(g, t) {
+    glide(g.voice('sfx', t).tone('triangle', 660, t, 0.1, 0.01, 0.7).frequency, t, 660, 160, 0.65);
   },
 
   /** TAG: a two-note chord (root and fifth), answered by the third and octave on bells. */

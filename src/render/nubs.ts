@@ -194,13 +194,17 @@ export interface NubsPose {
   reducedMotion: boolean;
   /**
    * Elementals (render/heroes.ts): the lit sum c (0..10), whether the walker is safe, the raw meter
-   * 0..1, high contrast and how it died. Nubs' own art reads none of them.
+   * 0..1, high contrast and how it died; its act (Ember 1 doused; Sprout 1 holding; Gust 1 soaked, 2
+   * fogged) and lean (−1..1: Drip toward its steer target, Gust with the wind). Nubs' own art reads
+   * none of them.
    */
   c: number;
   safe: boolean;
   meter: number;
   hc: boolean;
   cause: string;
+  act: number;
+  lean: number;
 }
 
 export function createPose(): NubsPose {
@@ -231,6 +235,8 @@ export function createPose(): NubsPose {
     meter: 1,
     hc: false,
     cause: '',
+    act: 0,
+    lean: 0,
   };
 }
 

@@ -1,6 +1,9 @@
 // SimEvents (and campaign view edges) → sound cues, with throttles for the bursty ones and music
 // ducks under the big moments, plus the per-frame drive of every continuous layer (via Scene).
 // Pure logic: it talks to the WebAudio side through RouterOutput, so tests drive it with a fake.
+// Elementals v2 (docs/ELEMENTALS_V2.md §7.10): every verb and object event has a cue or an explicit
+// silence, the rain patters while the walker is under it (the touch event's bit 2), and a Trial's
+// sun hold plays no lock cue (the view's health marks a Trial).
 
 import type { SimEvent } from '../core/sim/events.ts';
 import type { SfxName, SfxParams } from './recipes.ts';
@@ -76,6 +79,10 @@ export class SfxRouter {
   private locked = false;
   private eclipse = 0;
   private progress = -1;
+  /** Elementals v2: the walker is under rain (the patter), and the next drop's countdown (s) and count. */
+  private wet = false;
+  private patter = 0;
+  private drops = 0;
 
   /** `clockMs` is a real-time clock in milliseconds (performance.now in the browser). */
   constructor(out: RouterOutput, clockMs: () => number) {
@@ -112,6 +119,10 @@ export class SfxRouter {
       this.duckLeft -= dt;
       scene.duck = Math.min(scene.duck, this.duckLevel);
     }
+    if (this.wet && view.screen === 'play' && (this.patter -= dt) <= 0) {
+      this.patter = 0.17;
+      this.cue('drink', { day: view.day, level: 1, degree: 4 + ((this.drops++ * 3) % 5), gain: 0.3 });
+    }
     this.out.applyScene(scene);
     if (this.pulse.tick(dt, scene.heartbeat)) {
       const strong = (view.health ?? view.chill) < 10;
@@ -131,6 +142,7 @@ export class SfxRouter {
     this.gust = 0;
     this.locked = false;
     this.eclipse = 0;
+    this.wet = false;
   }
 
   /** Concept signatures from the view: a gust starting, the lock shutting or opening, an eclipse, the final stretch. */
@@ -141,7 +153,8 @@ export class SfxRouter {
     const progress = v.progress ?? -1;
     if (v.screen === 'play' && (v.phase === 'day' || v.phase === 'night')) {
       if (gust !== 0 && this.gust === 0 && this.gusts.tryAcquire(this.clockMs())) this.cue('gust', { index: gust });
-      if (locked !== this.locked) this.cue('lock', { index: locked ? 0 : 1 });
+      // A Trial's sun hold is the TAG's own moment (its cue covers it): no lock cue there.
+      if (locked !== this.locked && v.health === undefined) this.cue('lock', { index: locked ? 0 : 1 });
       if (eclipse > 0 && this.eclipse === 0) this.cue('eclipse', { day: v.day });
       if (progress >= FINAL_STRETCH && this.progress >= 0 && this.progress < FINAL_STRETCH) this.cue('finishNear', { day: v.day });
     }
@@ -254,6 +267,36 @@ export class SfxRouter {
         return this.cue('tag', { day });
       case 'tagClean':
         return this.cue('phew', { day });
+      // Elementals v2: the verbs and the objects.
+      case 'burn':
+        return this.cue('burn', { day });
+      case 'feed':
+        return this.cue('burn', { day, level: 2 });
+      case 'doused':
+        return this.cue('snapEnd', { day, level: 2 });
+      case 'fizz':
+        return this.cue('uiError');
+      case 'bump':
+        return this.cue('bump');
+      case 'fall':
+        return this.cue('fall');
+      case 'grow':
+        if (ev.on) this.cue('grow', { day });
+        return;
+      case 'grown':
+        return this.cue('bloom', { day });
+      case 'drink':
+        return this.cue('drink', { day });
+      case 'sizzle':
+        return ev.hero === 'drip' ? this.cue('snapEnd', { day, level: 2 }) : this.cue('bell', { day, degree: 7 }, true);
+      case 'gust':
+        return this.cue('gust', { index: ev.dir });
+      case 'touch':
+        // The rain's patter plays while the walker is under rain (update()).
+        this.wet = (ev.bits & 2) !== 0;
+        return;
+      case 'burnOut':
+        return;
       case 'start':
       case 'go':
       case 'shadeExit':

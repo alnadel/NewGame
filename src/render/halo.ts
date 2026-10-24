@@ -28,12 +28,14 @@
 // target dot (the glass layer hides).
 // Elementals (HaloInput.trial): on a Trial the arcs are the walking element's go arcs, drawn as the
 // teal ones in its colour on an ink underlay, with its pattern (Ember amber with outward ray ticks
-// and gold dots on the glare it feeds on, and no red glare; Sprout lime in leaf dashes; a narrow run
-// wears a target dot), and the gauge is frost-white like Nubs' (amber below 60, hot below 25, so the
-// element's colour only ever means go); a relay's telegraph dashes the incoming element's arcs
-// outside. Nubs keeps the teal dial.
+// and no red glare; Sprout lime in leaf dashes; a narrow run wears a target dot); Drip's and Gust's
+// legs hold the sun: the padlock and no arcs. The gauge is the walker's meter in its colours
+// (docs/ELEMENTALS_V2.md §2: Flame orange, amber below 60, ash below 25; Size blue, amber, red; Sap
+// green, no danger colours; Lift sky white on a lilac rim, amber, red), dashed and pulsing below a
+// steady health of 25 (never for Sap); a relay's telegraph dashes the incoming element's arcs
+// outside (Drip's in its blue). Nubs keeps the teal dial.
 
-import { coolLine, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
+import { coolLine, elHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
@@ -63,7 +65,16 @@ const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
 /** Elementals: each element's go colour. */
-const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), drip: TEAL, sprout: hex('#8BD650'), gust: TEAL };
+const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: 0xff8a1f, drip: 0x3faef7, sprout: 0x8bd650, gust: 0xa99cc6 };
+/** Elementals v2: an element's gauge from full to low (§2): its colour, below 60, below 25 (Sprout's Sap has no danger colours). */
+const GAUGE: Readonly<Record<HeroId, readonly number[]>> = {
+  nubs: [],
+  ember: [0xff7a1a, 0xffb347, 0x8c8c8c],
+  drip: [0x3faef7, AMBER, 0xff5d3d],
+  sprout: [0x6cc04a, 0x6cc04a, 0x6cc04a],
+  gust: [0xf4f1fb, AMBER, 0xff5d3d],
+};
+const LILAC = 0xa99cc6;
 const LEAF_DASH = [8, 6];
 
 /** An element's go colour. */
@@ -331,7 +342,9 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.stroke();
   }
 
-  if (inp.sunUp && !inp.blind) {
+  // Drip's and Gust's legs hold the sun: the padlock, and no go arcs.
+  const held = st !== null && inp.locked;
+  if (inp.sunUp && !inp.blind && !held) {
     // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
     const ga = inp.guideAlpha * A;
     // The v1.6 rule layers (landing, deep band) read a rule, not the teal guide: like the other v1.6
@@ -427,7 +440,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineCap = 'butt';
     }
   }
-  if (inp.sunUp && tag && !inp.blind) {
+  if (inp.sunUp && tag && !inp.blind && !held) {
     // A relay's telegraph: the incoming element's arcs, dashed just outside the ring.
     g.setLineDash(DASH);
     g.lineWidth = 3;
@@ -437,7 +450,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.stroke();
     g.setLineDash(NO_DASH);
   }
-  if (inp.sunUp && solo !== 'ember') {
+  if (inp.sunUp && solo !== 'ember' && !held) {
     // Glare arcs: red with hatching, always shown (but to Ember, which feeds on glare: its gold dots).
     let anyGlare = false;
     for (let b = 0; b < 360; b++) {
@@ -562,27 +575,28 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     // An element's gauge turns at 60 and 25 health.
     const wl = hd ? 60 : whiteLine(inp.maxChill);
     const cl = hd ? 25 : coolLine(inp.maxChill);
-    for (const line of [wl, cl]) {
+    for (const line of lead === 'sprout' ? [] : [wl, cl]) {
       const a = top + (TAU * line) / 100;
       g.moveTo(cx + Math.cos(a) * (gR - 3), cy + Math.sin(a) * (gR - 3));
       g.lineTo(cx + Math.cos(a) * (gR + 3), cy + Math.sin(a) * (gR + 3));
     }
     g.stroke();
     if (chill > 0.5) {
-      const red = chill < cl;
+      // An element's low cue follows its steady health (its taps and swipes are not damage; never Sap).
+      const red = hd ? lead !== 'sprout' && elHealth(st as SimState) < 25 : chill < cl;
       const white = chill >= wl;
       const end = top + (TAU * chill) / 100;
       g.lineCap = 'round';
       g.lineWidth = 5;
-      g.strokeStyle = cssa(INK, 0.35 * gA);
+      g.strokeStyle = lead === 'gust' ? cssa(LILAC, 0.9 * gA) : cssa(INK, 0.35 * gA);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
       g.stroke();
       g.lineWidth = 3;
       if (red) g.setLineDash([4, 3]);
       const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      // An element's gauge is frost-white like Nubs' when full: its colour means only "go".
-      g.strokeStyle = cssa(red ? HOT : white ? FROST : AMBER, gA * pulse);
+      // An element's gauge is its meter in its colours (§2).
+      g.strokeStyle = cssa(hd ? (GAUGE[lead][chill < 25 ? 2 : chill < 60 ? 1 : 0] as number) : red ? HOT : white ? FROST : AMBER, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
       g.stroke();
@@ -706,8 +720,9 @@ function at(g: CanvasRenderingContext2D, inp: HaloInput, a: number, r: number, l
 }
 
 /**
- * An element's pattern on its go arcs `m` (see the header): Ember's ray ticks every 6° and gold food
- * dots, and a target dot on every run under 8°.
+ * An element's pattern on its go arcs `m` (see the header): Ember's ray ticks every 6° and a target
+ * dot on every run under 8°. (v1's gold food dots on glare went with v1's Ember: in v2 glare is
+ * plain full light.)
  */
 function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uint8Array, col: number, a: number): void {
   const R = inp.R;
@@ -727,23 +742,8 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
     g.strokeStyle = cssa(col, a);
     g.stroke();
   }
-  // Dots (round caps on points): Ember's food, the glare that is also safe, gold outside its rays...
+  // A narrow run is a target, not a sliver: a white dot ringed in the element's colour.
   let k = 0;
-  g.beginPath();
-  for (let b = 0; b < 360 && hero === 'ember'; b += 6) {
-    if (inp.glare[b] !== 0 && m[b] !== 0) {
-      at(g, inp, b, R + 14, false);
-      at(g, inp, b, R + 14, true);
-      k++;
-    }
-  }
-  if (k > 0) {
-    g.lineWidth = 6 * T;
-    g.strokeStyle = cssa(GOLD_FOOD, a);
-    g.stroke();
-  }
-  // ...and a narrow run is a target, not a sliver: a white dot ringed in the element's colour.
-  k = 0;
   g.beginPath();
   for (let i = 0; i < n; i++) {
     const b0 = runBuf[2 * i] as number;
@@ -763,7 +763,6 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
     g.stroke();
   }
 }
-const GOLD_FOOD = hex('#FFD84A');
 
 /**
  * The glass rim (px outside R): clear of the bud glow at R + 11, 6 px outside the drag arrow at
