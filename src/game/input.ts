@@ -596,7 +596,10 @@ export class Input {
     this.release = 0;
   }
 
-  /** Forgets accumulated motion, edges and queued verbs (the finger state is kept). */
+  /**
+   * Forgets accumulated motion, edges and queued verbs (the finger state is kept); a queued release
+   * stays, so a hold let go before a pause still lets go after the resume.
+   */
   clearPending(): void {
     this.pending = 0;
     this.downEdge = false;
@@ -605,7 +608,10 @@ export class Input {
     this.release = 0;
     this.snapReq = false;
     this.steerPending = 0;
+    let rel = false;
+    for (let k = 0; k < this.qN; k++) rel ||= this.qV[(this.qHead + k) % QUEUE] === VERB_RELEASE;
     this.qN = 0;
+    if (rel) this.queue(VERB_RELEASE);
   }
 
   /** A synthetic tap (Space/Enter start or retry): downEdge + upEdge in one batch. */

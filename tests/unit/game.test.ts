@@ -716,6 +716,16 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
       b.inp.dispose();
     }
 
+    // A pause (releaseAll) then a resume (releaseAll again): the hold's release still lands.
+    const r = mk('grow');
+    r.p.onDown(pe(1, 100, 400, 0));
+    r.inp.takeFrames(1, 230);
+    r.inp.releaseAll();
+    r.inp.releaseAll();
+    r.inp.clearPending();
+    expect(sum(r.inp.takeFrames(1, 240)).verbs).toEqual([[VERB_RELEASE, 0, 0]]);
+    r.inp.dispose();
+
     // A steer press ends on cut(true) (no edges: it never held the sun).
     const c = mk('steer');
     c.p.onDown(pe(1, 100, 300, 0));
