@@ -748,74 +748,80 @@ Sap: 80 + 5 × 15 = 155 against 108 for the four bridges: two small trees for th
 
 ### 5.6 T6 "Rain Garden": Gust and Sprout (Nubs ▸ Gust ▸ Sprout ▸ Nubs)
 
+As re-authored by the lead's decisions (§13.3): the Nubs legs sit nearer midday and the garden rain
+pays Sap that Sprout needs.
+
 | Field | Value |
 |---|---|
 | id / chapter / biome | 1006 / 9 (Giant Country) / meadow |
-| time | start 150 (8:30 AM), relays `[{246, gust}, {390, sprout}, {576, nubs}]`, length 490 (to 4:40 PM). Legs 6.7 / 10.0 / 12.9 / 4.4 s |
-| drain / breeze / intro | 28 / 0 / null |
+| time | start 226 (9:46 AM), relays `[{322, gust}, {437, sprout}, {568, nubs}]`, length 402 (to 4:28 PM). Legs 6.7 / 8.0 / 9.1 / 4.2 s |
+| drain / breeze / intro | 38 / 0 / null |
 | goal / Dare / Steady | finish / `trees ≥ 3` / 25 |
-| interactions | I7 early in Gust's leg the trail wants an east wind, late it wants west (momentum matters); I12+I7 the hand-off fog veils Sprout's first sites unless Gust blows it off; I9+I7 the garden cloud waits east of Sprout's first stretch, and the same west wind brings it on: rain feeds Sprout's Sap and grows the garden plot ×3; I10 trees shade Nubs' last leg |
+| interactions | I7 early in Gust's leg the trail wants an east wind, late it wants west (momentum matters); I12+I7 the hand-off fog veils Sprout's first sites unless Gust blows it off west; I9+I7 the garden cloud waits east of Sprout's first stretch, and the same west wind brings it on: rain feeds Sprout's Sap (Sprout starts at 65, so it is not lost at the cap) and grows the garden plot ×3; I10 trees shade Nubs' last leg |
 
 | m | kind | dx | drift / r | leg s | arrives at dx (left alone) |
 |---|---|---|---|---|---|
-| 280 | fog | +90 at wake | −14 / 70 | Gust 2.4 | +10 |
-| 300 | rain (waits east) | +130 | 0 / 55 | Gust 3.8 | +130 (a west wind before 3.8 s brings it on) |
-| 312 | rain | −110 | +22 / 60 | Gust 4.6 | +16 |
-| 352 | fog | −80 | +14 / 75 | Gust 7.4 | 0 |
-| 360 | rain (waits west) | −150 | 0 / 55 | Gust 7.9 | −150 (an east wind brings it on) |
-| 402 | fog (hand-off) | +60 | −10 / 70 | Sprout 0.8 | +3: veils Sprout's sites until Sprout passes it (Sprout 1.5 s); wakes 4.9 s before the TAG |
-| 414 | rain (the garden cloud) | +120 | +6 / 85 | Sprout 1.7 | +154 (dry); wakes 4.05 s before the TAG; ~120 u of west wind puts it over Sprout and the garden plot |
-| 418 | plot | +44 | | Sprout 1.9 | the garden plot |
-| 464 | gap | 0 | r 14 (28) | Sprout 5.1 | contact 4.94 s |
-| 500 | stream | 0 | r 16 (32) | Sprout 7.6 | holdable 2.78 / contact 7.41 |
-| 520 | plot | −44 | | Sprout 9.0 | |
-| 545 | gap | 0 | r 16 (32) | Sprout 10.8 | holdable 5.91 / contact 10.54 |
-| 590 | plot | +44 | | Nubs 1.0 | in Sprout's window for its last 3.9 s |
-| 606 | plot | −44 | | Nubs 2.1 | last 2.8 s |
-| 620 | plot | +44 | | Nubs 3.1 | last 1.8 s |
+| 355 | rain | −110 at wake | +22 / 60 | Gust 2.3 | +16 (an east wind keeps it off) |
+| 365 | rain (waits east) | +130 | 0 / 55 | Gust 3.0 | +130 (a west wind brings it on) |
+| 372 | rain | +110 | −24 / 60 | Gust 3.5 | −27 (a west wind keeps it off) |
+| 394 | fog | −80 | +14 / 75 | Gust 5.0 | 0 |
+| 413 | rain (waits west) | −150 | 0 / 55 | Gust 6.3 | −150 (an east wind brings it on) |
+| 449 | fog (hand-off) | −35 | +6 / 55 | Sprout 0.8 | −1: veils Sprout's sites until Sprout passes it (Sprout 1.4 s); a west wind clears it; wakes 4.9 s before the TAG |
+| 461 | rain (the garden cloud) | +140 | 0 / 100 | Sprout 1.7 | +140 (dry); wakes 4.05 s before the TAG; ~100 u of west wind puts it over Sprout and the garden plot |
+| 464 | plot | +43 | | Sprout 1.9 | the garden plot |
+| 511 | gap | 0 | r 14 (28) | Sprout 5.1 | contact 4.94 s |
+| 530 | plot | −44 | | Sprout 6.5 | |
+| 548 | stream | 0 | r 14 (28) | Sprout 7.7 | holdable 2.65 / contact 7.51 |
+| 561 | plot | +56 | | Sprout 8.6 | |
+| 582 | plot | +44 | | Nubs 1.0 | in Sprout's window for its last 3.9 s |
+| 597 | plot | −43 | | Nubs 2.0 | last 2.8 s |
+| 610 | plot | +40 | | Nubs 2.9 | last 1.9 s |
 
-Sap: 80 + 5 × 12.9 ≈ 145, + ≈ 20 from the garden rain, against 92 for the bridges: three trees with
-the rain, two without (G7).
+Sap: 65 + 6 × 9.1 ≈ 120, + ≈ 25 from the garden rain, against 56 for the bridges: three trees with
+the rain, two without (G7 measures Sap 65 vs 41 and 3 trees vs 2).
 
 ### 5.7 T7 "Five Elements": the finale (Nubs ▸ Gust ▸ Sprout ▸ Ember ▸ Drip ▸ Nubs)
+
+As re-authored by the lead's decisions (§13.3): the Nubs legs sit nearer midday, the garden rain pays
+Sap that Sprout needs, and Drip's stretch needs its steer.
 
 | Field | Value |
 |---|---|
 | id / chapter / biome | 1007 / 17 (Storm Pass) / meadow |
-| time | start 60 (7:00 AM), relays `[{156, gust}, {264, sprout}, {384, ember}, {498, drip}, {598, nubs}]`, length 600 (to 5:00 PM). Legs 6.7 / 7.5 / 8.3 / 7.9 / 6.9 / 4.3 s |
-| drain / breeze / intro | 30 / **−16** (west) / null |
-| goal / Dare / Steady | finish / `grove ≥ 4` (trees standing at the finish) / 25 |
-| interactions | all of I1-I12. Gust: east first (the west-waiting cloud), then west for the hand-off (clears Sprout's fog and brings the garden cloud's rain onto Sprout and the garden plot). Sprout: four plots, Sap for four trees only with the garden rain. Ember: the breeze spreads fire west, so burning the bramble at 413 burns the tree on plot 410; a fourth tree needs Ember to take the bump instead. A shower crosses the gate at 446. Then swing the sun from Ember's light to Drip's shade. |
+| time | start 86 (7:26 AM), relays `[{182, gust}, {282, sprout}, {394, ember}, {494, drip}, {590, nubs}]`, length 564 (to 4:50 PM). Legs 6.7 / 6.9 / 7.8 / 6.9 / 6.7 / 4.2 s |
+| drain / breeze / intro | 42 / **−16** (west) / null |
+| goal / Dare / Steady | finish / `grove ≥ 3` (trees standing at the finish) / 25 |
+| interactions | all of I1-I12. Gust: T6's weather with its drifts set against the breeze, then west for the hand-off (clears Sprout's fog and brings the garden cloud's rain onto Sprout and the garden plot). Sprout: four plots, Sap for three trees only with the garden rain. Ember: the breeze spreads fire west, so burning the bramble at 423 burns the tree on plot 420; a fourth tree needs Ember to take the bump instead. A shower crosses the gate at 453. Then swing the sun from Ember's light to Drip's shade: Drip must steer off the trail for its puddles and round the hot stones on it. |
 
 | m | kind | dx | drift / r | leg s | arrives at dx (left alone) |
 |---|---|---|---|---|---|
-| 186 | rain | +125 at wake | −4 (eff. −20) / 55 | Gust 2.1 | +11 |
-| 206 | rain (waits east) | +120 | +16 (eff. 0) / 55 | Gust 3.5 | +120 (a west wind before 3.5 s brings it on) |
-| 214 | fog | −110 | +30 (eff. +20.4) / 70 | Gust 4.0 | +7 |
-| 236 | rain | +100 | 0 (eff. −16) / 60 | Gust 5.6 | +9 |
-| 248 | rain (waits west) | −150 | +16 (eff. 0) / 55 | Gust 6.4 | −150 (an east wind brings it on) |
-| 276 | fog (hand-off) | −30 | +16 (eff. +6.4) / 70 | Sprout 0.8 | +7: veils Sprout's sites until Sprout passes it (Sprout 1.5 s); wakes 4.9 s before the TAG |
-| 288 | rain (the garden cloud) | +150 | +8 (eff. −8) / 80 | Sprout 1.7 | +104: waters the garden plot, misses Sprout; ~130 u of west wind puts it over both; an east wind takes it off both |
-| 288 | plot | +44 | | Sprout 1.7 | the garden plot (veiled by the fog if it stays) |
-| 330 | plot | −44 | | Sprout 4.6 | |
-| 338 | gap | 0 | r 14 (28) | Sprout 5.1 | contact 4.94 s |
-| 364 | stream | 0 | r 14 (28) | Sprout 6.9 | holdable 2.09 / contact 6.74 |
-| 410 | plot | −44 | | Ember 1.8 | downwind of the bramble at 413; in Sprout's window for its last 3.1 s |
-| 413 | bramble | 0 | | Ember 2.0 | |
-| 416 | plot | +44 | | Ember 2.2 | upwind: safe; last 2.6 s |
-| 428 | puddle | 0 | | Ember 3.1 | |
-| 446 | rain (shower) | +133 at wake | −24 (eff. −40) / 55 | over the gate from Ember 0.5 to 3.3 s | −96 (dry) |
-| 446 | gate | 0 | | Ember 4.3 | sweet window after the shower: ≈ 0.8 s |
-| 468 | bramble | 0 | | Ember 5.8 | |
-| 480 | stone | 0 | | Ember 6.7 | |
-| 522 | ice | 0 | | Drip 1.7 | in Ember's window for its last 3.2 s |
-| 532 | puddle | −18 | | Drip 2.4 | |
-| 546 | ice | 0 | | Drip 3.3 | last 1.5 s |
-| 556 | stone | +12 | | Drip 4.0 | |
-| 570 | puddle | +16 | | Drip 5.0 | |
-| 582 | stone | −10 | | Drip 5.8 | |
+| 214 | rain | −110 at wake | +38 (eff. +22) / 60 | Gust 2.2 | +16 |
+| 222 | rain (waits east) | +130 | +16 (eff. 0) / 55 | Gust 2.8 | +130 (a west wind brings it on) |
+| 230 | rain | +110 | −8 (eff. −24) / 60 | Gust 3.3 | −27 |
+| 245 | fog | −80 | +24 (eff. +14.4) / 75 | Gust 4.4 | +2 |
+| 263 | rain (waits west) | −150 | +16 (eff. 0) / 55 | Gust 5.6 | −150 (an east wind brings it on) |
+| 294 | fog (hand-off) | −60 | +16 (eff. +6.4) / 55 | Sprout 0.8 | −23: veils Sprout's sites until Sprout passes it; a west wind clears it; wakes 4.9 s before the TAG |
+| 306 | rain (the garden cloud) | +140 | +16 (eff. 0) / 100 | Sprout 1.7 | +140 (dry); wakes 4.05 s before the TAG; a west wind puts it over Sprout and the garden plot |
+| 309 | plot | +44 | | Sprout 1.9 | the garden plot (veiled by the fog if it stays) |
+| 340 | plot | −36 | | Sprout 4.0 | |
+| 355 | gap | 0 | r 12 (24) | Sprout 5.1 | contact 4.90 s |
+| 383 | stream | 0 | r 12 (24) | Sprout 7.0 | holdable 1.99 / contact 6.84 |
+| 420 | plot | −44 | | Ember 1.8 | downwind of the bramble at 423; in Sprout's window for its last 3.1 s |
+| 423 | bramble | 0 | | Ember 2.0 | |
+| 426 | plot | +44 | | Ember 2.2 | upwind: safe; last 2.6 s |
+| 437 | puddle | 0 | | Ember 3.0 | |
+| 453 | rain (shower) | +133 at wake | −24 (eff. −40) / 55 | over the gate from Ember 0.4 to 3.1 s | −96 (dry) |
+| 453 | gate | 0 | | Ember 4.1 | sweet window after the shower: ≈ 0.8 s |
+| 472 | bramble | 0 | | Ember 5.4 | |
+| 483 | stone | 0 | | Ember 6.2 | |
+| 518 | ice | 0 | | Drip 1.7 | in Ember's window for its last 3.2 s; melted, its puddle is the one on the trail |
+| 529 | puddle | −22 | | Drip 2.4 | off the walking line |
+| 540 | stone | 0 | | Drip 3.2 | on the trail (was the second ice wall) |
+| 552 | stone | +3 | | Drip 4.0 | |
+| 562 | puddle | +24 | | Drip 4.7 | off the walking line |
+| 575 | stone | −2 | | Drip 5.6 | |
 
-Sap: 80 + 5 × 8.3 ≈ 122, + ≈ 20 from the garden rain, against 56 for the bridges: four trees (80)
+Sap: 70 + 6 × 7.8 ≈ 117, + ≈ 20 from the garden rain, against 48 for the bridges: three trees (60)
 only with the rain. Chip text for T7 is "ALL FIVE ELEMENTS" (six names do not fit a 360 px chip).
 
 ---
@@ -920,7 +926,7 @@ contract; plays Gust legs with the Gust policy (salt 0).
 | G5 | Anti-trivial: (a) `idle` (no input) fails; (b) for every element leg, pathBot with that leg's verb switched off (no taps, holds, steers or swipes there) fails; (c) T1: a tap-on-sight Ember (taps each wall as soon as it is a target) keeps a steady-health margin at least 15 lower than pathBot; (d) four spam bots, swiping east every 30 ticks, west every 30, east every 90 and west every 90 (no other Gust input), each fail in every Gust leg of T4, T6 and T7. |
 | G5b | pathBot's verbs with θ fixed at the best of 36 constant angles (10° apart, no turning) fail each Trial. |
 | G6 | The Dare is met on 10-60% of the G3 and G4 runs combined. |
-| G7 | Mixers mix (all hard, all fail `--check`): T5 pathBot without melting the two Drip-stretch ice walls fails; T6 pathBot without Gust's swipes after the hand-off fog wakes keeps a Sprout Sap margin at least 10 lower **and** grows fewer than 3 trees; T7 pathBot planting plot 410 and burning the bramble at 413 ends with that tree gone, and without the hand-off swipes it keeps a Sprout Sap margin at least 10 lower. |
+| G7 | Mixers mix (all hard, all fail `--check`): T5 pathBot without melting the two Drip-stretch ice walls fails; T6 pathBot without Gust's swipes after the hand-off fog wakes keeps a Sprout Sap margin at least 10 lower **and** grows fewer than 3 trees; T7 pathBot planting the plot downwind of an Ember-stretch wall (plot 420, the bramble at 423) grows a tree there and ends with it gone, and without the hand-off swipes it keeps a Sprout Sap margin at least 10 lower. |
 
 ### 6.5 Seed search and calibration bounds
 
@@ -1860,7 +1866,7 @@ commits or pushes outside the normal merge flow. Never run `playwright install`.
 | 4 | Weather Vane | NUBS ▸ GUST ▸ NUBS | Swipe to blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him. | Reach the finish | Finish · Rain ride 1 s · Meters ≥ 30 | Dare · Ride a rain cloud 1 s |
 | 5 | Steam | NUBS ▸ EMBER ▸ DRIP ▸ NUBS | Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember! | Reach the finish | Finish · Drink 4 · Meters ≥ 25 | Dare · Drink 4 puddles |
 | 6 | Rain Garden | NUBS ▸ GUST ▸ SPROUT ▸ NUBS | Clear the fog for Sprout and blow the rain onto its path: rain feeds plants. | Reach the finish | Finish · Grow 3 trees · Meters ≥ 25 | Dare · Grow 3 trees |
-| 7 | Five Elements | ALL FIVE ELEMENTS | Five elements, one day. The breeze spreads fire west: keep four trees. | Reach the finish | Finish · 4 trees standing · Meters ≥ 25 | Dare · Keep 4 trees standing |
+| 7 | Five Elements | ALL FIVE ELEMENTS | Five elements, one day. The breeze spreads fire west: keep three trees. | Reach the finish | Finish · 3 trees standing · Meters ≥ 25 | Dare · Keep 3 trees standing |
 
 The chip glyph is the intro element's glyph, or `elementals` for T5-T7. `levelCardFit` checks every
 blurb at 360, 390 and 1280.
@@ -1894,7 +1900,7 @@ way."
 
 **MIXER_TIPS:** T5 `go`: "Melt the ice past the Tag Stone for Drip. Wait out the shower before you
 burn."; T6 `go`: "Blow the fog off Sprout's path and the rain onto it: rain feeds Sprout."; T7 `go`:
-"The breeze blows west and fire spreads with it. Keep four trees standing!"
+"The breeze blows west and fire spreads with it. Keep three trees standing!"
 
 ### 10.4 Death lines (`elDeath`; `{time}` today's exact clock; `{Name}` the walker)
 
@@ -2006,6 +2012,7 @@ lever with its reason), deviations, gate results and the final `build:single`.
 | merged (c12be45) | 824,831 B | +42,857 over C0b | 41,984 B summed: 873 B over, from the 5,456 B reserve |
 | **release (this record)** | **824,832 B** | | **≤ 829,440 B: pass (4,608 B under)** |
 | fix round (13.6) | 828,328 B | +3,496 | ≤ 829,440 B: pass (1,112 B under) |
+| calibration round (13.7) | 828,294 B | −34 | ≤ 829,440 B: pass (1,146 B under) |
 
 The merged build is 795 B less than the four measurements added up, because 1,293 B of core
 `elements.ts` that ART's reads pull in were counted in both CORE's and ART's branch deltas.
@@ -2030,7 +2037,7 @@ merge. The integrator then made these fixes and applied every merge note:
 - `session.testSkipToLeg`: when the fast-forwarding bot leaves the sun mid-drag, a tap at 0 °/s
   ends it (ART's note). `render.spec`'s lift-tap workaround is gone.
 - `tests/e2e/elementals.spec.ts`: T4's swipe costs exactly 8 Lift, now that CORE is merged and T4
-  keeps costMul 1. `?trial=6` starts Nubs at 80, the pin's `tune.legStart`. Element deaths in e2e go
+  keeps costMul 1. `?trial=6` starts Nubs at 80, the pin's `tune.legStart` (60 since 13.7). Element deaths in e2e go
   through `forceDeath` only on Nubs legs, as UI asked.
 - `src/config/tuning.ts`: a comment records the global calibration pass beside its numbers (§6.5).
 - CORE's `touch` event and bits, `el.cause` and `el.fell` are what ART reads (`renderer.ts`,
@@ -2056,32 +2063,59 @@ merge. The integrator then made these fixes and applied every merge note:
 | T3 Green Bridge | 3584 | 28 → 34 | 80/80/80 | | as §5.3 | trees 2 |
 | T4 Weather Vane | 605 | 28 → 34 | 80/80/80 | | as §5.4 | cloudRide 60 (the +25% target measured the same share) |
 | T5 Steam | 1113 | 28 → 34 | 80/60/50/80 | costMul, evapMul 1.2 | puddles 425 −18 → −26, 492 18 → 26 (an unsteered Drip drank them), 530 −16 → −17 (G0 clearance) | drinks 4 → 5 ("Drink 5", "Drink 5 puddles") |
-| T6 Rain Garden | 73 | 28 → 34 | 80/65/100/80 | costMul 1.2 | **added** to Gust's leg: rain r330:82:90:0 (a wide cloud waiting east; without it Gust's leg passed with no swipe and the west spams passed); plots 606 −44 → −43, 620 44 → 40 (G0 clearance) | trees 3 |
-| T7 Five Elements | 20 | 30 → 36 | 80/70/100/60/50/80 | evapMul 1.2 | **added** to Gust's leg: rain r196:82:90:16 (waits east; the west spams passed without it); plot 288 44 → 52; stones 556 12 → 4, 582 −10 → −2; puddles 570 16 → 24, 532 −18 → −14 | grove 4 → 3 ("3 trees standing", "Keep 3 trees standing", blurb "…keep three trees.") |
+| T6 Rain Garden | 198 | 28 → 38 | 60/60/65/80 | | re-timed and re-authored by the lead's decisions (below; §5.6): start 150 → 226, relays 322/437/568, length 402; Gust's weather rebuilt (the first pin's added r330 gone); hand-off fog f449:-35:55:6, garden cloud r461:140:100:0; crossings 3 → 2; plots 464 44 → 43, 561 44 → 56 (G0 clearance) | trees 3 (now reached: 21%) |
+| T7 Five Elements | 1266 | 30 → 42 | 60/60/70/50/40/60 | evapMul 1.2 | re-timed and re-authored by the lead's decisions (below; §5.7): start 60 → 86, relays 182/282/394/494/590, length 564; Gust's weather as T6's against the breeze (the first pin's added r196 gone); hand-off fog f294:-60:55:16, garden cloud r306:140:100:16; crossings r14 → r12; Drip's stretch: ice 546 → hot stone t540 on the trail, puddles at −22 and +24, stones at 0, +3, −2; plot 340 −44 → −36 (G0 clearance) | grove 4 → 3 ("3 trees standing", "Keep 3 trees standing", blurb "…keep three trees."; now reached: 33%) |
 
-Salts past 199 (T1, T3, T5): few salts clear G0 and also fail a fixed sun, so `--pick` ran with
-`--to`. Both added rain clouds have rx 90, wider than §5's 55-85.
+Salts past 199 (T1, T3, T5, T6, T7): few salts clear G0 and also fail a fixed sun, so `--pick` ran
+with `--to` (T6 and T7 with plot dx moves past ±8 u, which the lead allowed). The garden clouds have
+rx 100 (T6, T7), wider than §5's 55-85.
 
-**Waivers awaiting the lead** (`WAIVERS` in `scripts/sim16/trials.ts`; the gate prints them as waived):
-T1 G6 96% (every finisher burns all 7, and 7 is every burnable), T2 G6 88% (every puddle is in
-Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25% target), T5 G4
-100% (humanEl 16/16 with every lever at its bound) and T5 G6 92%.
+**Lead decisions** (binding; applied in this round, CORE):
+1. **T7 G5** (Drip's leg passed unsteered): the second Drip-stretch ice wall is now an on-trail hot
+   stone (t540), and the stretch's puddles lie off the walking line (−22, +24), with its other stones
+   on it (+3, −2). An unsteered Drip meets three stones and only the melted ice's puddle and dies in
+   its leg (G5 passes, no waiver). Walls stay at dx 0 (ART's draw rule and `trials.test.ts`).
+2. **T6 G5b and T7 G5b** (a constant sun walked the whole Trial): the opening and closing Nubs legs
+   move toward midday. T6 starts at 9:46 AM (was 8:30) and ends at 4:28 PM (was 4:40), its Gust and
+   Sprout legs 8.0 s and 9.1 s (were 10.0 and 12.9). T7 starts at 7:26 AM (was 7:00) and ends at
+   4:50 PM (was 5:00), its element legs 6.9/7.8/6.9/6.7 s (were 7.5/8.3/7.9/6.9). §1.1's leg lengths
+   and the 5:00 PM limit hold. No object was added to a Nubs leg: the timing, the drain (T6 38, T7 42)
+   and Nubs' start meters (60) were enough. Measured: no constant angle walks T6 (best θ190 dies at
+   23%) or T7 (best θ320 dies at 97%, in the closing leg); G5b passes, no waiver.
+3. **T6 G7 and T7 G7** (the hand-off swipes added no Sap): each garden cloud waits east of Sprout's
+   first stretch (rx 100, dry left alone) and the hand-off's west swipes put it over Sprout and the
+   garden plot; Sprout starts below the Sap cap (T6 65, T7 70) so the rain is not lost at 100; the
+   hand-off fog is small enough that the same west wind clears it. Measured: T6 Sap margin 65 vs 41
+   without the hand-off swipes and 3 trees vs 2; T7 Sap 67 vs 52, and the tree on the downwind plot
+   (420) grows and burns. G7 passes on both. The harness's T7 check now finds the downwind plot from
+   the trial and requires its tree to have stood (it named plot 410, which no longer exists).
+4. **T6 G6 and T7 G6** (the Dares were met on 0%): the Sap economy is re-authored so the Dares are
+   reachable at their targets (T6 trees ≥ 3: two crossings instead of three; T7 grove ≥ 3: crossings
+   r12). Measured: T6 21%, T7 33% (G6 passes). The targets and their copy (card, HUD, tips, Pause)
+   stay "Grow 3 trees" and "Keep 3 trees standing"; §10.2's T7 row now shows that shipped text.
+5. **Accepted waivers** (`WAIVERS` in `scripts/sim16/trials.ts`, one line each; `--check` prints
+   them as accepted): T1 G6 96%, T2 G6 88% and T4 G6 83% (the Dare is "do everything the leg offers"
+   and most finishers do); T5 G4 100% and T5 G6 92% (T5 is the gentle first mixer).
 
-**Open: the lead decides (no waiver is allowed on G5/G5b, and none was added).**
-- **T6 G5b:** a constant θ20 walks the whole Trial. The 8:30 AM opening leg keeps a fixed-sun shade
-  line in every salt CORE scanned (0..20000), even at drain 42. Its Gust and Sprout legs do not
-  depend on θ, and the closing leg runs from 3:36 PM, also under long shadows.
-- **T7 G5 (Drip's verb off) and G5b:** Drip's leg passes unsteered with a steady low of 43.5 (the
-  plan's is 50.1). Both ice walls melt into puddles at dx 0, on the trail, and the held afternoon
-  sun shades the centreline. Integrator probe: 15 of 36 constant angles walk the whole Trial, and
-  the 7:00 AM opening leg keeps up to 75 Chill at a fixed θ.
-- **Also failing, needing a waiver or a change:** T6 G6 (trees ≥ 3 on 0%: 2 trees at most), T6 G7
-  (the hand-off swipes add no Sap: 44 vs 44), T7 G6 (grove ≥ 3 on 0%) and T7 G7 (plot 410 burns as
-  designed, but the hand-off swipes add only 2 Sap: 58 vs 60).
-- **Spec-level options:** move T6's and T7's opening and closing Nubs legs toward midday, where a
-  fixed sun cannot shade a whole leg. Take T7's Drip-stretch ice off the trail line (its puddles
-  then need steering), or swap one ice wall for an on-trail hot stone. Grant §6.5 one more object
-  per Nubs leg. Or limit G5b to the Trials whose Nubs legs fall between 9:00 AM and 3:00 PM.
+Levers beyond §6.5 the lead allowed for T6 and T7 (all recorded with their gates in
+`config/trials.ts`): T6 drain 28 → 38, legStart 60/60/65/80, plot dx 43 and 56; T7 drain 30 → 42,
+legStart 60/60/70/50/40/60, plot dx −36; the object lists and leg times above. `tuning.ts` is
+unchanged. Tooling: `--variant` takes `startMinute`, `lengthMinutes`, `relays` and `objects` (the
+authoring string); a re-timed variant's run now starts at its own minute (it started at the pinned
+trial's before, which made such variants wrong).
+
+**Gates as built** (`node scripts/sim.ts --trials --check` exits 0; `--perf` T6 tick 0.47× and guide
+0.51×, T7 0.66× and 0.52× a Nubs run's):
+
+| Trial | G1 margins | G2 low | G3 | G4 humanEl | G5b best constant θ | G6 Dare | G7 |
+|---|---|---|---|---|---|---|---|
+| T1 | 82/60/83 | 60 | 8/8 | 15/16 (94%) | θ240 dies at 23% (on sight 8 vs 59) | burns ≥ 7 96%, waived | |
+| T2 | 100/28/74 (Drip marks: chosen 45° 50, worst 310° 28) | 49 (worst bin 37) | 8/8 | 15/16 (94%) | θ340 dies at 99% | drinks ≥ 7 88%, waived | |
+| T3 | 83/39/83 | 81 | 8/8 | 13/16 (81%) | θ310 dies at 22% | trees ≥ 2 33% | |
+| T4 | 82/bots/83 | 80 | 8/8 | 12/16 (75%) | θ290 dies at 24% | cloudRide ≥ 60 83%, waived | |
+| T5 | 83/60/32/83 (chosen 45° 49, worst 300° 32) | 50 (worst bin 42) | 8/8 | 16/16 (100%), waived | θ290 dies at 71% | drinks ≥ 5 92%, waived | no melt fails in Drip's leg |
+| T6 | 63/bots/65/83 | 37 | 8/8 | 13/16 (81%) | θ190 dies at 23% | trees ≥ 3 21% | Sap 65 vs 41, trees 3 vs 2 |
+| T7 | 63/bots/67/50/38/63 (chosen 85° 39, worst 105° 38) | 27 (worst bin 27) | 8/8 | 11/16 (69%) | θ320 dies at 97% | grove ≥ 3 33% | plot 420 burns; Sap 67 vs 52 |
 
 ### 13.4 Deviations as built (from the team reports)
 
@@ -2105,8 +2139,9 @@ Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25
   when the target is first seen (in range and unveiled), not from when the tap is due: the old
   behaviour made humans miss walls systematically, and T1 and T5 were re-pinned after the fix.
 - G0 measures the intro element's first object at its y. `--perf` takes the median guide refresh
-  and the best of three timed reps. `trials.test.ts` runs G5 without G5b and accepts T7's one known
-  G5 failure (Drip's verb off) by its exact text.
+  and the best of three timed reps. `trials.test.ts` runs G5 without G5b; it accepted T7's one known
+  G5 failure (Drip's verb off) by its exact text until the lead's decisions fixed it (13.3), and now
+  accepts none.
 
 **ART**
 - T5's fill ceiling is 216, not 190: Steam's world and the Flurry Fields snow already issue 200
@@ -2210,10 +2245,24 @@ once for the sun-lock rule below), and `sim --trials --check` prints the same ga
 a fade mask on the Elementals body and a label halo under the selection ring (the ring reads behind
 the label's stroke); the lilac rim on the cloud face; drawing near targets above Ember's dial.
 **Still open (the lead decides, 13.3):** T6 G5b, T7 G5 and G5b fail `sim --trials --check` exactly
-as at the merge; no lever inside §6.5's bounds fixes them.
+as at the merge; no lever inside §6.5's bounds fixes them. (Closed by the lead's decisions: 13.3, 13.7.)
 
 **Gates after the fix round:** typecheck pass; `npm test` 56 files, 1,117 tests pass; `golden.ts`
 diff only `trials` (vs f2a7039); `sim --trials --check` as at the merge (exit 1: T6 G5b, T7 G5/G5b;
 T1-T5 pass with the five waivers); Playwright both projects 398 passed, 44 skipped, 0 failed (2
 workers, 18.6 min); `build:single` **828,328 B** ≤ 829,440 B (1,112 B under; this round +3,496 B, of
 which Retry from the Tag Stone ≈ 1,230 B).
+
+### 13.7 Calibration round (the lead's decisions)
+
+CORE applied the lead's five decisions (13.3): T6 and T7 re-timed toward midday and re-authored (§5.6,
+§5.7), T7's Drip stretch made to need its steer, the garden rain made to pay Sap that Sprout needs,
+the Dares reached at their targets, and the five waivers accepted. Only `src/config/trials.ts`, the
+trials harness (`scripts/sim16/`), the tests that encode the trials and these docs changed;
+`tuning.ts`, the core rules and every other layer are as they were.
+
+**Gates after the round:** `sim --trials --check` exits 0 with only the five accepted waivers (13.3's
+gate table); `--perf` T6 and T7 ≤ 0.66× a Nubs run's tick and ≤ 0.52× its guide refresh; typecheck
+pass; `npm test` 56 files, 1,117 tests pass; `golden.ts` diff only `trials` (the 1006 and 1007
+entries); Playwright `elementals.spec.ts` and `render.spec.ts` on both projects (one worker): 77
+passed, 15 skipped, 0 failed; `build:single` **828,294 B** ≤ 829,440 B (1,146 B under).
