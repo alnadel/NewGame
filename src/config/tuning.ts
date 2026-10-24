@@ -657,6 +657,9 @@ const tuning = {
     /** Meter a walker loses walking into a wall. */
     bump: 30,
     nubs: { income: 0.05 },
+    // The global calibration pass (§6.5, all seven Trials at once, within ±20% of §2.6): ember.refill
+    // 10 → 8 and its costs 12/22/18/8 → 14/26/21/9, sprout.root 5 → 6 and rain 15 → 18, drip.evap
+    // 14 → 16, gust.soak 30 → 36 (CORE's pass before the per-trial pins; docs/ELEMENTALS_V2.md §13).
     ember: {
       refill: 8, fade: 4, douse: 45, rain: 25, stone: 12, nowTicks: 30,
       cost: { bramble: 14, gate: 26, ice: 21, puddle: 9 },

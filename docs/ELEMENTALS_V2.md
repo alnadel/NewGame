@@ -1988,3 +1988,171 @@ Where the reviews offered options, or where this spec chose differently, the cho
 
 Written by the integrator at the merge: the C0b measured size, merge record, calibration (every moved
 lever with its reason), deviations, gate results and the final `build:single`.
+
+### 13.1 Sizes and the budget
+
+| Step | `build:single` | Delta | Allowance |
+|---|---|---|---|
+| 6b23531 (v1, before C0) | 797,416 B | | |
+| C0a + C0b (c338540) | 781,974 B | −15,442 | ≤ 782,000 B: pass |
+| C0c (ce4b871, CORE's skeleton) | 788,219 B | +6,245 over C0b | counted in CORE's |
+| `elementals2/core` (ca5100c) | 795,402 B | +13,428 over C0b | 14,336 B: pass (908 B left) |
+| `elementals2/art` (7dc1114) | 808,585 B | +20,366 over C0c | 20,480 B: pass (114 B left) |
+| `elementals2/ui` (3d9e2f1) | 798,077 B | +9,858 over C0c | 7,168 B: **2,690 B over** after its whole cut list |
+| merged (c12be45) | 824,831 B | +42,857 over C0b | 41,984 B summed: 873 B over, from the 5,456 B reserve |
+| **release (this record)** | **FINAL_B B** | | **≤ 829,440 B: pass (FINAL_LEFT B under)** |
+
+The merged build is 795 B less than the four measurements added up, because 1,293 B of core
+`elements.ts` that ART's reads pull in were counted in both CORE's and ART's branch deltas.
+
+**Amendment recorded (§9.3):** the budget is **810 KiB = 829,440 B**, in `docs/V1_6_PLAN.md` A3 and
+`docs/UI_V2.md` §13, with the reason "Elementals v2 (docs/ELEMENTALS_V2.md): four elements with
+their own verbs and factors, their world objects (walls, crossings, plants, puddles, stones,
+weather, fog, fire), seven Trials; v1's sun-variant heroes removed (≈ 16.3 KiB freed); allowances
+sized from v1's measured costs; shipped feature code, not dead code." **UI's amendment:** UI's
+2,690 B over its allowance (after cut-list items 1-4) is granted from the integration reserve. CORE
+(908 B) and ART (114 B) left part of theirs, and the merge saved 795 B, so the release fits the
+810 KiB budget with no further cut.
+
+### 13.2 Merge record
+
+The three branches merged into `claude/mobile-game-web-prototype-54l0ia` with `--no-ff` in the
+order of §7.0: `elementals2/core` (ab49273), `elementals2/art` (72f2d34) and `elementals2/ui`
+(c12be45). The teams' files were disjoint, so nothing conflicted. Typecheck was clean after each
+merge. The integrator then made these fixes and applied every merge note:
+- `tests/unit/campaignGame.test.ts`: T5's HUD goal target is 5. CORE's pin moved the Dare from 4.
+- `src/game/moments.ts`: T7's mixer tip says "Keep three trees standing!" (the grove Dare is now 3).
+- `session.testSkipToLeg`: when the fast-forwarding bot leaves the sun mid-drag, a tap at 0 °/s
+  ends it (ART's note). `render.spec`'s lift-tap workaround is gone.
+- `tests/e2e/elementals.spec.ts`: T4's swipe costs exactly 8 Lift, now that CORE is merged and T4
+  keeps costMul 1. `?trial=6` starts Nubs at 80, the pin's `tune.legStart`. Element deaths in e2e go
+  through `forceDeath` only on Nubs legs, as UI asked.
+- `src/config/tuning.ts`: a comment records the global calibration pass beside its numbers (§6.5).
+- CORE's `touch` event and bits, `el.cause` and `el.fell` are what ART reads (`renderer.ts`,
+  `sfxRouter.ts`), so the doused, soaked, fogged, patter and fall states are now fed by real play.
+  ART had checked them only in `?elfix=1`, and they were not reviewed again by eye at the merge.
+  Every wall and crossing in `TRIALS` has dx 0, which ART's draw rule relies on. The Gust glyph
+  exists for UI's tip toasts. The coin stays a Nubs-leg control, and ART's meter pill never sets
+  `meterShown`, so the coin e2e still clicks plain world on the Ember leg.
+- `docs/ELEMENTALS.md` carries the "Superseded by docs/ELEMENTALS_V2.md" line.
+
+### 13.3 Calibration as built (CORE; the values in `src/config/trials.ts` and `tuning.ts`)
+
+**Global pass** (§6.5, ±20% of §2.6): `ember.refill` 10 → 8, `ember.cost` bramble 12 → 14, gate
+22 → 26, ice 18 → 21, puddle 8 → 9; `sprout.root` 5 → 6, `sprout.rain` 15 → 18; `drip.evap` 14 → 16;
+`gust.soak` 30 → 36. The §2.7 table moves with them (Ember +8 at c ≥ 5; Drip −16 at c 5).
+
+**Per-trial pins** (each with its measured gates beside it in `config/trials.ts`; README §17.6):
+
+| Trial | Salt | Drain | `legStart` | Mul | Objects | Dare |
+|---|---|---|---|---|---|---|
+| T1 Kindling | 468 | 28 → 34 | 80/60/80 | costMul 1.2 | as §5.1 | burns 7 |
+| T2 Puddle Run | 187 | 26 → 28 | 100/50/80 | evapMul 1.2 | as §5.2 | drinks 6 → 7 ("Drink 7", "Drink all 7 puddles") |
+| T3 Green Bridge | 3584 | 28 → 34 | 80/80/80 | | as §5.3 | trees 2 |
+| T4 Weather Vane | 605 | 28 → 34 | 80/80/80 | | as §5.4 | cloudRide 60 (the +25% target measured the same share) |
+| T5 Steam | 1113 | 28 → 34 | 80/60/50/80 | costMul, evapMul 1.2 | puddles 425 −18 → −26, 492 18 → 26 (an unsteered Drip drank them), 530 −16 → −17 (G0 clearance) | drinks 4 → 5 ("Drink 5", "Drink 5 puddles") |
+| T6 Rain Garden | 73 | 28 → 34 | 80/65/100/80 | costMul 1.2 | **added** to Gust's leg: rain r330:82:90:0 (a wide cloud waiting east; without it Gust's leg passed with no swipe and the west spams passed); plots 606 −44 → −43, 620 44 → 40 (G0 clearance) | trees 3 |
+| T7 Five Elements | 20 | 30 → 36 | 80/70/100/60/50/80 | evapMul 1.2 | **added** to Gust's leg: rain r196:82:90:16 (waits east; the west spams passed without it); plot 288 44 → 52; stones 556 12 → 4, 582 −10 → −2; puddles 570 16 → 24, 532 −18 → −14 | grove 4 → 3 ("3 trees standing", "Keep 3 trees standing", blurb "…keep three trees.") |
+
+Salts past 199 (T1, T3, T5): few salts clear G0 and also fail a fixed sun, so `--pick` ran with
+`--to`. Both added rain clouds have rx 90, wider than §5's 55-85.
+
+**Waivers awaiting the lead** (`WAIVERS` in `scripts/sim16/trials.ts`; the gate prints them as waived):
+T1 G6 96% (every finisher burns all 7, and 7 is every burnable), T2 G6 88% (every puddle is in
+Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25% target), T5 G4
+100% (humanEl 16/16 with every lever at its bound) and T5 G6 92%.
+
+**Open: the lead decides (no waiver is allowed on G5/G5b, and none was added).**
+- **T6 G5b:** a constant θ20 walks the whole Trial. The 8:30 AM opening leg keeps a fixed-sun shade
+  line in every salt CORE scanned (0..20000), even at drain 42. Its Gust and Sprout legs do not
+  depend on θ, and the closing leg runs from 3:36 PM, also under long shadows.
+- **T7 G5 (Drip's verb off) and G5b:** Drip's leg passes unsteered with a steady low of 43.5 (the
+  plan's is 50.1). Both ice walls melt into puddles at dx 0, on the trail, and the held afternoon
+  sun shades the centreline. Integrator probe: 15 of 36 constant angles walk the whole Trial, and
+  the 7:00 AM opening leg keeps up to 75 Chill at a fixed θ.
+- **Also failing, needing a waiver or a change:** T6 G6 (trees ≥ 3 on 0%: 2 trees at most), T6 G7
+  (the hand-off swipes add no Sap: 44 vs 44), T7 G6 (grove ≥ 3 on 0%) and T7 G7 (plot 410 burns as
+  designed, but the hand-off swipes add only 2 Sap: 58 vs 60).
+- **Spec-level options:** move T6's and T7's opening and closing Nubs legs toward midday, where a
+  fixed sun cannot shade a whole leg. Take T7's Drip-stretch ice off the trail line (its puddles
+  then need steering), or swap one ice wall for an on-trail hot stone. Grant §6.5 one more object
+  per Nubs leg. Or limit G5b to the Trials whose Nubs legs fall between 9:00 AM and 3:00 PM.
+
+### 13.4 Deviations as built (from the team reports)
+
+**CORE**
+- G5(c) on T1 compares the lowest raw Flame (`meterLow`), not steady health: steady health adds the
+  spending back, so it cannot tell a tap-on-sight Ember from the plan (8 vs 59 on the pin).
+- Drip's lane (`laneOf`) uses each prism part's footprint inside a ±8 u band around the walker's y,
+  not the part's bounds. With the bounds, G0's ±12 u lane failed on about 97% of salts.
+- Sprout's audit leaves 13 ticks of press between holds where §6.2 says 9 (the bot input
+  contract's hold recognition). Its margin is the Sap ledger over the crossings only. The path
+  bot's plots are fitted on top at `treeMin` each, while the ledger keeps a 10 Sap reserve, so that
+  G7's Sap comparison means something.
+- Sprout's policy pours plots in arrival order, each up to `treeMin`, while Sap > 25. A short pour
+  carries over to the next hold, and a hold starts only with at least 5 Sap.
+- Gust's policy scores harm in meter units with sleeping weather included, and checks as the walker
+  enters a cloud, not only at its centre. §6.3's T4 rule is generalized: helpful rain in a later
+  stretch is pushed to within half its rx of the trail, and harmful hand-off fog is pushed off it,
+  whenever the swipe adds no more harm than it costs. Ride swipes wait while `windMax` would clip
+  more than half a kick. Lift may fall to one swipe's cost once Gust's own weather is past.
+- humanEl's first-exposure delay is per element window. Its reaction to an Ember target runs from
+  when the target is first seen (in range and unveiled), not from when the tap is due: the old
+  behaviour made humans miss walls systematically, and T1 and T5 were re-pinned after the fix.
+- G0 measures the intro element's first object at its y. `--perf` takes the median guide refresh
+  and the best of three timed reps. `trials.test.ts` runs G5 without G5b and accepts T7's one known
+  G5 failure (Drip's verb off) by its exact text.
+
+**ART**
+- T5's fill ceiling is 216, not 190: Steam's world and the Flurry Fields snow already issue 200
+  fills at C0c, before any trial art. It measures 197. T4 needed no exception (152 fills).
+- Fires within 70 u ahead of the walker are drawn behind it with the walls. The others are drawn
+  over the canopies. Walls and hot stones are drawn over the shadow layer (unshaded, the stones
+  glow) and under the casters. Walls and crossings are drawn at their own `o.x`, which relies on
+  §3.3's dx 0.
+- Ember's sweet band is one hatched ground band from `near` to 98 u, with no line per bramble. The
+  meter pill is a cached glyph and number, not a ring. The fog veil is a stretched radial sprite at
+  alpha 0.6 over the trail ±80 u, up to 330 u past the bank. Edge markers show only when the whole
+  footprint is above the play area, clamped 26 px inside the view.
+- The Gust swipe reuses the existing `gust` whoosh, so `bump` and `fall` are the only new recipes.
+  fx flourishes share one puff helper with per-event colours. High contrast outlines every object
+  with one ink ring path, not per sprite.
+- The dial's drag ticks are hidden on held legs by a render-side gate. The v1 Ember food dots on
+  the dial are gone. `drawTagStones` moved from `heroes.ts` to `trial.ts` (the sprite cache).
+
+**UI**
+- Cut list items 1-4 were all applied for size: there is no Retry from the Tag Stone (and no e2e
+  for it), no wheel steering on Drip legs (keys and drag steer), and no ghost easing. The TAG cue
+  line reads "{Name}'s turn." plus " The sun holds." with no verb text.
+- A tap or hold carries the ground point captured at pointerdown, not at recognition. The 300 ms
+  and 12 px conversions to a sun press are measured from the press point, and the converted press
+  replays its pointerdown quietly. A hold the sim already ended keeps its pointer slot until lift
+  or 24 px.
+- Steer and blow presses send no sun edges: `frame.down` is true only for sun presses, and
+  `Input.pointerDown` means "a sun press is held". `canSnap` is also false while `tagLocked`. Keys
+  held across a TAG are not cut (the cut rule is for pointers).
+- The verb ghost anchors to the first eligible object still ahead within [`near`, `range`] and moves
+  on to the next. The Ember ghost shows only during `burnSweet`, and the Drip ghost counts as done
+  once |`dxTarget`| ≥ 8. No `tag` tip fires at go for leg 0, because every Trial starts with Nubs.
+- On a fresh save the Title pill hides until `tutorialDone` or `unlockAll`. `RELAY_TIPS` is an array
+  of `[on, text, element?]`. The T2 and T4 e2e legs run at time scale 0.25 for stability.
+
+**Integrator**
+- No change to any rule, pin or gate. The open T6/T7 gates are left for the lead (13.3).
+- An orphaned vitest worker from the CORE worktree (parent gone, about 97% of one CPU since 10:50)
+  ran through every gate. Stopping it was refused by the session's permissions, so the gate
+  timings below were taken with it running.
+
+### 13.5 Release gates (§9.7) at the merge
+
+| # | Gate | Result |
+|---|---|---|
+| 1 | `npm run typecheck` | pass |
+| 2 | `npm test` | pass: 56 files, 1,113 tests (architecture scan included) |
+| 3 | `node scripts/golden.ts` + diff | pass: no change at HEAD; only `trials` differs from 6b23531 and from C0c |
+| 4 | `sim --check --seeds 40` | pass: 70 targets, all met |
+| 5 | `sim --campaign --bot all --tries 3` | pass: oracle 200/200, reactive 100/100 on 1-100, every hard gate (the MISS rows are the Journey's unchanged advisories) |
+| 6 | `sim --trials --check` and `--perf` | **fails (exit 1): T6 G5b; T7 G5 and G5b** (13.3). T1-T5 pass with the five waivers awaiting the lead. `--perf`: Trial tick 0.40-0.66× and guide refresh 0.46-0.66× a Nubs run's (≤ 1.25 and ≤ 1.3) |
+| 7 | `bench-step` and `--gen` (vs 6b23531) | pass: step 1.006 (≤ 1.10), guide 0.983 (≤ 1.5); `--gen` p99 0.979, over 1 ms 0.825, over 2 ms 0.833 (≤ 1.1), 0.974× ms/chunk |
+| 8 | `npm run e2e`, both projects | E2E_RESULT |
+| 9 | `build:single` | pass: FINAL_B B ≤ 829,440 B; the amendment is recorded (13.1) |

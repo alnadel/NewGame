@@ -1,5 +1,7 @@
 # SHADY Elementals: proof of concept
 
+Superseded by docs/ELEMENTALS_V2.md (Elementals v2: each element its own verb); this v1 spec is kept as history.
+
 User request: "expand the game but not full levels yet. Proof of concept first on a few levels. More
 characters for the player to play with, with different play styles, and keep mixing them in levels.
 Elementals, like fire, that play differently. Good variety, fun, related and thematic."

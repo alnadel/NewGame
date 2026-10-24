@@ -1759,6 +1759,15 @@ its decoration. Open: the lead amends to 780 KiB or orders cuts (the breakdown i
 **Measured after the Elementals fix round:** 797,416 B (778.7 KiB), 1,304 B under (the round's fixes,
 the Title's Elementals pill among them, added 3,220 B; `docs/ELEMENTALS.md` §8.4).
 
+**Amended for Elementals v2** (`docs/ELEMENTALS_V2.md` §9.3): **810 KiB (829,440 B)**, up from 780 KiB.
+Reason: "Elementals v2 (docs/ELEMENTALS_V2.md): four elements with their own verbs and factors, their
+world objects (walls, crossings, plants, puddles, stones, weather, fog, fire), seven Trials; v1's
+sun-variant heroes removed (≈ 16.3 KiB freed); allowances sized from v1's measured costs; shipped
+feature code, not dead code." C0a + C0b measured 781,974 B. **Measured at the Elementals v2 merge:**
+FINAL_B B (FINAL_KIB KiB), FINAL_LEFT B under. CORE added 13,428 B, ART 20,366 and UI 9,858 against
+allowances of 14,336, 20,480 and 7,168 B; UI's 2,690 B over, left after its whole cut list, came from
+the integration reserve (`docs/ELEMENTALS_V2.md` §13.1).
+
 ---
 
 ## 14. Work split (five builders)
