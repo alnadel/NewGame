@@ -26,6 +26,7 @@
 // - lock: from the 7th second of each 7 s of daylight the sun ignores every input for 1.2 s
 //   (sun.locked); coasting stops.
 
+import { HEROES } from '../../config/heroes.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { splitmix32 } from '../../config/rng.ts';
 import { angleDiff, smoothstep, wrapDeg } from '../dmath.ts';
@@ -100,7 +101,9 @@ export function updateSun(s: SimState, input: InputFrame): void {
   // 'dazzle' (Mirror Sun): the finger and the keys turn the sun the other way.
   let inp = mods.has('dazzle') ? mirror(input) : input;
   // 'lock': the sun ignores every input and stops dead for LOCK_TICKS at each LOCK_PERIOD of daylight.
-  const locked = ct >= 0 && mods.has('lock') && sunLockedAt(ct);
+  // Elementals v2 (docs/ELEMENTALS_V2.md §4.1): on a Trial it holds the same way while a sun-held
+  // element (Drip, Gust) walks and the clock runs.
+  const locked = (ct >= 0 && mods.has('lock') && sunLockedAt(ct)) || (s.el !== null && HEROES[s.nubs.hero].sunHeld && clockTicks(s) >= 0);
   if (locked !== sun.locked) {
     sun.locked = locked;
     if (locked) {

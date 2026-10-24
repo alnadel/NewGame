@@ -4,7 +4,7 @@
 
 import { createRun } from './create.ts';
 import { step } from './step.ts';
-import type { InputFrame, RunConfig, SimState } from './types.ts';
+import { VERB_HOLD, VERB_TAP, type InputFrame, type RunConfig, type SimState } from './types.ts';
 
 export interface Replay {
   readonly cfg: RunConfig;
@@ -19,6 +19,15 @@ export function createReplay(cfg: RunConfig): Replay {
 export function recordFrame(r: Replay, f: InputFrame): void {
   const c: InputFrame = { dTheta: f.dTheta, down: f.down, downEdge: f.downEdge, upEdge: f.upEdge, release: f.release, key: f.key };
   if (f.snap) c.snap = true;
+  // Elementals v2 (§7.9): the verb only when set, its point only with a tap or hold, the steer only when set.
+  if (f.verb) {
+    c.verb = f.verb;
+    if (f.verb === VERB_TAP || f.verb === VERB_HOLD) {
+      c.vx = f.vx ?? 0;
+      c.vy = f.vy ?? 0;
+    }
+  }
+  if (f.steer) c.steer = f.steer;
   r.frames.push(c);
 }
 

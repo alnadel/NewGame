@@ -29,6 +29,7 @@ import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
+import { elPolicy } from './bots/elements.ts';
 import { elHealth, tagLocked } from './elements.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
@@ -282,6 +283,8 @@ function reactiveBot(ctx: BotHookCtx): Bot {
       // v1.5 Cold Snap: lit and low, with no safe angle close by (or nearly melted).
       out.snap = mech && snapReady(s) && exposed(s) && (gauge(s) < cfg.snapLast || (gauge(s) < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
       out.snap = econReactiveSnap(ctx, s, out.snap);
+      // Elementals v2 (§6.3): the walking element's verb on a Trial (Nubs legs keep the play above).
+      if (s.el !== null) elPolicy(s, out, ctx.salt);
       return out;
     },
   };

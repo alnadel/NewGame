@@ -1518,22 +1518,44 @@ the old paths byte for byte (the goldens' other keys are unchanged).
   the grace and the clean-TAG watch start, and `tag` fires. The charge carries.
 - **`updateSnap`** casts the Cold Snap on a Trial only while Nubs walks and no TAG is within
   `tagSoonTicks` (`tagLocked`).
-- **`updateElements`** after the snap (the C0b stub is empty; C0c adds the skeleton).
+- **The sun holds** (`updateSun`, the `lock` concept's path) while Drip or Gust walks and the clock
+  runs: from the first tick after their TAG until the next one.
+- **`updateElements`** after the snap (the C0c skeleton: verbs cost nothing yet): a tap
+  (`VERB_TAP`, or `VERB_KEY_BURN` for the key) sets Ember's `burnTarget` burning for its burn time;
+  a hold (`VERB_HOLD`/`VERB_KEY_HOLD`) makes Sprout's `growTarget` the held site and `VERB_RELEASE`
+  lets go; a swipe (`VERB_WEST`/`VERB_EAST`) adds ∓/±`kick` to the wind (clamped, `stats.gusts`);
+  Drip's `steer` (or its keys) moves `dxTarget` within ±`range`, `dx` slides toward it at `slide`
+  and is clamped to the lane (`laneOf`), and the walker's x is `trailX(y) + dx` (any other leg
+  slides back to 0). Then the wind decays (`keep`); weather wakes within `wake`, drifts with its own
+  drift plus `gain · windAt`, and is gone `prune` off the trail or `behind` the walker, its rain
+  proxy cloud (`kind 'rain'`, z 0, made by `createEl`) following it and removed with it; fires count
+  down and burn out (a bramble or gate is gone, ice becomes a puddle, a puddle dries up, a plot and
+  its tree are gone; `stats.burns`); the hold pours `invest`/s into its site (up to its need; it
+  ends within `near` of Sprout), every site grows toward its size (×2 lit or wet, ×1.5 more wet;
+  light bits on guide ticks), a crossing's bridge completes at its need and a plot of at least
+  `treeMin` Sap stands as a tree caster once grown and let go (`stats.trees`). Contacts, costs,
+  feeds, fire spread, douse and veils are CORE's branch work.
 - **`applyElDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial): the
   walker's rate on Nubs' trial rule (`−D·f + R·max(0, 1 − f)`, f = c/5), floored at 0 by the TAG
   grace, `nb.safe` (strict shade), steady health (`elHealth`: meter plus what the leg spent) into
   `stats.minChill` and `lowChill`, `keepMemory`, the Cold Snap's income on Nubs legs, the clean-TAG
   watch, the lit totals and the leg tick.
 - **Pickups:** on a Trial only Nubs' Chill takes a flake or crystal, and a flake pays no charge.
-- **Death and win:** `elDead` (a fall, or a walker other than Sprout at 0) ends the run; `elDeath`
-  is `deathCause` with `who` and `heroCause 'melt'`. At the finish `stats.grove` is `groveCount`.
+- **Death and win:** `elDead` ends the run on a fall or Nubs' Chill at 0 (the skeleton: the other
+  life meters bottom out at 0 until CORE's branch gives them their rates and deaths); `elDeath` is
+  `deathCause` with `who` and `heroCause 'melt'`. At the finish `stats.grove` is `groveCount`
+  (standing trees on plots not burned).
 - **History, hash:** the Melt Map's chill slot holds the walker's steady health; `hashState` feeds
   the trial block (relay, grace, lane, wind, hold, spent, leg, fall, every object's fields and the
   element counters) only on a Trial.
-- **Reads** (`elements.ts`, final signatures; C0b returns neutral values): `walkerAt`, `windAt`,
-  `weatherXAt`, `weatherGood`, `arriveTicks`, `contactTicks`, `needOf`, `bridged`, `burnLeft`,
-  `burnSweet`, `growLeft`, `veiled`, `burnTarget`, `growTarget`, `laneOf`, `pointLit`, plus
-  `heroHealth`, `elHealth`, `tagTick`, `nextTagTicks`, `nextTagHero`, `tagLocked`, `relayY`.
+- **Reads** (`elements.ts`, final signatures, no allocation; every countdown to the contact edge):
+  `walkerAt`, `windAt`, `weatherXAt`, `weatherGood`, `arriveTicks`, `contactTicks`, `needOf`,
+  `bridged`, `burnLeft`, `burnSweet`, `growLeft`, `burnTarget`, `growTarget`, `laneOf`, `pointLit`
+  (real), `veiled` (false until the branch adds fog veils), plus `heroHealth`, `elHealth`, `tagTick`,
+  `nextTagTicks`, `nextTagHero`, `tagLocked`, `relayY`. Event `obj` fields are indices in
+  `s.el.objs`.
+- **Replays:** `recordFrame` copies `verb` only when set, `vx`/`vy` only with a tap or hold, `steer`
+  only when set, so a Nubs replay is byte-identical.
 - **`elFixture(s)`** (debug builds only, `?elfix=1`): every object kind in each of its states ahead
   of the walker, for art review.
 
@@ -1546,7 +1568,12 @@ Nubs' strict shade at the walker while a TAG is telegraphed, else zeros.
 
 The reactive and human models read `guide.now`/`next` unchanged; on a Trial `snapReady` also
 needs Nubs walking and no TAG lock, the panic rule reads the walker's steady health, and the
-reactive bot with a salt > 0 aims with an N(0, 4°) error per pick.
+reactive bot with a salt > 0 aims with an N(0, 4°) error per pick. The reactive bot hands each
+element leg to `elPolicy` (`sim/bots/elements.ts`; the skeleton: Ember taps each wall when
+`burnSweet` and dries puddles on its path, Sprout holds the nearest unbridged crossing to its need
+and then a bare plot into a tree, Drip steers toward the nearest puddle ahead, Gust swipes weather
+predicted on the trail away at most every 15 ticks), so `?bot=reactive` and the session's
+`testSkipToLeg` walk every leg of every Trial to the finish.
 
 ### 17.5 Proof: `node scripts/sim.ts --trials` (`scripts/sim16/trials.ts`)
 
