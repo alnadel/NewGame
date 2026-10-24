@@ -17,10 +17,29 @@
 // so it is read before the countdown runs and never after it. A level whose goal was relaxed (the
 // soft-fail) says so at go.
 //
-// Elementals: a Trial gets no Journey tips, mission steps or COMEBACK (its element tips are
-// docs/ELEMENTALS_V2.md §10.3's); a TAG drops the stale toasts.
+// Elementals v2 (docs/ELEMENTALS_V2.md §7.11, §10.3): a Trial gets no Journey tips, mission steps or
+// COMEBACK. Until it is passed it gets its elements' tips (ELEMENT_TIPS, each shown while that
+// element walks: 'tag' when its first leg begins, Nubs' on his second; 'target', 'low', 'water',
+// 'stone' and 'plot' when the moment comes), the hand-off tips (RELAY_TIPS, at the first telegraph
+// into Drip, into Gust, and any other) and a mixer's own (MIXER_TIPS, at go). A TAG drops the stale
+// toasts and the outgoing element's tips.
 
-import { FLARE_KEPT, levelProgress, queryBuds, trialDef, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
+import {
+  burnTarget,
+  elHealth,
+  FLARE_KEPT,
+  growTarget,
+  levelProgress,
+  queryBuds,
+  trialDef,
+  TUNING,
+  type Bud,
+  type HeroId,
+  type LevelDef,
+  type RunResult,
+  type SimEvent,
+  type SimState,
+} from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import { featureUnlocked } from '../meta/gamify.ts';
@@ -29,10 +48,60 @@ import { clearToasts, endToast, endToasts, showToast, type Banners } from '../re
 import { goalMetLive, trialGlyph } from './campaign.ts';
 import { mechanicOf, type Mechanic } from './mechanics.ts';
 
-/** When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal. */
+/**
+ * When a tip shows: at go, at a share of the level, on the first flake, melt or cloud, at the goal.
+ * Elementals v2: 'tag' an element's first leg begins; 'target' its first target enters the window;
+ * 'low' its steady health first under 40; 'water' (Ember) a puddle or rain ahead, (Sprout) rain on
+ * Sprout or a site; 'stone' (Drip) a hot stone ahead; 'plot' (Sprout) a soil patch in the window.
+ */
 export type TipOn =
   | 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop'
-  | 'cash' | 'hot' | 'amber' | 'heal' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon' | 'scorch' | 'tagSoon' | 'tag';
+  | 'cash' | 'hot' | 'amber' | 'heal' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon' | 'scorch' | 'tagSoon' | 'tag'
+  | 'target' | 'low' | 'water' | 'stone' | 'plot';
+
+type Tips = readonly (readonly [TipOn, string])[];
+
+/** Elementals v2 (§10.3): each element's tips, shown while it walks until the Trial is passed. */
+export const ELEMENT_TIPS: Readonly<Record<HeroId, Tips>> = {
+  ember: [
+    ['tag', "Ember's turn! Tap a wall just before Ember reaches it."],
+    ['target', 'Tap when the ring pulses: Ember walks through its own fire and takes it back.'],
+    ['water', 'Puddles and rain douse Ember, and rain puts fires out. Tap a puddle to dry it.'],
+    ['low', 'Low flame! Turn the sun onto Ember to refuel.'],
+  ],
+  drip: [
+    ['tag', "Drip's turn! Drag sideways: Drip follows your finger. The sun holds."],
+    ['target', 'Puddles and shade grow Drip. Steer into them.'],
+    ['stone', 'Hot stones shrink Drip. Steer around the orange glow.'],
+  ],
+  sprout: [
+    ['tag', "Sprout's turn! Hold on the soil patch ahead to grow a plant."],
+    ['target', 'Hold on the gap now: a bridge takes time to grow. Sun on it helps.'],
+    ['plot', 'Hold on a soil patch to grow a tree: shade for Nubs later.'],
+    ['water', 'Rain gives Sprout sap and makes plants grow fast.'],
+  ],
+  gust: [
+    ['tag', "Gust's turn! Swipe left or right to blow the weather off the trail."],
+    ['target', 'Each swipe costs Lift. Swipe early: the wind keeps pushing.'],
+    ['low', 'Low Lift! Swipe less and stay dry: clear air restores Lift.'],
+  ],
+  // Every Trial starts with Nubs: his 'tag' tip is for his second leg.
+  nubs: [['tag', 'Nubs again: drag to turn the sun and stay in shade.']],
+};
+
+/** Elementals v2: the hand-off tips, at the first telegraph into Drip, into Gust, and any other (no element). */
+export const RELAY_TIPS: readonly (readonly [TipOn, string, HeroId?])[] = [
+  ['tagSoon', 'Drip is next: the sun will hold. Turn it to the dashed arcs now!', 'drip'],
+  ['tagSoon', 'Gust is next: the sun will hold where you leave it.', 'gust'],
+  ['tagSoon', 'Hand-off soon! The next element plays its own way.'],
+];
+
+/** Elementals v2: the mixers' own tips (Trial n), at go. */
+export const MIXER_TIPS: Readonly<Record<number, Tips>> = {
+  5: [['go', 'Melt the ice past the Tag Stone for Drip. Wait out the shower before you burn.']],
+  6: [['go', 'Blow the fog off Sprout\'s path and the rain onto it: rain feeds Sprout.']],
+  7: [['go', 'The breeze blows west and fire spreads with it. Keep four trees standing!']],
+};
 
 /**
  * Contextual tips for the first Journey levels, shown on each try until the level is passed. Level
@@ -188,6 +257,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let snapBudTip = false;
   let glassTip = false;
   let budAt = -1e9;
+  /** Elementals v2: the last tick the walking element's moments were looked for. */
+  let elAt = -1e9;
   const budBuf: Bud[] = [];
   let tipsShown = 0;
   let tipGlyph: string | null = null;
@@ -205,14 +276,51 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   let scorched = false;
   let frostLater = false;
 
-  /** Shows the level's tip for `on` (a relay's 'tag' one: `who`'s), once per run (an `urgent` one ahead of any other toast). */
-  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string): void => {
+  /**
+   * Shows the level's tip for `on` (an element's: `who`'s; `exact`: only those whose third field is
+   * `who`, none or not), once per run (an `urgent` one ahead of any other toast).
+   */
+  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string, exact = false): void => {
     for (let i = 0; i < tips.length; i++) {
       const t = tips[i] as readonly [TipOn, string, string?];
-      if (t[0] !== on || (who && t[2] !== who) || (tipsShown & (1 << i)) !== 0) continue;
+      if (t[0] !== on || ((who || exact) && t[2] !== who) || (tipsShown & (1 << i)) !== 0) continue;
       tipsShown |= 1 << i;
       showToast(banners, 'tip', 'TIP', t[1], t[2] ?? tipGlyph, hold, urgent);
     }
+  };
+
+  /** Elementals v2: the walking element's moments (§7.11) in its window ahead (near..range u). */
+  const elementTips = (s: SimState): void => {
+    const h = s.nubs.hero;
+    const E = TUNING.elements;
+    let puddle = false;
+    let weather = false;
+    let rain = false;
+    let stone = false;
+    let plot = false;
+    let wet = (s.el?.touch ?? 0) & 2;
+    for (const o of s.el?.objs ?? []) {
+      const d = o.y - s.nubs.y;
+      if (d > E.range) break;
+      if (d < E.near || o.state === 2) continue;
+      const k = o.kind;
+      if (k === 'puddle') puddle = true;
+      else if (k === 'stone') stone = true;
+      else if (k === 'plot') plot = true;
+      else if (k === 'rain' || k === 'fog') {
+        weather ||= o.awake;
+        rain ||= k === 'rain';
+      }
+      wet |= o.light & 2;
+    }
+    const mine = (on: TipOn, now: boolean): void => {
+      if (now) tip(on, TIP_HOLD, false, h);
+    };
+    mine('target', h === 'ember' ? burnTarget(s, NaN, 0) >= 0 : h === 'sprout' ? growTarget(s, NaN, 0) >= 0 : h === 'drip' ? puddle : weather);
+    mine('low', elHealth(s) < 40);
+    mine('water', h === 'ember' ? puddle || rain : wet !== 0);
+    mine('stone', stone);
+    mine('plot', plot);
   };
 
   return {
@@ -225,9 +333,13 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       tips.length = 0;
       scorched = frostLater = false;
       const trial = lv ? trialDef(lv.id) : null;
-      const fresh = lv !== null && !trial && !save.campaign.stars[lv.id - 1];
-      if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
-      const mech = fresh ? mechanicOf(lv.introduces) : null;
+      const fresh = lv !== null && !(trial ? save.elementals2?.stars[trial.n - 1] : save.campaign.stars[lv.id - 1]);
+      if (fresh && trial) {
+        // A Trial's tips until it is passed: the mixer's, the hand-offs', then each element's (its glyph and walker).
+        tips.push(...(MIXER_TIPS[trial.n] ?? []), ...RELAY_TIPS);
+        for (const x of trial.cast) for (const t of ELEMENT_TIPS[x]) tips.push([t[0], t[1], x]);
+      } else if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
+      const mech = fresh && !trial ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
       else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...FIRST_TIPS);
       // Last, so it takes the place of the level's own 'go' tip.
@@ -237,7 +349,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       glassTip = tips.some((t) => t[0] === 'glass');
       soonTip = tips.some((t) => t[0] === 'soon');
       soonRise = -1;
-      budAt = -1e9;
+      budAt = elAt = -1e9;
       tipGlyph = trial ? trialGlyph(trial) : lv ? (lv.introduces ?? lv.concepts[0] ?? null) : null;
       // A Journey level toasts no mission steps before Missions open (they still pay at the end); a
       // Trial never does (it counts toward no mission).
@@ -268,13 +380,18 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           tip(ev.e === 'go' ? 'go' : 'cloud');
           break;
         case 'tagSoon':
-          tip('tagSoon');
+          // The first telegraph into Drip, into Gust, and into any other element each say their own.
+          tip('tagSoon', TIP_HOLD, false, ev.to === 'drip' || ev.to === 'gust' ? ev.to : undefined, true);
           break;
         case 'tag':
-          // An element's first turn: the TAG's telegraph and the last element's tips are stale (dropped,
-          // on screen or waiting, and the walker's later ones spent); its own 'tag' tip shows after the stamp.
+          // An element's turn: the TAG's telegraph and the last element's tips are stale (dropped, on
+          // screen or waiting, and its later ones spent, all but its 'tag' tip: Nubs' is for his second
+          // leg); the walker's own 'tag' tip shows after the stamp.
           clearToasts(banners);
-          for (let i = 0; i < tips.length; i++) if ((tips[i] as readonly [TipOn, string, string?])[0] !== 'tag') tipsShown |= 1 << i;
+          for (let i = 0; i < tips.length; i++) {
+            const t = tips[i] as readonly [TipOn, string, string?];
+            if (t[2] === ev.from && t[0] !== 'tag') tipsShown |= 1 << i;
+          }
           tip('tag', TIP_HOLD, false, ev.to);
           break;
         case 'flake':
@@ -355,6 +472,10 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           tip('p25');
         }
         if (p >= 0.6) tip('p60');
+        if (s.el !== null && s.tick - elAt >= MISSION_EVERY) {
+          elAt = s.tick;
+          elementTips(s);
+        }
         if ((snapBudTip || glassTip) && s.tick - budAt >= MISSION_EVERY) {
           // v1.6: a bud in reach under a snap; a glass flake's window on the dial.
           if (snapBudTip && s.snapTicks > 0 && s.guide.bud.includes(1)) {

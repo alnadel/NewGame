@@ -4,8 +4,11 @@
 
 import {
   biomeAtY,
+  bridged,
   buildRunResult,
+  burnSweet,
   burnTarget,
+  CAUSE_TIPS,
   COMFORT_MAX,
   CONCEPTS,
   createBot,
@@ -18,11 +21,11 @@ import {
   effectiveDrain,
   effectiveNoonCloud,
   elFixture,
+  elHealth,
   formatTimeOfDay,
   generateSome,
   growTarget,
   HEROES,
-  heroHealth,
   isTrialId,
   lerpSnap,
   anyLevelDef,
@@ -35,6 +38,7 @@ import {
   rungConfig,
   splitMinutes,
   step,
+  tagLocked,
   takeSnap,
   TRIAL_BASE,
   TUNING,
@@ -42,6 +46,7 @@ import {
   worldPlan,
   type Bot,
   type BotKind,
+  type ElObj,
   type FeatKind,
   type LevelDef,
   type ParJob,
@@ -111,7 +116,7 @@ import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
 import { cueDuration } from '../ui/labels.ts';
-import type { ChallengeBanner, CueId, ImportOutcome, ResultsCampaign, ResultsView, RunKind, RunStatusView, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
+import type { ChallengeBanner, CueId, GhostMode, ImportOutcome, ResultsCampaign, ResultsView, RunKind, RunStatusView, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
@@ -181,6 +186,9 @@ const PAR_TICKS = 6;
 function makeBot(kind: BotKind): Bot | null {
   return import.meta.env.MODE === 'single' ? null : createBot(kind);
 }
+
+/** Elementals v2 (§7.9): the kinds of object each verb's ghost hand shows on. */
+const GHOST_KINDS: Readonly<Record<Verb, string>> = { sun: '', burn: 'bramble gate ice', grow: 'gap stream plot', steer: 'puddle', blow: 'rain fog' };
 
 /** Elementals v2 (?elfix=1): every object kind and state on a Trial run, for art review; bot builds only (makeBot's gate). */
 function fixture(s: SimState): void {
@@ -610,7 +618,8 @@ export class Session {
       safeBottom: () => this.renderer.scene.view.safe.bottom,
       // v1.5 Cold Snap: only while a run plays past its start (never on the Title, the intro card,
       // a pause or a menu), and the meter only where it is drawn.
-      canSnap: () => this.ui.current() === 'play' && !this.paused && this.runActive && this.s.phase === 'day' && this.s.ready === 0,
+      // Elementals v2: only while Nubs walks and no TAG is due (the sim refuses the rest).
+      canSnap: () => this.ui.current() === 'play' && !this.paused && this.runActive && this.s.phase === 'day' && this.s.ready === 0 && (this.s.el === null || (this.s.nubs.hero === 'nubs' && !tagLocked(this.s))),
       meterHit: (x, y) => hudMeterHit(this.renderer.scene.hud, x, y),
       // Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the walking element's verb, the last drawn
       // frame's ground mapping (camera.ts: sx = ox + x·S, sy = oy − y·S) and the targets under a press.
@@ -1121,8 +1130,9 @@ export class Session {
     const lit = v.f * 5;
     v.glareW = lit > 0 ? Math.min(1, (2 * s.nubs.glare) / lit) : 0;
     v.chill = s.nubs.chill;
-    // Elementals: the heartbeat and the calm scene read the walker's health on a Trial.
-    v.health = s.trial !== null ? heroHealth(s.nubs) : undefined;
+    // Elementals: the heartbeat and the calm scene read the walker's steady health on a Trial
+    // (Sprout's Sap is no life meter: never a heartbeat).
+    v.health = s.el !== null ? (s.nubs.hero === 'sprout' ? 100 : elHealth(s)) : undefined;
     v.mult = s.nubs.mult;
     v.omega = s.sun.omega;
     // Campaign: the chapter's music palette, the finish line and the concept signatures.
@@ -1374,6 +1384,7 @@ export class Session {
     this.cues = 0;
     this.cueShown = null;
     this.cueHold = 0;
+    this.verbDone = false;
     this.meltWarn = false;
     this.runRung = this.rungOf.get(run) ?? -1;
     this.runWarmup = this.warmups.has(run);
@@ -1416,12 +1427,47 @@ export class Session {
     }
   }
 
-  private ghost: 'off' | 'both' | 'left' | 'right' = 'off';
+  private ghost: GhostMode = 'off';
+  /** Elementals v2: an element's verb landed this run (the intro ghost hand has taught it). */
+  private verbDone = false;
 
-  private setGhost(mode: 'off' | 'both' | 'left' | 'right'): void {
+  private setGhost(mode: GhostMode, at = false): void {
+    if (!at) this.ui.setGhostAt(NaN, NaN);
     if (mode === this.ghost) return;
     this.ghost = mode;
     this.ui.setGhostThumb(mode);
+  }
+
+  /**
+   * The intro element's ghost (§7.9): its verb played on the first target ahead in reach (Ember's
+   * once the tap is due), anchored there on the last drawn frame; off once a verb has landed.
+   */
+  private verbGhost(): void {
+    const s = this.s;
+    const hero = s.nubs.hero;
+    const verb = HEROES[hero].verb;
+    const el = s.el as NonNullable<SimState['el']>;
+    if (verb === 'steer' && Math.abs(el.dxTarget) >= 8) this.verbDone = true;
+    let o: ElObj | undefined;
+    if (!this.verbDone && s.trial?.intro === hero) {
+      const E = TUNING.elements;
+      for (const x of el.objs) {
+        const ahead = x.y - s.nubs.y;
+        if (ahead > E.range) break;
+        // The verb's kinds: no standing tree, no bridge, weather awake.
+        if (ahead >= E.near && x.state !== 2 && GHOST_KINDS[verb].includes(x.kind) && x.casterId < 0 && !bridged(x) && (verb !== 'blow' || x.awake)) {
+          o = x;
+          break;
+        }
+      }
+    }
+    if (!o || (verb === 'burn' && !burnSweet(s, o))) {
+      this.setGhost('off');
+      return;
+    }
+    const v = this.renderer.scene.view;
+    this.ui.setGhostAt(Math.max(40, Math.min(v.vw - 40, v.ox + o.x * v.S - v.vx)), v.oy - o.y * v.S - v.vy);
+    this.setGhost(verb === 'burn' ? 'tap' : verb === 'grow' ? 'hold' : verb === 'steer' ? 'steer' : o.x < s.nubs.x ? 'left' : 'right', true);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1729,6 +1775,15 @@ export class Session {
       case 'tag':
         // §4.1: a TAG ends the verb slot, and the sun press too when a held-sun leg (steer, blow) is involved.
         this.input.cut(HEROES[ev.from].sunHeld || HEROES[ev.to].sunHeld);
+        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. The sun holds."
+        this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
+        this.ui.showCue(this.cueShown.id);
+        break;
+      case 'burn':
+      case 'grow':
+      case 'gust':
+        // The first verb of the run that landed: the ghost hand has taught it (a spread fire is no tap).
+        if (ev.e !== 'burn' || !ev.spread) this.verbDone = true;
         break;
       case 'feat':
         this.featSeen.set(ev.kind, ev.value);
@@ -1830,9 +1885,11 @@ export class Session {
     this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
-    // A Trial's recap tip is the fallen element's (Nubs keeps today's recap tips).
+    // A Trial's recap tip names the cause (docs/ELEMENTALS_V2.md §7.2), else the fallen element's;
+    // Nubs melting keeps today's recap tips.
     const d = result.death;
-    const heroTip = this.s.trial ? HEROES[d.who ?? this.s.nubs.hero].deathTip : '';
+    const who = d.who ?? this.s.nubs.hero;
+    const heroTip = this.s.trial ? (CAUSE_TIPS[`${who}:${d.heroCause}`] ?? CAUSE_TIPS[d.heroCause ?? ''] ?? HEROES[who].deathTip) : '';
     this.tip = heroTip || deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
@@ -2243,6 +2300,11 @@ export class Session {
       } else if (this.kind === 'challenge') {
         // The sender's rules: no ghost hint.
         this.setGhost('off');
+      } else if (this.verbNow() !== 'sun') {
+        // Elementals v2 (§7.9): no drag ghost or lesson hint while an element plays its own verb; on
+        // an intro Trial the ghost plays that verb on its next target until the first verb lands.
+        this.hints.stop();
+        this.verbGhost();
       } else {
         const dragging = this.input.pointerDown || this.input.keyDown;
         const h = this.hintIn;
@@ -2397,6 +2459,7 @@ export class Session {
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
       const f = level.feats[0];
       const t = s.trial;
+      const x = HEROES[s.nubs.hero];
       const pct = `${Math.round(levelProgress(s) * 100)} %`;
       if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       // A Trial: the Dare's count on its star while open; the goal line counts the goal itself
@@ -2411,8 +2474,8 @@ export class Session {
           : pct;
       return {
         title: `${levelTag(level.id)} · ${level.name}`,
-        // A Trial: the walking element's tagline under the title.
-        ...(t ? { tagline: HEROES[s.nubs.hero].tagline } : {}),
+        // A Trial: the walking element's tagline under the title, then how it plays.
+        ...(t ? { tagline: x.tagline, verb: `${x.verbLine} · ${x.keyLine}` } : {}),
         goal: `${goalText(level, relaxed)} · ${count}`,
         now,
         stars: [

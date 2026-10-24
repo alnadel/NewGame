@@ -134,14 +134,19 @@ export function dareMet(level: LevelDef, stats: Stats, seen: FeatSeen = NONE): b
   return false;
 }
 
-// --- Elementals Trials (docs/ELEMENTALS.md §3, §4.10): the same flow with the Trial's own words ----
-// (TrialDef.card), its Dare (trialDareValue) and Steady star (the lowest health, stats.minChill).
+// --- Elementals v2 Trials (docs/ELEMENTALS_V2.md §5, §7.11): the same flow with the Trial's own ----
+// words (TrialDef.card), its Dare (trialDareValue) and Steady star (the lowest steady health, stats.minChill).
 
 /** A Dare counted in ticks (shown in seconds). */
 const dareSec = (k: TrialDareKind): boolean => k === 'cloudRide';
 /** The intro card's chip glyph: the intro element's, or the elements together on a mixer (docs/ELEMENTALS_V2.md §10.2). */
 export function trialGlyph(t: TrialDef): string {
   return t.intro ? HEROES[t.intro].glyph : 'elementals';
+}
+/** The Dare's glyph: the element that earns it (burns: Ember, drinks: Drip, trees and the grove: Sprout, a rain ride: Gust). */
+export function trialDareGlyph(t: TrialDef): string {
+  const k = t.dare.kind;
+  return HEROES[k === 'burns' ? 'ember' : k === 'drinks' ? 'drip' : k === 'cloudRide' ? 'gust' : 'sprout'].glyph;
 }
 /** The Trial's Dare count so far. */
 export function trialDare(t: TrialDef, stats: Stats): number {
@@ -172,7 +177,7 @@ export function introCard(level: LevelDef, relaxed = false): IntroCard {
   const t = trialDef(level.id);
   if (t) {
     const k = t.card;
-    return { kicker: levelTag(t.id).toUpperCase(), title: t.name, concept: trialGlyph(t), conceptName: k.chip, blurb: k.blurb, goal: k.goal, stars: [...k.stars], dare: k.dare, dareGlyph: trialGlyph(t) };
+    return { kicker: levelTag(t.id).toUpperCase(), title: t.name, concept: trialGlyph(t), conceptName: k.chip, blurb: k.blurb, goal: k.goal, stars: [...k.stars], dare: k.dare, dareGlyph: trialDareGlyph(t) };
   }
   const c = level.introduces ? CONCEPTS[level.introduces] : null;
   const f = level.feats[0];
@@ -378,7 +383,7 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
     // A Trial counts its goal (T7's blooms) until it is met, then its Dare.
     out.value = Math.min(trialDare(t, stats), t.dare.target);
     out.target = t.dare.target;
-    out.glyph = trialGlyph(t);
+    out.glyph = trialDareGlyph(t);
     out.sec = dareSec(t.dare.kind);
     return out;
   }

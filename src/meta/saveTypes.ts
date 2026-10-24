@@ -117,10 +117,11 @@ export interface CampaignState {
 }
 
 /**
- * Elementals (docs/ELEMENTALS.md): best stars per Trial (index n − 1, 0..3) and whether the screen was
- * opened. Absent until either; kept apart from the Journey's campaign, so no Journey count sees a Trial.
+ * Elementals v2 (docs/ELEMENTALS_V2.md): best stars per Trial (index n − 1, 7 entries, 0..3) and whether
+ * the screen was opened. Absent until either; kept apart from the Journey's campaign, so no Journey
+ * count sees a Trial.
  */
-export interface ElementalsState {
+export interface Elementals2State {
   stars: number[];
   seen: boolean;
 }
@@ -174,8 +175,11 @@ export interface Save {
   history: RunRecord[];
   week: WeekState;
   campaign: CampaignState;
-  /** Elementals Trials (absent on a save that never opened the screen or passed a Trial). */
-  elementals?: ElementalsState;
+  /**
+   * Elementals v2 Trials (absent on a save that never opened the screen or passed a Trial). v1's
+   * `elementals` is dropped by sanitize: its Trials were replaced.
+   */
+  elementals2?: Elementals2State;
   gamify: GamifyState;
   /** Local date of the last finished run, or ''. */
   lastPlay: string;

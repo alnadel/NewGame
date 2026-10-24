@@ -4,10 +4,10 @@
 // The primary action plays the next Journey level ("Level 4"; Space/Enter too); the map and Endless
 // sit beside it, the tray holds Daily, Missions, Wardrobe and Settings. The top bar holds the Sun
 // Rank badge (opens the Profile), the daily reward when one waits, and the Snow wallet (v1.4). The
-// Elementals pill (the four new heroes' faces) sits under the logo from a fresh save on.
+// Elementals pill (the four elements' faces) sits under the logo once the first-run lesson is passed.
 // Progressive disclosure (v1.4): a feature still locked (meta/gamify featureUnlocked) shows a lock
-// and says how to unlock it; while nothing is unlocked yet the Title is Play, Settings and the
-// Elementals pill only. A feature unlocked by progress wears a NEW mark until opened (kept in the
+// and says how to unlock it; while nothing is unlocked yet the Title is Play and Settings (and the
+// Elementals pill once the lesson is passed). A feature unlocked by progress wears a NEW mark until opened (kept in the
 // save). Only the controls take
 // pointer events: a press anywhere else reaches the canvas and starts an endless run (the challenge
 // while a challenge banner is up; the next level while Endless is locked). Tray and mode buttons activate on click with < 8 px of travel,
@@ -19,6 +19,7 @@ import {
   CAMPAIGN_STARS_MAX,
   continueLevel,
   dailyStatus,
+  elementalsOpen,
   nextGoal,
   nextRunEased,
   totalStars,
@@ -210,8 +211,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const walletValue = h('span', 'num');
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
   const hud = h('div', 'title-hud', badgeSlot, reward, h('i', 'title-hud-gap'), chipSnow);
-  // Elementals (docs/ELEMENTALS.md §4.10), the proof of concept's headline: a violet pill under the
-  // logo with the four new heroes' faces, from a fresh save on, NEW until the screen is opened.
+  // Elementals (docs/ELEMENTALS_V2.md §7.11), the proof of concept's headline: a violet pill under the
+  // logo with the four elements' faces (Ember, Drip, Sprout, Gust), once the first-run lesson is
+  // passed, NEW until the screen is opened.
   const faces = ELEMENTAL_FACES.map(() => fitCanvas(h('canvas'), 22));
   let facesDrawn = false;
   // A tap opens it; a sideways drag that starts on it is handed to the canvas, as the modes' are.
@@ -471,8 +473,9 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     });
     hide(mapBtn, fresh);
     // A challenge's banner takes the top's room (its run is the point of the link).
-    hide(elementalsBtn, ctx.challenge() !== null);
-    elementalsBtn.classList.toggle('is-new', save.elementals?.seen !== true);
+    // Elementals v2: it opens once the first-run lesson is passed.
+    hide(elementalsBtn, ctx.challenge() !== null || !elementalsOpen(save));
+    elementalsBtn.classList.toggle('is-new', save.elementals2?.seen !== true);
     if (!facesDrawn) faces.forEach((c, i) => ctx.cb.renderHeroPreview(c, (ELEMENTAL_FACES[i] as readonly [HeroId, string])[0]));
     facesDrawn = true;
     hide(chipMissions, !featureUnlocked(save, 'missions'));

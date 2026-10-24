@@ -7,6 +7,7 @@ import {
   CONCEPTS,
   FORECASTS,
   formatScore,
+  HEROES,
   levelTag,
   MINUTES_PER_DAY,
   PLAN_START_DATE,
@@ -14,6 +15,7 @@ import {
   type BiomeId,
   type DayPlan,
   type ForecastInfo,
+  type HeroId,
   type HourGlyph,
   type LevelDef,
   type RunStats,
@@ -202,6 +204,10 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
       // v1.5: the frost meter is full.
       return keyboard ? 'Frost full! Press ↓ for a Cold Snap' : 'Frost full! Swipe ↓ for a Cold Snap';
   }
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): a TAG, "{Name}'s turn." (+ " The sun holds."); the
+  // verb text is cut for the bundle budget (§9.3: the tips, the ghost and the Pause card say it).
+  const x = HEROES[id.slice(4) as HeroId];
+  return `${x.name}${x.name.endsWith('s') ? "'" : "'s"} turn.${x.sunHeld ? ' The sun holds.' : ''}`;
 }
 
 /** How long a cue stays up (ms); null = until replaced or cleared. */
@@ -219,6 +225,7 @@ export function cueDuration(id: CueId, dir: -1 | 1 | undefined): number | null {
     case 'drag':
       return null;
   }
+  return 2400;
 }
 
 // ---------------------------------------------------------------------------------------------

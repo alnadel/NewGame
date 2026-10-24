@@ -201,33 +201,41 @@ in play, and the stars and unlocks earned since the last visit pop in (`.is-fres
 another, `.is-unlocked` tiles, with the stamp or unlock sound). `setSave` and the Settings toggle
 re-render the tiles in place (focus survives).
 
-**Elementals** (docs/ELEMENTALS.md §4.10; `'elementals'`, `screens/elementals.ts`,
+**Elementals** (docs/ELEMENTALS_V2.md §7.11; `'elementals'`, `screens/elementals.ts`,
 `styles/elementals.css`). The Title pill `.elementals-btn` (the proof of concept's headline: a
-violet candy pill under the logo with the four new heroes' faces on `renderHeroPreview` canvases and
-the label "Elementals") shows from a fresh save on (hidden only under a challenge banner), and it
-wears the NEW sticker, its faces pulsing, until the screen is first opened (`markElementalsSeen`).
-It is pressable like the modes (a sideways drag on it moves the sun). Where it crowds Nubs' goal
-bubble, `fit()` drops the key line, then the forecast chip, but only when that keeps the bubble over
-him (`.no-keys`, `.no-forecast`). The screen rebuilds
-from the save on every refresh. It has a header with the Trial stars `n/24`, then the stage (the
-Wardrobe's stage recipe). The stage holds the selected Trial's featured hero (a duo shows both) on
-`renderHeroPreview` canvases, its name and element, tagline, ability with its glyph, the three
-rules as tags, and the primary **Play** "Play T3 · Thunder Alley". Below the stage sit the five
-heroes as round candy coins (`.hero-tile[data-hero]`, `aria-pressed`). A locked hero is a
-silhouette with a lock coin and "Pass T1" (its intro Trial; the aria-label and the toast name it).
-Picking a hero frames its Trials in gold (`.is-hl`) and points Play at its first open Trial not
-passed (else its first open one, else its first). Then come the eight Trials, two columns of
-Wardrobe tiles (`.trial-tile[data-trial]`). Each tile shows its `levelShort` disc, name, three stars
-and the cast's faces (the roster's art in small candy coins; '▸' a relay, back to Nubs on T5, '+' a
-duo; T8's five go without arrows), and carries `.is-locked`, `.is-done`, `.is-next` (selected) and
-`aria-disabled`. An open tile starts its Trial (`startRun('campaign', undefined, 1000 + n)`). A
-locked one toasts "Pass Kindling first.". Arrow keys walk the hero row and the grid, down from a
-hero to its first Trial and up from the grid's top row to the selected hero. Trials and heroes
-opened since the last visit pop open (`.is-unlocked`), with "Ember joins the team!" and the unlock
-sound (the Results of the pass that unlocked a hero say it too). `show('elementals', id)` selects
-that Trial (Results > Trials and Back after a Trial). A Trial's Results print `levelTag` ("Trial
-3"), hide the star road, say "Next trial" and lead "Trials" (the Elementals glyph) and Back here;
-its Pause card adds the hero's tagline under the title (a duo's both) and no dozing Nubs.
+violet candy pill under the logo with the faces of Ember, Drip, Sprout and Gust on
+`renderHeroPreview` canvases and the label "Elementals") shows once the first-run lesson is passed
+(`elementalsOpen`: `flags.tutorialDone` or the testing toggle; hidden under a challenge banner), and
+it wears the NEW sticker, its faces pulsing, until the screen is first opened
+(`markElementalsSeen`). It is pressable like the modes (a sideways drag on it moves the sun). Where
+it crowds Nubs' goal bubble, `fit()` drops the key line, then the forecast chip, but only when that
+keeps the bubble over him (`.no-keys`, `.no-forecast`). The screen rebuilds from the save on every
+refresh. It has a header with the Trial stars `n/21`, then the stage (the Wardrobe's stage recipe):
+the selected Trial's element (or the one tapped) on a `renderHeroPreview` canvas, its name and
+element, tagline, the three rules as tags, the **verb row** (`.el-verb`: the gesture icon from the
+one gesture set in `icons.ts`, `g-drag`, `g-tap`, `g-hold`, `g-steer`, `g-swipe`; the `verbLine`;
+then the `keyLine` small) and the primary **Play** "Play T3 · Green Bridge". Below the stage sit the
+five elements (Nubs, Ember, Drip, Sprout, Gust) as round candy coins (`.hero-tile[data-hero]`,
+`aria-pressed`). A locked one is a silhouette with a lock coin and "Pass T4" (its intro Trial; the
+aria-label "Gust, locked: pass Weather Vane" and the toast name it). Picking an element frames its
+Trials in gold (`.is-hl`) and points Play at its first open Trial not passed (else its first open
+one, else its first). Then come the seven Trials, two columns of Wardrobe tiles
+(`.trial-tile[data-trial]`, the last row single). Each tile shows its `levelShort` disc, name, three
+stars and the cast's faces in leg order (the roster's art in small candy coins with '▸' between;
+T7's five go without arrows), reads "Trial 3, Green Bridge, Nubs, Sprout, 2 of 3 stars", and carries
+`.is-locked`, `.is-done`, `.is-next` (selected) and `aria-disabled`. T1-T4 open together once the
+lesson is passed; T5 needs T1 and T2, T6 T3 and T4, T7 T5 and T6. An open tile starts its Trial
+(`startRun('campaign', undefined, 1000 + n)`); a locked one toasts "Pass Kindling first.". Arrow keys
+walk the element row and the grid, down from an element to its first Trial and up from the grid's
+top row to the selected element. Trials and elements opened since the last visit pop open
+(`.is-unlocked`), with "Ember joins the team!" and the unlock sound (the Results of the pass that
+unlocked one say it too). `show('elementals', id)` selects that Trial (Results > Trials and Back
+after a Trial). A Trial's Results print `levelTag` ("Trial 3"), hide the star road, say "Next
+trial" and lead "Trials" (the Elementals glyph) and Back here; its Pause card adds the walking
+element's tagline and "{verbLine} · {keyLine}" under the title, and no dozing Nubs. In play the
+cue line announces each TAG ("Drip's turn. The sun holds."), and on an intro Trial the ghost hand
+plays the element's verb on its next target (`setGhostAt`; modes `tap`, `hold`, `steer`, a swipe as
+`left`/`right`; keyboard players see the key).
 
 **Records** (the Profile's, v1.4; the v1.1 Journal's until then): bests (endless and Daily), the
 last 30 endless runs as bars (height ∝ score, colour by the day reached, the best in gold, runs on
@@ -284,10 +292,10 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
   `SAVE_BAK_KEY` (`shady.save.bak`); an unreadable main save is recovered from `.bak` when possible.
   - `.canPersist`: false while a newer version's save is on disk (the store then never writes;
     refuse reset and restore with the newer-version message).
-  - `elementals?: { stars[8] 0..3, seen }` (docs/ELEMENTALS.md §4.10) is optional: `sanitize` emits it
-    only when the raw save has it (`defaults()` has none), merges take the larger stars per Trial
-    and `seen` from either side, and a side without it (a build from before the Elementals) never
-    deletes it. A tab of such a build writing over it is merged rather than adopted, so the Trials
+  - `elementals2?: { stars[7] 0..3, seen }` (docs/ELEMENTALS_V2.md §7.11) is optional: `sanitize`
+    emits it only when the raw save has it (`defaults()` has none) and drops v1's `elementals` (its
+    Trials were replaced), merges take the larger stars per Trial and `seen` from either side, and a
+    side without it (a build from before Elementals v2) never deletes it. A tab of such a build writing over it is merged rather than adopted, so the Trials
     survive. The v3 → v4 upgrade (`upgradeToV4`) of a save with progress writes it
     with `seen: true`, so that first visit marks nothing new. (A lone older build, with no newer tab open, still drops the field when it writes.)
   - `.onExternalChange(cb) -> unsubscribe`: another tab or instance wrote the save (a `storage`
@@ -321,13 +329,14 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
     target, name, item } | null` names the next one (the Title's goal line, the map, Results).
     `isLevelPlayable(save, id)` (`id ≤ unlocked || settings.unlockAll`), `totalStars`,
     `continueLevel` (the highest unlocked level, the last once all are passed), `CAMPAIGN_STARS_MAX`.
-  - Elementals Trials (`result.level.id` 1001..1008, docs/ELEMENTALS.md §4.10): `elementals.stars[n-1]`
+  - Elementals Trials (`result.level.id` 1001..1007, docs/ELEMENTALS_V2.md §7.11): `elementals2.stars[n-1]`
     keeps the best (the field is created on the first star), the first pass pays +20 Snow ("First
-    pass +20"), each Trial it opens toasts "New trial: Day Shift", and XP comes through `awardRun`.
+    pass +20"), each Trial it opens toasts "New trial: Steam", and XP comes through `awardRun`.
     The Journey (stars, unlocked, misses, `lastLevel`, n/600, Continue), missions, achievements and
-    trophies are never touched. Helpers: `trialOpen(save, n)` (every `requires` passed, or
-    `unlockAll`), `heroUnlocked(save, hero)` (its intro Trial passed; Nubs always), `nextOpenTrial(save,
-    n)`, `trialBest`, `elementalStars` (of `ELEMENTAL_STARS_MAX` 24), `markElementalsSeen`;
+    trophies are never touched. Helpers: `elementalsOpen(save)` (the first-run lesson passed, or
+    `unlockAll`), `trialOpen(save, n)` (open, and every `requires` passed; or `unlockAll`),
+    `heroUnlocked(save, hero)` (its intro Trial passed; Nubs always), `nextOpenTrial(save, n)`,
+    `trialBest`, `elementalStars` (of `ELEMENTAL_STARS_MAX` 21), `markElementalsSeen`;
     `resetProgress` zeroes the field when the save has it (so a merge cannot bring Trials back).
   - `swapMission`, `recentBest` (tutorial runs ignored), `MILESTONES`, `nextMilestone`, `nextGoal`
     (the Title tagline from run 3: a nearly done mission, a fresh Daily, the next star reward once the
@@ -348,7 +357,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 - `meta/share.ts`: `buildShare(result, baseUrl | null, tryNumber, { name?, par?, plan? }) -> { text,
   url | null, challenge | null }` (forecast emojis on Day Plan runs, "Beat Sam's run", Snowbot's par
   on Dailies; a Journey level shares `SHADY Journey · Level 12 ★★☆ · Glass Garden` (a Trial `SHADY
-  Elementals · Trial 3 ★★☆ · Thunder Alley`) plus the plain
+  Elementals · Trial 3 ★★☆ · Green Bridge`) plus the plain
   game link, `challenge` null, `campaignShareText`, `starText`), `shareBase()`, the pure
   `resolveShareBase()`, glyph helpers. `platform/share.ts`:
   `shareText`, `shareFiles({ file, text })` ('saved' = downloaded and copied), `copyText`.
@@ -359,7 +368,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 
 Endless rules come from the comfort rung (`stats.comfort`, core `rungConfig`); Daily and challenge
 runs use their own rules; Journey levels come from `levelDef(id)` (core, CAMPAIGN_PLAN §2), Trials
-from `trialLevel(id)` (core, docs/ELEMENTALS.md §3). Wherever a level is named, `levelTag(id)` prints
+from `trialLevel(id)` (core, docs/ELEMENTALS_V2.md §5). Wherever a level is named, `levelTag(id)` prints
 "Level 12" or "Trial 3".
 
 ## 6. Integration recipes

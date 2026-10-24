@@ -10,6 +10,9 @@ import {
   CAMPAIGN_STARS_MAX,
   continueLevel,
   elementalStars,
+  elementalsOpen,
+  markElementalsSeen,
+  trialBest,
   ELEMENTAL_STARS_MAX,
   heroUnlocked,
   isLevelPlayable,
@@ -1018,7 +1021,7 @@ describe('Journey levels (CAMPAIGN_PLAN §5)', () => {
   });
 });
 
-describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
+describe('Elementals v2 Trials (docs/ELEMENTALS_V2.md §5.0, §7.11)', () => {
   /** A finished Trial n: `passed` with `stars`, failed otherwise. */
   const trial = (n: number, passed: boolean, stars: number, over: Partial<Stats> = {}): RunResult =>
     run(300, { flakes: 7, snow: 25, ...over }, { mode: 'campaign', level: { id: 1000 + n, passed, stars: stars as 0 | 1 | 2 | 3, introduces: null } });
@@ -1033,7 +1036,7 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     base.campaign.misses[1] = 1;
     const journey = structuredClone(base.campaign);
     const first = applyRunResult(base, trial(3, true, 2), opts());
-    expect(first.save.elementals).toEqual({ stars: [0, 0, 2, 0, 0, 0, 0], seen: false });
+    expect(first.save.elementals2).toEqual({ stars: [0, 0, 2, 0, 0, 0, 0], seen: false });
     // The Journey's stars, unlocked level, misses, last level, n/600 and Continue never change.
     expect(first.save.campaign).toEqual(journey);
     expect(totalStars(first.save)).toBe(2);
@@ -1047,12 +1050,12 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     expect(first.outcome.gamify?.xpGained).toBeGreaterThan(0);
     expect(first.save.gamify.xp).toBe(100 + (first.outcome.gamify?.xpGained ?? 0));
     const again = applyRunResult(first.save, trial(3, true, 3), opts());
-    expect(again.save.elementals?.stars[2]).toBe(3);
+    expect(again.save.elementals2?.stars[2]).toBe(3);
     expect(again.outcome.bonusSnow).toBe(0);
     expect(again.outcome.toasts.map((t) => t.text)).not.toContain('First pass +20');
     // A worse run or a fail keeps the best.
-    expect(applyRunResult(again.save, trial(3, true, 1), opts()).save.elementals?.stars[2]).toBe(3);
-    expect(applyRunResult(again.save, trial(3, false, 0), opts()).save.elementals?.stars[2]).toBe(3);
+    expect(applyRunResult(again.save, trial(3, true, 1), opts()).save.elementals2?.stars[2]).toBe(3);
+    expect(applyRunResult(again.save, trial(3, false, 0), opts()).save.elementals2?.stars[2]).toBe(3);
   });
 
   it('adds no mission progress, achievements or trophies; a fail stores nothing', () => {
@@ -1069,12 +1072,27 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     expect(save.stats.runs).toBe(11);
     // A failed first try leaves the field absent.
     const fail = applyRunResult(quiet(), trial(1, false, 0), opts());
-    expect('elementals' in fail.save).toBe(false);
+    expect('elementals2' in fail.save).toBe(false);
     expect(fail.outcome.bonusSnow).toBe(0);
+  });
+
+  it('opens nothing before the first-run lesson is passed (the testing toggle opens everything)', () => {
+    const s = quiet();
+    expect(elementalsOpen(s)).toBe(false);
+    expect([1, 2, 3, 4, 5, 6, 7].some((n) => trialOpen(s, n))).toBe(false);
+    expect(nextOpenTrial(s, 0)).toBeNull();
+    s.flags.tutorialDone = true;
+    expect(elementalsOpen(s)).toBe(true);
+    expect(nextOpenTrial(s, 0)).toBe(1);
+    const all = quiet();
+    all.settings.unlockAll = true;
+    expect(elementalsOpen(all)).toBe(true);
+    expect([1, 2, 3, 4, 5, 6, 7].every((n) => trialOpen(all, n))).toBe(true);
   });
 
   it('opens Trials and elements in the v2 order, and toasts each new Trial on the Results', () => {
     let s = quiet();
+    s.flags.tutorialDone = true;
     const open = (): number[] => [1, 2, 3, 4, 5, 6, 7].filter((n) => trialOpen(s, n));
     expect(open()).toEqual([1, 2, 3, 4]);
     expect(heroUnlocked(s, 'nubs')).toBe(true);
@@ -1112,14 +1130,27 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     all.settings.unlockAll = true;
     expect([1, 2, 3, 4, 5, 6, 7].every((n) => trialOpen(all, n))).toBe(true);
     expect(heroUnlocked(all, 'drip')).toBe(true);
-    expect(nextOpenTrial(quiet(), 4)).toBeNull();
-    expect(trialOpen(quiet(), 9)).toBe(false);
+    const done = quiet();
+    done.flags.tutorialDone = true;
+    expect(nextOpenTrial(done, 4)).toBeNull();
+    expect(trialOpen(done, 8)).toBe(false);
+    expect(trialOpen(done, 9)).toBe(false);
   });
 
   it('a reset zeroes the Trials (a merge must not bring them back)', () => {
     const s = quiet();
-    s.elementals = { stars: [3, 3, 0, 0, 0, 0, 0], seen: true };
-    expect(resetProgress(s).elementals).toEqual({ stars: Array(7).fill(0), seen: false });
-    expect('elementals' in resetProgress(quiet())).toBe(false);
+    s.elementals2 = { stars: [3, 3, 0, 0, 0, 0, 0], seen: true };
+    expect(resetProgress(s).elementals2).toEqual({ stars: Array(7).fill(0), seen: false });
+    expect('elementals2' in resetProgress(quiet())).toBe(false);
+  });
+
+  it('marks the screen seen without touching the stars', () => {
+    const s = quiet();
+    expect(markElementalsSeen(s).elementals2).toEqual({ stars: Array(7).fill(0), seen: true });
+    s.elementals2 = { stars: [2, 0, 1, 0, 0, 0, 0], seen: false };
+    const seen = markElementalsSeen(s);
+    expect(seen.elementals2).toEqual({ stars: [2, 0, 1, 0, 0, 0, 0], seen: true });
+    expect(s.elementals2.seen).toBe(false);
+    expect(trialBest(seen, 3)).toBe(1);
   });
 });

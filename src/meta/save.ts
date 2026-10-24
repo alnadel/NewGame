@@ -4,7 +4,7 @@
 // Loading never throws and never trusts its input: every field is type-checked, clamped and filtered
 // against the content catalog. A save written by a newer build is left untouched on disk.
 
-import type { CampaignState, DailyEntry, ElementalsState, ErrandState, GamifyState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
+import type { CampaignState, DailyEntry, Elementals2State, ErrandState, GamifyState, MissionSlot, RunRecord, Save, Settings, WeekState } from './saveTypes.ts';
 import type { StorageAdapter } from '../platform/storage.ts';
 import { onPageVisible } from '../platform/lifecycle.ts';
 import {
@@ -317,8 +317,8 @@ function sanitizeCampaign(raw: unknown): CampaignState {
 /** A level's goal misses stop counting here (two relax its goal). */
 export const MAX_MISSES = 9;
 
-/** The Elementals Trials' best stars (TRIAL_COUNT entries of 0..3) and the screen's seen mark. */
-function sanitizeElementals(raw: unknown): ElementalsState {
+/** The Elementals v2 Trials' best stars (TRIAL_COUNT entries of 0..3) and the screen's seen mark. */
+function sanitizeElementals(raw: unknown): Elementals2State {
   const r = rec(raw);
   const list = Array.isArray(r.stars) ? r.stars : [];
   return { stars: Array.from({ length: TRIAL_COUNT }, (_, i) => int(list[i], 0, 0, STARS_PER_LEVEL)), seen: bool(r.seen, false) };
@@ -457,8 +457,9 @@ function sanitize(r: Rec, now: number): Save {
     history,
     week: sanitizeWeek(r.week),
     campaign: sanitizeCampaign(r.campaign),
-    // Elementals: only a save that has the field keeps it (defaults() has none).
-    ...(isRecord(r.elementals) ? { elementals: sanitizeElementals(r.elementals) } : {}),
+    // Elementals v2: only a save that has the field keeps it (defaults() has none); v1's `elementals`
+    // (other Trials) is dropped.
+    ...(isRecord(r.elementals2) ? { elementals2: sanitizeElementals(r.elementals2) } : {}),
     gamify: sanitizeGamify(r.gamify, achievements.length),
     lastPlay: typeof r.lastPlay === 'string' && isDateString(r.lastPlay) ? r.lastPlay : '',
     flags: {
@@ -792,8 +793,8 @@ export class SaveStore {
     this.lastRaw = raw;
     const head = this.revs[this.revs.length - 1];
     let next: Save;
-    // A build from before the Elementals drops their field: its save never includes this one's.
-    if (!this.dirty && (head === undefined || remoteRevs.includes(head)) && (remote.save.elementals !== undefined || this.current.elementals === undefined)) {
+    // A build from before Elementals v2 drops their field: its save never includes this one's.
+    if (!this.dirty && (head === undefined || remoteRevs.includes(head)) && (remote.save.elementals2 !== undefined || this.current.elementals2 === undefined)) {
       // It includes everything this instance has: adopt it as it is.
       next = remote.save;
     } else {

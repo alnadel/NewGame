@@ -357,6 +357,14 @@ describe('Title, Daily and cue copy (UM9)', () => {
     expect(cueText('swing', undefined, false)).toBe('SWING! Straight into the next shade: +Snow');
     expect(cueDuration('swing', undefined)).toBe(2400);
   });
+
+  it('Elementals v2: the cue line announces each TAG, and says when the sun holds (docs/ELEMENTALS_V2.md §7.11)', () => {
+    expect(cueText('tag-ember', undefined, false)).toBe("Ember's turn.");
+    expect(cueText('tag-drip', undefined, true)).toBe("Drip's turn. The sun holds.");
+    expect(cueText('tag-gust', undefined, false)).toBe("Gust's turn. The sun holds.");
+    expect(cueText('tag-nubs', undefined, false)).toBe("Nubs' turn.");
+    expect(cueDuration('tag-sprout', undefined)).toBe(2400);
+  });
 });
 
 describe('Journal (UM10)', () => {

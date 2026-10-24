@@ -208,7 +208,8 @@ export function continueLevel(save: Pick<Save, 'campaign'>): number {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Elementals Trials (docs/ELEMENTALS.md §3.0, §4.10): their own stars, apart from the Journey's
+// Elementals v2 Trials (docs/ELEMENTALS_V2.md §5.0, §7.11): their own stars (save.elementals2),
+// apart from the Journey's
 // ---------------------------------------------------------------------------------------------
 
 /** Snow a Trial's first pass pays. */
@@ -217,36 +218,44 @@ export const TRIAL_FIRST_PASS_SNOW = 20;
 export const ELEMENTAL_STARS_MAX = TRIAL_COUNT * STARS_PER_LEVEL;
 
 /** Trial n's best stars (0: not passed). */
-export function trialBest(save: Pick<Save, 'elementals'>, n: number): number {
-  return save.elementals?.stars[n - 1] ?? 0;
+export function trialBest(save: Pick<Save, 'elementals2'>, n: number): number {
+  return save.elementals2?.stars[n - 1] ?? 0;
 }
 
-/** Trial n (1..8) can be played: every Trial it requires is passed, or the testing toggle opens them all. */
-export function trialOpen(save: Pick<Save, 'elementals' | 'settings'>, n: number): boolean {
+/** The Elementals open once the first-run lesson is passed (or the testing toggle opens everything). */
+export function elementalsOpen(save: Pick<Save, 'flags' | 'settings'>): boolean {
+  return save.flags.tutorialDone || save.settings.unlockAll;
+}
+
+/**
+ * Trial n (1..7) can be played: the Elementals are open and every Trial it requires is passed (T1-T4
+ * open together; T5 needs T1 and T2, T6 T3 and T4, T7 T5 and T6), or the testing toggle opens them all.
+ */
+export function trialOpen(save: Pick<Save, 'elementals2' | 'settings' | 'flags'>, n: number): boolean {
   const t = trialDef(TRIAL_BASE + n);
-  return t !== null && (save.settings.unlockAll || t.requires.every((k) => trialBest(save, k) > 0));
+  return t !== null && (save.settings.unlockAll || (save.flags.tutorialDone && t.requires.every((k) => trialBest(save, k) > 0)));
 }
 
-/** A hero's roster tile is open: its intro Trial passed (Nubs always), or the testing toggle. */
-export function heroUnlocked(save: Pick<Save, 'elementals' | 'settings'>, hero: HeroId): boolean {
+/** An element's roster tile is open: its intro Trial passed (Nubs always), or the testing toggle. */
+export function heroUnlocked(save: Pick<Save, 'elementals2' | 'settings'>, hero: HeroId): boolean {
   const n = HEROES[hero].intro;
   return n === 0 || save.settings.unlockAll || trialBest(save, n) > 0;
 }
 
 /** The next open Trial after Trial n (its number), or null. */
-export function nextOpenTrial(save: Pick<Save, 'elementals' | 'settings'>, n: number): number | null {
+export function nextOpenTrial(save: Pick<Save, 'elementals2' | 'settings' | 'flags'>, n: number): number | null {
   for (let k = n + 1; k <= TRIAL_COUNT; k++) if (trialOpen(save, k)) return k;
   return null;
 }
 
-/** The Elementals screen was opened (its Title square drops its NEW sticker). Pure. */
+/** The Elementals screen was opened (its Title pill drops its NEW sticker). Pure. */
 export function markElementalsSeen(save: Save): Save {
-  return { ...save, elementals: { stars: save.elementals?.stars.slice() ?? Array<number>(TRIAL_COUNT).fill(0), seen: true } };
+  return { ...save, elementals2: { stars: save.elementals2?.stars.slice() ?? Array<number>(TRIAL_COUNT).fill(0), seen: true } };
 }
 
-/** Stars earned across the Trials (of ELEMENTAL_STARS_MAX). */
-export function elementalStars(save: Pick<Save, 'elementals'>): number {
-  return save.elementals?.stars.reduce((a, b) => a + b, 0) ?? 0;
+/** Stars earned across the Trials (of ELEMENTAL_STARS_MAX, 21). */
+export function elementalStars(save: Pick<Save, 'elementals2'>): number {
+  return save.elementals2?.stars.reduce((a, b) => a + b, 0) ?? 0;
 }
 
 /** The next Journey star reward: the stars so far, the previous and next thresholds, its item. */
@@ -448,14 +457,14 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
   let campaign: CampaignOutcome | undefined;
   let firstPass = false;
   if (trial && r.level) {
-    // An Elementals Trial (docs/ELEMENTALS.md §4.10): its best stars and a first-pass bonus; the
+    // An Elementals Trial (docs/ELEMENTALS_V2.md §7.11): its best stars and a first-pass bonus; the
     // Journey's stars, unlocked level, misses and Continue never change.
     const lv = r.level;
     const n = lv.id - TRIAL_BASE;
     const before = trialBest(save, n);
     const stars = lv.passed ? Math.max(1, Math.min(STARS_PER_LEVEL, Math.floor(lv.stars))) : 0;
     if (stars > before) {
-      const el = (next.elementals ??= { stars: Array<number>(TRIAL_COUNT).fill(0), seen: false });
+      const el = (next.elementals2 ??= { stars: Array<number>(TRIAL_COUNT).fill(0), seen: false });
       el.stars[n - 1] = stars;
     }
     if (lv.passed && before === 0) {
@@ -465,7 +474,7 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     }
     const opened = TRIALS.filter((t) => !trialOpen(save, t.n) && trialOpen(next, t.n));
     for (const t of opened) chips.push({ text: `New trial: ${t.name}`, icon: 'star', tone: 'accent' });
-    // A hero this pass unlocked joins the team right here (the Elementals screen's toast waits for a visit).
+    // An element this pass unlocked joins the team right here (the Elementals screen's toast waits for a visit).
     for (const x of HERO_IDS) if (!heroUnlocked(save, x) && heroUnlocked(next, x)) chips.push({ text: `${HEROES[x].name} joins the team!`, icon: 'star', tone: 'gold' });
     campaign = { passed: lv.passed, stars, newStars: Math.max(0, stars - before), unlockedNext: opened.length > 0 };
   } else if (r.mode === 'campaign' && r.level !== undefined) {
@@ -828,7 +837,7 @@ export function equipCosmetic(save: Save, id: CosmeticId): EquipResult {
 export function resetProgress(save: Save, now: number = Date.now()): Save {
   const fresh = defaults(now);
   fresh.settings = { ...save.settings };
-  if (save.elementals) fresh.elementals = { stars: Array<number>(TRIAL_COUNT).fill(0), seen: false };
+  if (save.elementals2) fresh.elementals2 = { stars: Array<number>(TRIAL_COUNT).fill(0), seen: false };
   fresh.flags.installSheetShown = save.flags.installSheetShown;
   fresh.flags.persistRequested = save.flags.persistRequested;
   return fresh;

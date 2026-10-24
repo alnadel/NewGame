@@ -181,7 +181,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     { class: 'ghost', deco: true },
     h('div', 'ghost-track', h('div', 'ghost-trail'),
       h('div', 'ghost-hand', h('span', 'ghost-tip'), svgFromMarkup(ghostHandSvg()))),
-    h('p', 'ghost-word', h('span', 'ghost-arrow', '‹'), 'drag', h('span', 'ghost-arrow', '›')),
+    h('p', 'ghost-word', h('span', 'ghost-arrow', '‹'), h('span', 'ghost-verb', 'drag'), h('span', 'ghost-arrow', '›')),
   );
   // Keyboard players in play see the key to hold instead of the swiping hand.
   const ghostKey = h('span', 'ghost-key');
@@ -205,10 +205,17 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     const ms = cueDuration(id, dir);
     if (ms !== null) cueTimer = window.setTimeout(() => showCue(null), ms);
   };
+  /** Elementals v2: the ghost plays an element's verb where setGhostAt anchors it. */
+  let ghostAt = false;
+  const GHOST_VERB: Partial<Record<GhostMode, string>> = { tap: 'tap', hold: 'hold', steer: 'drag', left: 'swipe', right: 'swipe' };
+  const GHOST_KEY: Partial<Record<GhostMode, string>> = { tap: '↑', hold: 'Hold ↑', steer: '← →', left: '←', right: '→' };
   function updateGhostKey(): void {
     const dir = ghost === 'left' ? -1 : ghost === 'right' ? 1 : undefined;
-    // Waiting to start ('both'): Space starts the run (the arrows do too, steering as they go).
-    ghostKey.textContent = dir === undefined ? 'Space' : `Hold ${keyDir(dir) === -1 ? '←' : '→'}`;
+    // Waiting to start ('both'): Space starts the run (the arrows do too, steering as they go). An
+    // element's verb: its key (a Gust gust is one press).
+    ghostKey.textContent = ghostAt ? (GHOST_KEY[ghost] ?? '') : dir === undefined ? 'Space' : `Hold ${keyDir(dir) === -1 ? '←' : '→'}`;
+    const word = ghostEl.querySelector('.ghost-verb');
+    if (word) word.textContent = ghostAt ? (GHOST_VERB[ghost] ?? '') : 'drag';
   }
   const toasts = createToastStack();
   const modals = createModalHost(() => ctx, (open) => setFlag(screenLayer, 'inert', open || rotateBlocking));
@@ -483,6 +490,17 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     setGhostThumb(mode) {
       ghost = mode;
       updateGhost();
+      updateGhostKey();
+    },
+    setGhostAt(x, y) {
+      const at = x === x;
+      if (at) {
+        ghostEl.style.setProperty('--gx', `${Math.round(x)}px`);
+        ghostEl.style.setProperty('--gy', `${Math.round(y)}px`);
+      }
+      if (at === ghostAt) return;
+      ghostAt = at;
+      ghostEl.classList.toggle('is-at', at);
       updateGhostKey();
     },
     ghostProgress,

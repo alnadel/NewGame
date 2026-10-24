@@ -18,7 +18,7 @@ import {
   type InputFrame,
   type SimEvent,
 } from '../../src/core/index.ts';
-import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState, trialDareCount } from '../../src/game/campaign.ts';
+import { campaignConfig, conceptLabel, featLabel, goalLine, goalText, hudGoal, introCard, missLine, nextStarHint, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starRules, starState, trialDareCount, trialDareGlyph } from '../../src/game/campaign.ts';
 import { isDebugRun, parseParams } from '../../src/game/params.ts';
 import { campaignShareText } from '../../src/meta/share.ts';
 import { createBanners, dismissLevelCard, resetBanners, showLevelCard, showStamp, updateBanners } from '../../src/render/banners.ts';
@@ -307,7 +307,10 @@ describe('Elementals Trials (docs/ELEMENTALS_V2.md §7.11)', () => {
   const t6 = trialLevel(1006)!;
   it('the intro card, star rules and goal speak the Trial\'s own words; it is never relaxed', () => {
     expect(introCard(t1)).toMatchObject({ kicker: 'TRIAL 1', title: 'Kindling', concept: 'ember', conceptName: 'NUBS ▸ EMBER ▸ NUBS', goal: 'Reach the finish', dareGlyph: 'ember' });
-    expect(introCard(t6)).toMatchObject({ kicker: 'TRIAL 6', concept: 'elementals', goal: 'Reach the finish' });
+    expect(introCard(t6)).toMatchObject({ kicker: 'TRIAL 6', concept: 'elementals', goal: 'Reach the finish', dareGlyph: 'sprout' });
+    // The Dare's glyph is the element that earns it.
+    expect([1001, 1002, 1003, 1004, 1005, 1006, 1007].map((id) => trialDareGlyph(trialDef(id)!))).toEqual(['ember', 'drip', 'sprout', 'gust', 'drip', 'sprout', 'sprout']);
+    expect(hudGoal(trialLevel(1005)!, { flakes: 0, snow: 0, drinks: 2 })).toMatchObject({ value: 2, target: 4, glyph: 'drip' });
     expect(starRules(t1)).toEqual(['Finish', 'Burn all 7', 'All ≥ 30']);
     expect(campaignConfig(t6, false, true, true).relaxedGoal).toBeUndefined();
     expect(goalLine(t1, { flakes: 0, snow: 0 }, true)).toBe('Reached the finish');
