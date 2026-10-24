@@ -62,7 +62,7 @@ const SAP_GAP = 10;
 export const WAIVERS: Readonly<Record<string, string>> = {
   // The intros' Dares are "do everything the leg offers", and most finishers do.
   'T1 G6': 'the Dare is every wall the leg offers and most finishers burn them all (96% meet burns ≥ 7)',
-  'T2 G6': 'the Dare is every puddle the leg offers and most finishers drink them all (88% meet drinks ≥ 7)',
+  'T2 G6': 'the Dare is every puddle the leg offers and most finishers drink them all (96% meet drinks ≥ 6)',
   'T4 G6': 'the Dare is the ride the leg offers and most finishers take it (83% meet cloudRide ≥ 60, 83% ≥ 75)',
   // T5 is the gentle first mixer.
   'T5 G4': 'the gentle first mixer: humanEl passes 16/16 (100%) with every lever at its bound',
