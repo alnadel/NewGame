@@ -300,6 +300,8 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       const wall = o.kind === 'bramble' || o.kind === 'gate' || o.kind === 'ice';
       if (!wall && o.kind !== 'puddle') continue;
       if (burnTarget(s, wall ? trailX(tr, o.y) : o.x, o.y) !== i) continue;
+      // humanEl sees a target once it is in the window and unveiled (its reaction runs from then).
+      const seen = ready(s, i);
       // The verb lands TAP_PRESS ticks from now (the jitter moves the moment): has it come?
       const lead = TAP_PRESS + (jitter[i] as number);
       const own = wall && ownWall(s, o);
@@ -323,7 +325,7 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       }
       // Never under a shower: rain over it while it burns would put it out.
       if (!opts.tapOnSight && showered(s, el, o, TAP_PRESS, own ? contactTicks(s, o) : TAP_PRESS + burnTicksOf(o))) continue;
-      if (s.nubs.chill <= costOf(s, o) || !ready(s, i)) continue;
+      if (s.nubs.chill <= costOf(s, o) || !seen) continue;
       if (due < bestDue) {
         bestDue = due;
         best = i;
