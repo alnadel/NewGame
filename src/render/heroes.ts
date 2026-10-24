@@ -23,7 +23,7 @@ import { ctx2d, type Canvas2D } from './sprites.ts';
 const parsed = new Map<string, ArtOp[]>();
 
 /** Draws an art string ('@' and '$0' are pal[0]) in the current transform (`flat`: high contrast, no shines). */
-function art(g: CanvasRenderingContext2D, src: string, pal: readonly string[], flat = false): void {
+export function art(g: CanvasRenderingContext2D, src: string, pal: readonly string[], flat = false): void {
   if (!src) return;
   let ops = parsed.get(src);
   if (!ops) parsed.set(src, (ops = artOps(src)));

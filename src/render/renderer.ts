@@ -55,6 +55,7 @@ import {
 } from './ground.ts';
 import { createHalo, createHaloIn, drawHalo, tagSoon, updateHalo, type HaloInput, type HaloState } from './halo.ts';
 import { drawNextChip, drawTagStones, heroArt } from './heroes.ts';
+import { drawElAir, drawElCues, drawElGround, drawElWalls } from './trial.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,
@@ -726,6 +727,8 @@ export class Renderer {
     if (this.options.decor && inp.govLevel < 3) drawDecor(g, v, sc.decor, s, sc.particles, biomeSeamIn(s.world, v.y0 - 40, v.y1 + 40), di);
     else sc.decor.drawn = 0;
     drawFootprints(g, sc.footprints, v, sc.pal);
+    // A Trial's ground objects (under the shadow layer, so shade falls on them).
+    drawElGround(g, v, s, time, inp.reducedMotion);
     if (trial !== null && trial.relays.length > 0) drawTagStones(g, v, s);
     // A challenge run: the friend's puddle where the sender melted.
     const friend = s.cfg.mode === 'challenge' && inp.challengeMinutes >= 0;
@@ -755,6 +758,8 @@ export class Renderer {
         sc.passes++;
       }
     }
+    // A Trial's walls stand over the shade, under the casters and the walker.
+    drawElWalls(g, v, s, time, inp.reducedMotion);
     // Visible casters, far (north) first: contact shadows now (over the shadow layer, so its matched
     // source-over fill stays exact), the depth sort below.
     // (A campaign level's finish banner is a world caster of kind 'finish'; casters.ts draws it.)
@@ -870,6 +875,7 @@ export class Renderer {
     }
     drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapCloud, ux, uy, snap.cot);
+    drawElAir(g, v, s, time, inp.reducedMotion);
     drawAirParticles(g, sc.particles, v);
     if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {
@@ -924,6 +930,8 @@ export class Renderer {
       if (drawMeltMap(g, v, s, sc.map, o)) sc.passes++;
     }
 
+    // A Trial's telegraphs, over the world (canopies and clouds included) and under the dial.
+    if (inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause')) drawElCues(g, v, s, time, inp.reducedMotion, inp.highContrast, inp.dragging, sc.hud.bottom + 6);
     // Debug geometry.
     if (import.meta.env.MODE !== 'single' && inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 
