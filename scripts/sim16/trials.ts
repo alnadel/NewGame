@@ -68,6 +68,11 @@ export const WAIVERS: Readonly<Record<string, string>> = {
   // Measured on the pin: 20 of 24 runs ride ≥ 60 ticks (83%), and as many at the +25% target (75):
   // the cloud's 119 u footprint gives every rider up to 102 ticks once Gust pushes it over the trail.
   'T4 G6': 'every finisher rides the pushed cloud (83% of G3/G4 runs meet cloudRide ≥ 60, 83% ≥ 75)',
+  // Measured on the pin: humanEl 16/16 with every lever at its §6.5 bound (drain 34, every leg start
+  // −20, costMul and evapMul 1.2); the G5b scan of salts 0..6000 found no other salt that a fixed sun
+  // cannot walk; 22 of 24 runs drink 5 puddles at the +25% target.
+  'T5 G4': 'humanEl passes 16/16 (100%) with every lever at its bound',
+  'T5 G6': 'every finisher drinks five puddles (92% of G3/G4 runs meet drinks ≥ 5)',
 };
 const WAIVABLE: readonly number[] = [3, 4, 6, 7];
 
@@ -620,11 +625,12 @@ function deaths(outs: readonly TrialRunOut[]): string {
 // ---------------------------------------------------------------------------------------------
 
 function perfOf(id: number): { trialTick: number; nubsTick: number; trialGuide: number; nubsGuide: number } {
+  // µs per tick (mean) and per guide refresh (median: a lone GC pause would swamp a mean of a few
+  // dozen refreshes), each the least of the timed reps.
   const time = (s: SimState, n: number, next: (s: SimState) => InputFrame): [number, number] => {
     let tick = 0;
-    let guide = 0;
     let k = 0;
-    let g = 0;
+    const g: number[] = [];
     for (let i = 0; i < n && s.phase !== 'dead' && s.phase !== 'won'; i++) {
       const f = next(s);
       const a = performance.now();
@@ -634,26 +640,31 @@ function perfOf(id: number): { trialTick: number; nubsTick: number; trialGuide: 
       if (i % 30 === 0) {
         const b = performance.now();
         updateGuide(s);
-        guide += performance.now() - b;
-        g++;
+        g.push(performance.now() - b);
       }
     }
-    return [(1000 * tick) / Math.max(1, k), (1000 * guide) / Math.max(1, g)];
+    g.sort((x, y) => x - y);
+    return [(1000 * tick) / Math.max(1, k), 1000 * (g[g.length >> 1] ?? 0)];
   };
   const t = trialDef(id) as TrialDef;
   const ticks = Math.round((t.lengthMinutes / 14.4) * TICK_HZ);
-  // Twice each, the second timed (the first warms the JIT).
-  let tt = 0;
-  let tg = 0;
-  let nt = 0;
-  let ng = 0;
-  for (let rep = 0; rep < 2; rep++) {
+  // Four reps each, alternating; the first warms the JIT and is not counted.
+  let tt = Infinity;
+  let tg = Infinity;
+  let nt = Infinity;
+  let ng = Infinity;
+  for (let rep = 0; rep < 4; rep++) {
     const s = createRun(campaignConfig(id));
     const b = createBot('reactive');
-    [tt, tg] = time(s, ticks, (st) => b.next(st));
+    const [a, c] = time(s, ticks, (st) => b.next(st));
     const n = createRun(campaignConfig(12));
     const bn = createBot('reactive');
-    [nt, ng] = time(n, ticks, (st) => bn.next(st));
+    const [d, e] = time(n, ticks, (st) => bn.next(st));
+    if (rep === 0) continue;
+    tt = Math.min(tt, a);
+    tg = Math.min(tg, c);
+    nt = Math.min(nt, d);
+    ng = Math.min(ng, e);
   }
   return { trialTick: tt, nubsTick: nt, trialGuide: tg, nubsGuide: ng };
 }

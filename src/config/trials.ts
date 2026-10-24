@@ -185,9 +185,11 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60, Drip 70 → 50, costMul and evapMul 1.2 (too
   // easy: each element leg passed with its verb off); puddles 425 −18 → −26 and 492 18 → 26 (8 u
   // from the trail: an unsteered Drip drank them) and 530 −16 → −17 (G0 clearance); Dare 4 → 5
-  // (+25%; G6 above its band). Measured: G1 83/60/32/83 (Drip marks: chosen 45° 49, worst 300° 32),
-  // G2 low 50 (worst bin 42), G3 8/8, G4 8/16 (50%), G5b best θ290 dies at 71%, G6 drinks ≥ 5 29%,
-  // G7 the ice left standing kills Drip.
+  // (+25%, its bound). Measured: G1 83/60/32/83 (Drip marks: chosen 45° 49, worst 300° 32), G2 low
+  // 50 (worst bin 42), G3 8/8, G4 16/16 (100%), G5b best θ290 dies at 71%, G6 drinks ≥ 5 92%, G7 the
+  // ice left standing kills Drip. G4 and G6 are WAIVERS: every lever is at its bound, salts 0..6000
+  // hold no other whose sun cannot stay fixed with humanEl under 90%, and a second shower over a wall
+  // (one object added) changed nothing; every finisher drinks the five puddles.
   trial(5, 'Steam', 11, 'meadow', 120, 504, 34, 0, [[216, 'ember'], [390, 'drip'], [564, 'nubs']], null,
     'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-26 i436 t452:10 t474:-14 u492:26 t512:-4 u530:-17 t546:16', ['drinks', 5], 25, [1, 2],
     'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 5', 'Drink 5 puddles', '', 1113,
