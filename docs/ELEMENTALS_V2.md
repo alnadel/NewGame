@@ -671,6 +671,11 @@ Ember is T5's lesson.
 | 333 | puddle | −22 | 12.0 | | 344 | stone | +24 | 12.8 |
 | 354 | puddle | +12 | 13.5 | | | | | |
 
+As built (§13.3, the verifier round, §6.5 levers only): puddle 218 is removed, the Drip leg's one
+object (it lies wholly under the Old Oak's canopy, and no spot within ±6 min and ±8 u shows, G0);
+stone 232 +10 is at 229 +4 (leg s 4.8) and puddle 246 −8 at 252 (6.4), both out from under the
+canopies that hid them. Six puddles stay, and the Dare is the `drinks ≥ 6` above.
+
 ### 5.3 T3 "Green Bridge": Sprout's intro (Nubs ▸ Sprout ▸ Nubs)
 
 | Field | Value |
@@ -749,7 +754,8 @@ Sap: 80 + 5 × 15 = 155 against 108 for the four bridges: two small trees for th
 ### 5.6 T6 "Rain Garden": Gust and Sprout (Nubs ▸ Gust ▸ Sprout ▸ Nubs)
 
 As re-authored by the lead's decisions (§13.3): the Nubs legs sit nearer midday and the garden rain
-pays Sap that Sprout needs.
+pays Sap that Sprout needs. Plots 561 and 578 sit west, out from under the canopies that hid them at
++56 and 582 +44 (the verifier round, G0).
 
 | Field | Value |
 |---|---|
@@ -772,8 +778,8 @@ pays Sap that Sprout needs.
 | 511 | gap | 0 | r 14 (28) | Sprout 5.1 | contact 4.94 s |
 | 530 | plot | −44 | | Sprout 6.5 | |
 | 548 | stream | 0 | r 14 (28) | Sprout 7.7 | holdable 2.65 / contact 7.51 |
-| 561 | plot | +56 | | Sprout 8.6 | |
-| 582 | plot | +44 | | Nubs 1.0 | in Sprout's window for its last 3.9 s |
+| 561 | plot | −44 | | Sprout 8.6 | |
+| 578 | plot | −44 | | Nubs 0.7 | in Sprout's window for its last 4.2 s |
 | 597 | plot | −43 | | Nubs 2.0 | last 2.8 s |
 | 610 | plot | +40 | | Nubs 2.9 | last 1.9 s |
 
@@ -783,7 +789,9 @@ the rain, two without (G7 measures Sap 65 vs 41 and 3 trees vs 2).
 ### 5.7 T7 "Five Elements": the finale (Nubs ▸ Gust ▸ Sprout ▸ Ember ▸ Drip ▸ Nubs)
 
 As re-authored by the lead's decisions (§13.3): the Nubs legs sit nearer midday, the garden rain pays
-Sap that Sprout needs, and Drip's stretch needs its steer.
+Sap that Sprout needs, and Drip's stretch needs its steer. In the verifier round Nubs' opening leg
+starts at 50 (a constant sun at 325-326° walked the Trial), and the west puddle (545) and plot 428
+moved out from under the canopies that hid them (G0).
 
 | Field | Value |
 |---|---|
@@ -808,15 +816,15 @@ Sap that Sprout needs, and Drip's stretch needs its steer.
 | 383 | stream | 0 | r 12 (24) | Sprout 7.0 | holdable 1.99 / contact 6.84 |
 | 420 | plot | −44 | | Ember 1.8 | downwind of the bramble at 423; in Sprout's window for its last 3.1 s |
 | 423 | bramble | 0 | | Ember 2.0 | |
-| 426 | plot | +44 | | Ember 2.2 | upwind: safe; last 2.6 s |
+| 428 | plot | +44 | | Ember 2.4 | upwind: safe; last 2.5 s |
 | 437 | puddle | 0 | | Ember 3.0 | |
 | 453 | rain (shower) | +133 at wake | −24 (eff. −40) / 55 | over the gate from Ember 0.4 to 3.1 s | −96 (dry) |
 | 453 | gate | 0 | | Ember 4.1 | sweet window after the shower: ≈ 0.8 s |
 | 472 | bramble | 0 | | Ember 5.4 | |
 | 483 | stone | 0 | | Ember 6.2 | |
 | 518 | ice | 0 | | Drip 1.7 | in Ember's window for its last 3.2 s; melted, its puddle is the one on the trail |
-| 529 | puddle | −22 | | Drip 2.4 | off the walking line |
 | 540 | stone | 0 | | Drip 3.2 | on the trail (was the second ice wall) |
+| 545 | puddle | −22 | | Drip 3.5 | off the walking line (was 529, under the Crooked Oak's canopy) |
 | 552 | stone | +3 | | Drip 4.0 | |
 | 562 | puddle | +24 | | Drip 4.7 | off the walking line |
 | 575 | stone | −2 | | Drip 5.6 | |
@@ -918,13 +926,13 @@ contract; plays Gust legs with the Gust policy (salt 0).
 
 | Gate | Requirement |
 |---|---|
-| G0 | Placement and authoring: every authored object placed; no plot, puddle or stone within `clearance` of a generated prism part; every left-alone weather object arrives at its table's dx ±2 u; the authoring rules of §5.0 (leg lengths, the intro's first object ≥ 2 s, crossing radii, the first-crossing and every-crossing formulas, cross-leg windows ≥ 1.5 s, Gust push times); Drip's lane ≥ ±12 u everywhere in Drip legs. |
+| G0 | Placement and authoring: every authored object placed; no plot, puddle or stone within `clearance` of a generated prism part, and each shows: at least half of its disc is drawn clear of the generated casters (canopies drawn 0.25·z north of their footprint out to their lumps' reach, 1.16 r; roof slabs moved north by 0.25·z; solid blocks swept up to 0.25·h; the verifier round); every left-alone weather object arrives at its table's dx ±2 u; the authoring rules of §5.0 (leg lengths, the intro's first object ≥ 2 s, crossing radii, the first-crossing and every-crossing formulas, cross-leg windows ≥ 1.5 s, Gust push times); Drip's lane ≥ ±12 u everywhere in Drip legs. |
 | G1 | Every audited leg passes (§6.2), Drip legs from every marked bin. |
 | G2 | pathBot wins with lowest steady health ≥ 20; pathBot ending each pre-Drip leg at the **worst** marked bin also wins. |
 | G3 | `reactive` wins on ≥ 7 of 8 salts. |
 | G4 | humanEl passes **75-95%** on T1-T4 and 45-90% on T5-T7 (16 salts). |
 | G5 | Anti-trivial: (a) `idle` (no input) fails; (b) for every element leg, pathBot with that leg's verb switched off (no taps, holds, steers or swipes there) fails; (c) T1: a tap-on-sight Ember (taps each wall as soon as it is a target) keeps a steady-health margin at least 15 lower than pathBot; (d) four spam bots, swiping east every 30 ticks, west every 30, east every 90 and west every 90 (no other Gust input), each fail in every Gust leg of T4, T6 and T7. |
-| G5b | pathBot's verbs with θ fixed at the best of 36 constant angles (10° apart, no turning) fail each Trial. |
+| G5b | pathBot's verbs with θ fixed at each of 360 constant angles (1° apart, no turning) fail each Trial. (The first rounds tried 36, 10° apart; that grid missed T7's 325-326° window, 13.3.) |
 | G6 | The Dare is met on 10-60% of the G3 and G4 runs combined. |
 | G7 | Mixers mix (all hard, all fail `--check`): T5 pathBot without melting the two Drip-stretch ice walls fails; T6 pathBot without Gust's swipes after the hand-off fog wakes keeps a Sprout Sap margin at least 10 lower **and** grows fewer than 3 trees; T7 pathBot planting the plot downwind of an Ember-stretch wall (plot 420, the bramble at 423) grows a tree there and ends with it gone, and without the hand-off swipes it keeps a Sprout Sap margin at least 10 lower. |
 
@@ -1861,10 +1869,10 @@ commits or pushes outside the normal merge flow. Never run `playwright install`.
 | n | title | chip | blurb (≤ 90) | goal | stars | dare |
 |---|---|---|---|---|---|---|
 | 1 | Kindling | NUBS ▸ EMBER ▸ NUBS | Tap each wall just before Ember gets there. Light refuels the flame. | Reach the finish | Finish · Burn all 7 · Meters ≥ 30 | Dare · Burn all 7 walls |
-| 2 | Puddle Run | NUBS ▸ DRIP ▸ NUBS | Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones. | Reach the finish | Finish · Drink 6 · Meters ≥ 30 | Dare · Drink 6 puddles |
+| 2 | Puddle Run | NUBS ▸ DRIP ▸ NUBS | Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones. | Reach the finish | Finish · Drink 6 · Meters ≥ 30 | Dare · Drink all 6 puddles |
 | 3 | Green Bridge | NUBS ▸ SPROUT ▸ NUBS | Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them. | Reach the finish | Finish · Grow 2 trees · Meters ≥ 30 | Dare · Grow 2 trees |
 | 4 | Weather Vane | NUBS ▸ GUST ▸ NUBS | Swipe to blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him. | Reach the finish | Finish · Rain ride 1 s · Meters ≥ 30 | Dare · Ride a rain cloud 1 s |
-| 5 | Steam | NUBS ▸ EMBER ▸ DRIP ▸ NUBS | Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember! | Reach the finish | Finish · Drink 4 · Meters ≥ 25 | Dare · Drink 4 puddles |
+| 5 | Steam | NUBS ▸ EMBER ▸ DRIP ▸ NUBS | Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember! | Reach the finish | Finish · Drink 5 · Meters ≥ 25 | Dare · Drink 5 puddles |
 | 6 | Rain Garden | NUBS ▸ GUST ▸ SPROUT ▸ NUBS | Clear the fog for Sprout and blow the rain onto its path: rain feeds plants. | Reach the finish | Finish · Grow 3 trees · Meters ≥ 25 | Dare · Grow 3 trees |
 | 7 | Five Elements | ALL FIVE ELEMENTS | Five elements, one day. The breeze spreads fire west: keep three trees. | Reach the finish | Finish · 3 trees standing · Meters ≥ 25 | Dare · Keep 3 trees standing |
 
@@ -2013,6 +2021,7 @@ lever with its reason), deviations, gate results and the final `build:single`.
 | **release (this record)** | **824,832 B** | | **≤ 829,440 B: pass (4,608 B under)** |
 | fix round (13.6) | 828,328 B | +3,496 | ≤ 829,440 B: pass (1,112 B under) |
 | calibration round (13.7) | 828,294 B | −34 | ≤ 829,440 B: pass (1,146 B under) |
+| verifier round (13.7) | 828,287 B | −7 | ≤ 829,440 B: pass (1,153 B under) |
 
 The merged build is 795 B less than the four measurements added up, because 1,293 B of core
 `elements.ts` that ART's reads pull in were counted in both CORE's and ART's branch deltas.
@@ -2059,12 +2068,12 @@ merge. The integrator then made these fixes and applied every merge note:
 | Trial | Salt | Drain | `legStart` | Mul | Objects | Dare |
 |---|---|---|---|---|---|---|
 | T1 Kindling | 468 | 28 → 34 | 80/60/80 | costMul 1.2 | as §5.1 | burns 7 |
-| T2 Puddle Run | 187 | 26 → 28 | 100/50/80 | evapMul 1.2 | as §5.2 | drinks 6 → 7 ("Drink 7", "Drink all 7 puddles") |
+| T2 Puddle Run | 187 | 26 → 28 | 100/50/80 | evapMul 1.2 | as §5.2, and in the verifier round (§6.5 levers only): puddle 218 +20 removed (wholly under a canopy, no spot in bounds shows), stone 232 +10 → 229 +4, puddle 246 → 252 (G0: under canopies) | drinks 6 → 7 → 6 ("Drink 6", "Drink all 6 puddles": the six puddles left) |
 | T3 Green Bridge | 3584 | 28 → 34 | 80/80/80 | | as §5.3 | trees 2 |
 | T4 Weather Vane | 605 | 28 → 34 | 80/80/80 | | as §5.4 | cloudRide 60 (the +25% target measured the same share) |
 | T5 Steam | 1113 | 28 → 34 | 80/60/50/80 | costMul, evapMul 1.2 | puddles 425 −18 → −26, 492 18 → 26 (an unsteered Drip drank them), 530 −16 → −17 (G0 clearance) | drinks 4 → 5 ("Drink 5", "Drink 5 puddles") |
-| T6 Rain Garden | 198 | 28 → 38 | 60/60/65/80 | | re-timed and re-authored by the lead's decisions (below; §5.6): start 150 → 226, relays 322/437/568, length 402; Gust's weather rebuilt (the first pin's added r330 gone); hand-off fog f449:-35:55:6, garden cloud r461:140:100:0; crossings 3 → 2; plots 464 44 → 43, 561 44 → 56 (G0 clearance) | trees 3 (now reached: 21%) |
-| T7 Five Elements | 1266 | 30 → 42 | 60/60/70/50/40/60 | evapMul 1.2 | re-timed and re-authored by the lead's decisions (below; §5.7): start 60 → 86, relays 182/282/394/494/590, length 564; Gust's weather as T6's against the breeze (the first pin's added r196 gone); hand-off fog f294:-60:55:16, garden cloud r306:140:100:16; crossings r14 → r12; Drip's stretch: ice 546 → hot stone t540 on the trail, puddles at −22 and +24, stones at 0, +3, −2; plot 340 −44 → −36 (G0 clearance) | grove 4 → 3 ("3 trees standing", "Keep 3 trees standing", blurb "…keep three trees."; now reached: 33%) |
+| T6 Rain Garden | 198 | 28 → 38 | 60/60/65/80 | | re-timed and re-authored by the lead's decisions (below; §5.6): start 150 → 226, relays 322/437/568, length 402; Gust's weather rebuilt (the first pin's added r330 gone); hand-off fog f449:-35:55:6, garden cloud r461:140:100:0; crossings 3 → 2; plot 464 44 → 43 (G0 clearance); verifier round: plot 561 +56 → −44 and 582 +44 → 578 −44 (G0: under canopies) | trees 3 (now reached: 25%) |
+| T7 Five Elements | 1266 | 30 → 42 | 50/60/70/50/40/60 (opening 60 → 50 in the verifier round) | evapMul 1.2 | re-timed and re-authored by the lead's decisions (below; §5.7): start 60 → 86, relays 182/282/394/494/590, length 564; Gust's weather as T6's against the breeze (the first pin's added r196 gone); hand-off fog f294:-60:55:16, garden cloud r306:140:100:16; crossings r14 → r12; Drip's stretch: ice 546 → hot stone t540 on the trail, puddles at −22 (545; it was 529, under the Crooked Oak's canopy, until the verifier round) and +24, stones at 0, +3, −2; plot 340 −44 → −36 (G0 clearance); plot 426 → 428 (G0: 71% under a canopy) | grove 4 → 3 ("3 trees standing", "Keep 3 trees standing", blurb "…keep three trees."; now reached: 33%) |
 
 Salts past 199 (T1, T3, T5, T6, T7): few salts clear G0 and also fail a fixed sun, so `--pick` ran
 with `--to` (T6 and T7 with plot dx moves past ±8 u, which the lead allowed). The garden clouds have
@@ -2072,16 +2081,26 @@ rx 100 (T6, T7), wider than §5's 55-85.
 
 **Lead decisions** (binding; applied in this round, CORE):
 1. **T7 G5** (Drip's leg passed unsteered): the second Drip-stretch ice wall is now an on-trail hot
-   stone (t540), and the stretch's puddles lie off the walking line (−22, +24), with its other stones
-   on it (+3, −2). An unsteered Drip meets three stones and only the melted ice's puddle and dies in
-   its leg (G5 passes, no waiver). Walls stay at dx 0 (ART's draw rule and `trials.test.ts`).
+   stone (t540), and the stretch's puddles lie off the walking line (−22 at 545, +24 at 562), with
+   its other stones on it (+3, −2). An unsteered Drip meets three stones and only the melted ice's
+   puddle and dies in its leg (G5 passes, no waiver). Walls stay at dx 0 (ART's draw rule and
+   `trials.test.ts`). In the first pass the west puddle sat at 529, under the Crooked Oak's canopy
+   where no player could see it; it is at 545 now, in full view, and Drip's leg still fails with its
+   steer off: the path bot ("Drip dried up"), the worst-bin path bot ("sizzled away on a hot stone"),
+   reactive on 8 salts (0 pass) and humanEl on 16 (0 pass).
 2. **T6 G5b and T7 G5b** (a constant sun walked the whole Trial): the opening and closing Nubs legs
    move toward midday. T6 starts at 9:46 AM (was 8:30) and ends at 4:28 PM (was 4:40), its Gust and
    Sprout legs 8.0 s and 9.1 s (were 10.0 and 12.9). T7 starts at 7:26 AM (was 7:00) and ends at
    4:50 PM (was 5:00), its element legs 6.9/7.8/6.9/6.7 s (were 7.5/8.3/7.9/6.9). §1.1's leg lengths
    and the 5:00 PM limit hold. No object was added to a Nubs leg: the timing, the drain (T6 38, T7 42)
-   and Nubs' start meters (60) were enough. Measured: no constant angle walks T6 (best θ190 dies at
-   23%) or T7 (best θ320 dies at 97%, in the closing leg); G5b passes, no waiver.
+   and Nubs' start meters (T6 60; T7 50 opening, 60 closing) were enough. The first pass claimed
+   that no constant angle walked T7 (best θ320 dying at 97%), but it scanned only 36 angles 10°
+   apart. A constant sun at 325-326° walked T7 to the finish (opening low 0.7-4.8, closing low
+   6-16), and the claim was false. In the verifier round G5b scans every degree, and T7's opening
+   start moved 60 → 50, so θ325-326 die in the opening leg. The closing leg still kills every other
+   angle that lives through the opening. Measured: no constant angle walks T6 (best θ193 dies at
+   23%) or T7 (best θ317 dies at 97%, in the closing leg); none passes on a 0.25° scan of the whole
+   circle either. G5b passes, no waiver.
 3. **T6 G7 and T7 G7** (the hand-off swipes added no Sap): each garden cloud waits east of Sprout's
    first stretch (rx 100, dry left alone) and the hand-off's west swipes put it over Sprout and the
    garden plot; Sprout starts below the Sap cap (T6 65, T7 70) so the rain is not lost at 100; the
@@ -2091,31 +2110,59 @@ rx 100 (T6, T7), wider than §5's 55-85.
    the trial and requires its tree to have stood (it named plot 410, which no longer exists).
 4. **T6 G6 and T7 G6** (the Dares were met on 0%): the Sap economy is re-authored so the Dares are
    reachable at their targets (T6 trees ≥ 3: two crossings instead of three; T7 grove ≥ 3: crossings
-   r12). Measured: T6 21%, T7 33% (G6 passes). The targets and their copy (card, HUD, tips, Pause)
+   r12). Measured: T6 25%, T7 33% (G6 passes). The targets and their copy (card, HUD, tips, Pause)
    stay "Grow 3 trees" and "Keep 3 trees standing"; §10.2's T7 row now shows that shipped text.
 5. **Accepted waivers** (`WAIVERS` in `scripts/sim16/trials.ts`, one line each; `--check` prints
-   them as accepted): T1 G6 96%, T2 G6 88% and T4 G6 83% (the Dare is "do everything the leg offers"
-   and most finishers do); T5 G4 100% and T5 G6 92% (T5 is the gentle first mixer).
+   them as accepted): T1 G6 96%, T2 G6 96% (drinks ≥ 6 since the verifier round; 88% at ≥ 7 when
+   accepted) and T4 G6 83% (the Dare is "do everything the leg offers" and most finishers do); T5 G4
+   100% and T5 G6 92% (T5 is the gentle first mixer).
+
+**Verifier round** (after the first pass; CORE): the verifier found two problems, and both are fixed.
+- *A constant sun walked T7* (decision 2 did not hold; see 2 above). G5b now scans 360 angles 1°
+  apart (§6.4). T7's opening start is 50. On the degree scan T2 was walked too, at 242-248° and
+  331-334°. T2 is an earlier pin, so it was fixed with §6.5 levers only (below). Every Trial's sun
+  was also scanned at 0.25° steps over the whole circle: none passes. The best angles on the degree
+  scan are T1 θ241 23%, T2 θ250 98%, T3 θ282 23%, T4 θ284 24%, T5 θ291 71%, T6 θ193 23% and T7
+  θ317 97%.
+- *T7's west Drip-stretch puddle lay under the Crooked Oak's canopy* (drawn 0.25·z north of its
+  footprint): no player could see it, and G0's clearance looked only at prism parts. G0 now requires
+  every plot, puddle and stone to show, with at least half of its disc drawn clear of the generated
+  casters. Canopies are taken out to their lumps' reach (1.16 r) and moved north by 0.25·z, roofs
+  are moved north by 0.25·z, and blocks are swept up to 0.25·h. `clearanceMoves` (`--pick`) applies
+  the same rule. The new rule found these objects (share hidden):
+  - T7: puddle 529 (100%, now 545) and plot 426 (71%, now 428).
+  - T6: plots 561 +56 (84%) and 582 +44 (100%), now 561 −44 and 578 −44.
+  - T2: puddle 218 (100%), stone 232 (100%) and puddle 246 (82%).
+- *T2 within §6.5:* puddle 218 has no spot within ±6 min and ±8 u that shows. It is removed, as the
+  Drip leg's one object, and the Dare returns to §5's 6. Stone 232 +10 moved to 229 +4 and puddle
+  246 to 252. At 229 +4 the stone sits on the planned lane. The plan pays for it (G2 low 49 → 38),
+  but a constant sun at 242-249° or 331-337° cannot. A salt search under the new gates found no
+  other salt: 13 of 0..599 pass G0-G2, and all 13 fail G5 with every §6.5 lever at its hardest
+  (each on G5b, some also with Drip's verb off). That search ran with the visibility rule's first
+  form, which took canopies at r and allowed a third of the disc hidden.
+  The drain stays 28, because 30 or 32 put humanEl at 69% (below T2's 75% band).
 
 Levers beyond §6.5 the lead allowed for T6 and T7 (all recorded with their gates in
-`config/trials.ts`): T6 drain 28 → 38, legStart 60/60/65/80, plot dx 43 and 56; T7 drain 30 → 42,
-legStart 60/60/70/50/40/60, plot dx −36; the object lists and leg times above. `tuning.ts` is
+`config/trials.ts`): T6 drain 28 → 38, legStart 60/60/65/80, plot dx 43, plots 561 and 578 at −44;
+T7 drain 30 → 42, legStart 50/60/70/50/40/60, plot dx −36, puddle 545 −22, plot 428; the object
+lists and leg times above. T2's verifier-round changes use §6.5 levers only. `tuning.ts` is
 unchanged. Tooling: `--variant` takes `startMinute`, `lengthMinutes`, `relays` and `objects` (the
 authoring string); a re-timed variant's run now starts at its own minute (it started at the pinned
 trial's before, which made such variants wrong).
 
-**Gates as built** (`node scripts/sim.ts --trials --check` exits 0; `--perf` T6 tick 0.47× and guide
-0.51×, T7 0.66× and 0.52× a Nubs run's):
+**Gates as built** (after the verifier round; `node scripts/sim.ts --trials --check` exits 0 with G5b
+on every degree; `--perf` every Trial tick 0.39-0.66× and guide refresh 0.46-0.67× a Nubs run's,
+T2 0.66× and 0.52×, T6 0.43× and 0.51×, T7 0.62× and 0.56×):
 
 | Trial | G1 margins | G2 low | G3 | G4 humanEl | G5b best constant θ | G6 Dare | G7 |
 |---|---|---|---|---|---|---|---|
-| T1 | 82/60/83 | 60 | 8/8 | 15/16 (94%) | θ240 dies at 23% (on sight 8 vs 59) | burns ≥ 7 96%, waived | |
-| T2 | 100/28/74 (Drip marks: chosen 45° 50, worst 310° 28) | 49 (worst bin 37) | 8/8 | 15/16 (94%) | θ340 dies at 99% | drinks ≥ 7 88%, waived | |
-| T3 | 83/39/83 | 81 | 8/8 | 13/16 (81%) | θ310 dies at 22% | trees ≥ 2 33% | |
-| T4 | 82/bots/83 | 80 | 8/8 | 12/16 (75%) | θ290 dies at 24% | cloudRide ≥ 60 83%, waived | |
-| T5 | 83/60/32/83 (chosen 45° 49, worst 300° 32) | 50 (worst bin 42) | 8/8 | 16/16 (100%), waived | θ290 dies at 71% | drinks ≥ 5 92%, waived | no melt fails in Drip's leg |
-| T6 | 63/bots/65/83 | 37 | 8/8 | 13/16 (81%) | θ190 dies at 23% | trees ≥ 3 21% | Sap 65 vs 41, trees 3 vs 2 |
-| T7 | 63/bots/67/50/38/63 (chosen 85° 39, worst 105° 38) | 27 (worst bin 27) | 8/8 | 11/16 (69%) | θ320 dies at 97% | grove ≥ 3 33% | plot 420 burns; Sap 67 vs 52 |
+| T1 | 82/60/83 | 60 | 8/8 | 15/16 (94%) | θ241 dies at 23% (on sight 8 vs 59) | burns ≥ 7 96%, waived | |
+| T2 | 100/28/74 (Drip marks: chosen 45° 50, worst 310° 28) | 38 (worst bin 37) | 8/8 | 15/16 (94%) | θ250 dies at 98% | drinks ≥ 6 96%, waived | |
+| T3 | 83/39/83 | 81 | 8/8 | 13/16 (81%) | θ282 dies at 23% | trees ≥ 2 33% | |
+| T4 | 82/bots/83 | 80 | 8/8 | 12/16 (75%) | θ284 dies at 24% | cloudRide ≥ 60 83%, waived | |
+| T5 | 83/60/32/83 (chosen 45° 49, worst 300° 32) | 50 (worst bin 42) | 8/8 | 16/16 (100%), waived | θ291 dies at 71% | drinks ≥ 5 92%, waived | no melt fails in Drip's leg |
+| T6 | 63/bots/65/83 | 37 | 8/8 | 13/16 (81%) | θ193 dies at 23% | trees ≥ 3 25% | Sap 65 vs 41, trees 3 vs 2 |
+| T7 | 53/bots/67/50/37/63 (chosen 85° 39, worst 100° 37) | 27 (worst bin 27) | 8/8 | 13/16 (81%) | θ317 dies at 97% | grove ≥ 3 33% | plot 420 burns; Sap 67 vs 52 |
 
 ### 13.4 Deviations as built (from the team reports)
 
@@ -2266,3 +2313,31 @@ gate table); `--perf` T6 and T7 ≤ 0.66× a Nubs run's tick and ≤ 0.52× its 
 pass; `npm test` 56 files, 1,117 tests pass; `golden.ts` diff only `trials` (the 1006 and 1007
 entries); Playwright `elementals.spec.ts` and `render.spec.ts` on both projects (one worker): 77
 passed, 15 skipped, 0 failed; `build:single` **828,294 B** ≤ 829,440 B (1,146 B under).
+
+**Verifier round** (13.3): the verifier found two problems. A constant sun at 325-326° walked T7,
+which the 10° G5b grid missed. T7's west Drip-stretch puddle lay under the Crooked Oak's canopy, out
+of the player's sight. Fixes:
+- G5b now scans every degree.
+- G0 now requires every plot, puddle and stone to show, at least half of it clear of the drawn
+  casters.
+- T7: Nubs' opening start is 50. The west puddle moved to 545 and plot 426 to 428.
+- T6: plots 561 and 578 moved west, out from under canopies.
+- T2 (§6.5 levers only): its hidden puddle 218 is removed and its Dare is 6. Stone 229 +4 and
+  puddle 252 come out from under the canopies, and the stone also stops the 242-249° and 331-337°
+  suns that walked T2 on the degree scan.
+
+Only `src/config/trials.ts`, the trials harness, `trials.test.ts`, the trials golden and these docs
+changed. §10.2's T2 and T5 rows now show the Dares that ship ("Drink all 6 puddles", "Drink 5
+puddles").
+
+**Gates after the verifier round:**
+- `sim --trials --check` exits 0 with only the five accepted waivers (36.8 s); no Trial passes a
+  constant sun on a 0.25° scan.
+- `--perf`: every Trial ≤ 0.66× a Nubs run's tick and ≤ 0.67× its guide refresh.
+- typecheck passes. `npm test`: 56 files, 1,117 tests pass.
+- `golden.ts`: only `trials` differs (the 1002, 1006 and 1007 entries).
+- Playwright `elementals.spec.ts` and `render.spec.ts`, both projects, one worker: 77 passed, 15 skipped, 0 failed (7.6 min).
+- `build:single` is **828,287 B** ≤ 829,440 B (1,153 B under).
+- In the browser (390×844, DPR 2, touch, 0 errors), T7's Drip puddles at 545 −22 and 562 +24,
+  T6's plots 561 and 578, and T2's stone 229 +4 and puddle 252 are in view as the walker
+  approaches.

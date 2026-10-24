@@ -1600,7 +1600,8 @@ Drip's lane DP (33 lanes, consumed bits for puddles and stones, contacts along t
 coordinates) from every marked bin of the mask on a 5° grid; held legs commit the end bin that
 maximizes min(held, next) among the marks. `planPlayer` plays a plan under the input contract (or
 with a constant θ, a leg's verb off, a spam Gust, a tap-on-sight Ember). `trials.ts` runs the gates
-G0-G7 and G5b (§6.4) in a worker pool, `--check` (with `WAIVERS`: a G3/G4/G6/G7 failure kept with
+G0-G7 and G5b (§6.4: G0 with `hiddenShare`, at least half of a plot, puddle or stone drawn clear of
+the generated casters, canopies out to their lumps' reach; G5b on 360 constant angles 1° apart) in a worker pool, `--check` (with `WAIVERS`: a G3/G4/G6/G7 failure kept with
 its one-line reason, each accepted by the lead), `--pick <n>` (salts from `--from` to `--to`, `clearanceMoves`
 first, lever `--sets`, the Dare nudge), `--survey N`, `--variant '<json>'` (drain, legStart,
 costMul, evapMul, dareTarget, moves, add; and for a re-timed trial startMinute, lengthMinutes, relays
@@ -1612,12 +1613,12 @@ and objects, the authoring string, whose run starts at its own minute) and `--pe
 | Trial | Salt | Levers | Gates |
 |---|---|---|---|
 | T1 Kindling | 468 | drain 34, legs 80/60/80, costMul 1.2 | all pass; G6 96% waived (every finisher burns all 7) |
-| T2 Puddle Run | 187 | drain 28, legs 100/50/80, evapMul 1.2, Dare 7 | all pass; G6 88% waived (every finisher drinks all 7) |
+| T2 Puddle Run | 187 | drain 28, legs 100/50/80, evapMul 1.2, puddle 218 removed (hidden by a canopy), stone 229 +4, puddle 252, Dare 6 | all pass: G5b best θ250 dies at 98%; G6 96% waived (every finisher drinks all 6) |
 | T3 Green Bridge | 3584 | drain 34, legs 80/80/80 | all pass |
 | T4 Weather Vane | 605 | drain 34, legs 80/80/80 | all pass; G6 83% waived (every finisher rides) |
 | T5 Steam | 1113 | drain 34, legs 80/60/50/80, costMul and evapMul 1.2, Dare 5, puddles 425/492 8 u out | G4 100% and G6 92% waived |
-| T6 Rain Garden | 198 | re-timed by the lead (9:46 AM-4:28 PM), drain 38, legs 60/60/65/80, garden cloud r461 waiting east, two crossings | all pass: G5b best θ190 dies at 23%, G6 21%, G7 Sap 65 vs 41 and 3 trees vs 2 |
-| T7 Five Elements | 1266 | re-timed by the lead (7:26 AM-4:50 PM), drain 42, legs 60/60/70/50/40/60, evapMul 1.2, Drip's puddles off the trail and an on-trail stone for the second ice, Dare 3 | all pass: Drip's leg fails unsteered, G5b best θ320 dies at 97%, G6 33%, G7 plot 420 burns and Sap 67 vs 52 |
+| T6 Rain Garden | 198 | re-timed by the lead (9:46 AM-4:28 PM), drain 38, legs 60/60/65/80, garden cloud r461 waiting east, two crossings, plots 561 and 578 west (out from under canopies) | all pass: G5b best θ193 dies at 23%, G6 25%, G7 Sap 65 vs 41 and 3 trees vs 2 |
+| T7 Five Elements | 1266 | re-timed by the lead (7:26 AM-4:50 PM), drain 42, legs 50/60/70/50/40/60, evapMul 1.2, Drip's puddles off the trail (545 −22, 562 +24, both in view) and an on-trail stone for the second ice, Dare 3 | all pass: Drip's leg fails unsteered, G5b best θ317 dies at 97%, G6 33%, G7 plot 420 burns and Sap 67 vs 52 |
 
 Every waiver is accepted by the lead (`WAIVERS` in `scripts/sim16/trials.ts`; docs/ELEMENTALS_V2.md §13.3). `--perf`: every Trial tick
-≤ 0.7× and guide refresh ≤ 0.7× a Nubs run's; `createRun` ≤ 26 ms unprepared, ≤ 0.4 ms prepared.
+≤ 0.7× and guide refresh ≤ 0.7× a Nubs run's; no Trial passes a constant sun on a 0.25° scan either; `createRun` ≤ 26 ms unprepared, ≤ 0.4 ms prepared.
