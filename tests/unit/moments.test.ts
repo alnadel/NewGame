@@ -3,9 +3,9 @@
 // the COMEBACK.
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
-import { createRun, levelDef, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { createBot, createRun, levelDef, step, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { createMoments, LEVEL_TIPS, MECH_TIPS, withDare } from '../../src/game/moments.ts';
+import { createMoments, ELEMENT_TIPS, LEVEL_TIPS, MECH_TIPS, MIXER_TIPS, RELAY_TIPS, withDare } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToast, endToasts, holdToasts, resetBanners, showToast, updateBanners } from '../../src/render/banners.ts';
@@ -368,13 +368,69 @@ describe('RunMoments', () => {
     s.phase = 'day';
     m.begin(save, trialLevel(1005)!, true);
     m.onEvent({ e: 'go' }, s);
-    expect(b.toasts).toHaveLength(0);
+    // Only the mixer's own tip (docs/ELEMENTALS_V2.md §10.3) at go.
+    expect(b.toasts.map((t) => t.text)).toEqual([MIXER_TIPS[5]![0]![1]]);
     s.tick = 100;
     s.stats.flakes = 10;
     m.update(s);
     expect(log).toEqual([]);
     showToast(b, 'tip', 'TIP', 'stale', null, 3);
     m.onEvent({ e: 'tag', from: 'nubs', to: 'ember', index: 0 }, s);
-    expect(b.toasts).toHaveLength(0);
+    // The stale toasts leave; Ember's turn says how it plays, with its glyph.
+    expect(b.toasts.map((t) => [t.text, t.glyph])).toEqual([[ELEMENT_TIPS.ember[0]![1], 'ember']]);
   });
+
+  /** Plays Trial `id` with the core reactive bot into relay `leg` (each tick's events routed), collecting the tips shown. */
+  const playTips = (id: number, leg: number, passed = false) => {
+    const save = defaults(0);
+    if (passed) save.elementals2 = { stars: [1, 1, 1, 1, 1, 1, 1], seen: true };
+    const b = createBanners();
+    const m = createMoments(b, sinks().sinks);
+    const lv = trialLevel(id)!;
+    const s = createRun(campaignConfig(lv, false, true));
+    m.begin(save, lv, true);
+    const bot = createBot('reactive');
+    const seen: string[] = [];
+    const drain = (): void => {
+      for (const t of b.toasts) if (!seen.includes(t.text)) seen.push(t.text);
+      b.toasts.length = 0;
+    };
+    // Up to the TAG, then a few ticks into the leg (the moments are looked for every 6 ticks).
+    for (let n = 0, after = 0; n < 20_000 && after < 12 && s.phase !== 'dead' && s.phase !== 'won'; n++) {
+      if (s.relayIdx >= leg) after++;
+      step(s, bot.next(s));
+      for (const ev of s.events) m.onEvent(ev, s);
+      drain();
+      m.update(s);
+      drain();
+    }
+    return { s, m, seen, drain };
+  };
+
+  it("Elementals v2: each element's tips while it walks, the hand-off tips and none once the Trial is passed", () => {
+    // T1: the first telegraph (into Ember) is the general hand-off tip; Ember's turn, then its first wall in reach.
+    const t1 = playTips(1001, 1);
+    expect(t1.s.nubs.hero).toBe('ember');
+    expect(t1.seen).toEqual([RELAY_TIPS[2]![1], ELEMENT_TIPS.ember[0]![1], ELEMENT_TIPS.ember[1]![1]]);
+    // Its low-Flame tip reads the steady health (under 40).
+    t1.s.nubs.chill = 30;
+    t1.s.tick += 6;
+    t1.m.update(t1.s);
+    t1.drain();
+    expect(t1.seen).toContain(ELEMENT_TIPS.ember[3]![1]);
+    // T2: the telegraph into Drip says the sun will hold; Drip's turn; its puddles and hot stones ahead.
+    const t2 = playTips(1002, 1);
+    expect(t2.seen).toEqual(expect.arrayContaining([RELAY_TIPS[0]![1], ELEMENT_TIPS.drip[0]![1], ELEMENT_TIPS.drip[1]![1], ELEMENT_TIPS.drip[2]![1]]));
+    expect(t2.seen).not.toContain(RELAY_TIPS[2]![1]);
+    // T3: Sprout's turn, a site in reach and a soil patch in the window; Nubs' tip on his second leg.
+    const t3 = playTips(1003, 2);
+    expect(t3.seen).toEqual(expect.arrayContaining([ELEMENT_TIPS.sprout[0]![1], ELEMENT_TIPS.sprout[1]![1], ELEMENT_TIPS.sprout[2]![1], ELEMENT_TIPS.nubs[0]![1]]));
+    expect(t3.seen.indexOf(ELEMENT_TIPS.nubs[0]![1])).toBeGreaterThan(t3.seen.indexOf(ELEMENT_TIPS.sprout[0]![1]));
+    // T4: the telegraph into Gust, Gust's turn and its weather.
+    const t4 = playTips(1004, 1);
+    expect(t4.seen).toEqual(expect.arrayContaining([RELAY_TIPS[1]![1], ELEMENT_TIPS.gust[0]![1], ELEMENT_TIPS.gust[1]![1]]));
+    // A passed Trial shows none.
+    expect(playTips(1001, 2, true).seen).toEqual([]);
+  });
+
 });
