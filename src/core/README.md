@@ -1546,7 +1546,9 @@ the old paths byte for byte (the goldens' other keys are unchanged).
   fog; Nubs keeps today's melt line) and its line; `stats.grove` (`groveCount`) at the finish.
 - **Reads** (`elements.ts`, no allocation): `walkerAt`, `windAt`, `weatherXAt` (stepping, 600 ticks
   at most), `weatherGood`, `arriveTicks`, `contactTicks`, `needOf`, `bridged`, `burnLeft`,
-  `burnSweet`, `growLeft`, `burnTarget`, `growTarget` (veiled sites excluded), `laneOf`, `pointLit`,
+  `burnSweet` (an own wall's window opens at (burnTicks − 1) ticks of walking: a tap lands on the
+  next tick, and still feeds), `growLeft`, `burnTarget`, `growTarget` (veiled sites and sites poured
+  to their need excluded), `groveCount` (also the session's live grove count), `laneOf`, `pointLit`,
   `veiled` (fog over the target, or the trail-cover rule), `inWeather`, `heroHealth`, `elHealth`,
   `tagTick`, `nextTagTicks`, `nextTagHero`, `tagLocked`, `relayY`, `standTree`, `elStart`.
 - **History, hash, replays:** the Melt Map's chill slot holds the walker's steady health;

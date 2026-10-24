@@ -526,7 +526,8 @@ ellipses, the walker's centre inside the ellipse; walls and crossings once `y �
   `tagGrace = 30`, `tagWatch = 30`; `relayIdx++`, `stats.tags++`; `{ e: 'tag', from, to, index }`.
 - **The sun:** from the first tick after the TAG (`updateSun` runs before `updateRelay`),
   `s.sun.locked` is `HEROES[to].sunHeld` (Drip, Gust). Locking stops a coasting sun dead (the `lock`
-  concept's code path). Unlocking leaves θ where it was. `sfxRouter` plays no `lock` cue while
+  concept's code path) and, on a Trial, ends a drag (its lift would never reach the held sun).
+  Unlocking leaves θ where it was. `sfxRouter` plays no `lock` cue while
   `s.el !== null` (the TAG's own cue covers the hand-off).
 - **The press:** on every `tag` event the session calls `input.cut(all)`. It always ends the verb
   slot (§7.9): a held-back press is dropped and an active hold sends `VERB_RELEASE` (the sim has
@@ -2163,3 +2164,49 @@ Drip's reach), T4 G6 83% (every finisher rides the pushed cloud, also at the +25
 | 7 | `bench-step` and `--gen` (vs 6b23531) | pass: step 1.006 (≤ 1.10), guide 0.983 (≤ 1.5); `--gen` p99 0.979, over 1 ms 0.825, over 2 ms 0.833 (≤ 1.1), 0.974× ms/chunk |
 | 8 | `npm run e2e`, both projects | pass: 396 passed, 44 skipped, 0 failed, 0 flaky (2 workers, 18.7 min; nothing needed a re-run) |
 | 9 | `build:single` | pass: 824,832 B ≤ 829,440 B; the amendment is recorded (13.1) |
+
+### 13.6 Fix round (after the release review)
+
+Every confirmed finding of the release review was applied; the polish list where it was clearly
+right and cheap. Nubs' own runs stay byte-identical (only the `trials` golden key moved, re-baked
+once for the sun-lock rule below), and `sim --trials --check` prints the same gates as at the merge.
+
+**Rules and reads (core):**
+- `burnSweet`: an own bramble or gate's window opens at `(burnTicks − 1) · pace` (≈ 61.8 u, ≈ 96.8 u):
+  the tap lands on the next tick and the fire burns out before contacts on its last, so the old far
+  tick pulsed "tap now" but could not refund (unit test on four sub-tick offsets). The bots aim at
+  the window's centre and were left as they were.
+- `growTarget` skips a site already poured to its `need` (the Up key and a press move on to a site
+  that can take Sap; §1.4 and §2.4 say so).
+- A Trial's sun lock ends a drag (§4.1); `hit()` drops a death cause once the meter is restored
+  above 0 on the same tick (a later death names its own); the Drip mask writes into its buffer at
+  an offset (no `subarray` view per tick).
+
+**Play and presentation:**
+- The TAG cue hangs below the dial (what lies ahead, the verb ghost and CLEAN! are above it); this
+  also covers the review's "hand-off text over the ghost" finding, so the cue is not cleared early.
+- No HIGH NOON stamp or noon sting on a Trial; the low vignette and the sun's mood read steady
+  health (Sap never warns); the walker is redrawn through a fog bank it stands in; the weather
+  ghosts' ink pass outlines on-screen ghosts only; the pre-TAG arcs are thick dashes on a pulsing
+  band (the walker's coming dashes step aside during a telegraph).
+- A plot's hold ring closes at `treeMin`; Sprout's tips say so; a fall with Sap short of the bridge
+  gets `CAUSE_TIPS['sprout:sap']`. T7's grove Dare counts the trees standing now (HUD and Pause).
+  The Steady star reads "Meters ≥ n" and, while open, its running low on the Pause card.
+- Input: frames poll on the events' clock less the press's dispatch lag (a 250 ms tap burns); a
+  Gust swipe's 300 ms runs from its first move after a rest; a hold that breaks while another
+  finger turns the sun is ignored until it lifts; a new run drops queued verbs (`dropVerbs`).
+- Tips on a Trial rest 2 s, not 6, and a moment's tip is queued only when it can show at once (none
+  inside a telegraph; Sprout's `target` is a crossing); toasts hang below the wind chip.
+- Locked Trials name every requirement; T4's blurb says to push a rain cloud onto Nubs.
+- Retry from the Tag Stone is back (13.4, UI).
+- Polish: Ember's puddles pulse and cross like walls; the Up key's solid ring shows to keyboard
+  players only; screen particles draw under the toasts; an element's melt map pins no landmarks;
+  a locked element's tile is never the selection (group "Elements"); "{Name} joins the team!" is
+  said once, on the Results; Gust's coin portrait sits inside its coin.
+
+**Not done (reasons):** easing the intro Trials' opening Nubs leg (T1 and T3's humanEl already pass
+94% and 81%, under G4's 95% ceiling; a Nubs start of 100 needs a re-pick the lead must approve);
+a fade mask on the Elementals body and a label halo under the selection ring (the ring reads behind
+the label's stroke); the lilac rim on the cloud face; drawing near targets above Ember's dial.
+**Still open (the lead decides, 13.3):** T6 G5b, T7 G5 and G5b fail `sim --trials --check` exactly
+as at the merge; no lever inside §6.5's bounds fixes them.
