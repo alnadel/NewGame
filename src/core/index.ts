@@ -237,6 +237,7 @@ export {
   contactTicks,
   elFixture,
   elHealth,
+  groveCount,
   growLeft,
   growTarget,
   heroHealth,

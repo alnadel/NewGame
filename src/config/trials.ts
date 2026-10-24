@@ -107,7 +107,7 @@ function objects(src: string): readonly ElPlace[] {
 /**
  * One trial (§5). Every run starts with Nubs, so the cast is Nubs then each relay's newcomer in order,
  * and the card's chip names the walkers in order ("NUBS ▸ EMBER ▸ NUBS") unless `chip` is given; the
- * card's goal is "Reach the finish", its first star "Finish" and its third "All ≥ <steady>".
+ * card's goal is "Reach the finish", its first star "Finish" and its third "Meters ≥ <steady>".
  */
 function trial(
   n: number,
@@ -138,7 +138,7 @@ function trial(
     cast: [...new Set(walkers)], relays: relays.map(([minute, to]) => Object.freeze({ minute, to })), intro, breeze, objects: objects(src), tune: tune === TUNE ? TUNE : Object.freeze({ ...TUNE, ...tune }), mech: MECH,
     goal: FINISH, dare: { kind: dare[0], target: dare[1] }, steady, requires,
     card: Object.freeze({
-      chip: chip || walkers.join(' ▸ ').toUpperCase(), blurb, goal: 'Reach the finish', stars: ['Finish', star, `All ≥ ${steady}`] as const, dare: `Dare · ${dareLine}`,
+      chip: chip || walkers.join(' ▸ ').toUpperCase(), blurb, goal: 'Reach the finish', stars: ['Finish', star, `Meters ≥ ${steady}`] as const, dare: `Dare · ${dareLine}`,
     }),
   });
 }
@@ -180,7 +180,7 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // target, 75, still measured 83%).
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
     'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 60], 30, [],
-    "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1 s', 'Ride a rain cloud 1 s', '', 605, { legStart: [80, 80, 80] }),
+    "Swipe to blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him.", 'Rain ride 1 s', 'Ride a rain cloud 1 s', '', 605, { legStart: [80, 80, 80] }),
   // T5 pin: salt 1113 (found by the G5b scan: 0..1112 held no salt whose sun could not stay fixed);
   // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60, Drip 70 → 50, costMul and evapMul 1.2 (too
   // easy: each element leg passed with its verb off); puddles 425 −18 → −26 and 492 18 → 26 (8 u

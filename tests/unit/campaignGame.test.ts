@@ -311,7 +311,7 @@ describe('Elementals Trials (docs/ELEMENTALS_V2.md §7.11)', () => {
     // The Dare's glyph is the element that earns it.
     expect([1001, 1002, 1003, 1004, 1005, 1006, 1007].map((id) => trialDareGlyph(trialDef(id)!))).toEqual(['ember', 'drip', 'sprout', 'gust', 'drip', 'sprout', 'sprout']);
     expect(hudGoal(trialLevel(1005)!, { flakes: 0, snow: 0, drinks: 2 })).toMatchObject({ value: 2, target: 5, glyph: 'drip' });
-    expect(starRules(t1)).toEqual(['Finish', 'Burn all 7', 'All ≥ 30']);
+    expect(starRules(t1)).toEqual(['Finish', 'Burn all 7', 'Meters ≥ 30']);
     expect(campaignConfig(t6, false, true, true).relaxedGoal).toBeUndefined();
     expect(goalLine(t1, { flakes: 0, snow: 0 }, true)).toBe('Reached the finish');
     expect(goalLine(t1, { flakes: 0, snow: 0 }, false)).toBe('Out before the finish');

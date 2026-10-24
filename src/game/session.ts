@@ -24,6 +24,7 @@ import {
   elHealth,
   formatTimeOfDay,
   generateSome,
+  groveCount,
   growTarget,
   HEROES,
   isTrialId,
@@ -1047,6 +1048,16 @@ export class Session {
     }
   }
 
+  private readonly liveStatsOut = {} as SimState['stats'];
+  /** s.stats, except on a grove Trial (T7) before the finish: stats.grove is set at the finish, so count the trees standing now. */
+  private liveStats(): SimState['stats'] {
+    const s = this.s;
+    if (s.el === null || s.trial?.dare.kind !== 'grove' || s.phase === 'won') return s.stats;
+    Object.assign(this.liveStatsOut, s.stats);
+    this.liveStatsOut.grove = groveCount(s);
+    return this.liveStatsOut;
+  }
+
   /** The HUD's campaign row for the renderer (null outside a campaign run). */
   private fillCampaignView(): void {
     const r = this.renderIn;
@@ -1062,7 +1073,8 @@ export class Session {
       r.campaign = c;
     }
     const relaxed = this.relaxed();
-    const goal = hudGoal(level, s.stats, this.hudGoalOut, relaxed, this.featSeen);
+    const st = this.liveStats();
+    const goal = hudGoal(level, st, this.hudGoalOut, relaxed, this.featSeen);
     c.id = level.id;
     c.progress = levelProgress(s);
     c.goalValue = goal.value;
@@ -1073,7 +1085,7 @@ export class Session {
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
     c.gust = s.sun.gust;
-    c.stars = starState(level, s.stats, s.phase === 'won', relaxed, this.featSeen);
+    c.stars = starState(level, st, s.phase === 'won', relaxed, this.featSeen);
     c.coolLeft = 1 - Math.min(1, s.stats.litTotal / level.stars.sunSec);
     // A star earned mid-run (the goal, the flakes) chimes; the finish has its own jingle.
     if (c.stars & ~this.runStars & 3 && s.phase === 'day') {
@@ -2458,10 +2470,11 @@ export class Session {
     if (level) {
       const relaxed = this.relaxed();
       const seen = this.featSeen;
-      const bits = starState(level, s.stats, s.phase === 'won', relaxed, seen);
+      const st = this.liveStats();
+      const bits = starState(level, st, s.phase === 'won', relaxed, seen);
       const labels = starRules(level, relaxed);
       // The goal's own count (a finish goal: the progress); an open Dare's count (a finale's names both).
-      const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
+      const goal = hudGoal({ ...level, feats: [] }, st, undefined, relaxed, seen);
       const f = level.feats[0];
       const t = s.trial;
       const x = HEROES[s.nubs.hero];
@@ -2469,7 +2482,9 @@ export class Session {
       if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       // A Trial: the Dare's count on its star while open; the goal line counts the goal itself
       // (hudGoal's Trial branch turns to the Dare once the goal is a finish or met).
-      if (t && !(bits & STAR_FLAKES)) labels[1] = `${labels[1]} · ${trialDareCount(t, s.stats)}`;
+      if (t && !(bits & STAR_FLAKES)) labels[1] = `${labels[1]} · ${trialDareCount(t, st)}`;
+      // …and the Steady star's running low while it is still open (floored: never the threshold when just under it).
+      if (t && !(bits & STAR_COOL_LOST)) labels[2] = `${labels[2]} · low ${Math.floor(s.stats.minChill)}`;
       const count = t
         ? level.goal.kind === 'finish'
           ? pct

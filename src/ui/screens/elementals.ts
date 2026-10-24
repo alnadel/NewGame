@@ -25,8 +25,9 @@ const FACE: Readonly<Record<HeroFace, string>> = { ice: 'f-ice', red: 'f-red', b
 
 /** The hero a Trial is about (the stage's): the first elemental in its cast. */
 const featured = (t: TrialDef): HeroId => t.cast.find((x) => x !== 'nubs') ?? 'nubs';
-/** What opens a locked Trial: its first requirement not passed yet. */
-const blocker = (save: Save, t: TrialDef): string => (TRIALS[(t.requires.find((n) => !trialBest(save, n)) ?? 1) - 1] as TrialDef).name;
+/** What opens a locked Trial: every requirement not passed yet ("Kindling and Puddle Run"; else the lesson's T1). */
+const blocker = (save: Save, t: TrialDef): string =>
+  t.requires.filter((n) => !trialBest(save, n)).map((n) => (TRIALS[n - 1] as TrialDef).name).join(' and ') || (TRIALS[0] as TrialDef).name;
 
 export function createElementalsScreen(ctx: UiContext): Screen {
   /** The Trial Play starts, the last one played, and the hero tapped (null: the Trial's). */

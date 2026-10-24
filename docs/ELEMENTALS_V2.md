@@ -1850,13 +1850,13 @@ commits or pushes outside the normal merge flow. Never run `playwright install`.
 
 | n | title | chip | blurb (≤ 90) | goal | stars | dare |
 |---|---|---|---|---|---|---|
-| 1 | Kindling | NUBS ▸ EMBER ▸ NUBS | Tap each wall just before Ember gets there. Light refuels the flame. | Reach the finish | Finish · Burn all 7 · All ≥ 30 | Dare · Burn all 7 walls |
-| 2 | Puddle Run | NUBS ▸ DRIP ▸ NUBS | Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones. | Reach the finish | Finish · Drink 6 · All ≥ 30 | Dare · Drink 6 puddles |
-| 3 | Green Bridge | NUBS ▸ SPROUT ▸ NUBS | Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them. | Reach the finish | Finish · Grow 2 trees · All ≥ 30 | Dare · Grow 2 trees |
-| 4 | Weather Vane | NUBS ▸ GUST ▸ NUBS | Swipe to blow rain and fog off Gust's path. Each swipe costs Lift. | Reach the finish | Finish · Rain ride 1 s · All ≥ 30 | Dare · Ride a rain cloud 1 s |
-| 5 | Steam | NUBS ▸ EMBER ▸ DRIP ▸ NUBS | Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember! | Reach the finish | Finish · Drink 4 · All ≥ 25 | Dare · Drink 4 puddles |
-| 6 | Rain Garden | NUBS ▸ GUST ▸ SPROUT ▸ NUBS | Clear the fog for Sprout and blow the rain onto its path: rain feeds plants. | Reach the finish | Finish · Grow 3 trees · All ≥ 25 | Dare · Grow 3 trees |
-| 7 | Five Elements | ALL FIVE ELEMENTS | Five elements, one day. The breeze spreads fire west: keep four trees. | Reach the finish | Finish · 4 trees standing · All ≥ 25 | Dare · Keep 4 trees standing |
+| 1 | Kindling | NUBS ▸ EMBER ▸ NUBS | Tap each wall just before Ember gets there. Light refuels the flame. | Reach the finish | Finish · Burn all 7 · Meters ≥ 30 | Dare · Burn all 7 walls |
+| 2 | Puddle Run | NUBS ▸ DRIP ▸ NUBS | Set the sun, then drag to steer Drip through shade and puddles. Dodge hot stones. | Reach the finish | Finish · Drink 6 · Meters ≥ 30 | Dare · Drink 6 puddles |
+| 3 | Green Bridge | NUBS ▸ SPROUT ▸ NUBS | Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them. | Reach the finish | Finish · Grow 2 trees · Meters ≥ 30 | Dare · Grow 2 trees |
+| 4 | Weather Vane | NUBS ▸ GUST ▸ NUBS | Swipe to blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him. | Reach the finish | Finish · Rain ride 1 s · Meters ≥ 30 | Dare · Ride a rain cloud 1 s |
+| 5 | Steam | NUBS ▸ EMBER ▸ DRIP ▸ NUBS | Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember! | Reach the finish | Finish · Drink 4 · Meters ≥ 25 | Dare · Drink 4 puddles |
+| 6 | Rain Garden | NUBS ▸ GUST ▸ SPROUT ▸ NUBS | Clear the fog for Sprout and blow the rain onto its path: rain feeds plants. | Reach the finish | Finish · Grow 3 trees · Meters ≥ 25 | Dare · Grow 3 trees |
+| 7 | Five Elements | ALL FIVE ELEMENTS | Five elements, one day. The breeze spreads fire west: keep four trees. | Reach the finish | Finish · 4 trees standing · Meters ≥ 25 | Dare · Keep 4 trees standing |
 
 The chip glyph is the intro element's glyph, or `elementals` for T5-T7. `levelCardFit` checks every
 blurb at 360, 390 and 1280.
@@ -1927,7 +1927,7 @@ burn."; T6 `go`: "Blow the fog off Sprout's path and the rain onto it: rain feed
 | Title pill | "Elementals" with Ember, Drip, Sprout and Gust faces |
 | Screen header / stars chip | "Elementals", "n/21" |
 | Play button | "Play T3 · Green Bridge" |
-| Locked trial toast / hero badge | "Pass {name} first." / "Pass T{n}" |
+| Locked trial toast / hero badge | "Pass {name}[ and {name}] first." / "Pass T{n}" |
 | Unlock toast | "{Name} joins the team!" |
 | NEXT chip / sun badge | "NEXT ▸ {NAME} {s}" / "SUN HOLDS" |
 | TAG announcement (cue line) | "{Name}'s turn: {verbLine}." (+ " The sun holds.") |

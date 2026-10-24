@@ -88,7 +88,7 @@ test('lock states, labels and the verb row: seven Trials, five elements (Gust in
   const tiles = page.locator('.scr-elementals .trial-tile');
   await expect(tiles).toHaveCount(7);
   await expect(page.locator('.trial-tile[data-trial="3"]')).toHaveAttribute('aria-label', 'Trial 3, Green Bridge, Nubs, Sprout, not passed yet');
-  await expect(page.locator('.trial-tile[data-trial="5"]')).toHaveAttribute('aria-label', 'Trial 5, Steam, Nubs, Ember, Drip, locked: pass Kindling');
+  await expect(page.locator('.trial-tile[data-trial="5"]')).toHaveAttribute('aria-label', 'Trial 5, Steam, Nubs, Ember, Drip, locked: pass Kindling and Puddle Run');
   // T7's five faces go without arrows.
   await expect(page.locator('.trial-tile[data-trial="7"] .el-face')).toHaveCount(5);
   await expect(page.locator('.trial-tile[data-trial="1"]')).toHaveClass(/is-next/);
@@ -107,7 +107,7 @@ test('lock states, labels and the verb row: seven Trials, five elements (Gust in
   await expect(page.locator('.hero-tile[data-hero="volt"]')).toHaveCount(0);
   // A locked Trial says what opens it.
   await page.locator('.trial-tile[data-trial="6"]').click({ force: true });
-  await expect(page.locator('.toast').last()).toContainText('Pass Green Bridge first.');
+  await expect(page.locator('.toast').last()).toContainText('Pass Green Bridge and Weather Vane first.');
   expect(await screen(page)).toBe('elementals');
   // Arrow keys walk the grid: right, then down a row.
   await page.locator('.trial-tile[data-trial="1"]').focus();
