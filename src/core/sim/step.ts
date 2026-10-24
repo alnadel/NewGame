@@ -5,8 +5,9 @@
 // landing (or night regen) → pickups → buds → gates and balls passed → Dares (v1.6) → history →
 // death → guide. Everything is pure arithmetic on the state. On an Elementals Trial (s.el set,
 // docs/ELEMENTALS_V2.md §7.8) the relay runs after the clock, only Nubs casts the Cold Snap, the
-// element rules run after the snap (sim/elements.ts updateElements), the walker's meter follows its
-// element in place of Chill's, and a life meter at 0 or a fall ends the run.
+// element rules run after the snap (sim/elements.ts updateElements, then one point of Drip's pre-TAG
+// mask), the walker's meter follows its element in place of Chill's, and a life meter at 0 or a fall
+// ends the run.
 // The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
 import { TUNING } from '../../config/tuning.ts';
@@ -33,7 +34,7 @@ import { trailX } from '../trail.ts';
 import { deathCause } from './deathcause.ts';
 import { updateFeats } from './feats.ts';
 import { updateFlare } from './flares.ts';
-import { guideDue, updateGuide } from './guide.ts';
+import { elTagMask, guideDue, updateGuide } from './guide.ts';
 import { applyElDaylight, elDead, elDeath, groveCount, updateElements, updateRelay } from './elements.ts';
 import { pushHistory } from './history.ts';
 import { applyDaylight, applyNight, computeCoverage, hourGlyph } from './nubs.ts';
@@ -249,7 +250,10 @@ export function step(s: SimState, input: InputFrame): void {
   updateFlare(s);
   syncEclipse(s);
   updateSnap(s, inp);
-  if (s.el !== null) updateElements(s, inp);
+  if (s.el !== null) {
+    updateElements(s, inp);
+    elTagMask(s);
+  }
   computeCoverage(s);
   // Elementals: a Trial's walker follows its element, and night leaves its meter unchanged.
   if (daylight) {

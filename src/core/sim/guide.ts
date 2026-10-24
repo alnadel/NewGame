@@ -6,9 +6,10 @@
 // guide.flake (the bins that shade the nearest alive glass flake in its melt window) and, during a
 // flare's warning, guide.flare (full shade at the flare's first hold tick) with guide.flareTicks.
 //
-// Elementals v2 (docs/ELEMENTALS_V2.md §7.8): on a Trial elGuide follows the Nubs masks; the contract
-// stage reads Nubs' masks on every leg and, during a TAG's telegraph, guide.tag holds where to aim
-// the sun for the incoming element (Nubs' strict shade at the walker).
+// Elementals v2 (docs/ELEMENTALS_V2.md §4.1, §4.4, §7.8): on a Trial elGuide gives each walker its own
+// dial (Nubs shade, Ember light, Sprout its focus site's light, Drip and Gust none) and, during a TAG's
+// telegraph, guide.tag holds where to aim the sun for the incoming element (Drip's from the pre-TAG
+// lane mask, which elTagMask builds one point a tick inside step()).
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ } from '../clock.ts';
@@ -18,9 +19,9 @@ import { liftElevation, liftingFlare, worldElevation, worldYAtDayTick, worldYAtT
 import { gatherScene, lowerBound } from '../gen/store.ts';
 import { eclipseAt } from '../gen/world.ts';
 import { BINS, createMaskScene, glareMask, litMask, shadeMask } from '../intervals.ts';
-import { PICKUP_ALIVE, SNAP_ID_BASE, type Flare, type Pickup } from '../objects.ts';
+import { EL_GONE, PICKUP_ALIVE, SNAP_ID_BASE, type ElObj, type ElState, type Flare, type Pickup } from '../objects.ts';
 import { trailX } from '../trail.ts';
-import { tagLocked } from './elements.ts';
+import { bridged, contactTicks, nextTagHero, nextTagTicks, relayY, tagLocked } from './elements.ts';
 import { updateBudGuide, updateLandGuide } from './mechanics.ts';
 import { meltBudgetOf } from './pickups.ts';
 import type { SimState } from './types.ts';
@@ -95,11 +96,132 @@ export function updateGuide(s: SimState): void {
   if (s.el !== null) elGuide(s);
 }
 
-/** A Trial's layers over the Nubs masks (§7.8): guide.tag during a TAG's telegraph, else all 0. */
+const EL = TUNING.elements;
+const TM = EL.tagMask;
+/** The Drip mask's time samples, lane points per sample and points in all (§4.4). */
+const MASK_T = (TM.secs * TICK_HZ) / TM.step;
+const MASK_L = TM.lanes.length;
+const MASK_N = MASK_T * MASK_L;
+/** The mask is built from this many ticks before a TAG into Drip (one point a tick, then cycled). */
+const MASK_LEAD = 300;
+const score = new Float64Array(BINS);
+
+/**
+ * A Trial's dial (§7.8) over the masks updateGuide made at the walker: Ember's `now` is light
+ * (lit ≥ 2, `next` likewise from nextGuide), Sprout's the bins that light its focus site, Drip's and
+ * Gust's nothing (the sun holds). During a TAG's telegraph guide.tag is where to aim for the incoming
+ * element (§4.1), else all 0.
+ */
 function elGuide(s: SimState): void {
   const g = s.guide;
-  if (tagLocked(s)) g.tag.set(g.now);
+  const h = s.nubs.hero;
+  if (h === 'ember') for (let b = 0; b < BINS; b++) g.now[b] = (g.lit[b] as number) >= 2 ? 1 : 0;
+  else if (h === 'sprout') {
+    siteMask(s, focusSite(s), g.now);
+    g.next.set(g.now);
+  } else if (h !== 'nubs') {
+    g.now.fill(0);
+    g.next.fill(0);
+  }
+  const to = tagLocked(s) ? nextTagHero(s) : null;
+  if (to === 'nubs' || to === 'ember') for (let b = 0; b < BINS; b++) g.tag[b] = to === 'nubs' ? (g.lit[b] === 0 ? 1 : 0) : (g.lit[b] as number) >= 2 ? 1 : 0;
+  else if (to === 'sprout') siteMask(s, firstSite(s), g.tag);
+  else if (to === 'drip') elTagMarks(s, g.tag);
   else g.tag.fill(0);
+}
+
+/** Bins whose sun lights site i's centre now (gatherScene + shadeMask at the site, margin 1); all 0 for none. */
+function siteMask(s: SimState, i: number, out: Uint8Array): void {
+  const o = i >= 0 ? (s.el as ElState).objs[i] : undefined;
+  if (o === undefined) {
+    out.fill(0);
+    return;
+  }
+  gatherScene(s.world, pointScene, o.x, o.y, 1, s.tAbs, s.eps, s.cot);
+  shadeMask(pointScene, o.x, o.y, false, tmp);
+  for (let b = 0; b < BINS; b++) out[b] = tmp[b] === 1 ? 0 : 1;
+}
+
+/** A site Sprout can still grow: an unbridged crossing or a plot with no tree, not gone. */
+function openSite(o: ElObj): boolean {
+  return o.state !== EL_GONE && (o.kind === 'plot' ? o.casterId < 0 : (o.kind === 'gap' || o.kind === 'stream') && !bridged(o));
+}
+
+/** Sprout's focus site (§2.4): the held site, else the nearest growing site ahead, else the next unbridged crossing in the window; −1 none. */
+function focusSite(s: SimState): number {
+  const el = s.el as ElState;
+  if (el.hold >= 0) return el.hold;
+  const y = s.nubs.y;
+  let cross = -1;
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (!openSite(o) || o.y < y) continue;
+    if (o.grown < o.size) return i;
+    if (cross < 0 && o.kind !== 'plot' && contactTicks(s, o) >= 0 && o.y - o.r - y <= EL.range) cross = i;
+  }
+  return cross;
+}
+
+/** The incoming Sprout leg's first unbridged crossing in the window, else its first plot (§4.1); −1 none. */
+function firstSite(s: SimState): number {
+  const el = s.el as ElState;
+  const from = relayY(s, s.relayIdx);
+  let plot = -1;
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (!openSite(o) || o.y < from || o.y - s.nubs.y > EL.range) continue;
+    if (o.kind !== 'plot') return i;
+    if (plot < 0) plot = i;
+  }
+  return plot;
+}
+
+/**
+ * One point of the Drip mask (§4.4), inside step(): from MASK_LEAD ticks before a TAG into Drip until
+ * the TAG, one point a tick and then cycled (so the mask follows trees and weather). Point p is time
+ * sample p / MASK_L (the leg's tick TM.step · that) at lane offset TM.lanes[p % MASK_L], with the
+ * current casters and rain proxies at their current x; s.el.tagMask holds 1 per bin where it is shaded
+ * (lit ≤ 1).
+ */
+export function elTagMask(s: SimState): void {
+  const el = s.el as ElState;
+  const n = nextTagTicks(s);
+  if (el.tagMask.length === 0 || n <= 0 || n > MASK_LEAD || nextTagHero(s) !== 'drip') return;
+  const p = (MASK_LEAD - n) % MASK_N;
+  const w = s.world;
+  const tick = s.tickAbs + n + TM.step * Math.floor(p / MASK_L);
+  const y = worldYAtTick(w, tick);
+  const x = trailX(w.trail, y) + (TM.lanes[p % MASK_L] as number);
+  const eps = worldElevation(w, tick);
+  const row = el.tagMask.subarray(p * BINS, (p + 1) * BINS);
+  if (eps <= 0) {
+    row.fill(1);
+    return;
+  }
+  gatherScene(w, pointScene, x, y, MARGIN, tick / TICK_HZ, eps, 1 / tanD(eps), true, SNAP_ID_BASE);
+  litMask(pointScene, x, y, false, litNext, null);
+  for (let b = 0; b < BINS; b++) row[b] = (litNext[b] as number) <= 1 ? 1 : 0;
+}
+
+/**
+ * The Drip mask's marks (§4.4): per bin the share of the time samples at which at least one lane
+ * point is shaded; out[b] = 1 where it is at least max(min, rel · best).
+ */
+export function elTagMarks(s: SimState, out: Uint8Array): void {
+  const m = (s.el as ElState).tagMask;
+  let best = 0;
+  for (let b = 0; b < BINS; b++) {
+    let k = 0;
+    for (let t = 0; t < MASK_T; t++) {
+      let any = 0;
+      for (let l = 0; l < MASK_L; l++) any |= m[(t * MASK_L + l) * BINS + b] as number;
+      k += any;
+    }
+    score[b] = k / MASK_T;
+    if (score[b] as number > best) best = score[b] as number;
+  }
+  const bar = Math.max(TM.min, TM.rel * best);
+  for (let b = 0; b < BINS; b++) out[b] = (score[b] as number) >= bar ? 1 : 0;
 }
 
 /** guide.next: 0.6 s ahead (Nubs' position, the elevation and the clouds then; today's daylight only). */
@@ -119,7 +241,9 @@ function nextGuide(s: SimState): void {
   const eps = liftElevation(s.world, s.params, dayStartTick(s.day) + t, elevation(s.params, t / TICK_HZ));
   gatherScene(s.world, scene, x, y, MARGIN, s.tAbs + AHEAD / TICK_HZ, eps, 1 / tanD(eps));
   litMask(scene, x, y, false, litNext, null);
-  for (let b = 0; b < BINS; b++) g.next[b] = litNext[b] === 0 ? 1 : 0;
+  // Elementals: Ember's next is light (lit ≥ 2) 0.6 s ahead.
+  const ember = s.el !== null && s.nubs.hero === 'ember';
+  for (let b = 0; b < BINS; b++) g.next[b] = (ember ? (litNext[b] as number) >= 2 : litNext[b] === 0) ? 1 : 0;
 }
 
 /*
