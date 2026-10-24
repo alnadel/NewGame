@@ -436,6 +436,8 @@ function mount(screen: LabScreen, variant: string): void {
     save.campaign.unlocked = 154;
     save.campaign.lastLevel = 153;
   }
+  // Elementals v2: the screen opens once the first-run lesson is passed ('fresh': before it, all locked).
+  if (screen === 'elementals' && variant !== 'fresh') save.flags.tutorialDone = true;
   if (screen === 'elementals' && variant === 'regular') save.elementals2 = { stars: [3, 1, 0, 0, 0, 0, 0], seen: true };
   if (screen === 'elementals' && variant === 'done') save.elementals2 = { stars: [3, 3, 2, 3, 1, 3, 2], seen: true };
   if (screen === 'elementals' && variant === 'unlock-all') save.settings.unlockAll = true;

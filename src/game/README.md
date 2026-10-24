@@ -12,14 +12,14 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/cadence.ts` | The render cadence: which rAFs call `renderer.draw` (pure; unit-tested). |
 | `game/crash.ts` | The self-contained crash overlay (`#crash`) and the boot-failure splash, built with inline styles. |
 | `game/loop.ts` | `FixedClock`: 60 Hz accumulator, max 5 ticks/frame (× `?fast`), slow-mo, hit-stop, the sustained `assist` scale (the first lesson's slow time), interpolation alpha. |
-| `game/input.ts` | Pointer Events (+ coalesced) and arrow/A-D keys → per-tick `InputFrame`s (quantized dTheta/release, edge-ignore zones, latest pointer wins, release velocity). |
+| `game/input.ts` | Pointer Events (+ coalesced) and arrow/A-D keys → per-tick `InputFrame`s (quantized dTheta/release, edge-ignore zones, latest pointer wins, release velocity); Elementals v2's verb slot, taps, holds, steering, swipes and act keys. |
 | `game/camera.ts` | View metrics and letterboxing, Nubs at 68 %/70 %, shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
 | `game/fx.ts` | SimEvents → particles, rings, pops, HUD/banner timers, Nubs reactions, slow-mo and hit-stop; continuous steam, sweat, frost sparkles and fireflies. |
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3), the ghost-thumb hint tracker (§6.2) with its sticky target arc and the first lesson, and the ui.css ghost keyframes as functions (so the canvas moves in step with the DOM hand). |
 | `game/perf.ts` | Frame-time governor, four levels (v1.1 GR4): 0 full → 1 crisp shadows → 2 DPR × 0.75 → 3 DPR × 0.625 and a 200-particle cap (never below 1 device px per CSS px). Late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
 | `game/params.ts`, `game/debug.ts` | URL params, the `?debug=1` overlay, `window.__SHADY_TEST__`. |
 | `game/campaign.ts` | Campaign (Journey, v1.2) runs: a level's run config, the intro card's words and star rules, the Results goal line, the HUD goal pill and the stars so far (`starState`: the HUD pips and the Pause card) (CAMPAIGN_PLAN §4). |
-| `game/moments.ts` | v1.4 in-run moments: mission toasts ("MISSION ✓ 2/3", the save's active missions measured against the live run every 0.1 s, read-only on the save; scored runs only), the first three Journey levels' contextual tips (`LEVEL_TIPS`, shown until the level is passed), and the COMEBACK (Chill under the PHEW line while lit, then 0.75 s of held shade, no PHEW on the way in; once per dip). Elementals: the Trials' `HERO_TIPS`, `RELAY_TIPS` and `DUO_TIPS` (docs/ELEMENTALS.md §6.3). |
+| `game/moments.ts` | v1.4 in-run moments: mission toasts ("MISSION ✓ 2/3", the save's active missions measured against the live run every 0.1 s, read-only on the save; scored runs only), the first three Journey levels' contextual tips (`LEVEL_TIPS`, shown until the level is passed), and the COMEBACK (Chill under the PHEW line while lit, then 0.75 s of held shade, no PHEW on the way in; once per dip). Elementals v2: the Trials' `ELEMENT_TIPS`, `RELAY_TIPS` and `MIXER_TIPS` (docs/ELEMENTALS_V2.md §10.3). |
 | `render/renderer.ts` | Draw order and the per-frame render state (`RenderScene`). |
 | `render/*` | palette LUT, ground/trail/footprints, shadow layer, casters (+ night window glow), clouds, pickups and glare, Nubs (+ Wardrobe preview), halo dial (+ the frozen dial of the Melt Map), sun mascot with its Sun Shades (+ the Wardrobe's sun preview), HUD, banners/vignettes/stamps, particles, Melt Map, sprites; v1.1 adds `atmosphere.ts` (one small offscreen sky/vignette canvas, A12), `decor.ts` (decals, puddles, the biome signpost), `deathbeat.ts` (grey-out and hat pop), `friend.ts` (the challenger's puddle), `glyphs.ts` (every forecast, biome and concept glyph and the ground decals, stored as SVG path ops: `drawGlyph(id)`, `artOps`/`drawArt`) and `postcard.ts`. |
 
@@ -235,31 +235,55 @@ See CAMPAIGN_PLAN §4 for the contract; the core names (`CONCEPTS`, `levelDef`, 
   high contrast) and fills the air with spring petals, winter snow or blown leaves (`fx.ts`, none
   under reduced motion). Endless, Daily and challenge runs keep `PLAIN_THEME`.
 
-## Elementals (game side, docs/ELEMENTALS.md §4.10)
+## Elementals v2 (game side, docs/ELEMENTALS_V2.md §7.9, §7.11)
 
-A Trial (ids 1001..1008, core `trialLevel`, `trialDef`) runs through the campaign flow above with
-its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a debug run), and
-`?hero=<id>` swaps a solo Trial's hero (cfg.hero; an unscored debug run).
+A Trial (ids 1001..1007, core `trialLevel`, `trialDef`) runs through the campaign flow above with
+its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a debug run);
+`?elfix=1` puts its objects into every kind and state for art review (bot builds only).
+- **Input** (`input.ts`, §1.3, §7.9): the host names the walking element's verb (`verb()`: 'sun'
+  before the start beat and off Trials), maps CSS px to the ground on the last drawn frame
+  (`toWorld`, `uPerPx`) and says whether a press starts on a target (`canTarget`: core
+  `burnTarget`/`growTarget`). 'sun' is today's press, byte for byte. On 'burn' and 'grow' legs a
+  press that starts on a target goes to the **verb slot** (while it is free) and is held back from
+  the sun: a burn press released within 300 ms and 12 px is a **tap** (`VERB_TAP` + its ground point,
+  quantized to 1/8 u; no catch, no turn); a grow press still for 220 ms is a **hold** (`VERB_HOLD`)
+  until it lifts or moves 24 px (`VERB_RELEASE`); moving 12 px first, or a burn press past 300 ms,
+  makes it a sun press with the turn it made. Every other press is the **sun slot**'s (latest wins),
+  so a second finger turns the sun during a hold. On 'steer' legs every press slides Drip by the
+  finger's world distance (`steer`, 1/64 u, no invert or sensitivity); on 'blow' legs a press moving
+  24 px sideways within 300 ms (|dx| ≥ 1.5·|dy|) blows one gust (`VERB_WEST`/`VERB_EAST`). Keys:
+  Up/W burns (`VERB_KEY_BURN`) or holds until up (`VERB_KEY_HOLD`, `VERB_RELEASE`); Left/Right turn
+  the sun, steer Drip (`key`) or blow one gust per press (Gust, `key` 0); Down/S and the coin snap
+  only on 'sun'. The wheel turns the sun on 'sun', 'burn' and 'grow' legs and does nothing on held-sun
+  legs (Drip's wheel steering is cut for the bundle budget). A queued verb (a queue of 4) lands on the
+  first frame of the next batch; `takeFrames` resets `verb`, `vx`, `vy` and `steer` on every frame.
+  `cut(all)` on every `tag` ends the verb slot (a held-back press is dropped, a hold sends
+  `VERB_RELEASE`) and, with `all` (a steer or blow leg on either side), the sun slot's press;
+  `releaseAll()` lets a hold go too.
 - **`campaign.ts` variants**: `introCard` (kicker `levelTag` "TRIAL 3", the Trial's card chip, blurb,
-  goal and star rules, with the hero's glyph, or `'elementals'` for a relay or duo, from
-  `trialGlyph`), `starRules`, `goalText`, `goalLine` ("Reached the finish", "Out before the
-  finish", "Goal missed: Bloom 2 buds (1/2)", "Out before the finish (Bloom 2 buds ✓)"), `starState` (the goal, the Dare by `trialDareValue`,
-  and Steady: `stats.minChill` never under `steady`), and `hudGoal` (the goal until met, then the
-  Dare, ticks shown as seconds). `campaignConfig` never relaxes a Trial.
-- **Session**: Results > Map and Back after a Trial call `openJourney('elementals')`. Next goes to
-  the next open Trial (`nextOpenTrial`), else to the Elementals screen. The death recap tip is the
-  fallen hero's `deathTip` (Nubs' '' keeps today's recap tips; Ember smothered by a duo's Cold Snap
-  gets `SMOTHER_TIP`). The Pause card's title reads "Trial 3 · Thunder Alley" with the hero's
-  tagline (a duo's both); its goal line counts the goal itself ("NN %", "1/2") and the Dare star its
-  own count (`trialDareCount`). `renderHeroPreview` is stubbed with
-  `renderWardrobePreview(canvas, equipped)`, Nubs in his outfit, until ART's export lands.
-- **Tips** (`moments.ts`): until a Trial is passed (`save.elementals`) it shows its first hero's
-  `HERO_TIPS` (go, a quarter in, the ability's charge or its own moment). A relay adds `RELAY_TIPS`
-  (go, and the first TAG's telegraph on `tagSoon`), and each later hero's 'go' tip comes on the
-  `tag` that hands it the walk (once); a TAG clears every toast (`clearToasts`) and spends the last
-  hero's tips. A duo shows `DUO_TIPS`, whose Cold Snap warning shows only on T6. A Trial starts with
-  its charge full, so its 'frost' tip comes at a quarter in (ahead of p25) while the charge is
-  unspent, and a cast drops it. Trials toast no mission steps and no COMEBACK (a hero's meter is not Nubs' Chill).
+  goal and star rules, with the intro element's glyph, or `'elementals'` on a mixer, from
+  `trialGlyph`), `starRules`, `goalText`, `goalLine`, `starState` (the goal, the Dare by
+  `trialDareValue`, and Steady: `stats.minChill` never under `steady`), and `hudGoal` (the Dare,
+  ticks shown as seconds) with `trialDareGlyph` (burns Ember, drinks Drip, trees and the grove
+  Sprout, the rain ride Gust). `campaignConfig` never relaxes a Trial.
+- **Session**: `canSnap` only while Nubs walks and no TAG is due. Every `tag` calls `input.cut` and
+  announces the hand-off on the cue line (aria-live, CueId `tag-<element>`: "Drip's turn. The sun
+  holds."). Results > Map and Back after a Trial call `openJourney('elementals')`; Next goes to the
+  next open Trial (`nextOpenTrial`), else to the Elementals screen. The recap tip is `CAUSE_TIPS`
+  (`'<element>:<cause>'`, then `'<cause>'`), else the element's `deathTip` (Nubs melting keeps
+  today's recap tips). The Pause card reads "Trial 3 · Green Bridge", the walking element's tagline
+  and "{verbLine} · {keyLine}". `fillAudioView`'s health is the walker's steady health (`elHealth`;
+  Sprout's Sap never beats). The drag ghost and the lesson hint are off while an element plays its
+  own verb; on an intro Trial the DOM ghost plays the intro verb (tap, hold, steer, a swipe) on the
+  first target of the leg in reach (Ember's once the tap is due, `burnSweet`), anchored on the last
+  drawn frame (`ui.setGhostAt`), until the first verb of the run lands. Retry from the Tag Stone is
+  cut for the bundle budget (§9.3, the first item of UI's cut list).
+- **Tips** (`moments.ts`, §10.3): until a Trial is passed (`save.elementals2`) it shows its
+  elements' `ELEMENT_TIPS` while each walks ('tag' as its first leg begins, Nubs' on his second;
+  'target', 'low', 'water', 'stone', 'plot' when the moment comes, looked for every 6 ticks), the
+  hand-off `RELAY_TIPS` (the first telegraph into Drip, into Gust, and into any other) and a mixer's
+  `MIXER_TIPS` at go. A TAG clears every toast and spends the outgoing element's tips. Trials toast
+  no mission steps and no COMEBACK.
 
 ## v1.3 game feel
 
@@ -397,15 +421,15 @@ show while no swipe can cast.
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
 (−1 outside endless), `drain, noonCloud, forecast, biome, lessonOn`, and in v1.2 `level` (−1
 outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locked`, `moonlit`, and for
-the Elementals `hero`, `mate` (a duo's, else null), `relay` (the relay index), `meters` (each body's
-meter) and `charge` (the ability's)), `forceDeath()`,
+the Elementals `hero`, `relay` (the relay index), `charge` (the Cold Snap's), `meter`, `verb`,
+`sunHeld`, `omega` and `el` (dx, wind, hold, spent, the objects and the counts)), `forceDeath()`,
+`testWorldToScreen(x, y)` and `testSkipToLeg(i)` (bot builds),
 `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; for tooling: `paused()`,
 `presses()`, `demo(name)` (fx and audio only: `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`,
 `cloud`, `glare`, `flake`, `best`, in v1.1 `passed`, `swing`, `highnoon`, `postcard`, and in v1.2
 `finish`), `campaign()` (the last Results' `ResultsView.campaign`, or null), `perf()`
 (frame, sim, generation and render ms, layer counters, the DPR, `govLevel`, `draws`, and in v1.1
-`fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()` (with `hero`: cfg.hero
-or null), `cameraFx()`,
+`fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()`, `cameraFx()`,
 `hudPb()`, `renderOptions({ mapOverlay, multiplyShadows, decor })`, `pixelAB(a, b)`,
 `mapProbe(mapT)` (whole device pixels of the world rect only), `mapCallouts()` (Melt Map callout
 boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`) and `bot(kind)`
