@@ -328,7 +328,6 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           for (let i = 0; i < tips.length; i++) if ((tips[i] as readonly [TipOn, string, string?])[0] !== 'tag') tipsShown |= 1 << i;
           tip('tag', TIP_HOLD, false, ev.to);
           break;
-
         case 'flake':
           tip('flake');
           if (level && goalMetLive(level, s.stats)) tip('goal');

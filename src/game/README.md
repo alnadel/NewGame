@@ -248,14 +248,18 @@ its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a 
   Dare, ticks shown as seconds). `campaignConfig` never relaxes a Trial.
 - **Session**: Results > Map and Back after a Trial call `openJourney('elementals')`. Next goes to
   the next open Trial (`nextOpenTrial`), else to the Elementals screen. The death recap tip is the
-  fallen hero's `deathTip` (Nubs' '' keeps today's recap tips). The Pause card's title reads
-  "Trial 3 · Thunder Alley" with the hero's tagline. `renderHeroPreview` is stubbed with
+  fallen hero's `deathTip` (Nubs' '' keeps today's recap tips; Ember smothered by a duo's Cold Snap
+  gets `SMOTHER_TIP`). The Pause card's title reads "Trial 3 · Thunder Alley" with the hero's
+  tagline (a duo's both); its goal line counts the goal itself ("NN %", "1/2") and the Dare star its
+  own count (`trialDareCount`). `renderHeroPreview` is stubbed with
   `renderWardrobePreview(canvas, equipped)`, Nubs in his outfit, until ART's export lands.
 - **Tips** (`moments.ts`): until a Trial is passed (`save.elementals`) it shows its first hero's
   `HERO_TIPS` (go, a quarter in, the ability's charge or its own moment). A relay adds `RELAY_TIPS`
   (go, and the first TAG's telegraph on `tagSoon`), and each later hero's 'go' tip comes on the
-  `tag` that hands it the walk (once). A duo shows `DUO_TIPS`, whose Cold Snap warning shows only on
-  T6. Trials toast no mission steps and no COMEBACK (a hero's meter is not Nubs' Chill).
+  `tag` that hands it the walk (once); a TAG clears every toast (`clearToasts`) and spends the last
+  hero's tips. A duo shows `DUO_TIPS`, whose Cold Snap warning shows only on T6. A Trial starts with
+  its charge full, so its 'frost' tip comes at a quarter in (ahead of p25) while the charge is
+  unspent, and a cast drops it. Trials toast no mission steps and no COMEBACK (a hero's meter is not Nubs' Chill).
 
 ## v1.3 game feel
 

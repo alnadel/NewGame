@@ -68,7 +68,7 @@ for (const size of SIZES) {
     await expectInside(page, page.locator('.scr-title .play-pill'), 'Play');
     await expectInside(page, page.locator('.tray button[aria-label="Settings"]'), 'Settings');
 
-    await drag(page, Math.round(size.width / 2), Math.round(size.height * 0.4), -40);
+    await drag(page, Math.round(size.width / 2), Math.round(size.height * 0.55), -40);
     await waitForScreen(page, 'play');
     await page.waitForTimeout(800);
     await expectInside(page, page.locator('button[aria-label="Pause"]'), 'pause button');
@@ -141,7 +141,7 @@ async function expectInViewport(page: Page, loc: Locator, label: string): Promis
 
 async function startPlay(page: Page): Promise<void> {
   const vp = page.viewportSize()!;
-  await drag(page, Math.round(vp.width / 2), Math.round(vp.height * 0.4), -40);
+  await drag(page, Math.round(vp.width / 2), Math.round(vp.height * 0.55), -40);
   await waitForScreen(page, 'play');
 }
 
@@ -318,13 +318,15 @@ for (const size of [
       };
       const p = box('.scr-title .title-top .elementals-btn') as DOMRect;
       const label = document.querySelector('.scr-title .elementals-btn .btn-label') as HTMLElement;
+      const goal = box('.scr-title .tagline-box.is-goal');
       return {
         h: p.height,
         left: p.left,
         right: p.right,
         bottom: p.bottom,
         whole: label.scrollWidth <= label.clientWidth + 1,
-        goalTop: box('.scr-title .tagline-box.is-goal')?.top ?? Infinity,
+        // Nubs' goal bubble over him, or in the flow under the logo: never over the pill.
+        apart: !goal || p.bottom <= goal.top || p.top >= goal.bottom,
         modesTop: (box('.scr-title .modes') as DOMRect).top,
       };
     });
@@ -332,7 +334,7 @@ for (const size of [
     expect(pill.left).toBeGreaterThanOrEqual(0);
     expect(pill.right).toBeLessThanOrEqual(size.width);
     expect(pill.whole, 'its label shows whole').toBe(true);
-    expect(pill.bottom, "clear of Nubs' goal bubble").toBeLessThanOrEqual(pill.goalTop);
+    expect(pill.apart, "clear of Nubs' goal bubble").toBe(true);
     expect(pill.bottom, 'clear of the modes').toBeLessThan(pill.modesTop);
     await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
     await page.locator('.scr-title .elementals-btn').click();
@@ -454,7 +456,7 @@ for (const size of [
     await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=7&forecast=breezy&perf=0');
     await keepAlive(page);
-    await page.mouse.click(Math.round(size.width / 2), Math.round(size.height * 0.4));
+    await page.mouse.click(Math.round(size.width / 2), Math.round(size.height * 0.55));
     await waitForScreen(page, 'play');
     expect((await page.evaluate(() => window.__SHADY_TEST__!.state())).forecast).toBe('breezy');
     for (const snow of [0, 999, 1234]) {

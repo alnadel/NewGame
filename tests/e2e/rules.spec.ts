@@ -42,7 +42,7 @@ test.describe('comfort ladder (A2)', () => {
     expect({ profile: s.profile, drain: s.drain, noonCloud: s.noonCloud, rung: s.rung, warmup: s.warmup }).toEqual({ profile: 3, drain: 48, noonCloud: 1, rung: 4, warmup: true });
     await keepAlive(page);
     const v = page.viewportSize()!;
-    await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+    await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
     await waitForScreen(page, 'play');
     await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(4));
     await expect.poll(async () => (await state(page)).minutes, { timeout: 30_000 }).toBeGreaterThanOrEqual(310);
@@ -76,7 +76,7 @@ test.describe('first-run lesson (A5)', () => {
       await seedSave(page, { ...OPEN_SAVE, settings: { ...OPEN_SAVE.settings, reducedMotion } });
       await openGame(page, 'test=1&seed=42');
       const v = page.viewportSize()!;
-      await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+      await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
       await waitForScreen(page, 'play');
       await expect.poll(() => page.evaluate(() => document.querySelector('.cue')?.classList.contains('is-on') ?? false), { timeout: 10_000 }).toBe(true);
       await page.waitForTimeout(300);
@@ -98,7 +98,7 @@ test.describe('first-run lesson (A5)', () => {
     await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=5');
     const v = page.viewportSize()!;
-    await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+    await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
     await waitForScreen(page, 'play');
     // A passive player for 15 s: Nubs is lit, melts to the lesson's floor, drifts in and out of
     // shade and the hint changes sides. Each sample reads the cue line, the ghost hint and the sim in
@@ -135,7 +135,7 @@ test.describe('first-run lesson (A5)', () => {
     await seedSave(page, OPEN_SAVE);
     await openGame(page, 'test=1&seed=5');
     const v = page.viewportSize()!;
-    const c = { x: Math.round(v.width / 2), y: Math.round(v.height * 0.4) };
+    const c = { x: Math.round(v.width / 2), y: Math.round(v.height * 0.55) };
     await page.mouse.click(c.x, c.y);
     await waitForScreen(page, 'play');
     const hint = (): Promise<{ mode: string; lesson: boolean }> => page.evaluate(() => window.__SHADY_TEST__!.hint());

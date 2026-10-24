@@ -34,7 +34,7 @@ async function playRun(page: Page, liveMs: number): Promise<number> {
   await page.bringToFront();
   await keepAlive(page);
   const v = page.viewportSize()!;
-  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
   await waitForScreen(page, 'play', 15_000);
   await page.waitForTimeout(liveMs);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
@@ -115,7 +115,7 @@ test("a Daily try counted in one tab shows on the other's Daily screen", async (
   await waitForScreen(b, 'play');
   await b.evaluate(() => window.__SHADY_TEST__!.bot('oracle'));
   const v = b.viewportSize()!;
-  await b.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+  await b.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
   await b.evaluate(() => window.__SHADY_TEST__!.setTimeScale(3));
   await expect.poll(async () => (await state(b)).minutes, { timeout: 20_000 }).toBeGreaterThanOrEqual(31);
   await b.evaluate(() => window.__SHADY_TEST__!.forceDeath());

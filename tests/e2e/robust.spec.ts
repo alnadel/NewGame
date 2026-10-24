@@ -5,7 +5,7 @@ import { drag, OPEN_SAVE, openGame, seedSave, state, waitForScreen } from './hel
 
 async function startPlay(page: import('@playwright/test').Page): Promise<void> {
   const v = page.viewportSize()!;
-  await drag(page, Math.round(v.width / 2), Math.round(v.height * 0.4), -40);
+  await drag(page, Math.round(v.width / 2), Math.round(v.height * 0.55), -40);
   await waitForScreen(page, 'play');
 }
 

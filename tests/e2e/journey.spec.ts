@@ -47,7 +47,7 @@ test('a fresh save plays Level 1 first, from Play or the canvas; Endless opens a
   await expect(page.locator('.scr-title .endless-pill')).toBeHidden();
   await expect(page.locator('.scr-title .title-keys')).toHaveText('Space or ← →: play the level · Esc: back');
   const v = page.viewportSize() ?? { width: 390, height: 844 };
-  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
   await waitForScreen(page, 'play');
   expect((await runCfg(page)).mode).toBe('campaign');
   expect((await state(page)).level).toBe(1);
@@ -73,7 +73,7 @@ test('past Level 3 Endless is one tap away, and the canvas starts it', async ({ 
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'title');
   const v = page.viewportSize() ?? { width: 390, height: 844 };
-  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.4));
+  await page.mouse.click(Math.round(v.width / 2), Math.round(v.height * 0.55));
   await waitForScreen(page, 'play');
   expect((await runCfg(page)).mode).toBe('endless');
 });

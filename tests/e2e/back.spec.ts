@@ -97,7 +97,7 @@ test('Back on the Title leaves the game', async ({ page }) => {
 test('Back in play pauses; Back in pause stays paused', async ({ page }) => {
   await openFromBlank(page);
   const v = page.viewportSize()!;
-  await drag(page, Math.round(v.width / 2), Math.round(v.height * 0.4), -40);
+  await drag(page, Math.round(v.width / 2), Math.round(v.height * 0.55), -40);
   await waitForScreen(page, 'play');
   await page.waitForTimeout(300);
   await back(page);

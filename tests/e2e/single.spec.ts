@@ -58,7 +58,7 @@ test('the single-file build plays from file:// and shares the hosted link', asyn
 
   const v = page.viewportSize()!;
   const x = Math.round(v.width / 2);
-  const y = Math.round(v.height * 0.4);
+  const y = Math.round(v.height * 0.55);
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x - 40, y, { steps: 6 });

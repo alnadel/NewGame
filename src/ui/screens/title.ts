@@ -3,10 +3,12 @@
 // candy modes around a big green Play, a neutral cloud tray).
 // The primary action plays the next Journey level ("Level 4"; Space/Enter too); the map and Endless
 // sit beside it, the tray holds Daily, Missions, Wardrobe and Settings. The top bar holds the Sun
-// Rank badge (opens the Profile), the daily reward when one waits, and the Snow wallet (v1.4).
+// Rank badge (opens the Profile), the daily reward when one waits, and the Snow wallet (v1.4). The
+// Elementals pill (the four new heroes' faces) sits under the logo from a fresh save on.
 // Progressive disclosure (v1.4): a feature still locked (meta/gamify featureUnlocked) shows a lock
-// and says how to unlock it; while nothing is unlocked yet the Title is Play (and Settings) only. A
-// feature unlocked by progress wears a NEW mark until opened (kept in the save). Only the controls take
+// and says how to unlock it; while nothing is unlocked yet the Title is Play, Settings and the
+// Elementals pill only. A feature unlocked by progress wears a NEW mark until opened (kept in the
+// save). Only the controls take
 // pointer events: a press anywhere else reaches the canvas and starts an endless run (the challenge
 // while a challenge banner is up; the next level while Endless is locked). Tray and mode buttons activate on click with < 8 px of travel,
 // and a sideways drag that starts on one is handed to the canvas.
@@ -212,17 +214,17 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   // logo with the four new heroes' faces, from a fresh save on, NEW until the screen is opened.
   const faces = ELEMENTAL_FACES.map(() => fitCanvas(h('canvas'), 22));
   let facesDrawn = false;
-  const elementalsBtn = h(
-    'button',
-    { class: 'btn btn--violet elementals-btn pe', type: 'button' },
-    h('span', { class: 'el-tfaces', deco: true }, ...faces.map((c, i) => h('span', `candy ${(ELEMENTAL_FACES[i] as readonly [HeroId, string])[1]}`, c))),
-    h('span', 'btn-label', 'Elementals'),
-    newTag(),
+  // A tap opens it; a sideways drag that starts on it is handed to the canvas, as the modes' are.
+  const elementalsBtn = pressable(
+    h(
+      'button',
+      { class: 'btn btn--violet elementals-btn pe', type: 'button' },
+      h('span', { class: 'el-tfaces', deco: true }, ...faces.map((c, i) => h('span', `candy ${(ELEMENTAL_FACES[i] as readonly [HeroId, string])[1]}`, c))),
+      h('span', 'btn-label', 'Elementals'),
+      newTag(),
+    ),
+    () => ctx.go('elementals'),
   );
-  elementalsBtn.addEventListener('click', () => {
-    ctx.sound('tap');
-    ctx.go('elementals');
-  });
 
   // --- Chips -------------------------------------------------------------------------------------
   // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
@@ -323,15 +325,22 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const rank = hud.querySelector('.rank-name');
     if (rank && rank.scrollWidth > rank.clientWidth + 1) hud.classList.add('is-tight');
     bottomCluster.classList.remove('no-labels', 'is-tight', 'no-chips');
-    el.classList.remove('is-compact', 'no-tagline', 'no-forecast');
+    el.classList.remove('is-compact', 'no-tagline', 'no-forecast', 'no-keys');
 
     // --nubs-y is in viewport px, like the rects.
     const nubsY = ctx.rootPx('--nubs-y');
     const haloR = ctx.rootPx('--halo-r');
     placeBubble(nubsY, haloR);
-    // Under the Elementals pill the forecast chip gives way before the goal bubble leaves Nubs.
-    if (tagline.classList.contains('goal-inline') && !forecast.hidden) {
-      el.classList.add('no-forecast');
+    // Under the Elementals pill the key line, then the forecast chip give way when that keeps the
+    // goal bubble over Nubs (else both stay and the bubble joins the flow).
+    const inline = (): boolean => tagline.classList.contains('goal-inline');
+    for (const step of ['no-keys', 'no-forecast']) {
+      if (!inline()) break;
+      el.classList.add(step);
+      placeBubble(nubsY, haloR);
+    }
+    if (inline()) {
+      el.classList.remove('no-keys', 'no-forecast');
       placeBubble(nubsY, haloR);
     }
     if (nubsY !== null && haloR !== null) {
@@ -442,7 +451,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
 
   /**
    * Locks, NEW marks and claim dots. While nothing is unlocked yet (a first-time player) the locked
-   * controls, the map and the top bar stay hidden: the Title is Play (and Settings) only.
+   * controls, the map and the top bar stay hidden: the Title is Play, Settings and the Elementals pill.
    */
   function renderGates(save: Save): void {
     const open = gates.map((g) => isOpen(save, g.f));

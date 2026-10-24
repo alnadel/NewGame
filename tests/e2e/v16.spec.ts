@@ -20,7 +20,7 @@ async function playEndless(page: Page, rules = '&on=bank'): Promise<void> {
   await waitForScreen(page, 'title');
   await keepAlive(page);
   const box = (await page.locator('canvas#game').boundingBox())!;
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.45);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
   await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.state().phase)).toBe('day');
   await page.waitForTimeout(1600);
 }
@@ -63,7 +63,7 @@ test('Guide Auto never hides the deep band: a veteran save (30 runs) still draws
   await waitForScreen(page, 'title');
   await keepAlive(page);
   const box = (await page.locator('canvas#game').boundingBox())!;
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.45);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.55);
   await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.state().phase)).toBe('day');
   await page.waitForTimeout(1600);
   await demo(page, 'deepBand');

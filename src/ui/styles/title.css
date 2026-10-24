@@ -347,7 +347,8 @@ body,
 
 .sui.is-kbd .title-keys { display: block; }
 
-.scr-title:has(.challenge:not([hidden])) .title-keys { display: none; }
+.scr-title:has(.challenge:not([hidden])) .title-keys,
+.scr-title.no-keys .title-keys { display: none; }
 
 /* ===== The challenge banner: a pink-framed panel with a "CHALLENGE!" ribbon ===== */
 

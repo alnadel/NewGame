@@ -11,7 +11,7 @@ import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, waitForRunSta
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
-  return { x: Math.round(v.width / 2), y: Math.round(v.height * 0.4) };
+  return { x: Math.round(v.width / 2), y: Math.round(v.height * 0.55) };
 }
 
 async function startPlay(page: Page): Promise<void> {
