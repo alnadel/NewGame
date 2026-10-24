@@ -968,7 +968,7 @@ export class Renderer {
     }
 
     // A Trial's telegraphs, over the world (canopies and clouds included) and under the dial.
-    if (inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause')) drawElCues(g, v, s, time, inp.reducedMotion, inp.highContrast, inp.dragging, sc.hud.bottom + 6);
+    if (inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause')) drawElCues(g, v, s, time, inp.reducedMotion, inp.highContrast, inp.dragging, sc.hud.bottom + 6, sc.banners.levelKeys);
     // Debug geometry.
     if (import.meta.env.MODE !== 'single' && inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 

@@ -984,7 +984,7 @@ export class Session {
       r.sway = this.swayOut;
     }
     const inputDown = this.input.pointerDown || this.input.keyDown;
-    r.dragging = inputDown || this.s.sun.mode === 'dragging';
+    r.dragging = inputDown || this.input.steering || this.s.sun.mode === 'dragging';
     r.guideAlpha = this.currentGuideAlpha();
     this.fillHintView(real, screenNow);
     const save = this.d.store.get();

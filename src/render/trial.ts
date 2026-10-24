@@ -12,13 +12,14 @@
 //     proxy cloud) with one stroke path of streaks, fog banks (a radial sprite, the trail beyond a
 //     bank veiled at 0.6).
 // The cues (over everything in the world, under the dial) follow the walking element: Ember's hatched
-// sweet band, dashed target rings, the key's next target solid, a pulsing ring to tap now, red with a
-// cross once too late, burn progress arcs and a douse chevron on puddles in its path; Sprout's rings,
-// the hold ring filling to the site's need and the glowing line to it; growth bars, wet drops, a
-// check on a bridged crossing and red chevrons with "!" on one that will not be ready; Drip's target
-// dot; every awake weather object's dashed arrival ghost (green helps, red harms with a "!", white
-// neither; a green ghost off the trail points at it) and, above the view, an edge marker with its
-// drift. Colour is never the only channel: shapes, hatching, dashes, crosses and marks carry it too.
+// sweet band, dashed target rings, the key's next target solid (keyboard players), a pulsing ring to
+// tap now, red with a cross once too late, burn progress arcs and a douse chevron on puddles in its
+// path; Sprout's rings, the hold ring filling to the site's need (a plot's: treeMin) and the glowing
+// line to it; growth bars, wet drops, a check on a bridged crossing and red chevrons with "!" on one
+// that will not be ready; Drip's target dot; every awake weather object's dashed arrival ghost (green
+// helps, red harms with a "!", white neither; a green ghost off the trail points at it) and, above
+// the view, an edge marker with its drift. Colour is never the only channel: shapes, hatching,
+// dashes, crosses and marks carry it too. A walker inside a fog bank is drawn again through it.
 
 import {
   arriveTicks,
@@ -553,7 +554,7 @@ function ringPath(g: CanvasRenderingContext2D, v: View, o: ElObj, grow: number):
  * canopies and clouds so a target under a canopy is still marked. `top` is the play area's top
  * (CSS px, under the HUD band): weather above it gets an edge marker there.
  */
-export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, time: number, rm: boolean, hc: boolean, dragging: boolean, top: number): void {
+export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, time: number, rm: boolean, hc: boolean, dragging: boolean, top: number, keys = false): void {
   const el = s.el;
   if (el === null || s.phase !== 'day') return;
   const S = v.S;
@@ -567,8 +568,9 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
   g.lineCap = 'round';
   g.lineJoin = 'round';
 
-  // Each object's ring this frame.
-  const keyT = hero === 'ember' ? burnTarget(s, NaN, NaN) : hero === 'sprout' ? growTarget(s, NaN, NaN) : -1;
+  // Each object's ring this frame (the Up key's next target only for a keyboard player: to a touch
+  // player a solid ring would read as "tap now").
+  const keyT = !keys ? -1 : hero === 'ember' ? burnTarget(s, NaN, NaN) : hero === 'sprout' ? growTarget(s, NaN, NaN) : -1;
   const tagY = s.trial !== null && s.relayIdx < s.trial.relays.length ? relayY(s, s.relayIdx) : 1e9;
   for (let i = 0; i < n; i++) {
     const o = objs[i] as ElObj;

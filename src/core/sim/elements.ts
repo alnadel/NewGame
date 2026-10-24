@@ -842,7 +842,10 @@ function lateBridge(s: SimState, el: ElState): boolean {
   return false;
 }
 
-/** Adds `delta` to the walker's meter; a life meter it takes from above 0 to 0 names object i the cause. */
+/**
+ * Adds `delta` to the walker's meter; a life meter it takes from above 0 to 0 names object i the cause,
+ * and one restored above 0 (on the same tick) drops it again, so a later death names its own.
+ */
 function hit(s: SimState, el: ElState, i: number, delta: number, cause: HeroDeath): void {
   const nb = s.nubs;
   const was = nb.chill;
@@ -850,6 +853,9 @@ function hit(s: SimState, el: ElState, i: number, delta: number, cause: HeroDeat
   if (was > 0 && nb.chill <= 0 && nb.hero !== 'sprout') {
     el.cause = cause;
     el.causeObj = i;
+  } else if (nb.chill > 0 && !el.fell) {
+    el.cause = null;
+    el.causeObj = -1;
   }
 }
 

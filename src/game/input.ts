@@ -221,6 +221,11 @@ export class Input {
     return this.held && this.kind === SUN;
   }
 
+  /** A finger is down steering Drip. */
+  get steering(): boolean {
+    return this.held && this.kind === STEER;
+  }
+
   /** The walking element's verb ('sun' without a host that says). */
   private verb(): Verb {
     return this.host.verb?.() ?? 'sun';

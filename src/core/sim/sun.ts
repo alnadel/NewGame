@@ -110,7 +110,8 @@ export function updateSun(s: SimState, input: InputFrame): void {
       sun.omega = 0;
       sun.omegaRel = 0;
       sun.lag = 0;
-      if (sun.mode !== 'dragging') sun.mode = 'idle';
+      // A Trial's held leg ends a drag too (its lift would never reach the sun).
+      if (sun.mode !== 'dragging' || s.el !== null) sun.mode = 'idle';
     } else if (sun.mode === 'dragging' && !input.down && !input.downEdge) {
       sun.mode = 'idle'; // the finger lifted during the lock
     }
