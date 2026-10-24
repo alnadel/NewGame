@@ -171,9 +171,14 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   trial(3, 'Green Bridge', 15, 'meadow', 240, 400, 34, 0, [[340, 'sprout'], [556, 'nubs']], 'sprout',
     'p369:44 x408:0:12 s450:0:14 p476:-44 x502:0:16 s530:0:12 p572:44 p586:-44 p600:44', ['trees', 2], 30, [],
     'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3292, { legStart: [80, 100, 80] }),
-  trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 28, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
-    'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 60], 30, [],
-    "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1 s', 'Ride a rain cloud 1 s'),
+  // T4 pin: salt 605 (from a scan of salts on Nubs' opening leg: 0..199 held none that a constant
+  // sun angle could not walk with a ±20 Nubs lever); drain 28 → 34 and Nubs' legs 100 → 80 (too
+  // easy); Dare 60 → 75 ticks (+25%; G6 75% at 60). Gust 80 → 90 lets the east/30 spam Gust
+  // through (G5d). Measured: G1 82/bots/83, G2 low 80, G3 8/8, G4 12/16 (75%), G5d every spam Gust
+  // grounded in Gust's leg, G5b best θ290 dies at 24%, G6 cloudRide ≥ 75 58%.
+  trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
+    'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 75], 30, [],
+    "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1.25 s', 'Ride a rain cloud 1.25 s', '', 605, { legStart: [80, 80, 80] }),
   trial(5, 'Steam', 11, 'meadow', 120, 504, 28, 0, [[216, 'ember'], [390, 'drip'], [564, 'nubs']], null,
     'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-18 i436 t452:10 t474:-14 u492:18 t512:-4 u530:-16 t546:16', ['drinks', 4], 25, [1, 2],
     'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 4', 'Drink 4 puddles'),

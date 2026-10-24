@@ -342,7 +342,7 @@ export function clearanceMoves(v: TrialVariant): ElMove[] | null {
     const y = worldYAtTick(w, tickAtMinute(o.m));
     const tx = trailX(w.trail, y);
     if (clear(tx + o.dx, y, r)) continue;
-    const base = (trialDef(t.id) as TrialDef).objects[i] as TrialDef['objects'][number];
+    const base = ((trialDef(t.id) as TrialDef).objects[i] ?? o) as TrialDef['objects'][number];
     let found = false;
     for (let d = 1; d <= 8 && !found; d++) {
       for (const sgn of [-1, 1]) {
@@ -735,7 +735,13 @@ async function trialsMain(ctx: Sim16Ctx): Promise<void> {
       // Tooling: every gate on salts --from..--from + N − 1 (no short cut), one compact line each.
       const from = Number(argOf('from') ?? 0);
       for (const id of ids) {
-        const rows = await Promise.all(Array.from({ length: Number(survey) }, (_, k) => gates(run, { ...base, id, salt: from + k }, humanSalts)));
+        const rows = await Promise.all(
+          Array.from({ length: Number(survey) }, (_, k) => {
+            const v: TrialVariant = { ...base, id, salt: from + k };
+            const moves = clearanceMoves(v);
+            return gates(run, moves !== null && moves.length > 0 ? { ...v, moves } : v, humanSalts);
+          }),
+        );
         for (const g of rows) console.log(compact(g));
       }
       return;

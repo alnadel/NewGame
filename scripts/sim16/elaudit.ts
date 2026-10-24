@@ -62,6 +62,8 @@ const REGRAB_TICKS = REGRAB + 1;
 const DRY_AT = 60;
 /** Bridges complete this long before their contact (0.3 s). */
 const BRIDGE_SPARE = 18;
+/** The path bot's plots keep this much Sap spare in the ledger (play differs from the probe by a few ticks of pour). */
+const PLOT_RESERVE = 10;
 
 // ---------------------------------------------------------------------------------------------
 // Variants: a trial as calibration tries it (plain data: crosses workers)
@@ -94,6 +96,8 @@ export interface TrialVariant {
   readonly costMul?: number;
   readonly evapMul?: number;
   readonly moves?: readonly ElMove[];
+  /** Calibration (§6.5): objects added to the trial's list (one per leg at most), after the authored ones. */
+  readonly add?: readonly ElPlace[];
   readonly mod?: PlanMod;
 }
 
@@ -107,9 +111,10 @@ export function variantDef(v: TrialVariant): TrialDef {
     v.legStart === undefined &&
     v.costMul === undefined &&
     v.evapMul === undefined &&
-    (v.moves?.length ?? 0) === 0;
+    (v.moves?.length ?? 0) === 0 &&
+    (v.add?.length ?? 0) === 0;
   if (same) return t;
-  const objects: ElPlace[] = t.objects.map((o) => ({ ...o }));
+  const objects: ElPlace[] = [...t.objects, ...(v.add ?? [])].map((o) => ({ ...o }));
   for (const mv of v.moves ?? []) {
     const o = objects[mv.i] as { m: number; dx: number; drift?: number };
     if (mv.m !== undefined) o.m = mv.m;
@@ -575,11 +580,11 @@ function emberSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): Tap[] {
 /**
  * Sprout's schedule (§6.2): each crossing poured its need at the latest tick that completes it at ×1
  * growth with 0.3 s to spare, one hold at a time (each verb 13 ticks of press after the last release),
- * the first no earlier than TAG + 13; then plots in arrival order where a hold fits, as much Sap as the
- * ledger can spare (treeMin..treeMax), skipping plots a later fire would reach downwind unless the mod
+ * the first no earlier than TAG + 13; then plots in arrival order where a hold fits, treeMin Sap each
+ * while the ledger keeps PLOT_RESERVE, skipping plots a later fire would reach downwind unless the mod
  * asks. Returns the holds, or null when a crossing cannot be scheduled.
  */
-function sproutSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): { holds: Hold[]; ledger: number } | null {
+function sproutSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): { holds: Hold[]; margin: number; ledger: number } | null {
   const lp = plan.legs[leg] as LegPlan;
   const el = s0.el as ElState;
   const g = SP.grow * DT;
@@ -605,7 +610,10 @@ function sproutSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): { hold
     next = t;
   }
   holds.reverse();
-  // The Sap ledger with the crossings alone, then plots fitted into the gaps while it stays ≥ 0.
+  // The Sap ledger with the crossings alone (the leg's margin, §6.2), then plots fitted into the gaps
+  // while it stays ≥ 0 (the path bot's trees).
+  const start = legStartOf(plan.t, leg);
+  const margin = ledger(holds, p, start, el);
   const plots: number[] = [];
   for (let i = 0; i < el.objs.length; i++) {
     const o = el.objs[i] as ElObj;
@@ -614,10 +622,10 @@ function sproutSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): { hold
     if (!plan.mod.downwind && downwindPlot(s0, el, o)) continue;
     plots.push(i);
   }
-  const start = legStartOf(plan.t, leg);
   for (const i of plots) {
     const o = el.objs[i] as ElObj;
-    for (let amt = SP.treeMax; amt >= SP.treeMin; amt -= 5) {
+    // Each plot the least Sap that stands a tree (as many trees as the ledger allows).
+    for (let amt = SP.treeMin; amt <= SP.treeMin; amt += 5) {
       const pour = Math.ceil((amt - o.size) / rate) + 1;
       let placed = false;
       for (let t = lp.from + HOLD_PRESS; t + pour < lp.to - 1; t++) {
@@ -626,7 +634,7 @@ function sproutSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): { hold
         const [x, y] = pointOf(s0, o);
         const cand: Hold = { tick: t, end: t + pour, obj: i, x, y, goal: amt };
         const all = [...holds, cand].sort((a, b) => a.tick - b.tick);
-        if (ledger(all, p, start, el) >= 0) {
+        if (ledger(all, p, start, el) >= PLOT_RESERVE) {
           holds.push(cand);
           holds.sort((a, b) => a.tick - b.tick);
           placed = true;
@@ -636,7 +644,7 @@ function sproutSchedule(plan: Plan, leg: number, p: Probe, s0: SimState): { hold
       if (placed) break;
     }
   }
-  return { holds, ledger: ledger(holds, p, start, el) };
+  return { holds, margin, ledger: ledger(holds, p, start, el) };
 }
 
 /** Sap's lowest point over the leg with these holds (−1 when a pour would be short). */
@@ -1111,9 +1119,9 @@ export function audit(v: TrialVariant, worst = false): Plan {
         const sch = sproutSchedule(plan, L, p, st);
         if (sch === null) return fail(plan, `leg ${L} (sprout): a crossing cannot be scheduled`);
         lp.holds.push(...sch.holds);
-        lp.margin = sch.ledger;
-        lp.note = `Sap low ${sch.ledger < 0 ? 'SHORT' : sch.ledger.toFixed(0)}`;
-        if (sch.ledger < 0) return fail(plan, `leg ${L} (sprout): Sap short at a pour`);
+        lp.margin = sch.margin;
+        lp.note = `Sap low ${sch.margin < 0 ? 'SHORT' : sch.margin.toFixed(0)}, ${sch.ledger < 0 ? 'SHORT' : sch.ledger.toFixed(0)} with ${sch.holds.filter((h) => (st.el as ElState).objs[h.obj]?.kind === 'plot').length} plots`;
+        if (sch.margin < 0 || sch.ledger < 0) return fail(plan, `leg ${L} (sprout): Sap short at a pour`);
       }
     }
     if (lp.hero === 'nubs' || lp.hero === 'ember' || lp.hero === 'sprout') {

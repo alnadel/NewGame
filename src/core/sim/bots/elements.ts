@@ -40,6 +40,7 @@ import {
   nextTagTicks,
   pointLit,
   walkerAt,
+  weatherGood,
   weatherXAt,
 } from '../elements.ts';
 import { VERB_EAST, VERB_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type SimState } from '../types.ts';
@@ -65,6 +66,8 @@ const PLOT_SAP = 25;
 const SWIPE_EVERY = 15;
 const SWIPE_GAIN = 2;
 const SWIPE_LIFT = 20;
+/** Gust keeps pushing a helpful rain cloud of the next stretch until its predicted centre is this close to the trail (u). */
+const RIDE_NEAR = 12;
 /** The harm weights (meter a second) of fog that veils Ember's and Sprout's targets, and of the shade a rain cloud gives Nubs. */
 const FOG_VEIL = 10;
 const RAIN_SHADE = 28;
@@ -359,11 +362,12 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       const spare = s.nubs.chill - PLOT_SAP;
       for (let i = 0; i < el.objs.length && spare > 0; i++) {
         const o = el.objs[i] as ElObj;
-        if (o.kind !== 'plot' || o.state === EL_GONE || o.casterId >= 0 || o.size >= SP.treeMax) continue;
+        // Each plot is planted with the Sap that stands a tree (treeMin), then the next one.
+        if (o.kind !== 'plot' || o.state === EL_GONE || o.casterId >= 0 || o.size >= SP.treeMin) continue;
         if (o.size + spare < SP.treeMin || downwind(s, el, o)) continue;
         if (growTarget(s, o.x, o.y) !== i || !ready(s, i)) continue;
         best = i;
-        goal = Math.min(SP.treeMax, o.size + spare);
+        goal = SP.treeMin;
         break;
       }
     }
@@ -438,14 +442,23 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
     if (el.legTick % 6 !== 0 || s.tick - lastSwipe < SWIPE_EVERY || s.nubs.chill <= SWIPE_LIFT) return;
     const now = harm(s, el, 0);
     const kick = G.kick * (inWeather(el, 'fog', s.nubs.x, s.nubs.y) ? G.fogMuffle : 1);
+    // §6.3's T4 rule, for every helpful rain of a later stretch (T4's ride cloud, T6's and T7's
+    // garden clouds): push it over the trail, unless that swipe adds more harm than it costs (the
+    // others still ahead).
+    let dir = rideDir(s, el);
+    if (dir !== 0 && harm(s, el, dir * kick) <= now + G.swipe) return swipe(s, f, dir);
+    dir = 0;
     const east = harm(s, el, kick);
     const west = harm(s, el, -kick);
     // A swipe must save more than it costs (its Lift, and a little more).
     const bar = G.swipe * (s.trial?.tune.costMul ?? 1) + SWIPE_GAIN;
-    let dir = 0;
     if (east <= west && now - east >= bar) dir = 1;
     else if (west < east && now - west >= bar) dir = -1;
-    if (dir === 0) return;
+    if (dir !== 0) swipe(s, f, dir);
+  }
+
+  /** One swipe `dir` now (humanEl: 5% the wrong way, 10% one swipe late). */
+  function swipe(s: SimState, f: InputFrame, dir: number): void {
     lastSwipe = s.tick;
     if (human) {
       if (rng.chance(0.05)) dir = -dir;
@@ -458,6 +471,28 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
     }
     f.verb = dir > 0 ? VERB_EAST : VERB_WEST;
   }
+}
+
+/**
+ * The ride: the way to push the first awake rain cloud of a later stretch that helps its walker
+ * (weatherGood) and whose predicted centre at arrival misses the trail by more than RIDE_NEAR; 0
+ * when there is none. (The caller swipes only when that adds no more harm than the swipe costs.)
+ */
+function rideDir(s: SimState, el: ElState): number {
+  let ride: ElObj | null = null;
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (o.state === EL_GONE || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
+    if (o.y + E.weather.ryRatio * o.r < s.nubs.y) continue;
+    if (o.kind === 'rain' && o.awake && walkerAt(s, o.y) !== 'gust' && weatherGood(s, o) > 0) {
+      ride = o;
+      break;
+    }
+  }
+  if (ride === null) return 0;
+  const n = arriveTicks(s, ride.y);
+  const miss = trailX(s.world.trail, ride.y) - weatherXAt(s, ride, n < 0 ? 0 : n);
+  return miss > RIDE_NEAR ? 1 : miss < -RIDE_NEAR ? -1 : 0;
 }
 
 /** The walker's pace now (u per tick). */
