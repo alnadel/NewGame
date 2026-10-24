@@ -17,11 +17,10 @@
 // so it is read before the countdown runs and never after it. A level whose goal was relaxed (the
 // soft-fail) says so at go.
 //
-// Elementals (docs/ELEMENTALS.md §6.3): a Trial gets its hero's tips (HERO_TIPS), a relay's or a
-// duo's own (RELAY_TIPS, DUO_TIPS) until it is passed (save.elementals); in a relay each later
-// hero's 'go' tip comes when it takes over at its TAG ('tag', with the hero as its glyph). No Journey tips, mission steps or COMEBACK there.
+// Elementals: a Trial gets no Journey tips, mission steps or COMEBACK (its element tips are
+// docs/ELEMENTALS_V2.md §10.3's); a TAG drops the stale toasts.
 
-import { FLARE_KEPT, levelProgress, queryBuds, trialDef, type Bud, type HeroId, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
+import { FLARE_KEPT, levelProgress, queryBuds, trialDef, type Bud, type LevelDef, type RunResult, type SimEvent, type SimState } from '../core/index.ts';
 import { missionLabel, missionReward, missionTarget, missionValue, parseMissionId } from '../meta/missions.ts';
 import type { MissionDef } from '../meta/content.ts';
 import { featureUnlocked } from '../meta/gamify.ts';
@@ -117,47 +116,6 @@ export function withDare(text: string, lv: LevelDef): string {
   return f ? text.replace('{n}', String(f.target)) : text.replace(/\s*[^.!?]*\{n\}[^.!?]*[.!?]/, '');
 }
 
-type Tips = readonly (readonly [TipOn, string])[];
-
-/** Elementals: each hero's tips on its Trials ('frost': the ability's charge is ready). */
-export const HERO_TIPS: Readonly<Record<HeroId, Tips>> = {
-  ember: [
-    ['go', 'Ember feeds on light. Keep every shadow off the flame.'],
-    ['p25', 'Orange arcs are open light. Gold dots are glare: a feast!'],
-    ['frost', 'Shadow ahead? Swipe down to BLAZE right through it.'],
-  ],
-  sprout: [
-    ['go', 'Sprout loves the edge: half in shade, half in sun.'],
-    ['p25', 'Green rims are edges. Full sun scorches; deep shade starves slowly.'],
-    ['bud', 'Pass a bud on the edge and it blooms. Swipe down to SEED your own.'],
-  ],
-  volt: [
-    ['go', 'Volt must strike NEW shade. Grey is where it just struck.'],
-    ['p25', 'Flick 40° or more. Strike again within 1.5 s to chain.'],
-    ['frost', 'Nothing in reach? Swipe down: THUNDERCLAP strikes anywhere.'],
-  ],
-  drip: [
-    ['go', 'Watch the needle. Sun warms Drip, shade cools it.'],
-    ['p25', 'Teal cools, amber warms. Green is Calm; both ends are fatal.'],
-    ['flake', 'Flakes are ice cubes: great when hot, risky when cold.'],
-  ],
-  // Relays only (T5, T8), when Nubs takes his first turn.
-  nubs: [['go', 'Nubs hides in shade, as always. Teal is go.']],
-};
-
-/** Elementals: a relay's tips ('tagSoon': the first TAG's telegraph). */
-export const RELAY_TIPS: Tips = [
-  ['go', 'Heroes swap at the Tag Stones. Each one wants different light.'],
-  ['tagSoon', 'TAG in 3! Pre-aim for the dashed arcs for a clean TAG.'],
-];
-
-/** Elementals: a duo's tips (the 'frost' one where the Cold Snap is the duo's ability: T6). */
-export const DUO_TIPS: Tips = [
-  ['go', 'One sun, two friends. The bright band keeps both happy.'],
-  ['p25', "Glow between them? That's Harmony: the ability fills twice as fast."],
-  ['frost', "Careful: the Cold Snap's cloud smothers Ember too."],
-];
-
 /** The soft-fail's tip at go (a level whose goal was missed twice). */
 export const SOFT_FAIL_TIP = 'Goal eased: just reach the finish. The Dare still earns its star.';
 
@@ -246,8 +204,6 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   /** A missed flare scorched the tank (a snap or nightfall heals it); a charge filled under a snap (its tip waits for the end). */
   let scorched = false;
   let frostLater = false;
-  /** A Trial began with its charge full (campaignConfig startFrost 1): no frostReady comes before the first cast. */
-  let frostStart = false;
 
   /** Shows the level's tip for `on` (a relay's 'tag' one: `who`'s), once per run (an `urgent` one ahead of any other toast). */
   const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string): void => {
@@ -267,17 +223,11 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       shadeAt = -1;
       level = relaxed ? null : lv;
       tips.length = 0;
-      scorched = frostLater = frostStart = false;
+      scorched = frostLater = false;
       const trial = lv ? trialDef(lv.id) : null;
-      const fresh = lv !== null && !(trial ? save.elementals?.stars[trial.n - 1] : save.campaign.stars[lv.id - 1]);
-      if (trial) {
-        // A Trial's own tips until it is passed: a duo's (the Cold Snap's on T6 only), else a relay's
-        // and its first hero's, the later heroes' 'go' tips waiting for their TAG.
-        const [first, ...rest] = trial.cast as HeroId[];
-        if (fresh && trial.duo) tips.push(...DUO_TIPS.slice(0, trial.duo.ability === 'nubs' ? 3 : 2));
-        else if (fresh && first) tips.push(...(trial.relays.length ? RELAY_TIPS : []), ...HERO_TIPS[first], ...rest.map((x) => ['tag', (HERO_TIPS[x][0] as readonly [TipOn, string])[1], x] as const));
-      } else if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
-      const mech = fresh && !trial ? mechanicOf(lv.introduces) : null;
+      const fresh = lv !== null && !trial && !save.campaign.stars[lv.id - 1];
+      if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
+      const mech = fresh ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
       else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...FIRST_TIPS);
       // Last, so it takes the place of the level's own 'go' tip.
@@ -316,14 +266,13 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'go':
         case 'cloudCapture':
           tip(ev.e === 'go' ? 'go' : 'cloud');
-          if (ev.e === 'go' && s.trial !== null && s.nubs.frost >= 1) frostStart = true;
           break;
         case 'tagSoon':
           tip('tagSoon');
           break;
         case 'tag':
-          // A relay hero's first turn: the TAG's telegraph and the last hero's tips are stale (dropped,
-          // on screen or waiting, and the lead's later ones spent); its own 'go' tip shows after the stamp.
+          // An element's first turn: the TAG's telegraph and the last element's tips are stale (dropped,
+          // on screen or waiting, and the walker's later ones spent); its own 'tag' tip shows after the stamp.
           clearToasts(banners);
           for (let i = 0; i < tips.length; i++) if ((tips[i] as readonly [TipOn, string, string?])[0] !== 'tag') tipsShown |= 1 << i;
           tip('tag', TIP_HOLD, false, ev.to);
@@ -367,11 +316,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
         case 'nightStart':
           scorched = false;
           break;
-        case 'ability':
         case 'snap':
-          // Cast: a Trial's "swipe down" tip has nothing left to teach.
-          if (s.trial !== null) for (const t of tips) if (t[0] === 'frost') endToast(banners, t[1]);
-          if (ev.e === 'snap') tip('snap');
+          tip('snap');
           break;
         case 'deepEnter':
           tip('deep');
@@ -406,10 +352,6 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       if (tips.length > 0) {
         const p = levelProgress(s);
         if (p >= 0.25) {
-          // A Trial's starting charge, still unspent: its 'frost' tip takes the slot after 'go', queued
-          // ahead of p25 in the same tick so p25 cannot replace it (TIP_REST leaves a ~20 s Trial two tips).
-          if (frostStart && s.nubs.frost >= 1) tip('frost');
-          frostStart = false;
           tip('p25');
         }
         if (p >= 0.6) tip('p60');

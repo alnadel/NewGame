@@ -4,8 +4,8 @@
 // guarantee and pruning → flares (v1.6) → eclipse → snap → coverage → Chill/multiplier/PHEW/SWING/
 // landing (or night regen) → pickups → buds → gates and balls passed → Dares (v1.6) → history →
 // death → guide. Everything is pure arithmetic on the state. On an Elementals Trial (s.trial set) the
-// relay runs after the clock, a snap input casts the walking hero's ability, every body follows its
-// hero's rules (sim/heroes.ts) in place of Chill's, and either body's meter at 0 ends the run.
+// relay runs after the clock, only Nubs casts the Cold Snap, the walker follows its trial rule
+// (sim/heroes.ts) in place of Chill's, and its meter at 0 ends the run.
 // The first TUNING.start.readyTicks ticks after the start are the start beat: sun and coverage only.
 
 import { TUNING } from '../../config/tuning.ts';
@@ -50,10 +50,7 @@ const GATE_NOON_TO = 420;
 /** 'gate' concept: Snow for walking under a gate arch fully shaded. */
 const GATE_SNOW = 10;
 
-/** Elementals duo (docs/ELEMENTALS.md §2.2): the lead walks this far left of the trail centre, the mate as far right. */
-const DUO_DX = TUNING.heroes.duoDx;
-
-/** Derives time, elevation, sun vector and Nubs' position (a duo's two bodies) from (day, dayTick, θ). */
+/** Derives time, elevation, sun vector and Nubs' position from (day, dayTick, θ). */
 export function syncTime(s: SimState): void {
   const daylight = s.dayTick < dayTicks(s.day);
   s.tDay = s.dayTick / TICK_HZ;
@@ -68,12 +65,6 @@ export function syncTime(s: SimState): void {
   s.uy = sinD(s.sun.theta);
   s.nubs.y = worldYAtDayTick(s.world, s.day, s.dayTick);
   s.nubs.x = trailX(s.world.trail, s.nubs.y);
-  const m = s.mate;
-  if (m !== null) {
-    m.y = s.nubs.y;
-    m.x = s.nubs.x + DUO_DX;
-    s.nubs.x -= DUO_DX;
-  }
 }
 
 /** 'eclipse' concept: sets eclipseOn and the 0..1 intensity for the current absolute tick. */
@@ -180,7 +171,7 @@ function pushRecent(s: SimState): void {
 
 function die(s: SimState): void {
   s.phase = 'dead';
-  // On a Trial the failed body's meter is already 0 (and a duo's other body keeps its own).
+  // On a Trial the walker's meter is already 0.
   if (s.trial === null) s.nubs.chill = 0;
   s.stats.minutes = s.minutes;
   s.hourGlyphs[s.hourGlyphs.length - 1]?.push('melt');
@@ -213,7 +204,6 @@ function readyTick(s: SimState): void {
   s.ux = cosD(s.sun.theta);
   s.uy = sinD(s.sun.theta);
   computeCoverage(s);
-  if (s.mate !== null) computeCoverage(s, s.mate);
   if (s.ready === 0) {
     s.lessonOn = s.cfg.lesson === true;
     s.events.push({ e: 'go' });
@@ -259,8 +249,7 @@ export function step(s: SimState, input: InputFrame): void {
   syncEclipse(s);
   updateSnap(s, inp);
   computeCoverage(s);
-  if (s.mate !== null) computeCoverage(s, s.mate);
-  // Elementals: a Trial's bodies follow their heroes' rules, and night leaves hero meters unchanged.
+  // Elementals: a Trial's walker follows its trial rule, and night leaves its meter unchanged.
   if (daylight) {
     if (s.trial !== null) applyHeroDaylight(s);
     else applyDaylight(s);
@@ -272,7 +261,7 @@ export function step(s: SimState, input: InputFrame): void {
   pushHistory(s);
   pushRecent(s);
 
-  if (daylight && (s.nubs.chill <= 0 || (s.mate !== null && s.mate.chill <= 0))) {
+  if (daylight && s.nubs.chill <= 0) {
     die(s);
     return;
   }

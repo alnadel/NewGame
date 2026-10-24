@@ -1,7 +1,6 @@
-// Elementals (docs/ELEMENTALS.md §4.10, §5.5): the hero roster and the eight Trials, laid out like
-// the Wardrobe. The stage previews a hero (cb.renderHeroPreview; the selected Trial's two heroes side
-// by side for a duo) with its element, tagline, three rules, ability line and a swatch of its dial
-// arc, and Play for the selected Trial (the last one played, else the first open one not passed).
+// Elementals: the element roster and the Trials, laid out like the Wardrobe. The stage previews an
+// element (cb.renderHeroPreview) with its element word, tagline and three rules, and Play for the
+// selected Trial (the last one played, else the first open one not passed).
 // The heroes follow as round candy coins with their names hung under them (a locked one is a
 // silhouette with a lock that says what opens it; a tap previews the hero, highlights its Trials and
 // points Play at its next one), then the Trials as Wardrobe tiles in two columns: a "T3" disc, the
@@ -14,7 +13,7 @@ import { HERO_IDS, HEROES, levelShort, levelTag, TRIAL_BASE, TRIALS, type HeroFa
 import type { Save } from '../../meta/saveTypes.ts';
 import { ELEMENTAL_STARS_MAX, elementalStars, heroUnlocked, markElementalsSeen, trialBest, trialOpen } from '../../meta/progression.ts';
 import { artIcon } from '../art-icons.ts';
-import { fitCanvas as fit, h, setChildren, svgFromMarkup } from '../dom.ts';
+import { fitCanvas as fit, h, setChildren } from '../dom.ts';
 import { icon } from '../icons.ts';
 import { starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
@@ -22,15 +21,6 @@ import { button, menuHeader, setButtonLabel } from '../widgets.ts';
 
 /** Each candy face's class, written out whole (vite.config.ts shortens class names). */
 const FACE: Readonly<Record<HeroFace, string>> = { ice: 'f-ice', red: 'f-red', green: 'f-green', violet: 'f-violet', blue: 'f-blue' };
-/** Each hero's go arc on the dial (§1): its colour and pattern (solid, ray ticks, leaf dashes, bolt notches, warm dots). */
-const DIAL: Readonly<Record<HeroId, string>> = {
-  nubs: '#2EC4B6"',
-  ember: '#FF8A1F" stroke-dasharray="3 2"',
-  sprout: '#8BD650" stroke-dasharray="8 5"',
-  volt: '#FFE14D" stroke-dasharray="13 3"',
-  drip: '#FFB347" stroke-dasharray="0 7" stroke-linecap="round"',
-};
-const ARC = '<path d="M6 30A20 20 0 0 1 46 30" stroke="';
 
 /** The hero a Trial is about (the stage's): the first elemental in its cast. */
 const featured = (t: TrialDef): HeroId => t.cast.find((x) => x !== 'nubs') ?? 'nubs';
@@ -59,16 +49,15 @@ export function createElementalsScreen(ctx: UiContext): Screen {
   };
 
   const chip = h('span', { class: 'chip chip--stars elementals-stars', role: 'img' });
-  const canvases = [0, 1].map(() => h('canvas', { class: 'preview-canvas', deco: true }));
-  const spot = h('div', 'stage-spot', ...canvases);
+  const canvas = h('canvas', { class: 'preview-canvas', deco: true });
+  const spot = h('div', 'stage-spot', canvas);
   const name = h('p', 'preview-name gt-ink');
   const tagline = h('p', 'preview-note');
-  const ability = h('p', 'preview-note');
   const rules = h('ul', { class: 'el-rules', 'aria-label': 'Rules' });
   const playBtn = button(ctx, { label: 'Play', icon: 'play', variant: 'primary', size: 'lg', block: true, className: 'elementals-play', onPress: () => play(sel) });
   const heroes = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Heroes' });
   const grid = h('ul', { class: 'tile-grid panel el-grid', 'aria-label': 'Trials' });
-  const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, ability, rules, playBtn), heroes, grid);
+  const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, rules, playBtn), heroes, grid);
   // Arrow keys walk the tiles: along the hero row, across (±1) and down (±2) the Trial grid; down
   // from a hero to its first Trial, up from the grid's top row to the selected hero.
   body.addEventListener('keydown', (e) => {
@@ -100,17 +89,12 @@ export function createElementalsScreen(ctx: UiContext): Screen {
     setChildren(chip, artIcon('star'), h('span', 'num', String(stars)), h('small', null, `/${ELEMENTAL_STARS_MAX}`));
     chip.setAttribute('aria-label', `${stars} of ${ELEMENTAL_STARS_MAX} stars`);
 
-    // The stage: the hero tapped, else the selected Trial's (both of a duo's, side by side).
+    // The stage: the element tapped, else the selected Trial's.
     const id = picked ?? featured(sel);
     const hero = HEROES[id];
-    const duo = picked ? null : sel.duo;
-    spot.classList.toggle('is-duo', duo !== null);
-    canvases[1]!.hidden = !duo;
-    (duo ? [duo.left, duo.right] : [id]).forEach((x, i) => ctx.cb.renderHeroPreview(fit(canvases[i] as HTMLCanvasElement, 168), x));
-    setChildren(name, duo ? `${HEROES[duo.left].name} + ${hero.name}` : hero.name, ' ', h('span', 'tag', hero.element));
+    ctx.cb.renderHeroPreview(fit(canvas, 168), id);
+    setChildren(name, hero.name, ' ', h('span', 'tag', hero.element));
     tagline.textContent = hero.tagline;
-    // "Swipe down: COLD SNAP" reads as one unit (no-break spaces); it may wrap whole after the arc.
-    setChildren(ability, svgFromMarkup(`<svg width="40" height="26" viewBox="0 0 52 34" fill="none" stroke-width="7" aria-hidden="true">${ARC}#2A1B45" stroke-width="11"/>${ARC}${DIAL[id]}/></svg>`), ` ${hero.abilityLine.replace(/ /g, '\u00a0')}`);
     setChildren(rules, ...hero.rules.map((r) => h('li', 'tag', r)));
     setButtonLabel(playBtn, `Play ${levelShort(sel.id)} · ${sel.name}`);
 
@@ -156,12 +140,12 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const cast = who.flatMap((x, k) => {
         const c = fit(h('canvas', { deco: true }), 18);
         ctx.cb.renderHeroPreview(c, x);
-        return [k && who.length < 5 ? h('span', 'glyph', t.duo ? '+' : '▸') : null, h('span', `el-face candy ${FACE[HEROES[x].face]}`, c)];
+        return [k && who.length < 5 ? h('span', 'glyph', '▸') : null, h('span', `el-face candy ${FACE[HEROES[x].face]}`, c)];
       });
       const state = open ? (best ? starsLabel(best) : 'not passed yet') : `locked: pass ${blocker(save, t)}`;
       const b = h(
         'button',
-        { class: cls, type: 'button', 'data-trial': t.n, 'aria-disabled': String(!open), 'aria-label': `${levelTag(t.id)}, ${t.name}, ${who.map((x) => HEROES[x].name).join(t.duo ? ' and ' : ', then ')}, ${state}` },
+        { class: cls, type: 'button', 'data-trial': t.n, 'aria-disabled': String(!open), 'aria-label': `${levelTag(t.id)}, ${t.name}, ${who.map((x) => HEROES[x].name).join(', then ')}, ${state}` },
         h('span', 'node candy', levelShort(t.id)),
         h('span', 'tile-name gt-ink', t.name),
         h('span', 'el-stars', ...[0, 1, 2].map((k) => artIcon(k < best ? 'star' : 'starEmpty'))),

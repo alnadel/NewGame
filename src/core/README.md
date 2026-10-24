@@ -1481,103 +1481,55 @@ afternoon flare (an 80-point scorch), crossed sun its 20-Chill tank could not af
 - `sim --check` prints the oracle's Day-8 share with its count, and humanDial R3/R4's flare
   meeting (advisory ≥ 50%) with their 11 AM and first-night shares.
 
-## 17. Elementals (docs/ELEMENTALS.md)
+## 17. Elementals (docs/ELEMENTALS_V2.md)
 
-Five playable heroes (Nubs, Ember, Sprout, Volt, Drip) on eight Trials (ids 1001-1008: four
-intros, two duos, two relays). The spec is binding; this section says where things live and what
-the code decided where the spec left room. Every hero rule is gated on `s.trial !== null` (or
-`s.mate !== null`): Endless, Daily, challenge and Journey runs take the old paths byte for byte
-(the goldens' existing keys are unchanged).
+The Elemental Trials are being rebuilt as v2 (docs/ELEMENTALS_V2.md, binding): each element plays
+its own verb inside a run that stays a walk to the finish. The v1 sun-variant heroes (Ember's light
+table, Sprout's edge band, Volt, Drip's two-ended temperature, the swipe-down abilities, duos, the
+green thumb, `?hero=`) are gone (§8, the C0a demolition). Every element rule is gated on
+`s.trial !== null`: Endless, Daily, challenge and Journey runs take the old paths byte for byte
+(the goldens' other keys are unchanged).
 
 ### 17.1 Data and runs
 
-- **Config.** `config/heroes.ts` (`HeroId`, `HERO_IDS`, `HEROES`); `config/trials.ts` (`TRIALS`
-  with the pinned salts and the calibration of 17.5, `isTrialId`, `trialDef`, `trialLevel`,
-  `anyLevelDef`, `levelTag`/`levelShort`, `trialDareValue`, `trialStars`); `TUNING.heroes`.
+- **Config.** `config/heroes.ts` (`HeroId`, `HERO_IDS`, `HEROES`); `config/trials.ts` (`TRIALS`,
+  `isTrialId`, `trialDef`, `trialLevel`, `anyLevelDef`, `levelTag`/`levelShort`, `trialDareValue`,
+  `trialStars`); `TUNING.heroes` (the relay's numbers).
 - **Runs.** `campaignConfig(id)` takes a trial id (the trial's mechanics, `v16: V16_NONE`,
-  `startFrost: 1`). `createRun` sets `s.trial`, the lead's hero (`cast[0]`, or `cfg.hero` on a solo
-  trial) at `heroStart`, a duo's `s.mate`, `stats.minChill = 100` (the lowest health of any body)
-  and the eight hero counters at 0. `syncTime` puts a duo's lead at `trailX − 11` and its mate at
-  `+ 11`; `computeCoverage(s, nb)` runs per body and writes the integer lit sum `nb.c`.
+  `startFrost: 1`). `createRun` sets `s.trial`, the walker's element (`cast[0]`) at `heroStart`,
+  `stats.minChill = 100` (the walker's lowest health) and the relay counters at 0.
 
 ### 17.2 The step on a Trial (`sim/heroes.ts`)
 
 - **`updateRelay`** right after `syncTime`: `tagSoon` exactly `tagSoonTicks` before a TAG; at
-  `tagTick(t, i)` (the relay's minute on the 6-tick grid) the lead becomes the incoming hero at its
-  start meter, the Volt/Drip/ability state resets, the grace and the clean-TAG watch start, and
-  `tag` fires. The charge carries over.
-- **`updateSnap`** casts through `castHero` on a Trial: refused below a full charge, with a timed
-  ability or a Cold Snap on, with the sun down, in the start beat or with a TAG within
-  `tagSoonTicks` (`tagLocked`). Nubs' ability is `castSnap`; BLAZE and CLOUDBURST set
-  `heroAbility`/`heroTicks`; SEED inserts "Sprout's Sunflower" (`SEED_ID_BASE + stats.seeds`) 84
-  ticks of walking ahead, 30 u to the sun's side (the `ability` event's x, y is the flower's);
-  THUNDERCLAP strikes at θ (dead zone and refractory ignored, ×1.5, a chain step).
-- **`applyHeroDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial).
-  Per body, lead first (`bodyTick`; a duo's mate at `snapSmother` of the drain while a Cold Snap
-  rides): the hero's rate (per s, in `nb.rate`) and safe set (`nb.safe`)
-  from `nb.c` (Drip: `nb.w[0]`), the lead's TAG grace (the rate floored at 0), the meter (clamped;
-  Drip boils at 100 to 0 with `heroCause 'boil'`, and keeps its side with hysteresis; a Blazing
-  Ember reads c ≥ 5 and a Cloudbursting Drip is safe while its ability runs), health into
-  `stats.minChill` and `lowChill`, and `keepMemory` (glare touches, the last shader, cloud rides:
-  the block `applyDaylight` used to inline, now shared). Then once: Volt's strike on its
-  lit-to-shaded edge, Harmony, the ability hero's income through `addFrost` (× `harmonyMul`; nothing
-  under a Cold Snap), `blazeTicks` (blazing while raw Ember would not be safe) and `calmTicks`, the
-  green thumb (`bloom()` for buds within 24 u of a safe Sprout), the timed ability's countdown
-  (`abilityEnd`), the clean-TAG watch, and the lit totals.
-- **Pickups** (`pickups.ts`): the lead's flake or crystal goes through `heroFlake` (Nubs +6/+35;
-  Ember −12, steam for 0 in a Blaze, `heroCause 'hiss'` when it takes the last Heat; Sprout +8;
-  Drip −15, `heroCause 'freeze'` when it takes the last warmth; Volt Snow only; a crystal is ×2), with `heroPickup` for a non-Nubs collector. Snow,
-  `stats.flakes` and the `flake`/`crystal` events are as today; on a Trial a flake pays no charge
-  (income is joy only).
-- **Death:** either body's meter at 0 in daylight ends the run (`step.ts`); `heroDeath` names the
-  body (the lead wins a tie) in `who`/`heroCause`, keeps `deathCause`'s lines for Nubs and writes
-  §6.4's for the others (glare → cause `'glare'`, the cloud and Cold Snap lines → `'cloud'`, a named shader →
-  `'gap'`, else `'plain'`), plus " {Partner} can't go on alone." in a duo. `die()` leaves a duo's
-  surviving meter alone.
-- **History, hash:** the Melt Map's chill slot holds the lead's health; `hashState` feeds the hero
-  block (§4.8) only on a Trial.
+  `tagTick(t, i)` (the relay's minute on the 6-tick grid) the walker becomes the incoming element
+  at its start meter, the grace and the clean-TAG watch start, and `tag` fires. The charge carries.
+- **`updateSnap`** casts the Cold Snap on a Trial only while Nubs walks and no TAG is within
+  `tagSoonTicks` (`tagLocked`).
+- **`applyHeroDaylight`** replaces `applyDaylight` (and `applyNight` does nothing on a Trial): the
+  walker's rate on Nubs' trial rule (`−D·f + R·max(0, 1 − f)`, f = c/5), floored at 0 by the TAG
+  grace, `nb.safe` (strict shade), health into `stats.minChill` and `lowChill`, `keepMemory`, the
+  Cold Snap's income on Nubs legs, the clean-TAG watch and the lit totals.
+- **Pickups:** on a Trial only Nubs' Chill takes a flake or crystal, and a flake pays no charge.
+- **Death:** the walker's meter at 0 in daylight ends the run; `heroDeath` is `deathCause` with
+  `who` and `heroCause 'melt'`.
+- **History, hash:** the Melt Map's chill slot holds the walker's health; `hashState` feeds the
+  trial block only on a Trial.
 
-### 17.3 The guide on a Trial (`guide.ts heroGuide`)
+### 17.3 The guide on a Trial
 
-`updateGuide` hands over after the bud and land guides. The scene is gathered at the lead (a duo's
-at the pair's midpoint, margin + 11); `guide.lit`/`glare` keep their meaning at the lead's centre;
-`guide.lead`, `guide.mate` and `guide.now` (their AND in a duo) come from `heroMask` (Nubs c 0,
-Ember a rising rate, Sprout the band, Volt c ≤ 1 outside ±40° of `voltTheta`, Drip its centre
-sample against its side); `guide.next` is the same 0.6 s ahead; `guide.tag` is the incoming hero's
-mask (state reset) during a telegraph. A Blaze or a Cloudburst does not change the masks: they show
-where the light is. `guide.deep/flake/flare` stay 0. `guide.now` is the one source of "safe" for the
-dial, the ghost hint and the bots.
+Every leg reads Nubs' masks (`updateGuide` as in a Journey run); during a telegraph `guide.tag`
+holds Nubs' strict shade at the walker.
 
 ### 17.4 Bots
 
-The reactive and human models read `guide.now`/`next` unchanged and cast through the snap bit; on a
-Trial only: `snapReady` also waits for no timed ability and no TAG lock, the panic rule reads the
-ability hero's body (unsafe instead of lit, health instead of Chill; a duo's Cold Snap only while
-the partner has 60 health to spare), the human model's "lit" view is "some body unsafe", and the
-reactive bot with a salt > 0 aims with an N(0, 4°) error per pick (G3's eight hands; salt 0 is the
-plain bot). Nubs runs are untouched.
+The reactive and human models read `guide.now`/`next` unchanged; on a Trial `snapReady` also
+needs Nubs walking and no TAG lock, the panic rule reads the walker (unsafe instead of lit, health
+instead of Chill), and the reactive bot with a salt > 0 aims with an N(0, 4°) error per pick.
 
 ### 17.5 Proof: `node scripts/sim.ts --trials` (`scripts/sim16/trials.ts`)
 
-One row per trial with G1-G6 (§3.9); `--check` exits 1 on a failing gate that is not waived;
-`--pick <n> [--drain D] [--start M] [--from k]` searches salts (with §3.10's fallbacks and the Dare
-nudge); `--survey N [--drain D] [--start M]` prints every gate on salts 0..N − 1. Decisions:
-- **Audit (G1).** The spec's DP, plus: flakes the lead walks over are charged to the heroes they
-  hurt (Ember's hiss, Drip's ice cube; never melted, so still conservative); Drip's T grid is one
-  step's change (`k·D·0.1`) wide, so shade, sun and glare move exactly −1, +1 and +3 buckets (1-unit
-  buckets with rounding lost up to 0.35 a step). Volt legs are left to the bots.
-- **Path bot (G2)** follows the best path; a Drip leg steers closed-loop by a backward table of the
-  audit (an open-loop bin path drifts on a two-sided meter); a Volt leg is the striker's.
-- **Gates** G3 reactive 7/8 salts, G4 humanDial 16 salts in 55-90% (T1-T4) or 45-90%, G5 idle and 36
-  constant angles fail, G6 the Dare met at the finish on 10-60% of the G3 + G4 runs.
-- **Calibration.** At the spec's numbers G5 and G4 failed on every surveyed salt for most trials
-  (constant angles survived; humanDial passed 100%), so the drain also rises where a trial was too
-  easy (T1 40, T4 36, T5 40, T6 32, T8 32), T1 starts at 12:30, T2's drain fell to 18, T4 lost
-  'flurry' (its ice-cube clusters froze every bot on every salt), T2 and T7 lost 'giants' and
-  'dense' (one constant angle passed them; re-picked at salt 6) and two Dares were nudged (T2
-  blooms 5, T4 calm 19 s). Two gates no salt reaches are waived in `GATE_WAIVERS`: T3 G4 (humanDial
-  passes Volt 16/16 at every drain), T5 G6 (its Dare is every TAG). The measured numbers sit beside
-  each trial.
-- **Tests.** `tests/unit/heroes.test.ts` (rules, abilities, relay, duo, flakes, deaths, hash),
-  `tests/unit/trials.test.ts` (the table, and G1, G2, G5 on the pinned trials), the `trials`
-  golden key, T6/T8 replays in `determinism.test.ts`.
+The module shell: one row per trial with G1-G6 on Nubs' rule for every leg (the audit is a
+turn-limited survival DP carrying the alive bins across each TAG at the incoming start meter);
+`--check`, `--pick <n>` (salt search and the Dare nudge) and `--survey N`. ELEMENTALS_V2 §6
+replaces the audits and gates per verb.

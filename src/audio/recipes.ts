@@ -470,7 +470,7 @@ export const RECIPES = {
     seq(v, t + 0.03, tonic5(p), [[0, 12], [0.07, 19], [0.14, 24]], 'bell', 0.06, 0.9, 1.6);
   },
 
-  // Elementals (docs/ELEMENTALS.md §4.9): the abilities, Volt's strikes and a relay's TAG.
+  // Elementals: the v1 ability cues (kept for the element verbs) and a relay's TAG.
 
   /** BLAZE: a crackle whoomp, three bandpassed noise bursts over a sine rising an octave. */
   blaze(g, t, p) {
@@ -485,20 +485,6 @@ export const RECIPES = {
     const v = g.voice('sfx', t);
     glide(v.tone('sine', 300, t, 0.1, 0.003, 0.08).frequency, t, 300, 700, 0.06);
     seq(v, t + 0.05, tonic5(p), [[0, 0], [0.07, 7]], 'pluck', 0.1, 0.3, 1.5);
-  },
-
-  /**
-   * A strike: a zap (a sawtooth diving through a bandpass and a crack of noise) on a bell one
-   * pentatonic degree higher per chain step (`degree`), so a ×5 chain plays a melody; `gain` 1.5 is
-   * a THUNDERCLAP.
-   */
-  strike(g, t, p) {
-    const v = g.voice('sfx', t);
-    const k = p.gain ?? 1;
-    const env = v.gain(GAIN_FLOOR, v.filter('bandpass', 2200, 0.8));
-    glide(v.osc('sawtooth', 1800, t, perc(env.gain, t, 0.06 * k, 0.002, 0.12), env).frequency, t, 1800, 300, 0.12);
-    v.burst(g.white, t, 0.08 * k, 0.001, 0.05, v.filter('highpass', 2500, 0.7));
-    bellTone(v, t + 0.03, degreeHz(p.day ?? 1, Math.min(9, p.degree ?? 0), 5, p.key ?? 0), 0.08, 0.7, 0.25);
   },
 
   /** CLOUDBURST: a run of droplet plinks falling down the scale. */

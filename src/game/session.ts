@@ -30,7 +30,6 @@ import {
   prepareRun,
   prepareSome,
   rungConfig,
-  SMOTHER_TIP,
   splitMinutes,
   step,
   takeSnap,
@@ -1097,8 +1096,8 @@ export class Session {
     const lit = v.f * 5;
     v.glareW = lit > 0 ? Math.min(1, (2 * s.nubs.glare) / lit) : 0;
     v.chill = s.nubs.chill;
-    // Elementals: the heartbeat and the calm scene read the lowest health of any body on a Trial.
-    v.health = s.trial !== null ? Math.min(heroHealth(s.nubs), s.mate !== null ? heroHealth(s.mate) : 100) : undefined;
+    // Elementals: the heartbeat and the calm scene read the walker's health on a Trial.
+    v.health = s.trial !== null ? heroHealth(s.nubs) : undefined;
     v.mult = s.nubs.mult;
     v.omega = s.sun.omega;
     // Campaign: the chapter's music palette, the finish line and the concept signatures.
@@ -1178,10 +1177,9 @@ export class Session {
     const def = kind === 'campaign' ? anyLevelDef(level ?? 1) : null;
     if (def) {
       // A campaign level (CAMPAIGN_PLAN §4) or an Elementals Trial: the level's own rules, never the
-      // comfort ladder. A solo Trial opened with ?hero= walks that hero (a debug run).
+      // comfort ladder.
       this.cfgLevel = def;
       cfg = campaignConfig(def, rm, save.flags.tutorialDone, relaxedGoalFor(def, save.campaign.misses?.[def.id - 1] ?? 0));
-      if (p.hero !== null && def.id === p.level) cfg.hero = p.hero;
       this.kind = 'campaign';
     } else if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
@@ -1796,10 +1794,9 @@ export class Session {
     this.checkDailyTry();
     const save = this.d.store.get();
     const result = buildRunResult(this.s);
-    // A Trial's recap tip is the fallen hero's (Nubs keeps today's recap tips).
+    // A Trial's recap tip is the fallen element's (Nubs keeps today's recap tips).
     const d = result.death;
-    // A duo's Cold Snap that smothered Ember teaches the snap, not Ember's rule.
-    const heroTip = this.s.trial ? (d.heroCause === 'smother' ? SMOTHER_TIP : HEROES[d.who ?? this.s.nubs.hero].deathTip) : '';
+    const heroTip = this.s.trial ? HEROES[d.who ?? this.s.nubs.hero].deathTip : '';
     this.tip = heroTip || deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
@@ -2378,8 +2375,8 @@ export class Session {
           : pct;
       return {
         title: `${levelTag(level.id)} · ${level.name}`,
-        // A Trial: the walking hero's tagline under the title (docs/ELEMENTALS.md §6.5), a duo's both.
-        ...(t ? { tagline: s.mate ? `${HEROES[s.nubs.hero].tagline} ${HEROES[s.mate.hero].tagline}` : HEROES[s.nubs.hero].tagline } : {}),
+        // A Trial: the walking element's tagline under the title.
+        ...(t ? { tagline: HEROES[s.nubs.hero].tagline } : {}),
         goal: `${goalText(level, relaxed)} · ${count}`,
         now,
         stars: [
@@ -2503,12 +2500,10 @@ export class Session {
       gust: s.sun.gust,
       locked: s.sun.locked,
       moonlit: s.moonlit,
-      // Elementals (docs/ELEMENTALS.md §4.10): the walking hero, the duo's mate, the relay index,
-      // each body's meter and the ability charge.
+      // Elementals: the walking element, the relay index, its meter and the Cold Snap charge.
       hero: s.nubs.hero,
-      mate: s.mate?.hero ?? null,
       relay: s.relayIdx,
-      meters: s.mate ? [s.nubs.chill, s.mate.chill] : [s.nubs.chill],
+      meters: [s.nubs.chill],
       charge: s.nubs.frost,
     };
   }
@@ -2519,7 +2514,7 @@ export class Session {
   }
 
   /** Test hook: the config of the current run (the Title's held run between runs). */
-  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number; hero: string | null } {
+  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
     const c = s.cfg;
@@ -2531,7 +2526,6 @@ export class Session {
       seed: c.seed,
       dailyDate: c.dailyDate ?? null,
       drain: effectiveDrain(s),
-      hero: c.hero ?? null,
     };
   }
 

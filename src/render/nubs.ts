@@ -48,8 +48,6 @@ export interface NubsAnim {
   /** The face's look (unit screen vector), eased toward the sun or a flake ahead. */
   lookX: number;
   lookY: number;
-  /** Elementals: seconds left of Volt's strike flash (0 none). */
-  zap: number;
 }
 
 export function createNubsAnim(): NubsAnim {
@@ -71,7 +69,6 @@ export function createNubsAnim(): NubsAnim {
     hopNextH: 0,
     lookX: 1,
     lookY: 0,
-    zap: 0,
   };
   resetNubsAnim(a);
   return a;
@@ -109,7 +106,6 @@ export function resetNubsAnim(a: NubsAnim): void {
   a.phew = 0;
   a.hopT = -1;
   a.hopNext = -1;
-  a.zap = 0;
 }
 
 /** Advances springs and timers (dt in game seconds; sx = Nubs' screen x in CSS px; S = px per u). */
@@ -122,7 +118,6 @@ export function updateNubsAnim(a: NubsAnim, dt: number, sx: number, S: number, w
   a.glare = Math.max(0, a.glare - dt);
   a.happy = Math.max(0, a.happy - dt);
   a.phew = Math.max(0, a.phew - dt);
-  a.zap = Math.max(0, a.zap - dt);
   a.blinkIn -= dt;
   if (a.blinkIn <= 0) {
     a.blink = 0.12;
@@ -198,14 +193,12 @@ export interface NubsPose {
   shade: Rgb;
   reducedMotion: boolean;
   /**
-   * Elementals (render/heroes.ts): the lit sum c (0..10), whether the body is in its hero's safe
-   * set, the raw meter 0..1 (Drip's T), its timed ability running, high contrast and how it died.
-   * Nubs' own art reads none of them.
+   * Elementals (render/heroes.ts): the lit sum c (0..10), whether the walker is safe, the raw meter
+   * 0..1, high contrast and how it died. Nubs' own art reads none of them.
    */
   c: number;
   safe: boolean;
   meter: number;
-  power: boolean;
   hc: boolean;
   cause: string;
 }
@@ -236,7 +229,6 @@ export function createPose(): NubsPose {
     c: 0,
     safe: true,
     meter: 1,
-    power: false,
     hc: false,
     cause: '',
   };
@@ -1143,10 +1135,9 @@ export interface NubsSprite {
   /** Layer redraws and compositions so far (perf checks). */
   layerDraws: number;
   composes: number;
-  /** The pose the layers were drawn for (quantized), the art drawn this frame (null: Nubs) and whether its springs are baked into the front layer (a duo mate: no live strokes). */
+  /** The pose the layers were drawn for (quantized) and the art drawn this frame (null: Nubs). */
   readonly pose: NubsPose;
   art: CharArt | null;
-  baked: boolean;
   /**
    * Trials: the least time (s of pose time) between two layer redraws, and the pose time of the
    * last one; while it is above 0 a zoom of up to 8 % stretches the cached layers instead of
@@ -1184,7 +1175,6 @@ export function createNubsSprite(): NubsSprite {
     composes: 0,
     pose: createPose(),
     art: null,
-    baked: false,
     cap: 0,
     at: 0,
   };
@@ -1262,7 +1252,6 @@ export function renderNubsSprite(sp: NubsSprite, p: NubsPose, a: NubsAnim, looks
       prepare(sp.back, sp.backG, w, h, ox, oy);
       art.back(sp.backG, spritePose, a);
       prepare(sp.front, sp.frontG, w, h, ox, oy);
-      if (sp.baked) art.live(sp.frontG, spritePose, a);
       art.front(sp.frontG, spritePose, a);
       sp.layerDraws++;
     }
@@ -1345,10 +1334,10 @@ function compose(sp: NubsSprite): void {
   sp.composes++;
 }
 
-/** The springs between the layers: Nubs' scarf tails, or a hero's live parts (none when baked). */
+/** The springs between the layers: Nubs' scarf tails, or an element's live parts. */
 function liveLayer(g: CanvasRenderingContext2D, sp: NubsSprite): void {
   if (!sp.art) drawTailsLayer(g, sp.pose, sp.anim as NubsAnim, sp.looks as Looks, sp.geom);
-  else if (!sp.baked) sp.art.live(g, sp.pose, sp.anim as NubsAnim);
+  else sp.art.live(g, sp.pose, sp.anim as NubsAnim);
 }
 
 /**

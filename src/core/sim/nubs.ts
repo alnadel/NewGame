@@ -54,8 +54,7 @@ const candBalls: GazingBall[] = [];
  * Computes the per-sample lit weights w, their integer sum c, f, the glare count, the caster
  * shading the center sample, the cloud fully covering Nubs (never the Cold Snap's), the glaring ball
  * and deep shade (v1.5: fully shaded with two or more casters or clouds over the center sample), at
- * the position of body `nb` (Nubs, or an Elementals duo's mate; the scratch is shared, one call
- * after the other).
+ * the position of body `nb` (Nubs).
  */
 export function computeCoverage(s: SimState, nb: NubsState = s.nubs): void {
   const w = s.world;

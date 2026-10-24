@@ -6,9 +6,8 @@
 // guide.flake (the bins that shade the nearest alive glass flake in its melt window) and, during a
 // flare's warning, guide.flare (full shade at the flare's first hold tick) with guide.flareTicks.
 //
-// Elementals (docs/ELEMENTALS.md §4.8): on a Trial heroGuide fills the masks per hero instead, so
-// guide.now is each hero's safe set (a duo's AND band): the single source of "safe" for the dial,
-// the ghost hint and the bots.
+// Elementals: on a Trial every leg reads Nubs' masks, and during a TAG's telegraph guide.tag holds
+// where to aim the sun for the incoming element (Nubs' strict shade at the walker).
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayStartTick, dayTicks, elevation, TICK_HZ } from '../clock.ts';
@@ -18,10 +17,9 @@ import { liftElevation, liftingFlare, worldElevation, worldYAtDayTick, worldYAtT
 import { gatherScene, lowerBound } from '../gen/store.ts';
 import { eclipseAt } from '../gen/world.ts';
 import { BINS, createMaskScene, glareMask, litMask, shadeMask } from '../intervals.ts';
-import type { HeroId } from '../../config/heroes.ts';
 import { PICKUP_ALIVE, SNAP_ID_BASE, type Flare, type Pickup } from '../objects.ts';
 import { trailX } from '../trail.ts';
-import { heroMask, nextTagHero, nextTagTicks } from './heroes.ts';
+import { tagLocked } from './heroes.ts';
 import { updateBudGuide, updateLandGuide } from './mechanics.ts';
 import { meltBudgetOf } from './pickups.ts';
 import type { SimState } from './types.ts';
@@ -46,10 +44,6 @@ export function updateGuide(s: SimState): void {
   updateBudGuide(s);
   // v1.6 Garden (CORE-1): the landing mask at the snap's end.
   updateLandGuide(s);
-  if (s.trial !== null) {
-    heroGuide(s);
-    return;
-  }
   if (!s.sunUp) {
     g.now.fill(0);
     g.next.fill(0);
@@ -59,6 +53,7 @@ export function updateGuide(s: SimState): void {
     g.flake.fill(0);
     g.flare.fill(0);
     g.flareTicks = -1;
+    g.tag.fill(0);
     return;
   }
   const nb = s.nubs;
@@ -96,6 +91,10 @@ export function updateGuide(s: SimState): void {
   flakeGuide(s);
   flareGuide(s);
   nextGuide(s);
+  if (s.trial !== null) {
+    if (tagLocked(s)) g.tag.set(g.now);
+    else g.tag.fill(0);
+  }
 }
 
 /** guide.next: 0.6 s ahead (Nubs' position, the elevation and the clouds then; today's daylight only). */
@@ -262,73 +261,4 @@ function flareGuide(s: SimState): void {
 /** True on ticks where the guide refreshes (absolute 0.1 s grid). */
 export function guideDue(s: SimState): boolean {
   return s.tickAbs % TUNING.guide.everyTicks === 0;
-}
-
-const DUO_DX = TUNING.heroes.duoDx;
-/** heroGuide's scratch: another body's lit sums, Drip's centre weights, a shade row and a mask. */
-const heroLit = new Uint8Array(BINS);
-const heroW0 = new Uint8Array(BINS);
-const heroOut = new Uint8Array(BINS);
-
-/** Drip's centre-sample weights per bin at (x, y) in the gathered scene, into heroW0 (0 shade, 1 lit, 2 glare). */
-function centreWeights(x: number, y: number): void {
-  shadeMask(scene, x, y, false, tmp);
-  glareMask(scene, x, y, heroW0);
-  for (let b = 0; b < BINS; b++) heroW0[b] = heroW0[b] === 1 ? 2 : tmp[b] === 1 ? 0 : 1;
-}
-
-/**
- * Hero `h`'s safe mask for a body at (x, y) in the gathered scene (its lit sums in `lit`, already
- * filled unless `fill`), with Volt's last strike and Drip's side (the run's own, unless given).
- */
-function bodyGuide(s: SimState, h: HeroId, x: number, y: number, lit: Uint8Array, fill: boolean, out: Uint8Array, vTheta = s.voltTheta, cool = s.dripCool): void {
-  if (fill) litMask(scene, x, y, false, lit, null);
-  if (h === 'drip') centreWeights(x, y);
-  heroMask(s, h, lit, heroW0, out, vTheta, cool);
-}
-
-/**
- * The guide on a Trial (§4.8), after the bud and land guides: the scene at the lead (a duo's at the
- * pair's midpoint, margin + duoDx); guide.lit and guide.glare at the lead's centre with today's
- * meaning; guide.lead the lead hero's safe mask, guide.mate the mate's, guide.now their AND (the
- * lead's alone without a mate); guide.next the same 0.6 s ahead; guide.tag the incoming hero's mask
- * (from the lead's lit sums, its state reset) during a TAG's telegraph. Volt's masks leave out its
- * dead zone; Drip's read its centre sample and side. A Blaze or a Cloudburst does not change them
- * (they show where the light is). deep, flake and flare stay 0 (a Trial has no deep shade, glass or
- * flares), and a Trial ends before night.
- */
-function heroGuide(s: SimState): void {
-  const g = s.guide;
-  g.tag.fill(0);
-  const nb = s.nubs;
-  const m = s.mate;
-  const w = s.world;
-  const margin = m !== null ? MARGIN + DUO_DX : MARGIN;
-  const px = m !== null ? nb.x + DUO_DX : nb.x;
-  gatherScene(w, scene, px, nb.y, margin, s.tAbs, s.eps, s.cot);
-  litMask(scene, nb.x, nb.y, false, g.lit, g.glare);
-  bodyGuide(s, nb.hero, nb.x, nb.y, g.lit, false, g.lead);
-  const to = nextTagHero(s);
-  const n = nextTagTicks(s);
-  if (to !== null && n >= 0 && n <= TUNING.heroes.tagSoonTicks) bodyGuide(s, to, nb.x, nb.y, g.lit, false, g.tag, -1, true);
-  if (m !== null) {
-    bodyGuide(s, m.hero, m.x, m.y, heroLit, true, g.mate);
-    for (let b = 0; b < BINS; b++) g.now[b] = (g.lead[b] as number) & (g.mate[b] as number);
-  } else {
-    g.mate.fill(0);
-    g.now.set(g.lead);
-  }
-  const t = s.dayTick + AHEAD;
-  if (t >= dayTicks(s.day)) {
-    g.next.fill(0);
-    return;
-  }
-  const y = worldYAtDayTick(w, s.day, t);
-  const x = trailX(w.trail, y);
-  const eps = liftElevation(w, s.params, dayStartTick(s.day) + t, elevation(s.params, t / TICK_HZ));
-  gatherScene(w, scene, x, y, margin, s.tAbs + AHEAD / TICK_HZ, eps, 1 / tanD(eps));
-  bodyGuide(s, nb.hero, m !== null ? x - DUO_DX : x, y, heroLit, true, g.next);
-  if (m === null) return;
-  bodyGuide(s, m.hero, x + DUO_DX, y, heroLit, true, heroOut);
-  for (let b = 0; b < BINS; b++) g.next[b] = (g.next[b] as number) & (heroOut[b] as number);
 }

@@ -427,12 +427,12 @@ describe('chapter looks and the hot dial (v1.3)', () => {
 });
 
 describe('Elementals hero art (sprite keys)', () => {
-  const HEROES = ['ember', 'sprout', 'volt', 'drip'] as const;
+  const HEROES = ['ember', 'sprout', 'drip'] as const;
 
   it('keeps Nubs on its own art, its pose defaults neutral', () => {
     expect(heroArt('nubs')).toBeNull();
     const p = createPose();
-    expect([p.c, p.safe, p.meter, p.power, p.hc, p.cause]).toEqual([0, true, 1, false, false, '']);
+    expect([p.c, p.safe, p.meter, p.hc, p.cause]).toEqual([0, true, 1, false, '']);
   });
 
   it('quantizes the look in place to 16 directions, so a tiny turn keeps the cached layers', () => {
@@ -457,15 +457,15 @@ describe('Elementals hero art (sprite keys)', () => {
     }
   });
 
-  it('changes the key with the hero state (light, low, ability) and high contrast', () => {
-    for (const hero of HEROES) {
+  it('changes the key with the element state (light, low) and high contrast', () => {
+    for (const hero of ['ember', 'sprout'] as const) {
       const art = heroArt(hero);
       const a = createNubsAnim();
       const keys = new Set<number>();
       const p = createPose();
       p.reducedMotion = true;
       const at = (patch: Partial<typeof p>) => {
-        Object.assign(p, { chill: 0.8, safe: true, c: 3, meter: 0.5, power: false, hc: false }, patch);
+        Object.assign(p, { chill: 0.8, safe: true, c: 3, meter: 0.5, hc: false }, patch);
         keys.add(art?.key(p, a) as number);
       };
       at({});
@@ -490,10 +490,8 @@ describe('Elementals hero art (sprite keys)', () => {
     }
   });
 
-  it('colours the dial per hero (Drip warm when it runs hot)', () => {
-    const cols = new Set((['ember', 'sprout', 'volt', 'drip'] as const).map((h) => heroArcColor(h, true)));
-    expect(cols.size).toBe(4);
-    expect(heroArcColor('drip', false)).not.toBe(heroArcColor('drip', true));
-    expect(heroArcColor('ember', false)).toBe(heroArcColor('ember', true));
+  it('colours the dial per element (Ember amber, Sprout lime, Nubs teal)', () => {
+    const cols = new Set((['nubs', 'ember', 'sprout'] as const).map((h) => heroArcColor(h)));
+    expect(cols.size).toBe(3);
   });
 });

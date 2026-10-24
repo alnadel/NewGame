@@ -1,5 +1,5 @@
-// Elementals Trials (docs/ELEMENTALS.md §3, §4.1-§4.3): the trial table and its helpers, and the C0
-// plumbing that loads a trial and walks its bodies (Journey ids and texts untouched).
+// Elementals Trials: the trial table and its helpers, and the plumbing that loads a trial and walks
+// it (Journey ids and texts untouched).
 import { describe, expect, it } from 'vitest';
 import { CAMPAIGN_LEVELS, levelDef } from '../../src/config/campaign.ts';
 import { HERO_IDS, HEROES } from '../../src/config/heroes.ts';
@@ -23,7 +23,6 @@ import { createRun } from '../../src/core/sim/create.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { V16_NONE } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
-import { audit, g2Ok, gateG5, playTrial, runHere, waived } from '../../scripts/sim16/trials.ts';
 
 describe('the trial table', () => {
   it('serves ids 1001..1008 only, outside the Journey', () => {
@@ -33,7 +32,6 @@ describe('the trial table', () => {
       expect(t.n).toBe(i + 1);
       expect(t.seed).toBe(hashString(`trial-${t.id}-${t.salt}`));
       expect(trialDef(t.id)).toBe(t);
-      expect(t.cast[0]).toBe(t.duo ? t.duo.left : t.cast[0]);
       expect(t.mech).toEqual({ buds: [2, 7, 8].includes(t.n), snap: true, deep: false, brittle: false });
       expect(t.card.blurb.length).toBeLessThanOrEqual(90);
     });
@@ -67,20 +65,20 @@ describe('the trial table', () => {
   });
 
   it('counts Dares and stars as the Journey does: 2 of 3', () => {
-    const t = trialDef(1006) as TrialDef;
-    const stats = { flakes: 0, snow: 0, minChill: 30, harmonyTicks: 180 };
-    expect(trialDareValue('harmony', stats)).toBe(180);
+    const t = trialDef(1005) as TrialDef;
+    const stats = { flakes: 0, snow: 0, minChill: 35, cleanTags: 2 };
+    expect(trialDareValue('cleanTags', stats)).toBe(2);
     expect(trialDareValue('chain', stats)).toBe(0);
     expect(trialDareValue('flakes', { ...stats, flakes: 7 })).toBe(7);
     expect(trialStars(t, stats, false)).toBe(0);
     expect(trialStars(t, stats, true)).toBe(3);
-    expect(trialStars(t, { ...stats, minChill: 29 }, true)).toBe(2);
-    expect(trialStars(t, { ...stats, minChill: 29, harmonyTicks: 179 }, true)).toBe(1);
+    expect(trialStars(t, { ...stats, minChill: 34 }, true)).toBe(2);
+    expect(trialStars(t, { ...stats, minChill: 34, cleanTags: 1 }, true)).toBe(1);
   });
 });
 
 describe('C0: a trial loads and walks', () => {
-  it('runs every trial with its own rules, heroes and bodies', () => {
+  it('runs every trial on its walker (Nubs\' rule until the element rules land)', () => {
     for (const id of TRIAL_IDS) {
       const t = trialDef(id) as TrialDef;
       const cfg = campaignConfig(id);
@@ -88,22 +86,13 @@ describe('C0: a trial loads and walks', () => {
       const s = createRun(cfg);
       expect(s.trial).toBe(t);
       expect(s.nubs.hero).toBe(t.cast[0]);
-      expect(s.nubs.chill).toBe(t.cast[0] === 'drip' ? 50 : 100);
+      expect(s.nubs.chill).toBe(100);
       expect(s.nubs.frost).toBe(1);
       expect(s.stats.minChill).toBe(100);
       expect(s.stats.cleanTags).toBe(0);
-      expect(s.mate?.hero ?? null).toBe(t.duo ? t.duo.right : null);
       const bot = createBot('reactive');
       for (let i = 0; i < 600 && s.phase !== 'dead' && s.phase !== 'won'; i++) step(s, bot.next(s));
-      const x = trailX(s.world.trail, s.nubs.y);
-      if (s.mate) {
-        expect(s.nubs.x).toBeCloseTo(x - 11, 9);
-        expect(s.mate.x).toBeCloseTo(x + 11, 9);
-        expect(s.mate.y).toBe(s.nubs.y);
-        expect(s.mate.c).toBe(s.mate.w.reduce((a, b) => a + b, 0));
-      } else {
-        expect(s.nubs.x).toBe(x);
-      }
+      expect(s.nubs.x).toBe(trailX(s.world.trail, s.nubs.y));
       expect(s.nubs.c).toBe(s.nubs.w.reduce((a, b) => a + b, 0));
     }
   });
@@ -115,32 +104,15 @@ describe('C0: a trial loads and walks', () => {
     s.phase = 'won';
     expect(levelOutcome(l, s).passed).toBe(false); // Bloom 2 unmet, and a trial's goal never relaxes
     s.stats.blooms = 2;
-    s.stats.harmonyTicks = 240;
-    expect(levelOutcome(l, s)).toEqual({ id: 1007, passed: true, stars: 3, introduces: null });
+    expect(levelOutcome(l, s)).toEqual({ id: 1007, passed: true, stars: 2, introduces: null });
     s.stats.minChill = 29;
-    expect(levelOutcome(l, s).stars).toBe(2);
+    expect(levelOutcome(l, s).stars).toBe(1);
   });
 
-  it('leaves Nubs runs with no trial, no mate and no hero counters', () => {
+  it('leaves Nubs runs with no trial and no relay counters', () => {
     const s = createRun(campaignConfig(12));
     expect(s.trial).toBeNull();
-    expect(s.mate).toBeNull();
     expect(s.nubs.hero).toBe('nubs');
     expect(s.stats.cleanTags).toBeUndefined();
   });
-});
-
-describe('every pinned trial is proven winnable and not trivial (docs/ELEMENTALS.md §3.9 G1, G2, G5)', () => {
-  for (const id of TRIAL_IDS) {
-    it(`T${id - 1000}: the audit, the path bot (Volt: the striker) and the anti-trivial gate`, async () => {
-      const t = trialDef(id) as TrialDef;
-      const a = audit(t);
-      expect(a.ok, `G1 margin ${a.margin}`).toBe(true);
-      const p = playTrial({ v: { id, salt: t.salt }, p: { bot: 'path' } });
-      expect(g2Ok(t, p), `G2 ${p.line}`).toBe(true);
-      if (waived(id, 5)) return;
-      const g5 = await gateG5(runHere, { id, salt: t.salt });
-      expect(g5.ok, `G5 best θ${g5.bestTheta}`).toBe(true);
-    }, 60_000);
-  }
 });

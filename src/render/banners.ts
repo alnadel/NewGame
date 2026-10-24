@@ -16,11 +16,10 @@
 // resize, a contrast change or when the display font arrives); a frame blits it with a transform and
 // an alpha. No shadowBlur, no per-frame gradients.
 
-import { FORECASTS, type BiomeId, type ForecastId, type HeroId } from '../core/index.ts';
+import { FORECASTS, HERO_IDS, type BiomeId, type ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { bodyFont, burst, candyRect, chip, coin, displayFont, FACE, fontGen, INK, INK_2, onDisplayFont, outlined, panel, plate, ribbon, RIBBON, starSprite, TEXT, well, type Face, type FaceName, type RibbonTone } from './candy.ts';
 import { drawGlyph } from './glyphs.ts';
-import { drawHeroLegend } from './heroes.ts';
 import { ctx2d, makeCanvas, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -185,7 +184,7 @@ export interface Toast {
   at: number;
 }
 
-export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost' | 'tag' | 'blaze';
+export type StampKind = 'noon' | 'teal' | 'gold' | 'finish' | 'miss' | 'frost' | 'tag';
 
 /** Stamp timing (s): slam in, then fade out (the hold is per stamp). */
 export const STAMP_IN = 0.22;
@@ -201,12 +200,11 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [Face, string]>> = {
   miss: [FACE.pink, ''],
   // v1.6 PARRY!: a blue plate on an ice burst.
   frost: [FACE.blue, '#CFEFFF'],
-  // Elementals: TAG! on the incoming hero's face (showStamp's), BLAZE! on red.
+  // Elementals: TAG! on the incoming element's face (showStamp's).
   tag: [FACE.violet, '#FFFFFF'],
-  blaze: [FACE.red, '#FFD84A'],
 };
-/** Intro card glyphs drawn as a hero's dial legend. */
-const LEGEND: readonly string[] = ['ember', 'sprout', 'volt', 'drip'];
+/** Intro card glyphs of an element (a Trial's card). */
+const LEGEND: readonly string[] = HERO_IDS;
 /** The level card's slide-out (s). */
 const LEVEL_OUT_S = 0.3;
 /** The level card's slide-in (s). */
@@ -864,7 +862,7 @@ function sizeCard(b: Banners, v: View, scale: number, room: number): void {
   };
   if (b.levelConcept && b.levelBlurb) {
     const fs = [1, 0.9, 0.85, 1 / scale, 0.9 / scale].filter((f) => (f >= 0.85 || scale > 1) && f <= 1);
-    // A Trial's card (a hero's legend or the Elementals glyph) says its whole sentence (§6.2) before a line goes.
+    // A Trial's card (an element's glyph or the Elementals glyph) says its whole sentence before a line goes.
     if (b.levelConcept === 'elementals' || LEGEND.includes(b.levelConcept)) for (const f of scale > 1 ? [...fs, 0.8 / scale] : fs) if (at(f, true, true)) return;
     for (const f of fs) if (at(f, true)) return;
   }
@@ -938,9 +936,7 @@ function renderCard(b: Banners, s: Sprite, dpr: number, k: number, hc: boolean, 
     let tx = x + 13 * k;
     if (b.levelConcept) {
       chip(g, x + 5 * k, y + 5 * k, 22 * k, 22 * k, 11 * k, '#FFFFFF', k, 2 * k);
-      // A solo Trial's chip coin is the hero's dial legend (its go arc's colour and pattern).
-      if (LEGEND.includes(b.levelConcept)) drawHeroLegend(g, b.levelConcept as HeroId, x + 16 * k, y + 16 * k, 9 * k);
-      else drawGlyph(g, b.levelConcept, x + 16 * k, y + 16 * k, 15 * k);
+      drawGlyph(g, b.levelConcept, x + 16 * k, y + 16 * k, 15 * k);
       tx = x + 35 * k;
     }
     g.textAlign = 'left';

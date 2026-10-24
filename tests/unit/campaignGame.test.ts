@@ -315,19 +315,18 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     expect(goalLine(t1, { flakes: 0, snow: 0 }, false)).toBe('Out before the finish');
     expect(goalLine(t7, { flakes: 0, snow: 0, blooms: 1 }, false)).toBe('Goal missed: Bloom 2 buds (1/2)');
     expect(goalLine(t7, { flakes: 0, snow: 0, blooms: 2 }, false)).toBe('Out before the finish (Bloom 2 buds ✓)');
-    expect(trialDareCount(trialDef(1001)!, { flakes: 0, snow: 0, blazeTicks: 30 })).toBe('0.5/1 s');
     expect(trialDareCount(trialDef(1005)!, { flakes: 0, snow: 0, cleanTags: 3 })).toBe('2/2');
   });
   it('stars: the goal, the Dare (trialDareValue) and Steady (no body under the bar); the HUD pill counts the Dare', () => {
-    const st = (blazeTicks: number, minChill: number) => ({ flakes: 0, snow: 0, litTotal: 999, minChill, blazeTicks });
-    expect(starState(t1, st(0, 100), false)).toBe(0);
-    expect(starState(t1, st(60, 100), true)).toBe(STAR_GOAL | STAR_FLAKES);
+    const t5 = trialLevel(1005)!;
+    const st = (cleanTags: number, minChill: number) => ({ flakes: 0, snow: 0, litTotal: 999, minChill, cleanTags });
+    expect(starState(t5, st(0, 100), false)).toBe(0);
+    expect(starState(t5, st(2, 100), true)).toBe(STAR_GOAL | STAR_FLAKES);
     // The Journey's sun bar never counts on a Trial; a dip under the Steady bar does.
-    expect(starState(t1, st(59, 39), true)).toBe(STAR_GOAL | STAR_COOL_LOST);
-    expect(hudGoal(t1, { flakes: 0, snow: 0, blazeTicks: 30 })).toMatchObject({ value: 30, target: 60, glyph: 'ember', sec: true });
-    expect(hudGoal(t1, { flakes: 0, snow: 0, blazeTicks: 99 }).value).toBe(60);
-    // T7 counts its blooms goal first, then its Harmony Dare.
-    expect(hudGoal(t7, { flakes: 0, snow: 0, blooms: 1, harmonyTicks: 50 })).toMatchObject({ value: 1, target: 2 });
-    expect(hudGoal(t7, { flakes: 0, snow: 0, blooms: 2, harmonyTicks: 50 })).toMatchObject({ value: 50, target: 240, glyph: 'elementals', sec: true });
+    expect(starState(t5, st(1, 34), true)).toBe(STAR_GOAL | STAR_COOL_LOST);
+    expect(hudGoal(t5, { flakes: 0, snow: 0, cleanTags: 1 })).toMatchObject({ value: 1, target: 2, glyph: 'elementals', sec: false });
+    expect(hudGoal(t5, { flakes: 0, snow: 0, cleanTags: 9 }).value).toBe(2);
+    // T7 counts its blooms goal first.
+    expect(hudGoal(t7, { flakes: 0, snow: 0, blooms: 1 })).toMatchObject({ value: 1, target: 2 });
   });
 });

@@ -132,7 +132,6 @@ test('a tap on T1 plays Ember; the Results say Trial 1, Retry keeps it and Trial
   expect((await runCfg(page)).mode).toBe('campaign');
   expect((await state(page)).level).toBe(1001);
   expect((await state(page)).hero).toBe('ember');
-  expect((await state(page)).mate).toBeNull();
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
   const verdict = await page.evaluate(() => window.__SHADY_TEST__!.campaign());
@@ -158,36 +157,19 @@ test('a tap on T1 plays Ember; the Results say Trial 1, Retry keeps it and Trial
   expect(errors).toEqual([]);
 });
 
-test('?trial=6 walks Nubs with Ember beside him; Back from its Results leads to the Elementals', async ({ page }) => {
+test('?trial=6 walks Nubs; Back from its Results leads to the Elementals', async ({ page }) => {
   await page.goto('/?trial=6&test=1');
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'play');
   const s = await state(page);
   expect(s.level).toBe(1006);
   expect(s.hero).toBe('nubs');
-  expect(s.mate).toBe('ember');
-  expect(s.meters).toHaveLength(2);
-  expect((await runCfg(page)).hero).toBeNull();
+  expect(s.meters).toHaveLength(1);
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
   await page.keyboard.press('Escape');
   await waitForScreen(page, 'elementals');
   await expect(page.locator('.trial-tile[data-trial="6"]')).toHaveClass(/is-next/);
-});
-
-test('?hero= swaps a solo Trial\'s hero (QA); a relay ignores it', async ({ page }) => {
-  await page.goto('/?trial=3&hero=drip&test=1');
-  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
-  await waitForScreen(page, 'play');
-  expect((await state(page)).level).toBe(1003);
-  expect((await state(page)).hero).toBe('drip');
-  expect((await runCfg(page)).hero).toBe('drip');
-  await page.goto('/?trial=5&hero=drip&test=1');
-  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
-  await waitForScreen(page, 'play');
-  expect((await state(page)).hero).toBe('nubs');
-  expect((await state(page)).relay).toBe(0);
-  expect((await runCfg(page)).hero).toBeNull();
 });
 
 test('?trial=1 with the reactive bot passes, and the pass is kept apart from the Journey', async ({ page }) => {

@@ -50,7 +50,7 @@ export interface ShadyTestHook {
     decals: number;
   };
   /** The current run's config (the Title's held run between runs); drain = cfg.drain ?? the profile's. */
-  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number; hero: string | null };
+  runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number };
   /** Camera effects now: zoom factor (1 = none) and shake offset (u). */
   cameraFx(): { zoom: number; shakeX: number; shakeY: number };
   /** The best flag the HUD shows (frozen for the run in progress). */

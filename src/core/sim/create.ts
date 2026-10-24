@@ -1,7 +1,6 @@
 // createRun(): a fresh run in the 'hold' phase (V1_PLAN §8.3).
 
 import { startsWithSnap } from '../../config/campaign.ts';
-import type { HeroId } from '../../config/heroes.ts';
 import { trialDef } from '../../config/trials.ts';
 import { TUNING } from '../../config/tuning.ts';
 import { dayTicks } from '../clock.ts';
@@ -96,8 +95,8 @@ function startFrostH(w: World, cfg: RunConfig): number {
 }
 
 /**
- * A body on the trail (Nubs, or a duo's mate on Trials) at the start: its meter, the frost meter
- * empty (createRun fills the lead's) and every tracker reset; hero 'nubs' (createRun sets a Trial's).
+ * The walker at the start: its meter, the frost meter empty (createRun fills it) and every tracker
+ * reset; hero 'nubs' (createRun sets a Trial's).
  */
 function freshBody(chill: number, maxChill: number, theta0: number): NubsState {
   return {
@@ -205,9 +204,9 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
   const { day, dayTick } = startOf(cfg);
   const params = paramsAt(world, day);
   const maxChill = params.maxChill;
-  // Elementals: a Trial's lead walks as cast[0] (a solo Trial's ?hero= override) and starts at its hero's meter.
+  // Elementals: a Trial's walker starts as cast[0] at its element's meter.
   const trial = trialDef(cfg.level ?? 0);
-  const hero: HeroId = trial === null ? 'nubs' : (trial.relays.length === 0 && trial.duo === null && cfg.hero) || (trial.cast[0] as HeroId);
+  const hero = trial === null ? 'nubs' : trial.cast[0] ?? 'nubs';
   const chill = Math.min(maxChill, Math.max(1, cfg.startChill ?? (trial === null ? maxChill : heroStart(hero, maxChill))));
   const theta0 = world.theta0;
   const bank = world.v16.bank;
@@ -217,12 +216,6 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
   nubs.frost = frost;
   nubs.frostH = frostH;
   nubs.hero = hero;
-  const duo = trial === null ? null : trial.duo;
-  let mate: NubsState | null = null;
-  if (duo !== null) {
-    mate = freshBody(heroStart(duo.right, maxChill), maxChill, theta0);
-    mate.hero = duo.right;
-  }
   const s: SimState = {
     cfg: { ...cfg },
     params,
@@ -283,8 +276,6 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
       land: new Uint8Array(360),
       flare: new Uint8Array(360),
       flareTicks: -1,
-      lead: new Uint8Array(360),
-      mate: new Uint8Array(360),
       tag: new Uint8Array(360),
     },
     world,
@@ -309,29 +300,18 @@ export function createRun(cfg0: RunConfig, build?: RunBuild, ahead: number = TUN
     lessonShade: 0,
     lessonGrace: 0,
     trial,
-    mate,
-    heroAbility: null,
-    heroTicks: 0,
     relayIdx: 0,
     tagGrace: 0,
     tagWatch: 0,
-    voltLit: true,
-    voltTheta: -1,
-    voltChain: 0,
-    voltTick: -1e9,
-    dripCool: true,
-    harmony: false,
-    heroCause: null,
   };
   if (trial !== null) {
-    // Trials: minChill holds the lowest health of any body (§4.5); the hero counters start at 0.
-    Object.assign(s.stats, { minChill: 100, blazeTicks: 0, seeds: 0, strikes: 0, bestChain: 0, calmTicks: 0, tags: 0, cleanTags: 0, harmonyTicks: 0 });
+    // Trials: minChill holds the walker's lowest health; the relay counters start at 0.
+    Object.assign(s.stats, { minChill: 100, tags: 0, cleanTags: 0 });
   }
   syncTime(s);
   s.nextHistoryY = s.nubs.y;
   ensureGenerated(world, s.nubs.y + ahead);
   computeCoverage(s);
-  if (mate !== null) computeCoverage(s, mate);
   updateGuide(s);
   return s;
 }

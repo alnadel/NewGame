@@ -637,29 +637,16 @@ const tuning = {
     },
   },
 
-  /**
-   * Elementals (docs/ELEMENTALS.md §1): the heroes' meter rules. D = effectiveDrain(s), R =
-   * params.regen, c = the integer lit sum 0..10 (NubsState.c). Read only on Trials (s.trial !== null).
-   */
+  /** Elementals: the relay's numbers. Read only on Trials (s.trial !== null). */
   heroes: {
-    /** Duo: the lead walks this far left of the trail centre, the mate this far right (u). */
-    duoDx: 11,
-    /** Relay: the telegraph before a TAG (ticks); no ability can be cast inside it. */
+    /** Relay: the telegraph before a TAG (ticks); the Cold Snap cannot be cast inside it. */
     tagSoonTicks: 180,
-    /** After a TAG the incoming meter cannot fall for tagGraceTicks; the TAG is clean when the hero is safe within tagCleanTicks. */
+    /** After a TAG the incoming meter cannot fall for tagGraceTicks; the TAG is clean when the walker is safe within tagCleanTicks. */
     tagGraceTicks: 30,
     tagCleanTicks: 30,
     /** Health (0..100) below which lowChill fires. */
     lowHealth: 25,
-    /** Duo Harmony: the ability hero's income × this while both heroes are safe. */
-    harmonyMul: 2,
-    /** Duo: while Nubs' Cold Snap rides, the mate's meter runs at this share of the drain (§2.2: one snap costs Ember about 53 Heat at T6's drain 32, near the spec's 54 at drain 18). */
-    snapSmother: 0.55,
     nubs: { income: 0.05 },
-    ember: { fade: 1, gain: 0.4, glare: 1.2, flake: -12, blazeTicks: 180, blazeFloor: 5, incomeSun: 0.04, incomeGlare: 0.25 },
-    sprout: { starve: 0.4, grow: 0.6, scorch: 1, glare: 0.5, flake: 8, bandLo: 1, bandHi: 4, thumbReach: 24, seedAheadTicks: 84, seedLat: 30, income: 0.05 },
-    volt: { leakLit: 0.3, leakShade: 0.15, leakGlare: 0.6, litAt: 3, shadeAt: 1, strike: 0.5, chainStep: 0.25, chainCap: 5, chainTicks: 90, gapTicks: 45, deadDeg: 40, thunderMul: 1.5, incomeAt: 3, income: 0.1 },
-    drip: { k: 0.45, glareMul: 3, start: 50, calmLo: 30, calmHi: 70, coolAt: 55, warmAt: 45, flake: -15, rainTicks: 90, rainEase: 0.05, income: 0.06 },
   },
 };
 

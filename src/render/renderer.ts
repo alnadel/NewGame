@@ -1,11 +1,9 @@
 // Frame orchestration and draw order (archive/TECH_SPEC §9.2 with the V1_PLAN changes). The renderer only
 // reads the sim; render-side state (particles, rings, pops, footprints, the halo, the sun glyph,
 // banners, HUD timers, Nubs' springs) lives in RenderScene and is driven by game/fx.ts.
-// Elementals (docs/ELEMENTALS.md §4.9): on a Trial each body wears its hero's art (render/heroes.ts);
-// a duo's mate stands 22 u right of the lead (its springs baked, no footprint disc) and the camera,
-// the dial and the pops follow the pair's midpoint, with a warm tether glow while both are safe; the
-// Nubs-only cues follow health and each hero's own state (the vignette, the sun's moods, the hot ring,
-// the sizzle, which becomes Ember's smoke); the relay's Tag Stones stand on the trail and its NEXT chip
+// Elementals: on a Trial the walker wears its element's art (render/heroes.ts); the Nubs-only cues
+// follow health and the element's own state (the vignette, the sun's moods, the hot ring, the
+// sizzle, which becomes Ember's smoke); the relay's Tag Stones stand on the trail and its NEXT chip
 // counts the telegraph down under the dial.
 
 import {
@@ -56,7 +54,7 @@ import {
   type GroundPaint,
 } from './ground.ts';
 import { createHalo, createHaloIn, drawHalo, tagSoon, updateHalo, type HaloInput, type HaloState } from './halo.ts';
-import { drawNextChip, drawSkyBolt, drawTagStones, drawTether, heroArt } from './heroes.ts';
+import { drawNextChip, drawTagStones, heroArt } from './heroes.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,
@@ -312,10 +310,6 @@ export interface RenderScene {
   nubs: NubsAnim;
   pose: NubsPose;
   nubsSprite: NubsSprite;
-  /** Elementals: a duo's mate (springs, pose, sprite with its springs baked). */
-  mate: NubsAnim;
-  matePose: NubsPose;
-  mateSprite: NubsSprite;
   halo: HaloState;
   sun: SunGlyph;
   sunMood: SunMood;
@@ -393,9 +387,6 @@ export function createScene(): RenderScene {
     nubs: createNubsAnim(),
     pose: createPose(),
     nubsSprite: createNubsSprite(),
-    mate: createNubsAnim(),
-    matePose: createPose(),
-    mateSprite: Object.assign(createNubsSprite(), { baked: true }),
     halo: createHalo(),
     sun: createSunGlyph(),
     sunMood: 'smug',
@@ -536,7 +527,6 @@ export class Renderer {
     else for (let i = 0; i < 8; i++) g.restore();
     const sc = this.scene;
     sc.nubsSprite.key = Number.NaN;
-    sc.mateSprite.key = Number.NaN;
     sc.hud.layer = null;
     sc.hud.badgeKey = -1;
     sc.ground.meadow.T = 0;
@@ -668,11 +658,8 @@ export class Renderer {
     // Shake and zoom pulses run on real time (slow-mo doesn't stretch them); none under reduced motion.
     sc.cam.reducedMotion = inp.reducedMotion;
     updateCameraFx(sc.cam, adt);
-    // Elementals: a duo's camera, dial and pops follow the pair's midpoint.
     const trial = s.trial;
-    const mate = s.mate;
-    const midX = mate !== null ? (snap.nubsX + snap.mateX) / 2 : snap.nubsX;
-    setPlayCamera(v, sc.cam, midX, snap.nubsY);
+    setPlayCamera(v, sc.cam, snap.nubsX, snap.nubsY);
     const nubsSX = v.nx;
     const nubsSY = v.ny;
     if (inp.mapT >= 0 && inp.sheetTop !== null) {
@@ -698,17 +685,15 @@ export class Renderer {
     const udt = inp.paused ? 0 : adt;
     updatePops(sc.pops, udt);
     updateHud(sc.hud, udt);
-    // A Trial's cues read health (the lowest of a duo's two) where Nubs' read Chill.
-    const hp = trial ? healthOf(s.nubs, snap.chill) : 0;
-    const mateHp = mate !== null ? healthOf(mate, snap.mateChill) : 100;
-    const chillCue = trial ? Math.min(hp, mateHp) : snap.chill;
+    // A Trial's cues read health where Nubs' read Chill.
+    const hp = trial ? (100 * snap.chill) / s.nubs.maxChill : 0;
+    const chillCue = trial ? hp : snap.chill;
     updateBanners(sc.banners, udt, s.phase === 'day' && chillCue < 25 && dying < 0);
     // Nubs stands still through the start beat (the clock waits; the sun already moves).
     const walking = (s.phase === 'day' || s.phase === 'night') && s.ready === 0 && dying < 0;
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
-    if (mate !== null) updateNubsAnim(sc.mate, gdt, v.ox + snap.mateX * v.S, v.S, walking, s.params.v);
-    // The hot ring: Nubs in the sun; on a Trial a body out of its hero's safe set (Volt below 30 health: it always leaks).
-    const hot = trial ? (s.nubs.hero === 'volt' ? hp < 30 : !s.nubs.safe) || (mate !== null && !mate.safe) : s.nubs.f > 0;
+    // The hot ring: Nubs in the sun; on a Trial the walker not safe.
+    const hot = trial ? !s.nubs.safe : s.nubs.f > 0;
     updateHalo(sc.halo, udt, inp.dragging, chillCue, s.sun.dTheta, walking && sunUp && hot && inp.screen === 'play', inp.mech.deep && walking);
     sc.relief = Math.max(0, sc.relief - adt);
     sc.sunWorried = Math.max(0, sc.sunWorried - adt);
@@ -802,13 +787,9 @@ export class Renderer {
     pose.melt = dying;
     pose.shade = sc.pal.nubsShade;
     pose.reducedMotion = inp.reducedMotion;
-    // Elementals: which body fell (a duo's mate, when its hero is the one named), and each hero's state.
+    // Elementals: which element fell, and the walker's state.
     const who: HeroId = s.death?.who ?? s.nubs.hero;
-    const mateFell = mate !== null && who === mate.hero && who !== s.nubs.hero;
-    if (trial) {
-      heroPose(pose, s, s.nubs, hp, snap.chill, inp.highContrast);
-      if (mateFell) pose.melt = -1;
-    }
+    if (trial) heroPose(pose, s, s.nubs, hp, snap.chill, inp.highContrast);
     if ((inp.screen === 'title' || s.phase === 'hold') && sunUp) {
       // The Title sway is render-only and the sim is held, so read Nubs' shade at the swaying sun
       // from the guide's lit counts: he cools while the sun sits in the teal arc and warms outside
@@ -819,19 +800,6 @@ export class Renderer {
       pose.f = lit / 5;
     }
 
-    const mp = sc.matePose;
-    if (mate !== null) {
-      // The mate: the lead's look and light, its own place, samples and state (no footprint disc).
-      Object.assign(mp, pose);
-      mp.x = v.ox + snap.mateX * v.S;
-      mp.y = v.oy - snap.mateY * v.S;
-      mp.w0 = mate.w[0] as number;
-      heroPose(mp, s, mate, mateHp, snap.mateChill, inp.highContrast);
-      mp.melt = mateFell ? dying : -1;
-      sc.mate.lookX = sc.nubs.lookX;
-      sc.mate.lookY = sc.nubs.lookY;
-      drawOwnShadow(g, mp, sc.pal.shadow, sc.pal.shadowAlpha);
-    }
     drawOwnShadow(g, pose, sc.pal.shadow, sc.pal.shadowAlpha);
     drawFootprintDisc(g, pose, sc.pal.trail);
     if (glows) {
@@ -857,33 +825,13 @@ export class Renderer {
 
     // Depth-sorted objects, far (north) first, with Nubs inserted at his y.
     const looks = looksFor(inp.equipped);
-    // A trial's layers redraw at most 10 times a second, a duo's 5 each (§5.4: ≤ 12/s).
-    sc.nubsSprite.cap = trial ? (mate ? 0.2 : 0.1) : 0;
+    // A trial's layers redraw at most 10 times a second (≤ 12/s).
+    sc.nubsSprite.cap = trial ? 0.1 : 0;
     renderNubsSprite(sc.nubsSprite, pose, sc.nubs, looks, v.S * v.dpr, trial ? heroArt(s.nubs.hero) : null);
-    if (mate !== null) {
-      // Its layer redraws count with the lead's (perf().nubsLayerDraws).
-      const ms = sc.mateSprite;
-      ms.cap = 0.2;
-      const d0 = ms.layerDraws;
-      const c0 = ms.composes;
-      renderNubsSprite(ms, mp, sc.mate, looks, v.S * v.dpr, heroArt(mate.hero));
-      sc.nubsSprite.layerDraws += ms.layerDraws - d0;
-      sc.nubsSprite.composes += ms.composes - c0;
-      // The pair stands a little smaller so the two never overlap 22 u apart.
-      sc.nubsSprite.sx *= DUO_K;
-      sc.nubsSprite.sy *= DUO_K;
-      ms.sx *= DUO_K;
-      ms.sy *= DUO_K;
-    }
     const beat = sc.death;
-    if (dying >= 0 && beat.t < 0) startDeathBeat(beat, mateFell ? snap.mateX : snap.nubsX, snap.nubsY, ux, looks, v.S * v.dpr, trial ? who : 'nubs');
+    if (dying >= 0 && beat.t < 0) startDeathBeat(beat, snap.nubsX, snap.nubsY, ux, looks, v.S * v.dpr, trial ? who : 'nubs');
     else if (beat.t >= 0) beat.t += adt;
     nubsBox(pose.x, pose.y, v.S, box);
-    if (mate !== null) {
-      box[2] = mp.x + 19 * v.S;
-      // Harmony: a warm glow between the two, under them (none in high contrast).
-      if (s.harmony && dying < 0 && !inp.highContrast) drawTether(g, pose.x, mp.x, pose.y - 9 * v.S, v.S, inp.reducedMotion ? 0.9 : 0.8 + 0.2 * Math.sin(time * 5));
-    }
     let nubsDrawn = false;
     let occluded = false;
     // v1.5 buds (closed ones; a bloomed bud is its sunflower caster) join the depth sort.
@@ -891,7 +839,7 @@ export class Renderer {
       const c = casterBuf[i] as Caster;
       if (c.maxX < v.x0 - 40 || c.minX > v.x1 + 40) continue;
       if (!nubsDrawn && c.y < snap.nubsY) {
-        drawBodies(g, sc, mate !== null, v.dpr);
+        drawBodies(g, sc, v.dpr);
         nubsDrawn = true;
       }
       drawCaster(g, v, L, c);
@@ -904,11 +852,11 @@ export class Renderer {
         occluded = sx1 > (box[0] as number) && sx0 < (box[2] as number) && syBot > (box[1] as number) && syTop < (box[3] as number);
       }
     }
-    if (!nubsDrawn) drawBodies(g, sc, mate !== null, v.dpr);
+    if (!nubsDrawn) drawBodies(g, sc, v.dpr);
     else if (occluded) {
       // X-ray: Nubs stays readable through whatever stands in front of him.
       g.globalAlpha = 0.62;
-      drawBodies(g, sc, mate !== null, v.dpr);
+      drawBodies(g, sc, v.dpr);
       g.globalAlpha = 1;
     }
 
@@ -916,10 +864,9 @@ export class Renderer {
     if (this.options.decor) drawBunting(g, v, s.world, 1 - 0.6 * night);
     if (friend) drawFriendPennant(g, v, sc.friend[0] as number, sc.friend[1] as number, inp.challengeName);
     if (inp.screen !== 'title') {
-      // Nubs sizzles in the sun; Ember smokes out of the light; Volt's strike strikes from the sky.
+      // Nubs sizzles in the sun; Ember smokes out of the light.
       if (s.nubs.hero === 'nubs') drawSizzle(g, pose, time, s.nubs.glare > 0);
       else if (s.nubs.hero === 'ember' && !s.nubs.safe) drawSizzle(g, pose, time, false, true);
-      else if (s.nubs.hero === 'volt' && sc.nubs.zap > 0 && !inp.reducedMotion) drawSkyBolt(g, pose.x, v.vy, pose.y - 24 * v.S, time);
     }
     drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapCloud, ux, uy, snap.cot);
@@ -985,13 +932,13 @@ export class Renderer {
     if (showHalo) {
       const fade = dying >= 0 ? Math.max(0, 1 - dying / 0.3) : inp.screen === 'title' ? 0.75 : 1;
       const hi = sc.haloIn;
-      hi.cx = mate !== null ? (pose.x + mp.x) / 2 : pose.x;
+      hi.cx = pose.x;
       hi.cy = pose.y;
       hi.R = 40 * v.S;
       hi.theta = theta;
       hi.dragging = inp.dragging;
       hi.dTheta = s.sun.dTheta;
-      // A solo hero's gauge reads its health.
+      // An element's gauge reads its health.
       const heroGauge = trial !== null && s.nubs.hero !== 'nubs';
       hi.chill = heroGauge ? hp : snap.chill;
       hi.maxChill = heroGauge ? 100 : s.nubs.maxChill;
@@ -1026,7 +973,7 @@ export class Renderer {
     // R + 25 (their centres from R + 40), so a +5 never sits on the parry arc.
     const lift = inp.mech.flarePhase === 1 && inp.screen !== 'title' ? 10 * v.S + 40 : 0;
     sc.popLift += (lift - sc.popLift) * Math.min(1, adt * 12);
-    drawPops(g, sc.pops, v, hudScale(v), midX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion), sc.popLift, inp.highContrast);
+    drawPops(g, sc.pops, v, hudScale(v), snap.nubsX, snap.nubsY + hopLift(sc.nubs, inp.reducedMotion), sc.popLift, inp.highContrast);
 
     // Edge sun mascot (decoration), kept below the HUD band.
     if (inp.mapT < 0 && inp.screen !== 'title' && inp.screen !== 'menu') {
@@ -1082,29 +1029,19 @@ export class Renderer {
 }
 
 const mapOverlay: MapOverlay = { a: 0, labelA: 0, sheetTop: null, time: 0 };
-/** A duo's sprites' scale. */
-const DUO_K = 0.85;
-
-/** A body's health 0..100 at its (lerped) meter: Drip's 2·min(T, 100 − T), else the meter's share (core heroHealth). */
-function healthOf(nb: NubsState, meter: number): number {
-  return nb.hero === 'drip' ? 2 * Math.min(meter, 100 - meter) : (100 * meter) / nb.maxChill;
-}
-
-/** A Trial body's pose fields (render/heroes.ts reads them): health, lit sum, safe, meter, its timed ability, high contrast, how it fell. */
+/** A Trial walker's pose fields (render/heroes.ts reads them): health, lit sum, safe, meter, high contrast, how it fell. */
 function heroPose(p: NubsPose, s: SimState, nb: NubsState, hp: number, meter: number, hc: boolean): void {
   p.chill = Math.max(0, Math.min(1, hp / 100));
   p.c = nb.c;
   p.safe = nb.safe;
   p.meter = meter / 100;
-  p.power = (s.heroAbility === 'blaze' && nb.hero === 'ember') || (s.heroAbility === 'rain' && nb.hero === 'drip');
   p.hc = hc;
   p.cause = s.death?.heroCause ?? '';
 }
 
-/** Stamps the walking body, and a duo's mate beside it. */
-function drawBodies(g: CanvasRenderingContext2D, sc: RenderScene, duo: boolean, dpr: number): void {
+/** Stamps the walking body. */
+function drawBodies(g: CanvasRenderingContext2D, sc: RenderScene, dpr: number): void {
   drawNubsSprite(g, sc.nubsSprite, sc.pose.x, sc.pose.y, dpr);
-  if (duo) drawNubsSprite(g, sc.mateSprite, sc.matePose.x, sc.matePose.y, dpr);
 }
 const pickBuf: Pickup[] = [];
 

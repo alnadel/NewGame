@@ -26,19 +26,14 @@
 // edge (the sun's own flare cue) count down to the rise round the outside, the ring's hot glow
 // rests, and frost-rimmed teal marks the shade that holds through it, a run under 8° wearing a
 // target dot (the glass layer hides).
-// Elementals (docs/ELEMENTALS.md §1-§2, HaloInput.hero): on a Trial the arcs are the walking hero's
-// go arcs, drawn as the teal ones in its colour on an ink underlay, with its pattern (Ember amber with
-// outward ray ticks and gold dots on the glare it feeds on, and no red glare; Sprout lime in leaf
-// dashes; Volt yellow with bolt notches beside a grey hatched dead zone round its last strike; Drip
-// teal while it wants shade, dotted amber while it wants sun, pulsing; a narrow run wears a target
-// dot), and the gauge is frost-white like Nubs' (amber below 60, hot below 25, so the hero's colour
-// only ever means go; Drip's a two-ended thermometer, always shown). A duo draws each hero's own
-// arcs thin (the lead's inside the ring, the mate's outside), the band where both are happy in
-// white-gold with the lead's colour on its inner edge, and splits the gauge in two halves; a relay's
-// telegraph dashes the incoming hero's arcs outside.
-// Nubs walking alone keeps the teal dial.
+// Elementals (HaloInput.trial): on a Trial the arcs are the walking element's go arcs, drawn as the
+// teal ones in its colour on an ink underlay, with its pattern (Ember amber with outward ray ticks
+// and gold dots on the glare it feeds on, and no red glare; Sprout lime in leaf dashes; a narrow run
+// wears a target dot), and the gauge is frost-white like Nubs' (amber below 60, hot below 25, so the
+// element's colour only ever means go); a relay's telegraph dashes the incoming element's arcs
+// outside. Nubs keeps the teal dial.
 
-import { coolLine, heroHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
+import { coolLine, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';
 import { ghostSwipe } from '../game/assist.ts';
 import type { MechView } from './renderer.ts';
 import { cssa, hex } from './color.ts';
@@ -67,17 +62,13 @@ const FLARE = hex('#FF6A3D');
 const WHITE_HOT = hex('#FFF4D6');
 const GLASS_ICE = hex('#BFE6FF');
 const DASH = [4, 5];
-/** Elementals: each hero's go colour (Drip: teal cooling, amber warming), the duo's band, Volt's dead zone and Drip's thermometer (cold, steady, hot). */
-const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), sprout: hex('#8BD650'), volt: hex('#FFE14D'), drip: TEAL };
-const DRIP_WARM = hex('#FFB347');
-const BOTH = hex('#FFF2B0');
-const GREY = hex('#9AA0B4');
-const THERMO_COL = [hex('#5AB8FF'), hex('#6CC04A'), hex('#FF5D3D')];
+/** Elementals: each element's go colour. */
+const HERO_ARC: Readonly<Record<HeroId, number>> = { nubs: TEAL, ember: hex('#FF8A1F'), sprout: hex('#8BD650'), volt: TEAL, drip: TEAL };
 const LEAF_DASH = [8, 6];
 
-/** A hero's go colour (Drip's by side: `cool` wants shade). */
-export function heroArcColor(hero: HeroId, cool: boolean): number {
-  return hero === 'drip' && !cool ? DRIP_WARM : HERO_ARC[hero];
+/** An element's go colour. */
+export function heroArcColor(hero: HeroId): number {
+  return HERO_ARC[hero];
 }
 /** Round-capped dots 5 px apart (the glass arc's beads). */
 const BEADS = [0.1, 5];
@@ -151,16 +142,15 @@ export interface HaloInput {
   /** v1.6 layers (the MechView's deepBand, glass, land, flare and the flare's phase), null on the Title. */
   mech: MechView | null;
   /**
-   * Elementals: on a Trial its sim state (the dial reads the heroes, their masks guide.lead, .mate and
-   * .tag, Volt's last strike and Drip's side and T from it; a solo hero's gauge reads `chill` as its
-   * health 0..100), else null.
+   * Elementals: on a Trial its sim state (the dial reads the walking element and guide.tag from it;
+   * an element's gauge reads `chill` as its health 0..100), else null.
    */
   trial: SimState | null;
-  /** High contrast: a hero's patterns (rays, notches, beads, food dots, the dead-zone hatch) half as thick again. */
+  /** High contrast: an element's patterns (rays, food dots) half as thick again. */
   hc: boolean;
 }
 
-/** The incoming hero while a relay's TAG is telegraphed (TUNING.heroes.tagSoonTicks ahead), else null. */
+/** The incoming element while a relay's TAG is telegraphed (TUNING.heroes.tagSoonTicks ahead), else null. */
 export function tagSoon(s: SimState): HeroId | null {
   const n = nextTagTicks(s);
   return n >= 0 && n <= TUNING.heroes.tagSoonTicks ? nextTagHero(s) : null;
@@ -293,14 +283,12 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   const A = h.alpha * inp.fade;
   if (inp.fade <= 0.01) return;
   g.lineCap = 'butt';
-  // A Trial's own dial (Nubs walking alone keeps the teal one): its band colour and ink underlay.
+  // A Trial's own dial (Nubs keeps the teal one): its band colour and ink underlay.
   const st = inp.trial;
   const lead = st ? st.nubs.hero : 'nubs';
-  const mate = st?.mate?.hero;
-  const duo = mate !== undefined;
-  const hd = duo || lead !== 'nubs';
-  const solo = hd && !duo ? lead : null;
-  const col = duo ? BOTH : heroArcColor(lead, st ? st.dripCool : true);
+  const hd = lead !== 'nubs';
+  const solo = hd ? lead : null;
+  const col = HERO_ARC[lead];
   const under = hd ? 0.4 : 0;
   const tag = st ? tagSoon(st) : null;
 
@@ -322,7 +310,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     // During a flare's warning the glow rests (the countdown outside is the one hot thing to read).
     const k = inp.reducedMotion ? 0.6 : Math.max(0, Math.sin(h.beat * TAU)) ** 3;
     // Beside Ember's amber arcs the hot ring burns red.
-    const hot = lead === 'ember' || mate === 'ember' ? HOT_RED : HOT;
+    const hot = lead === 'ember' ? HOT_RED : HOT;
     if (inp.mech?.flarePhase !== 1) {
       g.lineWidth = 12 + 6 * k;
       g.strokeStyle = cssa(hot, (0.14 + 0.2 * k) * heat);
@@ -344,8 +332,8 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 
   if (inp.sunUp && !inp.blind) {
-    // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now); Drip's pulse slowly.
-    const ga = inp.guideAlpha * A * (solo === 'drip' && !inp.reducedMotion ? 0.875 + 0.125 * Math.sin(inp.time * TAU * 0.8) : 1);
+    // Shade arcs by how long the shade lasts (in fog the dial only knows the shade it has now).
+    const ga = inp.guideAlpha * A;
     // The v1.6 rule layers (landing, deep band) read a rule, not the teal guide: like the other v1.6
     // rims they stay at max(0.7, A) when Guide Auto has faded the teal away.
     const va = Math.max(0.7, A) * inp.fade;
@@ -377,11 +365,6 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.stroke();
     } else {
       const kind = ga > 0.01 ? splitShade(inp.now, inp.hideNext ? inp.now : inp.next, split) : 'none';
-      if (duo && ga > 0.01) {
-        // A duo: each hero's own arcs, thin, the lead's inside the ring and the mate's outside.
-        thin(g, inp, (st as SimState).guide.lead, R - 3, HERO_ARC[lead], ga);
-        thin(g, inp, (st as SimState).guide.mate, R + 5, HERO_ARC[mate], ga);
-      }
       if (ga > 0.01) {
         g.setLineDash(DASH);
         g.lineWidth = 2;
@@ -405,16 +388,15 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
           g.beginPath();
           arcRuns(g, split.lasting, cx, cy, R, 1);
           band(g, 8, cssa(col, 0.95 * ga), under * ga, solo === 'sprout');
-          // The white inner edge: "go here" (a duo's in the lead's colour, Sprout's lime keeps its dashed run whole).
-          g.lineWidth = solo === 'sprout' || duo ? 2 : 1;
-          g.strokeStyle = cssa(duo ? HERO_ARC[lead] : solo === 'sprout' ? col : 0xffffff, 0.85 * ga);
+          // The white inner edge: "go here" (Sprout's lime keeps its dashed run whole).
+          g.lineWidth = solo === 'sprout' ? 2 : 1;
+          g.strokeStyle = cssa(solo === 'sprout' ? col : 0xffffff, 0.85 * ga);
           g.beginPath();
           arcRuns(g, split.lasting, cx, cy, R - 4.5, 1);
           g.stroke();
         }
         if (solo && kind !== 'none') marks(g, inp, solo, kind === 'lasting' ? split.lasting : inp.now, col, ga);
       }
-      if (solo === 'volt' && (st as SimState).voltTheta >= 0) deadZone(g, inp, (st as SimState).voltTheta, Math.max(0.7, ga));
       const deepBand = inp.mech?.deepBand;
       if (deepBand) {
         // v1.6 deep shade: a darker band inside the teal, only where it is at least 3° wide; with the
@@ -446,7 +428,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
   if (inp.sunUp && tag && !inp.blind) {
-    // A relay's telegraph: the incoming hero's arcs, dashed just outside the ring.
+    // A relay's telegraph: the incoming element's arcs, dashed just outside the ring.
     g.setLineDash(DASH);
     g.lineWidth = 3;
     g.strokeStyle = cssa(HERO_ARC[tag], Math.max(0.7, A));
@@ -556,8 +538,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   // (a snap there pours nothing). A full tank hides it, a ration level's half tank too.
   const chill = Math.max(0, Math.min(100, inp.chill));
   const scorch = inp.mech ? inp.mech.scorch : 0;
-  if (duo || solo === 'drip') heroGauge(g, inp, st as SimState, Math.max(A, 0.9));
-  else if (chill < Math.min(100, inp.maxChill) - 1 || scorch > 0) {
+  if (chill < Math.min(100, inp.maxChill) - 1 || scorch > 0) {
     const gR = R - 8;
     const gA = Math.max(A, 0.9);
     const top = -Math.PI / 2;
@@ -578,7 +559,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.lineWidth = 1.5;
     g.strokeStyle = cssa(INK, 0.45 * gA);
     g.beginPath();
-    // A hero's gauge turns at 60 and 25 health.
+    // An element's gauge turns at 60 and 25 health.
     const wl = hd ? 60 : whiteLine(inp.maxChill);
     const cl = hd ? 25 : coolLine(inp.maxChill);
     for (const line of [wl, cl]) {
@@ -600,7 +581,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
       g.lineWidth = 3;
       if (red) g.setLineDash([4, 3]);
       const pulse = red ? 0.7 + 0.3 * Math.sin(inp.time * TAU * 1.1) : 1;
-      // A hero's gauge is frost-white like Nubs' when full: the hero's colour means only "go".
+      // An element's gauge is frost-white like Nubs' when full: its colour means only "go".
       g.strokeStyle = cssa(red ? HOT : white ? FROST : AMBER, gA * pulse);
       g.beginPath();
       g.arc(cx, cy, gR, top, end);
@@ -699,7 +680,7 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
   }
 }
 
-/** Strokes the current path `w` wide in `c` (a hero's band: on an ink underlay of alpha `under`, Sprout's in leaf dashes). */
+/** Strokes the current path `w` wide in `c` (an element's band: on an ink underlay of alpha `under`, Sprout's in leaf dashes). */
 function band(g: CanvasRenderingContext2D, w: number, c: string, under: number, dash: boolean): void {
   if (under > 0) {
     g.lineWidth = w + 3;
@@ -716,16 +697,7 @@ function band(g: CanvasRenderingContext2D, w: number, c: string, under: number, 
   g.setLineDash(NO_DASH);
 }
 
-/** A duo hero's own arcs, thin, at radius r. */
-function thin(g: CanvasRenderingContext2D, inp: HaloInput, mask: Uint8Array, r: number, c: number, a: number): void {
-  g.lineWidth = 2.5;
-  g.strokeStyle = cssa(c, 0.9 * a);
-  g.beginPath();
-  arcRuns(g, mask, inp.cx, inp.cy, r, 0.5);
-  g.stroke();
-}
-
-/** Adds a ring point at angle `a` (°), radius r, offset (u, t) radially and tangentially: a dot, a tick end, a bolt corner. */
+/** Adds a ring point at angle `a` (°), radius r: a dot or a tick end. */
 function at(g: CanvasRenderingContext2D, inp: HaloInput, a: number, r: number, line: boolean): void {
   const x = inp.cx + Math.cos(-a * DEG) * r;
   const y = inp.cy + Math.sin(-a * DEG) * r;
@@ -734,45 +706,26 @@ function at(g: CanvasRenderingContext2D, inp: HaloInput, a: number, r: number, l
 }
 
 /**
- * A solo hero's pattern on its go arcs `m` (see the header): Ember's ray ticks every 6° and gold food
- * dots, Volt's bolt notches, Drip's warm dots, and a target dot on every run under 8°.
+ * An element's pattern on its go arcs `m` (see the header): Ember's ray ticks every 6° and gold food
+ * dots, and a target dot on every run under 8°.
  */
 function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uint8Array, col: number, a: number): void {
   const R = inp.R;
   const n = runs(m);
   const T = inp.hc ? 1.5 : 1;
-  if (hero === 'ember' || hero === 'volt') {
+  if (hero === 'ember') {
     g.beginPath();
     for (let i = 0; i < n; i++) {
       const b0 = runBuf[2 * i] as number;
       const b1 = runBuf[2 * i + 1] as number;
-      const mid = (b0 + b1) / 2;
-      if (hero === 'volt') {
-        // A bolt across the band: in from outside, a step back, on in.
-        at(g, inp, mid - 1.5, R + 5, false);
-        at(g, inp, mid + 1, R + 0.5, true);
-        at(g, inp, mid - 1, R - 0.5, true);
-        at(g, inp, mid + 1.5, R - 5, true);
-      } else {
-        for (let b = b0 + 3; b < b1 - 1; b += 6) {
-          at(g, inp, b, R + 5, false);
-          at(g, inp, b, R + 10, true);
-        }
+      for (let b = b0 + 3; b < b1 - 1; b += 6) {
+        at(g, inp, b, R + 5, false);
+        at(g, inp, b, R + 10, true);
       }
     }
     g.lineWidth = 2 * T;
-    g.strokeStyle = cssa(hero === 'volt' ? INK : col, a);
+    g.strokeStyle = cssa(col, a);
     g.stroke();
-  }
-  if (col === DRIP_WARM) {
-    // Drip warming: white beads along the band.
-    g.setLineDash(BEADS);
-    g.lineWidth = 3 * T;
-    g.strokeStyle = cssa(0xffffff, a);
-    g.beginPath();
-    arcRuns(g, m, inp.cx, inp.cy, R, 2);
-    g.stroke();
-    g.setLineDash(NO_DASH);
   }
   // Dots (round caps on points): Ember's food, the glare that is also safe, gold outside its rays...
   let k = 0;
@@ -789,7 +742,7 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
     g.strokeStyle = cssa(GOLD_FOOD, a);
     g.stroke();
   }
-  // ...and a narrow run (Sprout's edges) is a target, not a sliver: a white dot ringed in the hero's colour.
+  // ...and a narrow run is a target, not a sliver: a white dot ringed in the element's colour.
   k = 0;
   g.beginPath();
   for (let i = 0; i < n; i++) {
@@ -811,87 +764,6 @@ function marks(g: CanvasRenderingContext2D, inp: HaloInput, hero: HeroId, m: Uin
   }
 }
 const GOLD_FOOD = hex('#FFD84A');
-
-/** Volt's dead zone: ±40° round its last strike as a grey band hatched across, with a bolt marker at the strike. */
-function deadZone(g: CanvasRenderingContext2D, inp: HaloInput, t: number, a: number): void {
-  const R = inp.R;
-  g.lineWidth = 7;
-  g.strokeStyle = cssa(GREY, 0.4 * a);
-  g.beginPath();
-  arcPath(g, inp.cx, inp.cy, R, t - 40, t + 40);
-  g.stroke();
-  g.beginPath();
-  for (let b = t - 38; b < t + 38; b += 6) {
-    at(g, inp, b, R - 4, false);
-    at(g, inp, b + 4, R + 4, true);
-  }
-  // The marker: a bolt standing out of the ring at the strike.
-  at(g, inp, t + 3, R + 20, false);
-  at(g, inp, t - 2, R + 13, true);
-  at(g, inp, t + 2, R + 12, true);
-  at(g, inp, t - 3, R + 5, true);
-  g.lineWidth = inp.hc ? 3 : 2;
-  g.strokeStyle = cssa(GREY, a);
-  g.stroke();
-}
-
-/**
- * A duo's gauge (two halves filling up from the bottom: the lead's left, the mate's right) or Drip's
- * two-ended thermometer (cold blue, a calm green band 30-70, hot red; the needle at T, notches at
- * the Steady band), always shown.
- */
-function heroGauge(g: CanvasRenderingContext2D, inp: HaloInput, st: SimState, gA: number): void {
-  const { cx, cy } = inp;
-  const gR = inp.R - 8;
-  const p2 = Math.PI / 2;
-  const m = st.mate;
-  g.lineCap = 'round';
-  g.lineWidth = 5;
-  g.strokeStyle = cssa(INK, 0.3 * gA);
-  g.beginPath();
-  g.arc(cx, cy, gR, m ? 0 : 0.75 * Math.PI, m ? TAU : 2.25 * Math.PI);
-  g.stroke();
-  g.lineWidth = 3;
-  if (m) {
-    for (let s = 0; s < 2; s++) {
-      const nb = s ? m : st.nubs;
-      const hp = Math.max(0, Math.min(100, heroHealth(nb)));
-      g.strokeStyle = cssa(hp < 25 ? HOT : hp < 60 ? AMBER : HERO_ARC[nb.hero], gA);
-      g.beginPath();
-      g.arc(cx, cy, gR, p2 + (s ? -0.1 : 0.1), p2 + (s ? -0.1 - 3 * hp / 100 : 0.1 + 3 * hp / 100), s > 0);
-      g.stroke();
-    }
-  } else {
-    // T 0..100 across 270° from the bottom left; the needle a white dot.
-    for (let i = 0; i < 3; i++) {
-      g.strokeStyle = cssa(THERMO_COL[i] as number, gA);
-      g.beginPath();
-      g.arc(cx, cy, gR, 0.75 * Math.PI + 0.0471 * THERMO[i]!, 0.75 * Math.PI + 0.0471 * THERMO[i + 1]!);
-      g.stroke();
-    }
-    // Notches at the Steady band, then the needle: a white dot ringed in ink at T.
-    const sT = (st.trial?.steady ?? 0) / 2;
-    g.beginPath();
-    for (let i = 0; i < 2 && sT > 0; i++) {
-      at(g, inp, -135 - 2.7 * (i ? 100 - sT : sT), gR + 5, false);
-      at(g, inp, -135 - 2.7 * (i ? 100 - sT : sT), gR - 5, true);
-    }
-    g.lineWidth = 1.5;
-    g.strokeStyle = cssa(INK, gA);
-    g.stroke();
-    const T = -135 - 2.7 * Math.max(0, Math.min(100, st.nubs.chill));
-    g.beginPath();
-    at(g, inp, T, gR, false);
-    at(g, inp, T, gR, true);
-    g.lineWidth = 9;
-    g.stroke();
-    g.lineWidth = 6;
-    g.strokeStyle = '#FFFFFF';
-    g.stroke();
-  }
-  g.lineCap = 'butt';
-}
-const THERMO = [0, 30, 70, 100];
 
 /**
  * The glass rim (px outside R): clear of the bud glow at R + 11, 6 px outside the drag arrow at

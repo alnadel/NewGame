@@ -247,25 +247,13 @@ export class SfxRouter {
         return this.cue('parry', { day });
       case 'flareMiss':
         return this.cue('glare');
-      // Elementals (docs/ELEMENTALS.md §4.9). A THUNDERCLAP sounds through its strike event.
-      case 'ability':
-        if (ev.kind !== 'thunder') this.cue(ev.kind, { day });
-        return;
-      case 'strike':
-        // One pentatonic degree up per chain step: a ×5 chain plays a melody.
-        return this.cue('strike', { day, degree: 1 + Math.min(5, ev.chain), gain: ev.thunder ? 1.5 : 1 });
-      case 'abilityEnd':
-        return this.cue('snapEnd', { day });
+      // Elementals: a relay's TAG.
       case 'tagSoon':
         return this.cue('detent', { index: 0, gain: 0.7 });
       case 'tag':
         return this.cue('tag', { day });
       case 'tagClean':
         return this.cue('phew', { day });
-      case 'heroPickup':
-        // The flake's bell rings from its own event; Ember hisses (a low snapEnd).
-        if (ev.hero === 'ember') this.cue('snapEnd', { day, level: 2 });
-        return;
       case 'start':
       case 'go':
       case 'shadeExit':

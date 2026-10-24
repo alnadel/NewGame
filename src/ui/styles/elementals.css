@@ -2,11 +2,7 @@
    recipes: the Wardrobe's stage and its tile grid (the Trials), the Title tray's squares (the heroes,
    made round), the kit's nodes, tags and lock badges; only what differs lives here. */
 
-/* The stage: a duo's two heroes side by side in one spotlight; the rule chips and Play across it. */
-.stage-spot.is-duo { grid-auto-flow: column; padding: 0 8px; border-radius: 48px; }
-
-.stage-spot.is-duo .preview-canvas { width: 72px; height: 72px; }
-
+/* The stage: the rule chips and Play across it. */
 .el-rules {
   grid-column: 1 / -1;
   display: flex;

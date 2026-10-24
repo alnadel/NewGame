@@ -9,13 +9,11 @@
 // frost gains pop beside Nubs ("+0.3", the run's first "+0.3 snap"), a spill shakes the meter, a
 // cash-in pours from the badge into it; LANDING!, GLASS SAVED!, the PARRY! stamp, a flare's miss,
 // a Dare met (DARE ✓); the Day card names the day's Noon Heat when it rises.
-// Elementals (docs/ELEMENTALS.md §4.9): the abilities (BLAZE! stamp, a sown sunflower popping up,
-// THUNDERCLAP!, CLOUDBURST!), Volt's strikes (a sky bolt, sparks and the chain's "x3!"), the TAG!
-// stamp in the incoming hero's face with a hop and 0.3 s of slow-mo, CLEAN!, a hero's fall. The
-// snowman's steam, sweat, breath and frost stay his: a hero's states show in its art (the per-hero
-// ambient emitters were cut for the bundle budget, §5.3).
+// Elementals: the TAG! stamp in the incoming element's face with a hop and 0.3 s of slow-mo,
+// CLEAN!, an element's fall. The snowman's steam, sweat, breath and frost stay his: an element's
+// states show in its art.
 
-import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, queryCasters, SEED_ID_BASE, worldPlan, type Caster, type SimEvent, type SimState } from '../core/index.ts';
+import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -46,13 +44,12 @@ import {
   POP_MULT,
   POP_PHEW,
   POP_SNAP,
-  POP_STRIKE,
   POP_SWING,
   spawn,
 } from '../render/particles.ts';
 import { flashDetent, heroArcColor, SWING_ARC_S } from '../render/halo.ts';
 import { POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
-import { hop, resetNubsAnim } from '../render/nubs.ts';
+import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { FaceName } from '../render/candy.ts';
 import type { MechView, RenderScene } from '../render/renderer.ts';
@@ -80,10 +77,6 @@ const SNOWFALL_S = 1.3;
 const CONFETTI: readonly number[] = [0xff5d5d, 0xffc23d, 0x2ec4b6, 0x5ab8ff, 0x9b5de5, 0xff9eb0, 0xffffff];
 const PETALS: readonly number[] = [0xffd6e0, 0xffe8c2, 0xfff4dc, 0xffb3c6, 0xffc9a3];
 const LEAVES: readonly number[] = [0x7cb342, 0x9ccc65, 0xc0ca33, 0xf9a825, 0x8bc34a];
-const STRIKE_TEXT: readonly string[] = ['', 'x1!', 'x2!', 'x3!', 'x4!', 'x5!'];
-/** The abilities' headline, its pop style and ring colour (BLAZE! is a stamp). */
-const ABILITY = { blaze: ['', 0, 0xff8a1f], seed: ['SEED!', POP_MULT, SUN_GOLD], thunder: ['THUNDERCLAP!', POP_STRIKE, 0xffe14d], rain: ['CLOUDBURST!', POP_DEEP, ICE] } as const;
-const seedBuf: Caster[] = [];
 
 /** Live particles of one kind. */
 function countKind(p: { cap: number; kind: Uint8Array; life: Float32Array }, kind: number): number {
@@ -138,7 +131,6 @@ export class Fx {
     this.snowAcc = 0;
     this.deepT = -1e9;
     this.trickSeen = this.gainSeen = false;
-    resetNubsAnim(this.sc.mate);
     resetBlooms();
   }
 
@@ -172,7 +164,6 @@ export class Fx {
           // GO! high over his head (clear of the first runs' cue pill) and a hop as he sets off.
           addHeadline(sc.pops, 'GO!', POP_GO, 0.7, 1);
           hop(sc.nubs, 5);
-          hop(sc.mate, 5);
           break;
         }
         case 'flake': {
@@ -404,8 +395,7 @@ export class Fx {
           // A fallen Elemental leaves no meltwater: a puff in its colour (its art shows the rest).
           const who = ev.info.who;
           if (who && who !== 'nubs') {
-            // At the body that fell (a duo's mate stands 22 u off the lead).
-            this.burst(ev.info.x, ev.info.y, 10, 14, 60, heroArcColor(who, true));
+            this.burst(ev.info.x, ev.info.y, 10, 14, 60, heroArcColor(who));
             break;
           }
           for (let i = 0; i < 14; i++) {
@@ -416,42 +406,10 @@ export class Fx {
           }
           break;
         }
-        // Elementals (docs/ELEMENTALS.md §4.9).
-        case 'ability': {
-          const [text, style, ring] = ABILITY[ev.kind];
-          if (text) addHeadline(sc.pops, text, style, 1);
-          else this.stamp('blaze', 'BLAZE!', 0.6);
-          // At the caster: a duo's mate when the ability is its hero's (T7's Sprout).
-          const m = s.mate !== null && s.mate.hero === ev.hero ? s.mate : null;
-          const ax = m ? m.x : nx;
-          const ay = m ? m.y : ny;
-          addRing(sc.rings, ax, ay, 6, 64, 0.5, 3.5, 0.95, ring);
-          this.burst(ax, ay, 20, 16, 110, ring);
-          const anim = m ? sc.mate : sc.nubs;
-          hop(anim, 6);
-          anim.happy = 0.9;
-          this.clock.addHitStop(0.04);
-          // A SEED: its sunflower springs up where it was sown (render/flora.ts pops it).
-          const id = SEED_ID_BASE + (s.stats.seeds ?? 1) - 1;
-          const n = ev.kind === 'seed' && !this.reducedMotion ? queryCasters(s.world, ny - 20, ny + 220, seedBuf) : 0;
-          for (let i = 0; i < n; i++) if ((seedBuf[i] as Caster).id === id) registerBloom((seedBuf[i] as Caster).x, (seedBuf[i] as Caster).y, sc.worldTime);
-          break;
-        }
-        case 'abilityEnd':
-          this.burst(nx, ny, 20, 6, 50, 0xffffff);
-          break;
-        case 'strike':
-          // The sky bolt and the flash (render/heroes.ts), sparks, the chain's "x3!" and a hop.
-          sc.nubs.zap = 0.05;
-          this.burst(nx, ny, 24, 10 + 2 * ev.chain, 100, 0xffe14d);
-          if (ev.chain >= 2) addPop(sc.pops, STRIKE_TEXT[Math.min(5, ev.chain)] as string, POP_STRIKE, 0, 240, 0.8);
-          sc.nubs.happy = Math.max(sc.nubs.happy, 0.4);
-          hop(sc.nubs, ev.chain >= 3 ? 5 : 3);
-          addShake(sc.cam, 1 + 0.5 * ev.chain, 0.1);
-          break;
+        // Elementals.
         case 'tag': {
-          // TAG!: the incoming hero's stamp, a hop, a ring and sparks in its colour, 0.3 s of slow-mo.
-          const c = heroArcColor(ev.to, true);
+          // TAG!: the incoming element's stamp, a hop, a ring and sparks in its colour, 0.3 s of slow-mo.
+          const c = heroArcColor(ev.to);
           this.stamp('tag', 'TAG!', 0.7, HEROES[ev.to].face);
           hop(sc.nubs, 8);
           sc.nubs.happy = 0.9;
@@ -547,7 +505,6 @@ export class Fx {
       sc.banners.stampStars = stars;
       this.confetti(64);
       hop(sc.nubs, 9);
-      hop(sc.mate, 9);
       sc.nubs.happy = 1;
       addZoomPulse(sc.cam, 0.06, 0.5);
       this.clock.addHitStop(0.06);

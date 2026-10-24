@@ -29,7 +29,7 @@ import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
-import { abilityBody, abilityHero, heroHealth, tagLocked } from './heroes.ts';
+import { heroHealth, tagLocked } from './heroes.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
@@ -181,7 +181,7 @@ function remember(r: GuideRing, s: SimState): void {
   (r.next[h] as Uint8Array).set(s.guide.next);
   (r.lit[h] as Uint8Array).set(s.guide.lit);
   r.ticks[h] = s.guide.tick;
-  r.nubsLit[h] = s.trial !== null ? (s.nubs.safe && (s.mate === null || s.mate.safe) ? 0 : 1) : s.nubs.f > 0 ? 1 : 0;
+  r.nubsLit[h] = s.trial !== null ? (s.nubs.safe ? 0 : 1) : s.nubs.f > 0 ? 1 : 0;
   r.head = (h + 1) % RING;
 }
 
@@ -222,34 +222,23 @@ function noviceBot(): Bot {
 
 /**
  * True when a Cold Snap can be cast this tick (the meter is full, none is on, the sun is up). On an
- * Elementals Trial the snap bit casts the ability hero's power: also no timed ability on and no TAG
- * within the lock (heroes.ts castHero).
+ * Elementals Trial only Nubs casts it, and no TAG may be within the lock.
  */
 function snapReady(s: SimState): boolean {
-  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0 && (s.trial === null || (s.heroAbility === null && !tagLocked(s)));
+  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0 && (s.trial === null || (s.nubs.hero === 'nubs' && !tagLocked(s)));
 }
 
 /** The reactive bot's aim error on a Trial with a salt > 0 (σ, degrees). */
 const SALT_AIM_DEG = 4;
 
-/** A duo's Cold Snap smothers the partner too: the bots cast it only while the partner's health is at least this. */
-const SNAP_SPARE = 60;
-
-/**
- * The panic rule's "in the sun": Nubs lit; on a Trial the ability hero's body outside its safe set
- * (a duo's Cold Snap only while the partner can spare SNAP_SPARE health).
- */
+/** The panic rule's "in the sun": Nubs lit; on a Trial the walker not safe. */
 function exposed(s: SimState): boolean {
-  if (s.trial === null) return s.nubs.f > 0;
-  const b = abilityBody(s);
-  const m = s.mate;
-  if (m !== null && abilityHero(s) === 'nubs' && heroHealth(b === m ? s.nubs : m) < SNAP_SPARE) return false;
-  return !b.safe;
+  return s.trial === null ? s.nubs.f > 0 : !s.nubs.safe;
 }
 
-/** The panic rule's gauge: Nubs' Chill; on a Trial the ability hero's health. */
+/** The panic rule's gauge: Nubs' Chill; on a Trial the walker's health. */
 function gauge(s: SimState): number {
-  return s.trial === null ? s.nubs.chill : heroHealth(abilityBody(s));
+  return s.trial === null ? s.nubs.chill : heroHealth(s.nubs);
 }
 
 function reactiveBot(ctx: BotHookCtx): Bot {

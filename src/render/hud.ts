@@ -45,7 +45,6 @@
 
 import type { MechView } from './renderer.ts';
 import {
-  abilityHero,
   dayStartTick,
   dayTicks,
   FLARE_KEPT,
@@ -56,7 +55,6 @@ import {
   levelShort,
   minutesOfDay,
   tagLocked,
-  TUNING,
   worldYAtTick,
   type Flare,
   type ForecastId,
@@ -780,11 +778,9 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const k = hudScale(v);
   const n = m.pips > 1 ? 2 : 1;
   const st = inp.s;
-  const hero: HeroId = st.trial !== null ? abilityHero(st) : 'nubs';
+  const hero: HeroId = st.nubs.hero;
   const locked = st.trial !== null && tagLocked(st);
-  // A hero's timed ability drains the ring as a snap does.
-  const timed = st.trial !== null && st.heroAbility !== null ? st.heroTicks / (st.heroAbility === 'blaze' ? TUNING.heroes.ember.blazeTicks : TUNING.heroes.drip.rainTicks) : 0;
-  const snapLeft = Math.max(m.snapLeft, timed);
+  const snapLeft = m.snapLeft;
   const r = METER_R * k;
   const x = (h.meterX = v.vx + v.vw - v.safe.right - METER_SIDE * k - r);
   const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - r;
