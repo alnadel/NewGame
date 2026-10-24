@@ -58,10 +58,16 @@ const SAP_GAP = 10;
  * still prints its row (marked "waived") and no longer fails --check.
  */
 export const WAIVERS: Readonly<Record<string, string>> = {
+  // Measured on the pin: 23 of 24 G3/G4 runs burn all 7 (96%): humanEl taps each wall it sees in its
+  // sweet window, so every finisher burns every wall, and 7 is every burnable (no +25% target exists).
+  'T1 G6': 'every finisher burns every wall (96% of G3/G4 runs meet burns ≥ 7)',
   // Measured on the pin: 21 of 24 G3/G4 runs drink all 7 (88%). Every puddle sits within ±22 u, Drip
   // reaches ±32 u at 220 u/s, and G0 keeps the lane ≥ ±12 u, so a puddle cannot be made missable
   // inside the dx ±8 u lever; the target is already at its +25% bound (6 → 7).
   'T2 G6': 'every finisher drinks every puddle (88% of G3/G4 runs meet drinks ≥ 7)',
+  // Measured on the pin: 20 of 24 runs ride ≥ 75 ticks (83%); the target is at its +25% bound and the
+  // cloud's 119 u footprint gives every rider up to 102 ticks once Gust pushes it over the trail.
+  'T4 G6': 'every finisher rides the pushed cloud (83% of G3/G4 runs meet cloudRide ≥ 75)',
 };
 const WAIVABLE: readonly number[] = [3, 4, 6, 7];
 

@@ -150,12 +150,13 @@ function trial(
  * TUNING.elements first (tuning.ts).
  */
 export const TRIALS: readonly TrialDef[] = Object.freeze([
-  // T1 pin: salt 193; drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 70 and costMul 1.2 (each
-  // lever set easier than this one was too easy: G5/G5b). Measured: G1 78/70/83, G2 low 70, G3 8/8, G4 14/16 (88%), G5c on sight
-  // 11 vs 69, G5b best θ330 dies at 23%, G6 burns ≥ 7 33%.
+  // T1 pin: salt 468 (the G5b scan: salts whose sun cannot stay fixed, then humanEl in its band);
+  // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60 and costMul 1.2 (each easier set was too easy:
+  // G5/G5b, humanEl above 95%). Measured: G1 82/60/83, G2 low 60, G3 8/8, G4 15/16 (94%), G5c on
+  // sight 8 vs 59, G5b best θ240 dies at 23%, G6 burns ≥ 7 96% (WAIVERS: every finisher burns them all).
   trial(1, 'Kindling', 7, 'meadow', 240, 400, 34, 0, [[340, 'ember'], [556, 'nubs']], 'ember',
     'b376 b405 t434 g448 b477 g506 b535 i580', ['burns', 7], 30, [],
-    'Tap each wall just before Ember gets there. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls', '', 193, { legStart: [80, 70, 80], costMul: 1.2 }),
+    'Tap each wall just before Ember gets there. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls', '', 468, { legStart: [80, 60, 80], costMul: 1.2 }),
   // T2 pin: salt 187; drain 26 → 28; Drip 70 → 50 and evapMul 1.2 (G5b: the held sun at a constant
   // angle walked Drip's leg), Nubs' closing leg 100 → 80; Dare 6 → 7 (+17%; G6 above its band).
   // Measured: G1 100/28/74 (Drip marks: chosen 45° 50, worst 310° 28), G2 low 49 (worst bin 37), G3
@@ -173,9 +174,10 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
     'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3584, { legStart: [80, 80, 80] }),
   // T4 pin: salt 605 (from a scan of salts on Nubs' opening leg: 0..199 held none that a constant
   // sun angle could not walk with a ±20 Nubs lever); drain 28 → 34 and Nubs' legs 100 → 80 (too
-  // easy); Dare 60 → 75 ticks (+25%; G6 75% at 60). Gust 80 → 90 lets the east/30 spam Gust
-  // through (G5d). Measured: G1 82/bots/83, G2 low 80, G3 8/8, G4 12/16 (75%), G5d every spam Gust
-  // grounded in Gust's leg, G5b best θ290 dies at 24%, G6 cloudRide ≥ 75 58%.
+  // easy); Dare 60 → 75 ticks (+25%, its bound; G6 above its band). Gust 80 → 90 lets the east/30
+  // spam Gust through (G5d). Measured: G1 82/bots/83, G2 low 80, G3 8/8, G4 12/16 (75%), G5d every
+  // spam Gust grounded in Gust's leg, G5b best θ290 dies at 24%, G6 cloudRide ≥ 75 83% (WAIVERS:
+  // every finisher's Gust brings the ride cloud on).
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
     'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 75], 30, [],
     "Swipe to blow rain and fog off Gust's path. Each swipe costs Lift.", 'Rain ride 1.25 s', 'Ride a rain cloud 1.25 s', '', 605, { legStart: [80, 80, 80] }),
