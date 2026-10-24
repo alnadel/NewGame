@@ -173,3 +173,17 @@ describe('a trial loads and walks', () => {
     expect(s.stats.cleanTags).toBeUndefined();
   });
 });
+
+describe('every pinned trial passes G0, G1, G2 and G5 (§6.4, §9.6)', () => {
+  it('placement and authoring, the audits, the path bot, the anti-trivial runs', async () => {
+    const { gates, report, runHere } = await import('../../scripts/sim16/trials.ts');
+    const fails: string[] = [];
+    for (const t of TRIALS) {
+      // G5 without G5b's 36 constant angles (`--trials --check` runs those); no G3/G4/G6/G7 bots.
+      const g = await gates(runHere, { id: t.id, salt: t.salt }, 0, false, [0, 5]);
+      const bad = [g.g0?.ok, g.g1?.ok, g.g2?.ok, g.g5?.ok].some((ok) => ok !== true);
+      if (bad) fails.push(report(g));
+    }
+    expect(fails).toEqual([]);
+  }, 60_000);
+});

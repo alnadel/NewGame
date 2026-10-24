@@ -441,20 +441,24 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       lateSwipe = 0;
       return;
     }
-    if (el.legTick % 6 !== 0 || s.tick - lastSwipe < SWIPE_EVERY || s.nubs.chill <= SWIPE_LIFT) return;
+    if (el.legTick % 6 !== 0 || s.tick - lastSwipe < SWIPE_EVERY) return;
+    // Lift kept back: SWIPE_LIFT while weather of Gust's own stretch can still soak it, else only
+    // the swipe's cost (the hand-off pushes may spend the rest of the leg's Lift).
+    const cost = G.swipe * (s.trial?.tune.costMul ?? 1);
+    if (s.nubs.chill <= (ownAhead(s, el) ? SWIPE_LIFT : cost + SWIPE_GAIN)) return;
     const now = harm(s, el, 0);
     const kick = G.kick * (inWeather(el, 'fog', s.nubs.x, s.nubs.y) ? G.fogMuffle : 1);
     // §6.3's T4 rule, for every helpful rain of a later stretch (T4's ride cloud, T6's and T7's
     // garden clouds): push it over the trail, unless that swipe adds more harm than it costs (the
     // others still ahead).
-    // A ride swipe waits until windMax would not clip its kick.
+    // A ride swipe waits while windMax would clip more than half its kick.
     let dir = rideDir(s, el);
-    if (dir !== 0 && dir * el.wind <= G.windMax - kick && harm(s, el, dir * kick) <= now + G.swipe) return swipe(s, f, dir);
+    if (dir !== 0 && dir * el.wind <= G.windMax - kick / 2 && harm(s, el, dir * kick) <= now + G.swipe) return swipe(s, f, dir);
     dir = 0;
     const east = harm(s, el, kick);
     const west = harm(s, el, -kick);
     // A swipe must save more than it costs (its Lift, and a little more).
-    const bar = G.swipe * (s.trial?.tune.costMul ?? 1) + SWIPE_GAIN;
+    const bar = cost + SWIPE_GAIN;
     if (east <= west && now - east >= bar) dir = 1;
     else if (west < east && now - west >= bar) dir = -1;
     if (dir !== 0) swipe(s, f, dir);
@@ -496,6 +500,17 @@ function rideDir(s: SimState, el: ElState): number {
   const n = arriveTicks(s, ride.y);
   const miss = trailX(s.world.trail, ride.y) - weatherXAt(s, ride, n < 0 ? 0 : n);
   return miss > RIDE_NEAR ? 1 : miss < -RIDE_NEAR ? -1 : 0;
+}
+
+/** Weather of Gust's own stretch still ahead (not passed) that would cover the trail. */
+function ownAhead(s: SimState, el: ElState): boolean {
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (o.state === EL_GONE || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
+    if (o.y + E.weather.ryRatio * o.r < s.nubs.y || walkerAt(s, o.y) !== 'gust') continue;
+    if (weatherGood(s, o) < 0) return true;
+  }
+  return false;
 }
 
 /** The walker's pace now (u per tick). */
