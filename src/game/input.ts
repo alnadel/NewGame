@@ -62,6 +62,8 @@ const HOLD_BREAK_PX = 24;
 const SWIPE_MS = 300;
 const SWIPE_PX = 24;
 const SWIPE_RATIO = 1.5;
+/** Jitter allowed between a press's down and up dispatch lag when a frame tells it apart (ms). */
+const LAG_SLACK = 20;
 /** Queued verbs waiting for their batch. */
 const QUEUE = 4;
 
@@ -122,6 +124,9 @@ export class Input {
   private active = -1;
   private kind = SUN;
   private lastX = 0;
+  /** A blow press's last sample (CSS px, ms): where its swipe window restarts. */
+  private lastY = 0;
+  private lastT = 0;
   private held = false;
   private pending = 0;
   private cum = 0;
@@ -160,6 +165,8 @@ export class Input {
   private vX = 0;
   private vY = 0;
   private vT = 0;
+  /** How late the held-back press's pointerdown was dispatched (performance.now() − timeStamp, ms). */
+  private vLag = 0;
   private vWx = 0;
   private vWy = 0;
   private vCurX = 0;
@@ -259,6 +266,7 @@ export class Input {
       this.vX = this.vCurX = e.clientX;
       this.vY = this.vCurY = e.clientY;
       this.vT = e.timeStamp;
+      this.vLag = Math.max(0, performance.now() - e.timeStamp);
       this.presses++;
       h.onPress();
     } else this.begin(e);
@@ -274,8 +282,8 @@ export class Input {
     this.kind = kind;
     this.held = true;
     this.lastX = this.pressX = e.clientX;
-    this.pressY = e.clientY;
-    this.pressT = e.timeStamp;
+    this.lastY = this.pressY = e.clientY;
+    this.lastT = this.pressT = e.timeStamp;
     this.gesture = 0;
     if (kind === SUN) {
       if (this.upEdge && !this.downEdge) this.upFirst = true;
@@ -314,11 +322,21 @@ export class Input {
       return;
     }
     if (this.kind === BLOW) {
-      // One gust per press: SWIPE_PX sideways within SWIPE_MS, mostly sideways; then the press is spent.
+      // One gust per press: SWIPE_PX sideways within SWIPE_MS of starting to move, mostly sideways;
+      // then the press is spent.
       if (this.gesture !== 0) return;
+      if (e.timeStamp - this.pressT > SWIPE_MS) {
+        // The window lapsed (a slow move, or a thumb that rested): it restarts at the last sample, and
+        // at this move if the pointer had rested there, so a rest and then a flick still blows.
+        this.pressX = this.lastX;
+        this.pressY = this.lastY;
+        this.pressT = e.timeStamp - this.lastT > SWIPE_MS ? e.timeStamp : this.lastT;
+      }
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      this.lastT = e.timeStamp;
       const dx = e.clientX - this.pressX;
-      if (e.timeStamp - this.pressT > SWIPE_MS) this.gesture = 2;
-      else if (Math.abs(dx) >= SWIPE_PX && Math.abs(dx) >= SWIPE_RATIO * Math.abs(e.clientY - this.pressY)) {
+      if (Math.abs(dx) >= SWIPE_PX && Math.abs(dx) >= SWIPE_RATIO * Math.abs(e.clientY - this.pressY)) {
         this.queue(dx < 0 ? VERB_WEST : VERB_EAST);
         this.gesture = 2;
       }
@@ -380,7 +398,11 @@ export class Input {
     if (this.vState === 1 && Math.hypot(x - this.vX, y - this.vY) >= TAP_PX) this.toSun(x, t);
     else if (this.vState === 2 && Math.hypot(x - this.hX, y - this.hY) >= HOLD_BREAK_PX) {
       this.queue(VERB_RELEASE);
-      this.toSun(x, t);
+      // Another finger turning the sun keeps it: the broken hold's pointer is ignored until it lifts.
+      if (this.held && this.kind === SUN) {
+        this.vId = -1;
+        this.vState = 0;
+      } else this.toSun(x, t);
     } else {
       this.vCurX = x;
       this.vCurY = y;
@@ -614,6 +636,14 @@ export class Input {
     if (rel) this.queue(VERB_RELEASE);
   }
 
+  /** A new run has no hold to let go: drops queued verbs (a release left over from the last run's hold) and the verb slot. */
+  dropVerbs(): void {
+    this.qN = 0;
+    this.vId = -1;
+    this.vState = 0;
+    this.keyHold = false;
+  }
+
   /** A synthetic tap (Space/Enter start or retry): downEdge + upEdge in one batch. */
   tap(): void {
     this.downEdge = true;
@@ -626,10 +656,12 @@ export class Input {
    * Builds `n` InputFrames for this frame's ticks. Pending rotation (and Drip's slide) is split evenly
    * (quantized, remainder carried); a press lands on the first frame and a release on the last; a
    * queued verb lands on the first frame. With n = 0 (hit-stop) everything keeps accumulating.
-   * `now` (ms, the events' clock) tells held-back presses apart by time.
+   * `now` (ms, the events' clock) tells held-back presses apart by time; without it, the frame
+   * clock less the held-back press's dispatch lag (the frame clock runs ahead of the events' clock:
+   * a lift already made within TAP_MS but not yet dispatched must not be overtaken here).
    */
-  takeFrames(n: number, now: number = performance.now()): readonly InputFrame[] {
-    this.poll(now);
+  takeFrames(n: number, now?: number): readonly InputFrame[] {
+    this.poll(now ?? performance.now() - this.vLag - LAG_SLACK);
     this.out.length = 0;
     if (n <= 0) return this.out;
     while (this.frames.length < n) this.frames.push(newFrame());

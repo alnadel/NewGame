@@ -1388,6 +1388,7 @@ export class Session {
     this.featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
+    this.input.dropVerbs();
     const botKind = this.params.bot ?? this.testBot;
     this.bot = botKind ? makeBot(botKind) : null;
     this.d.audio.resetRun();

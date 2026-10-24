@@ -495,6 +495,17 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
     inp.dispose();
   });
 
+  it("'burn': frames on the frame clock wait out the press's dispatch lag (a 250 ms tap still burns)", () => {
+    const { inp, p } = mk('burn');
+    // Dispatched 320 ms late: the frame clock is already past TAP_MS, the events' clock is not.
+    const t0 = performance.now() - 320;
+    p.onDown(pe(1, 101, 200, t0));
+    expect(sum(inp.takeFrames(1))).toMatchObject({ downEdge: false, verbs: [] });
+    p.onUp(pe(1, 101, 200, t0 + 250), false);
+    expect(sum(inp.takeFrames(1)).verbs).toEqual([[VERB_TAP, 50.5, 220]]);
+    inp.dispose();
+  });
+
   it("'burn'/'grow': a held-back press that moves 12 px becomes a sun press with its turn; a burn press held past 300 ms turns the sun", () => {
     for (const verb of ['burn', 'grow'] as const) {
       const { inp, p } = mk(verb);
@@ -609,10 +620,10 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
     p.onMove(pe(2, 130, 300, 280));
     expect(sum(inp.takeFrames(1, 290)).verbs).toEqual([[VERB_EAST, 0, 0]]);
     p.onUp(pe(2, 130, 300, 300), false);
-    // Too slow (past 300 ms), too steep (|dx| < 1.5·|dy|), too short.
-    p.onDown(pe(3, 100, 300, 1000));
-    p.onMove(pe(3, 160, 300, 1301));
-    p.onUp(pe(3, 160, 300, 1310), false);
+    // Too slow (never 24 px within 300 ms of moving), too steep (|dx| < 1.5·|dy|), too short.
+    p.onDown(pe(3, 100, 300, 1450));
+    for (let k = 1; k <= 12; k++) p.onMove(pe(3, 100 + 2 * k, 300, 1450 + 40 * k));
+    p.onUp(pe(3, 124, 300, 1940), false);
     p.onDown(pe(4, 100, 300, 2000));
     p.onMove(pe(4, 130, 321, 2100));
     p.onUp(pe(4, 130, 321, 2110), false);
@@ -620,6 +631,13 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
     p.onMove(pe(5, 123, 300, 3050));
     p.onUp(pe(5, 123, 300, 3060), false);
     expect(sum(inp.takeFrames(2, 3100))).toMatchObject({ verbs: [], dTheta: 0, upEdge: false });
+    // A thumb that rests, then flicks: the window restarts when it starts to move.
+    p.onDown(pe(6, 100, 300, 3500));
+    p.onMove(pe(6, 101, 300, 3700));
+    p.onMove(pe(6, 115, 300, 4400));
+    p.onMove(pe(6, 130, 300, 4416));
+    p.onUp(pe(6, 130, 300, 4430), false);
+    expect(sum(inp.takeFrames(1, 4440)).verbs).toEqual([[VERB_EAST, 0, 0]]);
     inp.dispose();
   });
 
@@ -715,6 +733,16 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
       expect(sum(b.inp.takeFrames(1, 310)).verbs).toEqual([]);
       b.inp.dispose();
     }
+
+    // A new run drops a release left over from the last run's hold (never a verb on a 'sun' frame).
+    const n = mk('grow');
+    n.p.onDown(pe(1, 100, 400, 0));
+    n.inp.takeFrames(1, 230);
+    n.inp.releaseAll();
+    n.h.verb = 'sun';
+    n.inp.dropVerbs();
+    expect(sum(n.inp.takeFrames(1, 240)).verbs).toEqual([]);
+    n.inp.dispose();
 
     // A pause (releaseAll) then a resume (releaseAll again): the hold's release still lands.
     const r = mk('grow');
