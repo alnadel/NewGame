@@ -313,11 +313,14 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       }
       wet |= o.light & 2;
     }
-    if (h === 'ember' ? burnTarget(s, NaN, 0) >= 0 : h === 'sprout' ? growTarget(s, NaN, 0) >= 0 : h === 'drip' ? puddle : weather) tip('target', TIP_HOLD, false, h);
-    if (elHealth(s) < 40) tip('low', TIP_HOLD, false, h);
-    if (h === 'ember' ? puddle || rain : wet !== 0) tip('water', TIP_HOLD, false, h);
-    if (stone) tip('stone', TIP_HOLD, false, h);
-    if (plot) tip('plot', TIP_HOLD, false, h);
+    const mine = (on: TipOn, now: boolean): void => {
+      if (now) tip(on, TIP_HOLD, false, h);
+    };
+    mine('target', h === 'ember' ? burnTarget(s, NaN, 0) >= 0 : h === 'sprout' ? growTarget(s, NaN, 0) >= 0 : h === 'drip' ? puddle : weather);
+    mine('low', elHealth(s) < 40);
+    mine('water', h === 'ember' ? puddle || rain : wet !== 0);
+    mine('stone', stone);
+    mine('plot', plot);
   };
 
   return {

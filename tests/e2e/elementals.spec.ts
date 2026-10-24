@@ -168,7 +168,8 @@ test("T1 from the screen starts with Nubs; Ember's tap burns the wall under the 
 });
 
 test("T2: Drip follows a drag by the finger's world distance, the sun holds, Left steers west, Pause steers nothing", async ({ page }) => {
-  let s = await playLeg(page, 2, 1);
+  // A slow clock: Drip's Size and Gust's Lift drain in the sun and rain while the test plays.
+  let s = await playLeg(page, 2, 1, 0.25);
   expect([s.hero, s.verb]).toEqual(['drip', 'steer']);
   await expect.poll(async () => (await state(page)).sunHeld).toBe(true);
   s = await state(page);
@@ -228,7 +229,7 @@ test("T3: Sprout's 1 s holds grow the first soil patch and the first gap", async
 });
 
 test("T4: Gust's left swipe blows the wind west (the sun holds)", async ({ page }) => {
-  const s = await playLeg(page, 4, 1);
+  const s = await playLeg(page, 4, 1, 0.25);
   expect([s.hero, s.verb]).toEqual(['gust', 'blow']);
   await expect.poll(async () => (await state(page)).sunHeld).toBe(true);
   const theta = (await state(page)).theta;
