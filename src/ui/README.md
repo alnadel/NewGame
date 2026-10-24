@@ -206,7 +206,9 @@ re-render the tiles in place (focus survives).
 violet candy pill under the logo with the four new heroes' faces on `renderHeroPreview` canvases and
 the label "Elementals") shows from a fresh save on (hidden only under a challenge banner), and it
 wears the NEW sticker, its faces pulsing, until the screen is first opened (`markElementalsSeen`).
-Where it crowds Nubs' goal bubble (360x640), `fit()` drops the forecast chip first. The screen rebuilds
+It is pressable like the modes (a sideways drag on it moves the sun). Where it crowds Nubs' goal
+bubble, `fit()` drops the key line, then the forecast chip, but only when that keeps the bubble over
+him (`.no-keys`, `.no-forecast`). The screen rebuilds
 from the save on every refresh. It has a header with the Trial stars `n/24`, then the stage (the
 Wardrobe's stage recipe). The stage holds the selected Trial's featured hero (a duo shows both) on
 `renderHeroPreview` canvases, its name and element, tagline, ability with its glyph, the three

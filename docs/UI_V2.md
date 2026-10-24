@@ -1755,6 +1755,10 @@ modes, cues) and eight Trials with their screen; shipped feature code, not dead 
 CORE added 15.4 KiB, ART 18.7 and UI 11.8 against allowances of 9, 12 and 8 KiB, each after cutting
 its decoration. Open: the lead amends to 780 KiB or orders cuts (the breakdown is in §5.3 there).
 
+**Amended by the lead for the Elementals proof of concept: 780 KiB (798,720 B).** Reason: "four playable heroes with sim rules, art, dial modes and cues, eight Trials and their screen; every team already cut decoration."
+**Measured after the Elementals fix round:** 797,416 B (778.7 KiB), 1,304 B under (the round's fixes,
+the Title's Elementals pill among them, added 3,220 B; `docs/ELEMENTALS.md` §8.4).
+
 ---
 
 ## 14. Work split (five builders)

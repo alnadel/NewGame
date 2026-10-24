@@ -1306,7 +1306,7 @@ Accept when every existing e2e passes unchanged, §5.6's UI tests pass, and UI's
   reads.
 - **Replays:** a trial replay is bit-identical (determinism test on T6 and T8).
 
-### 5.3 Bundle budget: amended to 760 KiB
+### 5.3 Bundle budget: amended to 760 KiB, then by the lead to 780 KiB
 
 `npm run build:single` is 747,314 B today (budget 747,520 B, 206 B of headroom). The new budget is
 **760 KiB = 778,240 B**.
@@ -1344,9 +1344,13 @@ audio recipes 1.0 (ART); `screens/elementals.ts` 4.7 KB, `moments.ts` 1.6, `prog
 `game/campaign.ts` 0.9 (UI). Every team cut its decoration first (§8.2). What is left is the hero
 rules, the copy that teaches them (§6), the dial patterns that keep colour from being the only channel
 (§5.5) and the screen, and nothing build-level is left to take (a JS target matching `cssTarget` saves
-260 B). Closing 15.6 KiB therefore means cutting specified features, so **the call is the lead's**:
-amend this budget to 780 KiB (798,720 B, leaving about 4.4 KiB for fixes) with the reason above, or
-order a cut list. Until then release gate 9 fails against 760 KiB.
+260 B). Closing 15.6 KiB would mean cutting specified features.
+
+**The lead amended the budget to 780 KiB = 798,720 B** for the Elementals proof of concept. Reason:
+"four playable heroes with sim rules, art, dial modes and cues, eight Trials and their screen; every team already cut decoration." The amendment is recorded in `docs/V1_6_PLAN.md` A3 and `docs/UI_V2.md` §13. Measured
+after the fix round (§8.4): **797,416 B (778.7 KiB), 1,304 B under**; the round added 3,220 B (the
+sim, game and render fixes 1,513 B; the Title pill, the screen's faces and keys, and the Results and
+Pause words 1,707 B).
 
 ### 5.4 Performance and draw budget
 
@@ -1743,3 +1747,71 @@ measured record in §5.3.
 chunk 1.002 and 0.970 on two runs), and its paired "frames over 1 ms / 2 ms a minute" bars (counts
 under 1 a minute) failed on a different bar in each of the two runs (1.119, then 1.875 on 0.17
 against 0.09 a minute).
+
+### 8.4 Fix round (review findings and the lead's list)
+
+**Sim and Trials (CORE).**
+- **The duo's Cold Snap smothers the mate at `TUNING.heroes.snapSmother` (0.55) of the drain**, so
+  one snap costs Ember about 53 Heat (it cost ~90 at the full drain 30); T6's drain 30 → 32 keeps
+  humanDial in band (§8.2). Ember dying under the snap reads "Smothered by the Cold Snap at {time}."
+  (heroCause `'smother'`, cause `'cloud'`) with its own recap tip (`SMOTHER_TIP`, §6.4).
+- **T2 and T7 re-picked without `giants` / `dense`** (salt 6; T2 drain 18): a constant sun angle
+  passed both. `GATE_WAIVERS` keeps only T3 G4 and T5 G6 (§8.2).
+- A flake takes the blame only when it took the last of the meter (a body the light already put out
+  stays "snuffed"); Drip frozen by an ice cube reads "Froze solid on an ice cube at {time}.". Volt's
+  fizzle counts from its last strike, else its TAG or go.
+- Goldens: the `trials` key changes for 1002, 1006 and 1007 only (re-picked or re-ruled on
+  purpose); every Nubs, Endless, Daily and Journey key is byte-identical.
+
+**Game and render.**
+- Solo hero gauges are frost-white when full (the hero's colour means only "go", §8.2 ART).
+- A Trial's HUD has no multiplier coin (§1.1: no multiplier); the goal slot runs to the edge.
+- A relay TAG clears the outgoing hero's tips and the telegraph; the incoming hero's tip follows.
+- The starting charge's 'frost' tip (Ember's BLAZE, Volt's THUNDERCLAP, T6's Cold Snap warning)
+  shows before the first cast, queued ahead of p25; a cast drops it.
+- The render snapshot never blends one hero's meter into the next across a TAG (`RenderSnap.relay`).
+- Nubs' melting sizzle and glare crackle stay silent while another hero leads (§8.1).
+- Trial intro cards keep their whole sentence at 1280x800 and 1280x720 (a whole-blurb fit first).
+- Pause card: the goal line counts the goal ("NN %", "1/2"), the Dare star its own count ("Chain x5 ·
+  0/5"); a duo shows both taglines; no dozing Nubs on a Trial.
+- T7 out before the line with its blooms met: "Out before the finish (Bloom 2 buds ✓)".
+- A duo's ability ring and hop, and a fallen mate's puff, land on the right body.
+- Copy (§6.3): "Teal cools, amber warms. Green is Calm; both ends are fatal." and "TAG in 3! Pre-aim
+  for the dashed arcs for a clean TAG."
+
+**UI.**
+- **Title:** the Elementals entry is the proof of concept's headline: a violet candy pill under the
+  logo with the four new heroes' faces and "Elementals", shown from a fresh save on (only a
+  challenge banner hides it), NEW until the screen is first opened; a sideways drag that starts on it
+  moves the sun, as on the modes. Under it the key line, then the forecast chip give way only when
+  that keeps Nubs' goal bubble over him (360x640 drops the forecast; 1280x720 keeps it). Inside,
+  T1-T4 still open at once (§3.0). The e2e taps that start a run from the Title press the world at
+  55 % of the height (40 % is now under the pill).
+- **Elementals screen:** a hero tap points Play at that hero's first open Trial not passed; the
+  ability line never breaks ("Swipe down: BLAZE"); Trial tiles show the cast's faces (the roster's
+  art; T5 back to Nubs, T8 without arrows); a locked hero reads "Pass T1" with its lock on top; arrow
+  keys cross between the hero row and the grid.
+- **Results on a Trial:** "Next trial" and "Trials" (the Elementals glyph); the pass that unlocks a
+  hero says "{Hero} joins the team!".
+
+**Skipped, with the reason.**
+- A Harmony / TAG-stone glyph for the duo and relay Dare pills: new glyph art, and 1.3 KiB of
+  budget is left; the pill's count already reads.
+- The Melt Map callout under the mobile Results share button: a Results layout change outside the
+  Elementals; left for its owner.
+- Keeping the Elementals screen's unlock pop across a reload: it needs a save field; the Results chip
+  now announces each new hero.
+- The duo stage's card blurb, the Trial tile's aria-description and the stars chip's "/24" gap
+  (shared with the Journey's header): cost or shared surfaces.
+- T3 keeps its G4 waiver (it is not passively beatable: idle 76%, no constant angle passes).
+
+**Gates after the fix round.**
+
+| Gate | Result |
+|---|---|
+| typecheck | clean (both tsconfigs) |
+| `npm test` | 56 files, 1,077 tests pass |
+| goldens | `node scripts/golden.ts` leaves `hashes.json` unchanged at the head; against the round's base only `trials` 1002, 1006, 1007 (and their 600/1200 marks) change, 7 lines, every other key byte-identical |
+| `sim --trials --check` | all eight trials pass every gate, waived: T3 G4, T5 G6 (7.7 s, 496 runs) |
+| Playwright, both projects, default workers (2) | 380 passed, 40 skipped (by project), 0 failed (18.5 min) |
+| `build:single` | 797,416 B, within the lead's 798,720 B (1,304 B under) |

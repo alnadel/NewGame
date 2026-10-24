@@ -17,6 +17,7 @@ A number marked **measured** comes from those runs. Every other number is a star
 >   **Amended for UI v2 (docs/UI_V2.md):** 730 KiB, to carry the bundled Lilita One display font and the candy component kit.
 >   **Superseded for the UI v2 release** by `docs/UI_V2.md` §13: 730 KiB (747,520 B). Measured when the four UI v2 screen branches were merged: 762,468 B (744.6 KiB), 14.6 KiB over and open (see §13 there).
 >   **Amended for Elementals** (`docs/ELEMENTALS.md` §5.3): 760 KiB (778,240 B). Reason: "Elementals proof of concept (docs/ELEMENTALS.md): four playable heroes (sim rules, art, dial modes, cues) and eight Trials with their screen; shipped feature code, not dead code." Measured at the Elementals merge: 794,196 B (775.6 KiB), 15.6 KiB over and open: the lead amends to 780 KiB or orders cuts (see §5.3 there).
+>   **Amended by the lead for the Elementals proof of concept:** 780 KiB (798,720 B). Reason: "four playable heroes with sim rules, art, dial modes and cues, eight Trials and their screen; every team already cut decoration." Measured after the Elementals fix round: 797,416 B (778.7 KiB), 1,304 B under (`docs/ELEMENTALS.md` §5.3, §8.4).
 
 ---
 
