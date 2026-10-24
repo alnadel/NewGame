@@ -28,10 +28,10 @@
 //   first, or a burn press held past TAP_MS, makes it a sun press with the turn it moved. Every
 //   other press is the sun slot's (latest wins), so a second finger turns the sun during a hold. On
 //   'steer' legs every press slides Drip with the finger (steer, world u); on 'blow' legs a quick
-//   sideways swipe blows one gust (VERB_WEST/EAST). Keys: Up/W acts (burn: VERB_KEY_BURN; grow:
-//   VERB_KEY_HOLD until up), Left/Right blow one gust per press on 'blow' legs; the wheel turns the
-//   sun on 'sun', 'burn' and 'grow' legs only. A queued verb lands on the first frame of the next
-//   batch. cut() ends the presses a TAG hands over.
+//   sideways swipe (SWIPE_PX within SWIPE_MS of starting to move) blows one gust (VERB_WEST/EAST).
+//   Keys: Up/W acts (burn: VERB_KEY_BURN; grow: VERB_KEY_HOLD until up), Left/Right blow one gust
+//   per press on 'blow' legs; the wheel turns the sun on 'sun', 'burn' and 'grow' legs only. A queued
+//   verb lands on the first frame of the next batch. cut() ends the presses a TAG hands over.
 
 import { VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_KEY_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type Verb } from '../core/index.ts';
 

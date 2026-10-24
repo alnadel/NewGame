@@ -118,7 +118,7 @@ the sun, a drag always does. A steer or a swipe is a drag, so Drip's and Gust's 
 | Ember | `burn` | a press on a target released ≤ 300 ms and < 12 px is a **tap** (burns it); every press that moves, lasts longer, or starts off a target turns the sun | ↑ / W burns the next target; ← → turn | turns | none |
 | Sprout | `grow` | a press on a site still (< 12 px) for 220 ms is a **hold** (grows it until lifted); a second finger turns the sun meanwhile; a short still press on a site does nothing; every press that moves, or starts off a site, turns the sun | hold ↑ / W grows the next site; ← → turn | turns | none |
 | Drip | `steer` | every drag slides Drip sideways, exactly with the finger | ← → / A D steer (Shift fine) | **held** | none |
-| Gust | `blow` | a **swipe** (≥ 24 px sideways within 300 ms, `|dx| ≥ 1.5·|dy|`) blows one gust that way (8 Lift) | ← → / A D: one gust per press (8 Lift) | **held** | none |
+| Gust | `blow` | a **swipe** (≥ 24 px sideways within 300 ms of starting to move, `|dx| ≥ 1.5·|dy|`) blows one gust that way (8 Lift) | ← → / A D: one gust per press (8 Lift) | **held** | none |
 
 - **Pause** is a DOM button over the canvas: its presses never reach the game input (unchanged).
 - **The HUD coin** is the Cold Snap's and shows only while Nubs walks; `meterHit` is false otherwise,
@@ -1391,7 +1391,7 @@ stands; `tagMask` once in `createEl`; scratch is module-level.
 | `sun` | today, byte for byte | today |
 | `burn`, `grow` | **off target** (`canTarget` false at its point): today's sun press. **On target**: a *held-back press* in the verb slot (below) | see below |
 | `steer` | every press: horizontal motion → `steer += dx · uPerPx()`, no `dTheta`, release 0 | `steer` split over the batch like `dTheta` |
-| `blow` | moving ≥ 24 px sideways within 300 ms with `|dx| ≥ 1.5·|dy|` → one gust that way, then the press is spent; no `dTheta` | `verb 4` or `5` |
+| `blow` | moving ≥ 24 px sideways within 300 ms of starting to move (a thumb may rest first) with `|dx| ≥ 1.5·|dy|` → one gust that way, then the press is spent; no `dTheta` | `verb 4` or `5` |
 
 **Two slots on `burn` and `grow` legs.** The **sun slot** is today's press (latest pointer wins among
 sun presses). The **verb slot** takes a press that starts on a target while the slot is free (a press
