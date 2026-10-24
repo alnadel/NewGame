@@ -7,7 +7,7 @@
 // the Drip mask's chosen, worst and best marked bin), the path bot's verdict and lowest steady health
 // (G2, also from the worst marked bin), the reactive bot's wins on 8 salts (G3), humanEl's pass rate on
 // --salts salts (G4), the anti-trivial runs (G5: idle, each element leg with its verb off, T1's
-// tap-on-sight Ember, the spam Gusts; G5b: the plan's verbs at the best of 36 constant angles), the
+// tap-on-sight Ember, the spam Gusts; G5b: the plan's verbs at every constant angle, 1° apart), the
 // Dare's share of the G3 and G4 runs (G6) and the mixers' interaction runs (G7). --check exits 1 on
 // any failed gate. --pick <id> tries salts 0..199 in order and prints the first that passes every gate
 // (moving the Dare target 25% toward the band when only G6 fails); it changes nothing. --variant
@@ -22,7 +22,7 @@ import type { HeroId } from '../../src/config/heroes.ts';
 import { TRIAL_IDS, trialDareValue, trialDef, type TrialDef } from '../../src/config/trials.ts';
 import { TUNING } from '../../src/config/tuning.ts';
 import { TICK_HZ, tickAtMinute } from '../../src/core/clock.ts';
-import { distPointConvex } from '../../src/core/geom.ts';
+import { distPointConvex, pointInConvex, segmentsIntersect } from '../../src/core/geom.ts';
 import { worldYAtTick } from '../../src/core/gen/plan.ts';
 import { campaignConfig, levelOutcome, levelProgress } from '../../src/core/level.ts';
 import { EL_GONE, RUNTIME_ID_BASE, type Caster, type ElObj, type ElState } from '../../src/core/objects.ts';
@@ -34,6 +34,7 @@ import { updateGuide } from '../../src/core/sim/guide.ts';
 import { step } from '../../src/core/sim/step.ts';
 import type { InputFrame, SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
+import { OBLIQUE } from '../../src/game/camera.ts';
 import { TaskPool } from './dares.ts';
 import { audit, AUDIT_HEALTH, downwindPlot, legAt, legHero, planPlayer, tickAtY, trialRun, variantDef, type ElMove, type Plan, type ThetaMode, type TrialVariant } from './elaudit.ts';
 import type { Sim16Ctx, Sim16Module } from './registry.ts';
@@ -76,6 +77,12 @@ const SPAMS: readonly { dir: -1 | 1; every: number }[] = [
   { dir: 1, every: 90 },
   { dir: -1, every: 90 },
 ];
+/** G5b: the constant angles tried, every CONST_STEP° (the 10° grid of the first round missed T7's 325-326° window). */
+const CONST_STEP = 1;
+/** G0: a canopy's lumps reach this far from its centre, in radii (render/casters.ts `lumps`: 0.42-0.54 r out, 0.48-0.62 r wide). */
+const CANOPY_REACH = 1.16;
+/** G0: the most of a plot's, puddle's or stone's disc that may be drawn under a generated caster. */
+const HIDDEN_MAX = 1 / 2;
 /** --pick: salts tried. */
 const PICK_SALTS = 200;
 const TICK_CAP = 12000;
@@ -238,6 +245,13 @@ export function gateG0(v: TrialVariant): G0Out {
       }
     }
   }
+  // Every plot, puddle and stone shows: at least half of its disc is drawn clear of the generated casters.
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (o.kind !== 'plot' && o.kind !== 'puddle' && o.kind !== 'stone') continue;
+    const h = hiddenShare(o.x, o.y, o.r, w.casters);
+    if (h.share > HIDDEN_MAX + 1e-9) fails.push(`${o.kind} m${mins[i]} ${Math.round(100 * h.share)}% hidden under ${h.by}`);
+  }
   // Leg lengths: opening ≥ 6.5 s, element legs ≥ 6.5 s, a closing Nubs leg ≥ 4 s.
   for (let L = 0; L < legs; L++) {
     const len = secs(to(L) - from(L));
@@ -329,8 +343,60 @@ export function gateG0(v: TrialVariant): G0Out {
 }
 
 /**
+ * The generated caster drawn over ground point (x, y), or null. The renderer draws a point at height z
+ * OBLIQUE·z north of its footprint and every caster over the trial's ground objects: a canopy covers
+ * its circle moved north by OBLIQUE·z (out to its lumps' reach), a roof slab its footprint swept from
+ * OBLIQUE·z0 to OBLIQUE·z1, a solid block its footprint swept up to OBLIQUE·h.
+ */
+function casterOver(x: number, y: number, casters: readonly Caster[]): Caster | null {
+  for (const c of casters) {
+    if (c.id >= RUNTIME_ID_BASE || Math.abs(c.y - y) > 200) continue;
+    for (const p of c.parts) {
+      if (p.t === 'disc') {
+        if (Math.hypot(x - p.cx, y - p.cy - OBLIQUE * p.z) < p.r * CANOPY_REACH) return c;
+        continue;
+      }
+      // The vertical segment of ground points drawn at (x, y) meets the footprint.
+      const y0 = y - OBLIQUE * (p.t === 'prism' ? p.h : p.z1);
+      const y1 = y - (p.t === 'prism' ? 0 : OBLIQUE * p.z0);
+      if (pointInConvex(x, y0, p.pts, p.n) || pointInConvex(x, y1, p.pts, p.n)) return c;
+      let ax = p.pts[2 * p.n - 2] as number;
+      let ay = p.pts[2 * p.n - 1] as number;
+      for (let k = 0; k < p.n; k++) {
+        const bx = p.pts[2 * k] as number;
+        const by = p.pts[2 * k + 1] as number;
+        if (segmentsIntersect(x, y0, x, y1, ax, ay, bx, by)) return c;
+        ax = bx;
+        ay = by;
+      }
+    }
+  }
+  return null;
+}
+
+/** The share of a ground disc (a 49-point grid at r/4) drawn under generated casters, and the last one found. */
+export function hiddenShare(x: number, y: number, r: number, casters: readonly Caster[]): { share: number; by: string } {
+  let n = 0;
+  let hid = 0;
+  let by = '';
+  for (let a = -4; a <= 4; a++) {
+    for (let b = -4; b <= 4; b++) {
+      if (a * a + b * b > 16) continue;
+      n++;
+      const c = casterOver(x + (a * r) / 4, y + (b * r) / 4, casters);
+      if (c !== null) {
+        hid++;
+        by = c.name;
+      }
+    }
+  }
+  return { share: hid / n, by };
+}
+
+/**
  * Calibration (§3.2, §6.5): the dx moves (±8 u, smallest first) that clear every authored plot,
- * puddle and stone of a variant off the generated prism parts, or null when one cannot be cleared.
+ * puddle and stone of a variant off the generated prism parts and out from under the drawn casters
+ * (G0), or null when one cannot be cleared.
  */
 export function clearanceMoves(v: TrialVariant): ElMove[] | null {
   const t = variantDef(v);
@@ -344,7 +410,8 @@ export function clearanceMoves(v: TrialVariant): ElMove[] | null {
     if (c.id >= RUNTIME_ID_BASE) continue;
     for (const p of c.parts) if (p.t === 'prism') parts.push({ pts: p.pts, n: p.n, y: c.y });
   }
-  const clear = (x: number, y: number, r: number): boolean => parts.every((p) => Math.abs(p.y - y) > 200 || distPointConvex(x, y, p.pts, p.n) - r >= E.objects.clearance);
+  const clear = (x: number, y: number, r: number): boolean =>
+    parts.every((p) => Math.abs(p.y - y) > 200 || distPointConvex(x, y, p.pts, p.n) - r >= E.objects.clearance) && hiddenShare(x, y, r, w.casters).share <= HIDDEN_MAX + 1e-9;
   for (let i = 0; i < t.objects.length; i++) {
     const o = t.objects[i] as TrialDef['objects'][number];
     const r = r0[o.k];
@@ -463,12 +530,13 @@ export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOu
     const sp = SPAMS[k] as { dir: number; every: number };
     if (o.won || !gustLegs.includes(o.leg)) why.push(`spam ${sp.dir > 0 ? 'east' : 'west'}/${sp.every} ${o.won ? 'passes' : `fails in leg ${o.leg}`}`);
   });
-  // G5b (skipped when `constants` is false: the unit test's G5 alone).
-  const consts = constants ? await Promise.all(Array.from({ length: 36 }, (_, i) => run.run({ v, p: { bot: 'path', theta: { k: 'const', theta: 10 * i } } }))) : [];
+  // G5b (skipped when `constants` is false: the unit test's G5 alone): every constant angle, CONST_STEP° apart.
+  const consts = constants ? await Promise.all(Array.from({ length: 360 / CONST_STEP }, (_, i) => run.run({ v, p: { bot: 'path', theta: { k: 'const', theta: CONST_STEP * i } } }))) : [];
   let best = 0;
   for (let i = 1; i < consts.length; i++) if ((consts[i] as TrialRunOut).progress > (consts[best] as TrialRunOut).progress) best = i;
-  if (consts.some((o) => o.passed)) why.push(`constant θ${10 * consts.findIndex((o) => o.passed)} passes`);
-  return { ok: why.length === 0, idle, offs, sight, spams, constBest: (consts[best] as TrialRunOut | undefined) ?? null, constTheta: 10 * best, why: why.join('; ') };
+  const passing = consts.flatMap((o, i) => (o.passed ? [CONST_STEP * i] : []));
+  if (passing.length > 0) why.push(`constant θ${passing.slice(0, 8).join(',')}${passing.length > 8 ? '…' : ''} pass${passing.length === 1 ? 'es' : ''}`);
+  return { ok: why.length === 0, idle, offs, sight, spams, constBest: (consts[best] as TrialRunOut | undefined) ?? null, constTheta: CONST_STEP * best, why: why.join('; ') };
 }
 
 /** The authored minutes of a variant's plots that a fire on a later wall reaches downwind (§3.4, G7 on T7). */
