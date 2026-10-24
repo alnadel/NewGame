@@ -2005,6 +2005,7 @@ lever with its reason), deviations, gate results and the final `build:single`.
 | `elementals2/ui` (3d9e2f1) | 798,077 B | +9,858 over C0c | 7,168 B: **2,690 B over** after its whole cut list |
 | merged (c12be45) | 824,831 B | +42,857 over C0b | 41,984 B summed: 873 B over, from the 5,456 B reserve |
 | **release (this record)** | **824,832 B** | | **≤ 829,440 B: pass (4,608 B under)** |
+| fix round (13.6) | 828,328 B | +3,496 | ≤ 829,440 B: pass (1,112 B under) |
 
 The merged build is 795 B less than the four measurements added up, because 1,293 B of core
 `elements.ts` that ART's reads pull in were counted in both CORE's and ART's branch deltas.
@@ -2210,3 +2211,9 @@ a fade mask on the Elementals body and a label halo under the selection ring (th
 the label's stroke); the lilac rim on the cloud face; drawing near targets above Ember's dial.
 **Still open (the lead decides, 13.3):** T6 G5b, T7 G5 and G5b fail `sim --trials --check` exactly
 as at the merge; no lever inside §6.5's bounds fixes them.
+
+**Gates after the fix round:** typecheck pass; `npm test` 56 files, 1,117 tests pass; `golden.ts`
+diff only `trials` (vs f2a7039); `sim --trials --check` as at the merge (exit 1: T6 G5b, T7 G5/G5b;
+T1-T5 pass with the five waivers); Playwright both projects 398 passed, 44 skipped, 0 failed (2
+workers, 18.6 min); `build:single` **828,328 B** ≤ 829,440 B (1,112 B under; this round +3,496 B, of
+which Retry from the Tag Stone ≈ 1,230 B).
