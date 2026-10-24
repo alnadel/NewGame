@@ -1603,3 +1603,18 @@ its measured reason, pending the lead), `--pick <n>` (salts from `--from` to `--
 first, lever `--sets`, the Dare nudge), `--survey N`, `--variant '<json>'` (drain, legStart,
 costMul, evapMul, dareTarget, moves, add) and `--perf`. The pins and their measured gates are in
 `config/trials.ts` beside each trial.
+
+### 17.6 The pins (`config/trials.ts`; measured with `--trials --check --perf`)
+
+| Trial | Salt | Levers | Gates |
+|---|---|---|---|
+| T1 Kindling | 468 | drain 34, legs 80/60/80, costMul 1.2 | all pass; G6 96% waived (every finisher burns all 7) |
+| T2 Puddle Run | 187 | drain 28, legs 100/50/80, evapMul 1.2, Dare 7 | all pass; G6 88% waived (every finisher drinks all 7) |
+| T3 Green Bridge | 3584 | drain 34, legs 80/80/80 | all pass |
+| T4 Weather Vane | 605 | drain 34, legs 80/80/80 | all pass; G6 83% waived (every finisher rides) |
+| T5 Steam | 1113 | drain 34, legs 80/60/50/80, costMul and evapMul 1.2, Dare 5, puddles 425/492 8 u out | G4 100% and G6 92% waived |
+| T6 Rain Garden | 73 | drain 34, legs 80/65/100/80, costMul 1.2, rain r330 added | **fails G5b** (a fixed sun walks the 8:30 AM opening leg in every salt to 20000), G6 0%, G7 |
+| T7 Five Elements | 20 | drain 36, legs 80/70/100/60/50/80, evapMul 1.2, rain r196 added, Dare 3 | **fails G5** (Drip's leg passes unsteered: its melted-ice puddles lie on the trail under a held shade), G5b, G6 0%, G7 |
+
+Every waiver needs the lead (`WAIVERS` in `scripts/sim16/trials.ts`). `--perf`: every Trial tick
+≤ 0.7× and guide refresh ≤ 0.7× a Nubs run's; `createRun` ≤ 26 ms unprepared, ≤ 0.4 ms prepared.
