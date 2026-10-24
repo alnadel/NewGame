@@ -32,6 +32,7 @@ import {
   levelDef,
   levelTag,
   levelProgress,
+  needOf,
   PLAN_START_DATE,
   prepareRun,
   prepareSome,
@@ -1889,7 +1890,11 @@ export class Session {
     // Nubs melting keeps today's recap tips.
     const d = result.death;
     const who = d.who ?? this.s.nubs.hero;
-    const heroTip = this.s.trial ? (CAUSE_TIPS[`${who}:${d.heroCause}`] ?? CAUSE_TIPS[d.heroCause ?? ''] ?? HEROES[who].deathTip) : '';
+    // Sprout short of Sap for the bridge that took it: the Sap tip, not the timing one.
+    const el = this.s.el;
+    const co = el?.objs[el.causeObj];
+    const sap = who === 'sprout' && co !== undefined && co.size < needOf(co) && this.s.nubs.chill < 10;
+    const heroTip = this.s.trial ? (CAUSE_TIPS[sap ? 'sprout:sap' : `${who}:${d.heroCause}`] ?? CAUSE_TIPS[d.heroCause ?? ''] ?? HEROES[who].deathTip) : '';
     this.tip = heroTip || deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
     result.melody = this.melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.

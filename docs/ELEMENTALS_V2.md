@@ -267,7 +267,7 @@ the sun, a drag always does. A steer or a swipe is a drag, so Drip's and Gust's 
     crossing in the window; no focus, no arcs;
   - the gauge: Sap in green `#6CC04A` (no danger colours: Sap is not life); a Sap pill;
   - while holding: a glowing line from Sprout to the site and a ring around the site filling to its
-    `need`; a growth bar under every growing site; drops on wet sites;
+    `need` (a plot's: `treeMin`); a growth bar under every growing site; drops on wet sites;
   - each crossing ahead: green check once bridged; red chevrons and "!" once `growLeft < 0`.
 
 ### 2.5 Gust (Air): BLOW
@@ -1874,9 +1874,9 @@ blurb at 360, 390 and 1280.
 | drip | tag | Drip's turn! Drag sideways: Drip follows your finger. The sun holds. |
 | drip | target | Puddles and shade grow Drip. Steer into them. |
 | drip | stone | Hot stones shrink Drip. Steer around the orange glow. |
-| sprout | tag | Sprout's turn! Hold on the soil patch ahead to grow a plant. |
+| sprout | tag | Sprout's turn! Hold the soil patch until its ring closes. |
 | sprout | target | Hold on the gap now: a bridge takes time to grow. Sun on it helps. |
-| sprout | plot | Hold on a soil patch to grow a tree: shade for Nubs later. |
+| sprout | plot | A closed ring stands a tree. Save the rest of your Sap for bridges. |
 | sprout | water | Rain gives Sprout sap and makes plants grow fast. |
 | gust | tag | Gust's turn! Swipe left or right to blow the weather off the trail. |
 | gust | target | Each swipe costs Lift. Swipe early: the wind keeps pushing. |

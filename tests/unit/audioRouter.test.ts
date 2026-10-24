@@ -199,6 +199,12 @@ describe('SfxRouter events', () => {
     expect(t.names()).not.toContain('lock');
   });
 
+  it('plays no noon sting on a Trial (its noon falls on an element leg)', () => {
+    const t = setup({ health: 100 });
+    t.router.onEvents([{ e: 'noonBanner' }], t.view);
+    expect(t.names()).not.toContain('noon');
+  });
+
   it('beats the heartbeat from a hero\'s health when the view has one', () => {
     const t = setup({ chill: 90, health: 8 });
     t.frames(1);

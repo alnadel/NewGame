@@ -75,9 +75,9 @@ export const ELEMENT_TIPS: Readonly<Record<HeroId, Tips>> = {
     ['stone', 'Hot stones shrink Drip. Steer around the orange glow.'],
   ],
   sprout: [
-    ['tag', "Sprout's turn! Hold on the soil patch ahead to grow a plant."],
+    ['tag', "Sprout's turn! Hold the soil patch until its ring closes."],
     ['target', 'Hold on the gap now: a bridge takes time to grow. Sun on it helps.'],
-    ['plot', 'Hold on a soil patch to grow a tree: shade for Nubs later.'],
+    ['plot', 'A closed ring stands a tree. Save the rest of your Sap for bridges.'],
     ['water', 'Rain gives Sprout sap and makes plants grow fast.'],
   ],
   gust: [

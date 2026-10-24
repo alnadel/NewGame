@@ -213,6 +213,15 @@
   transform: translate(-50%, -100%);
 }
 
+/* Elementals v2: a TAG's cue (ui.showCue 'tag-*') hangs below the dial instead: what lies ahead (the
+   verb ghost, the first target, the CLEAN! headline) is above it. Its top clears the padlock plate (R + 31). */
+.cue.is-tag {
+  top: calc(var(--nubs-y, 68%) - var(--wt) + var(--halo-r, 44px) + 36px);
+  transform: translate(-50%, -6px);
+}
+.cue.is-tag.is-on,
+.sui.is-rm .cue.is-tag { transform: translate(-50%, 0); }
+
 .sui:not([data-screen='play']) .cue { display: none; }
 
 /* Reduced motion: no slide, the same bottom anchor (a top anchor hung the cue over the dial). */

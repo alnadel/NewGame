@@ -255,8 +255,9 @@ export class Fx {
           break;
         }
         case 'noonBanner':
-          // The sim warns 2 s early (the audio's cue); the stamp lands at noon, with the clock.
-          this.noonIn = 2;
+          // The sim warns 2 s early (the audio's cue); the stamp lands at noon, with the clock. A Trial
+          // has no HIGH NOON (its noon falls on an element leg; TAG! stamps and tips hold that slot).
+          if (s.el === null) this.noonIn = 2;
           break;
         case 'noonPassed':
           // The boss blinks first: a worried sun for 1.5 s, the ruler's sparkle and one cool pulse.

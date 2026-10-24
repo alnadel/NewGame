@@ -95,4 +95,6 @@ export const CAUSE_TIPS: Readonly<Record<string, string>> = Object.freeze({
   sizzle: 'Hot stones glow orange. Steer around them.',
   soak: 'Rain soaks Gust. Push each cloud before it reaches the trail.',
   fog: 'Fog drains Gust and muffles its wind. Blow it away before Gust gets there.',
+  // Sprout fell short at a crossing it had started, with its Sap spent (the session picks it).
+  'sprout:sap': 'Sprout ran out of Sap. A short hold makes a tree: save Sap for the bridges.',
 });

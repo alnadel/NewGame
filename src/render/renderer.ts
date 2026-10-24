@@ -13,6 +13,7 @@
 import {
   coolLine,
   dayTicks,
+  elHealth,
   nextTagTicks,
   nightTicks,
   PICKUP_ALIVE,
@@ -61,7 +62,7 @@ import {
 } from './ground.ts';
 import { createHalo, createHaloIn, drawHalo, tagSoon, updateHalo, type HaloInput, type HaloState } from './halo.ts';
 import { drawNextChip, heroArt } from './heroes.ts';
-import { drawElAir, drawElCues, drawElGround, drawElWalls, drawTagStones } from './trial.ts';
+import { drawElAir, drawElCues, drawElGround, drawElWalls, drawTagStones, fogOver } from './trial.ts';
 import { createHud, drawHud, hudScale, syncHud, updateHud, type HudCampaign, type HudInput, type HudState } from './hud.ts';
 import {
   applyPull,
@@ -698,7 +699,9 @@ export class Renderer {
     // A Trial's cues read health where Nubs' read Chill.
     const hp = trial ? (100 * snap.chill) / s.nubs.maxChill : 0;
     const chillCue = trial ? hp : snap.chill;
-    updateBanners(sc.banners, udt, s.phase === 'day' && chillCue < 25 && dying < 0);
+    // Low warnings (heat vignette, sun mood) read steady health on a Trial: spending is not damage and Sap never warns (§1.2).
+    const lowCue = trial ? (s.nubs.hero === 'sprout' ? 100 : elHealth(s)) : snap.chill;
+    updateBanners(sc.banners, udt, s.phase === 'day' && lowCue < 25 && dying < 0);
     // Nubs stands still through the start beat (the clock waits; the sun already moves).
     const walking = (s.phase === 'day' || s.phase === 'night') && s.ready === 0 && dying < 0;
     updateNubsAnim(sc.nubs, gdt, v.ox + snap.nubsX * v.S, v.S, walking, s.params.v);
@@ -902,6 +905,14 @@ export class Renderer {
     drawHatPop(g, v, beat, inp.reducedMotion);
     drawClouds(g, v, s.world, snap.tAbs, nubsSX, nubsSY - 12 * v.S, night, inp.mech.snapCloud, ux, uy, snap.cot);
     drawElAir(g, v, s, time, inp.reducedMotion);
+    // A fog bank veils what lies beyond it, not the walker in it: redraw the walker through the bank
+    // (as the X-ray does through a canopy).
+    const fogA = trial !== null ? fogOver(s, snap.nubsX, snap.nubsY) : 0;
+    if (fogA > 0) {
+      g.globalAlpha = 0.7 * fogA;
+      drawBodies(g, sc, v.dpr);
+      g.globalAlpha = 1;
+    }
     drawAirParticles(g, sc.particles, v);
     if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {
@@ -1033,10 +1044,10 @@ export class Renderer {
       let mood: SunMood;
       if (dying >= 0) mood = 'guilty';
       else if (sc.relief > 0) mood = 'relief';
-      else if (chillCue < 30) mood = 'horrified';
+      else if (lowCue < 30) mood = 'horrified';
       else if (sc.sunWorried > 0) mood = 'worried';
       else if (boss > 0.6) mood = 'boss';
-      else mood = chillCue >= 60 ? 'smug' : 'worried';
+      else mood = lowCue >= 60 ? 'smug' : 'worried';
       sc.sunMood = mood;
       drawSun(g, sc.sun, mood, time, scale, sc.sunAlpha, sc.sun.x < pose.x ? -1 : 1, boss, looksFor(inp.equipped).shades, moonlit, eclipse);
       if (inp.mech.flarePhase > 0) drawFlareCue(g, sc.sun, scale, inp.mech.flarePhase, inp.mech.flareLeft, inp.mech.flareT, time, inp.reducedMotion, sc.sunAlpha);

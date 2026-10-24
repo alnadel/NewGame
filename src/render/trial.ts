@@ -509,6 +509,24 @@ export function drawElAir(g: CanvasRenderingContext2D, v: View, s: SimState, tim
   }
 }
 
+/**
+ * How deep the ground point (x, y) lies in an awake fog bank's sprite (0 clear .. 1 well inside): the
+ * renderer redraws the walker through the bank at this weight, since fog veils what lies beyond it,
+ * never who walks in it.
+ */
+export function fogOver(s: SimState, x: number, y: number): number {
+  const el = s.el;
+  if (el === null) return 0;
+  let a = 0;
+  for (let i = 0; i < el.objs.length; i++) {
+    const o = el.objs[i] as ElObj;
+    if (o.kind !== 'fog' || o.state === EL_GONE) continue;
+    const d = Math.hypot((x - o.x) / o.r, (y - o.y) / (E.weather.ryRatio * o.r));
+    a = Math.max(a, Math.min(1, (1.25 - d) / 0.65));
+  }
+  return a;
+}
+
 /** Per object, the ring its cue wears this frame: 0 none, 1 dashed (a target), 2 the key's next, 3 tap now, 4 too late. */
 const ring = new Uint8Array(64);
 /** The ring passes: an ink underlay, the white dashes, the key's next target, tap now (pulsing), too late. */
@@ -635,8 +653,10 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.moveTo(v.nx, v.ny - 14 * S);
     g.lineTo(x, y);
     const R = (o.r + 9) * S;
+    // A plot's ring closes at treeMin (the Sap that stands a tree); a crossing's at its need.
+    const full = o.kind === 'plot' ? E.sprout.treeMin : needOf(o);
     g.moveTo(x, y - R);
-    g.arc(x, y, R, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, o.size / needOf(o)));
+    g.arc(x, y, R, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, o.size / full));
     g.stroke();
   }
 
@@ -699,7 +719,8 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.beginPath();
     for (let i = 0; i < n; i++) {
       const gc = gcs[i] as number;
-      if (gc !== c && !(c < 0 && gc >= 0 && gc < 3)) continue;
+      // The ink pass (c −1) underlays the on-screen ghosts (0..2); each colour pass draws its own.
+      if (c < 0 ? !(gc >= 0 && gc < 3) : gc !== c) continue;
       const o = objs[i] as ElObj;
       any = true;
       ell(g, v.ox + (gxs[i] as number) * S, v.oy - o.y * S, o.r * S, E.weather.ryRatio * o.r * S);

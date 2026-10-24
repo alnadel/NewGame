@@ -201,6 +201,8 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     shownCue = id === null ? null : { id, dir };
     cueEl.classList.toggle('is-on', id !== null);
     if (id === null) return;
+    // Elementals v2: a TAG's line hangs below the dial, clear of what lies ahead (verb ghost, first target, CLEAN!).
+    cueEl.classList.toggle('is-tag', id.startsWith('tag-'));
     renderCue(id, dir);
     const ms = cueDuration(id, dir);
     if (ms !== null) cueTimer = window.setTimeout(() => showCue(null), ms);

@@ -198,7 +198,9 @@ export class SfxRouter {
         this.slowMo = SLOWMO_S;
         return this.cue('phew', { day });
       case 'noonBanner':
-        return this.cue('noon', { day });
+        // Nubs' noon sting; none on a Trial (the view's health marks one), like the lock cue.
+        if (view.health === undefined) this.cue('noon', { day });
+        return;
       case 'noonPassed':
         return this.cue('noonPassed', { day });
       case 'nightStart':
