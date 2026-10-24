@@ -11,7 +11,8 @@
 // Dare's share of the G3 and G4 runs (G6) and the mixers' interaction runs (G7). --check exits 1 on
 // any failed gate. --pick <id> tries salts 0..199 in order and prints the first that passes every gate
 // (moving the Dare target 25% toward the band when only G6 fails); it changes nothing. --variant
-// '<json>' plays a calibration variant (drain, legStart, costMul, evapMul, moves, dareTarget). --perf
+// '<json>' plays a calibration variant (drain, legStart, costMul, evapMul, moves, add, dareTarget; a
+// re-timed trial's startMinute, lengthMinutes, relays and objects, the authoring string). --perf
 // adds the µs per tick and per guide refresh against a Nubs run of the same length. The audits, plans
 // and players live in elaudit.ts; the bots in src/core/sim/bots (build:single drops all of it).
 
@@ -34,7 +35,7 @@ import { step } from '../../src/core/sim/step.ts';
 import type { InputFrame, SimState } from '../../src/core/sim/types.ts';
 import { trailX } from '../../src/core/trail.ts';
 import { TaskPool } from './dares.ts';
-import { audit, AUDIT_HEALTH, legAt, legHero, planPlayer, tickAtY, trialRun, variantDef, type ElMove, type Plan, type ThetaMode, type TrialVariant } from './elaudit.ts';
+import { audit, AUDIT_HEALTH, downwindPlot, legAt, legHero, planPlayer, tickAtY, trialRun, variantDef, type ElMove, type Plan, type ThetaMode, type TrialVariant } from './elaudit.ts';
 import type { Sim16Ctx, Sim16Module } from './registry.ts';
 
 export { trialRun, variantDef, type TrialVariant } from './elaudit.ts';
@@ -53,26 +54,18 @@ const ON_SIGHT_GAP = 15;
 /** G7: a mixer without its interaction keeps a Sprout Sap margin at least this much lower. */
 const SAP_GAP = 10;
 /**
- * Waivers (§6.5): a G3, G4, G6 or G7 failure a Trial may keep, each with its measured reason. Every
- * entry needs the lead's sign-off before the merge; G0, G1, G2 and G5/G5b take none. A waived gate
- * still prints its row (marked "waived") and no longer fails --check.
+ * Waivers (§6.5): a G3, G4, G6 or G7 failure a Trial may keep. Every entry below is accepted by the
+ * lead (docs/ELEMENTALS_V2.md §13.3, "Lead decisions"), with its reason in one line; G0, G1, G2 and
+ * G5/G5b take none. A waived gate still prints its row (marked "waived") and no longer fails --check.
  */
 export const WAIVERS: Readonly<Record<string, string>> = {
-  // Measured on the pin: 23 of 24 G3/G4 runs burn all 7 (96%): humanEl taps each wall it sees in its
-  // sweet window, so every finisher burns every wall, and 7 is every burnable (no +25% target exists).
-  'T1 G6': 'every finisher burns every wall (96% of G3/G4 runs meet burns ≥ 7)',
-  // Measured on the pin: 21 of 24 G3/G4 runs drink all 7 (88%). Every puddle sits within ±22 u, Drip
-  // reaches ±32 u at 220 u/s, and G0 keeps the lane ≥ ±12 u, so a puddle cannot be made missable
-  // inside the dx ±8 u lever; the target is already at its +25% bound (6 → 7).
-  'T2 G6': 'every finisher drinks every puddle (88% of G3/G4 runs meet drinks ≥ 7)',
-  // Measured on the pin: 20 of 24 runs ride ≥ 60 ticks (83%), and as many at the +25% target (75):
-  // the cloud's 119 u footprint gives every rider up to 102 ticks once Gust pushes it over the trail.
-  'T4 G6': 'every finisher rides the pushed cloud (83% of G3/G4 runs meet cloudRide ≥ 60, 83% ≥ 75)',
-  // Measured on the pin: humanEl 16/16 with every lever at its §6.5 bound (drain 34, every leg start
-  // −20, costMul and evapMul 1.2); the G5b scan of salts 0..6000 found no other salt that a fixed sun
-  // cannot walk; 22 of 24 runs drink 5 puddles at the +25% target.
-  'T5 G4': 'humanEl passes 16/16 (100%) with every lever at its bound',
-  'T5 G6': 'every finisher drinks five puddles (92% of G3/G4 runs meet drinks ≥ 5)',
+  // The intros' Dares are "do everything the leg offers", and most finishers do.
+  'T1 G6': 'the Dare is every wall the leg offers and most finishers burn them all (96% meet burns ≥ 7)',
+  'T2 G6': 'the Dare is every puddle the leg offers and most finishers drink them all (88% meet drinks ≥ 7)',
+  'T4 G6': 'the Dare is the ride the leg offers and most finishers take it (83% meet cloudRide ≥ 60, 83% ≥ 75)',
+  // T5 is the gentle first mixer.
+  'T5 G4': 'the gentle first mixer: humanEl passes 16/16 (100%) with every lever at its bound',
+  'T5 G6': 'the gentle first mixer: most finishers drink five puddles (92% meet drinks ≥ 5)',
 };
 const WAIVABLE: readonly number[] = [3, 4, 6, 7];
 
@@ -124,8 +117,9 @@ export interface TrialRunOut {
   readonly dareMet: boolean;
   readonly trees: number;
   readonly grove: number;
-  /** The authored minutes of the plots whose tree stands at the end. */
+  /** The authored minutes of the plots whose tree stands at the end, and of every plot a tree stood on. */
   readonly standing: readonly number[];
+  readonly stood: readonly number[];
   readonly line: string;
   /** No plan for this variant (its audit failed). */
   readonly noPlan?: boolean;
@@ -160,7 +154,7 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
   let next: (s: SimState) => InputFrame;
   if (p.bot === 'path') {
     const plan = auditOf(task.v, p.worst === true);
-    if (plan.theta === null) return { won: false, passed: false, health: 0, legLow: [], meterLow: [], progress: 0, leg: 0, dare: 0, dareMet: false, trees: 0, grove: 0, standing: [], line: plan.why, noPlan: true };
+    if (plan.theta === null) return { won: false, passed: false, health: 0, legLow: [], meterLow: [], progress: 0, leg: 0, dare: 0, dareMet: false, trees: 0, grove: 0, standing: [], stood: [], line: plan.why, noPlan: true };
     next = planPlayer(plan, { theta: p.theta ?? { k: 'plan' }, off: p.off, spam: p.spam, tapOnSight: p.tapOnSight });
   } else {
     const b = createBot(p.bot, p.salt, true, { el: p.el });
@@ -168,8 +162,11 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
   }
   const low: number[] = [];
   const raw: number[] = [];
+  const objs = (s.el as ElState).objs;
+  const stoodAt = new Uint8Array(objs.length);
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < TICK_CAP) {
     step(s, next(s));
+    for (let i = 0; i < objs.length; i++) if ((objs[i] as ElObj).kind === 'plot' && (objs[i] as ElObj).casterId >= 0) stoodAt[i] = 1;
     if (s.ready > 0 || s.phase !== 'day') continue;
     const el = s.el as ElState;
     const h = s.nubs.hero === 'sprout' ? s.nubs.chill : Math.min(100, s.nubs.chill + el.spent);
@@ -197,6 +194,7 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
     trees: s.stats.trees ?? 0,
     grove: s.stats.grove ?? 0,
     standing,
+    stood: mins.filter((_, i) => stoodAt[i] === 1),
     line: s.death?.line ?? '',
   };
 }
@@ -336,6 +334,7 @@ export function gateG0(v: TrialVariant): G0Out {
  */
 export function clearanceMoves(v: TrialVariant): ElMove[] | null {
   const t = variantDef(v);
+  const unmoved = variantDef({ ...v, moves: [] });
   const s = trialRun(t);
   const w = s.world;
   const moves: ElMove[] = [...(v.moves ?? [])];
@@ -353,7 +352,7 @@ export function clearanceMoves(v: TrialVariant): ElMove[] | null {
     const y = worldYAtTick(w, tickAtMinute(o.m));
     const tx = trailX(w.trail, y);
     if (clear(tx + o.dx, y, r)) continue;
-    const base = ((trialDef(t.id) as TrialDef).objects[i] ?? o) as TrialDef['objects'][number];
+    const base = (unmoved.objects[i] ?? o) as TrialDef['objects'][number];
     let found = false;
     for (let d = 1; d <= 8 && !found; d++) {
       for (const sgn of [-1, 1]) {
@@ -472,6 +471,15 @@ export async function gateG5(run: TrialRunner, v: TrialVariant, path: TrialRunOu
   return { ok: why.length === 0, idle, offs, sight, spams, constBest: (consts[best] as TrialRunOut | undefined) ?? null, constTheta: 10 * best, why: why.join('; ') };
 }
 
+/** The authored minutes of a variant's plots that a fire on a later wall reaches downwind (§3.4, G7 on T7). */
+function downwindMinutes(v: TrialVariant): number[] {
+  const t = variantDef(v);
+  const s = trialRun(t);
+  const el = s.el as ElState;
+  const mins = minutesOf(s, t);
+  return el.objs.flatMap((o, i) => (o.kind === 'plot' && downwindPlot(s, el, o) ? [mins[i] as number] : []));
+}
+
 /** G7, the mixers' interactions (§6.4). */
 export async function gateG7(run: TrialRunner, v: TrialVariant, base: AuditOut, path: TrialRunOut): Promise<NonNullable<Gates['g7']>> {
   const t = variantDef(v);
@@ -493,12 +501,16 @@ export async function gateG7(run: TrialRunner, v: TrialVariant, base: AuditOut, 
     return { ok: lower && fewer, what: `no hand-off swipes: Sap ${sap(a).toFixed(0)} vs ${sap(base).toFixed(0)}, trees ${o.trees} (path ${path.trees})` };
   }
   if (t.id === 1007) {
+    // The plots a fire on an Ember-stretch wall reaches downwind (the breeze's side): the path with
+    // the downwind mod plants them (it grows more trees than the plan) and ends with them gone.
+    const down = downwindMinutes(v);
     const burn = await run.run({ v: { ...v, mod: { downwind: true } }, p: { bot: 'path' } });
-    const gone = !burn.standing.includes(410);
+    const planted = down.length > 0 && down.every((m) => burn.stood.includes(m));
+    const gone = down.length > 0 && planted && down.every((m) => !burn.standing.includes(m));
     const w = { ...v, mod: { noHandoff: true } };
     const a = await run.audit(w);
     const lower = sap(a) <= sap(base) - SAP_GAP;
-    return { ok: gone && lower, what: `plot 410 ${gone ? 'burnt' : 'STANDS'}; no hand-off swipes: Sap ${sap(a).toFixed(0)} vs ${sap(base).toFixed(0)}` };
+    return { ok: gone && lower, what: `plot ${down.join(',') || 'none downwind'} ${gone ? 'burnt' : planted ? 'STANDS' : 'never planted'}; no hand-off swipes: Sap ${sap(a).toFixed(0)} vs ${sap(base).toFixed(0)}` };
   }
   return { ok: true, what: '' };
 }
@@ -590,7 +602,7 @@ export function report(g: Gates): string {
   if (g.g4) lines.push(`  G4 ${mark(g.g4.ok)} humanEl ${g.g4.passes}/${g.g4.outs.length} ${pct(g.g4.passes / g.g4.outs.length)}  deaths: ${deaths(g.g4.outs)}`);
   if (g.g6) lines.push(`  G6 ${mark(g.g6.ok)} dare ${t.dare.kind} ≥ ${t.dare.target}: ${pct(g.g6.share)}`);
   if (g.g7) lines.push(`  G7 ${mark(g.g7.ok)} ${g.g7.what}`);
-  for (const w of g.waived) lines.push(`  waived ${w} (needs the lead)`);
+  for (const w of g.waived) lines.push(`  waived ${w} (accepted by the lead)`);
   return lines.join('\n');
 }
 

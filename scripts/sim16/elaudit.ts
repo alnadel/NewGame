@@ -99,6 +99,31 @@ export interface TrialVariant {
   /** Calibration (§6.5): objects added to the trial's list (one per leg at most), after the authored ones. */
   readonly add?: readonly ElPlace[];
   readonly mod?: PlanMod;
+  /**
+   * Re-timing (the lead's T6/T7 decision, §13.3): the start minute, the length, every relay's minute
+   * (heroes unchanged) and the whole object list in the authoring string of `TRIALS` (moves and adds
+   * apply on top of it).
+   */
+  readonly startMinute?: number;
+  readonly lengthMinutes?: number;
+  readonly relays?: readonly number[];
+  readonly objects?: string;
+}
+
+const CODE: Readonly<Record<string, ElPlace['k']>> = { b: 'bramble', g: 'gate', i: 'ice', x: 'gap', s: 'stream', p: 'plot', u: 'puddle', t: 'stone', r: 'rain', f: 'fog' };
+
+/** An authoring string (`<code><m>[:dx[:r[:drift]]]`, as in config/trials.ts) as objects. */
+export function parseObjects(src: string): ElPlace[] {
+  return src
+    .trim()
+    .split(/\s+/)
+    .map((e) => {
+      const [m, dx, r, drift] = e.slice(1).split(':').map(Number) as [number, number?, number?, number?];
+      const o: { k: ElPlace['k']; m: number; dx: number; r?: number; drift?: number } = { k: CODE[e[0] as string] as ElPlace['k'], m, dx: dx ?? 0 };
+      if (r !== undefined) o.r = r;
+      if (drift !== undefined) o.drift = drift;
+      return o;
+    });
 }
 
 /** The TrialDef of a variant (the pinned one itself when nothing differs). */
@@ -112,9 +137,13 @@ export function variantDef(v: TrialVariant): TrialDef {
     v.costMul === undefined &&
     v.evapMul === undefined &&
     (v.moves?.length ?? 0) === 0 &&
-    (v.add?.length ?? 0) === 0;
+    (v.add?.length ?? 0) === 0 &&
+    v.startMinute === undefined &&
+    v.lengthMinutes === undefined &&
+    v.relays === undefined &&
+    v.objects === undefined;
   if (same) return t;
-  const objects: ElPlace[] = [...t.objects, ...(v.add ?? [])].map((o) => ({ ...o }));
+  const objects: ElPlace[] = [...(v.objects !== undefined ? parseObjects(v.objects) : t.objects), ...(v.add ?? [])].map((o) => ({ ...o }));
   for (const mv of v.moves ?? []) {
     const o = objects[mv.i] as { m: number; dx: number; drift?: number };
     if (mv.m !== undefined) o.m = mv.m;
@@ -125,6 +154,9 @@ export function variantDef(v: TrialVariant): TrialDef {
     ...t,
     salt: v.salt,
     seed: hashString(`trial-${t.id}-${v.salt}`),
+    startMinute: v.startMinute ?? t.startMinute,
+    lengthMinutes: v.lengthMinutes ?? t.lengthMinutes,
+    relays: v.relays ? Object.freeze(t.relays.map((r, i) => Object.freeze({ minute: v.relays?.[i] ?? r.minute, to: r.to }))) : t.relays,
     drain: v.drain ?? t.drain,
     dare: Object.freeze({ kind: t.dare.kind, target: v.dareTarget ?? t.dare.target }),
     objects: Object.freeze(objects),
@@ -149,6 +181,11 @@ export function trialRun(t: TrialDef): SimState {
   m.trial = t;
   s.cfg.seed = t.seed;
   s.cfg.drain = t.drain;
+  // createRun resolved the start time from the pinned trial: a re-timed variant starts at its own.
+  m.day = start.day;
+  m.dayTick = start.dayTick;
+  s.cfg.startDay = start.day;
+  s.cfg.startT = start.dayTick / TICK_HZ;
   const cl = s.world.clouds as Cloud[];
   for (let i = cl.length - 1; i >= 0; i--) if ((cl[i] as Cloud).id >= EL_ID_BASE && (cl[i] as Cloud).id < TREE_ID_BASE) cl.splice(i, 1);
   m.el = createEl(s);
@@ -672,7 +709,7 @@ function ledger(holds: readonly Hold[], p: Probe, start: number, el: ElState): n
 }
 
 /** A plot a fire on a later wall in an Ember stretch would reach while the breeze spreads fire (§3.4). */
-function downwindPlot(s: SimState, el: ElState, p: ElObj): boolean {
+export function downwindPlot(s: SimState, el: ElState, p: ElObj): boolean {
   const b = (s.trial as TrialDef).breeze;
   const F = E.fire;
   if (b < F.spreadAt && b > -F.spreadAt) return false;
