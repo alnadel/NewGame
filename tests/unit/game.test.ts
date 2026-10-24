@@ -1,12 +1,14 @@
 // Pure game-layer logic: guide Auto rules and ghost hints (V1_PLAN §6.2-§6.3), the fixed-step clock
 // (archive/TECH_SPEC §9.10), URL params (V1_PLAN §14), view letterboxing (archive/TECH_SPEC §9.1), the input
-// frame splitting/quantization (V1_PLAN §3.1) and the perf governor (archive/TECH_SPEC §15).
+// frame splitting/quantization (V1_PLAN §3.1), the Elementals v2 input model (docs/ELEMENTALS_V2.md
+// §7.9) and the perf governor (archive/TECH_SPEC §15).
 import { describe, expect, it } from 'vitest';
 import { cssEaseInOut, ghostSwingX, ghostSwipe, guideAlpha, HintTracker, nearestSafe, widestArc, type HintInput } from '../../src/game/assist.ts';
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { dailyDateInBounds, isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
 import { Input, type InputHost } from '../../src/game/input.ts';
+import { VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_KEY_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type Verb } from '../../src/core/index.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from '../../src/game/perf.ts';
 import { Cadence, type CadenceInput } from '../../src/game/cadence.ts';
 
@@ -362,6 +364,384 @@ describe('input frames (V1_PLAN §3.1)', () => {
     inp.begin(ev(200, 0));
     expect(inp.takeFrames(0).length).toBe(0);
     expect(inp.takeFrames(1)[0]!.downEdge).toBe(true);
+    inp.dispose();
+  });
+});
+
+describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
+  const g = globalThis as unknown as { window?: EventTarget & { innerWidth: number; innerHeight: number } };
+  if (!g.window) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
+  const canvas = new EventTarget() as unknown as HTMLCanvasElement;
+  type Priv = {
+    onDown(e: PointerEvent): void;
+    onMove(e: PointerEvent): void;
+    onUp(e: PointerEvent, cancel: boolean): void;
+    onKey(e: KeyboardEvent, down: boolean): void;
+    onWheel(e: WheelEvent): void;
+  };
+  /** An Input on a host whose verb, targets and scale the test sets; the ground point is (x / 2, (640 − y) / 2) + a 1/32 u offset (quantized away). */
+  const mk = (verb: Verb, extra: Partial<InputHost> = {}) => {
+    const h = { verb, target: true, uPer: 0.5, snap: true, asked: [] as number[] };
+    const host: InputHost = {
+      canvas,
+      accepting: () => true,
+      onPress: () => {},
+      viewportWidth: () => 360,
+      safeBottom: () => 0,
+      canSnap: () => h.snap,
+      verb: () => h.verb,
+      toWorld: (x, y, out) => {
+        out[0] = x / 2 + 1 / 32;
+        out[1] = (640 - y) / 2;
+        return true;
+      },
+      uPerPx: () => h.uPer,
+      canTarget: (wx, wy) => {
+        h.asked.push(wx, wy);
+        return h.target;
+      },
+      ...extra,
+    };
+    const inp = new Input(host);
+    return { h, inp, p: inp as unknown as Priv };
+  };
+  const pe = (id: number, x: number, y: number, t: number): PointerEvent =>
+    ({ pointerId: id, clientX: x, clientY: y, timeStamp: t, pointerType: 'touch', button: 0, preventDefault: () => {} }) as unknown as PointerEvent;
+  const ke = (key: string, repeat = false, shiftKey = false): KeyboardEvent =>
+    ({ key, shiftKey, repeat, altKey: false, ctrlKey: false, metaKey: false, target: null, preventDefault: () => {} }) as unknown as KeyboardEvent;
+  const wheel = (deltaY: number, deltaMode: number): WheelEvent => ({ deltaY, deltaMode, target: null, preventDefault: () => {} }) as unknown as WheelEvent;
+  /** Sums a batch: total turn and steer, edges, the verbs with their points, any frame down. */
+  const sum = (f: readonly InputFrame[]) => ({
+    dTheta: f.reduce((a, x) => a + x.dTheta, 0),
+    steer: f.reduce((a, x) => a + (x.steer ?? 0), 0),
+    downEdge: f.some((x) => x.downEdge),
+    upEdge: f.some((x) => x.upEdge),
+    down: f.some((x) => x.down),
+    verbs: f.filter((x) => x.verb).map((x) => [x.verb, x.vx, x.vy]),
+  });
+
+  it("'sun' plays a scripted pointer, key and wheel sequence exactly as before v2 (the original seven fields)", () => {
+    // Recorded from the pre-v2 input.ts (C0c) on the same script.
+    const want = [[[0, 1, 1, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0, 0]], [[18, 1, 0, 0, 0, 0, 0], [18, 1, 0, 0, 0, 0, 0], [18, 1, 0, 0, 0, 0, 0]], [[0, 1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 1125, 0, 0]], [[-3, 0, 1, 1, -300, 0, 0]], [[0, 0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1, 0]], [[0, 0, 0, 0, 0, 2, 0]], [[0, 0, 0, 0, 0, -1, 0]], [[0, 0, 0, 0, 0, 0, 0]], [[-7.5, 1, 1, 0, 0, 0, 0], [-7.5, 0, 0, 1, 0, 0, 0]], [[14, 0, 1, 1, 0, 0, 0]], [[0, 1, 1, 0, 0, 0, 1], [0, 1, 0, 0, 0, 0, 0]], [[0, 0, 0, 1, 0, 0, 1]], [[0, 1, 1, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0, 0]], [[0, 0, 0, 1, 0, 0, 0]]];
+    // With every v2 host member present (and every press on a target), and with none.
+    for (const extra of [{}, { verb: undefined, toWorld: undefined, uPerPx: undefined, canTarget: undefined }] as Partial<InputHost>[]) {
+      const { inp, p } = mk('sun', extra);
+      const got: number[][][] = [];
+      const take = (n: number, now: number): void => {
+        const fs = inp.takeFrames(n, now);
+        for (const f of fs) expect([f.verb, f.vx, f.vy, f.steer]).toEqual([0, 0, 0, 0]);
+        got.push(fs.map((f) => [f.dTheta, +f.down, +f.downEdge, +f.upEdge, f.release, f.key, +(f.snap ?? false)]));
+      };
+      p.onDown(pe(1, 200, 300, 0));
+      take(2, 5);
+      for (let i = 1; i <= 6; i++) p.onMove(pe(1, 200 - i * 9, 302, i * 8));
+      take(3, 50);
+      p.onUp(pe(1, 146, 302, 52), false);
+      take(2, 60);
+      p.onDown(pe(2, 100, 200, 100));
+      p.onMove(pe(2, 103, 203, 110));
+      p.onUp(pe(2, 103, 203, 130), false);
+      take(1, 140);
+      p.onKey(ke('ArrowLeft'), true);
+      take(2, 150);
+      p.onKey(ke('ArrowLeft', false, true), true);
+      take(1, 160);
+      p.onKey(ke('ArrowLeft', false, true), false);
+      p.onKey(ke('d'), true);
+      take(1, 170);
+      p.onKey(ke('d'), false);
+      p.onKey(ke('ArrowUp'), true);
+      p.onKey(ke('w'), true);
+      take(1, 180);
+      p.onKey(ke('ArrowUp'), false);
+      p.onWheel(wheel(3, 1));
+      take(2, 190);
+      p.onWheel(wheel(-40, 0));
+      take(1, 200);
+      p.onDown(pe(3, 250, 300, 300));
+      p.onMove(pe(3, 251, 360, 330));
+      take(2, 340);
+      p.onUp(pe(3, 251, 360, 350), false);
+      p.onKey(ke('ArrowDown'), true);
+      take(1, 360);
+      p.onDown(pe(4, 120, 300, 400));
+      p.onMove(pe(4, 140, 300, 420));
+      p.onDown(pe(5, 300, 300, 430));
+      p.onMove(pe(5, 280, 300, 440));
+      p.onMove(pe(4, 160, 300, 445));
+      p.onUp(pe(4, 160, 300, 450), true);
+      take(2, 455);
+      p.onUp(pe(5, 280, 300, 460), true);
+      take(1, 465);
+      expect(got).toEqual(want);
+      inp.dispose();
+    }
+  });
+
+  it("'burn': a tap on a target burns at its quantized ground point and leaves the sun alone", () => {
+    const { h, inp, p } = mk('burn');
+    p.onDown(pe(1, 101, 200, 0));
+    // The press is held back: nothing reaches the sun.
+    expect(sum(inp.takeFrames(2, 100))).toMatchObject({ dTheta: 0, downEdge: false, down: false, verbs: [] });
+    p.onMove(pe(1, 105, 203, 150));
+    p.onUp(pe(1, 105, 203, 280), false);
+    const f = inp.takeFrames(3, 290);
+    // No catch, no turn, no release: a coasting sun keeps coasting. The point is the press's, on the 1/8 u grid.
+    expect(sum(f)).toEqual({ dTheta: 0, steer: 0, downEdge: false, upEdge: false, down: false, verbs: [[VERB_TAP, 50.5, 220]] });
+    expect(f[0]!.verb).toBe(VERB_TAP);
+    expect(h.asked).toEqual([50.5, 220]);
+    // Frames are reset every batch.
+    expect(sum(inp.takeFrames(2, 300)).verbs).toEqual([]);
+    inp.dispose();
+  });
+
+  it("'burn'/'grow': a held-back press that moves 12 px becomes a sun press with its turn; a burn press held past 300 ms turns the sun", () => {
+    for (const verb of ['burn', 'grow'] as const) {
+      const { inp, p } = mk(verb);
+      p.onDown(pe(1, 200, 300, 0));
+      p.onMove(pe(1, 192, 300, 40));
+      expect(sum(inp.takeFrames(1, 50))).toMatchObject({ downEdge: false, dTheta: 0 });
+      p.onMove(pe(1, 188, 300, 60));
+      // 12 px left: −12/360 of a turn the other way (Δθ = −dx / width × 360°), caught now.
+      expect(sum(inp.takeFrames(2, 70))).toMatchObject({ downEdge: true, down: true, dTheta: 12, verbs: [] });
+      p.onMove(pe(1, 178, 300, 80));
+      expect(sum(inp.takeFrames(1, 90)).dTheta).toBe(10);
+      p.onUp(pe(1, 178, 300, 400), false);
+      expect(sum(inp.takeFrames(1, 410))).toMatchObject({ upEdge: true, verbs: [] });
+      inp.dispose();
+    }
+    const { inp, p } = mk('burn');
+    p.onDown(pe(1, 200, 300, 0));
+    expect(sum(inp.takeFrames(1, 300)).downEdge).toBe(false);
+    expect(sum(inp.takeFrames(1, 301))).toMatchObject({ downEdge: true, down: true, verbs: [] });
+    p.onUp(pe(1, 200, 300, 320), false);
+    expect(sum(inp.takeFrames(1, 330))).toMatchObject({ upEdge: true, verbs: [] });
+    inp.dispose();
+  });
+
+  it("'burn'/'grow': a press off every target is today's sun press", () => {
+    for (const verb of ['burn', 'grow'] as const) {
+      const { h, inp, p } = mk(verb);
+      h.target = false;
+      p.onDown(pe(1, 200, 300, 0));
+      p.onMove(pe(1, 190, 300, 10));
+      expect(sum(inp.takeFrames(1, 20))).toMatchObject({ downEdge: true, down: true, dTheta: 10, verbs: [] });
+      p.onUp(pe(1, 190, 300, 30), false);
+      expect(sum(inp.takeFrames(1, 40))).toMatchObject({ upEdge: true, verbs: [] });
+      inp.dispose();
+    }
+  });
+
+  it("'grow': still for 220 ms is a hold until it lifts; a shorter press does nothing", () => {
+    const { inp, p } = mk('grow');
+    p.onDown(pe(1, 100, 400, 0));
+    p.onMove(pe(1, 104, 404, 100));
+    expect(sum(inp.takeFrames(1, 219)).verbs).toEqual([]);
+    expect(sum(inp.takeFrames(2, 220))).toMatchObject({ verbs: [[VERB_HOLD, 50, 120]], downEdge: false, dTheta: 0, down: false });
+    p.onMove(pe(1, 120, 404, 400));
+    expect(sum(inp.takeFrames(1, 410))).toMatchObject({ verbs: [], dTheta: 0 });
+    p.onUp(pe(1, 120, 404, 1000), false);
+    expect(sum(inp.takeFrames(1, 1010))).toMatchObject({ verbs: [[VERB_RELEASE, 0, 0]], upEdge: false });
+    p.onDown(pe(2, 100, 400, 2000));
+    p.onUp(pe(2, 100, 400, 2200), false);
+    expect(sum(inp.takeFrames(1, 2210))).toMatchObject({ verbs: [], downEdge: false, upEdge: false });
+    inp.dispose();
+  });
+
+  it("'grow': a hold that moves 24 px lets go and becomes a sun press", () => {
+    const { inp, p } = mk('grow');
+    p.onDown(pe(1, 100, 400, 0));
+    inp.takeFrames(1, 230);
+    p.onMove(pe(1, 110, 400, 300));
+    expect(sum(inp.takeFrames(1, 310)).verbs).toEqual([]);
+    p.onMove(pe(1, 124, 400, 320));
+    const f = sum(inp.takeFrames(2, 330));
+    expect(f).toMatchObject({ verbs: [[VERB_RELEASE, 0, 0]], downEdge: true, down: true, dTheta: -24 });
+    inp.dispose();
+  });
+
+  it("'grow': a second finger turns the sun during a hold, and the first finger's lift still lets go", () => {
+    const { inp, p } = mk('grow');
+    p.onDown(pe(1, 100, 400, 0));
+    inp.takeFrames(1, 230);
+    // The second press on a target goes to the sun slot (the verb slot is busy).
+    p.onDown(pe(2, 250, 300, 300));
+    p.onMove(pe(2, 230, 300, 320));
+    expect(sum(inp.takeFrames(2, 330))).toMatchObject({ downEdge: true, down: true, dTheta: 20, verbs: [] });
+    p.onUp(pe(1, 100, 400, 400), false);
+    expect(sum(inp.takeFrames(1, 410))).toMatchObject({ verbs: [[VERB_RELEASE, 0, 0]], down: true, upEdge: false });
+    p.onUp(pe(2, 230, 300, 500), false);
+    expect(sum(inp.takeFrames(1, 510))).toMatchObject({ upEdge: true, verbs: [] });
+    inp.dispose();
+  });
+
+  it("'steer': every drag slides Drip by the finger's world distance (invert ignored), split and quantized; the sun gets nothing", () => {
+    const { h, inp, p } = mk('steer');
+    inp.invert = true;
+    inp.sensitivity = 2;
+    h.uPer = 0.37;
+    p.onDown(pe(1, 200, 300, 0));
+    p.onMove(pe(1, 230, 310, 10));
+    p.onMove(pe(1, 240, 280, 20));
+    const f = inp.takeFrames(3, 30);
+    expect(f.every((x) => x.steer! * 64 === Math.round(x.steer! * 64))).toBe(true);
+    const first = sum(f);
+    expect(first).toMatchObject({ dTheta: 0, downEdge: false, down: false, upEdge: false, verbs: [] });
+    // 40 px × 0.37 u/px = 14.8 u on the 1/64 u grid, the rounding remainder carried to later batches.
+    expect(Math.abs(first.steer - 14.8)).toBeLessThan(1 / 64);
+    p.onMove(pe(1, 200, 300, 50));
+    p.onUp(pe(1, 200, 300, 60), false);
+    const back = sum(inp.takeFrames(2, 70));
+    expect(back).toMatchObject({ upEdge: false, down: false, dTheta: 0 });
+    expect(Math.abs(first.steer + back.steer)).toBeLessThan(1 / 64);
+    inp.dispose();
+  });
+
+  it("'blow': a quick sideways swipe blows one gust that way; slow, steep or second moves do nothing", () => {
+    const { inp, p } = mk('blow');
+    p.onDown(pe(1, 200, 300, 0));
+    p.onMove(pe(1, 185, 302, 50));
+    p.onMove(pe(1, 175, 305, 100));
+    p.onMove(pe(1, 100, 305, 150));
+    expect(sum(inp.takeFrames(2, 160))).toMatchObject({ verbs: [[VERB_WEST, 0, 0]], dTheta: 0, downEdge: false, down: false });
+    p.onUp(pe(1, 100, 305, 170), false);
+    p.onDown(pe(2, 100, 300, 200));
+    p.onMove(pe(2, 130, 300, 280));
+    expect(sum(inp.takeFrames(1, 290)).verbs).toEqual([[VERB_EAST, 0, 0]]);
+    p.onUp(pe(2, 130, 300, 300), false);
+    // Too slow (past 300 ms), too steep (|dx| < 1.5·|dy|), too short.
+    p.onDown(pe(3, 100, 300, 1000));
+    p.onMove(pe(3, 160, 300, 1301));
+    p.onUp(pe(3, 160, 300, 1310), false);
+    p.onDown(pe(4, 100, 300, 2000));
+    p.onMove(pe(4, 130, 321, 2100));
+    p.onUp(pe(4, 130, 321, 2110), false);
+    p.onDown(pe(5, 100, 300, 3000));
+    p.onMove(pe(5, 123, 300, 3050));
+    p.onUp(pe(5, 123, 300, 3060), false);
+    expect(sum(inp.takeFrames(2, 3100))).toMatchObject({ verbs: [], dTheta: 0, upEdge: false });
+    inp.dispose();
+  });
+
+  it('keys per verb: Up/W burns (6) or holds (7, up 3), Left/Right blow one gust per press, steer with key; Down snaps only on the sun', () => {
+    const burn = mk('burn');
+    burn.p.onKey(ke('ArrowUp'), true);
+    burn.p.onKey(ke('ArrowUp', true), true);
+    burn.p.onKey(ke('ArrowUp'), false);
+    expect(sum(burn.inp.takeFrames(1, 0)).verbs).toEqual([[VERB_KEY_BURN, 0, 0]]);
+    expect(sum(burn.inp.takeFrames(1, 0)).verbs).toEqual([]);
+    burn.p.onKey(ke('ArrowLeft'), true);
+    expect(burn.inp.takeFrames(1, 0)[0]!.key).toBe(1);
+    burn.inp.dispose();
+
+    const grow = mk('grow');
+    grow.p.onKey(ke('w'), true);
+    grow.p.onKey(ke('w', true), true);
+    expect(sum(grow.inp.takeFrames(1, 0)).verbs).toEqual([[VERB_KEY_HOLD, 0, 0]]);
+    grow.p.onKey(ke('w'), false);
+    expect(sum(grow.inp.takeFrames(1, 0)).verbs).toEqual([[VERB_RELEASE, 0, 0]]);
+    grow.inp.dispose();
+
+    const blow = mk('blow');
+    blow.p.onKey(ke('ArrowLeft'), true);
+    blow.p.onKey(ke('ArrowLeft', true), true);
+    let f = blow.inp.takeFrames(1, 0);
+    expect([f[0]!.verb, f[0]!.key]).toEqual([VERB_WEST, 0]);
+    blow.p.onKey(ke('ArrowLeft'), false);
+    blow.p.onKey(ke('d'), true);
+    f = blow.inp.takeFrames(1, 0);
+    expect([f[0]!.verb, f[0]!.key]).toEqual([VERB_EAST, 0]);
+    blow.inp.dispose();
+
+    const steer = mk('steer');
+    steer.p.onKey(ke('ArrowLeft', false, true), true);
+    f = steer.inp.takeFrames(1, 0);
+    expect([f[0]!.verb, f[0]!.key, f[0]!.steer]).toEqual([0, 2, 0]);
+    steer.p.onKey(ke('ArrowUp'), true);
+    expect(steer.inp.takeFrames(1, 0)[0]!.verb).toBe(0);
+    steer.inp.dispose();
+
+    for (const verb of ['sun', 'burn', 'grow', 'steer', 'blow'] as const) {
+      const { inp, p } = mk(verb);
+      p.onKey(ke('ArrowDown'), true);
+      expect(inp.takeFrames(1, 0)[0]!.snap).toBe(verb === 'sun');
+      inp.dispose();
+    }
+  });
+
+  it("the wheel turns the sun on 'sun', 'burn' and 'grow', steers 6 u a notch (0.15 u/px, ±18 u) on 'steer', and does nothing on 'blow'", () => {
+    for (const verb of ['sun', 'burn', 'grow'] as const) {
+      const { inp, p } = mk(verb);
+      p.onWheel(wheel(3, 1));
+      expect(sum(inp.takeFrames(1, 0))).toMatchObject({ dTheta: -15, steer: 0 });
+      inp.dispose();
+    }
+    const steer = mk('steer');
+    steer.p.onWheel(wheel(3, 1));
+    expect(sum(steer.inp.takeFrames(1, 0))).toMatchObject({ dTheta: 0, steer: 6, downEdge: false });
+    steer.p.onWheel(wheel(-40, 0));
+    expect(sum(steer.inp.takeFrames(1, 0)).steer).toBe(-6);
+    steer.p.onWheel(wheel(1000, 0));
+    expect(sum(steer.inp.takeFrames(2, 0)).steer).toBe(18);
+    steer.inp.dispose();
+    const blow = mk('blow');
+    blow.p.onWheel(wheel(3, 1));
+    expect(sum(blow.inp.takeFrames(1, 0))).toMatchObject({ dTheta: 0, steer: 0, downEdge: false, upEdge: false, verbs: [] });
+    blow.inp.dispose();
+  });
+
+  it('cut(false) keeps a sun drag and drops the verb slot; cut(true) ends both; cut and releaseAll() let a hold go', () => {
+    // A burn press held back at the TAG is dropped: its lift is no tap.
+    const a = mk('burn');
+    a.h.target = false;
+    a.p.onDown(pe(1, 300, 300, 0));
+    a.h.target = true;
+    a.p.onDown(pe(2, 100, 300, 10));
+    a.inp.takeFrames(1, 20);
+    a.inp.cut(false);
+    a.p.onUp(pe(2, 100, 300, 100), false);
+    a.p.onMove(pe(1, 290, 300, 110));
+    // The sun drag carries on.
+    expect(sum(a.inp.takeFrames(1, 120))).toMatchObject({ verbs: [], dTheta: 10, down: true, upEdge: false });
+    a.inp.cut(true);
+    expect(sum(a.inp.takeFrames(1, 130))).toMatchObject({ upEdge: true, down: false });
+    expect(a.inp.takeFrames(1, 130)[0]!.release).toBe(0);
+    a.inp.dispose();
+
+    for (const end of ['cut', 'release'] as const) {
+      const b = mk('grow');
+      b.p.onDown(pe(1, 100, 400, 0));
+      b.inp.takeFrames(1, 230);
+      if (end === 'cut') b.inp.cut(false);
+      else b.inp.releaseAll();
+      expect(sum(b.inp.takeFrames(1, 240)).verbs).toEqual([[VERB_RELEASE, 0, 0]]);
+      // The finger is no longer the hold's: its lift sends nothing more.
+      b.p.onUp(pe(1, 100, 400, 300), false);
+      expect(sum(b.inp.takeFrames(1, 310)).verbs).toEqual([]);
+      b.inp.dispose();
+    }
+
+    // A steer press ends on cut(true) (no edges: it never held the sun).
+    const c = mk('steer');
+    c.p.onDown(pe(1, 100, 300, 0));
+    c.p.onMove(pe(1, 120, 300, 10));
+    c.inp.cut(true);
+    c.p.onMove(pe(1, 160, 300, 20));
+    expect(sum(c.inp.takeFrames(1, 30))).toMatchObject({ steer: 0, upEdge: false });
+    expect(c.inp.touching).toBe(false);
+    c.inp.dispose();
+  });
+
+  it('queues one verb per batch (a second waits for the next batch) and quantizes points to 1/8 u', () => {
+    const { inp, p } = mk('burn');
+    p.onDown(pe(1, 101.3, 200.7, 0));
+    p.onUp(pe(1, 101.3, 200.7, 50), false);
+    p.onKey(ke('ArrowUp'), true);
+    const f = inp.takeFrames(4, 60);
+    expect(sum(f).verbs).toEqual([[VERB_TAP, 50.625, 219.625]]);
+    expect(f[0]!.vx! * 8).toBe(Math.round(f[0]!.vx! * 8));
+    expect(sum(inp.takeFrames(4, 70)).verbs).toEqual([[VERB_KEY_BURN, 0, 0]]);
+    expect(sum(inp.takeFrames(4, 80)).verbs).toEqual([]);
     inp.dispose();
   });
 });

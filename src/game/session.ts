@@ -994,7 +994,7 @@ export class Session {
     const ci = this.cadenceIn;
     ci.now = now;
     ci.screen = r.screen;
-    ci.inputActive = inputDown;
+    ci.inputActive = inputDown || this.input.touching;
     ci.timeScale = this.clock.timeScale;
     ci.reducedMotion = r.reducedMotion;
     ci.settled = this.renderer.settled;

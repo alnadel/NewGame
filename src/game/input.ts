@@ -19,12 +19,21 @@
 //   sets InputFrame.snap on the next tick; only while host.canSnap() (a run in play, not the hold,
 //   the intro card or a menu). A swipe that snaps takes back the turn its press made and releases
 //   at 0 °/s, so it never coasts the sun.
-// - Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the host names the walking element's verb (verb()),
-//   maps CSS px to the ground (toWorld, uPerPx) and says whether a press starts on a target
-//   (canTarget); until the verb slots land every verb is played as 'sun' (today's press). cut() ends
-//   the presses a TAG hands over.
+// - Elementals v2 (docs/ELEMENTALS_V2.md §1.3, §7.9): the host names the walking element's verb
+//   (verb()), maps CSS px to the ground (toWorld, uPerPx) and says whether a press starts on a target
+//   (canTarget). 'sun' is today's press, byte for byte. On 'burn' and 'grow' legs a press that starts
+//   on a target goes to the verb slot (while it is free) and is held back from the sun: a burn press
+//   released within TAP_MS and TAP_PX is a tap (VERB_TAP + its ground point); a grow press still for
+//   HOLD_MS is a hold (VERB_HOLD) until it lifts or moves HOLD_BREAK_PX (VERB_RELEASE); moving TAP_PX
+//   first, or a burn press held past TAP_MS, makes it a sun press with the turn it moved. Every
+//   other press is the sun slot's (latest wins), so a second finger turns the sun during a hold. On
+//   'steer' legs every press slides Drip with the finger (steer, world u); on 'blow' legs a quick
+//   sideways swipe blows one gust (VERB_WEST/EAST). Keys: Up/W acts (burn: VERB_KEY_BURN; grow:
+//   VERB_KEY_HOLD until up), Left/Right blow one gust per press on 'blow' legs; the wheel steers
+//   Drip. A queued verb lands on the first frame of the next batch. cut() ends the presses a TAG
+//   hands over.
 
-import type { InputFrame, Verb } from '../core/index.ts';
+import { VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_KEY_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type Verb } from '../core/index.ts';
 
 const EDGE_PX = 20;
 const BOTTOM_EXTRA = 16;
@@ -45,9 +54,25 @@ const SNAP_MS = 450;
 const SNAP_LOCK_PX = 14;
 const METER_TAP_MS = 350;
 const METER_TAP_PX = 12;
+/** Elementals v2 recognition (§7.9; CSS px and ms). */
+const TAP_MS = 300;
+const TAP_PX = 12;
+const HOLD_MS = 220;
+const HOLD_BREAK_PX = 24;
+const SWIPE_MS = 300;
+const SWIPE_PX = 24;
+const SWIPE_RATIO = 1.5;
+/** Wheel steering on 'steer' legs (u per notch, per pixel, cap per event). */
+const WHEEL_STEER_NOTCH = 6;
+const WHEEL_STEER_PX = 0.15;
+const WHEEL_STEER_MAX = 18;
+/** Queued verbs waiting for their batch. */
+const QUEUE = 4;
 
 const qTheta = (d: number): number => Math.round(d * 1024) / 1024;
 const qRelease = (w: number): number => Math.round(w * 64) / 64;
+const qPoint = (u: number): number => Math.round(u * 8) / 8;
+const qSteer = (u: number): number => Math.round(u * 64) / 64;
 
 export interface InputHost {
   canvas: HTMLCanvasElement;
@@ -85,14 +110,21 @@ export function isControl(target: EventTarget | null): boolean {
 }
 
 function newFrame(): InputFrame {
-  return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0, snap: false };
+  return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0, snap: false, verb: 0, vx: 0, vy: 0, steer: 0 };
 }
+
+/** The sun slot's press: a sun press (today's), a steer or a blow (§7.9). */
+const SUN = 0;
+const STEER = 1;
+const BLOW = 2;
 
 export class Input {
   sensitivity = 1;
   invert = false;
   private readonly host: InputHost;
+  /** The sun slot: its pointer, what it plays (SUN, STEER, BLOW) and whether it is down. */
   private active = -1;
+  private kind = SUN;
   private lastX = 0;
   private held = false;
   private pending = 0;
@@ -119,6 +151,34 @@ export class Input {
   private onMeter = false;
   /** A Cold Snap waits for the next tick. */
   private snapReq = false;
+  /** Drip's slide still to send (world u). */
+  private steerPending = 0;
+  /**
+   * The verb slot (§7.9): its pointer (−1 free), its state (1 held back, 2 a hold), whether it is a
+   * grow press (else burn), the press (CSS px, ms) and its ground point, the pointer now, and where a
+   * hold was recognized.
+   */
+  private vId = -1;
+  private vState = 0;
+  private vGrow = false;
+  private vX = 0;
+  private vY = 0;
+  private vT = 0;
+  private vWx = 0;
+  private vWy = 0;
+  private vCurX = 0;
+  private vCurY = 0;
+  private hX = 0;
+  private hY = 0;
+  /** Up/W holds a site ('grow'). */
+  private keyHold = false;
+  /** Verbs waiting for their batch (a ring of QUEUE: code, point). */
+  private readonly qV = new Int8Array(QUEUE);
+  private readonly qX = new Float64Array(QUEUE);
+  private readonly qY = new Float64Array(QUEUE);
+  private qHead = 0;
+  private qN = 0;
+  private readonly pt = new Float64Array(2);
   private readonly frames: InputFrame[] = [];
   private readonly out: InputFrame[] = [];
   private readonly listeners: [EventTarget, string, EventListener, AddEventListenerOptions | boolean][] = [];
@@ -153,9 +213,19 @@ export class Input {
     this.listeners.length = 0;
   }
 
-  /** A finger (or mouse button) is down. */
+  /** A finger (or mouse button) is down turning the sun. */
   get pointerDown(): boolean {
-    return this.held;
+    return this.held && this.kind === SUN;
+  }
+
+  /** Any finger is down (a sun press, a steer, a swipe, a tap or a hold). */
+  get touching(): boolean {
+    return this.held || this.vId >= 0;
+  }
+
+  /** The walking element's verb ('sun' without a host that says). */
+  private verb(): Verb {
+    return this.host.verb?.() ?? 'sun';
   }
 
   /** A rotation key is held. */
@@ -180,13 +250,52 @@ export class Input {
     } catch {
       // Capture is best-effort; window listeners still follow the pointer.
     }
-    this.begin(e);
+    const verb = this.verb();
+    if (verb === 'steer' || verb === 'blow') this.track(e, verb === 'steer' ? STEER : BLOW);
+    else if ((verb === 'burn' || verb === 'grow') && this.vId < 0 && this.onTarget(e.clientX, e.clientY)) this.holdBack(e, verb === 'grow');
+    else this.begin(e);
+  }
+
+  /** The press at (x, y) CSS px starts on a target now; its quantized ground point is kept for the verb. */
+  private onTarget(x: number, y: number): boolean {
+    const h = this.host;
+    const pt = this.pt;
+    if (h.toWorld?.(x, y, pt) !== true) return false;
+    this.vWx = qPoint(pt[0] as number);
+    this.vWy = qPoint(pt[1] as number);
+    return h.canTarget?.(this.vWx, this.vWy) === true;
+  }
+
+  /** A press on a target: held back from the sun in the verb slot until it is told apart. */
+  private holdBack(e: PointerEvent, grow: boolean): void {
+    this.vId = e.pointerId;
+    this.vState = 1;
+    this.vGrow = grow;
+    this.vX = this.vCurX = e.clientX;
+    this.vY = this.vCurY = e.clientY;
+    this.vT = e.timeStamp;
+    this.presses++;
+    this.host.onPress();
+  }
+
+  /** A steer or blow press (the sun is held): it follows the pointer and never touches the sun. */
+  private track(e: PointerEvent, kind: number): void {
+    this.active = e.pointerId;
+    this.kind = kind;
+    this.held = true;
+    this.lastX = this.pressX = e.clientX;
+    this.pressY = e.clientY;
+    this.pressT = e.timeStamp;
+    this.gesture = 0;
+    this.presses++;
+    this.host.onPress();
   }
 
   /** Starts following a pointer (also used for the Title tray drag handoff). */
   begin(e: PointerEvent): void {
     if (this.upEdge && !this.downEdge) this.upFirst = true;
     this.active = e.pointerId;
+    this.kind = SUN;
     this.lastX = e.clientX;
     this.pressX = e.clientX;
     this.pressY = e.clientY;
@@ -213,7 +322,28 @@ export class Input {
   }
 
   private onMove(e: PointerEvent): void {
+    if (e.pointerId === this.vId) {
+      this.moveVerb(e.clientX, e.clientY, e.timeStamp);
+      return;
+    }
     if (e.pointerId !== this.active || !this.held) return;
+    if (this.kind === STEER) {
+      // Drip follows the finger exactly: CSS px → world u on the last drawn frame (no sensitivity, no invert).
+      this.steerPending += (e.clientX - this.lastX) * (this.host.uPerPx?.() ?? 1);
+      this.lastX = e.clientX;
+      return;
+    }
+    if (this.kind === BLOW) {
+      // One gust per press: SWIPE_PX sideways within SWIPE_MS, mostly sideways; then the press is spent.
+      if (this.gesture !== 0) return;
+      const dx = e.clientX - this.pressX;
+      if (e.timeStamp - this.pressT > SWIPE_MS) this.gesture = 2;
+      else if (Math.abs(dx) >= SWIPE_PX && Math.abs(dx) >= SWIPE_RATIO * Math.abs(e.clientY - this.pressY)) {
+        this.queue(dx < 0 ? VERB_WEST : VERB_EAST);
+        this.gesture = 2;
+      }
+      return;
+    }
     // A press that snapped no longer turns the sun.
     if (this.gesture === 2) return;
     if (this.gesture === 0) this.classify(e.clientX, e.clientY, e.timeStamp);
@@ -256,18 +386,111 @@ export class Input {
     }
   }
 
-  /** Asks for a Cold Snap on the next tick (when the host allows one now). */
+  /**
+   * The verb slot's pointer moved to (x, y): a held-back press that moves TAP_PX becomes a sun press;
+   * a hold that moves HOLD_BREAK_PX from where it was recognized lets go and becomes one.
+   */
+  private moveVerb(x: number, y: number, t: number): void {
+    this.poll(t);
+    if (this.vId < 0) {
+      // Time made it a sun press: this move turns the sun.
+      this.moveTo(x, t);
+      return;
+    }
+    if (this.vState === 1 && Math.hypot(x - this.vX, y - this.vY) >= TAP_PX) this.toSun(x, t);
+    else if (this.vState === 2 && Math.hypot(x - this.hX, y - this.hY) >= HOLD_BREAK_PX) {
+      this.queue(VERB_RELEASE);
+      this.toSun(x, t);
+    } else {
+      this.vCurX = x;
+      this.vCurY = y;
+    }
+  }
+
+  /** Time tells a held-back press apart: a grow press still for HOLD_MS is a hold; a burn press past TAP_MS turns the sun. */
+  private poll(now: number): void {
+    if (this.vState !== 1) return;
+    const dt = now - this.vT;
+    if (this.vGrow && dt >= HOLD_MS) {
+      this.queue(VERB_HOLD, this.vWx, this.vWy);
+      this.vState = 2;
+      this.hX = this.vCurX;
+      this.hY = this.vCurY;
+    } else if (!this.vGrow && dt > TAP_MS) this.toSun(this.vCurX, now);
+  }
+
+  /** The verb slot's press becomes the sun press now (latest wins): a catch plus the turn it moved since the press. */
+  private toSun(x: number, t: number): void {
+    const id = this.vId;
+    this.vId = -1;
+    this.vState = 0;
+    if (this.upEdge && !this.downEdge) this.upFirst = true;
+    this.active = id;
+    this.kind = SUN;
+    this.lastX = this.pressX = this.vX;
+    this.pressY = this.vY;
+    this.pressT = this.vT;
+    this.gesture = 1;
+    this.onMeter = false;
+    this.held = true;
+    this.downEdge = true;
+    this.cum = 0;
+    this.sN = 0;
+    this.sHead = 0;
+    this.pushSample(this.vT, 0);
+    this.moveTo(x, t);
+  }
+
+  /** Queues a verb for the next batch (a full queue drops it). */
+  private queue(v: number, x = 0, y = 0): void {
+    if (this.qN >= QUEUE) return;
+    const i = (this.qHead + this.qN) % QUEUE;
+    this.qV[i] = v;
+    this.qX[i] = x;
+    this.qY[i] = y;
+    this.qN++;
+  }
+
+  /** Ends the verb slot: a held-back press is dropped (ignored until it lifts), a hold lets go. */
+  private endVerb(): void {
+    if (this.vState === 2) this.queue(VERB_RELEASE);
+    if (this.keyHold) this.queue(VERB_RELEASE);
+    this.vId = -1;
+    this.vState = 0;
+    this.keyHold = false;
+  }
+
+  /** Asks for a Cold Snap on the next tick (when the host allows one now; only while the sun is the verb). */
   requestSnap(): boolean {
-    if (this.host.canSnap?.() !== true) return false;
+    if (this.host.canSnap?.() !== true || this.verb() !== 'sun') return false;
     this.snapReq = true;
     this.snaps++;
     return true;
   }
 
   private onUp(e: PointerEvent, cancel: boolean): void {
+    if (e.pointerId === this.vId) {
+      this.poll(e.timeStamp);
+      const near = Math.hypot(e.clientX - this.vX, e.clientY - this.vY) < TAP_PX;
+      if (this.vState === 1 && !near && !cancel) {
+        // It moved TAP_PX before it was told apart: a sun press after all, lifted here.
+        this.toSun(e.clientX, e.timeStamp);
+      } else if (this.vState === 1 && !this.vGrow && !cancel && e.timeStamp - this.vT <= TAP_MS) {
+        // A tap: the target under the press burns; the sun is left alone (no catch, no turn).
+        this.queue(VERB_TAP, this.vWx, this.vWy);
+      }
+      // A grow press lifted before HOLD_MS does nothing; a hold lets go.
+      if (this.vId === e.pointerId) {
+        if (this.vState === 2) this.queue(VERB_RELEASE);
+        this.vId = -1;
+        this.vState = 0;
+        return;
+      }
+    }
     if (e.pointerId !== this.active || !this.held) return;
     this.held = false;
     this.active = -1;
+    if (this.kind !== SUN) return;
     this.upEdge = true;
     const snapped = this.gesture === 2;
     // A tap on the frost meter (short, nearly still) snaps.
@@ -304,6 +527,22 @@ export class Input {
       if (this.requestSnap()) e.preventDefault();
       return;
     }
+    const verb = this.verb();
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') {
+      // Elementals v2: Up/W is the act key of 'burn' (one burn per press) and 'grow' (a hold until up).
+      if (!down) {
+        if (this.keyHold) this.queue(VERB_RELEASE);
+        this.keyHold = false;
+        return;
+      }
+      if ((verb !== 'burn' && verb !== 'grow') || e.altKey || e.ctrlKey || e.metaKey || isControl(e.target) || !this.host.accepting()) return;
+      e.preventDefault();
+      if (e.repeat || this.keyHold) return;
+      this.queue(verb === 'burn' ? VERB_KEY_BURN : VERB_KEY_HOLD);
+      this.keyHold = verb === 'grow';
+      this.host.onPress();
+      return;
+    }
     let left = false;
     let right = false;
     if (k === 'ArrowLeft' || k === 'a' || k === 'A') left = true;
@@ -313,6 +552,15 @@ export class Input {
     // Keys aimed at a control (a focused button, a slider, a radio group…) belong to it: an arrow on
     // the focused Missions button must not start a run. Key-ups always release.
     if (down && isControl(e.target)) return;
+    if (down && verb === 'blow') {
+      // Gust: one gust per press of Left or Right (the key never turns or steers).
+      if (!this.host.accepting()) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      this.queue(left ? VERB_WEST : VERB_EAST);
+      this.host.onPress();
+      return;
+    }
     if (down) {
       if (!this.host.accepting()) return;
       e.preventDefault();
@@ -326,10 +574,20 @@ export class Input {
     }
   }
 
-  /** A wheel turn: one synthetic tap frame with the event's (capped) turn. */
+  /** A wheel turn: one synthetic tap frame with the event's (capped) turn; on 'steer' legs a slide, on 'blow' legs nothing. */
   private onWheel(e: WheelEvent): void {
     if (this.held || e.deltaY === 0 || isControl(e.target) || !this.host.accepting()) return;
+    const verb = this.verb();
+    if (verb === 'blow') return;
     e.preventDefault();
+    if (verb === 'steer') {
+      // Down the wheel is a drag to the right (east), as it turns the sun.
+      const s = e.deltaMode === 1 ? WHEEL_STEER_NOTCH * Math.sign(e.deltaY) : WHEEL_STEER_PX * e.deltaY;
+      this.steerPending += Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, s));
+      this.presses++;
+      this.host.onPress();
+      return;
+    }
     const d = e.deltaMode === 1 ? -WHEEL_NOTCH * Math.sign(e.deltaY) : -WHEEL_PX * e.deltaY;
     this.pending += Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, d));
     this.presses++;
@@ -337,41 +595,47 @@ export class Input {
     this.tap();
   }
 
-  /** Drops any finger, keys and pending motion (pause, resume, new run, blur). */
-  releaseAll(): void {
-    if (this.held && this.active >= 0) {
-      try {
-        if (this.host.canvas.hasPointerCapture(this.active)) this.host.canvas.releasePointerCapture(this.active);
-      } catch {
-        // ignore
-      }
+  /** Releases pointer capture (best-effort). */
+  private uncapture(id: number): void {
+    try {
+      if (id >= 0 && this.host.canvas.hasPointerCapture(id)) this.host.canvas.releasePointerCapture(id);
+    } catch {
+      // ignore
     }
+  }
+
+  /** Drops any finger, keys and pending motion (pause, resume, new run, blur); a hold lets go (VERB_RELEASE). */
+  releaseAll(): void {
+    if (this.held) this.uncapture(this.active);
+    this.uncapture(this.vId);
     this.held = false;
     this.active = -1;
     this.keyL = false;
     this.keyR = false;
     this.shift = false;
     this.clearPending();
+    this.endVerb();
   }
 
   /**
-   * Called on every 'tag' (§4.1): ends the verb slot (none yet: every press is a sun press); with
-   * `all` (a TAG to or from a steer or blow leg) also ends the sun press, released at 0 °/s.
+   * Called on every 'tag' (§4.1): ends the verb slot (a held-back press is dropped, a hold sends
+   * VERB_RELEASE); with `all` (a TAG to or from a steer or blow leg) also ends the sun slot's press,
+   * a sun press released at 0 °/s.
    */
   cut(all: boolean): void {
-    if (!all || !this.held) return;
-    try {
-      if (this.host.canvas.hasPointerCapture(this.active)) this.host.canvas.releasePointerCapture(this.active);
-    } catch {
-      // ignore
-    }
+    this.endVerb();
+    if (!all) return;
+    this.steerPending = 0;
+    if (!this.held) return;
+    this.uncapture(this.active);
     this.held = false;
     this.active = -1;
+    if (this.kind !== SUN) return;
     this.upEdge = true;
     this.release = 0;
   }
 
-  /** Forgets accumulated motion and edges (the finger state is kept). */
+  /** Forgets accumulated motion, edges and queued verbs (the finger state is kept). */
   clearPending(): void {
     this.pending = 0;
     this.downEdge = false;
@@ -379,6 +643,8 @@ export class Input {
     this.upFirst = false;
     this.release = 0;
     this.snapReq = false;
+    this.steerPending = 0;
+    this.qN = 0;
   }
 
   /** A synthetic tap (Space/Enter start or retry): downEdge + upEdge in one batch. */
@@ -390,20 +656,26 @@ export class Input {
   }
 
   /**
-   * Builds `n` InputFrames for this frame's ticks. Pending rotation is split evenly (quantized,
-   * remainder carried); a press lands on the first frame and a release on the last. With n = 0
-   * (hit-stop) everything keeps accumulating.
+   * Builds `n` InputFrames for this frame's ticks. Pending rotation (and Drip's slide) is split evenly
+   * (quantized, remainder carried); a press lands on the first frame and a release on the last; a
+   * queued verb lands on the first frame. With n = 0 (hit-stop) everything keeps accumulating.
+   * `now` (ms, the events' clock) tells held-back presses apart by time.
    */
-  takeFrames(n: number): readonly InputFrame[] {
+  takeFrames(n: number, now: number = performance.now()): readonly InputFrame[] {
+    this.poll(now);
     this.out.length = 0;
     if (n <= 0) return this.out;
     while (this.frames.length < n) this.frames.push(newFrame());
-    // Left/A turns counter-clockwise (+); Shift held is the fine rate (±2).
+    // Left/A turns counter-clockwise (+); Shift held is the fine rate (±2). On 'blow' legs the keys blow instead.
     const fine = this.shift;
-    const key: InputFrame['key'] = this.keyL && !this.keyR ? (fine ? 2 : 1) : this.keyR && !this.keyL ? (fine ? -2 : -1) : 0;
+    const key: InputFrame['key'] = this.keyL === this.keyR || this.verb() === 'blow' ? 0 : this.keyL ? (fine ? 2 : 1) : fine ? -2 : -1;
     const per = qTheta(this.pending / n);
     this.pending -= per * n;
     if (Math.abs(this.pending) < 1e-9) this.pending = 0;
+    const steer = qSteer(this.steerPending / n);
+    this.steerPending -= steer * n;
+    if (Math.abs(this.steerPending) < 1e-9) this.steerPending = 0;
+    const down = this.held && this.kind === SUN;
     for (let i = 0; i < n; i++) {
       const f = this.frames[i] as InputFrame;
       f.dTheta = per;
@@ -411,9 +683,26 @@ export class Input {
       f.upEdge = false;
       f.release = 0;
       f.key = key;
-      f.down = this.held;
+      f.down = down;
       f.snap = false;
+      f.verb = 0;
+      f.vx = 0;
+      f.vy = 0;
+      f.steer = steer;
       this.out.push(f);
+    }
+    // One queued verb per batch, on its first tick (the next waits for the following batch).
+    if (this.qN > 0) {
+      const f = this.frames[0] as InputFrame;
+      const h = this.qHead;
+      const v = this.qV[h] as InputFrame['verb'] & number;
+      f.verb = v;
+      if (v === VERB_TAP || v === VERB_HOLD) {
+        f.vx = this.qX[h] as number;
+        f.vy = this.qY[h] as number;
+      }
+      this.qHead = (h + 1) % QUEUE;
+      this.qN--;
     }
     // A Cold Snap lands on the first tick of the batch.
     if (this.snapReq) {
