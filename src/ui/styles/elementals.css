@@ -54,21 +54,15 @@
 
 .el-stars { --ic: 18px; display: flex; }
 
-.el-cast { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; }
+.el-cast { display: flex; justify-content: center; align-items: center; gap: 2px; }
 
-/* A hero's face: a small coin in its candy colour with its initial (never the colour alone). */
-.el-face {
-  display: grid;
-  place-items: center;
-  width: 19px;
-  height: 19px;
-  border: 2px solid var(--ink);
-  border-radius: 50%;
-  background: var(--face);
-  font: 800 11px/1 var(--font-body);
-}
+/* A hero's face: the roster's art in a small coin of its candy colour (never the colour alone). */
+.el-face { --r: 50%; --lipH: 2px; display: grid; place-items: center; width: 24px; height: 24px; }
 
-.trial-tile .tray-lock { top: -6px; bottom: auto; }
+.el-face > canvas { width: 18px; height: 18px; }
+
+.trial-tile .tray-lock,
+.hero-tile .tray-lock { top: -6px; bottom: auto; }
 
 /* Opened since the last visit: the disc pops open (journey.css's keyframes). */
 .is-unlocked > :is(.node, .el-disc) { animation: unlock-pop 640ms var(--ease-back) 200ms both; }

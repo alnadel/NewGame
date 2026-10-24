@@ -32,9 +32,10 @@
 // dashes; Volt yellow with bolt notches beside a grey hatched dead zone round its last strike; Drip
 // teal while it wants shade, dotted amber while it wants sun, pulsing; a narrow run wears a target
 // dot), and the gauge is frost-white like Nubs' (amber below 60, hot below 25, so the hero's colour
-// only ever means go; Drip's a two-ended thermometer, always shown). A duo draws each hero's own arcs thin (the lead's inside the ring, the mate's
-// outside), the band where both are happy in white-gold with the lead's colour on its inner edge,
-// and splits the gauge in two halves; a relay's telegraph dashes the incoming hero's arcs outside.
+// only ever means go; Drip's a two-ended thermometer, always shown). A duo draws each hero's own
+// arcs thin (the lead's inside the ring, the mate's outside), the band where both are happy in
+// white-gold with the lead's colour on its inner edge, and splits the gauge in two halves; a relay's
+// telegraph dashes the incoming hero's arcs outside.
 // Nubs walking alone keeps the teal dial.
 
 import { coolLine, heroHealth, nextTagHero, nextTagTicks, TUNING, whiteLine, type HeroId, type SimState } from '../core/index.ts';

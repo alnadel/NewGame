@@ -11,7 +11,7 @@
 // while a challenge banner is up; the next level while Endless is locked). Tray and mode buttons activate on click with < 8 px of travel,
 // and a sideways drag that starts on one is handed to the canvas.
 
-import { formatScore, formatTimeOfDay, splitMinutes, type DayPlan } from '../../core/index.ts';
+import { formatScore, formatTimeOfDay, splitMinutes, type DayPlan, type HeroId } from '../../core/index.ts';
 import {
   activeMissionViews,
   CAMPAIGN_STARS_MAX,
@@ -25,7 +25,7 @@ import { claimables, featureHint, featureIsNew, featureName, featureUnlocked, ma
 import type { Save } from '../../meta/saveTypes.ts';
 import { artIcon, kitShape, type ArtName } from '../art-icons.ts';
 import { logoLayers } from '../art.ts';
-import { h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
+import { fitCanvas, h, setChildren, setFlag, svgFromMarkup } from '../dom.ts';
 import { claimDailyReward, claimDot, rankBadge } from '../gamify.ts';
 import { icon } from '../icons.ts';
 import type { Screen, UiContext } from '../screen.ts';
@@ -52,6 +52,8 @@ const BUBBLE_TIP_GAP = 6;
 const BUBBLE_TAIL = 14;
 /** The bubble joins the flow under the logo when it would come this close to the items above (px). */
 const BUBBLE_ROOM = 8;
+/** The Elementals pill's faces: the four new heroes and their candy faces (class names whole: vite.config.ts shortens them). */
+const ELEMENTAL_FACES: readonly (readonly [HeroId, string])[] = [['ember', 'f-red'], ['sprout', 'f-green'], ['volt', 'f-violet'], ['drip', 'f-blue']];
 /** Play's icon: a green triangle on a white coin. */
 const PLAY_COIN = '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M17 10 38 24 17 38Z" fill="#43B226" stroke="#2A1B45" stroke-width="4.5" stroke-linejoin="round"/></svg>';
 
@@ -205,13 +207,22 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const reward = h('div', { class: 'title-reward-wrap has-dot', 'data-dot': '' }, h('span', { class: 'burst', deco: true }), rewardBtn);
   const walletValue = h('span', 'num');
   const chipSnow = h('span', { class: 'chip chip--snow', role: 'img' }, artIcon('snow'), walletValue);
-  // Elementals (docs/ELEMENTALS.md §4.10): a violet square with a NEW sticker until the screen is opened.
-  const elementalsBtn = h('button', { class: 'btn btn--violet btn--sq elementals-btn pe', type: 'button', 'aria-label': 'Elementals', title: 'Elementals' }, artIcon('elementals'), newTag());
+  const hud = h('div', 'title-hud', badgeSlot, reward, h('i', 'title-hud-gap'), chipSnow);
+  // Elementals (docs/ELEMENTALS.md §4.10), the proof of concept's headline: a violet pill under the
+  // logo with the four new heroes' faces, from a fresh save on, NEW until the screen is opened.
+  const faces = ELEMENTAL_FACES.map(() => fitCanvas(h('canvas'), 22));
+  let facesDrawn = false;
+  const elementalsBtn = h(
+    'button',
+    { class: 'btn btn--violet elementals-btn pe', type: 'button' },
+    h('span', { class: 'el-tfaces', deco: true }, ...faces.map((c, i) => h('span', `candy ${(ELEMENTAL_FACES[i] as readonly [HeroId, string])[1]}`, c))),
+    h('span', 'btn-label', 'Elementals'),
+    newTag(),
+  );
   elementalsBtn.addEventListener('click', () => {
     ctx.sound('tap');
     ctx.go('elementals');
   });
-  const hud = h('div', 'title-hud', badgeSlot, reward, h('i', 'title-hud-gap'), elementalsBtn, chipSnow);
 
   // --- Chips -------------------------------------------------------------------------------------
   // Best as "D3 2:40 PM", matching the HUD's compact day badge; it opens the Profile's records.
@@ -284,7 +295,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
   const gap = (): HTMLElement => h('i', { class: 'title-gap', deco: true });
   const bottomCluster = h('div', 'title-bottom', chips, gap(), modes, gap(), tray);
   const logoEl = logo();
-  const top = h('div', 'title-top', logoEl, taglineBox, forecast, keys, challenge);
+  const top = h('div', 'title-top', logoEl, taglineBox, elementalsBtn, forecast, keys, challenge);
   const el = h('section', 'scr scr-title', hud, top, bottomCluster);
   let preview: DayPlan | null = null;
   /** The wallet as last shown (it counts up from there); null before the first render. */
@@ -318,6 +329,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     const nubsY = ctx.rootPx('--nubs-y');
     const haloR = ctx.rootPx('--halo-r');
     placeBubble(nubsY, haloR);
+    // Under the Elementals pill the forecast chip gives way before the goal bubble leaves Nubs.
+    if (tagline.classList.contains('goal-inline') && !forecast.hidden) {
+      el.classList.add('no-forecast');
+      placeBubble(nubsY, haloR);
+    }
     if (nubsY !== null && haloR !== null) {
       // The chips are the cluster's top row; when the column can't hold it all they overflow
       // upward, so measure them rather than the (capped) cluster box. 1 px covers the rounding of
@@ -345,7 +361,7 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
     if (nubsY !== null && haloR !== null) {
       const bubbleTop = nubsY - haloR - BUBBLE_TIP_GAP - BUBBLE_TAIL - taglineBox.offsetHeight;
       taglineBox.style.setProperty('--goal-top', `${Math.round(bubbleTop - layoutTop(top))}px`);
-      const above = [logoEl, forecast, keys, challenge].filter((e) => e.offsetWidth > 0);
+      const above = [logoEl, elementalsBtn, forecast, keys, challenge].filter((e) => e.offsetWidth > 0);
       inline = above.some((e) => bubbleTop < layoutBottom(e) + BUBBLE_ROOM);
     }
     for (const e of [taglineBox, tagline]) e.classList.toggle('goal-inline', inline);
@@ -445,8 +461,11 @@ export function createTitleScreen(ctx: UiContext): TitleScreen {
       if (isNew) g.el.setAttribute('aria-description', 'New');
     });
     hide(mapBtn, fresh);
-    hide(elementalsBtn, fresh || !isOpen(save, 'endless'));
+    // A challenge's banner takes the top's room (its run is the point of the link).
+    hide(elementalsBtn, ctx.challenge() !== null);
     elementalsBtn.classList.toggle('is-new', save.elementals?.seen !== true);
+    if (!facesDrawn) faces.forEach((c, i) => ctx.cb.renderHeroPreview(c, (ELEMENTAL_FACES[i] as readonly [HeroId, string])[0]));
+    facesDrawn = true;
     hide(chipMissions, !featureUnlocked(save, 'missions'));
     hide(hud, fresh);
     badge.update(save);

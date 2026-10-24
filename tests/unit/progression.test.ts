@@ -1083,12 +1083,16 @@ describe('Elementals Trials (docs/ELEMENTALS.md §4.10)', () => {
     s = t1.save;
     expect(open()).toEqual([1, 2, 3, 4, 5, 6]);
     expect(heroUnlocked(s, 'ember')).toBe(true);
-    expect(t1.outcome.toasts.map((t) => t.text)).toEqual(expect.arrayContaining(['New trial: Day Shift', 'New trial: Fire and Ice']));
+    expect(t1.outcome.toasts.map((t) => t.text)).toEqual(expect.arrayContaining(['New trial: Day Shift', 'New trial: Fire and Ice', 'Ember joins the team!']));
+    // A repeat pass opens nothing new: no hero chip.
+    expect(applyRunResult(s, trial(1, true, 2), opts()).outcome.toasts.map((t) => t.text)).not.toContain('Ember joins the team!');
     expect(t1.outcome.campaign?.unlockedNext).toBe(true);
     s = applyRunResult(s, trial(2, true, 2), opts()).save;
     expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(heroUnlocked(s, 'sprout')).toBe(true);
-    s = applyRunResult(s, trial(3, true, 3), opts()).save;
+    const t3 = applyRunResult(s, trial(3, true, 3), opts());
+    expect(t3.outcome.toasts.map((t) => t.text)).toContain('Volt joins the team!');
+    s = t3.save;
     expect(open()).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const t4 = applyRunResult(s, trial(4, true, 3), opts());
     s = t4.save;

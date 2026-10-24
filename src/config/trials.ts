@@ -123,7 +123,7 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // G2 pass h58 · G5 idle 8%, best θ330 73% · G3 8/8 · G4 12/16 · G6 waived (67%: 2 is every TAG).
   trial(5, 'Day Shift', 2, 0, 'oldtown', 'clear', [], 120, 480, 40, ['nubs', 'ember'], [{ minute: 300, to: 'ember' }, { minute: 480, to: 'nubs' }], null, PLAIN,
     { kind: 'cleanTags', target: 2 }, 35, [1],
-    'NUBS ▸ EMBER ▸ NUBS', 'Ember takes over at 11 AM, Nubs at 2 PM. Flip the sun at every TAG.', ['2 clean TAGs', 'All ≥ 35']),
+    'NUBS ▸ EMBER ▸ NUBS', 'Ember takes over at 11\u00a0AM, Nubs at 2\u00a0PM. Flip the sun at every TAG.', ['2 clean TAGs', 'All ≥ 35']),
   // T6: salt 2; drain 18 → 32 (G5 failed on 40 of 40 salts at 18, humanDial 16/16); the duo snap
   // smothers Ember at snapSmother. G1 margin 79/15 · G2 pass h83 · G5 idle 37%, best θ320 87% ·
   // G3 8/8 · G4 13/16 · G6 46%.

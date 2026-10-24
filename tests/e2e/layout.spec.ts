@@ -281,15 +281,16 @@ for (const pct of [150, 200]) {
   });
 }
 
-// Elementals (docs/ELEMENTALS.md §5.6): the Title's square keeps the top bar uncrowded (the rank's
-// name whole beside a waiting reward, nothing overlapping), and the screen's tiles are real targets
-// (hero coins ≥ 64 px, Trial tiles ≥ 48 px) with no sideways scroll.
+// Elementals (docs/ELEMENTALS.md §5.6): the Title's pill sits under the logo, whole and a real
+// target, clear of Nubs' goal bubble and the modes (the top bar keeps the rank's name whole beside a
+// waiting reward), and the screen's tiles are real targets (hero coins ≥ 64 px, Trial tiles ≥ 48 px)
+// with no sideways scroll.
 for (const size of [
   { width: 360, height: 640 },
   { width: 390, height: 844 },
   { width: 1280, height: 800 },
 ]) {
-  test(`Elementals at ${size.width}x${size.height}: the Title square fits, tiles are targets, no sideways scroll`, async ({ page }, info) => {
+  test(`Elementals at ${size.width}x${size.height}: the Title pill fits, tiles are targets, no sideways scroll`, async ({ page }, info) => {
     await page.setViewportSize(size);
     // Rank 1 with today's reward waiting: the tightest top bar.
     await seedSave(page, { v: 4, createdAt: 1, stats: { runs: 6, wallet: 40 }, campaign: { stars: [3, 2, 1], unlocked: 4 }, elementals: { stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true } });
@@ -306,10 +307,33 @@ for (const size of [
         right: Math.max(...boxes.map((b) => b.right)),
       };
     });
-    expect(hud.n, 'rank, reward, Elementals and wallet').toBe(4);
+    expect(hud.n, 'rank, reward and wallet').toBe(3);
     expect(hud.apart, 'top bar items apart').toBe(true);
     expect(hud.nameWhole, "the rank's name shows whole").toBe(true);
     expect(hud.right).toBeLessThanOrEqual(size.width + 0.5);
+    const pill = await page.evaluate(() => {
+      const box = (q: string): DOMRect | null => {
+        const e = document.querySelector(q) as HTMLElement | null;
+        return e && e.offsetWidth > 0 ? e.getBoundingClientRect() : null;
+      };
+      const p = box('.scr-title .title-top .elementals-btn') as DOMRect;
+      const label = document.querySelector('.scr-title .elementals-btn .btn-label') as HTMLElement;
+      return {
+        h: p.height,
+        left: p.left,
+        right: p.right,
+        bottom: p.bottom,
+        whole: label.scrollWidth <= label.clientWidth + 1,
+        goalTop: box('.scr-title .tagline-box.is-goal')?.top ?? Infinity,
+        modesTop: (box('.scr-title .modes') as DOMRect).top,
+      };
+    });
+    expect(pill.h, 'the pill is a target').toBeGreaterThanOrEqual(44);
+    expect(pill.left).toBeGreaterThanOrEqual(0);
+    expect(pill.right).toBeLessThanOrEqual(size.width);
+    expect(pill.whole, 'its label shows whole').toBe(true);
+    expect(pill.bottom, "clear of Nubs' goal bubble").toBeLessThanOrEqual(pill.goalTop);
+    expect(pill.bottom, 'clear of the modes').toBeLessThan(pill.modesTop);
     await info.attach(`title-${size.width}x${size.height}`, { body: await page.screenshot(), contentType: 'image/png' });
     await page.locator('.scr-title .elementals-btn').click();
     await waitForScreen(page, 'elementals');

@@ -202,26 +202,30 @@ another, `.is-unlocked` tiles, with the stamp or unlock sound). `setSave` and th
 re-render the tiles in place (focus survives).
 
 **Elementals** (docs/ELEMENTALS.md §4.10; `'elementals'`, `screens/elementals.ts`,
-`styles/elementals.css`). The Title square `.elementals-btn` (art icon `elementals`, aria-label
-"Elementals") sits in the top bar just before the wallet. It is hidden on a fresh save and until
-Endless opens, and it wears the NEW sticker until the screen is first opened
-(`markElementalsSeen`). When the Rank name would be cut, the bar tightens (`.title-hud.is-tight`,
-measured in `fit()`), so 360x640, 390x844 and 1280x800 keep every item whole. The screen rebuilds
+`styles/elementals.css`). The Title pill `.elementals-btn` (the proof of concept's headline: a
+violet candy pill under the logo with the four new heroes' faces on `renderHeroPreview` canvases and
+the label "Elementals") shows from a fresh save on (hidden only under a challenge banner), and it
+wears the NEW sticker, its faces pulsing, until the screen is first opened (`markElementalsSeen`).
+Where it crowds Nubs' goal bubble (360x640), `fit()` drops the forecast chip first. The screen rebuilds
 from the save on every refresh. It has a header with the Trial stars `n/24`, then the stage (the
 Wardrobe's stage recipe). The stage holds the selected Trial's featured hero (a duo shows both) on
 `renderHeroPreview` canvases, its name and element, tagline, ability with its glyph, the three
 rules as tags, and the primary **Play** "Play T3 · Thunder Alley". Below the stage sit the five
 heroes as round candy coins (`.hero-tile[data-hero]`, `aria-pressed`). A locked hero is a
-silhouette with a lock coin and "Pass Kindling" (its intro Trial). Picking a hero frames its
-Trials in gold (`.is-hl`). Then come the eight Trials, two columns of Wardrobe tiles
-(`.trial-tile[data-trial]`). Each tile shows its `levelShort` disc, name, three stars and the cast
-as lettered faces ('▸' a relay, '+' a duo), and carries `.is-locked`, `.is-done`, `.is-next`
-(selected) and `aria-disabled`. An open tile starts its Trial
-(`startRun('campaign', undefined, 1000 + n)`). A locked one toasts "Pass Kindling first.". Arrow
-keys walk the grid. Trials and heroes opened since the last visit pop open (`.is-unlocked`), with
-"Ember joins the team!" and the unlock sound. `show('elementals', id)` selects that Trial (Results >
-Map and Back after a Trial). A Trial's Results print `levelTag` ("Trial 3"), hide the star road
-and lead Map/Back here; its Pause card adds the hero's tagline under the title.
+silhouette with a lock coin and "Pass T1" (its intro Trial; the aria-label and the toast name it).
+Picking a hero frames its Trials in gold (`.is-hl`) and points Play at its first open Trial not
+passed (else its first open one, else its first). Then come the eight Trials, two columns of
+Wardrobe tiles (`.trial-tile[data-trial]`). Each tile shows its `levelShort` disc, name, three stars
+and the cast's faces (the roster's art in small candy coins; '▸' a relay, back to Nubs on T5, '+' a
+duo; T8's five go without arrows), and carries `.is-locked`, `.is-done`, `.is-next` (selected) and
+`aria-disabled`. An open tile starts its Trial (`startRun('campaign', undefined, 1000 + n)`). A
+locked one toasts "Pass Kindling first.". Arrow keys walk the hero row and the grid, down from a
+hero to its first Trial and up from the grid's top row to the selected hero. Trials and heroes
+opened since the last visit pop open (`.is-unlocked`), with "Ember joins the team!" and the unlock
+sound (the Results of the pass that unlocked a hero say it too). `show('elementals', id)` selects
+that Trial (Results > Trials and Back after a Trial). A Trial's Results print `levelTag` ("Trial
+3"), hide the star road, say "Next trial" and lead "Trials" (the Elementals glyph) and Back here;
+its Pause card adds the hero's tagline under the title (a duo's both) and no dozing Nubs.
 
 **Records** (the Profile's, v1.4; the v1.1 Journal's until then): bests (endless and Daily), the
 last 30 endless runs as bars (height ∝ score, colour by the day reached, the best in gold, runs on

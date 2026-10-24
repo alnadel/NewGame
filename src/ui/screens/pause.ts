@@ -1,6 +1,6 @@
 // Pause card: Resume / Restart / Settings / Home (GDD §5). Escape resumes.
 // UI v2 (docs/UI_V2.md §10.5): a blue panel under a blue "Paused" ribbon (the heading), Nubs dozing
-// on top of it, the sub-line and the run's status in wells with art stars.
+// on top of it (not on an Elementals Trial), the sub-line and the run's status in wells with art stars.
 
 import { artIcon } from '../art-icons.ts';
 import { h } from '../dom.ts';
@@ -36,6 +36,9 @@ export function createPauseScreen(ctx: UiContext): Screen {
     },
   });
 
+  const NUBS_SUB = 'Nubs is chilling. Take your time.';
+  const badge = h('div', { class: 'pause-badge', deco: true }, artIcon('nubsSleep'), h('span', 'gt pause-z', 'z Z'));
+  const sub = h('p', 'well dialog-sub', NUBS_SUB);
   // The run so far (v1.4): the level or mode, its goal and progress, the time reached, star pips.
   const statusTitle = h('p', 'pause-st-title');
   // An Elementals Trial: the walking hero's tagline under the title.
@@ -51,6 +54,9 @@ export function createPauseScreen(ctx: UiContext): Screen {
     status.hidden = v === null;
     card.classList.toggle('has-status', v !== null);
     card.classList.remove('has-stars');
+    // A Trial: no dozing Nubs (another hero may be walking); its taglines speak instead.
+    badge.hidden = !!v?.tagline;
+    sub.textContent = v?.tagline ? 'Take your time.' : NUBS_SUB;
     if (!v) return;
     statusTitle.textContent = v.title;
     statusTag.textContent = v.tagline ?? '';
@@ -72,8 +78,8 @@ export function createPauseScreen(ctx: UiContext): Screen {
     'div',
     { class: 'dialog pause-card pe', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pause-title' },
     ribbon('Paused', { tone: 'blue', id: 'pause-title', bandClass: 'dialog-title' }).el,
-    h('div', { class: 'pause-badge', deco: true }, artIcon('nubsSleep'), h('span', 'gt pause-z', 'z Z')),
-    h('p', 'well dialog-sub', 'Nubs is chilling. Take your time.'),
+    badge,
+    sub,
     status,
     resumeBtn,
     restartBtn,

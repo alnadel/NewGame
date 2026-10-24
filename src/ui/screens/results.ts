@@ -491,6 +491,11 @@ export function createResultsScreen(ctx: UiContext): ResultsScreen {
     goals.replaceChildren();
     hide(goals, true);
     if (!on) return;
+    // A Trial's actions say so: "Next trial", and "Trials" (the Elementals glyph) back to its screen.
+    const trial = isTrialId(c.id);
+    setButtonLabel(nextBtn, trial ? 'Next trial' : 'Next level');
+    setButtonLabel(mapBtn, trial ? 'Trials' : 'Map');
+    mapBtn.querySelector('use')?.setAttribute('href', `#a-${trial ? 'elementals' : 'map'}`);
     levelName.textContent = c.name;
     level.setAttribute('aria-label', `${levelTag(c.id)}, ${c.name}, ${c.passed ? starsLabel(c.stars) : 'not passed'}`);
     starsEl.setAttribute('aria-label', starsLabel(c.passed ? c.stars : 0));

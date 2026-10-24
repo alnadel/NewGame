@@ -6,6 +6,7 @@ import {
   comfortAfterRun,
   COMFORT_MAX,
   FORECAST_IDS,
+  HERO_IDS,
   HEROES,
   isTrialId,
   isWarmup,
@@ -464,6 +465,8 @@ export function applyRunResult(save: Save, r: RunResult, options: ApplyRunOption
     }
     const opened = TRIALS.filter((t) => !trialOpen(save, t.n) && trialOpen(next, t.n));
     for (const t of opened) chips.push({ text: `New trial: ${t.name}`, icon: 'star', tone: 'accent' });
+    // A hero this pass unlocked joins the team right here (the Elementals screen's toast waits for a visit).
+    for (const x of HERO_IDS) if (!heroUnlocked(save, x) && heroUnlocked(next, x)) chips.push({ text: `${HEROES[x].name} joins the team!`, icon: 'star', tone: 'gold' });
     campaign = { passed: lv.passed, stars, newStars: Math.max(0, stars - before), unlockedNext: opened.length > 0 };
   } else if (r.mode === 'campaign' && r.level !== undefined) {
     const lv = r.level;

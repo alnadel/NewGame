@@ -138,7 +138,7 @@ export const HERO_TIPS: Readonly<Record<HeroId, Tips>> = {
   ],
   drip: [
     ['go', 'Watch the needle. Sun warms Drip, shade cools it.'],
-    ['p25', 'Teal cools, amber warms. Both ends are fatal.'],
+    ['p25', 'Teal cools, amber warms. Green is Calm; both ends are fatal.'],
     ['flake', 'Flakes are ice cubes: great when hot, risky when cold.'],
   ],
   // Relays only (T5, T8), when Nubs takes his first turn.
@@ -148,7 +148,7 @@ export const HERO_TIPS: Readonly<Record<HeroId, Tips>> = {
 /** Elementals: a relay's tips ('tagSoon': the first TAG's telegraph). */
 export const RELAY_TIPS: Tips = [
   ['go', 'Heroes swap at the Tag Stones. Each one wants different light.'],
-  ['tagSoon', 'TAG in 3! Pre-aim for the dashed arcs.'],
+  ['tagSoon', 'TAG in 3! Pre-aim for the dashed arcs for a clean TAG.'],
 ];
 
 /** Elementals: a duo's tips (the 'frost' one where the Cold Snap is the duo's ability: T6). */

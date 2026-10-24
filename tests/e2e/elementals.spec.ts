@@ -1,9 +1,10 @@
-// Elementals (docs/ELEMENTALS.md §4.10, §5.6): the Title's square opens the Elementals screen once
-// Endless is open (hidden on a fresh save), the roster and the Trial tiles show their lock states, a
-// tap on an open Trial plays it as a campaign run with its hero, its Results say "Trial 1", Retry
-// keeps the Trial and Map returns to the screen; the stored save keeps Trial stars apart from the
-// Journey's; ?trial=6 walks Nubs with Ember beside him; ?hero= swaps a solo Trial's hero; the
-// reactive bot passes Trial 1.
+// Elementals (docs/ELEMENTALS.md §4.10, §5.6): the Title's pill (under the logo, from a fresh save
+// on) opens the Elementals screen, the roster and the Trial tiles show their lock states, a hero tap
+// points Play at that hero's Trial, a tap on an open Trial plays it as a campaign run with its hero,
+// its Results say "Trial 1", Retry keeps the Trial and "Trials" returns to the screen; the stored
+// save keeps Trial stars apart from the Journey's; ?trial=6 walks Nubs with Ember beside him; ?hero=
+// swaps a solo Trial's hero; every Trial's intro card says its whole sentence; the Pause card counts
+// the goal and the Dare apart; the reactive bot passes Trial 1.
 import { expect, test, type Page } from '@playwright/test';
 import { openGame, runCfg, screen, seedSave, state, waitForScreen, watchErrors } from './helpers.ts';
 
@@ -24,21 +25,24 @@ async function openElementals(page: Page): Promise<void> {
 const stored = (page: Page): Promise<{ elementals?: { stars: number[]; seen: boolean }; campaign: { stars: number[] } }> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('shady.save') ?? '{}'));
 
-test('the Title square is hidden on a fresh save', async ({ page }) => {
+test('the Title pill shows from a fresh save, under the logo with the heroes\' faces, and opens T1-T4', async ({ page }) => {
   await openGame(page);
-  await expect(page.locator('.scr-title .elementals-btn')).toBeHidden();
+  const btn = page.locator('.scr-title .title-top .elementals-btn');
+  await expect(btn).toBeVisible();
+  await expect(btn).toHaveAccessibleName('Elementals');
+  await expect(btn).toHaveClass(/is-new/);
+  await expect(btn.locator('.el-tfaces canvas')).toHaveCount(4);
+  await openElementals(page);
+  for (const n of [1, 2, 3, 4]) await expect(page.locator(`.trial-tile[data-trial="${n}"]`)).not.toHaveClass(/is-locked/);
+  await expect(page.locator('.trial-tile[data-trial="5"]')).toHaveClass(/is-locked/);
 });
 
-test('the Title square: shown with Endless open, NEW until the screen is opened', async ({ page }) => {
+test('the Title pill: NEW until the screen is opened', async ({ page }) => {
   await seedSave(page, openSave());
   await openGame(page);
   const btn = page.locator('.scr-title .elementals-btn');
   await expect(btn).toBeVisible();
-  await expect(btn).toHaveAttribute('aria-label', 'Elementals');
   await expect(btn).toHaveClass(/is-new/);
-  // Inside the top bar, before the wallet.
-  const order = await page.evaluate(() => [...document.querySelectorAll('.title-hud > *')].map((e) => e.className));
-  expect(order.findIndex((c) => c.includes('elementals-btn'))).toBe(order.findIndex((c) => c.includes('chip--snow')) - 1);
   await openElementals(page);
   await expect(page.locator('.elementals-stars')).toHaveText('0/24');
   expect((await stored(page)).elementals?.seen).toBe(true);
@@ -57,14 +61,14 @@ test('lock states: T1-T4 open, T5-T8 locked; Nubs open, the others pass their in
   for (const n of [1, 2, 3, 4]) await expect(tiles.nth(n - 1)).not.toHaveClass(/is-locked/);
   for (const n of [5, 6, 7, 8]) await expect(tiles.nth(n - 1)).toHaveClass(/is-locked/);
   await expect(page.locator('.trial-tile[data-trial="3"]')).toHaveAttribute('aria-label', 'Trial 3, Thunder Alley, Volt, not passed yet');
-  await expect(page.locator('.trial-tile[data-trial="5"]')).toHaveAttribute('aria-label', 'Trial 5, Day Shift, Nubs, then Ember, locked: pass Kindling');
+  await expect(page.locator('.trial-tile[data-trial="5"]')).toHaveAttribute('aria-label', 'Trial 5, Day Shift, Nubs, then Ember, then Nubs, locked: pass Kindling');
   await expect(page.locator('.trial-tile[data-trial="1"]')).toHaveClass(/is-next/);
   await expect(page.locator('.elementals-play')).toHaveText('Play T1 · Kindling');
   const heroes = page.locator('.scr-elementals .hero-tile');
   await expect(heroes).toHaveCount(5);
   await expect(page.locator('.hero-tile[data-hero="nubs"]')).not.toHaveClass(/is-locked/);
   await expect(page.locator('.hero-tile[data-hero="ember"]')).toHaveClass(/is-locked/);
-  await expect(page.locator('.hero-tile[data-hero="ember"]')).toContainText('Pass Kindling');
+  await expect(page.locator('.hero-tile[data-hero="ember"]')).toContainText('Pass T1');
   await expect(page.locator('.hero-tile[data-hero="ember"]')).toHaveAttribute('aria-label', 'Ember, locked: pass Kindling');
   // A locked Trial says what opens it.
   await page.locator('.trial-tile[data-trial="6"]').click({ force: true });
@@ -76,9 +80,49 @@ test('lock states: T1-T4 open, T5-T8 locked; Nubs open, the others pass their in
   await expect(page.locator('.trial-tile[data-trial="2"]')).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('.trial-tile[data-trial="4"]')).toBeFocused();
+  // Up from the grid's top row to the selected hero (T1's Ember), down from a hero to its first Trial.
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('.hero-tile[data-hero="ember"]')).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.trial-tile[data-trial="5"]')).toBeFocused();
 });
 
-test('a tap on T1 plays Ember; the Results say Trial 1, Retry keeps it and Map returns; the Journey is untouched', async ({ page }) => {
+test('a hero tap points Play at that hero\'s next Trial', async ({ page }) => {
+  await seedSave(page, { ...openSave(), elementals: { stars: [2, 0, 0, 0, 0, 0, 0, 0], seen: true } });
+  await openGame(page);
+  await openElementals(page);
+  await expect(page.locator('.elementals-play')).toHaveText('Play T2 · Dappled Lane');
+  await page.locator('.hero-tile[data-hero="ember"]').click();
+  // Ember's first open Trial not passed yet: T5 (Nubs ▸ Ember ▸ Nubs); its tile is the selected one.
+  await expect(page.locator('.elementals-play')).toHaveText('Play T5 · Day Shift');
+  await expect(page.locator('.trial-tile[data-trial="5"]')).toHaveClass(/is-selected/);
+  await expect(page.locator('.trial-tile.is-selected')).toHaveClass(/is-hl/);
+});
+
+test('every Trial\'s intro card keeps its whole sentence, and the Pause card counts the goal and the Dare apart', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'one project walks the sizes');
+  test.slow();
+  for (const [width, height] of [[1280, 800], [1280, 720], [390, 844], [360, 640]] as const) {
+    await page.setViewportSize({ width, height });
+    for (let n = 1; n <= 8; n++) {
+      await page.goto(`/?trial=${n}&test=1`);
+      await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+      await expect
+        .poll(() => page.evaluate(() => { const c = window.__SHADY_TEST__!.levelCard(); return c && c.concept && c.blurb > 0 && c.blurb === c.lines; }), { message: `T${n} at ${width}x${height}` })
+        .toBe(true);
+    }
+  }
+  await page.goto('/?trial=3&test=1');
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'play');
+  const status = await page.evaluate(() => window.__SHADY_TEST__!.runStatus());
+  expect(status!.goal).toMatch(/^Reach the finish · \d+ %$/);
+  expect(status!.stars[1]).toEqual({ label: 'Chain x5 · 0/5', state: 'open' });
+});
+
+test('a tap on T1 plays Ember; the Results say Trial 1, Retry keeps it and Trials returns; the Journey is untouched', async ({ page }) => {
   const errors = watchErrors(page);
   await seedSave(page, { v: 4, createdAt: 1, settings: { unlockAll: true } });
   await openGame(page);
@@ -101,7 +145,8 @@ test('a tap on T1 plays Ember; the Results say Trial 1, Retry keeps it and Map r
   await expect.poll(async () => `${await screen(page)}:${(await state(page)).level}`, { timeout: 10_000 }).toBe('play:1001');
   await page.evaluate(() => window.__SHADY_TEST__!.forceDeath());
   await waitForScreen(page, 'results', 15_000);
-  await page.locator('.res-sheet').getByRole('button', { name: 'Map' }).click();
+  await expect(page.locator('.res-sheet').getByRole('button', { name: 'Map' })).toHaveCount(0);
+  await page.locator('.res-sheet').getByRole('button', { name: 'Trials' }).click();
   await waitForScreen(page, 'elementals');
   await expect(page.locator('.trial-tile[data-trial="1"]')).toHaveClass(/is-next/);
   const save = await stored(page);

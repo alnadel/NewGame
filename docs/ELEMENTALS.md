@@ -1187,6 +1187,9 @@ Helpers:
 - a "New" `.sticker` until `elementals.seen`;
 - `trayFor.elementals` returns focus to it.
 
+(Fix round, §8.4: the lead made it the proof of concept's headline, a violet pill under the logo
+with the four new heroes' faces and the label "Elementals", shown from a fresh save on.)
+
 The four tray discs and Map | PLAY | Endless are untouched (UI_V2 §11.1).
 
 **Screen** `src/ui/screens/elementals.ts` plus `styles/elementals.css` (modelled on the Wardrobe):
@@ -1494,7 +1497,7 @@ characters, which `levelCardFit` checks at 360, 390 and 1280.
 | volt | p25 | Flick 40° or more. Strike again within 1.5 s to chain. |
 | volt | frost | Nothing in reach? Swipe down: THUNDERCLAP strikes anywhere. |
 | drip | go | Watch the needle. Sun warms Drip, shade cools it. |
-| drip | p25 | Teal cools, amber warms. Both ends are fatal. |
+| drip | p25 | Teal cools, amber warms. Green is Calm; both ends are fatal. |
 | drip | flake | Flakes are ice cubes: great when hot, risky when cold. |
 | nubs | go (T5/T8 only, when Nubs walks first) | Nubs hides in shade, as always. Teal is go. |
 
@@ -1503,7 +1506,7 @@ characters, which `levelCardFit` checks at 360, 390 and 1280.
 | Trigger | Text |
 |---|---|
 | go | Heroes swap at the Tag Stones. Each one wants different light. |
-| first `tagSoon` | TAG in 3! Pre-aim for the dashed arcs. |
+| first `tagSoon` | TAG in 3! Pre-aim for the dashed arcs for a clean TAG. |
 
 **DUO_TIPS:**
 
@@ -1543,12 +1546,13 @@ characters, which `levelCardFit` checks at 360, 390 and 1280.
 
 | Where | Text |
 |---|---|
-| Title square | label "Elementals" (aria-label "Elementals") |
+| Title pill | label "Elementals" (the four new heroes' faces beside it; fix round: was a square) |
 | Screen header and stars chip | "Elementals", "n/24" |
 | Play button | "Play T3 · Thunder Alley" |
 | Locked trial toast | "Pass {name of the first unpassed required trial} first." |
-| Locked hero badge | "Pass {intro trial name}" |
-| Unlock toast | "{Hero} joins the team!" |
+| Locked hero badge | "Pass {intro trial short}" ("Pass T1"; the aria-label and the toast say the name) |
+| Unlock toast | "{Hero} joins the team!" (also a Results chip on the pass that unlocks it) |
+| Results actions on a Trial | "Next trial", "Trials" (the Elementals glyph) |
 | New trial toast (Results) | "New trial: {name}" |
 | Relay chip | "NEXT ▸ {HERO} {s}" |
 | Stamps | "TAG!" (relay), "BLAZE!" (headline) |

@@ -105,13 +105,6 @@
   --ic: 34px;
 }
 
-/* The Elementals (docs/ELEMENTALS.md §4.10): a violet square, its NEW sticker on top. */
-.btn.elementals-btn {
-  --h: 46px;
-  --r: 16px;
-  --ic: 30px;
-  overflow: visible;
-}
 
 /* A crowded bar (title.ts fit(): the rank's name would be cut, e.g. beside a waiting reward and the
    Elementals square): tighter gaps, a smaller reward, name and the menus' compact wallet. */
@@ -298,6 +291,27 @@ body,
 
 .tagline-box.is-goal.goal-inline::before,
 .tagline-box.is-goal.goal-inline::after { display: none; }
+
+/* ===== The Elementals (docs/ELEMENTALS.md §4.10): a violet pill under the logo, the four new
+   heroes' faces in candy coins and its name; its NEW sticker (and a pulse) until it is opened. ===== */
+.btn.elementals-btn {
+  --h: 48px;
+  --r: 24px;
+  display: flex;
+  width: max-content;
+  margin: 10px auto 0;
+  padding: 2px 18px var(--lipH) 10px;
+  overflow: visible;
+  font-size: var(--fs-d-md);
+}
+
+.el-tfaces { display: flex; }
+
+.el-tfaces > .candy { --r: 50%; --lipH: 3px; display: grid; place-items: center; width: 30px; height: 30px; margin-right: -5px; }
+
+.el-tfaces canvas { width: 22px; height: 22px; }
+
+.elementals-btn.is-new .el-tfaces { animation: new-pulse 1.6s ease-in-out infinite; }
 
 /* ===== Forecast and the key line: dark chips on the world ===== */
 

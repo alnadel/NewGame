@@ -49,6 +49,12 @@ export function svgFromMarkup(markup: string): SVGSVGElement {
   return node;
 }
 
+/** Sizes a canvas's backing store to `css` px at the device's pixel ratio (max 2). */
+export function fitCanvas(c: HTMLCanvasElement, css: number): HTMLCanvasElement {
+  c.width = c.height = Math.round(css * Math.min(2, window.devicePixelRatio || 1));
+  return c;
+}
+
 /** Toggles a boolean attribute such as `disabled` or `hidden`. */
 export function setFlag(el: Element, name: string, on: boolean): void {
   if (on) el.setAttribute(name, '');

@@ -3,8 +3,9 @@
 // by side for a duo) with its element, tagline, three rules, ability line and a swatch of its dial
 // arc, and Play for the selected Trial (the last one played, else the first open one not passed).
 // The heroes follow as round candy coins with their names hung under them (a locked one is a
-// silhouette with a lock that says what opens it; a tap previews the hero and highlights its Trials), then the Trials as
-// Wardrobe tiles in two columns: a "T3" disc, the name, the best stars and the cast's faces. A tap
+// silhouette with a lock that says what opens it; a tap previews the hero, highlights its Trials and
+// points Play at its next one), then the Trials as Wardrobe tiles in two columns: a "T3" disc, the
+// name, the best stars and the cast's faces (the roster's art, small). A tap
 // on an open Trial plays it; a locked one says what opens it. Opening the screen marks it seen;
 // Trials and heroes opened since the last visit pop in, and a new hero joins the team with a toast.
 // refresh() rebuilds the tiles from the save and puts the focus back on the tile that had it.
@@ -13,7 +14,7 @@ import { HERO_IDS, HEROES, levelShort, levelTag, TRIAL_BASE, TRIALS, type HeroFa
 import type { Save } from '../../meta/saveTypes.ts';
 import { ELEMENTAL_STARS_MAX, elementalStars, heroUnlocked, markElementalsSeen, trialBest, trialOpen } from '../../meta/progression.ts';
 import { artIcon } from '../art-icons.ts';
-import { h, setChildren, svgFromMarkup } from '../dom.ts';
+import { fitCanvas as fit, h, setChildren, svgFromMarkup } from '../dom.ts';
 import { icon } from '../icons.ts';
 import { starsLabel } from '../labels.ts';
 import type { Screen, UiContext } from '../screen.ts';
@@ -35,12 +36,6 @@ const ARC = '<path d="M6 30A20 20 0 0 1 46 30" stroke="';
 const featured = (t: TrialDef): HeroId => t.cast.find((x) => x !== 'nubs') ?? 'nubs';
 /** What opens a locked Trial: its first requirement not passed yet. */
 const blocker = (save: Save, t: TrialDef): string => (TRIALS[(t.requires.find((n) => !trialBest(save, n)) ?? 1) - 1] as TrialDef).name;
-
-/** Sizes a canvas's backing store to `css` px at the device's pixel ratio (max 2). */
-function fit(c: HTMLCanvasElement, css: number): HTMLCanvasElement {
-  c.width = c.height = Math.round(css * Math.min(2, window.devicePixelRatio || 1));
-  return c;
-}
 
 export function createElementalsScreen(ctx: UiContext): Screen {
   /** The Trial Play starts, the last one played, and the hero tapped (null: the Trial's). */
@@ -74,12 +69,20 @@ export function createElementalsScreen(ctx: UiContext): Screen {
   const heroes = h('div', { class: 'el-heroes', role: 'group', 'aria-label': 'Heroes' });
   const grid = h('ul', { class: 'tile-grid panel el-grid', 'aria-label': 'Trials' });
   const body = h('div', 'menu-body', h('div', 'stage card el-stage', spot, name, tagline, ability, rules, playBtn), heroes, grid);
-  // Arrow keys walk the tiles: along the hero row, across (±1) and down (±2) the Trial grid.
+  // Arrow keys walk the tiles: along the hero row, across (±1) and down (±2) the Trial grid; down
+  // from a hero to its first Trial, up from the grid's top row to the selected hero.
   body.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
-    const list = [...(t.parentElement?.parentElement === grid ? grid.querySelectorAll('button') : heroes.contains(t) ? heroes.children : [])] as HTMLElement[];
+    const inGrid = t.parentElement?.parentElement === grid;
+    const list = [...(inGrid ? grid.querySelectorAll('button') : heroes.contains(t) ? heroes.children : [])] as HTMLElement[];
     const d = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -2, ArrowDown: 2 }[e.key] ?? 0;
-    const to = list[list.indexOf(t) + (list.length > 5 || d * d < 2 ? d : 0)];
+    const i = list.indexOf(t);
+    const to =
+      !inGrid && d > 1 && i >= 0
+        ? grid.querySelector<HTMLElement>(`[data-trial="${TRIALS.find((x) => x.cast.includes(t.dataset.hero as HeroId))?.n}"]`)
+        : inGrid && d < -1 && i < 2
+          ? heroes.querySelector<HTMLElement>('.is-selected')
+          : list[i + (list.length > 5 || d * d < 2 ? d : 0)];
     if (to && to !== t) {
       e.preventDefault();
       to.focus();
@@ -106,7 +109,8 @@ export function createElementalsScreen(ctx: UiContext): Screen {
     (duo ? [duo.left, duo.right] : [id]).forEach((x, i) => ctx.cb.renderHeroPreview(fit(canvases[i] as HTMLCanvasElement, 168), x));
     setChildren(name, duo ? `${HEROES[duo.left].name} + ${hero.name}` : hero.name, ' ', h('span', 'tag', hero.element));
     tagline.textContent = hero.tagline;
-    setChildren(ability, svgFromMarkup(`<svg width="40" height="26" viewBox="0 0 52 34" fill="none" stroke-width="7" aria-hidden="true">${ARC}#2A1B45" stroke-width="11"/>${ARC}${DIAL[id]}/></svg>`), ` ${hero.abilityLine}`);
+    // "Swipe down: COLD SNAP" reads as one unit (no-break spaces); it may wrap whole after the arc.
+    setChildren(ability, svgFromMarkup(`<svg width="40" height="26" viewBox="0 0 52 34" fill="none" stroke-width="7" aria-hidden="true">${ARC}#2A1B45" stroke-width="11"/>${ARC}${DIAL[id]}/></svg>`), ` ${hero.abilityLine.replace(/ /g, '\u00a0')}`);
     setChildren(rules, ...hero.rules.map((r) => h('li', 'tag', r)));
     setButtonLabel(playBtn, `Play ${levelShort(sel.id)} · ${sel.name}`);
 
@@ -116,18 +120,24 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const c = fit(h('canvas', { class: 'el-hcanvas', deco: true }), 52);
       ctx.cb.renderHeroPreview(c, x);
       const info = HEROES[x];
-      const intro = (TRIALS[info.intro - 1] as TrialDef | undefined)?.name;
-      const word = open ? info.name : `Pass ${intro}`;
+      const intro = TRIALS[info.intro - 1] as TrialDef | undefined;
+      // A locked hero's label stays short ("Pass T1"); its aria-label and the toast name the Trial.
+      const word = open ? info.name : `Pass ${levelShort(intro?.id ?? 0)}`;
       const on = x === id;
       const b = h(
         'button',
-        { class: `tile hero-tile${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: pass ${intro}` },
+        { class: `tile hero-tile${open ? '' : ' is-locked'}${on ? ' is-selected' : ''}${fresh[TRIALS.length + i] ? ' is-unlocked' : ''}`, type: 'button', 'data-hero': x, 'aria-pressed': String(on), 'aria-label': open ? info.name : `${info.name}, locked: pass ${intro?.name}` },
         h('span', `candy el-disc ${open ? FACE[info.face] : 'f-locked'}`, c, open ? null : h('span', { class: 'tray-lock lock-badge', deco: true }, icon('lock'))),
         h('span', { class: 'gt el-name', deco: true }, word),
       );
       b.addEventListener('click', () => {
-        if (!heroUnlocked(ctx.save(), x)) return deny(`${word} first.`);
+        const save = ctx.save();
+        if (!heroUnlocked(save, x)) return deny(`Pass ${intro?.name} first.`);
         ctx.sound('tap');
+        // Play follows the hero: its first open Trial not passed, else its first open one, else its first.
+        const mine = TRIALS.filter((t) => t.cast.includes(x));
+        const open = mine.filter((t) => trialOpen(save, t.n));
+        sel = open.find((t) => !trialBest(save, t.n)) ?? open[0] ?? mine[0] ?? sel;
         picked = x;
         refresh();
         ctx.announce(`${info.name}: ${info.tagline}`);
@@ -140,11 +150,18 @@ export function createElementalsScreen(ctx: UiContext): Screen {
       const open = trialOpen(save, t.n);
       const best = trialBest(save, t.n);
       const cls = `tile trial-tile${open ? '' : ' is-locked'}${best ? ' is-done' : ''}${t === sel ? ' is-next is-selected' : ''}${picked && t.cast.includes(picked) ? ' is-hl' : ''}${fresh[i] ? ' is-unlocked' : ''}`;
-      const cast = t.cast.flatMap((x, k) => [k ? h('span', 'glyph', t.duo ? '+' : '▸') : null, h('span', `el-face ${FACE[HEROES[x].face]}`, HEROES[x].name.charAt(0))]);
+      // The cast's faces, the roster's art in small coins: a relay in walking order, back to Nubs too
+      // (T5); five (T8) go without arrows to stay on one line.
+      const who = t.relays.length ? [t.cast[0] as HeroId, ...t.relays.map((r) => r.to)] : t.cast;
+      const cast = who.flatMap((x, k) => {
+        const c = fit(h('canvas', { deco: true }), 18);
+        ctx.cb.renderHeroPreview(c, x);
+        return [k && who.length < 5 ? h('span', 'glyph', t.duo ? '+' : '▸') : null, h('span', `el-face candy ${FACE[HEROES[x].face]}`, c)];
+      });
       const state = open ? (best ? starsLabel(best) : 'not passed yet') : `locked: pass ${blocker(save, t)}`;
       const b = h(
         'button',
-        { class: cls, type: 'button', 'data-trial': t.n, 'aria-disabled': String(!open), 'aria-label': `${levelTag(t.id)}, ${t.name}, ${t.cast.map((x) => HEROES[x].name).join(t.duo ? ' and ' : ', then ')}, ${state}` },
+        { class: cls, type: 'button', 'data-trial': t.n, 'aria-disabled': String(!open), 'aria-label': `${levelTag(t.id)}, ${t.name}, ${who.map((x) => HEROES[x].name).join(t.duo ? ' and ' : ', then ')}, ${state}` },
         h('span', 'node candy', levelShort(t.id)),
         h('span', 'tile-name gt-ink', t.name),
         h('span', 'el-stars', ...[0, 1, 2].map((k) => artIcon(k < best ? 'star' : 'starEmpty'))),
