@@ -29,9 +29,9 @@
 //   other press is the sun slot's (latest wins), so a second finger turns the sun during a hold. On
 //   'steer' legs every press slides Drip with the finger (steer, world u); on 'blow' legs a quick
 //   sideways swipe blows one gust (VERB_WEST/EAST). Keys: Up/W acts (burn: VERB_KEY_BURN; grow:
-//   VERB_KEY_HOLD until up), Left/Right blow one gust per press on 'blow' legs; the wheel steers
-//   Drip. A queued verb lands on the first frame of the next batch. cut() ends the presses a TAG
-//   hands over.
+//   VERB_KEY_HOLD until up), Left/Right blow one gust per press on 'blow' legs; the wheel turns the
+//   sun on 'sun', 'burn' and 'grow' legs only. A queued verb lands on the first frame of the next
+//   batch. cut() ends the presses a TAG hands over.
 
 import { VERB_EAST, VERB_HOLD, VERB_KEY_BURN, VERB_KEY_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type Verb } from '../core/index.ts';
 
@@ -62,10 +62,6 @@ const HOLD_BREAK_PX = 24;
 const SWIPE_MS = 300;
 const SWIPE_PX = 24;
 const SWIPE_RATIO = 1.5;
-/** Wheel steering on 'steer' legs (u per notch, per pixel, cap per event). */
-const WHEEL_STEER_NOTCH = 6;
-const WHEEL_STEER_PX = 0.15;
-const WHEEL_STEER_MAX = 18;
 /** Queued verbs waiting for their batch. */
 const QUEUE = 4;
 
@@ -218,11 +214,6 @@ export class Input {
     return this.held && this.kind === SUN;
   }
 
-  /** Any finger is down (a sun press, a steer, a swipe, a tap or a hold). */
-  get touching(): boolean {
-    return this.held || this.vId >= 0;
-  }
-
   /** The walking element's verb ('sun' without a host that says). */
   private verb(): Verb {
     return this.host.verb?.() ?? 'sun';
@@ -251,35 +242,34 @@ export class Input {
       // Capture is best-effort; window listeners still follow the pointer.
     }
     const verb = this.verb();
-    if (verb === 'steer' || verb === 'blow') this.track(e, verb === 'steer' ? STEER : BLOW);
-    else if ((verb === 'burn' || verb === 'grow') && this.vId < 0 && this.onTarget(e.clientX, e.clientY)) this.holdBack(e, verb === 'grow');
-    else this.begin(e);
-  }
-
-  /** The press at (x, y) CSS px starts on a target now; its quantized ground point is kept for the verb. */
-  private onTarget(x: number, y: number): boolean {
     const h = this.host;
     const pt = this.pt;
-    if (h.toWorld?.(x, y, pt) !== true) return false;
-    this.vWx = qPoint(pt[0] as number);
-    this.vWy = qPoint(pt[1] as number);
-    return h.canTarget?.(this.vWx, this.vWy) === true;
+    if (verb === 'steer' || verb === 'blow') this.begin(e, verb === 'steer' ? STEER : BLOW);
+    else if (
+      (verb === 'burn' || verb === 'grow') &&
+      this.vId < 0 &&
+      h.toWorld?.(e.clientX, e.clientY, pt) === true &&
+      h.canTarget?.((this.vWx = qPoint(pt[0] as number)), (this.vWy = qPoint(pt[1] as number))) === true
+    ) {
+      // A press on a target (its ground point kept, quantized): held back from the sun in the verb
+      // slot until it is told apart.
+      this.vId = e.pointerId;
+      this.vState = 1;
+      this.vGrow = verb === 'grow';
+      this.vX = this.vCurX = e.clientX;
+      this.vY = this.vCurY = e.clientY;
+      this.vT = e.timeStamp;
+      this.presses++;
+      h.onPress();
+    } else this.begin(e);
   }
 
-  /** A press on a target: held back from the sun in the verb slot until it is told apart. */
-  private holdBack(e: PointerEvent, grow: boolean): void {
-    this.vId = e.pointerId;
-    this.vState = 1;
-    this.vGrow = grow;
-    this.vX = this.vCurX = e.clientX;
-    this.vY = this.vCurY = e.clientY;
-    this.vT = e.timeStamp;
-    this.presses++;
-    this.host.onPress();
-  }
-
-  /** A steer or blow press (the sun is held): it follows the pointer and never touches the sun. */
-  private track(e: PointerEvent, kind: number): void {
+  /**
+   * Starts following a pointer (also used for the Title tray drag handoff): a sun press, or on a
+   * held-sun leg a steer or blow press that never touches the sun. `quiet`: a held-back press turning
+   * into a sun press (already counted).
+   */
+  begin(e: PointerEvent, kind = SUN, quiet = false): void {
     this.active = e.pointerId;
     this.kind = kind;
     this.held = true;
@@ -287,29 +277,19 @@ export class Input {
     this.pressY = e.clientY;
     this.pressT = e.timeStamp;
     this.gesture = 0;
-    this.presses++;
-    this.host.onPress();
-  }
-
-  /** Starts following a pointer (also used for the Title tray drag handoff). */
-  begin(e: PointerEvent): void {
-    if (this.upEdge && !this.downEdge) this.upFirst = true;
-    this.active = e.pointerId;
-    this.kind = SUN;
-    this.lastX = e.clientX;
-    this.pressX = e.clientX;
-    this.pressY = e.clientY;
-    this.pressT = e.timeStamp;
-    // A press that began before a snap was allowed (the one that starts the run, the start beat) is
-    // a drag for good: late-delivered moves of the same stroke never snap.
-    this.gesture = this.host.canSnap?.() === true ? 0 : 1;
-    this.onMeter = this.host.meterHit?.(e.clientX, e.clientY) === true;
-    this.held = true;
-    this.downEdge = true;
-    this.cum = 0;
-    this.sN = 0;
-    this.sHead = 0;
-    this.pushSample(e.timeStamp, 0);
+    if (kind === SUN) {
+      if (this.upEdge && !this.downEdge) this.upFirst = true;
+      // A press that began before a snap was allowed (the one that starts the run, the start beat) is
+      // a drag for good: late-delivered moves of the same stroke never snap.
+      if (this.host.canSnap?.() !== true) this.gesture = 1;
+      this.onMeter = this.host.meterHit?.(e.clientX, e.clientY) === true;
+      this.downEdge = true;
+      this.cum = 0;
+      this.sN = 0;
+      this.sHead = 0;
+      this.pushSample(e.timeStamp, 0);
+    }
+    if (quiet) return;
     this.presses++;
     this.host.onPress();
   }
@@ -421,23 +401,9 @@ export class Input {
 
   /** The verb slot's press becomes the sun press now (latest wins): a catch plus the turn it moved since the press. */
   private toSun(x: number, t: number): void {
-    const id = this.vId;
+    this.begin({ pointerId: this.vId, clientX: this.vX, clientY: this.vY, timeStamp: this.vT } as PointerEvent, SUN, true);
     this.vId = -1;
     this.vState = 0;
-    if (this.upEdge && !this.downEdge) this.upFirst = true;
-    this.active = id;
-    this.kind = SUN;
-    this.lastX = this.pressX = this.vX;
-    this.pressY = this.vY;
-    this.pressT = this.vT;
-    this.gesture = 1;
-    this.onMeter = false;
-    this.held = true;
-    this.downEdge = true;
-    this.cum = 0;
-    this.sN = 0;
-    this.sHead = 0;
-    this.pushSample(this.vT, 0);
     this.moveTo(x, t);
   }
 
@@ -574,20 +540,15 @@ export class Input {
     }
   }
 
-  /** A wheel turn: one synthetic tap frame with the event's (capped) turn; on 'steer' legs a slide, on 'blow' legs nothing. */
+  /**
+   * A wheel turn: one synthetic tap frame with the event's (capped) turn. Nothing on held-sun legs
+   * (Drip's wheel steering is cut for the bundle budget, docs/ELEMENTALS_V2.md §9.3: its keys steer).
+   */
   private onWheel(e: WheelEvent): void {
     if (this.held || e.deltaY === 0 || isControl(e.target) || !this.host.accepting()) return;
     const verb = this.verb();
-    if (verb === 'blow') return;
+    if (verb === 'steer' || verb === 'blow') return;
     e.preventDefault();
-    if (verb === 'steer') {
-      // Down the wheel is a drag to the right (east), as it turns the sun.
-      const s = e.deltaMode === 1 ? WHEEL_STEER_NOTCH * Math.sign(e.deltaY) : WHEEL_STEER_PX * e.deltaY;
-      this.steerPending += Math.max(-WHEEL_STEER_MAX, Math.min(WHEEL_STEER_MAX, s));
-      this.presses++;
-      this.host.onPress();
-      return;
-    }
     const d = e.deltaMode === 1 ? -WHEEL_NOTCH * Math.sign(e.deltaY) : -WHEEL_PX * e.deltaY;
     this.pending += Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, d));
     this.presses++;

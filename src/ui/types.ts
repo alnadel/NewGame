@@ -28,7 +28,7 @@ export type ScreenId =
  * - `drag`: "Drag ← to swing the sun" (or "Hold ←" for keyboard players) until replaced or cleared.
  * - `shade-found`: "Shade! Thick teal = safe" (1.4 s). `melting`: "Melting! Find thick teal" (1.6 s).
  */
-/** Elementals v2: `tag-<element>` announces a TAG ("Drip's turn: Drag: steer Drip. The sun holds."). */
+/** Elementals v2: `tag-<element>` announces a TAG ("Drip's turn. The sun holds."). */
 export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing' | 'snap-ready' | `tag-${HeroId}`;
 
 export type RunKind = 'endless' | 'daily' | 'challenge' | 'campaign';

@@ -4,6 +4,7 @@
 
 import {
   biomeAtY,
+  bridged,
   buildRunResult,
   burnSweet,
   burnTarget,
@@ -185,6 +186,9 @@ const PAR_TICKS = 6;
 function makeBot(kind: BotKind): Bot | null {
   return import.meta.env.MODE === 'single' ? null : createBot(kind);
 }
+
+/** Elementals v2 (§7.9): the kinds of object each verb's ghost hand shows on. */
+const GHOST_KINDS: Readonly<Record<Verb, string>> = { sun: '', burn: 'bramble gate ice', grow: 'gap stream plot', steer: 'puddle', blow: 'rain fog' };
 
 /** Elementals v2 (?elfix=1): every object kind and state on a Trial run, for art review; bot builds only (makeBot's gate). */
 function fixture(s: SimState): void {
@@ -999,7 +1003,7 @@ export class Session {
     const ci = this.cadenceIn;
     ci.now = now;
     ci.screen = r.screen;
-    ci.inputActive = inputDown || this.input.touching;
+    ci.inputActive = inputDown;
     ci.timeScale = this.clock.timeScale;
     ci.reducedMotion = r.reducedMotion;
     ci.settled = this.renderer.settled;
@@ -1450,10 +1454,8 @@ export class Session {
       for (const x of el.objs) {
         const ahead = x.y - s.nubs.y;
         if (ahead > E.range) break;
-        const k = x.kind;
-        const want =
-          verb === 'burn' ? k === 'bramble' || k === 'gate' || k === 'ice' : verb === 'grow' ? k === 'plot' ? x.casterId < 0 : (k === 'gap' || k === 'stream') && x.grown < 2 * x.r : verb === 'steer' ? k === 'puddle' : x.awake;
-        if (ahead >= E.near && x.state !== 2 && want) {
+        // The verb's kinds: no standing tree, no bridge, weather awake.
+        if (ahead >= E.near && x.state !== 2 && GHOST_KINDS[verb].includes(x.kind) && x.casterId < 0 && !bridged(x) && (verb !== 'blow' || x.awake)) {
           o = x;
           break;
         }
@@ -1773,7 +1775,7 @@ export class Session {
       case 'tag':
         // §4.1: a TAG ends the verb slot, and the sun press too when a held-sun leg (steer, blow) is involved.
         this.input.cut(HEROES[ev.from].sunHeld || HEROES[ev.to].sunHeld);
-        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn: Drag: steer Drip. The sun holds."
+        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. The sun holds."
         this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
         this.ui.showCue(this.cueShown.id);
         break;
@@ -2457,6 +2459,7 @@ export class Session {
       const goal = hudGoal({ ...level, feats: [] }, s.stats, undefined, relaxed, seen);
       const f = level.feats[0];
       const t = s.trial;
+      const x = HEROES[s.nubs.hero];
       const pct = `${Math.round(levelProgress(s) * 100)} %`;
       if (f && !(bits & STAR_FLAKES)) labels[1] = level.feats.length > 1 ? dareProgressText(level, s.stats, seen) : `${labels[1]} · ${countText(featLive(f.kind, s.stats, seen), f.target, featInSeconds(f.kind))}`;
       // A Trial: the Dare's count on its star while open; the goal line counts the goal itself
@@ -2472,7 +2475,7 @@ export class Session {
       return {
         title: `${levelTag(level.id)} · ${level.name}`,
         // A Trial: the walking element's tagline under the title, then how it plays.
-        ...(t ? { tagline: HEROES[s.nubs.hero].tagline, verb: `${HEROES[s.nubs.hero].verbLine} · ${HEROES[s.nubs.hero].keyLine}` } : {}),
+        ...(t ? { tagline: x.tagline, verb: `${x.verbLine} · ${x.keyLine}` } : {}),
         goal: `${goalText(level, relaxed)} · ${count}`,
         now,
         stars: [

@@ -669,26 +669,21 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
     }
   });
 
-  it("the wheel turns the sun on 'sun', 'burn' and 'grow', steers 6 u a notch (0.15 u/px, ±18 u) on 'steer', and does nothing on 'blow'", () => {
+  it("the wheel turns the sun on 'sun', 'burn' and 'grow' and does nothing on held-sun legs", () => {
     for (const verb of ['sun', 'burn', 'grow'] as const) {
       const { inp, p } = mk(verb);
       p.onWheel(wheel(3, 1));
       expect(sum(inp.takeFrames(1, 0))).toMatchObject({ dTheta: -15, steer: 0 });
       inp.dispose();
     }
-    const steer = mk('steer');
-    steer.p.onWheel(wheel(3, 1));
-    expect(sum(steer.inp.takeFrames(1, 0))).toMatchObject({ dTheta: 0, steer: 6, downEdge: false });
-    steer.p.onWheel(wheel(-40, 0));
-    expect(sum(steer.inp.takeFrames(1, 0)).steer).toBe(-6);
-    steer.p.onWheel(wheel(1000, 0));
-    expect(sum(steer.inp.takeFrames(2, 0)).steer).toBe(18);
-    steer.inp.dispose();
-    const blow = mk('blow');
-    blow.p.onWheel(wheel(3, 1));
-    expect(sum(blow.inp.takeFrames(1, 0))).toMatchObject({ dTheta: 0, steer: 0, downEdge: false, upEdge: false, verbs: [] });
-    blow.inp.dispose();
+    for (const verb of ['steer', 'blow'] as const) {
+      const { inp, p } = mk(verb);
+      p.onWheel(wheel(3, 1));
+      expect(sum(inp.takeFrames(1, 0))).toMatchObject({ dTheta: 0, steer: 0, downEdge: false, upEdge: false, verbs: [] });
+      inp.dispose();
+    }
   });
+
 
   it('cut(false) keeps a sun drag and drops the verb slot; cut(true) ends both; cut and releaseAll() let a hold go', () => {
     // A burn press held back at the TAG is dropped: its lift is no tap.
@@ -728,7 +723,7 @@ describe('Elementals v2 input (docs/ELEMENTALS_V2.md §7.9)', () => {
     c.inp.cut(true);
     c.p.onMove(pe(1, 160, 300, 20));
     expect(sum(c.inp.takeFrames(1, 30))).toMatchObject({ steer: 0, upEdge: false });
-    expect(c.inp.touching).toBe(false);
+    expect(c.inp.pointerDown).toBe(false);
     c.inp.dispose();
   });
 

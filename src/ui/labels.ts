@@ -204,9 +204,10 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
       // v1.5: the frost meter is full.
       return keyboard ? 'Frost full! Press ↓ for a Cold Snap' : 'Frost full! Swipe ↓ for a Cold Snap';
   }
-  // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): a TAG, "{Name}'s turn: {verbLine}." (+ " The sun holds.").
+  // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): a TAG, "{Name}'s turn." (+ " The sun holds."); the
+  // verb text is cut for the bundle budget (§9.3: the tips, the ghost and the Pause card say it).
   const x = HEROES[id.slice(4) as HeroId];
-  return `${x.name}'s turn: ${x.verbLine}.${x.sunHeld ? ' The sun holds.' : ''}`;
+  return `${x.name}'s turn.${x.sunHeld ? ' The sun holds.' : ''}`;
 }
 
 /** How long a cue stays up (ms); null = until replaced or cleared. */

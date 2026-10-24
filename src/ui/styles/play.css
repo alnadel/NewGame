@@ -130,18 +130,20 @@
 
 /* Elementals v2 (docs/ELEMENTALS_V2.md §7.9): an intro element's verb, played on its next target
    (ui.setGhostAt: --gx/--gy in the column): a tap, a hold, a short sideways drag (Drip's steer) or a
-   swipe ('left'/'right'), with its word under the hand. */
+   swipe ('left'/'right'), with its word. */
 .ghost[data-mode='tap'],
 .ghost[data-mode='hold'],
 .ghost[data-mode='steer'] { display: flex; }
 
+/* Anchored, it rides above the cue line and says its word over the fingertip (clear of the dial). */
 .ghost.is-at {
   --reach: 40px;
+  z-index: 1;
   top: var(--gy);
-  transform: translate(calc(var(--gx) - 50%), -32px);
+  transform: translate(calc(var(--gx) - 50%), -64px);
 }
 
-.ghost.is-at .ghost-word { display: flex; }
+.ghost.is-at .ghost-word { display: flex; order: -1; margin: 0 0 10px; }
 .ghost[data-mode='tap'] .ghost-arrow,
 .ghost[data-mode='hold'] .ghost-arrow { display: none; }
 .ghost[data-mode='steer'] .ghost-hand { animation: ghost-swing 1.6s ease-in-out infinite; }
