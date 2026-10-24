@@ -29,15 +29,15 @@ import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
-import { elPolicy } from './bots/elements.ts';
-import { elHealth, tagLocked } from './elements.ts';
+import { createElPolicy, type ElPolicy, type ElPolicyOpts } from './bots/elements.ts';
+import { elHealth, nextTagHero, tagLocked } from './elements.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
 import type { DareTerms } from './bots/dares.ts';
 
-export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat';
-export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat'] as BotKind[]);
+export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat' | 'humanEl';
+export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat', 'humanEl'] as BotKind[]);
 
 /** v1.6 reactive-bot policies (docs/V1_6_PLAN.md §2.2): today's play, timed greed, greed all day, never gold. */
 export type BotPolicy = 'plain' | 'chase' | 'naive' | 'safe';
@@ -84,6 +84,8 @@ export interface BotOptions {
    * bots play every level as 'finish' (and humanFeat plays like humanDial). CORE-2.
    */
   dares?: DareTerms;
+  /** Elementals v2 (reactive, humanEl): the element policy's variant (G5's tap on sight, spam Gust, verbs off). */
+  el?: ElPolicyOpts;
 }
 
 /** What a v1.6 hook (bots/econ.ts, bots/world.ts) knows about the bot calling it. */
@@ -242,11 +244,17 @@ function gauge(s: SimState): number {
   return s.trial === null ? s.nubs.chill : elHealth(s);
 }
 
+/** True during a TAG's telegraph into Drip: the sun is aimed at guide.tag (§6.3). */
+function intoDrip(s: SimState): boolean {
+  return s.el !== null && tagLocked(s) && nextTagHero(s) === 'drip';
+}
+
 function reactiveBot(ctx: BotHookCtx): Bot {
   const mech = ctx.mech;
   const cfg = TUNING.bots.reactive;
   const f = frame();
   const score = new Float64Array(BINS);
+  const el: ElPolicy = createElPolicy({ ...ctx.opts.el, salt: ctx.salt });
   let seenGuide = -1;
   let target = -1;
   let started = false;
@@ -261,10 +269,12 @@ function reactiveBot(ctx: BotHookCtx): Bot {
         // v1.5: gold (bud) bins count where they are also safe now (the angle that does both), and
         // anywhere while Chill is nearly full (a moment in the sun to plant shade for later).
         const spare = s.nubs.chill >= cfg.budChill;
+        // Elementals: during a telegraph into Drip the sun goes where the dashed arcs say.
+        const tag = intoDrip(s);
         for (let b = 0; b < BINS; b++) {
-          const now = g.now[b] as number;
+          const now = (tag ? g.tag[b] : g.now[b]) as number;
           const gold = mech && g.bud[b] === 1 && (now === 1 || spare) ? cfg.budWeight : 0;
-          score[b] = cfg.nowWeight * now + cfg.nextWeight * (g.next[b] as number) + gold;
+          score[b] = cfg.nowWeight * now + cfg.nextWeight * (tag ? now : (g.next[b] as number)) + gold;
         }
         econReactiveScore(ctx, s, score);
         worldReactiveScore(ctx, s, score);
@@ -284,10 +294,20 @@ function reactiveBot(ctx: BotHookCtx): Bot {
       out.snap = mech && snapReady(s) && exposed(s) && (gauge(s) < cfg.snapLast || (gauge(s) < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
       out.snap = econReactiveSnap(ctx, s, out.snap);
       // Elementals v2 (§6.3): the walking element's verb on a Trial (Nubs legs keep the play above).
-      if (s.el !== null) elPolicy(s, out, ctx.salt);
+      if (s.el !== null) el.fill(s, out);
       return out;
     },
   };
+}
+
+/** The set bin of `mask` nearest θ (−1 when none is set). */
+function nearestSet(mask: Uint8Array, theta: number): number {
+  const b0 = binOf(theta);
+  for (let k = 0; k <= 180; k++) {
+    if (mask[(b0 + k) % BINS] === 1) return (b0 + k) % BINS;
+    if (mask[(b0 - k + BINS) % BINS] === 1) return (b0 - k + BINS) % BINS;
+  }
+  return -1;
 }
 
 /** True when some bin within ±deg of θ is set in `mask`. */
@@ -533,7 +553,7 @@ function wideLasting(now: Uint8Array, next: Uint8Array, minArc: number, out: Uin
  * The human model; `lastingShare` is the share of decisions that read the lasting shade (0 for
  * 'human', so it draws exactly the v1.0 stream).
  */
-function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: number, salt: number, ctx: BotHookCtx): Bot {
+function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl', lastingShare: number, salt: number, ctx: BotHookCtx): Bot {
   const cfg = TUNING.bots.human;
   const msTicks = (ms: number): number => Math.round((ms * TICK_HZ) / 1000);
   const f = frame();
@@ -571,10 +591,18 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
   // v1.5: humanDial snaps in a panic (the meter glows on the HUD): lit with Chill under HUMAN_SNAP_CHILL.
   const snaps = kind !== 'human';
   const feat = kind === 'humanFeat';
+  // Elementals v2 (§6.3): humanEl plays the element legs with the element policy at human timing.
+  const el = kind === 'humanEl' ? createElPolicy({ ...ctx.opts.el, salt, human: true }) : null;
   return {
     kind,
     next(s: SimState): InputFrame {
+      if (el !== null && s.el !== null && el.busy()) {
+        // The finger is on a tap or a hold: no sun play meanwhile.
+        el.fill(s, f);
+        return f;
+      }
       const out = decide(s);
+      if (el !== null && s.el !== null) el.fill(s, out);
       out.snap = snaps && snapReady(s) && exposed(s) && gauge(s) < HUMAN_SNAP_CHILL;
       // humanFeat (v1.6): a snapSave Dare casts a ready snap in the sun (bots/dares.ts).
       if (feat && !out.snap && snapReady(s) && ctx.opts.dares) out.snap = ctx.opts.dares.humanSnap(s, false);
@@ -612,6 +640,20 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat', lastingShare: numbe
     if (pick < 0) return f;
     // The sun's own position is seen live; the shade state is stale.
     const theta = s.sun.theta;
+    if (el !== null && intoDrip(s)) {
+      // humanEl before a Drip leg: the nearest bin of the dashed arcs, N(0, 6°).
+      const g = s.guide.tag;
+      const near = nearestSet(g, theta);
+      lag = -1;
+      if (near < 0 || g[binOf(theta)] === 1) return f;
+      const d = angleDiff(near, theta) + 6 * gaussian(rng);
+      if (Math.abs(d) < 3) return f;
+      moveTicks = Math.max(1, msTicks(cfg.moveBaseMs + cfg.moveMsPerDeg * Math.abs(d)));
+      moveT = 0;
+      moveDist = d;
+      sent = 0;
+      return moveTick();
+    }
     const mask =
       useLasting && wideLasting(ring.now[pick] as Uint8Array, ring.next[pick] as Uint8Array, cfg.lastingMinArc, lasting) ? lasting : (ring.now[pick] as Uint8Array);
     // humanFeat (v1.6): a Dare focus (bots/world.ts) may move it even while it is safe.
@@ -659,6 +701,8 @@ export function createBot(kind: BotKind, salt = 0, mechanics = true, opts: BotOp
       return humanBot('humanDial', TUNING.bots.human.lastingShare, salt, ctx);
     case 'humanFeat':
       return humanBot('humanFeat', TUNING.bots.human.lastingShare, salt, ctx);
+    case 'humanEl':
+      return humanBot('humanEl', TUNING.bots.human.lastingShare, salt, ctx);
     default:
       return oracleBot(ctx);
   }
