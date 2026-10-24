@@ -67,8 +67,8 @@ const PLOT_MIN = 5;
 const SWIPE_EVERY = 15;
 const SWIPE_GAIN = 2;
 const SWIPE_LIFT = 20;
-/** Gust keeps pushing a helpful rain cloud of the next stretch until its predicted centre is this close to the trail (u). */
-const RIDE_NEAR = 12;
+/** Gust keeps pushing a helpful rain cloud of a later stretch until its predicted centre is this close to the trail (× its rx). */
+const RIDE_NEAR = 0.5;
 /** The harm weights (meter a second) of fog that veils Ember's and Sprout's targets, and of the shade a rain cloud gives Nubs. */
 const FOG_VEIL = 10;
 const RAIN_SHADE = 28;
@@ -484,24 +484,40 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
 
 /**
  * The ride: the way to push the first awake rain cloud of a later stretch that helps its walker
- * (weatherGood) and whose predicted centre at arrival misses the trail by more than RIDE_NEAR; 0
- * when there is none. (The caller swipes only when that adds no more harm than the swipe costs.)
+ * (weatherGood) and whose predicted centre at arrival misses the trail by more than RIDE_NEAR · rx; when
+ * there is none (or it is on), the way that takes the first awake harmful fog of a later stretch
+ * (the hand-off fog that veils Sprout's and Ember's targets) off the trail; 0 when neither needs it.
+ * (The caller swipes only when that adds no more harm than the swipe costs.)
  */
 function rideDir(s: SimState, el: ElState): number {
-  let ride: ElObj | null = null;
+  const tr = s.world.trail;
+  let fog = 0;
   for (let i = 0; i < el.objs.length; i++) {
     const o = el.objs[i] as ElObj;
-    if (o.state === EL_GONE || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
-    if (o.y + E.weather.ryRatio * o.r < s.nubs.y) continue;
-    if (o.kind === 'rain' && o.awake && walkerAt(s, o.y) !== 'gust' && weatherGood(s, o) > 0) {
-      ride = o;
-      break;
-    }
+    if (o.state === EL_GONE || !o.awake || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
+    if (o.y + E.weather.ryRatio * o.r < s.nubs.y || walkerAt(s, o.y) === 'gust') continue;
+    const good = weatherGood(s, o);
+    const n = arriveTicks(s, o.y);
+    const off = weatherXAt(s, o, n < 0 ? 0 : n) - trailX(tr, o.y);
+    if (o.kind === 'rain' && good > 0) {
+      if (off < -RIDE_NEAR * o.r) return 1;
+      if (off > RIDE_NEAR * o.r) return -1;
+    } else if (o.kind === 'fog' && good < 0 && fog === 0) fog = off > 0 ? 1 : -1;
   }
-  if (ride === null) return 0;
-  const n = arriveTicks(s, ride.y);
-  const miss = trailX(s.world.trail, ride.y) - weatherXAt(s, ride, n < 0 ? 0 : n);
-  return miss > RIDE_NEAR ? 1 : miss < -RIDE_NEAR ? -1 : 0;
+  return fog;
+}
+
+/**
+ * 1 − (predicted offset / r)² of weather o from the trail as the walker reaches its centre and as it
+ * reaches half its far side (the larger: a cloud the walker is already entering still counts).
+ */
+function overlapQ(s: SimState, o: ElObj, ry: number): number {
+  const tr = s.world.trail;
+  const n = arriveTicks(s, o.y);
+  const a = (weatherXAt(s, o, n < 0 ? 0 : n) - trailX(tr, o.y)) / o.r;
+  const m = arriveTicks(s, o.y + ry / 2);
+  const b = (weatherXAt(s, o, m < 0 ? 0 : m) - trailX(tr, o.y)) / o.r;
+  return 1 - Math.min(a * a, b * b);
 }
 
 /** Weather of Gust's own stretch still ahead (not passed) that would cover the trail. */
@@ -509,8 +525,9 @@ function ownAhead(s: SimState, el: ElState): boolean {
   for (let i = 0; i < el.objs.length; i++) {
     const o = el.objs[i] as ElObj;
     if (o.state === EL_GONE || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
-    if (o.y + E.weather.ryRatio * o.r < s.nubs.y || walkerAt(s, o.y) !== 'gust') continue;
-    if (weatherGood(s, o) < 0) return true;
+    const ry = E.weather.ryRatio * o.r;
+    if (o.y + ry < s.nubs.y || walkerAt(s, o.y) !== 'gust') continue;
+    if (overlapQ(s, o, ry) > 0) return true;
   }
   return false;
 }
@@ -595,23 +612,20 @@ function weightOf(s: SimState, o: ElObj): number {
 
 /**
  * The weather's predicted cost to the walkers ahead with `kick` more wind now (no later swipe): per
- * object not yet passed, its weight times the length of trail its ellipse covers when the walker
- * reaches it (weatherXAt; a sleeping object starts drifting when it wakes).
+ * object not yet passed, its weight times the length of trail its ellipse covers as the walker
+ * reaches it (overlapQ; weatherXAt: a sleeping object starts drifting when it wakes).
  */
 function harm(s: SimState, el: ElState, kick: number): number {
   const w0 = el.wind;
   const w = w0 + kick;
   el.wind = w > G.windMax ? G.windMax : w < -G.windMax ? -G.windMax : w;
   let sum = 0;
-  const tr = s.world.trail;
   for (let i = 0; i < el.objs.length; i++) {
     const o = el.objs[i] as ElObj;
     if (o.state === EL_GONE || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
     const ry = E.weather.ryRatio * o.r;
     if (o.y + ry < s.nubs.y) continue;
-    const n = arriveTicks(s, o.y);
-    const dx = (weatherXAt(s, o, n < 0 ? 0 : n) - trailX(tr, o.y)) / o.r;
-    const q = 1 - dx * dx;
+    const q = overlapQ(s, o, ry);
     if (q > 0) sum += weightOf(s, o) * 2 * ry * Math.sqrt(q);
   }
   el.wind = w0;
