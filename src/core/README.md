@@ -1724,4 +1724,5 @@ driver's µs per tick on T7; `node scripts/bench-step.ts --drive` times it at an
 - `bench-step`: step ×1.070, guide ×0.892; `--gen` passes; `--drive` 0.35 µs per tick.
 - **Cut list** (§12.3): the branch was over CORE's +3,456 B (C0c alone is +6,020 B over C0b), so
   `driveWeatherX`'s set-vane prediction, the ending rescue and Auto Snap are cut in one commit (about
-  110 B here); the branch stays over.
+  110 B here); the branch stays over: `build:single` 834,758 B, +9,764 B over C0b (824,994 B) and
+  +3,744 B over C0c (831,014 B), against CORE's +3,456 B and the 834,560 B release budget.
