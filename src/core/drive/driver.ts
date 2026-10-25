@@ -7,7 +7,7 @@
 //
 // Per tick (§2.2): the act per leg (§0.1; a first-run lesson's button waits for the first full
 // meter, §3.1); presses buffered, resolved and refused (§2.3) with the pre-TAG press; Cold Snap
-// presses and Auto Snap (§3.1); Ember's arms and ignition (§3.2: the required-first pick, the last
+// presses (§3.1; Auto Snap is CORE's cut list 3, §12.3); Ember's arms and ignition (§3.2: the required-first pick, the last
 // working tick one tick on); Sprout's jobs with their goals, release and pre-emption (§3.3: the
 // downwind-aware pick); the Gust vane and its governor (§3.5: symmetric notches, the policy's Lift
 // floor, auto-calm); Auto actions (§3.6); aim help (§4: the magnet with its engagement window, the
@@ -51,7 +51,7 @@ export interface DriveOpts {
   readonly track: boolean;
   /** 'fog' level: the magnet reads guide.now only. */
   readonly nowOnly: boolean;
-  /** Endless rungs R0-R1: Auto Snap (§3.1). */
+  /** Endless rungs R0-R1: Auto Snap (§3.1). Cut (CORE's cut list 3, §12.3): the driver ignores it. */
   readonly autoSnap: boolean;
   /** Settings → Auto actions (§3.6). */
   readonly autoAct: boolean;
@@ -187,7 +187,6 @@ export function createDriver(): Driver {
   // Aim help (§4): the last sun move (the engagement clock), hand and real lift, the last stroke's
   // net direction (±1, 0 under 1°) and the one in progress, the guide refresh last planned on.
   let moveAt = NEVER;
-  let handAt = NEVER;
   let liftAt = NEVER;
   let strokeDir = 0;
   let stroke = 0;
@@ -498,7 +497,7 @@ export function createDriver(): Driver {
     let kind = 2;
     if (nextTagHero(s) === 'drip' && n >= 0 && n <= A.handTicks && g.tag.indexOf(1) >= 0) to = handPlan(s, theta);
     else {
-      to = aimPlan(s, theta, opts.aimDeg, opts.nowOnly, opts.track, now - handAt >= A.endingTicks);
+      to = aimPlan(s, theta, opts.aimDeg, opts.nowOnly, opts.track);
       kind = aimOut.kind;
     }
     if (to !== to) return;
@@ -604,7 +603,7 @@ export function createDriver(): Driver {
       pre = 'none';
       shown = false;
       newLeg(s);
-      moveAt = handAt = liftAt = gAt = NEVER;
+      moveAt = liftAt = gAt = NEVER;
       strokeDir = 0;
       stroke = 0;
       seen = -1;
@@ -630,7 +629,6 @@ export function createDriver(): Driver {
         const drag = HEROES[hero].drag;
         // 2. The hand and the sun move, from the frame as the input filled it (before the driver writes).
         const hand = (f.down && !c.rest) || f.downEdge || f.upEdge || f.dTheta !== 0 || f.key !== 0;
-        if (hand) handAt = now;
         if (drag === 'sun') {
           if (s.ready === 0 && (f.downEdge || f.upEdge || f.dTheta !== 0 || f.key !== 0)) moveAt = now;
           // The stroke's net turn, from its downEdge to its upEdge.
@@ -672,16 +670,12 @@ export function createDriver(): Driver {
           if (act === 'none' || press(s, f, act, now - buf >= D.bufferTicks)) buf = -1;
           else if (c.act === 1) note(NOTE_BUFFER, DRIVE_ACTS.indexOf(act));
         }
-        // 6. The walking element's verb (one per tick; a verb sent in the start beat would be lost), Auto Snap.
+        // 6. The walking element's verb (one per tick; a verb sent in the start beat would be lost).
         if (el !== null && s.ready === 0) {
           if (opts.autoAct) auto(s, el);
           if (hero === 'ember') ember(s, el, f);
           else if (hero === 'sprout') sprout(s, el, f);
           else if (hero === 'gust') gust(s, el, f);
-        }
-        if (opts.autoSnap && act === 'snap' && f.snap !== true && snapReady(s) && s.nubs.f > 0 && s.nubs.chill < D.autoSnap.chill) {
-          f.snap = true;
-          note(NOTE_AUTO, 1);
         }
         // 7. Aim help (§4), on sun legs only.
         if (drag === 'sun') aim(s, f, c, hand);

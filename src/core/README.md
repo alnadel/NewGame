@@ -1636,7 +1636,7 @@ finger state into ordinary `InputFrame` fields before `step()`; `step()` itself 
 
 - **API.** `createDriver()` → `{ begin(s, opts), interrupt(), fill(s, f, c), observe(s), view, notes,
   noteN, clearNotes() }`. `DriveOpts`: `aimDeg` and `track` (`aimRadius`), `nowOnly` ('fog'),
-  `autoSnap` (Endless R0-R1), `autoAct` (Settings → Auto actions), `reducedMotion`. `DriveControl`
+  `autoSnap` (Endless R0-R1; ignored since CORE's cut list 3, §18.5), `autoAct` (Settings → Auto actions), `reducedMotion`. `DriveControl`
   per tick: `act` (a press lands), `vane` (notches: drag px / 36, keys ±1), `vaneUp` (snap the raw
   value to its notch), `rest` (the sun finger is down and still). `fill` runs only in the day phase.
 - **Order in `fill`** (§2.2): an interrupted glide or one whose leg ended closes; the hand and the
@@ -1649,14 +1649,14 @@ finger state into ordinary `InputFrame` fields before `step()`; `step()` itself 
   the walking element's verb (Ember's arms: tapped at their moment with Flame covering them,
   `WAIT_LOW` once, `EXPIRE` past the last working tick; Sprout's jobs: hold to the goal, release the
   tick after, pre-emption by an urgent crossing; Gust's governor: one gust per `every` ticks below
-  the notch's band, auto-calm at the policy floor); Auto actions; Auto Snap; aim help.
+  the notch's band, auto-calm at the policy floor); Auto actions; aim help.
 - **Aim help** (§4): planned on guide refresh ticks only, with the sun up, past the start beat,
   unlocked, no eclipse, **no lesson** (`s.lessonOn`), no hand, the sun settled, at least
   `regripTicks` after a real lift, `gapTicks` between glide starts, and only within `engageTicks`
   (300) of the last sun move (button presses, a resting finger and the start tap are not moves). The
   hand-over takes the last `handTicks` before a TAG into Drip (`handPlan`); otherwise the magnet
-  (`aimPlan`) settles a lit sun (or one in ending shade once the hand has rested `endingTicks`) into
-  lasting shade, or tracks a sun near its arc's edge back inside. Never against the stroke by more
+  (`aimPlan`) settles a lit sun into lasting shade (the rescue from ending shade is cut, §18.5), or
+  tracks a sun near its arc's edge back inside. Never against the stroke by more
   than `againstDeg` within `againstTicks` of the lift. A glide is eased over `glideTicks` ticks at
   `rate` (`rateReduced`) and its steps sum to `q1024(Δ)` exactly; it has its own edges unless the
   finger rests (then none), and a downEdge or a key ends it.
@@ -1667,7 +1667,7 @@ finger state into ordinary `InputFrame` fields before `step()`; `step()` itself 
   cost, the glide target and whether it is the hand-over, the last refusal.
 - **Notes** (pairs in `notes[0 .. 2·noteN)`, at most 8 between drains): `PRESS`, `REFUSE`, `BUFFER`,
   `SETTLE` (a glide ended: 0 track, 1 rescue), `NOTCH`, `CALM` (0 a press, 1 auto-calm, 2 a calm vane),
-  `WAIT_LOW`, `EXPIRE`, `HANDOVER` (the marked bin), `AUTO` (1 a snap, 2 an arm, 3 a job).
+  `WAIT_LOW`, `EXPIRE`, `HANDOVER` (the marked bin), `AUTO` (2 an arm, 3 a job; 1, a snap, is cut).
 
 ### 18.2 Aim, vane and the shared policy
 
@@ -1676,8 +1676,8 @@ finger state into ordinary `InputFrame` fields before `step()`; `step()` itself 
   marked bin), `q1024`, `glideTicks`, `glideStep`. Bins follow `binOf` (bin b covers
   [b − 0.5, b + 0.5)); glare stops the search for Nubs; a bud, glass glint, flare rim or (in a TAG
   telegraph) `guide.tag` under the sun is honoured.
-- `drive/vane.ts`: `driveWeatherX(s, o, ticks, n)`: a weather object's x with the vane held at notch
-  n, the governor simulated tick by tick as the driver and `step()` play it (n = 0: `weatherXAt`).
+- `drive/vane.ts`: `driveWeatherX(s, o, ticks, n)`: a weather object's x after `ticks`; since CORE's
+  cut list 1 (§18.5) the calm-now prediction (`weatherXAt`) for every notch.
 - `drive/pick.ts` (C0c): the timing and picks the driver and the bots share.
 
 ### 18.3 Journey content (§5.3)
@@ -1695,7 +1695,7 @@ only those 46 entries and `LEVEL_BAKE_RUN`; the goldens only campaign 32 and 100
 ### 18.4 Touch bots and gates
 
 `humanTouch`, `reactiveTouch`, `idleTouch` and `mashTouch` (§10.2) play through their own driver
-(`touchOpts(s, rung)`: the run's Standard radius, Auto Snap on R0-R1) and expose its view as
+(`touchOpts(s, rung)`: the run's Standard radius, `autoSnap` on R0-R1) and expose its view as
 `drive`; `humanTouch` takes `{ rest: true }`, `reactiveTouch` `{ park: θ }`. `sim --campaign`
 adds their rows and, with `--streams N --json FILE` / `--compare FILE`, the §9.5 recalibration
 gates against the humanDial baseline; `sim --check` adds the idleTouch and humanTouch rung rows;

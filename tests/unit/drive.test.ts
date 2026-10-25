@@ -675,35 +675,36 @@ describe('aim help: the magnet\'s target (§4.2)', () => {
 
   it('settles a lit sun into the nearest lasting arc within R, landing 4° inside it (at most half its width)', () => {
     paint(s, [[110, 130]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(113.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(113.5);
     expect(aimOut.kind).toBe(1);
-    expect(aimPlan(s, 100, 9, false, true, false)).toBeNaN();
+    expect(aimPlan(s, 100, 9, false, true)).toBeNaN();
     paint(s, [[80, 90]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(86.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(86.5);
     paint(s, [[110, 113]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(111.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(111.5);
     // At the same reach the wider arc wins, then CCW.
     paint(s, [[110, 112], [88, 90]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(111);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(111);
     paint(s, [[110, 112], [80, 90]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(86.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(86.5);
     expect(settleTarget(s, 100, 14, false)).toBe(86.5);
     expect(settleTarget(s, 100, 0, false)).toBeNaN();
   });
 
-  it('lasting shade is now ∧ next (now alone when that is empty, or on a fog level); ending shade is left until the hand rests', () => {
-    paint(s, [[95, 130]], [[110, 130]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBeNaN();
-    expect(aimPlan(s, 100, 14, false, true, true)).toBe(113.5);
-    // Fog: guide.now only, so the sun is in shade already.
-    expect(aimPlan(s, 100, 14, true, true, true)).toBeNaN();
+  it('lasting shade is now ∧ next (now alone when that is empty, or on a fog level); ending shade is left alone (cut list 2)', () => {
+    paint(s, [[100, 130]], [[110, 130]]);
+    expect(aimPlan(s, 105, 14, false, true)).toBeNaN();
+    // Lit, it settles into the lasting part.
+    expect(aimPlan(s, 99, 14, false, true)).toBe(113.5);
+    // Fog: guide.now only, so the edge is near and the sun goes back inside.
+    expect(aimPlan(s, 100.2, 14, true, true)).toBe(103.5);
     paint(s, [[110, 130]], []);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(113.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(113.5);
     // During a Cold Snap with a landing: guide.land.
     paint(s, [[110, 130]]);
     mark(s.guide.land, [[140, 150]]);
     s.snapTicks = 10;
-    expect(aimPlan(s, 135, 14, false, true, false)).toBe(143.5);
+    expect(aimPlan(s, 135, 14, false, true)).toBe(143.5);
     s.snapTicks = 0;
   });
 
@@ -712,55 +713,57 @@ describe('aim help: the magnet\'s target (§4.2)', () => {
       paint(s, [[110, 130]]);
       s.guide[m][100] = 1;
       if (m === 'flare') {
-        expect(aimPlan(s, 100, 14, false, true, false)).toBe(113.5);
+        expect(aimPlan(s, 100, 14, false, true)).toBe(113.5);
         s.guide.flareTicks = 30;
       }
-      expect(aimPlan(s, 100, 14, false, true, false), m).toBeNaN();
+      expect(aimPlan(s, 100, 14, false, true), m).toBeNaN();
     }
     paint(s, [[110, 130]]);
     s.guide.glare[105] = 1;
-    expect(aimPlan(s, 100, 14, false, true, false)).toBeNaN();
+    expect(aimPlan(s, 100, 14, false, true)).toBeNaN();
     mark(s.guide.now, [[80, 90]]);
     mark(s.guide.next, [[80, 90]]);
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(86.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(86.5);
     s.nubs.hero = 'ember';
-    expect(aimPlan(s, 100, 14, false, true, false)).toBe(113.5);
+    expect(aimPlan(s, 100, 14, false, true)).toBe(113.5);
     s.nubs.hero = 'nubs';
   });
 
   it('tracks a sun near its arc\'s edge back inside the same arc (never to another), only with track on', () => {
     paint(s, [[90, 108], [110, 130]]);
-    expect(aimPlan(s, 110.2, 14, false, true, false)).toBe(113.5);
+    expect(aimPlan(s, 110.2, 14, false, true)).toBe(113.5);
     expect(aimOut.kind).toBe(0);
-    expect(aimPlan(s, 129.6, 14, false, true, false)).toBe(126.5);
-    expect(aimPlan(s, 120, 14, false, true, false)).toBeNaN();
-    expect(aimPlan(s, 110.2, 14, false, false, false)).toBeNaN();
+    expect(aimPlan(s, 129.6, 14, false, true)).toBe(126.5);
+    expect(aimPlan(s, 120, 14, false, true)).toBeNaN();
+    expect(aimPlan(s, 110.2, 14, false, false)).toBeNaN();
     paint(s, [[0, 359]]);
-    expect(aimPlan(s, 10, 14, false, true, false)).toBeNaN();
+    expect(aimPlan(s, 10, 14, false, true)).toBeNaN();
   });
 
   it('reads bins as binOf does: bin b covers [b − 0.5, b + 0.5)', () => {
     paint(s, [[110, 130]]);
     expect([binOf(109.49), binOf(109.5), binOf(130.49), binOf(130.5)]).toEqual([109, 110, 130, 131]);
-    expect(aimPlan(s, 109.49, 14, false, true, false)).toBe(113.5);
+    expect(aimPlan(s, 109.49, 14, false, true)).toBe(113.5);
     expect(aimOut.kind).toBe(1);
-    expect(aimPlan(s, 109.5, 14, false, true, false)).toBe(113.5);
+    expect(aimPlan(s, 109.5, 14, false, true)).toBe(113.5);
     expect(aimOut.kind).toBe(0);
-    expect(aimPlan(s, 130.49, 14, false, true, false)).toBe(126.5);
+    expect(aimPlan(s, 130.49, 14, false, true)).toBe(126.5);
     expect(aimOut.kind).toBe(0);
-    expect(aimPlan(s, 130.5, 14, false, true, false)).toBe(126.5);
+    expect(aimPlan(s, 130.5, 14, false, true)).toBe(126.5);
     expect(aimOut.kind).toBe(1);
   });
 
   it('in a TAG telegraph prefers T ∧ guide.tag within reach, and leaves a sun parked on guide.tag alone', () => {
-    // T1: the telegraph of the TAG from Ember back to Nubs.
+    // T1: the telegraph of the TAG from Ember back to Nubs. Two arcs at the same reach: the wider wins
+    // until the dashed arcs cover the other.
     const t = trialTo(1001, 'ember', (x) => tagLocked(x) && nextTagHero(x) === 'nubs');
-    paint(t, [[100, 130]]);
-    mark(t.guide.tag, [[120, 140]]);
-    expect(aimPlan(t, 95, 14, false, true, false)).toBe(103.5);
-    expect(aimPlan(t, 110, 14, false, true, true)).toBe(123.5);
-    expect(aimPlan(t, 135, 14, false, true, true)).toBeNaN();
-    expect(aimPlan(t, 125, 14, false, true, true)).toBeNaN();
+    paint(t, [[105, 112], [140, 150]]);
+    expect(aimPlan(t, 126, 14, false, true)).toBe(143.5);
+    mark(t.guide.tag, [[105, 112], [130, 138]]);
+    expect(aimPlan(t, 126, 14, false, true)).toBe(108.5);
+    // Parked on the dashed arcs (lit or in shade): left alone.
+    expect(aimPlan(t, 135, 14, false, true)).toBeNaN();
+    expect(aimPlan(t, 108, 14, false, true)).toBeNaN();
   });
 });
 
@@ -1025,11 +1028,11 @@ describe('the hand-over, Auto Snap and Auto actions (§4.4, §3.1, §3.6)', () =
     }
   });
 
-  it('Auto Snap: on Endless rungs ≤ 1 a ready Cold Snap casts itself when Nubs is lit with Chill under 20', () => {
+  it('Auto Snap is cut (cut list 3): touchOpts still names rungs R0-R1, and a ready snap never casts itself', () => {
     const s = endless();
     expect([0, 1, 2, 3, 4, -1].map((r) => touchOpts(s, r).autoSnap)).toEqual([true, true, false, false, false, false]);
     const d = createDriver();
-    for (const [auto, chill, lit, want] of [[true, 15, 1, true], [true, 25, 1, false], [true, 15, 0, false], [false, 15, 1, false]] as const) {
+    for (const [auto, chill, lit, want] of [[true, 15, 1, false], [true, 25, 1, false], [true, 15, 0, false], [false, 15, 1, false]] as const) {
       d.begin(s, { ...OPTS, autoSnap: auto });
       s.nubs.frost = 1;
       s.nubs.chill = chill;
@@ -1125,19 +1128,19 @@ describe('due prompts and the Ember notes (§3.2, §2.4)', () => {
 });
 
 describe('the Gust vane\'s predictions (§3.5)', () => {
-  it('driveWeatherX equals stepping the sim with the governor at that notch, and with n = 0 with no gusts', () => {
-    for (const n of [0, 1, 2, -1]) {
+  it('driveWeatherX is the calm-now ghost for every notch (cut list 1): stepping the sim with the vane calm', () => {
+    for (const n of [0, 1, -2]) {
       const s = trialTo(1004, 'gust', (x) => objs(x).some((o) => (o.kind === 'rain' || o.kind === 'fog') && o.awake && o.state !== EL_GONE));
       const i = objs(s).findIndex((o) => (o.kind === 'rain' || o.kind === 'fog') && o.awake && o.state !== EL_GONE);
       const o = objs(s)[i] as ElObj;
       const ticks = 90;
       const want = driveWeatherX(s, o, ticks, n);
-      if (n === 0) expect(want).toBe(weatherXAt(s, o, ticks));
+      expect(want).toBe(weatherXAt(s, o, ticks));
       const d = createDriver();
       d.begin(s, OPTS);
       for (let k = 0; k < ticks; k++) {
         s.nubs.chill = 100;
-        tick(s, d, k === 0 ? { vane: n, vaneUp: true } : {});
+        tick(s, d);
         expect(s.nubs.hero).toBe('gust');
       }
       expect(objs(s)[i]!.x).toBeCloseTo(want, 6);
