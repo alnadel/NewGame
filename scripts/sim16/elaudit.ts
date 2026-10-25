@@ -330,6 +330,7 @@ export function planPlayer(plan: Plan, o: PlayerOpts): Player {
   // G5e: the driver that holds the vane (begun on its first Gust tick, filled on Gust legs only).
   const vctl: DriveControl = { act: 0, vane: 0, vaneUp: false, rest: false };
   let drv: Driver | null = null;
+  let vaneLeg = -1;
   return (s) => {
     f.verb = 0;
     f.vx = 0;
@@ -398,10 +399,11 @@ export function planPlayer(plan: Plan, o: PlayerOpts): Player {
           drv = createDriver();
           drv.begin(s, { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false });
         }
-        // Held at the notch: set again whenever it is not there (after an auto-calm, on a new leg).
-        drv.observe(s);
-        vctl.vane = drv.view.vane === o.vane ? 0 : o.vane - drv.view.vane;
+        // Set once on the leg's first tick and never touched again: the governor's rules (its
+        // auto-calm at the policy floor included) and no Calm press.
+        vctl.vane = s.relayIdx !== vaneLeg ? o.vane : 0;
         vctl.vaneUp = vctl.vane !== 0;
+        vaneLeg = s.relayIdx;
         drv.fill(s, f, vctl);
       } else if (hero === 'gust') {
         f.dTheta = 0;
