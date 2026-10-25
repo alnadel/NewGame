@@ -44,6 +44,7 @@
 // module (sim16/world.ts, CORE-2: --hours, --bake) add per-run metrics gathered in the workers,
 // their tables and gates after the v1.5 report, and their own modes.
 
+import { writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import { CAMPAIGN_LEVELS, featMet, featValue, isBossFinale, LEVEL_COUNT, ORACLE_PLANS, SOFT_FAIL_MISSES, type FeatKind, type LevelDef } from '../src/config/campaign.ts';
@@ -211,10 +212,10 @@ interface LevelOut {
  * Feat-seeking oracle: feats), `label` names the variant, and `relaxed` scores the goal as 'finish'
  * (the reactive bot on the teaching levels' verb goals, docs/V1_6_PLAN.md §2.6).
  */
-function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: Partial<V16Rules>, opts: BotOptions = {}, label?: string, relaxed = false): LevelOut {
+function playLevel(id: number, kind: BotKind, salt: number, mech = true, v16?: Partial<V16Rules>, opts: BotOptions = {}, label?: string, relaxed = false, lesson = id === 1): LevelOut {
   const t0 = performance.now();
   // Level 1 is the first run's lesson level (the session turns the lesson on until it is passed).
-  const base: Partial<RunConfig> = { lesson: id === 1, ...(v16 ? { v16 } : {}), ...(relaxed ? { relaxedGoal: true } : {}) };
+  const base: Partial<RunConfig> = { lesson, ...(v16 ? { v16 } : {}), ...(relaxed ? { relaxedGoal: true } : {}) };
   const s = createRun(campaignConfig(id, base));
   // The Journey terms (verb goals, Dares, humanFeat's focus) ride on every campaign bot here; the
   // options cross the worker boundary as data, so they are attached on this side.
@@ -334,7 +335,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
 type WorkerMsg =
   | { kind: 'run'; task: Task; job: Job }
   | { kind: 'career'; c: number; runs: number; bot: BotKind; days: number; meta: boolean; v16?: Partial<V16Rules> }
-  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean; v16?: Partial<V16Rules>; opts?: BotOptions; label?: string; relaxed?: boolean };
+  | { kind: 'level'; id: number; bot: BotKind; salt: number; mech: boolean; v16?: Partial<V16Rules>; opts?: BotOptions; label?: string; relaxed?: boolean; lesson?: boolean };
 
 if (!isMainThread && workerData === 'sim') {
   parentPort?.on('message', (m: WorkerMsg) => {
@@ -342,7 +343,7 @@ if (!isMainThread && workerData === 'sim') {
       const { out } = playRun(jobConfig(m.job, m.task.seed), m.job.bot, m.task.days, m.task.timeGen, !m.job.noMech, m.job.opts);
       parentPort?.postMessage({ ...out, job: m.task.job, seed: m.task.seed });
     } else if (m.kind === 'level') {
-      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech, m.v16, m.opts, m.label, m.relaxed));
+      parentPort?.postMessage(playLevel(m.id, m.bot, m.salt, m.mech, m.v16, m.opts, m.label, m.relaxed, m.lesson));
     } else {
       void runCareer(m.c, m.runs, m.bot, m.days, m.meta, m.v16).then((o) => parentPort?.postMessage(o));
     }
@@ -629,6 +630,12 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
       for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot: kindOf(bot), salt: t, mech, ...extra });
     }
   }
+  // Controls v3 (docs/CONTROLS_V3.md §9.5): --streams N adds the human comparison streams of each
+  // human bot asked for, labelled `<bot>~`: stream s's try t (t < --tries) plays decision stream
+  // streamSalt(s, t) (held out: the bake plays 101-110 and 201-220). --json writes their outcomes.
+  const streams = Math.max(0, Number(arg('streams', '0')));
+  const streamBots = streams > 0 ? bots.filter((b) => b.startsWith('human')) : [];
+  for (const id of ids) for (const bot of streamBots) for (let t = 0; t < tries; t++) for (let k = 0; k < streams; k++) msgs.push({ kind: 'level', id, bot: kindOf(bot), salt: streamSalt(k, t), mech, label: `${bot}~` });
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
@@ -783,11 +790,39 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   if (bosses.length) line(false, parryBosses.length === bosses.length, 'every boss finale offers a parry Dare (advisory)', `${parryBosses.length} of ${bosses.length}${parryBosses.length < bosses.length ? ` (without: ${bosses.filter((l) => !parryBosses.includes(l)).map((l) => `L${l.id}`).join(', ')})` : ''}`);
   const two = daring.filter((l) => l.feats.length >= 2).length;
   console.log(`  (row) levels with two Dares: ${two}`);
+  const json = arg('json', '');
+  if (json !== '' && streamBots.length > 0) {
+    const file: StreamFile = { what: 'SHADY --campaign streams (docs/CONTROLS_V3.md §9.5)', bot: streamBots[0] as string, streams, tries, levels: {} };
+    for (const id of ids) file.levels[id] = streamString(outs.filter((o) => o.bot === `${file.bot}~` && o.id === id), streams, tries);
+    writeFileSync(json, `${JSON.stringify(file)}\n`);
+    console.log(`\n  wrote ${file.bot}'s ${streams} streams × ${tries} tries on ${ids.length} levels to ${json}`);
+  }
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
     process.exit(1);
   }
   console.log('\nAll hard gates met.');
+}
+
+/** The decision stream of comparison stream `s`'s try `t`: s on its first try, 1000·t + s after. */
+function streamSalt(s: number, t: number): number {
+  return 1000 * t + s;
+}
+
+/** A --json file of human comparison streams: per level, one character per run ('1' passed), try-major (t · streams + s). */
+interface StreamFile {
+  what: string;
+  bot: string;
+  streams: number;
+  tries: number;
+  levels: Record<number, string>;
+}
+
+/** The pass string of one level's stream runs (try-major). */
+function streamString(rs: readonly LevelOut[], streams: number, tries: number): string {
+  let out = '';
+  for (let t = 0; t < tries; t++) for (let k = 0; k < streams; k++) out += rs.find((o) => o.salt === streamSalt(k, t))?.passed ? '1' : '0';
+  return out;
 }
 
 async function main(): Promise<void> {
