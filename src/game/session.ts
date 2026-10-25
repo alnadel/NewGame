@@ -2605,7 +2605,6 @@ export class Session {
     this.d.haptics.setEnabled(st.haptics);
     this.input.sensitivity = st.sensitivity;
     this.input.invert = st.invert;
-    this.input.swingBoost = this.params.boost ?? st.swingBoost;
   }
 
   /**

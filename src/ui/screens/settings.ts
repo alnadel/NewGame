@@ -1,6 +1,6 @@
 // Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code, V1_1_PLAN UM2/UM9: the name on challenge
-// links and adaptive comfort; Controls v3, docs/CONTROLS_V3.md §8.1: aim help, Swing Boost, the
-// button's side and Auto actions). Opened from the Title or from Pause;
+// links and adaptive comfort; Controls v3, docs/CONTROLS_V3.md §8.1: aim help, the button's side and
+// Auto actions; Swing Boost is cut for the bundle budget). Opened from the Title or from Pause;
 // Back returns to wherever it was opened from. Mid-run (from Pause) the backup, restore and reset
 // controls are hidden: replacing the save under a running run would desync it. A "Testing" group
 // holds the Journey's unlock-all toggle (CAMPAIGN_PLAN §5).
@@ -59,7 +59,6 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     onInput: (v) => change('sensitivity', Math.round(v * 100) / 100) });
   const invert = toggleSwitch(ctx, 'Invert drag direction', (on) => change('invert', on));
   const aim = segmented(ctx, 'Aim help', choices('Standard', 'Strong', 'Light', 'Off'), (v) => change('aim', v));
-  const boost = toggleSwitch(ctx, 'Swing Boost', (on) => change('swingBoost', on));
   const hand = segmented(ctx, 'Button side', choices('Left', 'Right'), (v) => change('hand', v));
   const keys = h('div', 'set-row set-row--keys',
     h('span', { class: 'set-ic', deco: true }, icon('keyboard')),
@@ -246,7 +245,6 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       row('gauge', 'Drag speed', null, sensitivity.el),
       row('invert', 'Invert drag', 'Drag right to turn the sun the other way', invert.el),
       stackRow('sun', 'Aim help', 'Standard: the sun slides into nearby shade. Strong: it reaches farther (marked 🧭). Light: only a nudge.', aim.el),
-      row('swing', 'Swing Boost', 'Fast swings turn the sun farther', boost.el),
       row('swap', 'Button side', null, hand.el),
       keys,
     )),
@@ -291,7 +289,6 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     sensitivity.set(current.sensitivity);
     invert.set(current.invert);
     aim.set(current.aim);
-    boost.set(current.swingBoost);
     hand.set(current.hand);
     autoAct.set(current.autoAct);
     motion.set(current.reducedMotion);

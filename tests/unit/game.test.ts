@@ -6,7 +6,7 @@ import { cssEaseInOut, ghostSwingX, ghostSwipe, guideAlpha, HintTracker, nearest
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { dailyDateInBounds, isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
-import { createInput, swingBoost, type Input, type InputHost } from '../../src/game/input.ts';
+import { createInput, type Input, type InputHost } from '../../src/game/input.ts';
 import { createDriver, createRun, NOTE_REFUSE, REFUSE_CHARGING, step, type DragKind, type DriveAct, type DriveControl, type InputFrame } from '../../src/core/index.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from '../../src/game/perf.ts';
 import { Cadence, type CadenceInput } from '../../src/game/cadence.ts';
@@ -433,28 +433,6 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     up(2, 189);
     t = take(inp, 3);
     expect(t.f.every((x) => x.release === 0) && t.f[2]!.upEdge).toBe(true);
-    inp.dispose();
-  });
-
-  it('Swing Boost: off by default; 1 + 0.6 · smoothstep(400, 1000, v) of the finger speed over 50 ms', () => {
-    expect([swingBoost(0), swingBoost(400), swingBoost(700), swingBoost(1000), swingBoost(5000)]).toEqual([1, 1, 1.3, 1.6, 1.6]);
-    const { h, inp, down, move } = mk();
-    expect(inp.swingBoost).toBe(false);
-    // 1000 px/s: 10 px every 10 ms.
-    const swing = (): number => {
-      down(1, 300);
-      for (let i = 1; i <= 8; i++) {
-        h.t += 10;
-        move(1, 300 - 10 * i);
-      }
-      const d = sum(take(inp, 1).f, 'dTheta');
-      inp.releaseAll();
-      return d;
-    };
-    expect(swing()).toBe(80);
-    inp.swingBoost = true;
-    // The first sample reads 1000 px/s too (its 10 ms since the press): every step boosted 1.6×.
-    expect(swing()).toBeCloseTo(128, 2);
     inp.dispose();
   });
 

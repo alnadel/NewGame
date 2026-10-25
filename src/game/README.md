@@ -406,7 +406,7 @@ vane and the finger's state into the sim's verbs.
   minifier shortens its state). The world slot: the first pointer wins; a still owner (4 px in
   300 ms) yields to a new press; a press in the hold or start beat turns nothing for its first 10 px;
   the edge zones are 16 px at the sides and max(safe inset, 8 px) at the bottom. `host.drag()` names
-  what it drags: the sun (Δθ = −dx / viewport width × 360° × sensitivity, × Swing Boost when on),
+  what it drags: the sun (Δθ = −dx / viewport width × 360° × sensitivity),
   Drip (`steer`, the finger's world distance) or Gust's vane (36 px a notch, snapped on lift). A lift
   never coasts; a finger 3 px still for 300 ms rests (`DriveControl.rest`). The button slot: the disc
   presses in at once; a press counts on lift within 12 px or after 120 ms still (at most 2 wait for
@@ -432,9 +432,9 @@ vane and the finger's state into the sim's verbs.
 - **Tips** (`moments.ts`): `onDrive(code, a)` tips the first refusal of each reason in a teaching
   run, the vane's first ±2 notch, the first auto-calm and the first settle (`flags.settleTip`) once
   each; `update(s, due)` tips an act that falls due.
-- **Settings** (§8): Aim help (Standard, Strong, Light, Off), Swing Boost, Button side and Auto
-  actions, applied from the next run. URL: `?aim=`, `?boost=0|1` and `?autoact=1` (debug runs),
-  `?hand=left|right`.
+- **Settings** (§8): Aim help (Standard, Strong, Light, Off), Button side and Auto actions, applied
+  from the next run (Swing Boost is cut for the bundle budget; `settings.swingBoost` stays in the save,
+  unread). URL: `?aim=` and `?autoact=1` (debug runs), `?hand=left|right`.
 - **Copy**: the controls' words are `CONTROL_TEXT` (config/controls.ts); the intro cards, tips and
   the Pause card's key line speak of one drag and one button.
 

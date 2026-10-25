@@ -53,12 +53,11 @@ export interface Params {
   /** v1.6 rules switched by ?on=bank,… and ?off=flares,… (cfg.v16, over the shipped V16_SHIP); null when neither. */
   rules: Partial<V16Rules> | null;
   /**
-   * Controls v3 (docs/CONTROLS_V3.md §8.1): ?aim=standard|strong|light|off, ?hand=left|right,
-   * ?boost=0|1 and ?autoact=1 override those settings (tests and tooling); null each when absent.
+   * Controls v3 (docs/CONTROLS_V3.md §8.1): ?aim=standard|strong|light|off, ?hand=left|right and
+   * ?autoact=1 override those settings (tests and tooling); null each when absent.
    */
   aim: Settings['aim'] | null;
   hand: Settings['hand'] | null;
-  boost: boolean | null;
   autoAct: boolean | null;
 }
 
@@ -96,7 +95,6 @@ export function parseParams(search: string, today: string = localDate()): Params
     const v = q.get(k) as T;
     return values.includes(v) ? v : null;
   };
-  const boost = q.get('boost');
   const tn = trial !== null && trial >= 1 && trial <= TRIAL_COUNT ? TRIAL_BASE + Math.floor(trial) : null;
   let rules: { -readonly [K in keyof V16Rules]?: boolean } | null = null;
   for (const [k, v] of [['on', true], ['off', false]] as const) {
@@ -126,7 +124,6 @@ export function parseParams(search: string, today: string = localDate()): Params
     rules,
     aim: oneOf('aim', ['standard', 'strong', 'light', 'off']),
     hand: oneOf('hand', ['left', 'right']),
-    boost: boost === null ? null : boost === '1',
     autoAct: q.get('autoact') === '1' ? true : null,
   };
 }
@@ -147,8 +144,8 @@ export function startTFor(t: string | null, day: number): number | null {
 
 /**
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
- * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward, a guide, aim help, Swing Boost
- * or Auto actions override or a Trial's object fixture (?elfix=1). Such runs are not scored, saved, shared or counted as Daily tries (they work in production
+ * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward, a guide, aim help or Auto
+ * actions override or a Trial's object fixture (?elfix=1). Such runs are not scored, saved, shared or counted as Daily tries (they work in production
  * builds for QA). ?seed, ?mode=daily&date, ?level, ?trial, ?hand, ?mute, ?debug, ?test and ?perf don't make
  * a run a debug run.
  */
@@ -166,7 +163,6 @@ export function isDebugRun(p: Params): boolean {
     p.plan !== null ||
     p.rules !== null ||
     p.aim !== null ||
-    p.boost !== null ||
     p.autoAct !== null ||
     p.elfix
   );

@@ -9,15 +9,15 @@
 //   is ignored (never captured) for its whole life, unless the owner is still (it has not travelled
 //   YIELD_PX in the last YIELD_MS of its life): then the new pointer takes the slot from its own press
 //   point with zero jump and the old one is ignored until it lifts. What it drags is host.drag() at
-//   touch-down: 'sun' turns the sun (Δθ = −dx / viewportWidth × 360° × sensitivity × boost, inverted
-//   on request), 'steer' slides Drip by the finger's world distance (host.uPerPx; no sensitivity or
+//   touch-down: 'sun' turns the sun (Δθ = −dx / viewportWidth × 360° × sensitivity, inverted on
+//   request), 'steer' slides Drip by the finger's world distance (host.uPerPx; no sensitivity or
 //   invert), 'vane' moves Gust's vane by dx / VANE_PX notches and its lift snaps the vane to its notch
 //   (vaneUp). A sun lift (pointerup, pointercancel, lostpointercapture) is an upEdge at 0 °/s:
 //   nothing coasts.
 //   - Start slop: a press that begins in the run's hold or start beat sends no turn until it is
 //     START_SLOP px from its press point (then the whole displacement), so a start tap turns nothing.
-//   - Swing Boost (Settings, off by default): the turn grows to 1.6× from 400 to 1000 px/s of finger
-//     speed (smoothstep), the speed read over the last SPEED_MS of an 8-sample ring.
+//   - The finger's speed (for the TAG guards) is read over the last SPEED_MS of an 8-sample ring.
+//     Swing Boost (§1.2) is cut for the bundle budget (its setting stays in the save, unread).
 //   - Rest: a sun finger that has not travelled REST_PX in REST_MS rests (DriveControl.rest): aim help
 //     treats it as no hand.
 // - The button slot (§1.3): a touch on the disc presses in at once (buttonDown) and becomes a press
@@ -81,12 +81,6 @@ const WHEEL_MAX = 45;
 const qTheta = (d: number): number => Math.round(d * 1024) / 1024;
 const qSteer = (u: number): number => Math.round(u * 64) / 64;
 
-/** Swing Boost (§1.2): 1 + 0.6 · smoothstep(400, 1000, v) for a finger speed v (px/s). */
-export function swingBoost(v: number): number {
-  const t = Math.max(0, Math.min(1, (v - 400) / 600));
-  return 1 + 0.6 * t * t * (3 - 2 * t);
-}
-
 export interface InputHost {
   canvas: HTMLCanvasElement;
   /** True when canvas pointers should act (UI on title or play, not paused, no overlay). */
@@ -137,8 +131,6 @@ const G_VANE = 3;
 export interface Input {
   sensitivity: number;
   invert: boolean;
-  /** Swing Boost (§1.2, Settings; off by default). */
-  swingBoost: boolean;
   /** The clock the pointer timestamps share (performance.now; tests replace it). */
   now: () => number;
   /** A world finger (or mouse button) is down turning the sun. */
@@ -321,7 +313,7 @@ export function createInput(host: InputHost): Input {
     if (dx === 0) return;
     if (kind === 'steer') steerPending += dx * host.uPerPx();
     else if (kind === 'vane') vanePending += dx / VANE_PX;
-    else pending += (-dx / Math.max(1, host.viewportWidth())) * 360 * self.sensitivity * (self.invert ? -1 : 1) * (self.swingBoost ? swingBoost(speed(t)) : 1);
+    else pending += (-dx / Math.max(1, host.viewportWidth())) * 360 * self.sensitivity * (self.invert ? -1 : 1);
   };
 
   /** One (coalesced) sample of pointer `id`. */
@@ -457,7 +449,6 @@ export function createInput(host: InputHost): Input {
   const self: Input = {
     sensitivity: 1,
     invert: false,
-    swingBoost: false,
     now: () => performance.now(),
     presses: 0,
     acts: 0,
