@@ -2767,6 +2767,7 @@ export class Session {
     const dv = this.renderIn.drive;
     return {
       phase: s.phase,
+      ready: s.ready,
       day: s.day,
       minutes: s.minutes,
       chill: s.nubs.chill,

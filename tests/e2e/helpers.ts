@@ -3,6 +3,8 @@ import { expect, type CDPSession, type Page } from '@playwright/test';
 
 export interface ShadyState {
   phase: string;
+  /** The start beat's ticks left (0: past it). */
+  ready: number;
   day: number;
   minutes: number;
   chill: number;
@@ -182,6 +184,11 @@ export async function worldToScreen(page: Page, x: number, y: number): Promise<{
 /** Elementals v2: fast-forwards the Trial with the core reactive bot to leg `i` (or `before` ticks ahead of its TAG), then hands back to the input. */
 export async function skipToLeg(page: Page, i: number, before = 0): Promise<void> {
   await page.evaluate(([n, b]) => window.__SHADY_TEST__!.testSkipToLeg(n as number, b as number), [i, before]);
+}
+
+/** Waits until the run is past its start beat (phase 'day', the ready count spent). */
+export async function waitPlaying(page: Page, timeout = 10_000): Promise<void> {
+  await expect.poll(async () => { const s = await state(page); return s.phase === 'day' && s.ready === 0; }, { timeout }).toBe(true);
 }
 
 /** Controls v3: button and act-key presses the input accepted. */
