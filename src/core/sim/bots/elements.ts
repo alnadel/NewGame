@@ -203,6 +203,8 @@ export interface ElPolicyOpts {
   readonly off?: readonly number[];
   /** Controls v3 (§10.2): play the button and the vane through a driver (press()), not taps, holds and swipes. */
   readonly touch?: boolean;
+  /** Touch, G9's measure (§10.3): never press while this object is the pick (it stays unarmed and unqueued). */
+  readonly skip?: number;
 }
 
 export interface ElPolicy {
@@ -302,7 +304,7 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       if (hero === 'gust') return vane(s, el, v, c, free);
       const p = v.pick;
       // The reaction delay runs from the tick the target becomes the pick.
-      if (p < 0 || pressed[p] === 1 || (hero !== 'ember' && hero !== 'sprout') || !ready(s, p) || !free) return false;
+      if (p < 0 || p === opts.skip || pressed[p] === 1 || (hero !== 'ember' && hero !== 'sprout') || !ready(s, p) || !free) return false;
       const o = el.objs[p] as ElObj;
       const q0 = v.queue[0] as number;
       if (hero === 'ember') {
