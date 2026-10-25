@@ -19,17 +19,21 @@
 // With a salt the reactive policy adds noise (tap timing ±6 ticks, steer ±3 u; the aim error is
 // bots.ts'); humanEl adds human timing and errors. Variants for the gates: tap on sight (G5c), a
 // one-way spam Gust (G5d) and legs with their verb switched off (G5b).
+//
+// Controls v3 (docs/CONTROLS_V3.md §10.2): the timing the driver shares (Ember's ignition moment,
+// the shower and downwind tests, Gust's Lift floor and its weather test) lives in drive/pick.ts; the
+// policy calls it with its own press lead and keeps its own target order and margins.
 
 import type { HeroId } from '../../../config/heroes.ts';
 import { TUNING } from '../../../config/tuning.ts';
 import { DT, TICK_HZ } from '../../clock.ts';
 import { worldYAtTick } from '../../gen/plan.ts';
+import { burnTicksOf, downwind, emberDue, emberLeft, gustFloor, overlapQ, ownWall, paceOf, showered } from '../../drive/pick.ts';
 import { EL_GONE, EL_IDLE, type ElObj, type ElState } from '../../objects.ts';
 import { rngFor, type Rng } from '../../rng.ts';
 import { trailX } from '../../trail.ts';
 import {
   arriveTicks,
-  burnLeft,
   burnTarget,
   contactTicks,
   growLeft,
@@ -37,7 +41,6 @@ import {
   inWeather,
   laneOf,
   needOf,
-  nextTagTicks,
   pointLit,
   walkerAt,
   weatherGood,
@@ -51,22 +54,19 @@ const SP = E.sprout;
 const DR = E.drip;
 const G = E.gust;
 const O = E.objects;
-const FI = E.fire;
 
 /** Ticks a tap presses before its verb frame; a hold's recognition (HOLD_MS 220); the re-grab after either. */
 export const TAP_PRESS = 6;
 export const HOLD_PRESS = 13;
 export const REGRAB = 9;
-/** Ember dries a puddle on its path this many ticks before reaching it, while Flame is above DRY_FLAME. */
-const DRY_TICKS = 60;
-const DRY_FLAME = 30;
+/** Ice and walls past the TAG are tapped this many ticks before it at the latest (the press and its margin). */
+const TAG_MARGIN = 2 * TAP_PRESS;
 /** Sprout pours into plots only while Sap stays above PLOT_SAP, and starts a plot's hold with at least PLOT_MIN to pour. */
 const PLOT_SAP = 25;
 const PLOT_MIN = 5;
-/** Gust swipes at most once per this many ticks, when a swipe saves SWIPE_GAIN more than it costs and Lift is above SWIPE_LIFT. */
+/** Gust swipes at most once per this many ticks, when a swipe saves SWIPE_GAIN more than it costs and Lift is above the floor (drive/pick.ts gustFloor). */
 const SWIPE_EVERY = 15;
 const SWIPE_GAIN = 2;
-const SWIPE_LIFT = 20;
 /** Gust keeps pushing a helpful rain cloud of a later stretch until its predicted centre is this close to the trail (× its rx). */
 const RIDE_NEAR = 0.5;
 /** The harm weights (meter a second) of fog that veils Ember's and Sprout's targets, and of the shade a rain cloud gives Nubs. */
@@ -302,26 +302,26 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       if (burnTarget(s, wall ? trailX(tr, o.y) : o.x, o.y) !== i) continue;
       // humanEl sees a target once it is in the window and unveiled (its reaction runs from then).
       const seen = ready(s, i);
-      // The verb lands TAP_PRESS ticks from now (the jitter moves the moment): has it come?
+      // The verb lands TAP_PRESS ticks from now (the jitter moves the moment): has it come (drive/pick.ts
+      // emberDue, with the policy's TAG margin)? Then the policy's own last-moment margins.
       const lead = TAP_PRESS + (jitter[i] as number);
       const own = wall && ownWall(s, o);
       let due: number;
       if (opts.tapOnSight && wall) due = 0;
-      else if (!wall) {
-        const c = contactTicks(s, o);
-        if (s.nubs.chill <= DRY_FLAME || c - lead > DRY_TICKS) continue;
-        due = c;
-      } else if (own) {
-        // The middle of the sweet window: from burnTicks of walking ahead down to `near`.
-        const d = o.y - O.wallDepth / 2 - s.nubs.y;
-        if (d - lead * pace > (burnTicksOf(o) * pace + E.near) / 2 || d - TAP_PRESS * pace < E.near) continue;
-        due = (d - E.near) / pace;
-      } else {
-        // Ice, or a wall past the TAG: burnt out before its walker gets there, tapped while Ember still walks.
-        const n = nextTagTicks(s);
-        const l = Math.min(burnLeft(s, o), n < 0 ? Infinity : n - 2 * TAP_PRESS);
-        if (l - lead > EM.nowTicks || l - TAP_PRESS < 0) continue;
-        due = l;
+      else {
+        if (emberDue(s, i, lead, TAG_MARGIN) > 0) continue;
+        if (!wall) due = contactTicks(s, o);
+        else if (own) {
+          // The middle of the sweet window has come; the tap still lands outside `near`.
+          const d = o.y - O.wallDepth / 2 - s.nubs.y;
+          if (d - TAP_PRESS * pace < E.near) continue;
+          due = (d - E.near) / pace;
+        } else {
+          // Ice, or a wall past the TAG: burnt out before its walker gets there, tapped while Ember still walks.
+          const l = emberLeft(s, o, TAG_MARGIN);
+          if (l - TAP_PRESS < 0) continue;
+          due = l;
+        }
       }
       // Never under a shower: rain over it while it burns would put it out.
       if (!opts.tapOnSight && showered(s, el, o, TAP_PRESS, own ? contactTicks(s, o) : TAP_PRESS + burnTicksOf(o))) continue;
@@ -444,10 +444,10 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       return;
     }
     if (el.legTick % 6 !== 0 || s.tick - lastSwipe < SWIPE_EVERY) return;
-    // Lift kept back: SWIPE_LIFT while weather of Gust's own stretch can still soak it, else only
-    // the swipe's cost (the hand-off pushes may spend the rest of the leg's Lift).
+    // Lift kept back (drive/pick.ts gustFloor): 20 while weather of Gust's own stretch can still soak
+    // it, else only the swipe's cost and a little more (the hand-off pushes may spend the rest of the leg's Lift).
     const cost = G.swipe * (s.trial?.tune.costMul ?? 1);
-    if (s.nubs.chill <= (ownAhead(s, el) ? SWIPE_LIFT : cost + SWIPE_GAIN)) return;
+    if (s.nubs.chill <= gustFloor(s, el)) return;
     const now = harm(s, el, 0);
     const kick = G.kick * (inWeather(el, 'fog', s.nubs.x, s.nubs.y) ? G.fogMuffle : 1);
     // §6.3's T4 rule, for every helpful rain of a later stretch (T4's ride cloud, T6's and T7's
@@ -507,74 +507,8 @@ function rideDir(s: SimState, el: ElState): number {
   return fog;
 }
 
-/**
- * 1 − (predicted offset / r)² of weather o from the trail as the walker reaches its centre and as it
- * reaches half its far side (the larger: a cloud the walker is already entering still counts).
- */
-function overlapQ(s: SimState, o: ElObj, ry: number): number {
-  const tr = s.world.trail;
-  const n = arriveTicks(s, o.y);
-  const a = (weatherXAt(s, o, n < 0 ? 0 : n) - trailX(tr, o.y)) / o.r;
-  const m = arriveTicks(s, o.y + ry / 2);
-  const b = (weatherXAt(s, o, m < 0 ? 0 : m) - trailX(tr, o.y)) / o.r;
-  return 1 - Math.min(a * a, b * b);
-}
-
-/** Weather of Gust's own stretch still ahead (not passed) that would cover the trail. */
-function ownAhead(s: SimState, el: ElState): boolean {
-  for (let i = 0; i < el.objs.length; i++) {
-    const o = el.objs[i] as ElObj;
-    if (o.state === EL_GONE || (o.kind !== 'rain' && o.kind !== 'fog')) continue;
-    const ry = E.weather.ryRatio * o.r;
-    if (o.y + ry < s.nubs.y || walkerAt(s, o.y) !== 'gust') continue;
-    if (overlapQ(s, o, ry) > 0) return true;
-  }
-  return false;
-}
-
-/** The walker's pace now (u per tick). */
-function paceOf(s: SimState): number {
-  return worldYAtTick(s.world, s.tickAbs + 1) - s.nubs.y;
-}
-
-function burnTicksOf(o: ElObj): number {
-  return (EM.burnTicks as Partial<Record<string, number>>)[o.kind] ?? 0;
-}
-
 function costOf(s: SimState, o: ElObj): number {
   return ((EM.cost as Partial<Record<string, number>>)[o.kind] ?? 0) * (s.trial?.tune.costMul ?? 1);
-}
-
-/** A bramble or gate Ember itself will reach (its own fire feeds it). */
-function ownWall(s: SimState, o: ElObj): boolean {
-  return (o.kind === 'bramble' || o.kind === 'gate') && walkerAt(s, o.y - O.wallDepth / 2) === 'ember';
-}
-
-/** Rain predicted over object o at some tick `from`..`to` ticks from now (no new swipe), every 3 ticks. */
-export function showered(s: SimState, el: ElState, o: ElObj, from: number, to: number): boolean {
-  for (let j = 0; j < el.objs.length; j++) {
-    const r = el.objs[j] as ElObj;
-    if (r.kind !== 'rain' || r.state === EL_GONE || Math.abs(r.y - o.y) > r.r) continue;
-    for (let k = from; k <= to; k += 3) {
-      const ex = (o.x - weatherXAt(s, r, k)) / r.r;
-      const ey = (o.y - r.y) / (E.weather.ryRatio * r.r);
-      if (ex * ex + ey * ey <= 1) return true;
-    }
-  }
-  return false;
-}
-
-/** A plot a later fire would reach: downwind of a bramble or gate in an Ember stretch while the breeze spreads fire. */
-function downwind(s: SimState, el: ElState, p: ElObj): boolean {
-  const b = s.trial?.breeze ?? 0;
-  if (b < FI.spreadAt && b > -FI.spreadAt) return false;
-  for (let i = 0; i < el.objs.length; i++) {
-    const o = el.objs[i] as ElObj;
-    if ((o.kind !== 'bramble' && o.kind !== 'gate') || o.state === EL_GONE || walkerAt(s, o.y) !== 'ember') continue;
-    const dx = p.x - o.x;
-    if (Math.abs(p.y - o.y) <= FI.reachY && Math.abs(dx) <= FI.reach && (b < 0 ? -dx : dx) >= -FI.upwind) return true;
-  }
-  return false;
 }
 
 /** Drip's score of lane L: +30 a puddle it can reach within 60 ticks, −20 a stone it would touch, +0.2 per shaded tick of the next 30 (tested every 5). */
