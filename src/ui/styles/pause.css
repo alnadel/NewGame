@@ -123,10 +123,11 @@
   .scr-pause .row-2 > .btn { --ic: 20px; font-size: var(--fs-d-sm); }
 }
 
-/* Shorter still (small phones): Restart, Settings and Home share one row, icon over
-   label, dozing Nubs (he would poke out of the top) goes, the ribbon sits lower and the status
-   well tightens, so the card keeps clear of Nubs' halo under a 47 px notch (layout.spec). */
-@container pause (max-height: 22em) {
+/* Shorter still (small phones, and every tall phone now that Nubs rides higher: Controls v3 §5.2):
+   Restart, Settings and Home share one row, icon over label, dozing Nubs (he would poke out of the
+   top) goes, the ribbon sits lower and the status well tightens, so the card keeps clear of Nubs'
+   halo under a 47 px notch (layout.spec). */
+@container pause (max-height: 24em) {
   .scr-pause .dialog.pause-card { margin-top: 12px; padding-top: 44px; }
   .scr-pause .pause-badge { display: none; }
   .scr-pause .dialog > .ribbon:first-child { top: -24px; }
