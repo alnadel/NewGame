@@ -6,11 +6,11 @@ import {
   biomeAtY,
   bridged,
   buildRunResult,
-  burnSweet,
   CAUSE_TIPS,
   COMFORT_MAX,
   CONCEPTS,
   createBot,
+  createDriver,
   createParJob,
   createReplay,
   createRun,
@@ -33,6 +33,7 @@ import {
   levelTag,
   levelProgress,
   needOf,
+  nextTagTicks,
   PLAN_START_DATE,
   prepareRun,
   prepareSome,
@@ -48,6 +49,9 @@ import {
   worldPlan,
   type Bot,
   type BotKind,
+  type DriveControl,
+  type Driver,
+  type DriveOpts,
   type ElObj,
   type FeatKind,
   type LevelDef,
@@ -128,6 +132,7 @@ import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { createMechanics } from './mechanics.ts';
+import { hudButtonHit } from '../render/hud.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
@@ -191,8 +196,11 @@ function makeBot(kind: BotKind): Bot | null {
   return import.meta.env.MODE === 'single' ? null : createBot(kind);
 }
 
-/** Elementals v2 (§7.9): the kinds of object each verb's ghost hand shows on. */
-const GHOST_KINDS: Readonly<Record<Verb, string>> = { sun: '', burn: 'bramble gate ice', grow: 'gap stream plot', steer: 'puddle', blow: 'rain fog' };
+/**
+ * Elementals v2 (§7.9): the kinds of object each verb's ghost hand shows on. Controls v3 (C0b): none
+ * for Ember and Sprout, whose tap and hold on a target are gone (UI's branch teaches their button).
+ */
+const GHOST_KINDS: Readonly<Record<Verb, string>> = { sun: '', burn: '', grow: '', steer: 'puddle', blow: 'rain fog' };
 
 /** Elementals v2 (?elfix=1): every object kind and state on a Trial run, for art review; bot builds only (makeBot's gate). */
 function fixture(s: SimState): void {
@@ -297,6 +305,14 @@ export class Session {
   readonly ui: Ui;
   readonly renderer: Renderer;
   readonly input: Input;
+  /** Controls v3 (docs/CONTROLS_V3.md §2.1): fills each input frame before step (bot frames skip it). */
+  readonly driver: Driver = createDriver();
+  /**
+   * The driver's options. C0b passes neutral ones (no aim help: the skeleton driver has no magnet);
+   * UI's session wiring builds them per run (§11.6: aimRadius for the setting and run, fog, Auto
+   * Snap's rungs, Auto actions, reduced motion).
+   */
+  private driveOpts: DriveOpts = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
   readonly clock = new FixedClock();
   readonly fx: Fx;
   /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
@@ -623,9 +639,19 @@ export class Session {
       onPress: () => this.onPress(),
       viewportWidth: () => this.renderer.scene.view.vw,
       safeBottom: () => this.renderer.scene.view.safe.bottom,
-      // Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the walking element's verb and the last drawn
-      // frame's scale (camera.ts: sx = ox + x·S).
-      verb: () => this.verbNow(),
+      // Controls v3 (docs/CONTROLS_V3.md §11.6): what a drag moves and what the button does now, the
+      // button's disc on the last drawn frame (the play screen only), the hold or start beat, and the
+      // last drawn frame's scale (camera.ts: sx = ox + x·S).
+      drag: () => {
+        const s = this.s;
+        return s.el !== null && s.phase === 'day' && s.ready === 0 ? HEROES[s.nubs.hero].drag : 'sun';
+      },
+      act: () => {
+        const v = this.renderIn.drive;
+        return v.incoming !== 'none' ? v.incoming : v.act;
+      },
+      buttonHit: (x, y) => this.ui.current() === 'play' && !this.paused && hudButtonHit(this.renderer.scene.hud, x, y),
+      starting: () => this.s.phase === 'hold' || this.s.ready > 0,
       uPerPx: () => 1 / this.renderer.scene.view.S,
     });
     this.mech.route = (ev) => {
@@ -679,6 +705,11 @@ export class Session {
       govLevel: 0,
       paused: false,
       debug: null,
+      drive: this.driver.view,
+      buttonDown: false,
+      hand: save.settings.hand,
+      aimDeg: 0,
+      nowOnly: false,
     };
 
     deps.audio.onHeartbeat = () => deps.haptics.play('heartbeat');
@@ -893,11 +924,15 @@ export class Session {
     const tSim = performance.now();
     if (stepping) {
       n = this.clock.advance(real);
+      // Controls v3 (§2.1): the driver fills each input frame before step (bot frames skip it), and
+      // the recording keeps what it added, so replays stay exact.
       const frames = this.bot ? null : this.input.takeFrames(n);
+      const ctl = this.bot ? null : this.input.controls();
       for (let i = 0; i < n; i++) {
         takeSnap(s, this.prev);
         const f = this.bot ? this.bot.next(s) : (frames?.[i] ?? null);
         if (!f) break;
+        if (ctl) this.driver.fill(s, f, ctl[i] as DriveControl);
         step(s, f);
         if (this.rec) recordFrame(this.rec, f);
         for (const ev of s.events) {
@@ -918,13 +953,26 @@ export class Session {
     this.stats.simMs = performance.now() - tSim;
     lerpSnap(this.prev, this.curr, this.clock.alpha, this.snap);
 
-    // Route events.
+    // Route events, and the driver's notes (§2.4). A bot run shows its touch driver's view, or keeps
+    // the session's driver fresh (so the HUD's button stays true).
     const view = this.fillAudioView(screen);
     if (events.length > 0) {
       this.d.audio.onEvents(events, view);
       this.d.haptics.onEvents(events, s.sun.omega);
       this.fx.onEvents(events, s);
     }
+    const dr = this.driver;
+    const bd = this.bot?.drive;
+    if (!bd && (this.bot || n === 0)) dr.observe(s);
+    this.renderIn.drive = bd ?? dr.view;
+    for (let i = 0; i < dr.noteN; i++) {
+      const code = dr.notes[2 * i] as number;
+      const a = dr.notes[2 * i + 1] as number;
+      this.fx.onDrive(code, a);
+      this.d.audio.onDrive(code, a);
+      this.d.haptics.onDrive(code, a);
+    }
+    dr.clearNotes();
     this.checkDailyTry();
     if (stepping) this.checkStamp();
 
@@ -963,8 +1011,14 @@ export class Session {
       if (Math.abs(this.swayOut) < 0.01) this.swayOut = 0;
       r.sway = this.swayOut;
     }
-    const inputDown = this.input.pointerDown || this.input.keyDown;
-    r.dragging = inputDown || this.input.steering || this.s.sun.mode === 'dragging';
+    // A glide never lights the dial as a drag: the input's state says, or a bot's sun.
+    const inp = this.input;
+    const inputDown = inp.pointerDown || inp.keyDown;
+    r.dragging = inputDown || inp.steering || inp.vaning || (this.bot !== null && this.s.sun.mode === 'dragging');
+    r.buttonDown = inp.buttonDown;
+    r.hand = this.d.store.get().settings.hand;
+    r.aimDeg = this.driveOpts.aimDeg;
+    r.nowOnly = this.driveOpts.nowOnly;
     r.guideAlpha = this.currentGuideAlpha();
     this.fillHintView(real, screenNow);
     const save = this.d.store.get();
@@ -1392,6 +1446,7 @@ export class Session {
     this.verbDone = false;
     this.meltWarn = false;
     this.runRung = this.rungOf.get(run) ?? -1;
+    this.driver.begin(run, this.driveOpts);
     this.runWarmup = this.warmups.has(run);
     this.runLevel = this.levelOf.get(run) ?? null;
     this.wonAt = -1;
@@ -1444,8 +1499,8 @@ export class Session {
   }
 
   /**
-   * The intro element's ghost (§7.9): its verb played on the first target ahead in reach (Ember's
-   * once the tap is due), anchored there on the last drawn frame; off once a verb has landed.
+   * The intro element's ghost (§7.9): its verb played on the first target ahead in reach, anchored
+   * there on the last drawn frame; off once a verb has landed.
    */
   private verbGhost(): void {
     const s = this.s;
@@ -1466,13 +1521,13 @@ export class Session {
         }
       }
     }
-    if (!o || (verb === 'burn' && !burnSweet(s, o))) {
+    if (!o) {
       this.setGhost('off');
       return;
     }
     const v = this.renderer.scene.view;
     this.ui.setGhostAt(Math.max(40, Math.min(v.vw - 40, v.ox + o.x * v.S - v.vx)), v.oy - o.y * v.S - v.vy);
-    this.setGhost(verb === 'burn' ? 'tap' : verb === 'grow' ? 'hold' : verb === 'steer' ? 'steer' : o.x < s.nubs.x ? 'left' : 'right', true);
+    this.setGhost(verb === 'steer' ? 'steer' : o.x < s.nubs.x ? 'left' : 'right', true);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1698,7 +1753,7 @@ export class Session {
     this.d.audio.stopMelody();
     this.runActive = false;
     this.paused = false;
-    this.input.releaseAll();
+    this.release();
     if (this.queuedChallenge) {
       this.challenge = this.queuedChallenge;
       this.queuedChallenge = null;
@@ -1717,9 +1772,15 @@ export class Session {
     this.setGhost('both');
   }
 
+  /** Drops the input's fingers, keys and presses, and interrupts the driver (§2.1: pause, blur, a new run). */
+  private release(): void {
+    this.input.releaseAll();
+    this.driver.interrupt();
+  }
+
   private pause(): void {
     this.paused = true;
-    this.input.releaseAll();
+    this.release();
     this.setGhost('off');
     this.cue(null);
   }
@@ -1734,7 +1795,7 @@ export class Session {
   private resume(): void {
     this.d.audio.ensure();
     this.paused = false;
-    this.input.releaseAll();
+    this.release();
     this.clock.acc = 0;
   }
 
@@ -1802,6 +1863,9 @@ export class Session {
     this.mech.onEvent(ev);
     switch (ev.e) {
       case 'tag':
+        // Controls v3 (§1.5, §2.1): a finger held through the hand-off keeps working with the new leg's meaning.
+        this.input.handoff();
+        this.driver.interrupt();
         // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. The sun holds."
         this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
         this.ui.showCue(this.cueShown.id);
@@ -1849,7 +1913,7 @@ export class Session {
         break;
       case 'snap':
         this.snapsSeen++;
-        // The "Frost full! Swipe ↓" line has done its job: clear it so it never covers the snap.
+        // The "Frost full!" line has done its job: clear it so it never covers the snap.
         if (this.cueShown?.id === 'snap-ready') this.cue(null);
         break;
       case 'snapEnd':
@@ -1929,7 +1993,7 @@ export class Session {
     this.applyResult(save, result);
     this.setGhost('off');
     this.cue(null);
-    this.input.releaseAll();
+    this.release();
     if (this.ui.current() === 'play') this.ui.show('dying');
     // Start building the next endless run: its world is generated a slice per frame while the
     // death and the Results play (stepPrebuild), so Retry is instant and no frame hitches.
@@ -1985,7 +2049,7 @@ export class Session {
     this.d.haptics.play('best');
     this.setGhost('off');
     this.cue(null);
-    this.input.releaseAll();
+    this.release();
   }
 
   private updateWinFlow(): void {
@@ -2348,8 +2412,7 @@ export class Session {
         h.next = s.guide.next;
         h.theta = s.sun.theta;
         h.dragging = dragging;
-        // Mirror Sun (concept 'dazzle') turns the sun against the drag, so the hint flips too.
-        h.invert = this.input.invert !== s.mods.has('dazzle');
+        h.invert = this.input.invert;
         h.lessonOn = lessonOn;
         if (this.hints.update(dt, h) && !this.debugRuns) {
           this.d.store.update((sv) => {
@@ -2611,6 +2674,7 @@ export class Session {
   testState() {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
+    const dv = this.renderIn.drive;
     return {
       phase: s.phase,
       day: s.day,
@@ -2643,6 +2707,23 @@ export class Session {
       verb: HEROES[s.nubs.hero].verb,
       sunHeld: s.el !== null && s.sun.locked,
       omega: s.sun.omega,
+      // Controls v3 (docs/CONTROLS_V3.md §11.8): the driver's view as rendered, the sun's mode and lag.
+      sunMode: s.sun.mode,
+      lag: s.sun.lag,
+      drive: {
+        act: dv.act,
+        state: dv.state,
+        pick: dv.pick,
+        queue: Array.from(dv.queue),
+        due: dv.due,
+        buffered: dv.buffered,
+        incoming: dv.incoming,
+        vane: dv.vane,
+        vaneResting: dv.vaneResting,
+        glide: Number.isFinite(dv.glide) ? dv.glide : null,
+        refuse: dv.refuse,
+        aimDeg: this.driveOpts.aimDeg,
+      },
       el:
         s.el === null
           ? null
@@ -2669,22 +2750,25 @@ export class Session {
 
   /**
    * Test hook (§7.11): fast-forwards the Trial headless with the core reactive bot until relayIdx is
-   * `i` (its events routed as in play), then hands back to the input.
+   * `i` (its events routed as in play), or (Controls v3, §11.8) until `before` ticks ahead of TAG `i`,
+   * then hands back to the input with the driver begun afresh. Bot frames only: no driver.
    */
-  testSkipToLeg(i: number): void {
+  testSkipToLeg(i: number, before = 0): void {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
     const bot = makeBot('reactive');
     if (!bot || s.el === null) return;
     for (let n = 0; n < 60_000 && s.relayIdx < i && s.phase !== 'dead' && s.phase !== 'won'; n++) {
+      if (before > 0 && s.relayIdx === i - 1 && nextTagTicks(s) <= before) break;
       const f = bot.next(s);
       step(s, f);
       if (this.rec) recordFrame(this.rec, f);
       for (const ev of s.events) this.onTickEvent(ev);
     }
-    this.input.releaseAll();
+    this.release();
     // The bot's last frame may leave the sun mid-drag (no lift reaches the sim): a tap at 0 °/s ends it.
     if (s.sun.mode === 'dragging') this.input.tap();
+    this.driver.begin(s, this.driveOpts);
     takeSnap(s, this.prev);
     takeSnap(s, this.curr);
   }

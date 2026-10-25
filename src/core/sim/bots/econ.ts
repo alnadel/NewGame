@@ -16,6 +16,7 @@ import type { Caster, Flare } from '../../objects.ts';
 import { casterReach, distToCasterBounds, shadowLength } from '../../shadows.ts';
 import { trailX } from '../../trail.ts';
 import type { BotHookCtx } from '../bots.ts';
+import { snapReady } from '../mechanics.ts';
 import type { SimState } from '../types.ts';
 
 const RB = TUNING.bots.reactive;
@@ -57,11 +58,6 @@ const ORACLE_TIGHT = 25;
 /** BotOptions.hop (a SWING-hopping baseline, review of economy iteration 2): another caster's shade at least HOP_DEG of turn away, while Chill ≥ HOP_CHILL. */
 const HOP_DEG = 42;
 const HOP_CHILL = 50;
-
-/** True when a Cold Snap can be cast this tick (same rule as bots.ts). */
-function snapReady(s: SimState): boolean {
-  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0;
-}
 
 /**
  * True while a chase/naive policy chases gold (and, for CORE-2's glass term, glass): 'chase' (timed

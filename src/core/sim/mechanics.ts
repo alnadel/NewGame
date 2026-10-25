@@ -37,6 +37,15 @@ const GROW = DT / B.growSec;
 const DECAY = B.decay * DT;
 /** Cold Snap length in ticks. */
 export const SNAP_TICKS = Math.round(F.snapSec * TICK_HZ);
+/**
+ * True when a Cold Snap can be cast this tick (the meter is full, none is on, the sun is up, past the
+ * start beat). On an Elementals Trial only Nubs casts it, and no TAG may be within the lock. The
+ * bots' and the driver's rule (docs/CONTROLS_V3.md §2.3).
+ */
+export function snapReady(s: SimState): boolean {
+  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0 && (s.trial === null || (s.nubs.hero === 'nubs' && !tagLocked(s)));
+}
+
 /** Hundredths of frost per charge (one snap). */
 const CHARGE_H = BANK.costH;
 

@@ -58,6 +58,8 @@ export interface ShadyAudio {
 
   /** Every SimEvent of the frame (all ticks), in order, with the current view. */
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void;
+  /** Controls v3 (docs/CONTROLS_V3.md §7.3): one driver note (code, a). Silent until ART's branch routes them. */
+  onDrive(code: number, a: number): void;
   /** Once per rendered frame (also while paused or on menus) with real seconds elapsed. Pumps the scheduler. */
   update(view: Readonly<AudioView>, dtReal: number): void;
   /** Precomputes the noise tables (call when idle, before the first tap: e.g. requestIdleCallback). */
@@ -153,6 +155,8 @@ class ShadyAudioImpl implements ShadyAudio {
     this.isMuted = muted;
     this.engine.graph?.setMuted(muted);
   }
+
+  onDrive(): void {}
 
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void {
     this.router.onEvents(events, view);

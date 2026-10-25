@@ -23,6 +23,14 @@ export interface Settings {
   comfort: boolean;
   /** Testing: every Journey level is playable (default off). */
   unlockAll: boolean;
+  /** Controls v3 (docs/CONTROLS_V3.md §8.1): aim help (§4.3; 'strong' marks the run assisted). */
+  aim: 'standard' | 'strong' | 'light' | 'off';
+  /** Swing Boost (§1.2), off by default. */
+  swingBoost: boolean;
+  /** The action button's side (§1.1). */
+  hand: 'right' | 'left';
+  /** Auto actions (§3.6): Ember and Sprout act on their own (marks the run assisted). */
+  autoAct: boolean;
 }
 
 export interface SaveStats {

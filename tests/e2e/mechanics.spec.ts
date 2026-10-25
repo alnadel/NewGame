@@ -1,7 +1,7 @@
 // v1.5 core mechanics on the game side (docs/V1_5_PLAN.md): the Cold Snap input (Down/S, a tap on
-// the full frost meter) and the render-only demos of buds, a bloom,
-// the full meter, a snap and deep shade. Input is measured where it is made (the test hook's
-// mech().snaps counts the snaps input asked for), so these hold whatever the sim does with them.
+// the action button, Controls v3) and the render-only demos of buds, a bloom, the full meter, a snap
+// and deep shade. Input is measured where it is made (the test hook's mech().snaps counts the snap
+// presses input accepted), so these hold whatever the sim does with them.
 import { expect, test, type Page } from '@playwright/test';
 import { keepAlive, mech, waitForScreen, watchErrors } from './helpers.ts';
 
@@ -34,9 +34,9 @@ async function swipe(page: Page, x: number, y: number, dx: number, dy: number, m
   await page.mouse.up();
 }
 
-// Controls v3 C0a (docs/CONTROLS_V3.md §11.1): the swipe and the coin tap are gone; the button and
-// the keys come back through the driver, and these cases are rewritten when UI lands (§12.2).
-test.fixme('Down and S ask for a Cold Snap during play', async ({ page, isMobile }) => {
+// Controls v3 (docs/CONTROLS_V3.md §11.1): the swipe is gone; Down/S and the button (the coin at its
+// centre) are presses the driver casts. UI's branch rewrites these cases (§12.2).
+test('Down and S ask for a Cold Snap during play', async ({ page, isMobile }) => {
   test.skip(isMobile, 'keyboard: the desktop project');
   await playLevel(page);
   await page.keyboard.press('ArrowDown');
@@ -44,7 +44,7 @@ test.fixme('Down and S ask for a Cold Snap during play', async ({ page, isMobile
   expect((await mech(page)).snaps).toBe(2);
 });
 
-test.fixme('the frost meter shows full and a tap on it asks for a Cold Snap', async ({ page }) => {
+test('the frost meter shows full and a tap on it asks for a Cold Snap', async ({ page }) => {
   await playLevel(page);
   await page.evaluate(() => window.__SHADY_TEST__!.demo('snapReady'));
   await expect.poll(async () => (await mech(page)).meter).toBe(true);

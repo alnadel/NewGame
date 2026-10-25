@@ -204,6 +204,8 @@ export interface Haptics {
   detent(index: number, dir: 1 | -1, omega: number): void;
   /** Forwards a frame's SimEvents; `omega` is the sun's current angular velocity (°/s). */
   onEvents(events: readonly SimEvent[], omega: number): void;
+  /** Controls v3 (docs/CONTROLS_V3.md §7.3): one driver note (code, a). None buzz yet (ART's branch adds the patterns). */
+  onDrive(code: number, a: number): void;
 }
 
 /** What the gated player needs from the platform; injectable for tests. */
@@ -313,6 +315,8 @@ export class WebVibrateHaptics implements Haptics {
     this.fire('detent', now);
   }
 
+  onDrive(): void {}
+
   onEvents(events: readonly SimEvent[], omega: number): void {
     if (!this.on) return;
     for (const ev of events) {
@@ -371,6 +375,8 @@ export class NullHaptics implements Haptics {
   detent(): void {}
 
   onEvents(): void {}
+
+  onDrive(): void {}
 }
 
 /** The best Haptics for this platform: WebVibrateHaptics where navigator.vibrate exists, else Null. */

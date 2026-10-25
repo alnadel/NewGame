@@ -296,8 +296,7 @@ export function showLevelCard(b: Banners, w: LevelCardWords, biome: BiomeId): vo
   b.levelOut = -1;
   b.levelKicker = w.kicker;
   b.levelTitle = w.title;
-  // The Dazzle forecast keeps its sparkle; the concept with that id is Mirror Sun.
-  b.levelConcept = w.concept === 'dazzle' ? 'mirror' : w.concept;
+  b.levelConcept = w.concept;
   b.levelConceptName = w.conceptName;
   b.levelBlurb = w.blurb;
   b.levelGoal = w.goal;

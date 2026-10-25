@@ -677,7 +677,63 @@ const tuning = {
     /** The pre-TAG mask for an incoming Drip leg (§4.4): seconds sampled, tick step, lane offsets, mark thresholds. */
     tagMask: { secs: 6, step: 12, lanes: [-20, 0, 20], min: 0.5, rel: 0.8 },
   },
+
+  // Read only by src/core/drive and the bots; never by step().
+  /** Controls v3 (docs/CONTROLS_V3.md §2-§4): the driver's numbers (ticks at 60 Hz, degrees, meter units). */
+  drive: {
+    /** A press that is not legal yet waits this long (300 ms), then is refused. */
+    bufferTicks: 18,
+    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.5 s). */
+    preTagTicks: 30,
+    /** Due prompts: amber within dueTicks of a required act's last moment, red within urgentTicks. */
+    dueTicks: 60,
+    urgentTicks: 24,
+    ember: { arms: 2, dryTicks: 60, dryFlame: 30, tagMargin: 2 },
+    sprout: { jobs: 2, urgent: 90, step: 20, plotSap: 25, plotMin: 5, dueGrowLeft: 120, urgentGrowLeft: 60 },
+    /**
+     * Vane notches ±1 breeze, ±2 gale: band floors (u/s), gust spacing (ticks), the Lift floor (the
+     * policy's: `lift` while own weather is ahead, else one gust's price + `gain`), steady Lift/s per notch at costMul 1.
+     */
+    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0] },
+    aim: {
+      /** Capture radius (°): Journey L1-40, 41-100, 101-200; Endless rungs R0..R4; Daily and challenges; Trials; Strong; Light. */
+      journey: [14, 12, 10],
+      endless: [14, 14, 14, 12, 10],
+      daily: 10,
+      trials: 14,
+      strong: 14,
+      light: 8,
+      /** Glide speed (°/s), under reduced motion. */
+      rate: 240,
+      rateReduced: 180,
+      /** Land this far inside an arc (°, at most half its width); track when closer than `edge` to an edge. */
+      inset: 4,
+      edge: 2,
+      /** An ending sun is rescued after this many idle ticks; one glide start per gapTicks. */
+      endingTicks: 18,
+      gapTicks: 30,
+      /** Aim help acts only within engageTicks of the last sun move (5 s), never during the lesson. */
+      engageTicks: 300,
+      /** Re-grip grace: no glide for regripTicks after a real lift; until againstTicks, none against the stroke by more than againstDeg, and a re-grip undoes a glide. */
+      regripTicks: 15,
+      againstTicks: 30,
+      againstDeg: 4,
+      /** The pre-TAG hand-over into Drip: last ticks, reach (°), inset (°). */
+      handTicks: 60,
+      handReach: 30,
+      handInset: 3,
+    },
+    /** Endless comfort rungs ≤ rungs: a ready Cold Snap casts itself when Nubs is lit with Chill < chill. */
+    autoSnap: { rungs: 1, chill: 20 },
+  },
 };
 
 export const TUNING = deepFreeze(tuning);
 export type Tuning = typeof TUNING;
+
+/**
+ * Controls v3 gate levers (docs/CONTROLS_V3.md §4.3, §5.3, §10.1): aim help's Standard radius and
+ * track per level, Trial or rung ('L<n>', 'T<n>', 'R<n>'; at most 6 entries, each with its reason
+ * here and in the spec's §16). Read by aimRadius for Standard only. Empty: no lever taken.
+ */
+export const AIM_OVERRIDE: Readonly<Record<string, { readonly deg: number; readonly track: boolean }>> = /* @__PURE__ */ Object.freeze({});

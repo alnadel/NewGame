@@ -143,10 +143,11 @@ describe('Dares (game/campaign.ts)', () => {
     // Without Dares the flakes star stays (every v1.6 level has one; a made-up level checks the words).
     expect(introCard(withFeats(12, [])).dare).toBe('');
     expect(starRules(withFeats(12, []))[1]).toMatch(/flakes$/);
-    expect(featLabel({ kind: 'deep', target: 90 }, one)).toBe('1.5 s deep');
-    expect(featLabel({ kind: 'brittle', target: 1 }, one)).toBe('Save 1 glass');
-    expect(featLabel({ kind: 'swings', target: 3 }, one)).toBe('3 SWINGs');
-    expect(featLabel({ kind: 'still', target: 2 }, { ...one, concepts: ['gusts'] })).toBe('Hold 2 gusts');
+    expect(featLabel({ kind: 'deep', target: 90 })).toBe('1.5 s deep');
+    expect(featLabel({ kind: 'brittle', target: 1 })).toBe('Save 1 glass');
+    expect(featLabel({ kind: 'swings', target: 3 })).toBe('3 SWINGs');
+    // Controls v3 (docs/CONTROLS_V3.md §11.1 C0b): a 'still' Dare is always the lock's.
+    expect(featLabel({ kind: 'still', target: 2 })).toBe('Hold 2 locks');
   });
 
   it('counts the Dare live on the pill (from the sim\'s feat events) and lights star 2 when it is met', () => {

@@ -98,28 +98,27 @@ export function featInSeconds(kind: FeatKind): boolean {
 }
 
 const secs = (ticks: number): string => String(Math.round(ticks / 6) / 10);
-const gusty = (level?: Pick<LevelDef, 'concepts'>): boolean => level?.concepts.includes('gusts') === true;
 
-/** The Dare's (or verb goal's) glyph; a Gusts level's 'still' Dare is about gusts. */
-export function featGlyph(kind: FeatKind, level?: Pick<LevelDef, 'concepts'>): string {
-  return kind === 'still' && gusty(level) ? 'gusts' : FEAT_WORDS[kind][0];
+/** The Dare's (or verb goal's) glyph. */
+export function featGlyph(kind: FeatKind): string {
+  return FEAT_WORDS[kind][0];
 }
 
 /** A Dare's short label: "Bloom 2", "3 SWINGs", "2.5 s deep", "Parry 6", "Save 1 glass", "Reach ×4". */
-export function featLabel(f: FeatSpec, level: Pick<LevelDef, 'concepts' | 'lengthMinutes'>): string {
+export function featLabel(f: FeatSpec): string {
   const t = f.target;
-  const w = f.kind === 'still' && gusty(level) ? 'Hold # gust*' : FEAT_WORDS[f.kind][1];
+  const w = FEAT_WORDS[f.kind][1];
   return w.replace('#', String(t)).replace('$', secs(t)).replace('*', t === 1 ? '' : 's');
 }
 
 /** The level's Dares as one line: "Bloom 2", or a finale's "Bloom 2 or Parry 6" ('' when it has none). */
 export function dareText(level: LevelDef): string {
-  return level.feats.map((f) => featLabel(f, level)).join(' or ');
+  return level.feats.map((f) => featLabel(f)).join(' or ');
 }
 
 /** Every Dare with its live count: "10 flakes 7/10 · or Parry 4 2/4" (a finale's two), "Bloom 2 1/2" (one). */
 export function dareProgressText(level: LevelDef, stats: Stats, seen: FeatSeen = NONE): string {
-  return level.feats.map((f) => `${featLabel(f, level)} ${countText(featLive(f.kind, stats, seen), f.target, featInSeconds(f.kind))}`).join(' · or ');
+  return level.feats.map((f) => `${featLabel(f)} ${countText(featLive(f.kind, stats, seen), f.target, featInSeconds(f.kind))}`).join(' · or ');
 }
 
 /** A Dare's live count: the core's featValue, or the sim's last `feat` event for it if that ran ahead. */
@@ -190,7 +189,7 @@ export function introCard(level: LevelDef, relaxed = false): IntroCard {
     goal: goalText(level, relaxed),
     stars: starRules(level, relaxed),
     dare: f ? `Dare · ${dareText(level)}` : '',
-    dareGlyph: f ? featGlyph(f.kind, level) : null,
+    dareGlyph: f ? featGlyph(f.kind) : null,
   };
 }
 
@@ -201,7 +200,7 @@ export function starRules(level: LevelDef, relaxed = false): [string, string, st
   const g = level.goal;
   const verb = goalFeat(g.kind);
   const pass = relaxed || g.kind === 'finish' ? 'Finish' : g.kind === 'snow' ? `${g.target} Snow` : verb ? verbGoalLabel(level, verb) : 'Finish';
-  const two = level.feats.length > 0 ? (level.feats.length > 1 ? 'A Dare' : featLabel(level.feats[0] as FeatSpec, level)) : `${level.stars.flakes} flakes`;
+  const two = level.feats.length > 0 ? (level.feats.length > 1 ? 'A Dare' : featLabel(level.feats[0] as FeatSpec)) : `${level.stars.flakes} flakes`;
   return [pass, two, `≤ ${tenths(level.stars.sunSec)} s in sun`];
 }
 
@@ -235,7 +234,7 @@ export function goalText(level: LevelDef, relaxed = false): string {
 
 /** A verb goal's label: its Dare's words, except the 'gate' goal (the arch shaded, not deep). */
 function verbGoalLabel(level: LevelDef, verb: FeatKind): string {
-  return level.goal.kind === 'gate' ? 'Shade the arch' : featLabel({ kind: verb, target: level.goal.target }, level);
+  return level.goal.kind === 'gate' ? 'Shade the arch' : featLabel({ kind: verb, target: level.goal.target });
 }
 
 /**
@@ -401,7 +400,7 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
       out.value = goalValue(level, stats, seen);
       out.flakes = g.kind === 'flakes';
       if (verb && verb !== 'flakes') {
-        out.glyph = featGlyph(verb, level);
+        out.glyph = featGlyph(verb);
         out.sec = featInSeconds(verb);
       }
     }
@@ -422,7 +421,7 @@ export function hudGoal(level: LevelDef | null, stats: Stats, out: HudGoal = { v
   out.value = Math.min(featLive(f.kind, stats, seen), f.target);
   out.target = f.target;
   out.flakes = f.kind === 'flakes';
-  out.glyph = f.kind === 'flakes' ? null : featGlyph(f.kind, level);
+  out.glyph = f.kind === 'flakes' ? null : featGlyph(f.kind);
   out.sec = featInSeconds(f.kind);
   return out;
 }

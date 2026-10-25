@@ -27,8 +27,9 @@
 //
 // v1.5 frost meter (Cold Snap): an ice coin in the world rect's bottom-right corner, clear of the
 // edge and home-bar zones, shown on runs that fill it. Its ring fills ice-blue around a snowflake;
-// full, it glows and breathes with a bobbing chevron over it; while a snap lasts the ring drains
-// white. (Controls v3: the coin takes no taps; the action button replaces it.)
+// full, it glows and breathes; while a snap lasts the ring drains white. (Controls v3, docs/
+// CONTROLS_V3.md §11.1: the coin is the action button's placeholder at its centre; its swipe-down
+// chevron is gone with the swipe.)
 //
 // Elementals v2 (docs/ELEMENTALS_V2.md §7.10): on a Trial the Cold Snap's coin shows only on Nubs'
 // legs (in the 3 s before a TAG it dims under a "TAG" chip: no snap then); another element's leg
@@ -59,6 +60,7 @@ import {
   worldYAtTick,
   type Flare,
   type ForecastId,
+  type DriveView,
   type HeroId,
   type SimState,
   windAt,
@@ -179,6 +181,11 @@ export interface HudState {
 
   widths: Map<string, WidthTable>;
 
+  /** Controls v3 (docs/CONTROLS_V3.md §1.1): the action button's centre and hit radius (CSS px) as last laid out, and whether it takes presses. */
+  btnX: number;
+  btnY: number;
+  btnR: number;
+  btnShown: boolean;
   /** v1.5 frost meter: shown last frame, its centre and radius (CSS px), the ready pop (s) and whether it was full. */
   meterShown: boolean;
   meterX: number;
@@ -186,8 +193,7 @@ export interface HudState {
   meterR: number;
   meterPop: number;
   meterFull: boolean;
-  /** v1.6: the half-span a tap may hit beside the centre (0: one coin), full charges last frame, a spill (s left), the banked chips' values, text and widths; a cash-in's pour and a trick's flash (s left). */
-  meterSpan: number;
+  /** v1.6: full charges last frame, a spill (s left), the banked chips' values, text and widths; a cash-in's pour and a trick's flash (s left). */
   meterFullN: number;
   spill: number;
   lastBankH: number;
@@ -275,13 +281,16 @@ export function createHud(): HudState {
     spriteK: -1,
     spriteDpr: -1,
     widths: new Map(),
+    btnX: 0,
+    btnY: 0,
+    btnR: 0,
+    btnShown: false,
     meterShown: false,
     meterX: 0,
     meterY: 0,
     meterR: 0,
     meterPop: 0,
     meterFull: false,
-    meterSpan: 0,
     meterFullN: 0,
     spill: 0,
     lastBankH: 0,
@@ -309,6 +318,31 @@ export function updateHud(h: HudState, dt: number): void {
   h.spill = Math.max(0, h.spill - dt);
   h.pour = Math.max(0, h.pour - dt);
   h.ringFlash = Math.max(0, h.ringFlash - dt);
+}
+
+/** Controls v3 action button (§1.1, × hudScale): centre this far from the world rect's handed side and above the bottom inset; hit radius. */
+const BTN_SIDE = 70;
+const BTN_BOTTOM = 88;
+const BTN_HIT = 52;
+
+/** Lays the action button out for this frame: it takes presses while the run is in its day and the driver shows an act (or the incoming one). */
+function layoutButton(h: HudState, v: View, inp: HudInput): void {
+  const k = hudScale(v);
+  const d = inp.drive;
+  h.btnX = inp.hand === 'left' ? v.vx + v.safe.left + BTN_SIDE * k : v.vx + v.vw - v.safe.right - BTN_SIDE * k;
+  h.btnY = v.vy + v.vh - v.safe.bottom - BTN_BOTTOM * k;
+  h.btnR = BTN_HIT * k;
+  h.btnShown = d !== null && inp.s.phase === 'day' && (d.act !== 'none' || d.incoming !== 'none');
+}
+
+/** True inside the button's hit disc (§1.1) while it is shown. */
+export function hudButtonHit(h: HudState, x: number, y: number): boolean {
+  return h.btnShown && (x - h.btnX) * (x - h.btnX) + (y - h.btnY) * (y - h.btnY) <= h.btnR * h.btnR;
+}
+
+/** The button's centre and hit radius (CSS px) as last laid out, and whether it is shown. */
+export function hudButton(h: HudState): { x: number; y: number; r: number; shown: boolean } {
+  return { x: h.btnX, y: h.btnY, r: h.btnR, shown: h.btnShown };
 }
 
 export function hudScale(v: View): number {
@@ -441,6 +475,9 @@ export interface HudInput {
   reducedMotion: boolean;
   /** High contrast (§8.5): flat faces, 4 px plate outlines, no glows. */
   hc: boolean;
+  /** Controls v3: the driver's view (the button's act) and the button's side. */
+  drive: Readonly<DriveView> | null;
+  hand: 'right' | 'left';
 }
 
 /** Splits "4/6" into "4" and "/6" (the count and its target), into out[0..1]. */
@@ -555,11 +592,12 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const top = v.safe.top + 8;
   h.bottom = top + ROW_H + 8;
   if (inp.alpha <= 0.01) {
-    h.meterShown = false;
+    h.meterShown = h.btnShown = false;
     return;
   }
   const s = inp.s;
   syncHud(h, v, inp);
+  layoutButton(h, v, inp);
   const dl = dayTicks(s.day);
   const night = s.dayTick >= dl ? 1 : 0;
   const k = h.k;
@@ -858,9 +896,9 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   const locked = st.trial !== null && tagLocked(st);
   const snapLeft = m.snapLeft;
   const r = METER_R * k;
-  const x = (h.meterX = v.vx + v.vw - v.safe.right - METER_SIDE * k - r);
-  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - r;
-  h.meterSpan = 0;
+  // Controls v3 C0b: the coin is the action button's placeholder, drawn at its centre.
+  const x = (h.meterX = h.btnX);
+  const y = h.btnY;
   h.meterY = y;
   h.meterR = METER_RING * k;
   const snapping = snapLeft > 0;
@@ -914,10 +952,9 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   }
   const top = y - METER_RING * k - 10 * k;
   const maxX = v.vx + v.vw - v.safe.right - 4 * k;
-  let cy = full && !snapping ? top - 16 * k : top;
+  let cy = top;
   if (m.bankH > 0) {
-    // The frost banked under the snap, paid when it ends: a chip with a snowflake ("+0.3"), above
-    // the chevron when a snap is ready.
+    // The frost banked under the snap, paid when it ends: a chip with a snowflake ("+0.3").
     if (m.bankH !== h.lastBankH) {
       h.chipText = snapsText(m.bankH);
       h.chipW = chipWidth(g, h, h.chipText, k);
@@ -948,22 +985,6 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('TAG', x, top + 0.5 * k);
-  } else if (full) {
-    // "Swipe down": a white chevron with an ink outline, bobbing down over the meter.
-    const cy = top + (rm ? 0 : ((inp.time * 1.6) % 1) * 6 * k);
-    const w = 8 * k;
-    g.lineJoin = 'round';
-    g.lineCap = 'round';
-    for (let p = 0; p < 2; p++) {
-      g.strokeStyle = p === 0 ? INK : '#FFFFFF';
-      g.lineWidth = (p === 0 ? 7 : 3.5) * k;
-      g.beginPath();
-      g.moveTo(x - w, cy - w / 2);
-      g.lineTo(x, cy + w / 2);
-      g.lineTo(x + w, cy - w / 2);
-      g.stroke();
-    }
-    g.lineCap = 'butt';
   }
   if (h.pour > 0 && !rm) {
     // A cash-in: a stream of frost from the multiplier coin down into the meter.

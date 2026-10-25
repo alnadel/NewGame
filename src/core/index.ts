@@ -2,7 +2,7 @@
 // meta code should import from here rather than from individual core modules.
 
 // Configuration and constants
-export { TUNING } from '../config/tuning.ts';
+export { AIM_OVERRIDE, TUNING } from '../config/tuning.ts';
 export {
   COMFORT_MAX,
   COMFORT_RUNGS,
@@ -68,7 +68,8 @@ export type {
 } from '../config/campaign.ts';
 // Elementals: the elements and the Trials.
 export { CAUSE_TIPS, HERO_IDS, HEROES } from '../config/heroes.ts';
-export type { HeroDeath, HeroFace, HeroId, HeroInfo, Verb } from '../config/heroes.ts';
+export type { DragKind, DriveAct, HeroDeath, HeroFace, HeroId, HeroInfo, Verb } from '../config/heroes.ts';
+export { CONTROL_TEXT } from '../config/controls.ts';
 export {
   anyLevelDef,
   isTrialId,
@@ -223,7 +224,7 @@ export type {
 } from './sim/events.ts';
 export { sunMaxRate } from './sim/sun.ts';
 export { debugRing, effectiveDrain } from './sim/nubs.ts';
-export { budFacing, coolLine, debugBloom, SNAP_TICKS, snapGauge, whiteLine } from './sim/mechanics.ts';
+export { budFacing, coolLine, debugBloom, SNAP_TICKS, snapGauge, snapReady, whiteLine } from './sim/mechanics.ts';
 export { meltBudgetOf } from './sim/pickups.ts';
 export { debugFlare, flarePhaseAt } from './sim/flares.ts';
 export { glassInWindow } from './sim/guide.ts';
@@ -269,3 +270,31 @@ export { deathRecap, deathTip } from './sim/recap.ts';
 export type { DeathRecap } from './sim/recap.ts';
 export { createParJob } from './sim/par.ts';
 export type { ParJob } from './sim/par.ts';
+
+// Controls v3 (docs/CONTROLS_V3.md §11.3): the driver, aim help and the policy it shares with the bots.
+export {
+  createDriver,
+  DRIVE_ACTS,
+  NOTE_AUTO,
+  NOTE_BUFFER,
+  NOTE_CALM,
+  NOTE_EXPIRE,
+  NOTE_HANDOVER,
+  NOTE_NOTCH,
+  NOTE_PRESS,
+  NOTE_REFUSE,
+  NOTE_SETTLE,
+  NOTE_WAIT_LOW,
+  REFUSE_BUSY,
+  REFUSE_CHARGING,
+  REFUSE_FULL,
+  REFUSE_LOCKED,
+  REFUSE_LOW,
+  REFUSE_NOTHING,
+  REFUSE_WAIT,
+  vaneNotch,
+} from './drive/driver.ts';
+export type { AimSetting, DriveControl, Driver, DriveOpts, DriveView } from './drive/driver.ts';
+export { aimRadius, settleTarget } from './drive/aim.ts';
+export { driveWeatherX } from './drive/vane.ts';
+export { downwind, emberDue, emberLast, emberPick, gustFloor, jobGoal, ownAhead, showered, sproutPick } from './drive/pick.ts';

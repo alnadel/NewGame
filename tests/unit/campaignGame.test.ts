@@ -92,7 +92,7 @@ describe('the words', () => {
     expect(conceptLabel({ name: 'Glare' }, 'glare')).toBe('New concept');
     expect(c.blurb).toContain('Gazing balls');
     // The three star rules: the goal, the level's Dare (v1.6; the flakes without one), a cool run (lit at most sunSec, rounded up).
-    expect(c.stars).toEqual([clean(l6.goal.target), featLabel(l6.feats[0]!, l6), `≤ ${Math.round(l6.stars.sunSec * 10) / 10} s in sun`]);
+    expect(c.stars).toEqual([clean(l6.goal.target), featLabel(l6.feats[0]!), `≤ ${Math.round(l6.stars.sunSec * 10) / 10} s in sun`]);
     expect(introCard({ ...l6, feats: [] }).stars[1]).toBe(`${l6.stars.flakes} flakes`);
     expect(introCard(levelDef(2)!).stars[0]).toBe(`${levelDef(2)!.goal.target} flakes`);
     // v1.6 (T6): no level has a Snow goal any more; the words still read one.

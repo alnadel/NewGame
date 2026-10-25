@@ -76,13 +76,10 @@ const ICONS = {
   half: `<rect x="5.5" y="4" width="13" height="16" rx="3"/><path d="M5.5 12h13v5a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3Z" ${FILL}/>`,
   flakes: `<path d="M8 4.6v6M5.4 6.1l2.6 1.5 2.6-1.5M5.4 9.1l2.6-1.5 2.6 1.5"/><path d="M16 12.4v7M13 14.1l3 1.8 3-1.8M13 17.7l3-1.8 3 1.8"/>`,
   anchor: `<circle cx="12" cy="5.6" r="2.2"/><path d="M12 7.8v12.6"/><path d="M5 13.2a7 7 0 0 0 14 0"/><path d="M8.6 12h6.8"/>`,
-  spin: `<path d="M12 3.6a8.4 8.4 0 1 1-7.9 5.5"/><path d="M2.8 6.2 4.1 9.1l3-1.2"/><circle cx="12" cy="12" r="1.6" ${FILL}/>`,
-  detent: `<circle cx="12" cy="12" r="8.2"/><path d="M12 3.8v2.6M12 17.6v2.6M3.8 12h2.6M17.6 12h2.6"/><path d="M12 12 15.2 8.8"/><circle cx="12" cy="12" r="1.3" ${FILL}/>`,
   eclipse: `<circle cx="12" cy="12" r="6.4"/><path d="M12 5.6a6.4 6.4 0 0 1 0 12.8 7 7 0 0 0 0-12.8Z" ${FILL}/><path d="M12 2.4v1.6M12 20v1.6M2.4 12H4M20 12h1.6M5.2 5.2l1.2 1.2M17.6 17.6l1.2 1.2M5.2 18.8l1.2-1.2M17.6 6.4l1.2-1.2"/>`,
   sunset: `<path d="M3.6 16.4h16.8"/><path d="M7.2 16.4a4.8 4.8 0 0 1 9.6 0"/><path d="M12 6.6v2.2M5.6 10.2l1.5 1.5M18.4 10.2l-1.5 1.5"/><path d="M8.4 20h7.2"/>`,
   road: `<path d="M7.6 20.4 10 3.6h4l2.4 16.8"/><path d="M12 6.4v2.2M12 11.4v2.2M12 16.4v2.2"/>`,
   dome: `<path d="M4.4 15.6a7.6 7.6 0 1 1 15.2 0Z"/><path d="M3 19h18"/><path d="M12 4.6v3.4M12 15.6v-3"/>`,
-  mirror: `<ellipse cx="12" cy="9.4" rx="5" ry="6.6" fill="currentColor" fill-opacity=".18"/><path d="M9.6 7.4l2.6-2.6M12 18v2"/><path d="M5 21h14M7 19.4 5 21l2 1.6M17 19.4l2 1.6-2 1.6"/>`,
   // v1.5 mechanics: a sunflower (buds), a cloud dropping a flake (Cold Snap), two shadows overlapping (deep shade).
   sunflower: `<circle cx="12" cy="8.6" r="2.7" ${FILL}/><path d="M12 2.3v2.1M12 12.8v1.6M5.7 8.6h2.1M16.2 8.6h2.1M7.5 4.1 9 5.6M15 11.6l1.3 1.3M16.5 4.1 15 5.6M9 11.6l-1.3 1.3"/><path d="M12 14.6v6.8M12 19.2c1.3-1.8 3-2.2 4.4-1.6-.6 1.6-2.5 2.4-4.4 1.6Z"/>`,
   coldsnap: `<path d="M6.6 12.6a3.2 3.2 0 0 1-.4-6.3 4.4 4.4 0 0 1 8.5-1.1 3.1 3.1 0 0 1 1.6 5.9"/><path d="M6.6 12.6h9.4"/><path d="M12 14.6v6.4M9.2 16.2l5.6 3.2M9.2 19.4l5.6-3.2"/>`,
@@ -91,12 +88,12 @@ const ICONS = {
   globe: `<circle cx="12" cy="10" r="7"/><path d="M6.2 15.6 5 20.6h14l-1.2-5"/><path d="M12 6.8v6.4M9.2 8.4l5.6 3.2M9.2 11.6l5.6-3.2" stroke-width="1.6"/>`,
   basket: `<path d="M3.8 9.6h16.4l-1.6 9.6a1.6 1.6 0 0 1-1.6 1.4H7a1.6 1.6 0 0 1-1.6-1.4Z"/><path d="M8.4 9.6 11 4M15.6 9.6 13 4M9.4 13.4v3.6M12 13.4v3.6M14.6 13.4v3.6"/>`,
   // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the one gesture set (HEROES[h].gesture): drag the
-  // sun, tap (a press and its ring), hold (a ring filling), steer (a drop slid sideways), swipe.
+  // sun, steer (a drop slid sideways); Controls v3 (docs/CONTROLS_V3.md §11.8) placeholders until UI
+  // draws its own: press (a press and its ring), vane (a sideways drag).
   'g-drag': DRAG,
-  'g-tap': `<circle cx="12" cy="12" r="2.8" ${FILL}/><circle cx="12" cy="12" r="7.4"/>`,
-  'g-hold': `<circle cx="12" cy="12" r="2.8" ${FILL}/><path d="M12 4.6A7.4 7.4 0 1 1 4.6 12"/>`,
+  'g-press': `<circle cx="12" cy="12" r="2.8" ${FILL}/><circle cx="12" cy="12" r="7.4"/>`,
   'g-steer': `<path d="M12 6.4s3.4 3.6 3.4 6a3.4 3.4 0 0 1-6.8 0c0-2.4 3.4-6 3.4-6Z"/><path d="M5.6 9.6 3.2 12l2.4 2.4M18.4 9.6l2.4 2.4-2.4 2.4"/>`,
-  'g-swipe': `<path d="M3.6 12h13.6M13.6 8l4 4-4 4M3.6 7.6h5M3.6 16.4h5"/>`,
+  'g-vane': `<path d="M3.6 12h13.6M13.6 8l4 4-4 4M3.6 7.6h5M3.6 16.4h5"/>`,
 } as const;
 
 export type IconName = keyof typeof ICONS;

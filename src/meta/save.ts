@@ -73,6 +73,10 @@ export function defaultSettings(): Settings {
     name: '',
     comfort: true,
     unlockAll: false,
+    aim: 'standard',
+    swingBoost: false,
+    hand: 'right',
+    autoAct: false,
   };
 }
 
@@ -200,6 +204,10 @@ export function sanitizeSettings(raw: unknown): Settings {
     name: typeof r.name === 'string' ? sanitizeName(r.name) : d.name,
     comfort: bool(r.comfort, d.comfort),
     unlockAll: bool(r.unlockAll, d.unlockAll),
+    aim: pick(r.aim, ['standard', 'strong', 'light', 'off'] as const, d.aim),
+    swingBoost: bool(r.swingBoost, d.swingBoost),
+    hand: pick(r.hand, ['right', 'left'] as const, d.hand),
+    autoAct: bool(r.autoAct, d.autoAct),
   };
 }
 

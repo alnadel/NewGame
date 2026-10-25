@@ -7,6 +7,7 @@ import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { dailyDateInBounds, isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
 import { Input, type InputHost } from '../../src/game/input.ts';
+import type { DragKind, DriveAct } from '../../src/core/index.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from '../../src/game/perf.ts';
 import { Cadence, type CadenceInput } from '../../src/game/cadence.ts';
 
@@ -261,7 +262,18 @@ describe('input frames (V1_PLAN §3.1)', () => {
   const made = !g.window;
   if (made) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
   const canvas = new EventTarget() as unknown as HTMLCanvasElement;
-  const host: InputHost = { canvas, accepting: () => true, onPress: () => {}, viewportWidth: () => 360, safeBottom: () => 0 };
+  const host: InputHost = {
+    canvas,
+    accepting: () => true,
+    onPress: () => {},
+    viewportWidth: () => 360,
+    safeBottom: () => 0,
+    drag: () => 'sun',
+    act: () => 'none',
+    buttonHit: () => false,
+    starting: () => false,
+    uPerPx: () => 1,
+  };
 
   const ev = (x: number, t: number): PointerEvent => ({ pointerId: 1, clientX: x, clientY: 300, timeStamp: t, pointerType: 'touch', button: 0 }) as unknown as PointerEvent;
 
@@ -327,10 +339,10 @@ describe('input frames (V1_PLAN §3.1)', () => {
 
   it('a lift releases at 0 °/s however fast the finger moved (Controls v3: nothing coasts)', () => {
     const inp = new Input(host);
-    const mv = inp as unknown as { moveTo(x: number): void; onUp(e: PointerEvent): void };
+    const mv = inp as unknown as { moveTo(x: number): void; onUp(e: PointerEvent, cancel: boolean): void };
     inp.begin(ev(300, 0));
     for (let i = 1; i <= 5; i++) mv.moveTo(300 - i * 10);
-    mv.onUp(ev(250, 50));
+    mv.onUp(ev(250, 50), false);
     const f = inp.takeFrames(3);
     expect(f[2]!.upEdge).toBe(true);
     expect(f[2]!.down).toBe(false);
@@ -343,6 +355,144 @@ describe('input frames (V1_PLAN §3.1)', () => {
     inp.begin(ev(200, 0));
     expect(inp.takeFrames(0).length).toBe(0);
     expect(inp.takeFrames(1)[0]!.downEdge).toBe(true);
+    inp.dispose();
+  });
+});
+
+describe('Controls v3 input skeleton (docs/CONTROLS_V3.md §1, §11.1 C0b)', () => {
+  const g = globalThis as unknown as { window?: EventTarget & { innerWidth: number; innerHeight: number } };
+  if (!g.window) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
+  const canvas = new EventTarget() as unknown as HTMLCanvasElement;
+  type Priv = { onDown(e: PointerEvent): void; onMove(e: PointerEvent): void; onUp(e: PointerEvent, cancel: boolean): void; onKey(e: KeyboardEvent, down: boolean): void };
+  /** An Input whose leg (drag kind, act) the test sets; the button's disc is x ≥ 280, y ≥ 500. */
+  const mk = () => {
+    const h = { drag: 'sun' as DragKind, act: 'snap' as DriveAct, starting: false, pressed: 0 };
+    const host: InputHost = {
+      canvas,
+      accepting: () => true,
+      onPress: () => void h.pressed++,
+      viewportWidth: () => 360,
+      safeBottom: () => 0,
+      drag: () => h.drag,
+      act: () => h.act,
+      buttonHit: (x, y) => h.act !== 'none' && x >= 280 && y >= 500,
+      starting: () => h.starting,
+      uPerPx: () => 0.5,
+    };
+    const inp = new Input(host);
+    return { h, inp, p: inp as unknown as Priv };
+  };
+  const pe = (id: number, x: number, y: number): PointerEvent =>
+    ({ pointerId: id, clientX: x, clientY: y, timeStamp: 0, pointerType: 'touch', button: 0, preventDefault: () => {} }) as unknown as PointerEvent;
+  const ke = (key: string): KeyboardEvent => ({ key, shiftKey: false, repeat: false, altKey: false, ctrlKey: false, metaKey: false, target: null, preventDefault: () => {} }) as unknown as KeyboardEvent;
+  const take = (inp: Input, n: number) => ({ f: inp.takeFrames(n), c: inp.controls() });
+
+  it('a still touch on the button is a press on its lift: counted, one per batch on its first tick, the sun untouched', () => {
+    const { h, inp, p } = mk();
+    p.onDown(pe(1, 300, 560));
+    expect(inp.buttonDown).toBe(true);
+    expect(take(inp, 2).c.every((c) => c.act === 0)).toBe(true);
+    p.onMove(pe(1, 305, 562));
+    p.onUp(pe(1, 305, 562), false);
+    expect([inp.acts, inp.snaps, h.pressed, inp.buttonDown]).toEqual([1, 1, 1, false]);
+    const { f, c } = take(inp, 2);
+    expect(c.map((x) => x.act)).toEqual([1, 0]);
+    expect(f.some((x) => x.downEdge || x.upEdge || x.down || x.dTheta !== 0)).toBe(false);
+    // A touch that moves 12 px first acts nothing (C0b: drag-through comes with UI's branch); a cancel acts nothing.
+    p.onDown(pe(2, 300, 560));
+    p.onMove(pe(2, 312, 560));
+    p.onUp(pe(2, 312, 560), false);
+    p.onDown(pe(3, 300, 560));
+    p.onUp(pe(3, 300, 560), true);
+    expect(inp.acts).toBe(1);
+    // Three presses: two wait (one per batch), the third is dropped; a Burn press is no snap.
+    h.act = 'burn';
+    for (let i = 0; i < 3; i++) {
+      p.onDown(pe(4 + i, 300, 560));
+      p.onUp(pe(4 + i, 300, 560), false);
+    }
+    expect([inp.acts, inp.snaps]).toEqual([3, 1]);
+    expect([take(inp, 1).c[0]!.act, take(inp, 1).c[0]!.act, take(inp, 1).c[0]!.act]).toEqual([1, 1, 0]);
+    inp.dispose();
+  });
+
+  it('the world slot: the first pointer wins; a steer drag slides Drip by uPerPx; a vane drag moves 1 notch per 36 px and its lift snaps it', () => {
+    const { h, inp, p } = mk();
+    p.onDown(pe(1, 100, 300));
+    p.onDown(pe(2, 200, 300));
+    p.onMove(pe(2, 260, 300));
+    p.onMove(pe(1, 90, 300));
+    let t = take(inp, 1);
+    expect([t.f[0]!.downEdge, t.f[0]!.dTheta, inp.presses]).toEqual([true, 10, 1]);
+    p.onUp(pe(1, 90, 300), false);
+    take(inp, 1);
+    h.drag = 'steer';
+    p.onDown(pe(3, 100, 300));
+    p.onMove(pe(3, 120, 300));
+    t = take(inp, 2);
+    expect([t.f[0]!.steer! + t.f[1]!.steer!, t.f[0]!.downEdge, t.f[0]!.down, t.f[0]!.dTheta]).toEqual([10, false, false, 0]);
+    expect(inp.steering).toBe(true);
+    p.onUp(pe(3, 120, 300), false);
+    h.drag = 'vane';
+    p.onDown(pe(4, 100, 300));
+    p.onMove(pe(4, 118, 300));
+    t = take(inp, 2);
+    expect([t.c[0]!.vane, t.c[0]!.vaneUp, t.c[1]!.vane, inp.vaning]).toEqual([0.5, false, 0, true]);
+    p.onUp(pe(4, 118, 300), false);
+    t = take(inp, 1);
+    expect([t.c[0]!.vane, t.c[0]!.vaneUp, t.f[0]!.upEdge]).toEqual([0, true, false]);
+    inp.dispose();
+  });
+
+  it('keys per leg: ↑ presses any act, ↓ only the Cold Snap; ← → move the vane one notch on Gust; ↑ starts a held run', () => {
+    const { h, inp, p } = mk();
+    const key = (k: string, down = true): void => p.onKey(ke(k), down);
+    key('ArrowDown');
+    key('w');
+    expect([inp.acts, inp.snaps]).toEqual([2, 2]);
+    take(inp, 1);
+    take(inp, 1);
+    h.act = 'burn';
+    key('s');
+    key('ArrowUp');
+    expect([inp.acts, inp.snaps]).toEqual([3, 2]);
+    expect(take(inp, 1).c[0]!.act).toBe(1);
+    h.act = 'calm';
+    h.drag = 'vane';
+    key('ArrowRight');
+    key('ArrowRight', false);
+    key('ArrowLeft');
+    key('ArrowLeft', false);
+    key('ArrowLeft');
+    const t = take(inp, 1);
+    expect([t.c[0]!.vane, t.c[0]!.vaneUp, t.f[0]!.key]).toEqual([-1, true, 0]);
+    key('ArrowLeft', false);
+    h.act = 'none';
+    h.drag = 'sun';
+    h.starting = true;
+    const before = h.pressed;
+    key('ArrowUp');
+    const s = take(inp, 1);
+    expect([h.pressed - before, s.f[0]!.downEdge, s.f[0]!.upEdge, inp.acts]).toEqual([1, true, true, 3]);
+    inp.dispose();
+  });
+
+  it('handoff: a held finger keeps its slot with the new leg\'s kind from where it is (into sun a downEdge, out of sun an upEdge)', () => {
+    const { h, inp, p } = mk();
+    p.onDown(pe(1, 100, 300));
+    p.onMove(pe(1, 110, 300));
+    take(inp, 1);
+    h.drag = 'steer';
+    inp.handoff();
+    let t = take(inp, 1);
+    expect([t.f[0]!.upEdge, t.f[0]!.down, t.f[0]!.dTheta, inp.steering]).toEqual([true, false, 0, true]);
+    p.onMove(pe(1, 130, 300));
+    h.drag = 'sun';
+    inp.handoff();
+    p.onMove(pe(1, 120, 300));
+    t = take(inp, 2);
+    // The steer pending at the TAG is dropped; the sun turns only by what moved after it.
+    expect([t.f[0]!.downEdge, t.f[0]!.steer, t.f[0]!.dTheta + t.f[1]!.dTheta, inp.pointerDown]).toEqual([true, 0, 10, true]);
     inp.dispose();
   });
 });

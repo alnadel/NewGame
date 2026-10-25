@@ -38,8 +38,13 @@ describe('the element table (§10.1)', () => {
     for (const h of HERO_IDS) {
       expect(HEROES[h].rules).toHaveLength(3);
       expect(HEROES[h].glyph).toBe(h);
-      expect(HEROES[h].gesture).toMatch(/^g-(drag|tap|hold|steer|swipe)$/);
+      expect(HEROES[h].gesture).toMatch(/^g-(drag|press|steer|vane)$/);
     }
+    // Controls v3 (docs/CONTROLS_V3.md §0.1, §11.2, §13.1): the button's act and the drag per element, and the banner's lines.
+    expect(HERO_IDS.map((h) => HEROES[h].act)).toEqual(['snap', 'burn', 'none', 'grow', 'calm']);
+    expect(HERO_IDS.map((h) => HEROES[h].drag)).toEqual(['sun', 'sun', 'steer', 'sun', 'vane']);
+    expect(HERO_IDS.map((h) => HEROES[h].dragLine)).toEqual(['Drag: turn the sun', 'Drag: turn the sun', 'Drag: steer Drip', 'Drag: turn the sun', 'Drag: set the wind']);
+    expect(HERO_IDS.map((h) => HEROES[h].actLine)).toEqual(['Button: Cold Snap', 'Button: burn the next wall', 'No button: the sun holds', 'Button: grow the next plant', 'Button: calm the wind']);
     expect(HEROES.nubs.deathTip).toBe('');
     expect(CAUSE_TIPS['ember:crash']).toBeTruthy();
     expect(CAUSE_TIPS.fall).toBe(CAUSE_TIPS.swept);

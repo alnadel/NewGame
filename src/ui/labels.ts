@@ -202,7 +202,8 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
       return 'SWING! Straight into the next shade: +Snow';
     case 'snap-ready':
       // v1.5: the frost meter is full.
-      return keyboard ? 'Frost full! Press ↓ for a Cold Snap' : 'Frost full! Swipe ↓ for a Cold Snap';
+      // Controls v3: the swipe is gone; the button (or ↓) casts it.
+      return keyboard ? 'Frost full! Press ↓ for a Cold Snap' : 'Frost full! Tap the frost button';
   }
   // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): a TAG, "{Name}'s turn." (+ " The sun holds."); the
   // verb text is cut for the bundle budget (§9.3: the tips, the ghost and the Pause card say it).

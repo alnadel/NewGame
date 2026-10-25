@@ -36,6 +36,10 @@ export interface ShadyState {
   verb: 'sun' | 'burn' | 'grow' | 'steer' | 'blow';
   sunHeld: boolean;
   omega: number;
+  /** Controls v3 (docs/CONTROLS_V3.md §11.8): the sun's mode and lag, and the driver's view as rendered. */
+  sunMode: string;
+  lag: number;
+  drive: ShadyDrive;
   /** A Trial's element state (null in a Nubs run). */
   el: null | {
     dx: number;
@@ -48,6 +52,22 @@ export interface ShadyState {
     trees: number;
     bumps: number;
   };
+}
+
+/** Controls v3: the driver's view (game/session.ts testState().drive). */
+export interface ShadyDrive {
+  act: 'none' | 'snap' | 'burn' | 'grow' | 'calm';
+  state: number;
+  pick: number;
+  queue: number[];
+  due: number;
+  buffered: boolean;
+  incoming: 'none' | 'snap' | 'burn' | 'grow' | 'calm';
+  vane: number;
+  vaneResting: boolean;
+  glide: number | null;
+  refuse: number;
+  aimDeg: number;
 }
 
 /** Collects console errors and page errors for the lifetime of the page. */
@@ -158,9 +178,14 @@ export async function worldToScreen(page: Page, x: number, y: number): Promise<{
   return page.evaluate(([wx, wy]) => window.__SHADY_TEST__!.testWorldToScreen(wx as number, wy as number), [x, y]);
 }
 
-/** Elementals v2: fast-forwards the Trial with the core reactive bot to leg `i`, then hands back to the input. */
-export async function skipToLeg(page: Page, i: number): Promise<void> {
-  await page.evaluate((n) => window.__SHADY_TEST__!.testSkipToLeg(n), i);
+/** Elementals v2: fast-forwards the Trial with the core reactive bot to leg `i` (or `before` ticks ahead of its TAG), then hands back to the input. */
+export async function skipToLeg(page: Page, i: number, before = 0): Promise<void> {
+  await page.evaluate(([n, b]) => window.__SHADY_TEST__!.testSkipToLeg(n as number, b as number), [i, before]);
+}
+
+/** Controls v3: the action button (CSS px), whether it takes presses and its side. */
+export async function button(page: Page): Promise<{ x: number; y: number; r: number; shown: boolean; side: 'right' | 'left' }> {
+  return page.evaluate(() => window.__SHADY_TEST__!.button());
 }
 
 export async function runCfg(page: Page): Promise<RunCfg> {
@@ -223,7 +248,10 @@ declare global {
       state(): ShadyState;
       forceDeath(): void;
       testWorldToScreen(x: number, y: number): { x: number; y: number };
-      testSkipToLeg(i: number): void;
+      testSkipToLeg(i: number, before?: number): void;
+      button(): { x: number; y: number; r: number; shown: boolean; side: 'right' | 'left' };
+      acts(): number;
+      testGuide(): { now: number[]; next: number[]; lasting: number[] };
       runHeadless(seed: number, ticks: number, bot: string): string;
       setTimeScale(n: number): void;
       audioState(): string;

@@ -142,6 +142,9 @@ export class Fx {
     resetBlooms();
   }
 
+  /** Controls v3 (docs/CONTROLS_V3.md §2.4, §7): one driver note (code, a). No effects yet (ART's branch adds them). */
+  onDrive(_code: number, _a: number): void {}
+
   /** Routes one frame's events. */
   onEvents(events: readonly SimEvent[], s: SimState): void {
     const sc = this.sc;

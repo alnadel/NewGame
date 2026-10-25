@@ -31,6 +31,7 @@ import {
   type HeroId,
   type NubsState,
   type Pickup,
+  type DriveView,
   type RenderSnap,
   type SimState,
   type World,
@@ -291,6 +292,15 @@ export interface RenderInput {
   /** Paused: UI timers (banners, HUD pops, halo) hold still. */
   paused: boolean;
   debug: DebugDraw | null;
+  /** Controls v3: the driver's view (always set; `act` 'none' on the Title; bot runs pass the touch bot's `drive`, or keep it fresh with `observe`). */
+  drive: Readonly<DriveView>;
+  /** A pointer is down on the button. */
+  buttonDown: boolean;
+  /** The button's side (Settings). */
+  hand: 'right' | 'left';
+  /** Aim help in force (°; 0 off) and 'fog' now-only: the dial's ghost-sun preview. */
+  aimDeg: number;
+  nowOnly: boolean;
 }
 
 /** All render-side state. fx.ts writes into it; the renderer reads and animates it. */
@@ -438,6 +448,8 @@ export function createScene(): RenderScene {
       mech: null,
       reducedMotion: false,
       hc: false,
+      drive: null,
+      hand: 'right',
     },
   };
 }
@@ -455,6 +467,8 @@ function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
   h.mech = inp.mech;
   h.reducedMotion = inp.reducedMotion;
   h.hc = inp.highContrast;
+  h.drive = inp.drive;
+  h.hand = inp.hand;
   return h;
 }
 
@@ -1033,7 +1047,7 @@ export class Renderer {
       if (hd.meterShown) {
         const mr = 26 * scale;
         const top = hd.meterY - hd.meterR - 40 * scale - mr;
-        if (sc.sun.y > top && Math.abs(sc.sun.x - hd.meterX) < hd.meterSpan + hd.meterR + mr) sc.sun.y = top;
+        if (sc.sun.y > top && Math.abs(sc.sun.x - hd.meterX) < hd.meterR + mr) sc.sun.y = top;
       }
       // Over the dial (its rims reach R + 30; Nubs by a screen edge) the sun steps back to 40 %, so
       // it never hides the sun pointer or the flare arc under it.
@@ -1065,7 +1079,7 @@ export class Renderer {
       const a = dying >= 0 ? Math.max(0, 1 - dying / 0.4) : inp.screen === 'pause' && v.cssH < 672 ? 0.3 : 1;
       drawHud(g, sc.hud, v, hudInput(sc, inp, a));
     } else {
-      sc.hud.meterShown = false;
+      sc.hud.meterShown = sc.hud.btnShown = false;
     }
     // Screen particles (leaves, petals, snow, confetti) under the banners: a tip's words stay clear.
     drawScreenParticles(g, sc.particles, v.dpr);

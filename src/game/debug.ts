@@ -4,6 +4,7 @@ import { BOT_KINDS, runHeadless, type BotKind } from '../core/index.ts';
 import type { ShadyAudio } from '../audio/index.ts';
 import type { DebugDraw, RenderOptions } from '../render/renderer.ts';
 import { levelCardFit } from '../render/banners.ts';
+import { hudButton } from '../render/hud.ts';
 import { calloutBoxes, calloutsDrawn } from '../render/meltMap.ts';
 import { shakeOf, zoomOf } from './camera.ts';
 import type { MapProbe, PixelAB, Session } from './session.ts';
@@ -19,8 +20,14 @@ export interface ShadyTestHook {
   audioState(): string;
   /** Elementals v2 (docs/ELEMENTALS_V2.md §7.11): CSS px of a ground point on the last drawn frame. */
   testWorldToScreen(x: number, y: number): { x: number; y: number };
-  /** Elementals v2: fast-forwards the Trial with the core reactive bot until relayIdx is `i`, then hands back to the input. */
-  testSkipToLeg(i: number): void;
+  /** Elementals v2: fast-forwards the Trial with the core reactive bot until relayIdx is `i` (or `before` ticks ahead of TAG `i`), then hands back to the input. */
+  testSkipToLeg(i: number, before?: number): void;
+  /** Controls v3 (docs/CONTROLS_V3.md §11.8): the action button (CSS px), whether it takes presses and its side. */
+  button(): { x: number; y: number; r: number; shown: boolean; side: 'right' | 'left' };
+  /** Controls v3: button and act-key presses the input accepted. */
+  acts(): number;
+  /** Controls v3: the guide's bins set now (now, next, and the lasting now ∧ next). */
+  testGuide(): { now: number[]; next: number[]; lasting: number[] };
   /** Extras for tooling. */
   paused(): boolean;
   presses(): number;
@@ -90,8 +97,8 @@ export interface ShadyTestHook {
   setSnow(n: number): void;
   /**
    * v1.5 mechanics as the renderer sees them (game/mechanics.ts): the frost meter (shown, fill, its
-   * centre in CSS px), deep shade, the snap left and its cloud, the dial's gold bins, the run's buds
-   * and Cold Snaps asked for by input so far.
+   * centre in CSS px: the action button's, Controls v3), deep shade, the snap left and its cloud, the
+   * dial's gold bins, the run's buds and the Cold Snap presses input accepted so far.
    */
   mech(): {
     meter: boolean;
@@ -141,7 +148,23 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
     state: () => session.testState(),
     forceDeath: () => session.forceDeath(),
     testWorldToScreen: (x, y) => session.testWorldToScreen(x, y),
-    testSkipToLeg: (i) => session.testSkipToLeg(i),
+    testSkipToLeg: (i, before) => session.testSkipToLeg(i, before),
+    button: () => {
+      const b = hudButton(session.renderer.scene.hud);
+      const v = session.renderer.scene.view;
+      return { ...b, side: b.x < v.vx + v.vw / 2 ? 'left' : 'right' };
+    },
+    acts: () => session.input.acts,
+    testGuide: () => {
+      const g = session.state.guide;
+      const out = { now: [] as number[], next: [] as number[], lasting: [] as number[] };
+      for (let b = 0; b < g.now.length; b++) {
+        if (g.now[b]) out.now.push(b);
+        if (g.next[b]) out.next.push(b);
+        if (g.now[b] && g.next[b]) out.lasting.push(b);
+      }
+      return out;
+    },
     // The single-file build ships no bots (session.ts makeBot): there it reports no hash.
     runHeadless: (seed, ticks, bot) => (import.meta.env.MODE === 'single' ? '' : runHeadless(seed, ticks, bot as BotKind)),
     setTimeScale: (n) => {
@@ -202,8 +225,9 @@ export function installTestHook(session: Session, audio: ShadyAudio): void {
       return {
         meter: h.meterShown,
         frost: m.frost,
-        meterX: h.meterX,
-        meterY: h.meterY,
+        // Controls v3 (§11.8): the action button's centre (the coin is drawn there).
+        meterX: h.btnX,
+        meterY: h.btnY,
         deep: m.deep,
         snapLeft: m.snapLeft,
         snapId: m.snapCloud?.id ?? -1,

@@ -1821,3 +1821,28 @@ commit, the humanDial baseline's SHA-256, any `SUB_OVERRIDE`, `TOUCH_READS`, `AI
 §6.5 levers used (each with its reason, and each Trial whose golden entries a lever re-pinned),
 deviations, gate results (§12.5; G9's shortest window per Trial, G11's mash shares, the idle-pass
 list) and the final `build:single`.
+
+### 16.1 C0 (the integrator's contract commits)
+
+- **C0a** (demolition): `build:single` 822,916 B (828,287 B before: −5,371 B). Golden diff empty.
+- **C0b** (contract): `build:single` **824,994 B** (gate ≤ 825,000 B; +2,078 B over C0a). Golden diff
+  empty. The teams branch from here. To fit the gate, C0b keeps four things small, each a deliberate
+  and recorded choice, not a change to the contract:
+  1. The session begins the driver with neutral `DriveOpts` (aim 0, no track, Auto Snap and Auto
+     actions off): building them per run from `aimRadius` (§11.6) is UI's session wiring, and the
+     skeleton driver has no magnet to use them. `aimRadius` is the full table in core; it enters the
+     bundle when UI calls it.
+  2. The skeleton driver writes only `view.act` (the lesson-run rule included), `view.vane`,
+     `view.buffered` and the `PRESS` note: a Cold Snap press casts on the first legal tick within
+     `bufferTicks` and is otherwise dropped. Refusals (`REFUSE` notes, `view.refuse`) and the snap
+     states (`view.state`, `fill`, `lockTicks`) come with C0c.
+  3. `CONTROL_TEXT` (§13.3) is marked pure, so the build drops it until UI ships a reader.
+  4. Demolition that came with the contract: the full coin's "swipe down" chevron, the dead
+     `meterSpan` tap span, the intro Trials' Ember and Sprout ghost hand (it tapped walls and held
+     sites, gestures C0a removed; UI adds the `press` ghost), and the "Frost full! Swipe ↓" cue (now
+     "Frost full! Tap the frost button").
+- Other C0b notes: the side and bottom edge zones stay at 20 px and inset + 16 px until UI's branch
+  (§1.1); the gesture icons `g-tap` and `g-swipe` are renamed `g-press` and `g-vane` as placeholders
+  and `g-hold` goes (UI draws its own); the DOM icons `spin`, `detent` and `mirror` and the canvas
+  glyph `mirror` go with the retired concepts that alone used them; `featGlyph` and `featLabel` lose
+  their level argument with `gusty`; `Bot` gains the optional `drive` view (§2.1).

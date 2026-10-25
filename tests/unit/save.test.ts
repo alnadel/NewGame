@@ -61,6 +61,10 @@ describe('defaults', () => {
       name: '',
       comfort: true,
       unlockAll: false,
+      aim: 'standard',
+      swingBoost: false,
+      hand: 'right',
+      autoAct: false,
     });
     expect(s.campaign).toEqual({ stars: Array(200).fill(0), unlocked: 1, lastLevel: 0 });
     expect(s.stats.runs).toBe(0);
@@ -432,6 +436,11 @@ describe('migrate', () => {
 
   it('sanitizeSettings fills defaults for junk', () => {
     expect(sanitizeSettings('nope')).toEqual(defaults(NOW).settings);
+  });
+
+  it('sanitizeSettings keeps the Controls v3 fields it knows (docs/CONTROLS_V3.md §8.1) and defaults the rest', () => {
+    expect(sanitizeSettings({ aim: 'light', swingBoost: true, hand: 'left', autoAct: true })).toMatchObject({ aim: 'light', swingBoost: true, hand: 'left', autoAct: true });
+    expect(sanitizeSettings({ aim: 'max', swingBoost: 1, hand: 'up', autoAct: 'yes' })).toMatchObject({ aim: 'standard', swingBoost: false, hand: 'right', autoAct: false });
   });
 });
 

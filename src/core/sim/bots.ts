@@ -31,10 +31,12 @@ import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } 
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
 import { createElPolicy, type ElPolicy, type ElPolicyOpts } from './bots/elements.ts';
 import { elHealth, nextTagHero, tagLocked } from './elements.ts';
+import { snapReady } from './mechanics.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
 import type { DareTerms } from './bots/dares.ts';
+import type { DriveView } from '../drive/driver.ts';
 
 export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat' | 'humanEl';
 export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat', 'humanEl'] as BotKind[]);
@@ -101,6 +103,8 @@ export interface Bot {
   readonly kind: BotKind;
   /** Input for the next tick of `s`. The returned frame is reused; copy it to keep it. */
   next(s: SimState): InputFrame;
+  /** Controls v3 (docs/CONTROLS_V3.md §2.1, §10.2): a touch bot's own driver's view (the session renders it). */
+  readonly drive?: Readonly<DriveView>;
 }
 
 const quantize = (d: number): number => Math.round(d * 1024) / 1024;
@@ -221,14 +225,6 @@ function noviceBot(): Bot {
       return out;
     },
   };
-}
-
-/**
- * True when a Cold Snap can be cast this tick (the meter is full, none is on, the sun is up). On an
- * Elementals Trial only Nubs casts it, and no TAG may be within the lock.
- */
-function snapReady(s: SimState): boolean {
-  return s.world.mech.snap && s.nubs.frost >= 1 && s.snapTicks === 0 && s.phase === 'day' && s.sunUp && s.ready === 0 && (s.trial === null || (s.nubs.hero === 'nubs' && !tagLocked(s)));
 }
 
 /** The reactive bot's aim error on a Trial with a salt > 0 (σ, degrees). */
