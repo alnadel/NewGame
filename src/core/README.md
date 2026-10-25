@@ -1714,7 +1714,7 @@ driver's µs per tick on T7; `node scripts/bench-step.ts --drive` times it at an
   others are past `SUB_OVERRIDE`'s 8 entries) and the chapter gate on ch6, 7, 12, 14, 15, 17 and 20
   (ch17 134 vs 164: its substitutes, sprint, fleet, ration and dense, are real difficulty where the
   retired gusts, slippery and heavy cost the bots nothing). On the 154 unchanged levels humanTouch
-  passes more streams than humanDial (2369 vs 2345 within 3 tries), so the driver is not the cause.
+  passes as many streams as humanDial (2346 vs 2345 within 3 tries), so the driver is not the cause.
 - `sim --check --seeds 40`: every target met; idleTouch reaches no first night at R2-R4 (0 of 40
   each); humanTouch's median death is at or past humanDial's on every rung.
 - `sim --trials --check --perf`: every gate passes but **G5e** on T4 (+1 walks Gust's leg), T6 (−1)
