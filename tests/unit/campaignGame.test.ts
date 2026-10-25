@@ -1,6 +1,6 @@
 // The campaign in the game and render layers (CAMPAIGN_PLAN §4): the level's run config, the intro
 // card's words, the goal line and the HUD goal pill, level progress and the finish line, the
-// render-side concept fields (gusts, lock, eclipse), ?level=, the level card's timing and the
+// render-side concept fields (lock, eclipse; the retired gust stays 0), ?level=, the level card's timing and the
 // finish/miss stamps.
 import { describe, expect, it } from 'vitest';
 import {
@@ -215,22 +215,14 @@ describe('progress and the finish line (core)', () => {
   });
 
   it('the sim writes the gust, lock and eclipse fields', () => {
-    const gusts = levelDef(32)!;
-    const s = createRun(campaignConfig(gusts, false, true));
+    // Controls v3 retired Gusts (L32 teaches Lowland now): sun.gust stays 0 on every level.
+    const s = createRun(campaignConfig(levelDef(32)!, false, true));
     step(s, TAP);
-    // A 2 s gust every 8 s of the daylight clock (the start beat excluded): over 20 s, one to three
-    // gusts, each tick blowing one way (the exact timetable is the core's campaign.test).
-    let seen = 0;
     for (let i = 0; i < 60 * 20; i++) {
       s.nubs.chill = s.nubs.maxChill;
       step(s, NO_INPUT);
-      if (s.sun.gust !== 0) {
-        expect(Math.abs(s.sun.gust)).toBe(1);
-        seen++;
-      }
+      expect(s.sun.gust).toBe(0);
     }
-    expect(seen).toBeGreaterThanOrEqual(60 * 2);
-    expect(seen).toBeLessThanOrEqual(60 * 6);
     const lock = levelDef(33)!;
     const t = createRun(campaignConfig(lock, false, true));
     step(t, TAP);

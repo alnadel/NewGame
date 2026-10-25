@@ -126,6 +126,19 @@ describe('sun control', () => {
     }
   });
 
+  it('the sunFollow and sunFriction params still cap the follow and stop the coast (no concept sets them: Controls v3)', () => {
+    const s = sunState(0);
+    s.params = { ...s.params, sunFollow: 220, sunFriction: 0 };
+    updateSun(s, f({ downEdge: true, down: true, dTheta: 90 }));
+    expect(s.sun.dTheta).toBeCloseTo(220 / 60, 9);
+    updateSun(s, f({ upEdge: true, release: 1000 }));
+    expect(s.sun.omegaRel).toBe(0);
+    expect(settle(s).length).toBeGreaterThanOrEqual(0);
+    expect(s.sun.mode).toBe('idle');
+    // The retired gusts never blow: SunState.gust stays 0.
+    expect(s.sun.gust).toBe(0);
+  });
+
   it('8. a detent event at each 15° crossing', () => {
     const s = sunState(1);
     const events: SimEvent[] = [];

@@ -8,6 +8,7 @@ import {
   CHAPTERS,
   CONCEPT_IDS,
   CONCEPTS,
+  composeDraw,
   conceptsCompatible,
   goalMet,
   isBossFinale,
@@ -15,8 +16,11 @@ import {
   levelDef,
   levelSeed,
   mechanicsOf,
+  retiredLevel,
   starsFor,
   startsWithSnap,
+  substitute,
+  SUB_OVERRIDE,
   TEACH_LEVELS,
   teachLevel,
   type ConceptId,
@@ -42,7 +46,7 @@ import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runBot } from '../../src/core/sim/headless.ts';
 import { buildRunResult } from '../../src/core/sim/result.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { sunGustAt, sunLockedAt } from '../../src/core/sim/sun.ts';
+import { sunLockedAt } from '../../src/core/sim/sun.ts';
 import { NO_INPUT, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 
 const TAP: InputFrame = { dTheta: 0, down: false, downEdge: true, upEdge: true, release: 0, key: 0 };
@@ -126,10 +130,10 @@ describe('the level table', () => {
       expect(l.lengthMinutes).toBeGreaterThan(0);
       expect(l.drain).toBeGreaterThanOrEqual(22);
       expect(l.drain).toBeLessThanOrEqual(55);
-      // The effective drain (× the concepts' drainMul) is capped: 40 with lock/gusts, 45 with an eclipse.
+      // The effective drain (× the concepts' drainMul) is capped: 40 with lock, 45 with an eclipse.
       const mul = dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts).drainMul;
       expect(l.drain * mul).toBeLessThanOrEqual(62 + 1e-9);
-      if (l.concepts.includes('lock') || l.concepts.includes('gusts')) expect(l.drain * mul).toBeLessThanOrEqual(40 + 1e-9);
+      if (l.concepts.includes('lock')) expect(l.drain * mul).toBeLessThanOrEqual(40 + 1e-9);
       if (l.concepts.includes('eclipse')) expect(l.drain * mul).toBeLessThanOrEqual(45 + 1e-9);
       // Star 3 (a cool run) allows 22% of the level's daylight in the sun and 20% of the tank.
       expect(Math.abs(l.stars.sunSec - (0.22 * l.lengthMinutes * 50) / 720)).toBeLessThanOrEqual(0.05 + 1e-9);
@@ -148,11 +152,11 @@ describe('the level table', () => {
     expect(levelDef(42)).toBe(CAMPAIGN_LEVELS[41]);
   });
 
-  it('levels 1-40 introduce the first forty concepts in catalog order, alone; later levels introduce nothing', () => {
+  it('levels 1-40 introduce the forty concepts in catalog order, alone; later levels introduce nothing', () => {
     expect(TEACH_LEVELS).toBe(40);
-    // v1.6: Glass Flakes (21) and the Solar Flare (38) take Lowland's and Moon Sun's teaching slots.
-    expect(CONCEPT_IDS).toHaveLength(45);
-    expect([teachLevel('brittle'), teachLevel('flare'), teachLevel('lowland'), teachLevel('moonlit')]).toEqual([21, 38, 0, 0]);
+    // Controls v3 (§5.3): 40 concept ids, all taught. v1.6's Glass Flakes (21) and Solar Flare (38) stay.
+    expect(CONCEPT_IDS).toHaveLength(40);
+    expect([teachLevel('brittle'), teachLevel('flare')]).toEqual([21, 38]);
     expect(Object.keys(CONCEPTS).sort()).toEqual([...CONCEPT_IDS].sort());
     for (let id = 1; id <= 40; id++) {
       const l = levelDef(id) as LevelDef;
@@ -163,13 +167,17 @@ describe('the level table', () => {
       expect(l.name).toBe(c.title);
       expect(c.name).not.toBe(c.title);
     }
-    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(45);
+    expect(new Set(CONCEPT_IDS.map((id) => CONCEPTS[id].name)).size).toBe(40);
     for (let id = 41; id <= 200; id++) expect((levelDef(id) as LevelDef).introduces).toBeNull();
-    // v1.5: the core mechanics are taught in chapter 1; Wide Open, Crowded and Drought only compose.
+    // v1.5: the core mechanics are taught in chapter 1.
     expect([teachLevel('deep'), teachLevel('bloom'), teachLevel('snap')]).toEqual([5, 8, 10]);
-    for (const c of ['sparse', 'dense', 'drought', 'lowland', 'moonlit'] as const) {
-      expect(teachLevel(c)).toBe(0);
-      expect(CAMPAIGN_LEVELS.some((l) => l.concepts.includes(c))).toBe(true);
+    // Controls v3: the five teaching slots the retired control concepts left, with their titles, a finish goal each.
+    const slots = [['sparse', 16, 'Big Sky'], ['drought', 29, 'Cloudless'], ['dense', 30, 'Thicket'], ['moonlit', 31, 'Moonlit'], ['lowland', 32, 'Short Grass']] as const;
+    for (const [c, id, title] of slots) {
+      expect(teachLevel(c)).toBe(id);
+      expect((levelDef(id) as LevelDef).name).toBe(title);
+      expect((levelDef(id) as LevelDef).goal.kind).toBe('finish');
+      expect(CAMPAIGN_LEVELS.some((l) => l.id > 40 && l.concepts.includes(c))).toBe(true);
     }
     // No composed level carries a mechanic concept: the mechanics are simply on after their lesson.
     for (const l of CAMPAIGN_LEVELS) if (l.id > 40) for (const c of ['deep', 'bloom', 'snap'] as const) expect(l.concepts).not.toContain(c);
@@ -231,8 +239,12 @@ describe('the level table', () => {
     for (const id of [12, 25, 35]) expect(at(id).lengthMinutes).toBe(300);
     expect(at(10).lengthMinutes).toBe(300);
     for (const id of [20, 30]) expect(at(id).lengthMinutes).toBe(360);
-    // On the curve (drain + the concepts' costs) a finale is a spike: above its chapter and the next start.
-    const curve = (id: number): number => at(id).drain + at(id).concepts.reduce((a, c) => a + (CONCEPTS[c].level?.cost ?? 0), 0);
+    // On the curve (the effective drain + the concepts' costs) a finale is a spike: above its chapter
+    // and the next start (Controls v3: L31's Moon Sun drains 0.7×).
+    const curve = (id: number): number => {
+      const l = at(id);
+      return l.drain * dayParams(1, 3, dayPlan(l.biome, l.forecast), l.concepts).drainMul + l.concepts.reduce((a, c) => a + (CONCEPTS[c].level?.cost ?? 0), 0);
+    };
     for (const f of [10, 20, 30]) expect(curve(f)).toBeGreaterThan(Math.max(curve(f - 1), curve(f + 1)));
     expect(curve(31)).toBeGreaterThan(curve(11));
     // A costly concept lowers the drain: Long Shadows drains less than Gates.
@@ -246,7 +258,10 @@ describe('the level table', () => {
       const l = levelDef(id) as LevelDef;
       const ch = CHAPTERS[l.chapter - 1]!;
       expect(l.concepts.length).toBeGreaterThanOrEqual(2);
-      expect(ch.concepts).toContain(l.concepts[0]);
+      // The draw (retired ids included) leads with the chapter's headline; its substitution is the level.
+      const draw = composeDraw(id, levelSeed(id, 0), ch);
+      expect(ch.concepts).toContain(draw[0]);
+      expect(l.concepts.filter((c) => c !== 'flare')).toEqual(substitute(id, draw, ch));
       // The composed draw (the Solar Flare is appended to a boss finale after it).
       const drawn = l.concepts.filter((c) => c !== 'flare');
       for (let i = 0; i < drawn.length; i++)
@@ -255,9 +270,9 @@ describe('the level table', () => {
         expect(l.concepts).toHaveLength(4);
         expect(l.concepts[3]).toBe('flare');
         expect(l.flares.length).toBeGreaterThanOrEqual(1);
-        expect(l.concepts[0]).toBe(ch.concepts[0]);
+        expect(draw[0]).toBe(ch.concepts[0]);
       }
-      // Forecast concepts only where they fit; 'oldtown'/'market' force Old Town, 'dazzle' the Meadow.
+      // Forecast concepts only where they fit; 'oldtown'/'market' force Old Town.
       for (const c of l.concepts) {
         const need = CONCEPTS[c].level?.biome;
         if (need) expect(l.biome).toBe(need);
@@ -295,6 +310,66 @@ describe('the level table', () => {
     expect(goalMet(s7, { flakes: 0, snow: 0, minChill: 0, swings: 1 })).toBe(true);
     expect(goalMet(s7, { flakes: 0, snow: 0, minChill: 0 }, true)).toBe(true);
     expect(goalMet(levelDef(1) as LevelDef, { flakes: 0, snow: 0, minChill: 0 })).toBe(true);
+  });
+});
+
+describe('Controls v3: the retired control concepts (§5.3)', () => {
+  const RETIRED = ['dazzle', 'slippery', 'clockwork', 'gusts', 'heavy'];
+
+  it('no level carries a retired concept, and 46 levels changed: the five teaching slots and every draw that held one', () => {
+    for (const r of RETIRED) expect(Object.keys(CONCEPTS)).not.toContain(r);
+    for (const l of CAMPAIGN_LEVELS) for (const c of l.concepts) expect(RETIRED).not.toContain(c);
+    const changed = CAMPAIGN_LEVELS.filter((l) => retiredLevel(l.id)).map((l) => l.id);
+    // The spec's table: dazzle, slippery, clockwork, gusts and heavy's levels.
+    const table = [
+      [16, 123, 130, 139, 144, 145, 177],
+      [30, 81, 83, 85, 87, 89, 90, 161, 162, 164, 167],
+      [31, 54, 92, 96, 99, 100, 114],
+      [32, 71, 72, 73, 74, 75, 76, 78, 79, 80, 93, 163, 169, 170],
+      [29, 97, 98, 103, 112, 165, 168],
+    ].flat();
+    expect(changed).toEqual([...table].sort((a, b) => a - b));
+    expect(changed).toHaveLength(46);
+  });
+
+  it('substitutes each retired draw with the first of its list that fits, in the level order; none fitting drops the slot', () => {
+    const at = (id: number, drawn: Parameters<typeof substitute>[1]): ConceptId[] => substitute(id, drawn, CHAPTERS[(levelDef(id) as LevelDef).chapter - 1]!);
+    // dazzle: dense, lowland, sparse (L123).
+    expect(at(123, ['blind', 'dazzle'])).toEqual(['blind', 'dense']);
+    // slippery: sprint, sparse, dense (L161; with sprint drawn already, the next one).
+    expect(at(161, ['fleet', 'slippery'])).toEqual(['fleet', 'sprint']);
+    expect(at(161, ['sprint', 'slippery'])).toEqual(['sprint', 'sparse']);
+    // clockwork: sparse, dense, lowland (L54, L92: the substitute takes the retired id's place).
+    expect(at(54, ['market', 'gate', 'clockwork'])).toEqual(['market', 'gate', 'sparse']);
+    expect(at(92, ['clockwork', 'ration'])).toEqual(['sparse', 'ration']);
+    // gusts: fleet, breezy, sparse, dense (L75; L72 has fleet already and breezy and sparse do not fit).
+    expect(at(75, ['gusts', 'stroll'])).toEqual(['fleet', 'stroll']);
+    expect(at(72, ['fleet', 'gusts'])).toEqual(['fleet', 'dense']);
+    // heavy: sprint, ration, sparse (L112; L103's hardy does not take sprint).
+    expect(at(112, ['lowland', 'heavy'])).toEqual(['lowland', 'sprint']);
+    expect(at(103, ['hardy', 'heavy'])).toEqual(['hardy', 'ration']);
+    // None fits: the slot drops (L169: fleet and dense drawn, breezy and sparse conflict).
+    expect(at(169, ['gusts', 'fleet', 'dense'])).toEqual(['fleet', 'dense']);
+    expect((levelDef(169) as LevelDef).concepts).toEqual(['fleet', 'dense']);
+    // A draw without a retired id is the level as before.
+    expect(at(41, ['flakes', 'cloud'])).toEqual(['flakes', 'cloud']);
+  });
+
+  it('SUB_OVERRIDE holds at most 8 substituted levels, each moved to a later substitute or null', () => {
+    const ids = Object.keys(SUB_OVERRIDE).map(Number);
+    expect(ids.length).toBeLessThanOrEqual(8);
+    for (const id of ids) {
+      expect(id).toBeGreaterThan(40);
+      expect(retiredLevel(id)).toBe(true);
+      const o = SUB_OVERRIDE[id];
+      if (o !== null) expect((levelDef(id) as LevelDef).concepts).toContain(o);
+    }
+  });
+
+  it('renames the three levels titled for a retired rule', () => {
+    expect([85, 94, 165].map((id) => (levelDef(id) as LevelDef).name)).toEqual(['Pine Hollow', 'Stop Clock', 'Cloudburst Pass']);
+    const names = CAMPAIGN_LEVELS.map((l) => l.name.toLowerCase());
+    for (const w of ['slippery', 'slick', 'heavy hands', 'mirror sun']) expect(names.some((n) => n.includes(w)), w).toBe(false);
   });
 });
 
@@ -339,9 +414,6 @@ describe('concept tunes reach dayParams', () => {
     expect(at('thaw').regen).toBeCloseTo(TUNING.nubs.regen * 0.45, 9);
     expect(at('frosty').regen).toBe(TUNING.nubs.regen * 2.5);
     expect(at('ration').maxChill).toBe(50);
-    expect(at('heavy').sunFollow).toBe(220);
-    expect(at('heavy').sunFriction).toBe(0);
-    expect(at('slippery').sunFriction).toBeCloseTo(0.9941836, 6);
     expect(at('moonlit').epsNoon).toBe(30);
     expect(at('moonlit').drainMul).toBe(0.7);
     expect(at('boss').epsNoon).toBe(80);
@@ -575,78 +647,6 @@ describe('campaign runs', () => {
     expect(lockedTicks).toBe(72);
     expect(s.sun.locked).toBe(false);
     expect(s.sun.theta).not.toBe(theta);
-  });
-
-  it('gusts: a 2 s gust every 8 s turns the sun at 25°/s in a seeded direction; sun.gust tells the HUD', () => {
-    expect(sunGustAt(479)).toBe(-1);
-    expect(sunGustAt(480)).toBe(1);
-    expect(sunGustAt(599)).toBe(1);
-    expect(sunGustAt(600)).toBe(-1);
-    expect(sunGustAt(960)).toBe(2);
-    const s = started(32);
-    shadeAll(s);
-    while (s.dayTick < 479) step(s, NO_INPUT);
-    expect(s.phase).toBe('day');
-    expect(s.sun.gust).toBe(0);
-    const before = s.sun.theta;
-    let dir = 0;
-    let n = 0;
-    while (s.dayTick < 600 && s.phase === 'day') {
-      step(s, NO_INPUT);
-      if (s.sun.gust !== 0) {
-        n++;
-        if (dir === 0) dir = s.sun.gust;
-        expect(s.sun.gust).toBe(dir);
-      }
-    }
-    expect(n).toBe(120);
-    expect(Math.abs(angleDiff(s.sun.theta, before))).toBeCloseTo(50, 6);
-    expect(Math.sign(angleDiff(s.sun.theta, before))).toBe(dir);
-    // Deterministic per seed, and the other gusts can blow the other way.
-    const dirs = new Set<number>();
-    const t = started(32);
-    shadeAll(t);
-    while (t.dayTick < 2 * 480 + 10 && t.phase === 'day') {
-      step(t, NO_INPUT);
-      if (t.sun.gust !== 0) dirs.add(t.sun.gust);
-    }
-    expect(dirs.size).toBeGreaterThanOrEqual(1);
-    const again = started(32);
-    shadeAll(again);
-    while (again.dayTick < 600 && again.phase === 'day') step(again, NO_INPUT);
-    expect(again.sun.theta).toBe(s.sun.theta);
-  });
-
-  it('clockwork: a release snaps the target to the nearest 30° without coasting', () => {
-    const s = started(31);
-    step(s, f({ down: true, downEdge: true, dTheta: 20 }));
-    step(s, f({ upEdge: true, dTheta: 3, release: 900 }));
-    expect(s.sun.omegaRel).toBe(0);
-    for (let i = 0; i < 60 && s.sun.mode !== 'idle'; i++) step(s, NO_INPUT);
-    expect(s.sun.mode).toBe('idle');
-    expect(Math.abs(angleDiff(s.sun.theta, Math.round(s.sun.theta / 30) * 30))).toBeLessThan(1e-9);
-  });
-
-  it('heavy: the sun follows at 220°/s and never coasts; slippery: a flick coasts far', () => {
-    const heavy = started(29);
-    step(heavy, f({ down: true, downEdge: true, dTheta: 90 }));
-    expect(heavy.sun.dTheta).toBeCloseTo(220 / 60, 9);
-    step(heavy, f({ upEdge: true, release: 1000 }));
-    expect(heavy.sun.omegaRel).toBe(0);
-    for (let i = 0; i < 120 && heavy.sun.mode !== 'idle'; i++) step(heavy, NO_INPUT);
-    expect(heavy.sun.mode).toBe('idle');
-
-    const slip = started(30);
-    shadeAll(slip);
-    step(slip, f({ down: true, downEdge: true }));
-    step(slip, f({ upEdge: true, release: 1000 }));
-    let travel = 0;
-    for (let i = 0; i < 3000 && slip.sun.mode !== 'idle' && slip.phase === 'day'; i++) {
-      step(slip, NO_INPUT);
-      travel += slip.sun.dTheta;
-    }
-    // At e^(−0.35/60) per tick a 360°/s flick coasts well over three full turns (plain: ≈ 103°).
-    expect(Math.abs(travel)).toBeGreaterThan(900);
   });
 
   it('moonlit: a moon sun with noon elevation 30° and 0.7× the drain; s.moonlit for the renderer', () => {
