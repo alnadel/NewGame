@@ -437,6 +437,9 @@ vane and the finger's state into the sim's verbs.
   unread). URL: `?aim=` and `?autoact=1` (debug runs), `?hand=left|right`.
 - **Copy**: the controls' words are `CONTROL_TEXT` (config/controls.ts); the intro cards, tips and
   the Pause card's key line speak of one drag and one button.
+- **Bundle** (§12.3): the UI-owned files add 2,166 B to build:single over C0b (the cut list's Swing
+  Boost and vane, calm and settle tips are out); reading `CONTROL_TEXT` and `aimRadius` brings in
+  1,026 B of config and core code that C0b's bundle left out.
 
 ## Test hook (`?test=1`)
 
