@@ -295,9 +295,8 @@ test('T4: a 40 px drag sets the vane to 1, the wind rises in gusts of 8 × costM
   expect([s.drive.vane, s.drive.refuseNote, s.drive.refuse]).toEqual([0, 0, 0]);
 });
 
-// CORE's driver adds the CALM note (a = 2: the soft cue "The wind is calm") and the touch bots.
-test.describe('needs controls3/core', () => {
-  test.fixme(true, 'the C0c driver writes no CALM note and has no touch bots yet (docs/CONTROLS_V3.md §11.9)');
+// CORE's driver: the CALM note (a = 2: the soft cue "The wind is calm") and the touch bots.
+test.describe('the CALM note and the touch bots', () => {
   test('T4: a press on a calm vane says "The wind is calm"', async ({ page }) => {
     await playLeg(page, 4, 1, 1);
     await pressButton(page, 1);

@@ -3,7 +3,7 @@
 // pointer wins; the button snaps on a long press and refuses a press it cannot take with its reason
 // (the repeat carries +16); a drag that starts on the button turns the sun and acts nothing; ↑ and ↓
 // snap; ?hand=left puts the button left; the 16 px side zone; the first-run lesson has no button and
-// nothing moves the sun. Aim help's cases wait for CORE's magnet.
+// nothing moves the sun; aim help settles a lit lift into lasting shade, never in the re-grip grace.
 import { expect, test, type Page } from '@playwright/test';
 import {
   acts,
@@ -191,26 +191,64 @@ test('the first-run lesson (a fresh save) shows no button, and nothing moves the
   expect(Math.abs(angleDiff(t.theta, th0))).toBeLessThan(0.01);
 });
 
-// Aim help (§4): CORE's magnet lands with controls3/core (C0c's settleTarget is NaN and the driver
-// plans no glides, §11.9); these run once it is merged.
-test.describe('aim help (needs the magnet from controls3/core)', () => {
-  test.fixme(true, 'the C0c driver has no magnet yet (docs/CONTROLS_V3.md §11.9)');
+// Aim help (§4): CORE's magnet.
+test.describe('aim help', () => {
   test('?aim=strong: a lift 8° outside a lasting arc settles inside it within 0.5 s, nothing moving in the first 200 ms', async ({ page }) => {
     await playEndless(page, '&aim=strong');
-    const g = await page.evaluate(() => window.__SHADY_TEST__!.testGuide());
-    expect(g.lasting.length).toBeGreaterThan(0);
     const vw = await viewWidth(page);
     const p = await worldPoint(page);
-    const th0 = (await state(page)).theta;
-    // Aim at 8° past the arc's first bin, away from it.
-    const edge = g.lasting[0]! - 0.5;
-    const target = edge - 8;
-    const cdp = await touchScreen(page);
-    await playTouch(cdp, [{ id: 1, pts: strokePts(p.x, p.y, (-angleDiff(target, th0) / 360) * vw, 0, 300) }]);
-    const lifted = (await state(page)).theta;
-    await page.waitForTimeout(200);
-    expect(Math.abs(angleDiff((await state(page)).theta, lifted))).toBeLessThan(0.5);
-    await expect.poll(async () => g.lasting.includes(Math.round((await state(page)).theta) % 360), { timeout: 1_000 }).toBe(true);
+    const bin = (t: number): number => ((Math.round(t) % 360) + 360) % 360;
+    // The morning's arcs drift and break up within a second as Nubs walks, so the sim stands still while
+    // the target is chosen and the stroke is played, and the case starts again from where the sun is
+    // when the world moved under the lift (an arc gone, or shade spread over it).
+    for (let attempt = 1; ; attempt++) {
+      await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0));
+      await page.waitForTimeout(100);
+      const g = await page.evaluate(() => window.__SHADY_TEST__!.testGuide());
+      const th0 = (await state(page)).theta;
+      // Stop 8° short of the nearest lasting arc edge, moving toward it, on a lit bin: the glide then
+      // carries on the stroke's way (one back against it waits againstTicks, 0.5 s, by design: §4.2),
+      // and a lit sun is rescued at once (CORE's cut 2 left no rescue for shade that is ending: §16).
+      let d = NaN;
+      for (const b of g.lasting) {
+        for (const dir of [1, -1]) {
+          if (g.lasting.includes((b - dir + 360) % 360)) continue;
+          const dd = angleDiff(b - dir * 8.5, th0);
+          if (dd * dir >= 5 && !g.now.includes(bin(b - dir * 8.5)) && !(Math.abs(dd) >= Math.abs(d))) d = dd;
+        }
+      }
+      expect(Number.isFinite(d)).toBe(true);
+      const dx = (-d / 360) * vw;
+      const cdp = await touchScreen(page);
+      await playTouch(cdp, [{ id: 1, pts: strokePts(p.x - dx / 2, p.y, dx, 0, 300) }]);
+      // An eighth of the speed from the lift on, so the hook's polling stays well inside the re-grip
+      // grace (15 ticks, 2 s of real time here): the lift's own chase ends in about 5 ticks, then 300 ms
+      // of real time is about 2 more.
+      await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0.125));
+      await expect
+        .poll(async () => { const s = await state(page); return s.sunMode === 'idle' && Math.abs(angleDiff(s.theta, th0)) > Math.abs(d) / 2; }, { timeout: 5_000, intervals: [16] })
+        .toBe(true);
+      const lifted = (await state(page)).theta;
+      const at = await page.evaluate(() => window.__SHADY_TEST__!.testGuide());
+      const ready = !at.now.includes(bin(lifted)) && at.lasting.some((b) => Math.abs(angleDiff(b, lifted)) <= 12);
+      if (!ready && attempt < 4) continue;
+      expect(ready).toBe(true);
+      expect(Math.abs(angleDiff(lifted, th0 + d))).toBeLessThan(1);
+      await page.waitForTimeout(300);
+      expect(Math.abs(angleDiff((await state(page)).theta, lifted))).toBeLessThan(0.5);
+      // Then it glides into the shade (8.5° to the arc's edge, plus the inset).
+      await expect
+        .poll(
+          async () => {
+            const th = (await state(page)).theta;
+            const now = await page.evaluate(() => window.__SHADY_TEST__!.testGuide());
+            return Math.abs(angleDiff(th, lifted)) >= 4 && now.lasting.includes(bin(th));
+          },
+          { timeout: 8_000, intervals: [50] },
+        )
+        .toBe(true);
+      break;
+    }
   });
   test('no glide 6 s after the last drag', async ({ page }) => {
     await playEndless(page, '&aim=strong');
