@@ -195,7 +195,7 @@ export function missionHint(def: MissionDef): string | null {
     case 'blooms-2':
       return 'Shine the sun from a bud’s gold mark (gold on the dial) until it blooms.';
     case 'snaps-2':
-      return 'Grow sunflowers from cool shade to fill the frost; when a pip glows, swipe down.';
+      return 'Grow sunflowers from cool shade to fill the frost; when a pip glows, tap the frost button.';
     case 'deep-8':
       return 'Deep shade: Nubs under two shadows at once (the dial’s ring turns dark).';
     default:

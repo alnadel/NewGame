@@ -3,9 +3,9 @@
 // the COMEBACK.
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
-import { createBot, createRun, levelDef, step, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { createBot, createRun, levelDef, NOTE_CALM, NOTE_NOTCH, NOTE_REFUSE, NOTE_SETTLE, REFUSE_FULL, REFUSE_NOTHING, step, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { createMoments, ELEMENT_TIPS, LEVEL_TIPS, MECH_TIPS, MIXER_TIPS, RELAY_TIPS, withDare } from '../../src/game/moments.ts';
+import { createMoments, ELEMENT_TIPS, LEVEL_TIPS, MECH_TIPS, MIXER_TIPS, RELAY_TIPS, SETTLE_TIP, withDare } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToast, endToasts, holdToasts, resetBanners, showToast, updateBanners } from '../../src/render/banners.ts';
@@ -431,6 +431,61 @@ describe('RunMoments', () => {
     expect(t4.seen).toEqual(expect.arrayContaining([RELAY_TIPS[1]![1], ELEMENT_TIPS.gust[0]![1], ELEMENT_TIPS.gust[1]![1]]));
     // A passed Trial shows none.
     expect(playTips(1001, 2, true).seen).toEqual([]);
+  });
+
+  it("Controls v3: the driver's triggers: due, the first refusal of each reason, a gale notch, an auto-calm (docs/CONTROLS_V3.md §6.2)", () => {
+    // Ember's leg of a fresh T1: the first due prompt, ahead of other toasts.
+    const t1 = playTips(1001, 1);
+    t1.s.tick += 6;
+    t1.m.update(t1.s, 1);
+    t1.drain();
+    expect(t1.seen).toContain(ELEMENT_TIPS.ember[4]![1]);
+    // Each refusal reason once, in its chip's words (a repeat of the same reason adds nothing).
+    for (const [a, text] of [[REFUSE_NOTHING, 'Nothing to burn yet'], [REFUSE_NOTHING + 16, 'Nothing to burn yet'], [REFUSE_FULL, 'Two walls ready']] as const) {
+      expect(t1.m.onDrive(NOTE_REFUSE, a, t1.s, text)).toBe(false);
+    }
+    t1.drain();
+    expect(t1.seen.filter((x) => x === 'Nothing to burn yet' || x === 'Two walls ready')).toEqual(['Nothing to burn yet', 'Two walls ready']);
+    // Gust's leg of T4: the first gale notch and the first auto-calm (not a breeze, nor a calm press).
+    const t4 = playTips(1004, 1);
+    expect(t4.s.nubs.hero).toBe('gust');
+    t4.m.onDrive(NOTE_NOTCH, 1, t4.s, '');
+    t4.m.onDrive(NOTE_CALM, 0, t4.s, '');
+    t4.drain();
+    expect(t4.seen).not.toContain(ELEMENT_TIPS.gust[3]![1]);
+    expect(t4.seen).not.toContain(ELEMENT_TIPS.gust[4]![1]);
+    t4.m.onDrive(NOTE_NOTCH, -2, t4.s, '');
+    t4.m.onDrive(NOTE_CALM, 1, t4.s, '');
+    t4.drain();
+    expect(t4.seen).toEqual(expect.arrayContaining([ELEMENT_TIPS.gust[3]![1], ELEMENT_TIPS.gust[4]![1]]));
+    // A passed Trial gets no refusal tips.
+    const done = playTips(1001, 1, true);
+    done.m.onDrive(NOTE_REFUSE, REFUSE_NOTHING, done.s, 'Nothing to burn yet');
+    done.drain();
+    expect(done.seen).toEqual([]);
+  });
+
+  it("Controls v3: Nubs' settle tip shows at his first rescue capture outside the lesson, once per profile (§6.1)", () => {
+    const save = defaults(0);
+    save.stats.runs = 40;
+    const b = createBanners();
+    const m = createMoments(b, sinks().sinks);
+    const s = dayRun();
+    m.begin(save, null, true);
+    // A track re-inset (a = 0) or a lesson run says nothing; a rescue capture does, once.
+    expect(m.onDrive(NOTE_SETTLE, 0, s, '')).toBe(false);
+    s.lessonOn = true;
+    expect(m.onDrive(NOTE_SETTLE, 1, s, '')).toBe(false);
+    s.lessonOn = false;
+    expect(m.onDrive(NOTE_SETTLE, 1, s, '')).toBe(true);
+    expect(b.toasts.map((t) => t.text)).toEqual([SETTLE_TIP]);
+    expect(m.onDrive(NOTE_SETTLE, 1, s, '')).toBe(false);
+    // Once the profile has seen it, never again; an experienced player's run shows no refusal tips.
+    save.flags.settleTip = true;
+    m.begin(save, null, true);
+    expect(m.onDrive(NOTE_SETTLE, 1, s, '')).toBe(false);
+    m.onDrive(NOTE_REFUSE, 1, s, 'Cold Snap charging · 40%');
+    expect(b.toasts.map((t) => t.text)).toEqual([SETTLE_TIP]);
   });
 
 });

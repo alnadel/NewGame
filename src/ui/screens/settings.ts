@@ -18,6 +18,8 @@ import type { ScreenId } from '../types.ts';
 import { button, hide, menuHeader, section, segmented, setButtonLabel, slider, toggleSwitch } from '../widgets.ts';
 
 const percent = (v: number): string => `${Math.round(v)}%`;
+/** Segmented options whose values are their labels in lower case. */
+const choices = <T extends string>(...labels: T[]): { value: Lowercase<T>; label: T }[] => labels.map((label) => ({ value: label.toLowerCase() as Lowercase<T>, label }));
 
 export const KEYS_LINE = '← → or A D: turn the sun · Shift: fine turns · ↑ or W: the button · ↓ or S: Cold Snap · Space/Enter: play the level, or retry · P or Esc: pause';
 export const MID_RUN_BACKUP_NOTE = 'Backup, restore and reset are in Settings on the Title screen.';
@@ -56,11 +58,9 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const sensitivity = slider({ label: 'Drag sensitivity', min: 0.6, max: 1.5, step: 0.05, format: (v) => `${v.toFixed(2)}×`,
     onInput: (v) => change('sensitivity', Math.round(v * 100) / 100) });
   const invert = toggleSwitch(ctx, 'Invert drag direction', (on) => change('invert', on));
-  const aim = segmented(ctx, 'Aim help', [
-    { value: 'standard', label: 'Standard' }, { value: 'strong', label: 'Strong' }, { value: 'light', label: 'Light' }, { value: 'off', label: 'Off' },
-  ] as const, (v) => change('aim', v));
+  const aim = segmented(ctx, 'Aim help', choices('Standard', 'Strong', 'Light', 'Off'), (v) => change('aim', v));
   const boost = toggleSwitch(ctx, 'Swing Boost', (on) => change('swingBoost', on));
-  const hand = segmented(ctx, 'Button side', [{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }] as const, (v) => change('hand', v));
+  const hand = segmented(ctx, 'Button side', choices('Left', 'Right'), (v) => change('hand', v));
   const keys = h('div', 'set-row set-row--keys',
     h('span', { class: 'set-ic', deco: true }, icon('keyboard')),
     h('span', 'set-text', h('span', 'set-label', 'Keys'), h('span', 'set-hint set-keys',
@@ -99,14 +99,10 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const unlockAll = toggleSwitch(ctx, 'Unlock all levels (testing)', (on) => change('unlockAll', on));
 
   // Accessibility
-  const motion = segmented(ctx, 'Reduced motion', [
-    { value: 'auto', label: 'Auto' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' },
-  ] as const, (v) => change('reducedMotion', v));
+  const motion = segmented(ctx, 'Reduced motion', choices('Auto', 'On', 'Off'), (v) => change('reducedMotion', v));
   const contrast = toggleSwitch(ctx, 'High-contrast shadows', (on) => change('highContrast', on));
   const autoAct = toggleSwitch(ctx, 'Auto actions', (on) => change('autoAct', on));
-  const guide = segmented(ctx, 'Shade guide', [
-    { value: 'auto', label: 'Auto' }, { value: 'always', label: 'Always' }, { value: 'off', label: 'Off' },
-  ] as const, (v) => change('guide', v));
+  const guide = segmented(ctx, 'Shade guide', choices('Auto', 'Always', 'Off'), (v) => change('guide', v));
 
   // App: the browser's install prompt, caught by platform/pwa (Chromium/Android only).
   const installBtn = button(ctx, {

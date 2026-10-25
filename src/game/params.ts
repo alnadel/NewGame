@@ -91,8 +91,11 @@ export function parseParams(search: string, today: string = localDate()): Params
   const plan = q.get('plan');
   const level = num('level');
   const trial = num('trial');
-  const aim = q.get('aim');
-  const hand = q.get('hand');
+  /** The value of `k` when it is one of `values`, else null. */
+  const oneOf = <T extends string>(k: string, values: readonly T[]): T | null => {
+    const v = q.get(k) as T;
+    return values.includes(v) ? v : null;
+  };
   const boost = q.get('boost');
   const tn = trial !== null && trial >= 1 && trial <= TRIAL_COUNT ? TRIAL_BASE + Math.floor(trial) : null;
   let rules: { -readonly [K in keyof V16Rules]?: boolean } | null = null;
@@ -121,9 +124,9 @@ export function parseParams(search: string, today: string = localDate()): Params
     level: tn ?? (level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null),
     elfix: import.meta.env.MODE !== 'single' && q.get('elfix') === '1',
     rules,
-    aim: aim === 'standard' || aim === 'strong' || aim === 'light' || aim === 'off' ? aim : null,
-    hand: hand === 'left' || hand === 'right' ? hand : null,
-    boost: boost === '1' ? true : boost === '0' ? false : null,
+    aim: oneOf('aim', ['standard', 'strong', 'light', 'off']),
+    hand: oneOf('hand', ['left', 'right']),
+    boost: boost === null ? null : boost === '1',
     autoAct: q.get('autoact') === '1' ? true : null,
   };
 }

@@ -442,6 +442,22 @@ describe('migrate', () => {
     expect(sanitizeSettings({ aim: 'light', swingBoost: true, hand: 'left', autoAct: true })).toMatchObject({ aim: 'light', swingBoost: true, hand: 'left', autoAct: true });
     expect(sanitizeSettings({ aim: 'max', swingBoost: 1, hand: 'up', autoAct: 'yes' })).toMatchObject({ aim: 'standard', swingBoost: false, hand: 'right', autoAct: false });
   });
+
+  it("Controls v3's teaching flags (snapTeach, settleTip) default off, survive migrate and only turn on in a merge (§6.1)", () => {
+    const base = defaults(NOW);
+    expect([base.flags.snapTeach, base.flags.settleTip]).toEqual([false, false]);
+    const old = JSON.parse(JSON.stringify(base)) as { flags: Record<string, unknown> };
+    delete old.flags.snapTeach;
+    delete old.flags.settleTip;
+    const r = migrate(JSON.stringify(old), NOW);
+    expect(r.status === 'ok' && [r.save.flags.snapTeach, r.save.flags.settleTip]).toEqual([false, false]);
+    const a: Save = { ...base, flags: { ...base.flags, snapTeach: true } };
+    const b: Save = { ...base, flags: { ...base.flags, settleTip: true } };
+    const m = mergeSaves(base, a, b);
+    expect([m.flags.snapTeach, m.flags.settleTip]).toEqual([true, true]);
+    const kept = migrate(JSON.stringify(m), NOW);
+    expect(kept.status === 'ok' && [kept.save.flags.snapTeach, kept.save.flags.settleTip]).toEqual([true, true]);
+  });
 });
 
 describe('storage adapter', () => {

@@ -36,6 +36,7 @@ import {
   levelProgress,
   needOf,
   nextTagTicks,
+  NOTE_PRESS,
   NOTE_REFUSE,
   PLAN_START_DATE,
   prepareRun,
@@ -316,7 +317,7 @@ export class Session {
   readonly fx: Fx;
   /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
   readonly mech = createMechanics();
-  /** Cold Snaps seen this session (the "swipe down" cue stops after two). */
+  /** Cold Snaps seen this session (the "Full! Tap the frost button." cue stops after two). */
   private snapsSeen = 0;
   /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */
   private readonly moments: RunMoments;
@@ -1455,14 +1456,28 @@ export class Session {
     this.taught = 0;
     this.teachMode = 'off';
     this.meltWarn = false;
-    this.runRung = this.rungOf.get(run) ?? -1;
-    this.driver.begin(run, (this.driveOpts = this.optsFor(run)));
+    const rung = (this.runRung = this.rungOf.get(run) ?? -1);
     this.runWarmup = this.warmups.has(run);
     this.runLevel = this.levelOf.get(run) ?? null;
     this.wonAt = -1;
     this.won = null;
     const store = this.d.store;
     const save = store.get();
+    // Controls v3 (§11.6): the driver's options for this run: aim help for the setting and the run
+    // (blind levels 0, fog levels now-only), Auto Snap on the comfort rungs up to
+    // TUNING.drive.autoSnap.rungs, Auto actions. A settings change applies from the next run.
+    const p = this.params;
+    const st = save.settings;
+    const aim = aimRadius(p.aim ?? st.aim, { mode: run.cfg.mode, level: run.cfg.level ?? null, rung, trial: run.trial !== null, blind: run.mods.has('blind') });
+    this.driveOpts = {
+      aimDeg: aim.deg,
+      track: aim.track,
+      nowOnly: run.mods.has('fog'),
+      autoSnap: rung >= 0 && rung <= TUNING.drive.autoSnap.rungs,
+      autoAct: p.autoAct ?? st.autoAct,
+      reducedMotion: run.cfg.reducedMotion,
+    };
+    this.driver.begin(run, this.driveOpts);
     this.dailyTry = null;
     this.dailyCounted = false;
     // Eligibility is decided when the run begins (the Title may have held it since yesterday).
@@ -1500,10 +1515,9 @@ export class Session {
   private ghost: GhostMode = 'off';
   /** The intro Drip has slid (the ghost hand has taught the steer). */
   private verbDone = false;
-  /** §6.1 teaching: the moments taught this run (bits: 1 the Cold Snap, 2 Ember or Sprout, 4 Gust), the ghost of the one on ('off' none), the presses before it and when its slow time ends (this.time, s). */
+  /** §6.1 teaching: the moments taught this run (bits: 1 the Cold Snap, 2 Ember or Sprout, 4 Gust), the ghost of the one on ('off' none) and when its slow time ends (this.time, s). */
   private taught = 0;
   private teachMode: GhostMode = 'off';
-  private teachActs = 0;
   private teachEnd = 0;
 
   private setGhost(mode: GhostMode, at = false): void {
@@ -1539,23 +1553,21 @@ export class Session {
   /**
    * §6.1 teaching by doing: the Cold Snap's first full meter (on its level, or a profile's first), and
    * on an intro Trial Ember's or Sprout's first pick and Gust's first weather in reach. The ghost hand
-   * plays the act (a press on the button; a 40 px vane drag) until the player does it, the first
-   * TEACH_S real seconds in slow time (updateHints). Returns the ghost mode ('off': none).
+   * plays the act (a press on the button; a 40 px vane drag) until the player does it (a press the
+   * driver takes, onNote; a vane notch), the first TEACH_S real seconds in slow time (updateHints).
+   * Returns the ghost mode ('off': none).
    */
   private teach(): GhostMode {
     const s = this.s;
     const v = this.renderIn.drive;
     const h = s.nubs.hero;
-    if (this.teachMode === 'off') {
-      const snap = v.act === 'snap';
-      const bit = snap ? 1 : h === 'gust' ? 4 : 2;
-      const due = snap
-        ? v.state === 1 && (this.runLevel?.introduces === 'snap' || !this.d.store.get().flags.snapTeach)
-        : s.trial?.intro === h && (h === 'gust' ? this.ahead('rain fog') !== undefined : v.pick >= 0);
-      if (this.taught & bit || !due) return 'off';
+    const snap = v.act === 'snap';
+    const bit = snap ? 1 : h === 'gust' ? 4 : 2;
+    // A moment holds while its act can be done: the snap ready, a pick, weather ahead under a calm vane.
+    if (!(snap ? v.state === 1 : h === 'gust' ? !v.vane && this.ahead('rain fog') : v.pick >= 0)) this.teachMode = 'off';
+    else if (!(this.taught & bit) && (snap ? this.runLevel?.introduces === 'snap' || !this.d.store.get().flags.snapTeach : s.trial?.intro === h)) {
       this.taught |= bit;
       this.teachMode = h === 'gust' ? 'vane' : 'press';
-      this.teachActs = this.input.acts;
       this.teachEnd = this.time + TEACH_S;
       if (snap) {
         this.cue('snap-ready');
@@ -1566,8 +1578,6 @@ export class Session {
         }
       }
     }
-    // Taught: the first press (or vane notch) since.
-    if (this.teachMode === 'vane' ? v.vane !== 0 : this.input.acts > this.teachActs) this.teachMode = 'off';
     return this.teachMode;
   }
 
@@ -2591,6 +2601,8 @@ export class Session {
    * the calm cues) and its tips; Nubs' first rescue capture's tip marks the profile.
    */
   private onNote(code: number, a: number): void {
+    // A press the driver takes ends a teaching moment (§6.1).
+    if (code === NOTE_PRESS) this.teachMode = 'off';
     const t = noteText(code, a, this.renderIn.drive);
     if (t) this.say(t);
     if (this.moments.onDrive(code, a, this.s, t) && !this.debugRuns) {
@@ -2612,27 +2624,6 @@ export class Session {
   private assisted(st: Settings): boolean {
     const p = this.params;
     return (p.guide ?? st.guide) === 'always' || (p.aim ?? st.aim) === 'strong' || (p.autoAct ?? st.autoAct);
-  }
-
-  /**
-   * Controls v3 (§11.6): the driver's options for `run`: aim help for the setting and the run (blind
-   * levels 0, fog levels now-only), Auto Snap on Endless comfort rungs up to TUNING.drive.autoSnap.rungs,
-   * Auto actions and reduced motion. Set at every beginRun; a settings change applies from the next run.
-   */
-  private optsFor(run: SimState): DriveOpts {
-    const st = this.d.store.get().settings;
-    const p = this.params;
-    const m = run.cfg.mode;
-    const rung = this.runRung;
-    const a = aimRadius(p.aim ?? st.aim, { mode: m, level: run.cfg.level ?? null, rung, trial: run.trial !== null, blind: run.mods.has('blind') });
-    return {
-      aimDeg: a.deg,
-      track: a.track,
-      nowOnly: run.mods.has('fog'),
-      autoSnap: m === 'endless' && rung >= 0 && rung <= TUNING.drive.autoSnap.rungs,
-      autoAct: p.autoAct ?? st.autoAct,
-      reducedMotion: this.reducedMotion(),
-    };
   }
 
   /** The Pause card's view of the run in progress (UiCallbacks.runStatus; also the test hook's). */
