@@ -183,11 +183,11 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
       return 'flake';
     case 'sizzle':
       return 'glare';
-    case 'gust':
-      return 'detent';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
-      // the rest have no haptic. 'best' and 'ui' are played by the UI directly.
+      // the rest have no haptic. 'best' and 'ui' are played by the UI directly. Controls v3 (§7.3):
+      // a 'gust' buzzes nothing, since the vane's governor gusts with no finger down (the vane's
+      // notch has its own pattern).
       return null;
   }
 }

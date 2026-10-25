@@ -75,7 +75,6 @@ export class SfxRouter {
   private duckLeft = 0;
   private flowers = 0;
   /** Campaign view state seen last frame (edges become cues). */
-  private gust = 0;
   private locked = false;
   private eclipse = 0;
   private progress = -1;
@@ -139,26 +138,22 @@ export class SfxRouter {
     this.duckLeft = 0;
     this.flowers = 0;
     this.progress = -1;
-    this.gust = 0;
     this.locked = false;
     this.eclipse = 0;
     this.wet = false;
   }
 
-  /** Concept signatures from the view: a gust starting, the lock shutting or opening, an eclipse, the final stretch. */
+  /** Concept signatures from the view: the lock shutting or opening, an eclipse, the final stretch. */
   private edges(v: Readonly<AudioView>): void {
-    const gust = v.gust ?? 0;
     const locked = v.locked ?? false;
     const eclipse = v.eclipse ?? 0;
     const progress = v.progress ?? -1;
     if (v.screen === 'play' && (v.phase === 'day' || v.phase === 'night')) {
-      if (gust !== 0 && this.gust === 0 && this.gusts.tryAcquire(this.clockMs())) this.cue('gust', { index: gust });
       // A Trial's sun hold is the TAG's own moment (its cue covers it): no lock cue there.
       if (locked !== this.locked && v.health === undefined) this.cue('lock', { index: locked ? 0 : 1 });
       if (eclipse > 0 && this.eclipse === 0) this.cue('eclipse', { day: v.day });
       if (progress >= FINAL_STRETCH && this.progress >= 0 && this.progress < FINAL_STRETCH) this.cue('finishNear', { day: v.day });
     }
-    this.gust = gust;
     this.locked = locked;
     this.eclipse = eclipse;
     this.progress = progress;
@@ -292,7 +287,9 @@ export class SfxRouter {
       case 'sizzle':
         return ev.hero === 'drip' ? this.cue('snapEnd', { day, level: 2 }) : this.cue('bell', { day, degree: 7 }, true);
       case 'gust':
-        return this.cue('gust', { index: ev.dir });
+        // Controls v3 (§3.5): the vane's governor gusts on its own, so its whoosh plays once a second at most.
+        if (this.gusts.tryAcquire(now)) this.cue('gust', { index: ev.dir });
+        return;
       case 'touch':
         // The rain's patter plays while the walker is under rain (update()).
         this.wet = (ev.bits & 2) !== 0;

@@ -22,8 +22,7 @@
 //
 // Campaign variant (v1.2, CAMPAIGN_PLAN §4; v1.4): the star pips show what the run has earned so far
 // (the goal, the flakes star, the cool run, which turns to a slashed grey star when lost; a pip pops
-// when it lights, and a ring drains round the third as Nubs spends the cool run's sun budget), and a
-// wind glyph rides the progress head during a gust.
+// when it lights, and a ring drains round the third as Nubs spends the cool run's sun budget).
 //
 // v1.5 frost meter (Cold Snap): an ice coin in the world rect's bottom-right corner, clear of the
 // edge and home-bar zones, shown on runs that fill it. Its ring fills ice-blue around a snowflake;
@@ -435,7 +434,7 @@ function fresh(c: Canvas2D, dpr: number): CanvasRenderingContext2D {
   return g;
 }
 
-/** The campaign row (renderer.ts CampaignView): the level, its progress, the goal pill and the gust. */
+/** The campaign row (renderer.ts CampaignView): the level, its progress and the goal pill. */
 export interface HudCampaign {
   id: number;
   /** 0..1 to the finish line. */
@@ -447,8 +446,8 @@ export interface HudCampaign {
   /** Marker positions (0..1) on the progress bar, −1 none. */
   markGate: number;
   markEclipse: number;
-  /** The gust turning the sun now (−1 clockwise, +1 counter-clockwise, 0 none). */
-  gust: number;
+  /** Retired with the Gusts concept (Controls v3 §5.3): read by nothing; the session stops writing it. */
+  gust?: number;
   /** The stars so far (game/campaign.ts starState bits: 1 goal met, 2 flakes star, 4 cool run lost). */
   stars: number;
   /** The cool run's sun budget left, 1..0 (a ring drains around the third pip as Nubs spends it). */
@@ -691,8 +690,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
   }
 
   // Ruler: the elapsed fill and the progress head (a moon at night is part of the layer). On a
-  // campaign level the ruler is the level's progress and the head always shows; a gust blows a wind
-  // glyph past it.
+  // campaign level the ruler is the level's progress and the head always shows.
   if (h.leftShown && h.rulerShown) {
     const x0 = h.rulerX0;
     const x1 = h.rulerX1;
@@ -743,21 +741,6 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
         g.arc(px, cy, HEAD_R * k + 2.5 * k, 0, TAU);
         g.stroke();
       }
-    }
-    if (c && c.gust !== 0) {
-      // The gust: a wind mark drifting past the head the way the sun is pushed (+1 CCW = leftward drag).
-      const dir = c.gust > 0 ? -1 : 1;
-      const drift = rm ? 4 * k : ((inp.time * 1.6) % 1) * 10 * k;
-      const wx = Math.min(x1 + 6 * k, Math.max(x0 - 6 * k, px + dir * (14 * k + drift)));
-      const wy = cy - 12 * k;
-      g.fillStyle = '#FFFFFF';
-      g.strokeStyle = INK;
-      g.lineWidth = 2 * k;
-      g.beginPath();
-      g.arc(wx, wy, 8.5 * k, 0, TAU);
-      g.fill();
-      g.stroke();
-      drawGlyph(g, 'gusts', wx, wy, 13 * k, undefined, dir < 0);
     }
     if (h.noonSparkle > 0) {
       const t = 1 - h.noonSparkle / 1.2;

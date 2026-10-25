@@ -49,8 +49,9 @@ export interface AudioView {
   chapter?: number;
   /** Progress to the finish line, 0..1 (levelProgress); −1 = no finish line. */
   progress?: number;
-  /** SimState.sun.gust ('gusts': ±1 while the wind turns the sun) and sun.locked ('lock'). */
+  /** Retired with the Gusts concept (Controls v3 §5.3): read by nothing; the session stops writing it. */
   gust?: number;
+  /** SimState.sun.locked ('lock'). */
   locked?: boolean;
   /** SimState.eclipse, 0..1. */
   eclipse?: number;
@@ -65,7 +66,7 @@ export interface AudioView {
 export function createAudioView(): AudioView {
   return {
     ...{ screen: 'title', phase: 'hold', day: 1, tDay: 0, dayLength: 50, eps: 6, epsNoon: 48, f: 0, glareW: 0, chill: 100, mult: 1, omega: 0 },
-    ...{ chapter: 0, progress: -1, gust: 0, locked: false, eclipse: 0, moonlit: false, fog: false },
+    ...{ chapter: 0, progress: -1, locked: false, eclipse: 0, moonlit: false, fog: false },
   };
 }
 

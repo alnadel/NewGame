@@ -13,8 +13,9 @@
 // CLEAN!, an element's fall. The snowman's steam, sweat, breath and frost stay his: an element's
 // states show in its art. v2 (docs/ELEMENTALS_V2.md §7.10): a fire's sparks (water for ice and
 // puddles), ash and steam puffs, Ember feeding ("+n"), a grey puff for a refused verb, BUMP!, a hold's
-// ring, BRIDGE!/TREE!, Drip's splash ("+30"), a hot stone's steam or sparks, a gust's wind streaks
-// (none under reduced motion); no zoom pulses while another element walks (§1.4).
+// ring, BRIDGE!/TREE!, Drip's splash ("+30"), a hot stone's steam or sparks; no zoom pulses while
+// another element walks (§1.4). Controls v3 (docs/CONTROLS_V3.md §7.2): the wind streaks are retired
+// with the Gusts concept (the vane's chevrons and the wind chip show the wind).
 
 import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
@@ -32,7 +33,6 @@ import {
   P_FLAKE_FLY,
   P_FROST,
   P_GLINT,
-  P_GUST,
   P_LEAF,
   P_PETAL,
   P_PUFF,
@@ -106,7 +106,6 @@ export class Fx {
   private wispAcc = 0;
   private leafAcc = 0;
   private glintAcc = 0;
-  private gustAcc = 0;
   /** Game seconds until HIGH NOON lands (the sim's noonBanner comes 2 s early), or 0. */
   private noonIn = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
@@ -478,10 +477,6 @@ export class Fx {
             this.puff(nx, ny, 0xffffff);
           }
           break;
-        case 'gust':
-          // Wind streaks across the view the way it blows (none under reduced motion).
-          if (!this.reducedMotion) this.streaks(ev.dir, 8);
-          break;
         default:
           break;
       }
@@ -707,18 +702,6 @@ export class Fx {
     } else {
       this.leafAcc = 0;
     }
-    // Gusts (v1.2): while a gust turns the sun, wind streaks fly across the screen the way it pushes
-    // (+1 counter-clockwise reads as a leftward drag), at most 14 at once.
-    const gust = s.sun.gust;
-    if (gust !== 0) {
-      this.gustAcc += dt * 16;
-      while (this.gustAcc >= 1) {
-        this.gustAcc -= 1;
-        this.streaks(gust > 0 ? -1 : 1, 1);
-      }
-    } else {
-      this.gustAcc = 0;
-    }
     // Dazzle: glints flash on lit ground around Nubs (at most 6 at once).
     if (fc === 'dazzle' && daylight) {
       this.glintAcc += dt * 5;
@@ -752,17 +735,6 @@ export class Fx {
   /** Eight puffs rising off (x, y): ash, steam or a splash. */
   private puff(x: number, y: number, color: number): void {
     for (let i = 0; i < 8; i++) spawn(this.sc.particles, P_PUFF, x + rnd(-12, 12), y + rnd(-4, 4), rnd(2, 12), rnd(-12, 12), rnd(-4, 4), rnd(14, 30), 0.8, 3, 8, color);
-  }
-
-  /** n wind streaks flying across the view the way `dir` blows (+1 east), at most 14 at once. */
-  private streaks(dir: number, n: number): void {
-    const p = this.sc.particles;
-    const v = this.sc.view;
-    for (let i = 0; i < n && countKind(p, P_GUST) < 14; i++) {
-      const speed = rnd(760, 1100);
-      const gi = spawn(p, P_GUST, dir > 0 ? v.vx - 40 : v.vx + v.vw + 40, v.vy + rnd(0.1, 0.92) * v.vh, 0, dir * speed, 0, 0, (v.vw + 120) / speed + 0.2, rnd(60, 130), rnd(1.6, 3), 0xffffff);
-      p.vrot[gi] = 0;
-    }
   }
 
   /** Snow falling from the Cold Snap's cloud body to the ground under it, riding along with it. */

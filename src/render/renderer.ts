@@ -101,7 +101,6 @@ import {
   createRings,
   drawAirParticles,
   drawGroundParticles,
-  drawGustStreaks,
   drawPops,
   drawRings,
   drawScreenParticles,
@@ -928,7 +927,6 @@ export class Renderer {
       g.globalAlpha = 1;
     }
     drawAirParticles(g, sc.particles, v);
-    if (s.sun.gust !== 0 || sc.particles.count > 0) drawGustStreaks(g, sc.particles);
     if (fog && inp.mapT < 0) {
       // Fog: the world fades out between FOG_NEAR and FOG_FAR u ahead and is gone beyond (one
       // cached band sprite stretched over the fade, a flat fill above it).

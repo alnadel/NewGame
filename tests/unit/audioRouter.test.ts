@@ -252,29 +252,34 @@ describe('SfxRouter campaign', () => {
     expect(t.names()).toEqual(['levelWin', 'dayFanfare', 'uiTap']);
   });
 
-  it('turns concept edges into signatures: gust, lock and unlock, eclipse, the final stretch (once each)', () => {
+  it('turns concept edges into signatures: lock and unlock, eclipse, the final stretch (once each)', () => {
     const t = setup({ progress: 0.5 });
     t.frames(0.1);
     expect(t.played).toHaveLength(0);
-    Object.assign(t.view, { gust: -1, locked: true, eclipse: 0.1, progress: 0.9 });
+    Object.assign(t.view, { locked: true, eclipse: 0.1, progress: 0.9 });
     t.frames(0.5);
-    expect(t.names()).toEqual(['gust', 'lock', 'eclipse', 'finishNear']);
-    expect(t.played[0]?.params.index).toBe(-1);
-    expect(t.played[1]?.params.index).toBe(0);
-    Object.assign(t.view, { gust: 0, locked: false });
+    expect(t.names()).toEqual(['lock', 'eclipse', 'finishNear']);
+    expect(t.played[0]?.params.index).toBe(0);
+    Object.assign(t.view, { locked: false });
     t.frames(0.1);
     expect(t.names().at(-1)).toBe('lock');
     expect(t.played.at(-1)?.params.index).toBe(1);
-    // A gust that blows again within a second stays quiet.
+    // The retired Gusts concept's view field plays nothing.
     t.view.gust = 1;
     t.frames(0.1);
-    expect(t.names().filter((n) => n === 'gust')).toHaveLength(1);
+    expect(t.names()).not.toContain('gust');
+  });
+
+  it("whooshes the vane governor's gusts once a second at most", () => {
+    const t = setup();
+    t.stream(8, 250, () => ({ e: 'gust', dir: 1, wind: 30, cost: 8 }));
+    expect(t.names()).toEqual(['gust', 'gust']);
   });
 
   it('keeps concept cues off the Title and menus, and re-arms the finish line per run', () => {
     const t = setup({ screen: 'title', progress: 0.5 });
     t.frames(0.1);
-    Object.assign(t.view, { gust: 1, locked: true, progress: 0.9 });
+    Object.assign(t.view, { locked: true, progress: 0.9 });
     t.frames(0.1);
     expect(t.played).toHaveLength(0);
     const r = setup({ progress: 0.8 });

@@ -130,7 +130,8 @@ describe('hapticForEvent', () => {
       [{ e: 'grown', obj: 0, tree: false, x: 0, y: 0 }, 'bloom'],
       [{ e: 'drink', obj: 0, delta: 30, x: 0, y: 0 }, 'flake'],
       [{ e: 'sizzle', obj: 0, hero: 'drip', delta: -20, x: 0, y: 0 }, 'glare'],
-      [{ e: 'gust', dir: 1, wind: 30, cost: 8 }, 'detent'],
+      // Controls v3 (§7.3): the vane's governor gusts untouched: no buzz.
+      [{ e: 'gust', dir: 1, wind: 30, cost: 8 }, null],
       [{ e: 'touch', bits: 2 }, null],
     ];
     for (const [ev, name] of cases) expect(hapticForEvent(ev)).toBe(name);
