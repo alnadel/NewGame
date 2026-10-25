@@ -103,9 +103,9 @@ Input ownership:
 | `setToday(date)` | Local date changed while open (midnight rollover; the session checks at most once a second and when the page shows). Re-renders the Daily screen (number, tries, Play label, 14-day history), the Title's Daily dot and Results' Retry label. |
 | `setChallenge(banner \| null)` | Title banner "Sam challenges you: Beat Day 2 · 2:40 PM" + Play, from a `#c=` link (section 6). `banner.name` ('' = "A friend", shown in `<bdi>`), `banner.warmup` (note "Warm-up run first"), `banner.note`. |
 | `setRunPreview(plan \| null)` | The Title run's Day-1 `DayPlan` for the chip "Forecast: 🌬️ Breezy · Old Town"; null (plan-off runs) hides it. |
-| `showCue(id \| null, dir?)` | The cue line above Nubs (`aria-live` polite, 18 px on an ink pill): `keep-shade` "Keep Nubs in the shade" (2 s), `drag` "Drag ← to swing the sun" ("Hold ←" for keyboard players, Invert honoured; until replaced), `shade-found` "Shade! Thick teal = safe" (1.4 s), `melting` "Melting! Find thick teal" (1.6 s; with `dir`, "Melting! Drag → to the thick teal" until replaced; the session re-sends `drag`/`melting` whenever the lesson's hint changes sides), `swing` "SWING! Straight into the next shade: +Snow" (2.4 s, after the first SWING of a lifetime). Null clears it. Shown only in play. |
+| `showCue(id \| null, dir?)` | The cue line above Nubs (`aria-live` polite, 18 px on an ink pill): `keep-shade` "Keep Nubs in the shade" (2 s), `drag` "Drag ← to swing the sun" ("Hold ←" for keyboard players, Invert honoured; until replaced), `shade-found` "Shade! Thick teal = safe" (1.4 s), `melting` "Melting! Find thick teal" (1.6 s; with `dir`, "Melting! Drag → to the thick teal" until replaced; the session re-sends `drag`/`melting` whenever the lesson's hint changes sides), `swing` "SWING! Straight into the next shade: +Snow" (2.4 s, after the first SWING of a lifetime). Controls v3: `snap-ready` "Full! Tap the frost button." ("Full! Press ↓ for a Cold Snap." for keyboard players), `tag-<element>` "{Name}'s turn. {drag line} · {act line}", and `ctl:<text>`, a driver note's words as they are (the refusal reasons, "Armed", "Growing", the calm cues; 1.6 s; `ui/labels.ts` `noteText`). Null clears it. Shown only in play. |
 | `setPostcard(url \| null)` | The Results postcard thumbnail (an object URL of the ready PNG; a paper placeholder while null). |
-| `setGhostThumb(mode)` | `'both'`: the looping swipe with the word "drag" while a run waits for its first press. `'left'` / `'right'`: the one-way hint in play, or a "Hold ←" key chip for keyboard players. `'off'`. Shown only in `play` (the Title leads with its Play button; the game may keep sending `'both'` there). |
+| `setGhostThumb(mode)` | `'both'`: the looping swipe with the word "drag" while a run waits for its first press. `'left'` / `'right'`: the one-way hint in play, or a "Hold ←" key chip for keyboard players. Controls v3 teaching (anchored with `setGhostAt`): `'press'` taps the action button ("tap"; the key chip "↑"), `'vane'` drags Gust's vane in the band under Nubs and `'steer'` slides Drip ("drag"; "← →"). `'off'`. Shown only in `play` (the Title leads with its Play button; the game may keep sending `'both'` there). |
 | `ghostProgress()` | Progress 0..1 through the ghost hand's current animation loop (read from its CSS animation clock), or −1 while it is hidden or only pulsing (reduced motion). The game moves the halo's ghost sun (and a run's waiting sway) in step with it. |
 | `setAudioMuted(muted)` | Small muted icon under the pause button while the AudioContext isn't running. |
 | `toast(text, { icon?, tone?, duration? })` | Stack at the top of the world column (below the header on menus, below the HUD row in play), 2.5 s each. Every screen switch fades the old toasts out in ~120 ms; toasts raised by the entering screen (in `enter()` or later) stay. Icons/tones as in `meta/progression` `ToastSpec`. |
@@ -213,7 +213,7 @@ keeps the bubble over him (`.no-keys`, `.no-forecast`). The screen rebuilds from
 refresh. It has a header with the Trial stars `n/21`, then the stage (the Wardrobe's stage recipe):
 the selected Trial's element (or the one tapped) on a `renderHeroPreview` canvas, its name and
 element, tagline, the three rules as tags, the **verb row** (`.el-verb`: the gesture icon from the
-one gesture set in `icons.ts`, `g-drag`, `g-tap`, `g-hold`, `g-steer`, `g-swipe`; the `verbLine`;
+one gesture set in `icons.ts`, `g-drag`, `g-press`, `g-steer`, `g-vane`; the `verbLine`;
 then the `keyLine` small) and the primary **Play** "Play T3 · Green Bridge". Below the stage sit the
 five elements (Nubs, Ember, Drip, Sprout, Gust) as round candy coins (`.hero-tile[data-hero]`,
 `aria-pressed`). A locked one is a silhouette with a lock coin and "Pass T4" (its intro Trial; the
@@ -233,9 +233,10 @@ pass that unlocked it). `show('elementals', id)` selects that Trial (Results > T
 after a Trial). A Trial's Results print `levelTag` ("Trial 3"), hide the star road, say "Next
 trial" and lead "Trials" (the Elementals glyph) and Back here; its Pause card adds the walking
 element's tagline and "{verbLine} · {keyLine}" under the title, and no dozing Nubs. In play the
-cue line announces each TAG ("Drip's turn. The sun holds."), and on an intro Trial the ghost hand
-plays the element's verb on its next target (`setGhostAt`; modes `tap`, `hold`, `steer`, a swipe as
-`left`/`right`; keyboard players see the key).
+cue line announces each TAG ("Drip's turn. Drag: steer Drip · No button: the sun holds"), and the
+game teaches by doing (Controls v3 §6): the ghost hand taps the button for the first pick of an intro
+Trial and the first full meter, drags the vane at Gust's first weather and steers Drip at its first
+puddle (`setGhostAt`; keyboard players see the key).
 
 **Records** (the Profile's, v1.4; the v1.1 Journal's until then): bests (endless and Daily), the
 last 30 endless runs as bars (height ∝ score, colour by the day reached, the best in gold, runs on
@@ -265,7 +266,7 @@ and a "Below your usual" line (`outcome.paceDown`) is set in plain ink, not the 
 | `share()` | `buildShare(result, shareBase(), dailyTry, { name: settings.name, par })` then `shareText({ text })` (text and link; desktop copies). The UI toasts "Copied!" / failure. |
 | `sharePostcard()` | The Postcard pill: `shareFiles({ file, text })` called synchronously in the click task; `'saved'` toasts "Postcard saved · link copied". Optional until gameRender's postcard lands (the pill hides without it). |
 | `swapMission(slotId)` | Swap on a stale mission (Missions card or Results row): `swapMission(save, slotId)`, `store.set`, `ui.setSave`. |
-| `settingsChanged(settings)` | Full new `Settings` (already clamped by the controls). Persist (`store.update`), apply volumes, sensitivity, invert, guide, high contrast. Reduced motion is applied to the DOM by the UI, which also keeps the new settings in its own copy of the save (so the Journey's "Unlock all levels (testing)" toggle refreshes the map at once, before `setSave`). |
+| `settingsChanged(settings)` | Full new `Settings` (already clamped by the controls). Persist (`store.update`), apply volumes, sensitivity, invert, guide, high contrast; Controls v3's Aim help (`aim`: Standard, Strong, Light, Off), Button side (`hand`) and Auto actions (`autoAct`, under Accessibility, marked 🧭) take effect from the next run (an Aim help Strong or Auto actions run is assisted). Reduced motion is applied to the DOM by the UI, which also keeps the new settings in its own copy of the save (so the Journey's "Unlock all levels (testing)" toggle refreshes the map at once, before `setSave`). |
 | `buy(id)` | `buyCosmetic(save, id)`; on success `store.set(save)`, `ui.setSave(save)`, return true. |
 | `equip(id)` | `equipCosmetic(save, id)`; `store.set`, `ui.setSave`. |
 | `exportBackup()` | `exportBackup(store.get())`. The UI copies it and shows it in a box. |

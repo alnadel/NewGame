@@ -5,14 +5,19 @@
 import {
   COMFORT_MAX,
   CONCEPTS,
+  CONTROL_TEXT,
   FORECASTS,
   formatScore,
   HEROES,
   levelTag,
   MINUTES_PER_DAY,
+  NOTE_CALM,
+  NOTE_PRESS,
+  NOTE_REFUSE,
   PLAN_START_DATE,
   planDay,
   type BiomeId,
+  type DriveView,
   type DayPlan,
   type ForecastInfo,
   type HeroId,
@@ -183,10 +188,26 @@ export function parLine(par: number | null): string {
 
 const CUE_ARROW = { [-1]: '←', 1: '→' } as const;
 
+/** The refusal reasons' text keys (DriveView.refuse codes, docs/CONTROLS_V3.md §2.4). */
+const REFUSE_KEYS = ['', 'charging', 'locked', 'nothing', 'low', 'full', 'wait', 'busy'] as const;
+
+/**
+ * Controls v3 (docs/CONTROLS_V3.md §8.2, §13.3): what the cue line says for a driver note: a refusal's
+ * reason (its chip text, with the meter's percent or the seconds to the hand-off), "Armed" and
+ * "Growing" for accepted presses, the calm cues; '' for the rest.
+ */
+export function noteText(code: number, a: number, v: Readonly<DriveView>): string {
+  const k = code === NOTE_PRESS ? (a === 2 ? 'cue.armed' : a === 3 ? 'cue.growing' : '') : code === NOTE_REFUSE ? `refuse.${REFUSE_KEYS[a & 15]}` : code === NOTE_CALM ? (a === 1 ? 'calm.auto' : a === 2 ? 'cue.calm' : '') : '';
+  const t = CONTROL_TEXT[k] ?? CONTROL_TEXT[`${k}.${v.act}`] ?? '';
+  return t.replace('{pct}', String(Math.floor(v.fill * 100))).replace('{s}', String(Math.ceil(v.lockTicks / 60)));
+}
+
 /** The cue line's copy (ui.showCue). Keyboard players hold a key instead of dragging. */
 export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): string {
   const arrow = CUE_ARROW[dir ?? 1];
   const verb = keyboard ? 'Hold' : 'Drag';
+  // Controls v3: a driver note's words (noteText) and the run's control cues.
+  if (id.startsWith('ctl:')) return id.slice(4);
   switch (id) {
     case 'keep-shade':
       return 'Keep Nubs in the shade';
@@ -201,14 +222,13 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
       // The first SWING ever: what just happened, so it can happen on purpose.
       return 'SWING! Straight into the next shade: +Snow';
     case 'snap-ready':
-      // v1.5: the frost meter is full.
-      // Controls v3: the swipe is gone; the button (or ↓) casts it.
-      return keyboard ? 'Frost full! Press ↓ for a Cold Snap' : 'Frost full! Tap the frost button';
+      // v1.5: the frost meter is full. Controls v3 (§6.1): the button (or ↓) casts it.
+      return keyboard ? 'Full! Press ↓ for a Cold Snap.' : 'Full! Tap the frost button.';
   }
-  // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): a TAG, "{Name}'s turn." (+ " The sun holds."); the
-  // verb text is cut for the bundle budget (§9.3: the tips, the ghost and the Pause card say it).
+  // A TAG (Controls v3 §6.1, §13.2): "{Name}'s turn." with the element's drag and button lines, as
+  // its canvas banner says them.
   const x = HEROES[id.slice(4) as HeroId];
-  return `${x.name}${x.name.endsWith('s') ? "'" : "'s"} turn.${x.sunHeld ? ' The sun holds.' : ''}`;
+  return `${x.name}${x.name.endsWith('s') ? "'" : "'s"} turn. ${x.dragLine} · ${x.actLine}`;
 }
 
 /** How long a cue stays up (ms); null = until replaced or cleared. */
@@ -226,7 +246,7 @@ export function cueDuration(id: CueId, dir: -1 | 1 | undefined): number | null {
     case 'drag':
       return null;
   }
-  return 2400;
+  return id.startsWith('ctl:') ? 1600 : 2400;
 }
 
 // ---------------------------------------------------------------------------------------------

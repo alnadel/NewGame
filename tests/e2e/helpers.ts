@@ -1,8 +1,10 @@
 // Shared helpers for the Playwright specs.
-import { expect, type Page } from '@playwright/test';
+import { expect, type CDPSession, type Page } from '@playwright/test';
 
 export interface ShadyState {
   phase: string;
+  /** The start beat's ticks left (0: past it). */
+  ready: number;
   day: number;
   minutes: number;
   chill: number;
@@ -24,7 +26,6 @@ export interface ShadyState {
   mods: string[];
   levelProgress: number;
   eclipse: number;
-  gust: number;
   locked: boolean;
   moonlit: boolean;
   /** Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the walking element, the relay index, the Cold Snap charge. */
@@ -46,7 +47,9 @@ export interface ShadyState {
     wind: number;
     hold: number;
     spent: number;
-    objs: { k: string; x: number; y: number; state: number; size: number; grown: number; veiled: boolean }[];
+    /** The ticks of this run's gusts. */
+    gusts: number[];
+    objs: { k: string; x: number; y: number; state: number; size: number; grown: number; need: number; veiled: boolean }[];
     burns: number;
     drinks: number;
     trees: number;
@@ -58,6 +61,8 @@ export interface ShadyState {
 export interface ShadyDrive {
   act: 'none' | 'snap' | 'burn' | 'grow' | 'calm';
   state: number;
+  /** The frost meter (snap) or the running job's size / goal (grow). */
+  fill: number;
   pick: number;
   queue: number[];
   due: number;
@@ -67,6 +72,12 @@ export interface ShadyDrive {
   vaneResting: boolean;
   glide: number | null;
   refuse: number;
+  /** The last REFUSE note's a: the reason, + 16 on a repeat this leg (0 none). */
+  refuseNote: number;
+  /** The presses the driver answered (PRESS and REFUSE notes) since the page loaded. */
+  answered: number;
+  /** The button's press-in look on the frame drawn last. */
+  down: boolean;
   aimDeg: number;
 }
 
@@ -181,6 +192,105 @@ export async function worldToScreen(page: Page, x: number, y: number): Promise<{
 /** Elementals v2: fast-forwards the Trial with the core reactive bot to leg `i` (or `before` ticks ahead of its TAG), then hands back to the input. */
 export async function skipToLeg(page: Page, i: number, before = 0): Promise<void> {
   await page.evaluate(([n, b]) => window.__SHADY_TEST__!.testSkipToLeg(n as number, b as number), [i, before]);
+}
+
+/** Waits until the run is past its start beat (phase 'day', the ready count spent). */
+export async function waitPlaying(page: Page, timeout = 10_000): Promise<void> {
+  await expect.poll(async () => { const s = await state(page); return s.phase === 'day' && s.ready === 0; }, { timeout }).toBe(true);
+}
+
+/** Controls v3: button and act-key presses the input accepted. */
+export async function acts(page: Page): Promise<number> {
+  return page.evaluate(() => window.__SHADY_TEST__!.acts());
+}
+
+/** Controls v3: the guide's bins set now (now, next and the lasting now ∧ next). */
+export async function guideBins(page: Page): Promise<{ now: number[]; next: number[]; lasting: number[] }> {
+  return page.evaluate(() => window.__SHADY_TEST__!.testGuide());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Controls v3 (docs/CONTROLS_V3.md §12.2): real touch through CDP Input.dispatchTouchEvent, sent on a
+// wall-clock schedule at 120 Hz without awaiting each call (awaiting throttles Chromium to about 20
+// Hz). Each finger is a list of timed points: the first touches down, the last lifts (unless `hold`).
+// ---------------------------------------------------------------------------------------------
+
+/** A CDP session that dispatches touch (Chromium; both projects). */
+export async function touchScreen(page: Page): Promise<CDPSession> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  return cdp;
+}
+
+/** One finger's path: timed points (ms from the start of play), touching down at the first. */
+export interface Finger {
+  id: number;
+  pts: { t: number; x: number; y: number }[];
+  /** Keep it down after its last point (a later play lifts it). */
+  hold?: boolean;
+}
+
+const HZ_MS = 1000 / 120;
+
+/** A straight stroke from (x, y) by (dx, dy) over `ms`, sampled at 120 Hz, starting at `t0` (ms). */
+export function strokePts(x: number, y: number, dx: number, dy: number, ms: number, t0 = 0): Finger['pts'] {
+  const n = Math.max(1, Math.round(ms / HZ_MS));
+  return Array.from({ length: n + 1 }, (_, i) => ({ t: t0 + (ms * i) / n, x: x + (dx * i) / n, y: y + (dy * i) / n }));
+}
+
+/** A still press at (x, y) for `ms`, with a wobble of up to `wobble` px (deterministic), starting at `t0`. */
+export function pressPts(x: number, y: number, ms: number, wobble = 0, t0 = 0): Finger['pts'] {
+  const n = Math.max(1, Math.round(ms / HZ_MS));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const a = i === 0 || i === n ? 0 : wobble * Math.sin(i * 1.7);
+    return { t: t0 + (ms * i) / n, x: x + a, y: y + a * 0.6 };
+  });
+}
+
+/** The fingers each CDP session holds down between plays (a finger held through one play moves on in the next). */
+const DOWN = new WeakMap<CDPSession, Map<number, { x: number; y: number; id: number }>>();
+
+/** Plays the fingers' touches on the wall clock (all of them sent, then awaited together). */
+export async function playTouch(cdp: CDPSession, fingers: Finger[]): Promise<void> {
+  const evs = fingers.flatMap((f) => f.pts.map((p, k) => ({ f, k, t: p.t }))).sort((a, b) => a.t - b.t);
+  let down = DOWN.get(cdp);
+  if (!down) DOWN.set(cdp, (down = new Map()));
+  const sent: Promise<unknown>[] = [];
+  const t0 = Date.now();
+  const send = (type: 'touchStart' | 'touchMove' | 'touchEnd', touchPoints: { x: number; y: number; id: number }[]): void => {
+    sent.push(cdp.send('Input.dispatchTouchEvent', { type, touchPoints }));
+  };
+  for (const { f, k, t } of evs) {
+    const wait = t0 + t - Date.now();
+    if (wait > 1) await new Promise((r) => setTimeout(r, wait));
+    const p = f.pts[k]!;
+    const tp = { x: p.x, y: p.y, id: f.id };
+    if (k === 0 && !down.has(f.id)) {
+      down.set(f.id, tp);
+      send('touchStart', [...down.values()]);
+    } else {
+      down.set(f.id, tp);
+      send('touchMove', [tp]);
+    }
+    if (k === f.pts.length - 1 && !f.hold) {
+      down.delete(f.id);
+      send('touchEnd', [tp]);
+    }
+  }
+  await Promise.all(sent);
+}
+
+/** The world viewport's width (CSS px): a sun drag turns −dx / width · 360° (sensitivity 1). */
+export async function viewWidth(page: Page): Promise<number> {
+  return page.evaluate(() => parseFloat(document.getElementById('ui')!.style.getPropertyValue('--world-width')) || window.innerWidth);
+}
+
+/** The signed difference a − b of two angles (°), in (−180, 180]. */
+export function angleDiff(a: number, b: number): number {
+  let d = (a - b) % 360;
+  if (d <= -180) d += 360;
+  if (d > 180) d -= 360;
+  return d;
 }
 
 /** Controls v3: the action button (CSS px), whether it takes presses and its side. */

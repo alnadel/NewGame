@@ -14,6 +14,7 @@ import {
   type V16Rules,
 } from '../core/index.ts';
 import { addDays, DAILY_EPOCH, isDateString, localDate } from '../meta/daily.ts';
+import type { Settings } from '../meta/saveTypes.ts';
 
 export interface Params {
   seed: number | null;
@@ -51,6 +52,13 @@ export interface Params {
   elfix: boolean;
   /** v1.6 rules switched by ?on=bank,… and ?off=flares,… (cfg.v16, over the shipped V16_SHIP); null when neither. */
   rules: Partial<V16Rules> | null;
+  /**
+   * Controls v3 (docs/CONTROLS_V3.md §8.1): ?aim=standard|strong|light|off, ?hand=left|right and
+   * ?autoact=1 override those settings (tests and tooling); null each when absent.
+   */
+  aim: Settings['aim'] | null;
+  hand: Settings['hand'] | null;
+  autoAct: boolean | null;
 }
 
 /**
@@ -82,6 +90,11 @@ export function parseParams(search: string, today: string = localDate()): Params
   const plan = q.get('plan');
   const level = num('level');
   const trial = num('trial');
+  /** The value of `k` when it is one of `values`, else null. */
+  const oneOf = <T extends string>(k: string, values: readonly T[]): T | null => {
+    const v = q.get(k) as T;
+    return values.includes(v) ? v : null;
+  };
   const tn = trial !== null && trial >= 1 && trial <= TRIAL_COUNT ? TRIAL_BASE + Math.floor(trial) : null;
   let rules: { -readonly [K in keyof V16Rules]?: boolean } | null = null;
   for (const [k, v] of [['on', true], ['off', false]] as const) {
@@ -109,6 +122,9 @@ export function parseParams(search: string, today: string = localDate()): Params
     level: tn ?? (level !== null && level >= 1 && level <= 200 ? Math.floor(level) : null),
     elfix: import.meta.env.MODE !== 'single' && q.get('elfix') === '1',
     rules,
+    aim: oneOf('aim', ['standard', 'strong', 'light', 'off']),
+    hand: oneOf('hand', ['left', 'right']),
+    autoAct: q.get('autoact') === '1' ? true : null,
   };
 }
 
@@ -128,9 +144,9 @@ export function startTFor(t: string | null, day: number): number | null {
 
 /**
  * True when URL params change the sim or the player — a debug start (?day, ?t, ?chill), a bot,
- * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward, a guide override or a Trial's
- * object fixture (?elfix=1). Such runs are not scored, saved, shared or counted as Daily tries (they work in production
- * builds for QA). ?seed, ?mode=daily&date, ?level, ?trial, ?mute, ?debug, ?test and ?perf don't make
+ * a forced profile, rung, forecast, Day Plan or v1.6 rule, fast-forward, a guide, aim help or Auto
+ * actions override or a Trial's object fixture (?elfix=1). Such runs are not scored, saved, shared or counted as Daily tries (they work in production
+ * builds for QA). ?seed, ?mode=daily&date, ?level, ?trial, ?hand, ?mute, ?debug, ?test and ?perf don't make
  * a run a debug run.
  */
 export function isDebugRun(p: Params): boolean {
@@ -146,6 +162,8 @@ export function isDebugRun(p: Params): boolean {
     p.rung !== null ||
     p.plan !== null ||
     p.rules !== null ||
+    p.aim !== null ||
+    p.autoAct !== null ||
     p.elfix
   );
 }

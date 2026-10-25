@@ -1,5 +1,6 @@
 // Settings (GDD §14 + volumes, V1_PLAN §11.5 backup code, V1_1_PLAN UM2/UM9: the name on challenge
-// links and adaptive comfort). Opened from the Title or from Pause;
+// links and adaptive comfort; Controls v3, docs/CONTROLS_V3.md §8.1: aim help, the button's side and
+// Auto actions; Swing Boost is cut for the bundle budget). Opened from the Title or from Pause;
 // Back returns to wherever it was opened from. Mid-run (from Pause) the backup, restore and reset
 // controls are hidden: replacing the save under a running run would desync it. A "Testing" group
 // holds the Journey's unlock-all toggle (CAMPAIGN_PLAN §5).
@@ -17,8 +18,10 @@ import type { ScreenId } from '../types.ts';
 import { button, hide, menuHeader, section, segmented, setButtonLabel, slider, toggleSwitch } from '../widgets.ts';
 
 const percent = (v: number): string => `${Math.round(v)}%`;
+/** Segmented options whose values are their labels in lower case. */
+const choices = <T extends string>(...labels: T[]): { value: Lowercase<T>; label: T }[] => labels.map((label) => ({ value: label.toLowerCase() as Lowercase<T>, label }));
 
-export const KEYS_LINE = '← → or A D: turn the sun · Shift: fine turns · Space/Enter: play the level, or retry · P or Esc: pause';
+export const KEYS_LINE = '← → or A D: turn the sun · Shift: fine turns · ↑ or W: the button · ↓ or S: Cold Snap · Space/Enter: play the level, or retry · P or Esc: pause';
 export const MID_RUN_BACKUP_NOTE = 'Backup, restore and reset are in Settings on the Title screen.';
 
 export function createSettingsScreen(ctx: UiContext): Screen {
@@ -55,6 +58,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const sensitivity = slider({ label: 'Drag sensitivity', min: 0.6, max: 1.5, step: 0.05, format: (v) => `${v.toFixed(2)}×`,
     onInput: (v) => change('sensitivity', Math.round(v * 100) / 100) });
   const invert = toggleSwitch(ctx, 'Invert drag direction', (on) => change('invert', on));
+  const aim = segmented(ctx, 'Aim help', choices('Standard', 'Strong', 'Light', 'Off'), (v) => change('aim', v));
+  const hand = segmented(ctx, 'Button side', choices('Left', 'Right'), (v) => change('hand', v));
   const keys = h('div', 'set-row set-row--keys',
     h('span', { class: 'set-ic', deco: true }, icon('keyboard')),
     h('span', 'set-text', h('span', 'set-label', 'Keys'), h('span', 'set-hint set-keys',
@@ -93,13 +98,10 @@ export function createSettingsScreen(ctx: UiContext): Screen {
   const unlockAll = toggleSwitch(ctx, 'Unlock all levels (testing)', (on) => change('unlockAll', on));
 
   // Accessibility
-  const motion = segmented(ctx, 'Reduced motion', [
-    { value: 'auto', label: 'Auto' }, { value: 'on', label: 'On' }, { value: 'off', label: 'Off' },
-  ] as const, (v) => change('reducedMotion', v));
+  const motion = segmented(ctx, 'Reduced motion', choices('Auto', 'On', 'Off'), (v) => change('reducedMotion', v));
   const contrast = toggleSwitch(ctx, 'High-contrast shadows', (on) => change('highContrast', on));
-  const guide = segmented(ctx, 'Shade guide', [
-    { value: 'auto', label: 'Auto' }, { value: 'always', label: 'Always' }, { value: 'off', label: 'Off' },
-  ] as const, (v) => change('guide', v));
+  const autoAct = toggleSwitch(ctx, 'Auto actions', (on) => change('autoAct', on));
+  const guide = segmented(ctx, 'Shade guide', choices('Auto', 'Always', 'Off'), (v) => change('guide', v));
 
   // App: the browser's install prompt, caught by platform/pwa (Chromium/Android only).
   const installBtn = button(ctx, {
@@ -242,6 +244,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       'Controls',
       row('gauge', 'Drag speed', null, sensitivity.el),
       row('invert', 'Invert drag', 'Drag right to turn the sun the other way', invert.el),
+      stackRow('sun', 'Aim help', 'Standard: the sun slides into nearby shade. Strong: it reaches farther (marked 🧭). Light: only a nudge.', aim.el),
+      row('swap', 'Button side', null, hand.el),
       keys,
     )),
     toned('f-green', section(
@@ -254,6 +258,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       stackRow('motion', 'Reduced motion', 'No shake, zoom or sliding cards', motion.el),
       row('contrast', 'High-contrast shadows', null, contrast.el),
       stackRow('compass', 'Shade guide', 'Thick teal lasts, thin is ending. "Always" marks your shares.', guide.el),
+      row('bolt', 'Auto actions', 'Ember and Sprout act on their own (marked 🧭)', autoAct.el),
     )),
     section(
       'Testing',
@@ -283,6 +288,9 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     haptics.set(current.haptics);
     sensitivity.set(current.sensitivity);
     invert.set(current.invert);
+    aim.set(current.aim);
+    hand.set(current.hand);
+    autoAct.set(current.autoAct);
     motion.set(current.reducedMotion);
     contrast.set(current.highContrast);
     guide.set(current.guide);

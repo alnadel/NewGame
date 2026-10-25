@@ -203,5 +203,7 @@ export interface Save {
      * held at ×5). Always true once validated; saves without it are converted once on load.
      */
     missionsV2: boolean;
+    /** Controls v3 (docs/CONTROLS_V3.md §6.1): the Cold Snap's first full meter was taught (ghost press, slow time). */
+    snapTeach: boolean;
   };
 }

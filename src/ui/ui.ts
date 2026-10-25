@@ -207,14 +207,14 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     const ms = cueDuration(id, dir);
     if (ms !== null) cueTimer = window.setTimeout(() => showCue(null), ms);
   };
-  /** Elementals v2: the ghost plays an element's verb where setGhostAt anchors it. */
+  /** The ghost plays Drip's steer or a Controls v3 act (§6.1) where setGhostAt anchors it. */
   let ghostAt = false;
-  const GHOST_VERB: Partial<Record<GhostMode, string>> = { tap: 'tap', hold: 'hold', steer: 'drag', left: 'swipe', right: 'swipe' };
-  const GHOST_KEY: Partial<Record<GhostMode, string>> = { tap: '↑', hold: 'Hold ↑', steer: '← →', left: '←', right: '→' };
+  const GHOST_VERB: Partial<Record<GhostMode, string>> = { press: 'tap', steer: 'drag', vane: 'drag' };
+  const GHOST_KEY: Partial<Record<GhostMode, string>> = { press: '↑', steer: '← →', vane: '← →' };
   function updateGhostKey(): void {
     const dir = ghost === 'left' ? -1 : ghost === 'right' ? 1 : undefined;
     // Waiting to start ('both'): Space starts the run (the arrows do too, steering as they go). An
-    // element's verb: its key (a Gust gust is one press).
+    // anchored act: its key (the button is ↑; the vane moves a notch per arrow).
     ghostKey.textContent = ghostAt ? (GHOST_KEY[ghost] ?? '') : dir === undefined ? 'Space' : `Hold ${keyDir(dir) === -1 ? '←' : '→'}`;
     const word = ghostEl.querySelector('.ghost-verb');
     if (word) word.textContent = ghostAt ? (GHOST_VERB[ghost] ?? '') : 'drag';

@@ -3,11 +3,13 @@
 // every frame's events to fx, audio, haptics, meta and the UI.
 
 import {
+  aimRadius,
   biomeAtY,
   bridged,
   buildRunResult,
   CAUSE_TIPS,
   COMFORT_MAX,
+  CONTROL_TEXT,
   CONCEPTS,
   createBot,
   createDriver,
@@ -34,6 +36,8 @@ import {
   levelProgress,
   needOf,
   nextTagTicks,
+  NOTE_PRESS,
+  NOTE_REFUSE,
   PLAN_START_DATE,
   prepareRun,
   prepareSome,
@@ -124,7 +128,7 @@ import { clearParticles, clearPops, clearRings } from '../render/particles.ts';
 import { resetFootprints } from '../render/ground.ts';
 import { resetBanners } from '../render/banners.ts';
 import { createUi } from '../ui/ui.ts';
-import { cueDuration } from '../ui/labels.ts';
+import { cueDuration, noteText } from '../ui/labels.ts';
 import type { ChallengeBanner, CueId, GhostMode, ImportOutcome, ResultsCampaign, ResultsView, RunKind, RunStatusView, ScreenId, Ui, UiCallbacks, UiSoundName } from '../ui/types.ts';
 import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSetting, type HintInput } from './assist.ts';
 import { Cadence, type CadenceInput } from './cadence.ts';
@@ -132,8 +136,8 @@ import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { createMechanics } from './mechanics.ts';
-import { hudButtonHit } from '../render/hud.ts';
-import { Input } from './input.ts';
+import { hudButton, hudButtonHit } from '../render/hud.ts';
+import { createInput, type Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
@@ -179,6 +183,15 @@ const IDLE_BUDGET = 12;
  */
 const SINGLE = import.meta.env.MODE === 'single';
 /**
+ * Test hook: the last REFUSE note's `a` (the reason, + 16 on a repeat this leg), the presses answered
+ * (PRESS and REFUSE notes), the run's gust ticks, and demo('cool') (the walker's meter kept full,
+ * so a touch test plays on); never kept in the single-file build.
+ */
+let lastRefuse = 0;
+let cool = false;
+let answered = 0;
+const gustTicks: number[] = [];
+/**
  * World built before the Title's first frame: the view above Nubs plus the 540 u shadow reach, with
  * margin (GR19). Idle frames generate the rest; a tap at once pays the remainder on the first tick.
  */
@@ -196,11 +209,9 @@ function makeBot(kind: BotKind): Bot | null {
   return import.meta.env.MODE === 'single' ? null : createBot(kind);
 }
 
-/**
- * Elementals v2 (§7.9): the kinds of object each verb's ghost hand shows on. Controls v3 (C0b): none
- * for Ember and Sprout, whose tap and hold on a target are gone (UI's branch teaches their button).
- */
-const GHOST_KINDS: Readonly<Record<Verb, string>> = { sun: '', burn: '', grow: '', steer: 'puddle', blow: 'rain fog' };
+/** Controls v3 (docs/CONTROLS_V3.md §6.1): a teaching moment's slow time (real s) and the vane ghost's band below Nubs (CSS px). */
+const TEACH_S = 2.5;
+const TEACH_BAND = 130;
 
 /** Elementals v2 (?elfix=1): every object kind and state on a Trial run, for art review; bot builds only (makeBot's gate). */
 function fixture(s: SimState): void {
@@ -307,17 +318,15 @@ export class Session {
   readonly input: Input;
   /** Controls v3 (docs/CONTROLS_V3.md §2.1): fills each input frame before step (bot frames skip it). */
   readonly driver: Driver = createDriver();
-  /**
-   * The driver's options. C0b passes neutral ones (no aim help: the skeleton driver has no magnet);
-   * UI's session wiring builds them per run (§11.6: aimRadius for the setting and run, fog, Auto
-   * Snap's rungs, Auto actions, reduced motion).
-   */
+  /** The driver's options for the run in play (optsFor, at beginRun). */
   private driveOpts: DriveOpts = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
+  /** The frame's sim events without the sun's detents, for audio and haptics while a glide runs (§4.5). */
+  private readonly quiet: SimEvent[] = [];
   readonly clock = new FixedClock();
   readonly fx: Fx;
   /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
   readonly mech = createMechanics();
-  /** Cold Snaps seen this session (the "swipe down" cue stops after two). */
+  /** Cold Snaps seen this session (the "Full! Tap the frost button." cue stops after two). */
   private snapsSeen = 0;
   /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */
   private readonly moments: RunMoments;
@@ -633,7 +642,7 @@ export class Session {
       version: deps.version,
     });
     if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
-    this.input = new Input({
+    this.input = createInput({
       canvas: deps.canvas,
       accepting: () => this.accepting(),
       onPress: () => this.onPress(),
@@ -923,6 +932,7 @@ export class Session {
     events.length = 0;
     const tSim = performance.now();
     if (stepping) {
+      if (!SINGLE && cool) s.nubs.chill = s.nubs.maxChill;
       n = this.clock.advance(real);
       // Controls v3 (§2.1): the driver fills each input frame before step (bot frames skip it), and
       // the recording keeps what it added, so replays stay exact.
@@ -942,7 +952,7 @@ export class Session {
         if (s.phase === 'dead' || s.phase === 'won') break;
       }
       if (n > 0) takeSnap(s, this.curr);
-      this.moments.update(s);
+      this.moments.update(s, (this.bot?.drive ?? this.driver.view).due);
     } else {
       // The death, the finish freeze and the Results keep game time flowing for the effects.
       const flowing = screen === 'dying' || screen === 'results' || (won && screen === 'play');
@@ -956,21 +966,32 @@ export class Session {
     // Route events, and the driver's notes (§2.4). A bot run shows its touch driver's view, or keeps
     // the session's driver fresh (so the HUD's button stays true).
     const view = this.fillAudioView(screen);
-    if (events.length > 0) {
-      this.d.audio.onEvents(events, view);
-      this.d.haptics.onEvents(events, s.sun.omega);
-      this.fx.onEvents(events, s);
-    }
     const dr = this.driver;
     const bd = this.bot?.drive;
     if (!bd && (this.bot || n === 0)) dr.observe(s);
-    this.renderIn.drive = bd ?? dr.view;
+    const dv = (this.renderIn.drive = bd ?? dr.view);
+    if (events.length > 0) {
+      // §4.5: a magnet glide is a real drag in the sim; its detents tick the dial but never buzz or click.
+      let quiet = events;
+      if (dv.glide === dv.glide) {
+        quiet = this.quiet;
+        quiet.length = 0;
+        for (const ev of events) if (ev.e !== 'detent') quiet.push(ev);
+      }
+      this.d.audio.onEvents(quiet, view);
+      this.d.haptics.onEvents(quiet, s.sun.omega);
+      this.fx.onEvents(events, s);
+    }
+    // The driver's notes (§2.4): a repeat refusal (a ≥ 16) still says why, but never buzzes or fizzes.
     for (let i = 0; i < dr.noteN; i++) {
       const code = dr.notes[2 * i] as number;
       const a = dr.notes[2 * i + 1] as number;
       this.fx.onDrive(code, a);
-      this.d.audio.onDrive(code, a);
-      this.d.haptics.onDrive(code, a);
+      if (code !== NOTE_REFUSE || a < 16) {
+        this.d.audio.onDrive(code, a);
+        this.d.haptics.onDrive(code, a);
+      }
+      this.onNote(code, a);
     }
     dr.clearNotes();
     this.checkDailyTry();
@@ -1016,7 +1037,7 @@ export class Session {
     const inputDown = inp.pointerDown || inp.keyDown;
     r.dragging = inputDown || inp.steering || inp.vaning || (this.bot !== null && this.s.sun.mode === 'dragging');
     r.buttonDown = inp.buttonDown;
-    r.hand = this.d.store.get().settings.hand;
+    r.hand = this.params.hand ?? this.d.store.get().settings.hand;
     r.aimDeg = this.driveOpts.aimDeg;
     r.nowOnly = this.driveOpts.nowOnly;
     r.guideAlpha = this.currentGuideAlpha();
@@ -1128,7 +1149,6 @@ export class Session {
     c.goalSec = goal.sec;
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
-    c.gust = s.sun.gust;
     c.stars = starState(level, st, s.phase === 'won', relaxed, this.featSeen);
     c.coolLeft = 1 - Math.min(1, s.stats.litTotal / level.stars.sunSec);
     // A star earned mid-run (the goal, the flakes) chimes; the finish has its own jingle.
@@ -1195,7 +1215,6 @@ export class Session {
     // Campaign: the chapter's music palette, the finish line and the concept signatures.
     v.chapter = s.level?.chapter ?? 0;
     v.progress = s.level ? levelProgress(s) : -1;
-    v.gust = s.sun.gust;
     v.locked = s.sun.locked;
     v.eclipse = s.eclipse;
     v.moonlit = s.moonlit;
@@ -1429,6 +1448,7 @@ export class Session {
     this.resetRender();
     this.fx.resetRun();
     this.mech.reset();
+    if (!SINGLE) gustTicks.length = 0;
     this.featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
@@ -1444,15 +1464,31 @@ export class Session {
     this.cueShown = null;
     this.cueHold = 0;
     this.verbDone = false;
+    this.taught = 0;
+    this.teachMode = 'off';
     this.meltWarn = false;
-    this.runRung = this.rungOf.get(run) ?? -1;
-    this.driver.begin(run, this.driveOpts);
+    const rung = (this.runRung = this.rungOf.get(run) ?? -1);
     this.runWarmup = this.warmups.has(run);
     this.runLevel = this.levelOf.get(run) ?? null;
     this.wonAt = -1;
     this.won = null;
     const store = this.d.store;
     const save = store.get();
+    // Controls v3 (§11.6): the driver's options for this run: aim help for the setting and the run
+    // (blind levels 0, fog levels now-only), Auto Snap on the comfort rungs up to
+    // TUNING.drive.autoSnap.rungs, Auto actions. A settings change applies from the next run.
+    const p = this.params;
+    const st = save.settings;
+    const aim = aimRadius(p.aim ?? st.aim, { mode: run.cfg.mode, level: run.cfg.level ?? null, rung, trial: run.trial !== null, blind: run.mods.has('blind') });
+    this.driveOpts = {
+      aimDeg: aim.deg,
+      track: aim.track,
+      nowOnly: run.mods.has('fog'),
+      autoSnap: rung >= 0 && rung <= TUNING.drive.autoSnap.rungs,
+      autoAct: p.autoAct ?? st.autoAct,
+      reducedMotion: run.cfg.reducedMotion,
+    };
+    this.driver.begin(run, this.driveOpts);
     this.dailyTry = null;
     this.dailyCounted = false;
     // Eligibility is decided when the run begins (the Title may have held it since yesterday).
@@ -1465,7 +1501,7 @@ export class Session {
     this.resultsShown = false;
     this.paused = false;
     this.runActive = true;
-    this.runAssisted = (this.params.guide ?? save.settings.guide) === 'always';
+    this.runAssisted = this.assisted(save.settings);
     this.runPb = this.livePb();
     this.runGoal = this.liveGoal();
     this.lifetimeRuns = save.stats.runs;
@@ -1488,8 +1524,12 @@ export class Session {
   }
 
   private ghost: GhostMode = 'off';
-  /** Elementals v2: an element's verb landed this run (the intro ghost hand has taught it). */
+  /** The intro Drip has slid (the ghost hand has taught the steer). */
   private verbDone = false;
+  /** §6.1 teaching: the moments taught this run (bits: 1 the Cold Snap, 2 Ember or Sprout, 4 Gust), the ghost of the one on ('off' none) and when its slow time ends (this.time, s). */
+  private taught = 0;
+  private teachMode: GhostMode = 'off';
+  private teachEnd = 0;
 
   private setGhost(mode: GhostMode, at = false): void {
     if (!at) this.ui.setGhostAt(NaN, NaN);
@@ -1498,36 +1538,58 @@ export class Session {
     this.ui.setGhostThumb(mode);
   }
 
-  /**
-   * The intro element's ghost (§7.9): its verb played on the first target ahead in reach, anchored
-   * there on the last drawn frame; off once a verb has landed.
-   */
+  /** The intro Drip's ghost (§6.1, ELEMENTALS_V2 §7.9): a steer on the first puddle ahead in reach, anchored there on the last drawn frame, until Drip has slid. */
   private verbGhost(): void {
     const s = this.s;
-    const hero = s.nubs.hero;
-    const verb = HEROES[hero].verb;
-    const el = s.el as NonNullable<SimState['el']>;
-    if (verb === 'steer' && Math.abs(el.dxTarget) >= 8) this.verbDone = true;
-    let o: ElObj | undefined;
-    if (!this.verbDone && s.trial?.intro === hero) {
-      const E = TUNING.elements;
-      for (const x of el.objs) {
-        const ahead = x.y - s.nubs.y;
-        if (ahead > E.range) break;
-        // The verb's kinds: no standing tree, no bridge, weather awake.
-        if (ahead >= E.near && x.state !== 2 && GHOST_KINDS[verb].includes(x.kind) && x.casterId < 0 && !bridged(x) && (verb !== 'blow' || x.awake)) {
-          o = x;
-          break;
+    if (Math.abs((s.el as NonNullable<SimState['el']>).dxTarget) >= 8) this.verbDone = true;
+    const o = !this.verbDone && s.trial?.intro === 'drip' && s.nubs.hero === 'drip' ? this.ahead('puddle') : undefined;
+    if (!o) return this.setGhost('off');
+    const v = this.renderer.scene.view;
+    this.ui.setGhostAt(Math.max(40, Math.min(v.vw - 40, v.ox + o.x * v.S - v.vx)), v.oy - o.y * v.S - v.vy);
+    this.setGhost('steer', true);
+  }
+
+  /** The first object of `kinds` ahead in reach (near..range): no standing tree, no bridge, weather awake. */
+  private ahead(kinds: string): ElObj | undefined {
+    const s = this.s;
+    const E = TUNING.elements;
+    for (const x of (s.el as NonNullable<SimState['el']>).objs) {
+      const d = x.y - s.nubs.y;
+      if (d > E.range) break;
+      if (d >= E.near && x.state !== 2 && kinds.includes(x.kind) && x.casterId < 0 && !bridged(x) && (x.awake || !(x.kind === 'rain' || x.kind === 'fog'))) return x;
+    }
+    return undefined;
+  }
+
+  /**
+   * §6.1 teaching by doing: the Cold Snap's first full meter (on its level, or a profile's first), and
+   * on an intro Trial Ember's or Sprout's first pick and Gust's first weather in reach. The ghost hand
+   * plays the act (a press on the button; a 40 px vane drag) until the player does it (a press the
+   * driver takes, onNote; a vane notch), the first TEACH_S real seconds in slow time (updateHints).
+   * Returns the ghost mode ('off': none).
+   */
+  private teach(): GhostMode {
+    const s = this.s;
+    const v = this.renderIn.drive;
+    const h = s.nubs.hero;
+    const snap = v.act === 'snap';
+    const bit = snap ? 1 : h === 'gust' ? 4 : 2;
+    // A moment holds while its act can be done: the snap ready, a pick, weather ahead under a calm vane.
+    if (!(snap ? v.state === 1 : h === 'gust' ? !v.vane && this.ahead('rain fog') : v.pick >= 0)) this.teachMode = 'off';
+    else if (!(this.taught & bit) && (snap ? this.runLevel?.introduces === 'snap' || !this.d.store.get().flags.snapTeach : s.trial?.intro === h)) {
+      this.taught |= bit;
+      this.teachMode = h === 'gust' ? 'vane' : 'press';
+      this.teachEnd = this.time + TEACH_S;
+      if (snap) {
+        this.cue('snap-ready');
+        if (!this.debugRuns) {
+          this.d.store.update((sv) => {
+            sv.flags.snapTeach = true;
+          });
         }
       }
     }
-    if (!o) {
-      this.setGhost('off');
-      return;
-    }
-    const v = this.renderer.scene.view;
-    this.ui.setGhostAt(Math.max(40, Math.min(v.vw - 40, v.ox + o.x * v.S - v.vx)), v.oy - o.y * v.S - v.vy);
-    this.setGhost(verb === 'steer' ? 'steer' : o.x < s.nubs.x ? 'left' : 'right', true);
+    return this.teachMode;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1694,6 +1756,8 @@ export class Session {
     // The new run's recording starts with the frames that brought it here (a second retry works too).
     this.rec?.frames.push(...rec.frames.slice(0, i), lift);
     this.pauseIfPlaying();
+    // §11.5: arms, jobs and the vane start empty again.
+    this.say(CONTROL_TEXT['cue.retryTag'] as string);
   }
 
   private retry(): void {
@@ -1859,6 +1923,7 @@ export class Session {
   }
 
   private onTickEvent(ev: SimEvent): void {
+    if (!SINGLE && ev.e === 'gust') gustTicks.push(this.s.tick);
     this.moments.onEvent(ev, this.s);
     this.mech.onEvent(ev);
     switch (ev.e) {
@@ -1866,15 +1931,9 @@ export class Session {
         // Controls v3 (§1.5, §2.1): a finger held through the hand-off keeps working with the new leg's meaning.
         this.input.handoff();
         this.driver.interrupt();
-        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. The sun holds."
+        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. Drag: steer Drip · …"
         this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
         this.ui.showCue(this.cueShown.id);
-        break;
-      case 'burn':
-      case 'grow':
-      case 'gust':
-        // The first verb of the run that landed: the ghost hand has taught it (a spread fire is no tap).
-        if (ev.e !== 'burn' || !ev.spread) this.verbDone = true;
         break;
       case 'feat':
         this.featSeen.set(ev.kind, ev.value);
@@ -2396,9 +2455,18 @@ export class Session {
       } else if (this.kind === 'challenge') {
         // The sender's rules: no ghost hint.
         this.setGhost('off');
+      } else if (this.teach() !== 'off') {
+        // Controls v3 (§6.1): a teaching moment's ghost, on the button (a press) or in the band below
+        // Nubs (a vane drag), in slow time for its first seconds (never on a Daily).
+        const v = this.renderer.scene.view;
+        const b = hudButton(this.renderer.scene.hud);
+        const press = this.teachMode === 'press';
+        this.ui.setGhostAt(press ? b.x - v.vx : v.vw / 2, press ? b.y - v.vy : v.nubsFrac * v.vh + TEACH_BAND);
+        this.setGhost(this.teachMode, true);
+        slow = this.time < this.teachEnd && this.kind !== 'daily';
       } else if (this.verbNow() !== 'sun') {
-        // Elementals v2 (§7.9): no drag ghost or lesson hint while an element plays its own verb; on
-        // an intro Trial the ghost plays that verb on its next target until the first verb lands.
+        // Elementals v2 (§7.9): no drag ghost or lesson hint while an element plays its own verb; the
+        // intro Drip's ghost steers on its first puddle.
         this.hints.stop();
         this.verbGhost();
       } else {
@@ -2527,8 +2595,8 @@ export class Session {
     if (comfortChanged) this.refreshTitleRun();
     this.applySettings(st);
     this.ui.setSave(this.d.store.get());
-    // Switching to Guide "Always" mid-run marks the run assisted, even if it is switched back.
-    if (this.runActive && (this.params.guide ?? st.guide) === 'always') this.runAssisted = true;
+    // Switching to Guide "Always", Strong aim help or Auto actions mid-run marks the run assisted, even if it is switched back.
+    if (this.runActive && this.assisted(st)) this.runAssisted = true;
     this.reducedMotionMaybeChanged();
   }
 
@@ -2537,6 +2605,36 @@ export class Session {
     this.d.haptics.setEnabled(st.haptics);
     this.input.sensitivity = st.sensitivity;
     this.input.invert = st.invert;
+  }
+
+  /**
+   * A driver note (§2.4): its words on the cue line (aria-live: refusal reasons, "Armed", "Growing",
+   * the calm cues) and its tips; Nubs' first rescue capture's tip marks the profile.
+   */
+  private onNote(code: number, a: number): void {
+    // A press the driver takes ends a teaching moment (§6.1).
+    if (code === NOTE_PRESS) this.teachMode = 'off';
+    if (!SINGLE && (code === NOTE_PRESS || code === NOTE_REFUSE)) {
+      answered++;
+      if (code === NOTE_REFUSE) lastRefuse = a;
+    }
+    const t = noteText(code, a, this.renderIn.drive);
+    if (t) this.say(t);
+    this.moments.onDrive(code, a, this.s, t);
+  }
+
+  /** Words on the cue line from the controls (a `ctl:` cue, 1.6 s; event and lesson cues wait it out). */
+  private say(t: string): void {
+    const id: CueId = `ctl:${t}`;
+    this.cueShown = { id, dir: undefined };
+    this.cueHold = performance.now() + 1600;
+    this.ui.showCue(id);
+  }
+
+  /** The run counts as assisted (the share's 🧭, latched): Guide "Always", Strong aim help or Auto actions (§8.1). */
+  private assisted(st: Settings): boolean {
+    const p = this.params;
+    return (p.guide ?? st.guide) === 'always' || (p.aim ?? st.aim) === 'strong' || (p.autoAct ?? st.autoAct);
   }
 
   /** The Pause card's view of the run in progress (UiCallbacks.runStatus; also the test hook's). */
@@ -2677,6 +2775,7 @@ export class Session {
     const dv = this.renderIn.drive;
     return {
       phase: s.phase,
+      ready: s.ready,
       day: s.day,
       minutes: s.minutes,
       chill: s.nubs.chill,
@@ -2695,7 +2794,6 @@ export class Session {
       mods: Array.from(s.mods),
       levelProgress: levelProgress(s),
       eclipse: s.eclipse,
-      gust: s.sun.gust,
       locked: s.sun.locked,
       moonlit: s.moonlit,
       // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the walking element, the relay index, the Cold
@@ -2713,6 +2811,7 @@ export class Session {
       drive: {
         act: dv.act,
         state: dv.state,
+        fill: dv.fill,
         pick: dv.pick,
         queue: Array.from(dv.queue),
         due: dv.due,
@@ -2722,6 +2821,9 @@ export class Session {
         vaneResting: dv.vaneResting,
         glide: Number.isFinite(dv.glide) ? dv.glide : null,
         refuse: dv.refuse,
+        refuseNote: lastRefuse,
+        answered,
+        down: this.renderIn.buttonDown,
         aimDeg: this.driveOpts.aimDeg,
       },
       el:
@@ -2732,7 +2834,8 @@ export class Session {
               wind: s.el.wind,
               hold: s.el.hold,
               spent: s.el.spent,
-              objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, veiled: veiled(s, o) })),
+              gusts: gustTicks.slice(),
+              objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, need: needOf(o), veiled: veiled(s, o) })),
               burns: s.stats.burns ?? 0,
               drinks: s.stats.drinks ?? 0,
               trees: s.stats.trees ?? 0,
@@ -2946,6 +3049,12 @@ export class Session {
   demo(name: string): void {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
+    // Controls v3 (§12.2): 'snapReady' fills the run's meter (the Bank's charge too), so the button's press really casts.
+    if (name === 'snapReady') {
+      s.nubs.frost = Math.max(s.nubs.frost, 1);
+      s.nubs.frostH = Math.max(s.nubs.frostH, TUNING.bank.costH);
+    }
+    if (name === 'cool') cool = true;
     // v1.5: bud, bloom, snapReady, snap, deep (game/mechanics.ts).
     if (this.mech.demo(name, s, this.snap, this.time)) return;
     let ev: SimEvent | null = null;

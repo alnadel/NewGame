@@ -442,6 +442,20 @@ describe('migrate', () => {
     expect(sanitizeSettings({ aim: 'light', swingBoost: true, hand: 'left', autoAct: true })).toMatchObject({ aim: 'light', swingBoost: true, hand: 'left', autoAct: true });
     expect(sanitizeSettings({ aim: 'max', swingBoost: 1, hand: 'up', autoAct: 'yes' })).toMatchObject({ aim: 'standard', swingBoost: false, hand: 'right', autoAct: false });
   });
+
+  it("Controls v3's teaching flag (snapTeach) defaults off, survives migrate and only turns on in a merge (§6.1)", () => {
+    const base = defaults(NOW);
+    expect(base.flags.snapTeach).toBe(false);
+    const old = JSON.parse(JSON.stringify(base)) as { flags: Record<string, unknown> };
+    delete old.flags.snapTeach;
+    const r = migrate(JSON.stringify(old), NOW);
+    expect(r.status === 'ok' && r.save.flags.snapTeach).toBe(false);
+    const a: Save = { ...base, flags: { ...base.flags, snapTeach: true } };
+    const m = mergeSaves(base, a, base);
+    expect(m.flags.snapTeach).toBe(true);
+    const kept = migrate(JSON.stringify(m), NOW);
+    expect(kept.status === 'ok' && kept.save.flags.snapTeach).toBe(true);
+  });
 });
 
 describe('storage adapter', () => {

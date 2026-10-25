@@ -13,7 +13,7 @@ import { appIconSvg, logoLayers, logoSvg } from '../../src/ui/art.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { HourGlyph, RunResult } from '../../src/core/index.ts';
+import { NOTE_CALM, NOTE_PRESS, NOTE_REFUSE, NOTE_SETTLE, REFUSE_BUSY, REFUSE_CHARGING, REFUSE_FULL, REFUSE_LOCKED, REFUSE_LOW, REFUSE_NOTHING, REFUSE_WAIT, type DriveView, type HourGlyph, type RunResult } from '../../src/core/index.ts';
 import { defaults } from '../../src/meta/save.ts';
 import type { Save } from '../../src/meta/saveTypes.ts';
 import { dayStripLines, GLYPHS, MOON } from '../../src/meta/share.ts';
@@ -25,6 +25,7 @@ import {
   continueLabel,
   cueDuration,
   cueText,
+  noteText,
   dailyPlan,
   dailyRunLabel,
   journalChart,
@@ -358,12 +359,45 @@ describe('Title, Daily and cue copy (UM9)', () => {
     expect(cueDuration('swing', undefined)).toBe(2400);
   });
 
-  it('Elementals v2: the cue line announces each TAG, and says when the sun holds (docs/ELEMENTALS_V2.md §7.11)', () => {
-    expect(cueText('tag-ember', undefined, false)).toBe("Ember's turn.");
-    expect(cueText('tag-drip', undefined, true)).toBe("Drip's turn. The sun holds.");
-    expect(cueText('tag-gust', undefined, false)).toBe("Gust's turn. The sun holds.");
-    expect(cueText('tag-nubs', undefined, false)).toBe("Nubs' turn.");
+  it('Controls v3: the cue line announces each TAG with its drag and button lines (docs/CONTROLS_V3.md §6.1, §13.1)', () => {
+    expect(cueText('tag-ember', undefined, false)).toBe("Ember's turn. Drag: turn the sun · Button: burn the next wall");
+    expect(cueText('tag-drip', undefined, true)).toBe("Drip's turn. Drag: steer Drip · No button: the sun holds");
+    expect(cueText('tag-gust', undefined, false)).toBe("Gust's turn. Drag: set the wind · Button: calm the wind");
+    expect(cueText('tag-nubs', undefined, false)).toBe("Nubs' turn. Drag: turn the sun · Button: Cold Snap");
     expect(cueDuration('tag-sprout', undefined)).toBe(2400);
+    expect([cueText('snap-ready', undefined, false), cueText('snap-ready', undefined, true)]).toEqual(['Full! Tap the frost button.', 'Full! Press ↓ for a Cold Snap.']);
+  });
+
+  it('Controls v3: driver notes on the cue line: refusal reasons with their numbers, Armed and Growing, the calm cues (§8.2, §13.3)', () => {
+    const v = { act: 'snap', fill: 0.427, lockTicks: 100 } as unknown as DriveView;
+    expect(noteText(NOTE_REFUSE, REFUSE_CHARGING, v)).toBe('Cold Snap charging · 42%');
+    expect(noteText(NOTE_REFUSE, REFUSE_CHARGING + 16, v)).toBe('Cold Snap charging · 42%');
+    expect(noteText(NOTE_REFUSE, REFUSE_LOCKED, v)).toBe('Hand-off in 2 s');
+    expect([noteText(NOTE_REFUSE, REFUSE_WAIT, v), noteText(NOTE_REFUSE, REFUSE_BUSY, v), noteText(NOTE_PRESS, 1, v)]).toEqual(['Get ready…', 'The snap is on', '']);
+    const burn = { ...v, act: 'burn' } as DriveView;
+    expect([noteText(NOTE_REFUSE, REFUSE_NOTHING, burn), noteText(NOTE_REFUSE, REFUSE_LOW, burn), noteText(NOTE_REFUSE, REFUSE_FULL, burn), noteText(NOTE_PRESS, 2, burn)]).toEqual([
+      'Nothing to burn yet',
+      'Low flame: turn the sun onto Ember',
+      'Two walls ready',
+      'Armed',
+    ]);
+    const grow = { ...v, act: 'grow' } as DriveView;
+    expect([noteText(NOTE_REFUSE, REFUSE_NOTHING, grow), noteText(NOTE_REFUSE, REFUSE_LOW, grow), noteText(NOTE_REFUSE, REFUSE_FULL, grow), noteText(NOTE_PRESS, 3, grow)]).toEqual([
+      'Nothing to grow yet',
+      'Low sap',
+      'Two plants queued',
+      'Growing',
+    ]);
+    const calm = { ...v, act: 'calm' } as DriveView;
+    expect([noteText(NOTE_CALM, 0, calm), noteText(NOTE_CALM, 1, calm), noteText(NOTE_CALM, 2, calm), noteText(NOTE_PRESS, 4, calm), noteText(NOTE_SETTLE, 1, calm)]).toEqual([
+      '',
+      'Calm: saving Lift',
+      'The wind is calm',
+      '',
+      '',
+    ]);
+    expect(cueText('ctl:Armed', undefined, false)).toBe('Armed');
+    expect(cueDuration('ctl:Armed', undefined)).toBe(1600);
   });
 });
 

@@ -4,9 +4,11 @@
 // landscape shows the rotate overlay. Wave 3: on wide screens every control lies inside the world
 // rect the game publishes (K9), short viewports keep Retry reachable, large text keeps the tray
 // labels apart, a rich save's chips clear Nubs' halo, the challenge banner clears the chips, and
-// a toast clears the menu header. Screenshots are attached, not asserted.
+// a toast clears the menu header. Controls v3 (docs/CONTROLS_V3.md §1.1, §5.2, §12.2): the action
+// button's hit disc lies inside the viewport and clear of the edge zones, either hand, and a point
+// 340 u ahead of Nubs lies below the HUD band. Screenshots are attached, not asserted.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { challengeCode, drag, keepAlive, OPEN_SAVE, openGame, seedSave, waitForScreen } from './helpers.ts';
+import { button, challengeCode, drag, keepAlive, OPEN_SAVE, openGame, seedSave, waitForScreen, worldToScreen } from './helpers.ts';
 
 const SIZES = [
   { width: 320, height: 568 },
@@ -466,5 +468,41 @@ for (const size of [
       expect(hud.rulerW, `ruler width with Snow ${snow}`).toBeGreaterThanOrEqual(48);
     }
     await info.attach(`hud-${size.width}`, { body: await page.screenshot({ clip: { x: 0, y: 0, width: size.width, height: 64 } }), contentType: 'image/png' });
+  });
+}
+
+// Controls v3 (§1.1, §5.2): the button's disc (hit radius 52k) clear of the 16 px side zones and the
+// bottom band, on either side; Nubs rides high enough that the whole targeting range (340 u) shows
+// below the HUD band (the top inset + 64 px).
+for (const size of [
+  { width: 360, height: 640 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+  { width: 1280, height: 720 },
+]) {
+  test(`Controls v3 at ${size.width}x${size.height}: the button inside the viewport and clear of the edge zones, both hands; 340 u ahead below the HUD`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'one project walks the sizes');
+    await page.setViewportSize(size);
+    for (const hand of ['right', 'left'] as const) {
+      await page.goto(`/?level=12&test=1&hand=${hand}`);
+      await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+      await waitForScreen(page, 'play');
+      await keepAlive(page);
+      await page.keyboard.press('Space');
+      await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.state().drive.act), { timeout: 10_000 }).toBe('snap');
+      await page.waitForTimeout(200);
+      const b = await button(page);
+      expect([b.shown, b.side]).toEqual([true, hand]);
+      expect(b.x - b.r, `${hand} disc clear of the left zone`).toBeGreaterThanOrEqual(16);
+      expect(b.x + b.r, `${hand} disc clear of the right zone`).toBeLessThanOrEqual(size.width - 16);
+      expect(b.y + b.r, `${hand} disc above the bottom band`).toBeLessThanOrEqual(size.height - 8);
+      expect(b.y - b.r, `${hand} disc on screen`).toBeGreaterThanOrEqual(0);
+      const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
+      const a = await worldToScreen(page, 0, 0);
+      const c = await worldToScreen(page, 0, 100);
+      const perU = (a.y - c.y) / 100;
+      const top = await page.evaluate(() => parseFloat(document.getElementById('ui')!.style.getPropertyValue('--world-top')) || 0);
+      expect(nubs.y - 340 * perU, '340 u ahead below the HUD band').toBeGreaterThan(top + 64);
+    }
   });
 }

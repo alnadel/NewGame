@@ -9,8 +9,8 @@
   position: absolute;
   left: 0;
   right: 0;
-  /* In play Nubs and his halo dial sit at 68-70% of the height: the hint stays just below them. */
-  top: min(84%, calc(100% - var(--in-bottom) - 72px));
+  /* Controls v3 (§6.1): the hand drags in the band 130 px below Nubs (camera.ts puts him at 60-72%). */
+  top: min(calc(var(--nubs-y, 70%) - var(--wt) + 130px), calc(100% - var(--in-bottom) - 72px));
   display: none;
   flex-direction: column;
   align-items: center;
@@ -128,11 +128,11 @@
   50% { opacity: 0.45; }
 }
 
-/* Elementals v2 (docs/ELEMENTALS_V2.md §7.9): an intro element's verb, played on its next target
-   (ui.setGhostAt: --gx/--gy in the column): a tap, a hold, a short sideways drag (Drip's steer) or a
-   swipe ('left'/'right'), with its word. */
-.ghost[data-mode='tap'],
-.ghost[data-mode='hold'],
+/* Anchored ghosts (ui.setGhostAt: --gx/--gy in the column): Drip's steer (Elementals v2 §7.9) and
+   Controls v3's teaching (docs/CONTROLS_V3.md §6.1): a tap on the action button ('press') and a 40 px
+   vane drag that lifts ('vane'), each with its word. */
+.ghost[data-mode='press'],
+.ghost[data-mode='vane'],
 .ghost[data-mode='steer'] { display: flex; }
 
 /* Anchored, it rides above the cue line and says its word over the fingertip (clear of the dial). */
@@ -144,18 +144,14 @@
 }
 
 .ghost.is-at .ghost-word { display: flex; order: -1; margin: 0 0 10px; }
-.ghost[data-mode='tap'] .ghost-arrow,
-.ghost[data-mode='hold'] .ghost-arrow { display: none; }
+.ghost[data-mode='press'] .ghost-arrow { display: none; }
 .ghost[data-mode='steer'] .ghost-hand { animation: ghost-swing 1.6s ease-in-out infinite; }
-.ghost[data-mode='tap'] .ghost-hand { animation: ghost-tap 1.2s ease-in-out infinite; }
-.ghost[data-mode='hold'] .ghost-hand { animation: ghost-hold 2s ease-in-out infinite; }
+.ghost[data-mode='press'] .ghost-hand { animation: ghost-tap 1.2s ease-in-out infinite; }
+.ghost.is-at[data-mode='vane'] { --reach: 20px; }
+.ghost[data-mode='vane'] .ghost-hand { animation: ghost-once 1.5s ease-in-out infinite; }
 
 @keyframes ghost-tap {
   30%, 45% { transform: scale(0.8); }
-}
-
-@keyframes ghost-hold {
-  15%, 80% { transform: scale(0.8); }
 }
 
 .ghost-word {
