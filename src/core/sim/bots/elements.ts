@@ -28,19 +28,21 @@ import type { HeroId } from '../../../config/heroes.ts';
 import { TUNING } from '../../../config/tuning.ts';
 import { DT, TICK_HZ } from '../../clock.ts';
 import { worldYAtTick } from '../../gen/plan.ts';
-import { burnTicksOf, downwind, emberDue, emberLeft, gustFloor, overlapQ, ownWall, paceOf, showered } from '../../drive/pick.ts';
+import { downwind, emberDue, emberLeft, gustFloor, overlapQ, paceOf, showered } from '../../drive/pick.ts';
 import { EL_GONE, EL_IDLE, type ElObj, type ElState } from '../../objects.ts';
 import { rngFor, type Rng } from '../../rng.ts';
 import { trailX } from '../../trail.ts';
 import {
   arriveTicks,
   burnTarget,
+  burnTicksOf,
   contactTicks,
   growLeft,
   growTarget,
   inWeather,
   laneOf,
   needOf,
+  ownWall,
   pointLit,
   walkerAt,
   weatherGood,

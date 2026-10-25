@@ -1846,3 +1846,38 @@ list) and the final `build:single`.
   and `g-hold` goes (UI draws its own); the DOM icons `spin`, `detent` and `mirror` and the canvas
   glyph `mirror` go with the retired concepts that alone used them; `featGlyph` and `featLabel` lose
   their level argument with `gusty`; `Bot` gains the optional `drive` view (§2.1).
+- **C0c** (skeleton, two commits on C0b):
+  1. The proof commit (`039bfa7`): `drive/pick.ts` holds the shared timing (`emberDue`, `emberLeft`,
+     `showered`, `downwind`, `overlapQ`, `ownAhead`, `gustFloor`, `paceOf`) and `bots/elements.ts`
+     calls it instead of its private copies. `node scripts/golden.ts` leaves `tests/golden/hashes.json`
+     byte-identical and `sim --trials --check` prints C0b's report line for line (exit 0, only the
+     accepted waivers). `build:single` 825,050 B.
+  2. The driver: arms and ignition, jobs with goals, release and pre-emption, the governor with
+     auto-calm, refusals with repeats, the pre-TAG press, the snap states. Goldens and the trials
+     report unchanged again (the bots do not use the driver yet). `build:single` **831,014 B**:
+     +6,020 B over C0b (the picks about 2.7 KB, the driver about 3.3 KB over the C0b stub; no other
+     code enters the bundle), so C0c alone is 2,564 B over CORE's +3,456 B allowance (§12.3). Recorded
+     for the lead: the release budget needs rebalancing or CORE's cut list before CORE's branch adds
+     the magnet, the hand-over, due, Auto actions and Auto Snap.
+  Choices made in C0c, each within the contract:
+  - `emberDue(s, i, lead, tagMargin = TUNING.drive.ember.tagMargin)`: the optional fourth argument is
+    the TAG margin of `emberLeft`; the bots pass their own (2 · `TAP_PRESS` = 12 ticks), which kept
+    every hash. Showers stay the caller's test (`showered`), as in the bots.
+  - `pick.ts` also exports `paceOf`, `emberLeft`, `overlapQ`, `targetX` and `nearLast` (a verb's last
+    tick that still finds its object `near` ahead, the walker one tick on); core's `isWall`,
+    `isCrossing`, `edgeOf`, `burnTicksOf` and `ownWall` are exported from `sim/elements.ts` and used
+    instead of copies (the bots now use core's `ownWall` and `burnTicksOf`: same results, same hashes).
+  - A press is tried on its own tick and the next 18 and refused on the 18th; a buffered press also
+    drops when the driver sees a new leg (`relayIdx`), so a bot-owned driver needs no `interrupt`. The
+    pre-TAG press waits in its own slot (`view.buffered` while it waits) and becomes an ordinary
+    buffered press on the incoming element's first tick.
+  - Notes are `PRESS` and `REFUSE` only: a Calm press on a calm vane writes nothing until CORE adds
+    `CALM` with a = 2; an auto-calm writes nothing until `CALM` with a = 1.
+  - Ember: `view.pick` is −1 while both arms are taken (the next press would be refused `full`);
+    `view.state` is ready or low by the pick's cost. Sprout: a press tops up a running plot when the
+    pick is a plot or there is none (the running plot is in a job, so it is never the pick); a job's
+    hold starts only on a tick its point resolves to it (`growTarget`), and any hold that is not the
+    running job's is let go first (a pre-empted plot, a hold left from before `begin`).
+    `view.state` is ready, low (a plot with Sap ≤ 30) or working (pouring). `view.due` stays 0.
+  - Driver cost per tick (fill with its observe, Node, reactive sun frames with presses every 20
+    ticks): median 0.3-3.5 µs on T1, T3, T4 and T7; the Sprout pick's downwind test is the most.

@@ -356,11 +356,11 @@ export function pointLit(s: SimState, x: number, y: number): boolean {
 // Small helpers (no allocation)
 // ---------------------------------------------------------------------------------------------
 
-function isWall(k: ElKind): boolean {
+export function isWall(k: ElKind): boolean {
   return k === 'bramble' || k === 'gate' || k === 'ice';
 }
 
-function isCrossing(k: ElKind): boolean {
+export function isCrossing(k: ElKind): boolean {
   return k === 'gap' || k === 'stream';
 }
 
@@ -369,7 +369,7 @@ function isWeather(k: ElKind): boolean {
 }
 
 /** The contact edge (§0.2): walls o.y − wallDepth/2, crossings o.y − r, weather its near rim, circles o.y − r − touch. */
-function edgeOf(o: ElObj): number {
+export function edgeOf(o: ElObj): number {
   const k = o.kind;
   if (isWall(k)) return o.y - O.wallDepth / 2;
   if (isCrossing(k)) return o.y - o.r;
@@ -383,13 +383,13 @@ function pace(s: SimState): number {
 }
 
 /** Ticks a fire on `o` burns (bramble, gate, ice, puddle, plot; 0 for the rest). */
-function burnTicksOf(o: ElObj): number {
+export function burnTicksOf(o: ElObj): number {
   const b = EM.burnTicks as Partial<Record<ElKind, number>>;
   return b[o.kind] ?? 0;
 }
 
 /** A bramble or gate Ember itself will reach (its fire can feed Ember, §2.2). */
-function ownWall(s: SimState, o: ElObj): boolean {
+export function ownWall(s: SimState, o: ElObj): boolean {
   return (o.kind === 'bramble' || o.kind === 'gate') && walkerAt(s, edgeOf(o)) === 'ember';
 }
 
