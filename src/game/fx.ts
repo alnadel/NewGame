@@ -17,7 +17,7 @@
 // another element walks (§1.4). Controls v3 (docs/CONTROLS_V3.md §7.2): the wind streaks are retired
 // with the Gusts concept (the vane's chevrons and the wind chip show the wind).
 
-import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
+import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, NOTE_AUTO, NOTE_CALM, NOTE_PRESS, NOTE_REFUSE, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -51,7 +51,7 @@ import {
   spawn,
 } from '../render/particles.ts';
 import { flashDetent, heroArcColor, SWING_ARC_S } from '../render/halo.ts';
-import { POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
+import { BTN_FLASH_S, BTN_NO_S, POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
 import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { FaceName } from '../render/candy.ts';
@@ -141,8 +141,16 @@ export class Fx {
     resetBlooms();
   }
 
-  /** Controls v3 (docs/CONTROLS_V3.md §2.4, §7): one driver note (code, a). No effects yet (ART's branch adds them). */
-  onDrive(_code: number, _a: number): void {}
+  /**
+   * Controls v3 (docs/CONTROLS_V3.md §2.4, §7.1): one driver note (code, a) on the button: an
+   * accepted press, a calm or an automatic act flashes it, a refused press shakes it red (every
+   * time: the chip always shows; only the haptic and the fizz go quiet on a repeat).
+   */
+  onDrive(code: number, a: number): void {
+    const h = this.sc.hud;
+    if (code === NOTE_PRESS || code === NOTE_AUTO || (code === NOTE_CALM && a < 2)) h.btnFlash = BTN_FLASH_S;
+    else if (code === NOTE_REFUSE) h.btnNo = BTN_NO_S;
+  }
 
   /** Routes one frame's events. */
   onEvents(events: readonly SimEvent[], s: SimState): void {
@@ -159,9 +167,6 @@ export class Fx {
       switch (ev.e) {
         case 'detent':
           flashDetent(sc.halo, ev.index);
-          break;
-        case 'catch':
-          sc.sun.squash = 0.08;
           break;
         case 'go': {
           // End of the start beat: a little cheer and a kick of snow dust as Nubs sets off; on a
@@ -422,8 +427,12 @@ export class Fx {
         // Elementals.
         case 'tag': {
           // TAG!: the incoming element's stamp, a hop, a ring and sparks in its colour, 0.3 s of slow-mo.
+          // Controls v3 (§6.1): the 1.2 s banner names the element with its drag and button lines,
+          // and a finger held through the hand-off glows on the dial for 300 ms.
           const c = heroArcColor(ev.to);
           this.stamp('tag', 'TAG!', 0.7, HEROES[ev.to].face);
+          sc.halo.tagGlow = 0.3;
+          sc.halo.tagCol = c;
           hop(sc.nubs, 8);
           sc.nubs.happy = 0.9;
           addRing(sc.rings, nx, ny, 6, 60, 0.45, 3.5, 0.9, c);

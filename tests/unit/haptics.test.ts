@@ -6,6 +6,7 @@ import {
   WebVibrateHaptics,
   createHaptics,
   hapticForEvent,
+  hapticForNote,
   isDetentHapticStep,
   webVibrateBackend,
 } from '../../src/platform/haptics.ts';
@@ -70,6 +71,11 @@ describe('patterns', () => {
       frost: [6, 40, 6],
       snap: [25, 40, 35],
       deep: 8,
+      // Controls v3 (docs/CONTROLS_V3.md §7.3): the four drive patterns.
+      act: 8,
+      refuse: [30, 40, 30],
+      settle: 6,
+      notch: 6,
     });
   });
 
@@ -286,6 +292,49 @@ describe('WebVibrateHaptics gating', () => {
     t.at(200);
     t.h.onEvents([{ e: 'multUp', level: 5 }], 0);
     expect(t.patterns()).toEqual([5, [10, 30, 10, 30, 20]]);
+  });
+
+  it("a magnet glide's detents are silent (Controls v3 §4.5)", () => {
+    const t = setup();
+    t.h.onEvents([{ e: 'detent', dir: 1, index: 6 }], 120, true);
+    expect(t.calls).toHaveLength(0);
+    t.h.onEvents([{ e: 'detent', dir: 1, index: 6 }], 120);
+    expect(t.patterns()).toEqual([5]);
+  });
+});
+
+describe('drive notes (Controls v3 §7.3)', () => {
+  it('maps every note code to a pattern or an explicit none', () => {
+    // PRESS, REFUSE (first / repeat), BUFFER, SETTLE (capture / track), NOTCH, CALM (pressed, auto, already calm), WAIT_LOW, EXPIRE, HANDOVER, AUTO.
+    const cases: [number, number, string | null][] = [
+      [1, 2, 'act'],
+      [2, 3, 'refuse'],
+      [2, 3 + 16, null],
+      [3, 2, null],
+      [4, 1, 'settle'],
+      [4, 0, null],
+      [5, 1, 'notch'],
+      [6, 0, 'act'],
+      [6, 1, 'act'],
+      [6, 2, null],
+      [7, 4, null],
+      [8, 4, 'refuse'],
+      [9, 120, null],
+      [10, 1, null],
+    ];
+    for (const [code, a, name] of cases) expect(hapticForNote(code, a), `${code}/${a}`).toBe(name);
+  });
+
+  it('buzzes a first refusal and stays silent on a repeat of its reason', () => {
+    const t = setup();
+    t.h.onDrive(2, 1);
+    t.at(500);
+    t.h.onDrive(2, 1 + 16);
+    t.at(1000);
+    t.h.onDrive(1, 1);
+    t.at(1500);
+    t.h.onDrive(5, -1);
+    expect(t.patterns()).toEqual([[30, 40, 30], 8, 6]);
   });
 });
 

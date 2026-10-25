@@ -1,6 +1,6 @@
 // The edge sun mascot (GDD §10, V1_PLAN §9): a decorative sun in sunglasses riding a rounded
 // rectangle inset from the viewport edges, on the ray from Nubs toward θ. Its face follows Chill
-// (smug ≥ 60, worried 30-60, horrified < 30), sighs on a PHEW, squashes on a catch, turns away
+// (smug ≥ 60, worried 30-60, horrified < 30), sighs on a PHEW, turns away
 // guiltily when Nubs melts, sinks at sunset, and becomes the moon at night. Its top run stays
 // below the HUD band. Around noon it turns boss (GR10): it swells, its rays flare and flicker over
 // a second, counter-turning orange corona, and it pushes its shades up to glare and grin.
@@ -33,12 +33,11 @@ export interface SunGlyph {
   init: boolean;
   /** Night 0..1 (moon). */
   night: number;
-  squash: number;
   guilty: number;
 }
 
 export function createSunGlyph(): SunGlyph {
-  return { x: 0, y: 0, mx: 0, my: 0, init: false, night: 0, squash: 0, guilty: 0 };
+  return { x: 0, y: 0, mx: 0, my: 0, init: false, night: 0, guilty: 0 };
 }
 
 const out = new Float64Array(2);
@@ -132,8 +131,6 @@ export function drawSun(
   g.globalAlpha = a;
   g.save();
   g.translate(gx, gy);
-  const sq = 1 - 0.1 * Math.min(1, s.squash / 0.08);
-  g.scale(1 / sq, sq);
   if (boss > 0.01) {
     // The boss corona: 12 orange rays between the main ones, turning the other way at 20°/s.
     g.rotate(-time * 20 * DEG);

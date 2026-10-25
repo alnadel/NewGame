@@ -21,6 +21,7 @@ import {
   queryCasters,
   queryPickups,
   SAMPLE_DX,
+  settleTarget,
   SAMPLE_DY,
   trailSlope,
   worldPlan,
@@ -119,8 +120,6 @@ import { ctx2d, makeCanvas } from './sprites.ts';
 import { bossWeight, createSunGlyph, drawFlareCue, drawSun, placeSun, type SunGlyph, type SunMood } from './sun.ts';
 
 const DEG = Math.PI / 180;
-/** Sun Lock's warning: the padlock blinks this many ticks before the lock. */
-const LOCK_WARN_TICKS = 36;
 /** The moon's shadow length factor (a low moon). */
 const MOON_COT = 1.2;
 let moonRim: Canvas2D | null = null;
@@ -449,6 +448,7 @@ export function createScene(): RenderScene {
       hc: false,
       drive: null,
       hand: 'right',
+      buttonDown: false,
     },
   };
 }
@@ -468,6 +468,7 @@ function hudInput(sc: RenderScene, inp: RenderInput, alpha: number): HudInput {
   h.hc = inp.highContrast;
   h.drive = inp.drive;
   h.hand = inp.hand;
+  h.buttonDown = inp.buttonDown;
   return h;
 }
 
@@ -980,7 +981,7 @@ export class Renderer {
     }
 
     // A Trial's telegraphs, over the world (canopies and clouds included) and under the dial.
-    if (inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause')) drawElCues(g, v, s, time, inp.reducedMotion, inp.highContrast, inp.dragging, sc.hud.bottom + 6, sc.banners.levelKeys);
+    if (inp.mapT < 0 && (inp.screen === 'play' || inp.screen === 'pause')) drawElCues(g, v, s, time, inp.reducedMotion, inp.highContrast, inp.dragging, sc.hud.bottom + 6, inp.drive, sc.hud.btnX, sc.hud.btnY, 46 * hudScale(v));
     // Debug geometry.
     if (import.meta.env.MODE !== 'single' && inp.debug) drawDebug(g, v, s, inp.debug, ux, uy, snap.cot, snap.tAbs, pose, sc.wispTries);
 
@@ -1015,11 +1016,18 @@ export class Renderer {
       hi.blind = s.mods.has('blind');
       hi.hideNext = fog;
       hi.locked = s.sun.locked;
+      // Controls v3 (§7.2): the lock countdown, the ghost sun and its settle preview, the hand-over sweep.
+      hi.lockIn = 0;
+      if (!s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock')) for (let t = 60; t > 0; t--) if (sunLockedAt(s.dayTick + t)) hi.lockIn = t;
+      const d = inp.drive;
+      hi.ghost = dragging && sunUp && !s.sun.locked && s.sun.mode === 'dragging' ? snap.theta + s.sun.lag : NaN;
+      const st = inp.aimDeg > 0 && Number.isFinite(hi.ghost) ? settleTarget(s, hi.ghost, inp.aimDeg, inp.nowOnly) : NaN;
+      hi.settle = Math.abs(st - hi.ghost) > 0.5 ? st : NaN;
+      hi.glide = d.handover ? d.glide : NaN;
       // A Trial's bud arcs show while Nubs or Sprout walks.
       hi.bud = inp.screen === 'title' || (trial !== null && s.nubs.hero !== 'nubs' && s.nubs.hero !== 'sprout') ? null : inp.mech.bud;
       hi.deep = inp.mech.deep;
       hi.mech = inp.screen === 'title' ? null : inp.mech;
-      hi.lockSoon = !s.sun.locked && s.phase === 'day' && s.ready === 0 && s.mods.has('lock') && sunLockedAt(s.dayTick + LOCK_WARN_TICKS);
       hi.trial = trial ? s : null;
       hi.hc = inp.highContrast;
       drawHalo(g, sc.halo, hi);
@@ -1036,7 +1044,6 @@ export class Renderer {
     if (inp.mapT < 0 && inp.screen !== 'title' && inp.screen !== 'menu') {
       const scale = hudScale(v) * 0.9;
       sc.sun.night += ((sunUp ? 0 : 1) - sc.sun.night) * Math.min(1, adt * 2);
-      sc.sun.squash = Math.max(0, sc.sun.squash - adt);
       if (dying >= 0) sc.sun.guilty = Math.min(1, sc.sun.guilty + adt * 3);
       else sc.sun.guilty = Math.max(0, sc.sun.guilty - adt * 3);
       placeSun(sc.sun, v, pose.x, pose.y - 10 * v.S, ux, -uy, adt, v.safe.top + 84);

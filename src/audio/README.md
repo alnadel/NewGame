@@ -140,7 +140,7 @@ from 0 with the layer's fade; a layer unwanted for ≥ 1 s and five of its fade 
 | Event | Cue | Rule |
 |---|---|---|
 | `detent` | Detent click (pitch ladder by `index`) | ≥ 50 ms apart and ≤ 20/s; softer (to 60 %) as \|ω\| → 600°/s |
-| `catch` | Catch thunk | |
+| `catch` | none (Controls v3: no coasting sun in play; the recipe is gone) | |
 | `flake` | Flake bell at `degree` (0..9, octaves 5-6) | **Quantized** to the next free 16th note; ≤ 12/s |
 | `crystal` | Ice-crystal triad | |
 | `flower` | Frost-flower music-box note | Climbs the pentatonic scale each night; quantized |

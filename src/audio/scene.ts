@@ -58,6 +58,8 @@ export interface AudioView {
   /** SimState.moonlit, and whether the 'fog' concept is active. */
   moonlit?: boolean;
   fog?: boolean;
+  /** Controls v3 (§4.5): a magnet glide runs (the driver view's glide is finite): its sun detents are silent. */
+  glide?: boolean;
   /** Elementals: on a Trial the lowest health (0..100) of any body, read where Nubs' Chill is (the heartbeat, the calm arpeggio); absent elsewhere. */
   health?: number;
 }

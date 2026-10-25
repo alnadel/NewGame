@@ -55,6 +55,17 @@ const SLOWMO_MUFFLE_HZ = 1100;
 /** Detent clicks fade toward 60% at full spin speed, so fast swings purr instead of rattle. */
 const DETENT_SOFT_OMEGA = 600;
 
+/**
+ * Controls v3 (§7.3): a driver note's cue, or null (explicitly silent): a press 'uiTap' (the UI's
+ * click), a first refusal of its reason or an expired arm 'uiError' (the fizz; a repeat, a ≥ 16,
+ * is silent: its chip still shows), a capture 'clink', a vane notch 'detent'; a buffered press, a
+ * track glide, a calm, a wait for Flame, the hand-over and an automatic act play nothing of their
+ * own (the act's sim event carries its sound).
+ */
+export function driveCue(code: number, a: number): SfxName | null {
+  return code === 1 ? 'uiTap' : (code === 2 && a < 16) || code === 8 ? 'uiError' : code === 4 && a === 1 ? 'clink' : code === 5 ? 'detent' : null;
+}
+
 export class SfxRouter {
   /** Called on every heartbeat the router plays (wire haptics here so both stay in sync). */
   onHeartbeat: ((strong: boolean) => void) | null = null;
@@ -94,6 +105,12 @@ export class SfxRouter {
     if (events.length === 0) return;
     const now = this.clockMs();
     for (const ev of events) this.route(ev, view, now);
+  }
+
+  /** Controls v3 (§7.3): one driver note's cue (driveCue), if it has one. */
+  onDrive(code: number, a: number): void {
+    const name = driveCue(code, a);
+    if (name) this.cue(name, name === 'detent' ? { index: a } : {});
   }
 
   /** Plays a cue (from an event, a view edge or the game's direct play()) and applies its duck. */
@@ -163,13 +180,15 @@ export class SfxRouter {
     const day = view.day;
     switch (ev.e) {
       case 'detent':
-        if (this.detents.tryAcquire(now)) {
+        // A magnet glide's detents are silent (§4.5): only SETTLE marks magnet motion.
+        if (!view.glide && this.detents.tryAcquire(now)) {
           const spin = Math.min(1, Math.abs(view.omega) / DETENT_SOFT_OMEGA);
           this.cue('detent', { index: ev.index, gain: 1 - 0.4 * spin });
         }
         return;
       case 'catch':
-        return this.cue('catch');
+        // Controls v3 (§1.6): no coasting sun in play, so no catch cue.
+        return;
       case 'flake':
         if (this.bells.tryAcquire(now)) this.cue('bell', { day, degree: ev.degree }, true);
         return;

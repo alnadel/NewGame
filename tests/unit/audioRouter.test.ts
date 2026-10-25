@@ -3,7 +3,7 @@ import type { SimEvent } from '../../src/core/sim/events.ts';
 import type { SfxName, SfxParams } from '../../src/audio/recipes.ts';
 import { createAudioView } from '../../src/audio/scene.ts';
 import type { AudioView, Scene } from '../../src/audio/scene.ts';
-import { DUCKS, SfxRouter } from '../../src/audio/sfxRouter.ts';
+import { driveCue, DUCKS, SfxRouter } from '../../src/audio/sfxRouter.ts';
 
 interface Played {
   name: SfxName;
@@ -142,7 +142,8 @@ describe('SfxRouter events', () => {
       { e: 'ballPassed', clean: true },
     ];
     t.router.onEvents(events, t.view);
-    expect(t.names()).toEqual(['catch', 'crystal', 'noon', 'noonPassed', 'cloud', 'glare', 'gate']);
+    // Controls v3 (§1.6): no coasting sun in play, so a catch plays nothing.
+    expect(t.names()).toEqual(['crystal', 'noon', 'noonPassed', 'cloud', 'glare', 'gate']);
   });
 
   it('gives every Elementals event a cue or an explicit silence', () => {
@@ -364,5 +365,43 @@ describe('SfxRouter heartbeat', () => {
     t.frames(0.5);
     expect(t.scenes).toHaveLength(30);
     expect(t.scenes.at(-1)?.arp).toBe(3);
+  });
+});
+
+describe('SfxRouter drive notes (Controls v3 §7.3)', () => {
+  it('maps every note code to a cue or an explicit none', () => {
+    // PRESS, REFUSE (first / repeat), BUFFER, SETTLE (capture / track), NOTCH, CALM (pressed, auto, already calm), WAIT_LOW, EXPIRE, HANDOVER, AUTO.
+    const cases: [number, number, SfxName | null][] = [
+      [1, 2, 'uiTap'],
+      [2, 3, 'uiError'],
+      [2, 3 + 16, null],
+      [3, 2, null],
+      [4, 1, 'clink'],
+      [4, 0, null],
+      [5, 1, 'detent'],
+      [6, 0, null],
+      [6, 1, null],
+      [6, 2, null],
+      [7, 4, null],
+      [8, 4, 'uiError'],
+      [9, 120, null],
+      [10, 1, null],
+    ];
+    for (const [code, a, name] of cases) expect(driveCue(code, a), `${code}/${a}`).toBe(name);
+    for (let code = 1; code <= 10; code++) expect(cases.some((c) => c[0] === code)).toBe(true);
+  });
+
+  it("plays the cue, the notch on the detent ladder, and keeps a repeat refusal and a glide's detents silent", () => {
+    const t = setup();
+    t.router.onDrive(1, 2);
+    t.router.onDrive(2, 1);
+    t.router.onDrive(2, 1 + 16);
+    t.router.onDrive(4, 1);
+    t.router.onDrive(5, 2);
+    expect(t.names()).toEqual(['uiTap', 'uiError', 'clink', 'detent']);
+    expect(t.played.at(-1)?.params.index).toBe(2);
+    t.advance(100);
+    t.router.onEvents([{ e: 'detent', dir: 1, index: 3 }], { ...t.view, glide: true });
+    expect(t.names()).toHaveLength(4);
   });
 });

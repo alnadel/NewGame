@@ -55,12 +55,11 @@ import {
   hudClock,
   levelShort,
   minutesOfDay,
-  tagLocked,
   worldYAtTick,
   type Flare,
   type ForecastId,
+  type DriveAct,
   type DriveView,
-  type HeroId,
   type SimState,
   windAt,
 } from '../core/index.ts';
@@ -68,6 +67,7 @@ import type { View } from '../game/camera.ts';
 import { chip as pill, coin, displayFont, FACE, fontGen, INK, onDisplayFont, outlined, plate, slot, SLOT_2, SLOT_SUB, starSprite, type Face } from './candy.ts';
 import { cssa } from './color.ts';
 import { drawGlyph } from './glyphs.ts';
+import { heroArcColor } from './halo.ts';
 import { ctx2d, flake, makeCanvas, radialSprite, roundRect, type Canvas2D } from './sprites.ts';
 
 const TAU = Math.PI * 2;
@@ -185,15 +185,17 @@ export interface HudState {
   btnY: number;
   btnR: number;
   btnShown: boolean;
-  /** v1.5 frost meter: shown last frame, its centre and radius (CSS px), the ready pop (s) and whether it was full. */
+  /** Controls v3: the action button (the frost meter's successor) drawn last frame, its centre and the radius it covers with its pill (CSS px). */
   meterShown: boolean;
   meterX: number;
   meterY: number;
   meterR: number;
-  meterPop: number;
-  meterFull: boolean;
-  /** v1.6: full charges last frame, a spill (s left), the banked chips' values, text and widths; a cash-in's pour and a trick's flash (s left). */
-  meterFullN: number;
+  /** The button's press-in (0..1), an accepted press's flash and a refusal's shake (s left), the last frame's dt (s). */
+  btnPress: number;
+  btnFlash: number;
+  btnNo: number;
+  dt: number;
+  /** v1.6: a spill (s left), the banked chips' values, text and widths; a cash-in's pour and a trick's flash (s left). */
   spill: number;
   lastBankH: number;
   chipText: string;
@@ -203,9 +205,6 @@ export interface HudState {
   glassW: number;
   pour: number;
   ringFlash: number;
-  /** The meter's coin sprite (idle, ready, frozen) and what it was drawn for. */
-  meterBase: Canvas2D | null;
-  meterKey: number;
 }
 
 export function createHud(): HudState {
@@ -288,9 +287,10 @@ export function createHud(): HudState {
     meterX: 0,
     meterY: 0,
     meterR: 0,
-    meterPop: 0,
-    meterFull: false,
-    meterFullN: 0,
+    btnPress: 0,
+    btnFlash: 0,
+    btnNo: 0,
+    dt: 0,
     spill: 0,
     lastBankH: 0,
     chipText: '',
@@ -300,8 +300,6 @@ export function createHud(): HudState {
     glassW: 0,
     pour: 0,
     ringFlash: 0,
-    meterBase: null,
-    meterKey: -1,
   };
 }
 
@@ -313,7 +311,9 @@ export function updateHud(h: HudState, dt: number): void {
   h.multShake = Math.max(0, h.multShake - dt);
   h.snowPop = Math.max(0, h.snowPop - dt);
   h.noonSparkle = Math.max(0, h.noonSparkle - dt);
-  h.meterPop = Math.max(0, h.meterPop - dt);
+  h.btnFlash = Math.max(0, h.btnFlash - dt);
+  h.btnNo = Math.max(0, h.btnNo - dt);
+  h.dt = dt;
   h.spill = Math.max(0, h.spill - dt);
   h.pour = Math.max(0, h.pour - dt);
   h.ringFlash = Math.max(0, h.ringFlash - dt);
@@ -474,9 +474,10 @@ export interface HudInput {
   reducedMotion: boolean;
   /** High contrast (§8.5): flat faces, 4 px plate outlines, no glows. */
   hc: boolean;
-  /** Controls v3: the driver's view (the button's act) and the button's side. */
+  /** Controls v3: the driver's view (the button's act and states), the button's side and a finger on it. */
   drive: Readonly<DriveView> | null;
   hand: 'right' | 'left';
+  buttonDown: boolean;
 }
 
 /** Splits "4/6" into "4" and "/6" (the count and its target), into out[0..1]. */
@@ -751,26 +752,28 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.stroke();
     }
   }
-  // The Cold Snap's coin shows on Nubs' legs; another element's leg shows its meter pill there.
-  const hero = s.nubs.hero;
-  h.meterShown = inp.mech?.meter === true && hero === 'nubs';
-  if (h.meterShown) drawFrostMeter(g, h, v, inp, inp.mech as MechView);
-  else if (s.el !== null && hero !== 'nubs') meterPill(g, v, inp, hero);
+  // Controls v3 (§7.1): the action button while the leg has an act (or the incoming one shows), the
+  // Cold Snap's frost meter being Nubs' look; a Drip leg's Size pill sits at its centre instead.
+  const d = inp.drive;
+  const act = d === null ? 'none' : d.incoming !== 'none' ? d.incoming : d.act;
+  h.meterShown = act !== 'none';
+  if (h.meterShown) drawButton(g, h, v, inp, d as DriveView, act);
+  else if (s.el !== null && s.nubs.hero !== 'nubs') meterPill(g, v, inp, h.btnX, h.btnY);
   h.windBottom = 0;
   if (s.el !== null) windChip(g, h, v, inp);
   g.globalAlpha = 1;
 }
 
 /**
- * Elementals v2: the walking element's meter pill in the coin slot (its glyph and number on its
- * face colour). It never sets meterShown.
+ * Elementals v2: the walking element's meter pill (its glyph and number on its face colour), centred
+ * on (cx, cy): above the action button, or at its centre on a Drip leg (Controls v3 §7.1).
  */
-function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, hero: HeroId): void {
+function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, cx: number, cy: number): void {
   const k = hudScale(v);
+  const hero = inp.s.nubs.hero;
   const r = 20 * k;
   const w = 92 * k;
-  const x = v.vx + v.vw - v.safe.right - METER_SIDE * k + 3 * k - w;
-  const y = v.vy + v.vh - v.safe.bottom - METER_BOTTOM * k - METER_R * k;
+  const x = cx - w / 2;
   // The pill and its glyph are one sprite per element and scale; the number is drawn over it.
   const c = cached(0, hero + k, v, w + 6 * k, 2 * r + 6 * k, (pg) => {
     pill(pg, 2 * k, 2 * k, w, 2 * r, r, FACE[HEROES[hero].face][1], k, 3 * k);
@@ -781,13 +784,13 @@ function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, hero: He
     drawGlyph(pg, hero, 2 * k + r, 2 * k + r, 24 * k);
   });
   g.globalAlpha = inp.alpha;
-  g.drawImage(c, x - 2 * k, y - r - 2 * k, c.width / v.dpr, c.height / v.dpr);
+  g.drawImage(c, x - 2 * k, cy - r - 2 * k, c.width / v.dpr, c.height / v.dpr);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  outlined(g, String(Math.round(inp.s.nubs.chill)), x + w / 2 + r, y + k, 24 * k);
+  outlined(g, String(Math.round(inp.s.nubs.chill)), x + w / 2 + r, cy + k, 24 * k);
 }
 
-/** HUD sprite `i` (0 the meter pill, 1 the wind chip), redrawn only when its key or the dpr changes. */
+/** HUD sprite `i` (0 the meter pill, 1 the wind chip, 2 the button, 3 and 4 its lit and empty pips), redrawn only when its key or the dpr changes. */
 function cached(i: number, key: string, v: View, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): Canvas2D {
   let c = sprC[i];
   if (!c || sprK[i] !== key + v.dpr) {
@@ -852,123 +855,217 @@ function fillGradient(g: CanvasRenderingContext2D, h: HudState, level: boolean):
 const LEVEL_FILL = [0, '#B6F56A', 0.5, '#7FDB45', 1, '#3FB52A'];
 const DAY_FILL = [0, '#FF9E6B', 0.22, '#FFD27A', 0.5, '#FFF2B0', 0.78, '#FFC23D', 1, '#E3829E'];
 
-/** The frost meter's coin and ring radii, the ring's width and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px). */
-const METER_R = 28;
-const METER_RING = 34;
-const METER_RING_W = 6;
-const METER_SIDE = 34;
-const METER_BOTTOM = 44;
-/** v1.6: the Frost Bank's two charge coins hung under the meter: radius and spacing (× the HUD scale). */
+/** Controls v3 action button (§1.1, × the HUD scale): the drawn disc, its ring and the ring's width; the meter pill rides this far above its centre (52 + 14). */
+const BTN_DISC = 34;
+const BTN_RING = 40;
+const BTN_RING_W = 6;
+const PILL_UP = 66;
+/** v1.6: the Frost Bank's two charge coins hung under the ring (an Ember's arms and Sprout's jobs hang there too): radius and spacing. */
 const BANK_R = 9;
 const BANK_DX = 11;
 /** v1.6 timings (s): a spill's shake, a cash-in's pour, a trick's flash. */
 export const SPILL_S = 0.6;
 export const POUR_S = 0.8;
 export const RING_FLASH_S = 0.35;
+/** Controls v3 timings (s): the button's pulse (ready, a new act: the icon morph), an accepted press's flash, a refusal's shake. */
+export const BTN_FLASH_S = 0.25;
+export const BTN_NO_S = 0.35;
+/** Each act's disc face and icon glyph (snap: the snowflake sprite). */
+const ACT_FACE: Readonly<Record<DriveAct, Face>> = { none: FACE.ice, snap: FACE.ice, burn: FACE.red, grow: FACE.green, calm: FACE.cloud };
+const ACT_GLYPH: Readonly<Record<DriveAct, string>> = { none: '', snap: '', burn: 'ember', grow: 'sprout', calm: 'calm' };
+const RED = '#FF4D3D';
 
 /**
- * The frost meter (see the header): an ice coin whose ring fills with frost, and with the Frost
- * Bank its two charge coins under it. Full, the coin turns deep blue and glows; while a snap lasts
- * the coin freezes and the ring drains white with it, and the income banked under it waits in a chip
- * over the meter.
+ * Controls v3 (§7.1): the action button. One disc with the act's icon (snowflake, flame, leaf,
+ * still wind) inside the walker's meter ring; every state is a shape: the charging frost arc
+ * (icon 60 %), ready (full colour, one pulse; Nubs' frost meter glows and breathes), locked (a
+ * padlock and the seconds to the TAG), low (the next cost in red), idle (icon 45 %), working (the
+ * ring is the pour's size / goal), armed or queued (two pips hung under the ring, filled per arm or
+ * job), due (an amber ring outside and a 1.08 pulse every 600 ms; red at 400 ms), buffered (a rim
+ * spinner), incoming (the next act's disc with an arrow), Gust's vane (one or two chevrons the way
+ * it blows, dimmed while resting, and "−N/s" by the Lift pill). It presses in to 0.92 under a
+ * finger, pops on an accepted press, shakes red on a refused one. Reduced motion: no scale or shake,
+ * static outlines and colour swaps. Nubs' look keeps the frost meter's Bank coins, chips and pour.
  */
-function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput, m: MechView): void {
+function drawButton(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudInput, d: Readonly<DriveView>, act: DriveAct): void {
   const k = hudScale(v);
-  const n = m.pips > 1 ? 2 : 1;
-  const st = inp.s;
-  const locked = st.trial !== null && tagLocked(st);
-  const snapLeft = m.snapLeft;
-  const r = METER_R * k;
-  // Controls v3 C0b: the coin is the action button's placeholder, drawn at its centre.
-  const x = (h.meterX = h.btnX);
-  const y = h.btnY;
-  h.meterY = y;
-  h.meterR = METER_RING * k;
-  const snapping = snapLeft > 0;
-  const fullN = snapping ? 0 : Math.floor(Math.min(n, m.frost) + 0.001);
-  if (fullN > h.meterFullN) h.meterPop = 0.45;
-  h.meterFullN = fullN;
-  const full = (h.meterFull = fullN > 0);
+  const s = inp.s;
+  const m = inp.mech;
   const rm = inp.reducedMotion;
-  const a = inp.alpha * (locked ? 0.45 : 1);
-  g.globalAlpha = a;
-  // A full meter breathes, and pops (1 → 1.25 → 1) when a charge fills.
+  const x = (h.meterX = h.btnX);
+  const y = (h.meterY = h.btnY);
+  const inc = d.incoming !== 'none';
+  const pill = s.el !== null && s.nubs.hero !== 'nubs';
+  h.meterR = (BTN_RING + (pill ? 46 : 4)) * k;
+  const st = inc ? 1 : d.state;
+  const snap = act === 'snap' && m !== null;
+  const snapLeft = m ? m.snapLeft : 0;
+  const n = m && m.pips > 1 ? 2 : 1;
+  const snapping = snapLeft > 0;
+  const fullN = !snap || snapping ? 0 : Math.floor(Math.min(n, (m as MechView).frost) + 0.001);
+  h.btnPress = Math.max(0, Math.min(1, h.btnPress + (inp.buttonDown ? h.dt : -h.dt) / 0.06));
+  const due = inc ? 0 : d.due;
+  const full = fullN > 0;
+  const a = inp.alpha * (st === 2 ? 0.45 : 1);
   const breathe = full ? (rm ? 1 : 0.5 + 0.5 * Math.sin(inp.time * 8.8)) : 0;
-  const s = 1 + (rm ? 0 : 0.18 * Math.sin((Math.PI * h.meterPop) / 0.45)) + (full && !rm ? 0.03 * breathe : 0);
+  // Pressed 0.92 (direct feedback, kept under reduced motion), a pop or a due pulse 1.08 (none under
+  // reduced motion); a refusal shakes it.
+  const sc = 1 - 0.08 * h.btnPress;
+  const bx = x + (rm ? 0 : Math.sin(h.btnNo * 80) * 4 * k * (h.btnNo / BTN_NO_S));
+  const R = BTN_RING * k * sc;
+  g.globalAlpha = a;
   if (full && !inp.hc) {
     const glow = (iceGlow ??= radialSprite('120,200,255', 128, 0.8, 0.42, 0.32));
-    const gr = r * (2.2 + 0.25 * breathe);
+    const gr = BTN_DISC * k * (2.2 + 0.25 * breathe);
     g.globalAlpha = a * (0.55 + 0.45 * breathe);
-    g.drawImage(glow, x - gr, y - gr, gr * 2, gr * 2);
+    g.drawImage(glow, bx - gr, y - gr, gr * 2, gr * 2);
     g.globalAlpha = a;
   }
-  // The coin and its track (one sprite per look), then the fill: the charge in progress (all of it
-  // once both are full), or the snap draining white.
+  // The ring's track, the disc and its icon: one sprite per look (idle, ready, frozen), icon weight and contrast.
   const look = snapping ? 2 : full ? 1 : 0;
-  const mk = look * 2 + (inp.hc ? 1 : 0) + k * 10 + v.dpr * 1000;
-  if (h.meterKey !== mk || !h.meterBase) renderMeter(h, v, k, look, inp.hc, mk);
-  const base = h.meterBase as Canvas2D;
-  const bw = (base.width / v.dpr) * s;
-  g.drawImage(base, x - bw / 2, y - bw / 2, bw, bw);
-  const f = snapping ? snapLeft : fullN >= n ? 1 : Math.max(0, Math.min(1, m.frost - fullN));
+  const dim = st === 0 || st === 2 ? 2 : st === 5 ? 1 : 0;
+  const half = (BTN_RING + BTN_RING_W / 2 + 3) * k;
+  const base = cached(2, `${act}${look}${dim}${+inp.hc}${k}`, v, 2 * half, 2 * half, (bg) => {
+    ring(bg, half, BTN_RING * k, BTN_RING_W * k, k);
+    coin(bg, half, half, BTN_DISC * k, snap ? (look === 1 ? METER_READY : look === 2 ? METER_FROZEN : FACE.ice) : ACT_FACE[act], k, inp.hc);
+    bg.globalAlpha = dim === 2 ? 0.45 : dim ? 0.6 : 1;
+    const f = 36 * k;
+    if (act === 'snap') bg.drawImage(flake(), half - f / 2, half - f / 2, f, f);
+    else drawGlyph(bg, ACT_GLYPH[act], half, half, f, act === 'calm' ? '#6E5CA8' : '#FFFFFF');
+  });
+  const bw = (base.width / v.dpr) * sc;
+  g.drawImage(base, bx - bw / 2, y - bw / 2, bw, bw);
+  // The ring: the frost (Nubs), the pour's size / goal (Sprout working) or the walker's meter; red while a refusal shakes.
+  const f = h.btnNo > 0 ? 1 : inc ? 0 : snap ? (snapping ? snapLeft : fullN >= n ? 1 : Math.max(0, Math.min(1, (m as MechView).frost - fullN))) : st === 4 ? d.fill : s.nubs.chill / s.nubs.maxChill;
   if (f > 0) {
     g.lineCap = 'round';
-    g.lineWidth = METER_RING_W * k * s;
-    g.strokeStyle = snapping ? '#FFFFFF' : full ? '#9FE6FF' : '#5AB8FF';
+    g.lineWidth = BTN_RING_W * k * sc;
+    g.strokeStyle = h.btnNo > 0 ? RED : snap ? (snapping ? '#FFFFFF' : full ? '#9FE6FF' : '#5AB8FF') : st === 4 ? '#FFFFFF' : cssa(heroArcColor(s.nubs.hero), 1);
     g.beginPath();
-    g.arc(x, y, METER_RING * k * s, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, f));
+    g.arc(bx, y, R, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, f));
     g.stroke();
-    g.lineCap = 'butt';
   }
-  if (n > 1) {
-    // The bank's two charges, hung under the ring: lit in turn; a spill shakes the second.
-    bankLit ??= bankSprite(true);
-    bankOff ??= bankSprite(false);
-    const br = BANK_R * k;
+  g.lineWidth = 3 * k;
+  if (h.btnFlash > 0) {
+    // An accepted press: a white outline round the rim, fading.
+    g.strokeStyle = cssa(0xffffff, h.btnFlash / BTN_FLASH_S);
+    g.beginPath();
+    g.arc(bx, y, R + 5 * k, 0, TAU);
+    g.stroke();
+  }
+  if (due > 0) {
+    // Due: an amber ring outside the rim (red when urgent; thicker in high contrast).
+    g.lineWidth = (inp.hc ? 5 : 3.5) * k;
+    g.strokeStyle = due > 1 ? RED : '#FFB347';
+    g.beginPath();
+    g.arc(bx, y, R + 7 * k, 0, TAU);
+    g.stroke();
+  }
+  if (d.buffered) {
+    // Buffered: a white arc runs round the rim (still under reduced motion).
+    const a0 = rm ? -2 : inp.time * 14;
+    g.lineWidth = 3 * k;
+    g.strokeStyle = '#FFFFFF';
+    g.beginPath();
+    g.arc(bx, y, R, a0, a0 + 1.3);
+    g.stroke();
+  }
+  g.lineCap = 'butt';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  if (st === 2) {
+    // Locked: a padlock and the seconds to the TAG.
+    drawGlyph(g, 'lock', bx, y - 6 * k, 22 * k, INK);
+    outlined(g, String(Math.ceil(d.lockTicks / 60)), bx, y + 15 * k, 16 * k);
+  } else if (st === 3) {
+    // Low: the next act's cost in red under the icon.
+    outlined(g, String(Math.ceil(d.cost)), bx, y + 21 * k, 15 * k, RED);
+  }
+  g.globalAlpha = inp.alpha;
+  const side = inp.hand === 'left' ? 1 : -1;
+  if (inc) {
+    // Incoming: an arrow at the rim's upper outer corner.
+    const ax = bx - side * 31 * k;
+    const ay = y - 31 * k;
+    g.fillStyle = '#FFFFFF';
+    g.strokeStyle = INK;
+    g.lineWidth = 2.5 * k;
+    g.beginPath();
+    g.moveTo(ax - 6 * k, ay - 8 * k);
+    g.lineTo(ax + 7 * k, ay);
+    g.lineTo(ax - 6 * k, ay + 8 * k);
+    g.closePath();
+    g.fill();
+    g.stroke();
+  }
+  const py = y + (BTN_RING + 2) * k;
+  const br = BANK_R * k;
+  const pd = br * 2 * (BANK_SPRITE / (BANK_SPRITE - 2 * BANK_PAD));
+  if (snap ? n > 1 : !inc && (act === 'burn' || act === 'grow')) {
+    // Two pips hung under the ring: the Frost Bank's charges (lit in turn; a spill shakes the
+    // second), Ember's armed walls or Sprout's jobs (filled per arm or job).
+    const lit = cached(3, act, v, BANK_SPRITE, BANK_SPRITE, (pg) => pipArt(pg, snap ? FACE.blue : ACT_FACE[act], ACT_GLYPH[act]));
+    const off = cached(4, '', v, BANK_SPRITE, BANK_SPRITE, (pg) => pipArt(pg, SOCKET, ''));
     for (let i = 0; i < 2; i++) {
-      const lit = !snapping && m.frost >= i + 1 - 0.001;
-      const px = x + (i === 0 ? -BANK_DX : BANK_DX) * k + (i === 1 && !rm ? Math.sin(h.spill * 70) * 3 * k * (h.spill / SPILL_S) : 0);
-      const py = y + (METER_RING + 2) * k;
-      const d = br * 2 * (BANK_SPRITE / (BANK_SPRITE - 2 * BANK_PAD));
-      g.drawImage(lit ? bankLit : bankOff, px - d / 2, py - d / 2, d, d);
+      const px = x + (i ? BANK_DX : -BANK_DX) * k + (i && !rm ? Math.sin(h.spill * 70) * 3 * k * (h.spill / SPILL_S) : 0);
+      g.drawImage((snap ? !snapping && (m as MechView).frost >= i + 1 - 0.001 : (d.queue[i] as number) >= 0) ? lit : off, px - pd / 2, py - pd / 2, pd, pd);
     }
   }
-  const top = y - METER_RING * k - 10 * k;
+  if (!inc && act === 'calm' && d.vane !== 0) {
+    // The vane: a chevron per notch on the rim the way it blows (dimmed while no weather is in reach).
+    const dir = d.vane > 0 ? 1 : -1;
+    g.globalAlpha = inp.alpha * (d.vaneResting ? 0.45 : 1);
+    g.fillStyle = '#FFFFFF';
+    g.strokeStyle = INK;
+    g.lineWidth = 2 * k;
+    g.lineJoin = 'round';
+    g.beginPath();
+    for (let i = 0; i < dir * d.vane; i++) {
+      const cx = bx + dir * (BTN_RING + 11 + 9 * i) * k;
+      g.moveTo(cx - dir * 4 * k, y - 8 * k);
+      g.lineTo(cx + dir * 5 * k, y);
+      g.lineTo(cx - dir * 4 * k, y + 8 * k);
+      g.lineTo(cx - dir * k, y);
+      g.closePath();
+    }
+    g.fill();
+    g.stroke();
+    g.globalAlpha = inp.alpha;
+  }
+  if (pill) {
+    meterPill(g, v, inp, x, y - PILL_UP * k);
+    if (!inc && d.vaneCost > 0) {
+      // What the vane costs: "−4.9/s" beside the Lift pill, on the screen's side of it.
+      g.textAlign = side < 0 ? 'right' : 'left';
+      outlined(g, `−${d.vaneCost.toFixed(1)}/s`, x + side * 50 * k, y - PILL_UP * k + k, 15 * k, d.vaneResting ? '#C9C2D9' : '#FFFFFF');
+    }
+  }
+  if (!snap) return;
+  const top = y - BTN_RING * k - 10 * k;
   const maxX = v.vx + v.vw - v.safe.right - 4 * k;
   let cy = top;
-  if (m.bankH > 0) {
+  if ((m as MechView).bankH > 0) {
     // The frost banked under the snap, paid when it ends: a chip with a snowflake ("+0.3").
-    if (m.bankH !== h.lastBankH) {
-      h.chipText = snapsText(m.bankH);
+    const bh = (m as MechView).bankH;
+    if (bh !== h.lastBankH) {
+      h.chipText = snapsText(bh);
       h.chipW = chipWidth(g, h, h.chipText, k);
     }
     chip(g, h, x, cy, k, h.chipText, h.chipW, 1, maxX);
     cy -= 24 * k;
   }
-  h.lastBankH = m.bankH;
-  if (m.glassH > 0) {
+  h.lastBankH = (m as MechView).bankH;
+  const gh = (m as MechView).glassH;
+  if (gh > 0) {
     // Economy iteration 2: a saved glass cluster's frost waits for the next snap ("+0.8 next snap"),
     // a ghost chip (dimmed while no snap is ready to pour it), stacked over the snap's own chip.
-    if (m.glassH !== h.lastGlassH) {
-      h.glassText = `${snapsText(m.glassH)} next snap`;
+    if (gh !== h.lastGlassH) {
+      h.glassText = `${snapsText(gh)} next snap`;
       h.glassW = chipWidth(g, h, h.glassText, k);
     }
-    chip(g, h, x, cy, k, h.glassText, h.glassW, fullN > 0 || snapping ? 0.95 : 0.55, maxX);
+    chip(g, h, x, cy, k, h.glassText, h.glassW, full || snapping ? 0.95 : 0.55, maxX);
   }
-  h.lastGlassH = m.glassH;
-  if (locked) {
-    // No ability inside a TAG's telegraph: a "TAG" chip over the dimmed coin.
-    g.globalAlpha = inp.alpha;
-    g.font = h.chipFont;
-    const tw = g.measureText('TAG').width + 14 * k;
-    g.fillStyle = INK;
-    roundRect(g, x - tw / 2, top - 10 * k, tw, 20 * k, 10 * k);
-    g.fill();
-    g.fillStyle = '#FFFFFF';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText('TAG', x, top + 0.5 * k);
-  }
+  h.lastGlassH = gh;
   if (h.pour > 0 && !rm) {
     // A cash-in: a stream of frost from the multiplier coin down into the meter.
     const u = 1 - h.pour / POUR_S;
@@ -985,27 +1082,6 @@ function drawFrostMeter(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
       g.stroke();
     }
   }
-  g.lineCap = 'butt';
-}
-
-/**
- * The meter's coin sprite: the slot track of its ring and an ice coin with a snowflake (ready: deep
- * blue; frozen during a snap); a hero's coin is its candy face with its glyph in white (frozen while
- * its timed ability runs).
- */
-function renderMeter(h: HudState, v: View, k: number, look: number, hc: boolean, key: number): void {
-  const dpr = v.dpr;
-  const half = (METER_RING + METER_RING_W / 2 + 3) * k;
-  const size = Math.ceil(half * 2 * dpr);
-  const c = sized(h.meterBase, size, size);
-  h.meterBase = c;
-  h.meterKey = key;
-  const g = fresh(c, dpr);
-  const o = size / dpr / 2;
-  ring(g, o, METER_RING * k, METER_RING_W * k, k);
-  coin(g, o, o, METER_R * k, look === 1 ? METER_READY : look === 2 ? METER_FROZEN : FACE.ice, k, hc);
-  const f = 30 * k;
-  g.drawImage(flake(), o - f / 2, o - f / 2, f, f);
 }
 
 /** A ring track centred on (o, o): an ink band with the slot's colour inside it. */
@@ -1024,20 +1100,17 @@ const METER_READY: Face = ['#7CC4FF', '#2B7FD0', '#1F62B0', '#164A8A'];
 const SOCKET: Face = [SLOT_2, SLOT_2, SLOT_2, '#3B2A5A'];
 const METER_FROZEN: Face = ['#FFFFFF', '#E4F3FF', '#C6E6FB', '#9FD3F5'];
 
-/** The Frost Bank charge coins (lit: blue with a white flake; off: a slot socket), 48 px. */
+/** The button's pips (the Frost Bank's charge coins, an Ember's arms, Sprout's jobs): 48 px sprites with this padding. */
 const BANK_SPRITE = 48;
 const BANK_PAD = 6;
-let bankLit: Canvas2D | null = null;
-let bankOff: Canvas2D | null = null;
-function bankSprite(lit: boolean): Canvas2D {
-  const c = makeCanvas(BANK_SPRITE, BANK_SPRITE);
-  const g = ctx2d(c);
+/** A pip coin on a 48 px canvas: `face` with a white snowflake (glyph ''), a white glyph, or none (the socket). */
+function pipArt(g: CanvasRenderingContext2D, face: Face, glyph: string): void {
   const o = BANK_SPRITE / 2;
   const r = o - BANK_PAD;
   const k = r / BANK_R;
-  coin(g, o, o - k, r, lit ? FACE.blue : SOCKET, k, true);
-  if (lit) g.drawImage(flake(), o - r * 0.75, o - k - r * 0.75, r * 1.5, r * 1.5);
-  return c;
+  coin(g, o, o - k, r, face, k, true);
+  if (glyph) drawGlyph(g, glyph, o, o - k, r * 1.5, '#FFFFFF');
+  else if (face !== SOCKET) g.drawImage(flake(), o - r * 0.75, o - k - r * 0.75, r * 1.5, r * 1.5);
 }
 
 /** A chip's width for `text` (its snowflake and padding included). */

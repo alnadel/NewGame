@@ -26,11 +26,10 @@ import {
   bridged,
   burnLeft,
   burnSweet,
-  burnTarget,
+  driveWeatherX,
   EL_BURNING,
   EL_GONE,
   growLeft,
-  growTarget,
   needOf,
   relayY,
   trailX,
@@ -38,9 +37,9 @@ import {
   veiled,
   walkerAt,
   weatherGood,
-  weatherXAt,
   windAt,
   type Cloud,
+  type DriveView,
   type ElKind,
   type ElObj,
   type SimState,
@@ -528,16 +527,22 @@ export function fogOver(s: SimState, x: number, y: number): number {
   return a;
 }
 
-/** Per object, the ring its cue wears this frame: 0 none, 1 dashed (a target), 2 the key's next, 3 tap now, 4 too late. */
+/** Per object, the ring its cue wears this frame: 0 none, 1 dashed (a target), 3 tap now, 4 too late (2 unused: the button's pick is ringed apart). */
 const ring = new Uint8Array(64);
 /** The ring passes: an ink underlay, the white dashes, the key's next target, tap now (pulsing), too late. */
-const RING_W = [4.5, 2.2, 3, 3, 3.2];
-const RING_C = [0x2b2140, 0xffffff, 0xffffff, AMBER, RED];
-const RING_A = [0.35, 1, 0.95, 1, 0.95];
+const RING_W = [4.5, 2.2, 0, 3, 3.2];
+const RING_C = [0x2b2140, 0xffffff, 0, AMBER, RED];
+const RING_A = [0.35, 1, 0, 1, 0.95];
 const DASHES = [7, 6];
 /** Per object, its arrival ghost's x and colour class (−1 none; weatherGood + 1, + 3 above the view). */
 const gxs = new Float64Array(64);
 const gcs = new Int8Array(64);
+/** Per object, its calm-now ghost's x (NaN none). */
+const cxs = new Float64Array(64);
+/** The pick ring's dashes: Ember's short ones, Sprout's leaf dashes (the dial's). */
+const PICK_DASH = [3, 4];
+const LEAF_DASH = [8, 6];
+const EMBER = 0xff8a1f;
 let hatch: CanvasPattern | null = null;
 
 /** The ring around o (screen px): walls and crossings an ellipse across the trail, circles r + 6. */
@@ -552,9 +557,10 @@ function ringPath(g: CanvasRenderingContext2D, v: View, o: ElObj, grow: number):
 /**
  * The telegraphs (§2, §3.6, §7.10), over the world and under the dial: drawn above casters'
  * canopies and clouds so a target under a canopy is still marked. `top` is the play area's top
- * (CSS px, under the HUD band): weather above it gets an edge marker there.
+ * (CSS px, under the HUD band): weather above it gets an edge marker there. Controls v3: `d` is the
+ * driver's view (the pick, the arms and jobs, the vane) and (bx, by, br) the button's centre and rim.
  */
-export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, time: number, rm: boolean, hc: boolean, dragging: boolean, top: number, keys = false): void {
+export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, time: number, rm: boolean, hc: boolean, dragging: boolean, top: number, d: Readonly<DriveView>, bx: number, by: number, br: number): void {
   const el = s.el;
   if (el === null || s.phase !== 'day') return;
   const S = v.S;
@@ -568,9 +574,7 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
   g.lineCap = 'round';
   g.lineJoin = 'round';
 
-  // Each object's ring this frame (the Up key's next target only for a keyboard player: to a touch
-  // player a solid ring would read as "tap now").
-  const keyT = !keys ? -1 : hero === 'ember' ? burnTarget(s, NaN, NaN) : hero === 'sprout' ? growTarget(s, NaN, NaN) : -1;
+  // Each object's ring this frame.
   const tagY = s.trial !== null && s.relayIdx < s.trial.relays.length ? relayY(s, s.relayIdx) : 1e9;
   for (let i = 0; i < n; i++) {
     const o = objs[i] as ElObj;
@@ -581,10 +585,10 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     if (hero === 'ember') {
       // Walls and Ember's puddles alike: too late (red, crossed), tap now (pulsing), the key's next, a target.
       if (isWall(o.kind) || (o.kind === 'puddle' && ahead >= E.near && edgeOf(o) < tagY && Math.abs(o.x - trailX(tr, o.y)) <= O.puddleR + O.touch)) {
-        ring[i] = burnLeft(s, o) < 0 ? 4 : burnSweet(s, o) ? 3 : i === keyT ? 2 : 1;
+        ring[i] = burnLeft(s, o) < 0 ? 4 : burnSweet(s, o) ? 3 : 1;
       }
     } else if (hero === 'sprout' && ahead >= E.near && (isCross(o.kind) ? !bridged(o) : o.kind === 'plot' && o.casterId < 0)) {
-      ring[i] = i === keyT ? 2 : 1;
+      ring[i] = 1;
     }
   }
   if (hc) {
@@ -598,9 +602,10 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.strokeStyle = '#2B2140';
     g.stroke();
   }
-  // Dashed rings on an ink underlay; the key's next target solid white; tap now pulsing amber; too late red with a cross.
+  // Dashed rings on an ink underlay; tap now pulsing amber; too late red with a cross.
   for (let p = 0; p < 5; p++) {
     const want = p < 2 ? 1 : p;
+    if (p === 2) continue;
     let any = false;
     g.beginPath();
     for (let i = 0; i < n; i++) {
@@ -624,6 +629,49 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     g.strokeStyle = cssa(RING_C[p] as number, p === 3 ? 0.75 + 0.25 * pulse : (RING_A[p] as number));
     g.stroke();
     g.setLineDash([]);
+  }
+
+  // Controls v3 (§7.2): the button's pick, ringed outside its cue (Ember short dashes, Sprout leaf
+  // dashes; amber or red while it is due) with a thin line from the button's rim, every frame before
+  // the press; armed walls and queued sites carry a pip in the element's colour.
+  const pk = d.pick;
+  const burn = d.act === 'burn';
+  if (pk >= 0 && pk < n) {
+    const o = objs[pk] as ElObj;
+    const x = v.ox + o.x * S;
+    const y = v.oy - (o.y + (isWall(o.kind) ? 6 : 0)) * S;
+    const ang = Math.atan2(y - by, x - bx);
+    const col = d.due > 1 ? RED : d.due ? AMBER : burn ? EMBER : LIME;
+    g.lineWidth = 1.2;
+    g.strokeStyle = 'rgba(43,33,64,.5)';
+    g.beginPath();
+    g.moveTo(bx + Math.cos(ang) * br, by + Math.sin(ang) * br);
+    g.lineTo(x, y);
+    g.stroke();
+    for (let p = hc ? 0 : 1; p < 2; p++) {
+      g.beginPath();
+      ringPath(g, v, o, 6 + (rm ? 0 : 1.5 * pulse));
+      if (p) g.setLineDash(burn ? PICK_DASH : LEAF_DASH);
+      g.lineWidth = (p ? 3.5 : 7) * lw;
+      g.strokeStyle = p ? cssa(col, 1) : '#2B2140';
+      g.stroke();
+    }
+    g.setLineDash([]);
+  }
+  for (let j = 0; j < 2; j++) {
+    const i = d.queue[j] as number;
+    if (i < 0 || i >= n) continue;
+    const o = objs[i] as ElObj;
+    const x = v.ox + o.x * S + 34 * S;
+    const y = v.oy - o.y * S - 14 * S;
+    g.fillStyle = burn ? '#FF6A45' : '#69D33B';
+    g.strokeStyle = '#2B2140';
+    g.lineWidth = 2;
+    g.beginPath();
+    ell(g, x, y, 8 * S, 8 * S);
+    g.fill();
+    g.stroke();
+    drawGlyph(g, burn ? 'ember' : 'sprout', x, y, 11 * S, '#FFFFFF');
   }
 
   // Fires: a shrinking arc over each burning object (its time left, on a dark track).
@@ -714,9 +762,21 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     const o = objs[i] as ElObj;
     gcs[i] = -1;
     if (o.state === EL_GONE || !o.awake || !isWeather(o.kind) || o.y + E.weather.ryRatio * o.r < ny) continue;
-    gxs[i] = weatherXAt(s, o, Math.max(0, arriveTicks(s, o.y)));
+    const t = Math.max(0, arriveTicks(s, o.y));
+    gxs[i] = driveWeatherX(s, o, t, d.vane);
+    // Controls v3 (§3.5): while the vane is set, where the cloud lands if you calm now.
+    cxs[i] = d.vane !== 0 ? driveWeatherX(s, o, t, 0) : NaN;
     gcs[i] = weatherGood(s, o) + 1 + (o.y - E.weather.ryRatio * o.r > topY ? 3 : 0);
   }
+  g.setLineDash([3, 6]);
+  g.lineWidth = 2 * lw;
+  g.strokeStyle = cssa(0xffffff, 0.38);
+  g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const c = cxs[i] as number;
+    if ((gcs[i] as number) >= 0 && (gcs[i] as number) < 3 && Number.isFinite(c)) ell(g, v.ox + c * S, v.oy - (objs[i] as ElObj).y * S, (objs[i] as ElObj).r * S, E.weather.ryRatio * (objs[i] as ElObj).r * S);
+  }
+  g.stroke();
   g.setLineDash([6, 5]);
   for (let c = -1; c < 3; c++) {
     let any = false;
