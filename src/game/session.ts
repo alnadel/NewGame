@@ -182,6 +182,8 @@ const IDLE_BUDGET = 12;
  * so the tooling-only methods below (state, demos, pixel and map probes) compile away there.
  */
 const SINGLE = import.meta.env.MODE === 'single';
+/** Test hook: the last REFUSE note's `a` (the reason, + 16 on a repeat this leg); never kept in the single-file build. */
+let lastRefuse = 0;
 /**
  * World built before the Title's first frame: the view above Nubs plus the 540 u shadow reach, with
  * margin (GR19). Idle frames generate the rest; a tap at once pays the remainder on the first tick.
@@ -2603,6 +2605,7 @@ export class Session {
   private onNote(code: number, a: number): void {
     // A press the driver takes ends a teaching moment (§6.1).
     if (code === NOTE_PRESS) this.teachMode = 'off';
+    if (!SINGLE && code === NOTE_REFUSE) lastRefuse = a;
     const t = noteText(code, a, this.renderIn.drive);
     if (t) this.say(t);
     if (this.moments.onDrive(code, a, this.s, t) && !this.debugRuns) {
@@ -2808,6 +2811,7 @@ export class Session {
         vaneResting: dv.vaneResting,
         glide: Number.isFinite(dv.glide) ? dv.glide : null,
         refuse: dv.refuse,
+        refuseNote: lastRefuse,
         aimDeg: this.driveOpts.aimDeg,
       },
       el:
@@ -3032,6 +3036,8 @@ export class Session {
   demo(name: string): void {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
+    // Controls v3 (§12.2): 'snapReady' fills the run's meter too, so the button's press really casts.
+    if (name === 'snapReady') s.nubs.frost = Math.max(s.nubs.frost, 1);
     // v1.5: bud, bloom, snapReady, snap, deep (game/mechanics.ts).
     if (this.mech.demo(name, s, this.snap, this.time)) return;
     let ev: SimEvent | null = null;
