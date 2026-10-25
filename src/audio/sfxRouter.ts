@@ -70,41 +70,41 @@ export class SfxRouter {
   /** Called on every heartbeat the router plays (wire haptics here so both stay in sync). */
   onHeartbeat: ((strong: boolean) => void) | null = null;
 
-  private readonly out: RouterOutput;
-  private readonly clockMs: () => number;
-  private readonly detents = new RateLimiter(THROTTLES.detent[0], THROTTLES.detent[1]);
-  private readonly melts = new RateLimiter(THROTTLES.melt[0], THROTTLES.melt[1]);
-  private readonly bells = new RateLimiter(THROTTLES.bell[0], THROTTLES.bell[1]);
-  private readonly gusts = new RateLimiter(THROTTLES.gust[0], THROTTLES.gust[1]);
-  private readonly buds = new RateLimiter(THROTTLES.bud[0], THROTTLES.bud[1]);
-  private readonly deeps = new RateLimiter(THROTTLES.deep[0], THROTTLES.deep[1]);
-  private readonly tricks = new RateLimiter(THROTTLES.trick[0], THROTTLES.trick[1]);
-  private readonly pulse = new Pulse();
-  private readonly scene = createScene();
-  private slowMo = 0;
-  private duckLevel = 1;
-  private duckLeft = 0;
-  private flowers = 0;
+  readonly #out: RouterOutput;
+  readonly #clockMs: () => number;
+  readonly #detents = new RateLimiter(THROTTLES.detent[0], THROTTLES.detent[1]);
+  readonly #melts = new RateLimiter(THROTTLES.melt[0], THROTTLES.melt[1]);
+  readonly #bells = new RateLimiter(THROTTLES.bell[0], THROTTLES.bell[1]);
+  readonly #gusts = new RateLimiter(THROTTLES.gust[0], THROTTLES.gust[1]);
+  readonly #buds = new RateLimiter(THROTTLES.bud[0], THROTTLES.bud[1]);
+  readonly #deeps = new RateLimiter(THROTTLES.deep[0], THROTTLES.deep[1]);
+  readonly #tricks = new RateLimiter(THROTTLES.trick[0], THROTTLES.trick[1]);
+  readonly #pulse = new Pulse();
+  readonly #scene = createScene();
+  #slowMo = 0;
+  #duckLevel = 1;
+  #duckLeft = 0;
+  #flowers = 0;
   /** Campaign view state seen last frame (edges become cues). */
-  private locked = false;
-  private eclipse = 0;
-  private progress = -1;
+  #locked = false;
+  #eclipse = 0;
+  #progress = -1;
   /** Elementals v2: the walker is under rain (the patter), and the next drop's countdown (s) and count. */
-  private wet = false;
-  private patter = 0;
-  private drops = 0;
+  #wet = false;
+  #patter = 0;
+  #drops = 0;
 
   /** `clockMs` is a real-time clock in milliseconds (performance.now in the browser). */
   constructor(out: RouterOutput, clockMs: () => number) {
-    this.out = out;
-    this.clockMs = clockMs;
+    this.#out = out;
+    this.#clockMs = clockMs;
   }
 
   /** Feed every SimEvent emitted by the sim this frame (any number of ticks' worth). */
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void {
     if (events.length === 0) return;
-    const now = this.clockMs();
-    for (const ev of events) this.route(ev, view, now);
+    const now = this.#clockMs();
+    for (const ev of events) this.#route(ev, view, now);
   }
 
   /** Controls v3 (§7.3): one driver note's cue (driveCue), if it has one. */
@@ -115,73 +115,73 @@ export class SfxRouter {
 
   /** Plays a cue (from an event, a view edge or the game's direct play()) and applies its duck. */
   cue(name: SfxName, params: SfxParams = {}, quantize = false): void {
-    this.out.play(name, params, quantize);
+    this.#out.play(name, params, quantize);
     const duck = DUCKS[name];
     if (!duck) return;
-    this.duckLevel = Math.min(this.duckLeft > 0 ? this.duckLevel : 1, duck[0]);
-    this.duckLeft = Math.max(this.duckLeft, duck[1]);
+    this.#duckLevel = Math.min(this.#duckLeft > 0 ? this.#duckLevel : 1, duck[0]);
+    this.#duckLeft = Math.max(this.#duckLeft, duck[1]);
   }
 
   /** Once per rendered frame, with real (unscaled) seconds since the last call. */
   update(view: Readonly<AudioView>, dtReal: number): void {
     const dt = Number.isFinite(dtReal) && dtReal > 0 ? Math.min(dtReal, 0.25) : 0;
-    this.edges(view);
-    const scene = sceneFor(view, this.scene);
-    if (this.slowMo > 0) {
-      this.slowMo -= dt;
+    this.#edges(view);
+    const scene = sceneFor(view, this.#scene);
+    if (this.#slowMo > 0) {
+      this.#slowMo -= dt;
       scene.muffle = Math.min(scene.muffle, SLOWMO_MUFFLE_HZ);
     }
-    if (this.duckLeft > 0) {
-      this.duckLeft -= dt;
-      scene.duck = Math.min(scene.duck, this.duckLevel);
+    if (this.#duckLeft > 0) {
+      this.#duckLeft -= dt;
+      scene.duck = Math.min(scene.duck, this.#duckLevel);
     }
-    if (this.wet && view.screen === 'play' && (this.patter -= dt) <= 0) {
-      this.patter = 0.17;
-      this.cue('drink', { day: view.day, level: 1, degree: 4 + ((this.drops++ * 3) % 5), gain: 0.3 });
+    if (this.#wet && view.screen === 'play' && (this.#patter -= dt) <= 0) {
+      this.#patter = 0.17;
+      this.cue('drink', { day: view.day, level: 1, degree: 4 + ((this.#drops++ * 3) % 5), gain: 0.3 });
     }
-    this.out.applyScene(scene);
-    if (this.pulse.tick(dt, scene.heartbeat)) {
+    this.#out.applyScene(scene);
+    if (this.#pulse.tick(dt, scene.heartbeat)) {
       const strong = (view.health ?? view.chill) < 10;
-      this.out.play('heartbeat', { strong }, false);
+      this.#out.play('heartbeat', { strong }, false);
       this.onHeartbeat?.(strong);
     }
   }
 
   /** New run (start or retry): forget throttles, timers and per-run counters. */
   resetRun(): void {
-    for (const r of [this.detents, this.melts, this.bells, this.gusts, this.buds, this.deeps, this.tricks]) r.reset();
-    this.pulse.reset();
-    this.slowMo = 0;
-    this.duckLeft = 0;
-    this.flowers = 0;
-    this.progress = -1;
-    this.locked = false;
-    this.eclipse = 0;
-    this.wet = false;
+    for (const r of [this.#detents, this.#melts, this.#bells, this.#gusts, this.#buds, this.#deeps, this.#tricks]) r.reset();
+    this.#pulse.reset();
+    this.#slowMo = 0;
+    this.#duckLeft = 0;
+    this.#flowers = 0;
+    this.#progress = -1;
+    this.#locked = false;
+    this.#eclipse = 0;
+    this.#wet = false;
   }
 
   /** Concept signatures from the view: the lock shutting or opening, an eclipse, the final stretch. */
-  private edges(v: Readonly<AudioView>): void {
+  #edges(v: Readonly<AudioView>): void {
     const locked = v.locked ?? false;
     const eclipse = v.eclipse ?? 0;
     const progress = v.progress ?? -1;
     if (v.screen === 'play' && (v.phase === 'day' || v.phase === 'night')) {
       // A Trial's sun hold is the TAG's own moment (its cue covers it): no lock cue there.
-      if (locked !== this.locked && v.health === undefined) this.cue('lock', { index: locked ? 0 : 1 });
-      if (eclipse > 0 && this.eclipse === 0) this.cue('eclipse', { day: v.day });
-      if (progress >= FINAL_STRETCH && this.progress >= 0 && this.progress < FINAL_STRETCH) this.cue('finishNear', { day: v.day });
+      if (locked !== this.#locked && v.health === undefined) this.cue('lock', { index: locked ? 0 : 1 });
+      if (eclipse > 0 && this.#eclipse === 0) this.cue('eclipse', { day: v.day });
+      if (progress >= FINAL_STRETCH && this.#progress >= 0 && this.#progress < FINAL_STRETCH) this.cue('finishNear', { day: v.day });
     }
-    this.locked = locked;
-    this.eclipse = eclipse;
-    this.progress = progress;
+    this.#locked = locked;
+    this.#eclipse = eclipse;
+    this.#progress = progress;
   }
 
-  private route(ev: SimEvent, view: Readonly<AudioView>, now: number): void {
+  #route(ev: SimEvent, view: Readonly<AudioView>, now: number): void {
     const day = view.day;
     switch (ev.e) {
       case 'detent':
         // A magnet glide's detents are silent (§4.5): only SETTLE marks magnet motion.
-        if (!view.glide && this.detents.tryAcquire(now)) {
+        if (!view.glide && this.#detents.tryAcquire(now)) {
           const spin = Math.min(1, Math.abs(view.omega) / DETENT_SOFT_OMEGA);
           this.cue('detent', { index: ev.index, gain: 1 - 0.4 * spin });
         }
@@ -190,15 +190,15 @@ export class SfxRouter {
         // Controls v3 (§1.6): no coasting sun in play, so no catch cue.
         return;
       case 'flake':
-        if (this.bells.tryAcquire(now)) this.cue('bell', { day, degree: ev.degree }, true);
+        if (this.#bells.tryAcquire(now)) this.cue('bell', { day, degree: ev.degree }, true);
         return;
       case 'crystal':
         return this.cue('crystal', { day });
       case 'flower':
         // Each night's flowers climb the pentatonic scale, on the grid like the flake bells.
-        return this.cue('flower', { day, degree: this.flowers++ % 5 }, true);
+        return this.cue('flower', { day, degree: this.#flowers++ % 5 }, true);
       case 'flakeMelt':
-        if (this.melts.tryAcquire(now)) this.cue('melt');
+        if (this.#melts.tryAcquire(now)) this.cue('melt');
         return;
       case 'shadeEnter':
         if (ev.litFor >= AHH_MIN_LIT_S) this.cue('ahh', { day });
@@ -209,7 +209,7 @@ export class SfxRouter {
         if (ev.from > 1) this.cue('multReset');
         return;
       case 'phew':
-        this.slowMo = SLOWMO_S;
+        this.#slowMo = SLOWMO_S;
         return this.cue('phew', { day });
       case 'noonBanner':
         // Nubs' noon sting; none on a Trial (the view's health marks one), like the lock cue.
@@ -218,7 +218,7 @@ export class SfxRouter {
       case 'noonPassed':
         return this.cue('noonPassed', { day });
       case 'nightStart':
-        this.flowers = 0;
+        this.#flowers = 0;
         return this.cue('nightfall', { day: ev.day });
       case 'dawn':
         return this.cue('dayFanfare', { day: ev.day });
@@ -237,7 +237,7 @@ export class SfxRouter {
       // v1.5 core mechanics.
       case 'budGrow':
         // The tick climbs the scale as the bud grows (a rising count-up to the bloom).
-        if (this.buds.tryAcquire(now)) this.cue('budGrow', { day, degree: Math.round(Math.max(0, Math.min(1, ev.grow)) * 7) });
+        if (this.#buds.tryAcquire(now)) this.cue('budGrow', { day, degree: Math.round(Math.max(0, Math.min(1, ev.grow)) * 7) });
         return;
       case 'bloom':
         return this.cue('bloom', { day });
@@ -248,7 +248,7 @@ export class SfxRouter {
       case 'snapEnd':
         return this.cue('snapEnd', { day });
       case 'deepEnter':
-        if (this.deeps.tryAcquire(now)) this.cue('deepEnter', { day });
+        if (this.#deeps.tryAcquire(now)) this.cue('deepEnter', { day });
         return;
       // v1.6: the ring, the bank, the garden, glass, flares (gains ride on their own cue: a bloom, a parry).
       case 'multDown':
@@ -256,7 +256,7 @@ export class SfxRouter {
         return;
       case 'ringTrick':
         // A pluck high on the bud tick's ladder; the cash-in pours with the meter's shimmer; a spill tumbles down.
-        if (this.tricks.tryAcquire(now)) this.cue('budGrow', { day, degree: 8 });
+        if (this.#tricks.tryAcquire(now)) this.cue('budGrow', { day, degree: 8 });
         return;
       case 'snapCash':
         if (ev.refundH > 0) this.cue('frostReady', { day });
@@ -307,11 +307,11 @@ export class SfxRouter {
         return ev.hero === 'drip' ? this.cue('snapEnd', { day, level: 2 }) : this.cue('bell', { day, degree: 7 }, true);
       case 'gust':
         // Controls v3 (§3.5): the vane's governor gusts on its own, so its whoosh plays once a second at most.
-        if (this.gusts.tryAcquire(now)) this.cue('gust', { index: ev.dir });
+        if (this.#gusts.tryAcquire(now)) this.cue('gust', { index: ev.dir });
         return;
       case 'touch':
         // The rain's patter plays while the walker is under rain (update()).
-        this.wet = (ev.bits & 2) !== 0;
+        this.#wet = (ev.bits & 2) !== 0;
         return;
       case 'burnOut':
         return;

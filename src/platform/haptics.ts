@@ -272,72 +272,72 @@ export function webVibrateBackend(): VibrateBackend | null {
 
 export class WebVibrateHaptics implements Haptics {
   readonly supported: boolean;
-  private on: boolean;
-  private readonly backend: VibrateBackend | null;
-  private readonly now: () => number;
-  private readonly schedule: (fn: () => void, ms: number) => void;
+  #on: boolean;
+  readonly #backend: VibrateBackend | null;
+  readonly #now: () => number;
+  readonly #schedule: (fn: () => void, ms: number) => void;
   /** Start time of the last pattern played (ms). */
-  private last = Number.NEGATIVE_INFINITY;
-  private pending: HapticName | null = null;
-  private timerArmed = false;
+  #last = Number.NEGATIVE_INFINITY;
+  #pending: HapticName | null = null;
+  #timerArmed = false;
   /** Start times of the most recent detent pulses (ring of detentPerSecond). */
-  private readonly detentTimes = new Float64Array(HAPTIC_RULES.detentPerSecond).fill(Number.NEGATIVE_INFINITY);
-  private detentHead = 0;
+  readonly #detentTimes = new Float64Array(HAPTIC_RULES.detentPerSecond).fill(Number.NEGATIVE_INFINITY);
+  #detentHead = 0;
   /** Start time of the last pattern of each name with its own minimum gap (ms). */
-  private readonly lastOf = new Map<HapticName, number>();
+  readonly #lastOf = new Map<HapticName, number>();
 
   constructor(opts: WebVibrateOptions = {}) {
-    this.backend = opts.backend === undefined ? webVibrateBackend() : opts.backend;
-    this.supported = this.backend !== null;
-    this.on = opts.enabled ?? true;
-    this.now = opts.now ?? (() => performance.now());
-    this.schedule = opts.schedule ?? ((fn, ms) => void setTimeout(fn, ms));
+    this.#backend = opts.backend === undefined ? webVibrateBackend() : opts.backend;
+    this.supported = this.#backend !== null;
+    this.#on = opts.enabled ?? true;
+    this.#now = opts.now ?? (() => performance.now());
+    this.#schedule = opts.schedule ?? ((fn, ms) => void setTimeout(fn, ms));
   }
 
   get enabled(): boolean {
-    return this.on;
+    return this.#on;
   }
 
   setEnabled(on: boolean): void {
-    this.on = on;
-    if (!on) this.pending = null;
+    this.#on = on;
+    if (!on) this.#pending = null;
   }
 
   play(name: HapticName): void {
-    if (!this.active()) return;
-    const now = this.now();
+    if (!this.#active()) return;
+    const now = this.#now();
     if (name === 'heartbeat') {
-      this.fire(name, now);
+      this.#fire(name, now);
       return;
     }
-    const wait = this.last + HAPTIC_RULES.gapMs - now;
+    const wait = this.#last + HAPTIC_RULES.gapMs - now;
     if (wait <= 0) {
-      this.fire(name, now);
+      this.#fire(name, now);
       return;
     }
     const rank = DEFER_RANK[name];
     if (rank === undefined) return;
-    const pendingRank = this.pending === null ? 0 : (DEFER_RANK[this.pending] ?? 0);
+    const pendingRank = this.#pending === null ? 0 : (DEFER_RANK[this.#pending] ?? 0);
     if (rank < pendingRank) return;
-    this.pending = name;
-    if (!this.timerArmed) {
-      this.timerArmed = true;
-      this.schedule(this.flush, wait);
+    this.#pending = name;
+    if (!this.#timerArmed) {
+      this.#timerArmed = true;
+      this.#schedule(this.#flush, wait);
     }
   }
 
   detent(index: number, dir: 1 | -1, omega: number): void {
-    if (!this.active()) return;
+    if (!this.#active()) return;
     if (Math.abs(omega) > HAPTIC_RULES.detentMaxOmega) return;
     if (!isDetentHapticStep(index, dir)) return;
-    const now = this.now();
-    if (now - this.last < HAPTIC_RULES.gapMs) return;
-    const newest = this.detentTimes[(this.detentHead + this.detentTimes.length - 1) % this.detentTimes.length] as number;
-    const oldest = this.detentTimes[this.detentHead] as number;
+    const now = this.#now();
+    if (now - this.#last < HAPTIC_RULES.gapMs) return;
+    const newest = this.#detentTimes[(this.#detentHead + this.#detentTimes.length - 1) % this.#detentTimes.length] as number;
+    const oldest = this.#detentTimes[this.#detentHead] as number;
     if (now - newest < HAPTIC_RULES.detentMinGapMs || now - oldest < 1000) return;
-    this.detentTimes[this.detentHead] = now;
-    this.detentHead = (this.detentHead + 1) % this.detentTimes.length;
-    this.fire('detent', now);
+    this.#detentTimes[this.#detentHead] = now;
+    this.#detentHead = (this.#detentHead + 1) % this.#detentTimes.length;
+    this.#fire('detent', now);
   }
 
   onDrive(code: number, a: number): void {
@@ -346,7 +346,7 @@ export class WebVibrateHaptics implements Haptics {
   }
 
   onEvents(events: readonly SimEvent[], omega: number, glide = false): void {
-    if (!this.on) return;
+    if (!this.#on) return;
     for (const ev of events) {
       if (ev.e === 'detent') {
         if (!glide) this.detent(ev.index, ev.dir, omega);
@@ -355,28 +355,28 @@ export class WebVibrateHaptics implements Haptics {
       const name = hapticForEvent(ev);
       const gap = name ? HAPTIC_RULES.minGapMs[name] : undefined;
       if (name && gap !== undefined) {
-        const now = this.now();
-        if (now - (this.lastOf.get(name) ?? -Infinity) < gap) continue;
-        this.lastOf.set(name, now);
+        const now = this.#now();
+        if (now - (this.#lastOf.get(name) ?? -Infinity) < gap) continue;
+        this.#lastOf.set(name, now);
       }
       if (name) this.play(name);
     }
   }
 
-  private active(): boolean {
-    return this.on && this.backend !== null && this.backend.ready();
+  #active(): boolean {
+    return this.#on && this.#backend !== null && this.#backend.ready();
   }
 
-  private fire(name: HapticName, now: number): void {
+  #fire(name: HapticName, now: number): void {
     const p = HAPTIC_PATTERNS[name];
-    this.backend?.vibrate(typeof p === 'number' ? p : p.slice());
-    this.last = now;
+    this.#backend?.vibrate(typeof p === 'number' ? p : p.slice());
+    this.#last = now;
   }
 
-  private readonly flush = (): void => {
-    this.timerArmed = false;
-    const name = this.pending;
-    this.pending = null;
+  readonly #flush = (): void => {
+    this.#timerArmed = false;
+    const name = this.#pending;
+    this.#pending = null;
     if (name) this.play(name);
   };
 }
@@ -384,18 +384,18 @@ export class WebVibrateHaptics implements Haptics {
 /** For platforms without vibration (iOS Safari): everything is a no-op. */
 export class NullHaptics implements Haptics {
   readonly supported = false;
-  private on: boolean;
+  #on: boolean;
 
   constructor(enabled = true) {
-    this.on = enabled;
+    this.#on = enabled;
   }
 
   get enabled(): boolean {
-    return this.on;
+    return this.#on;
   }
 
   setEnabled(on: boolean): void {
-    this.on = on;
+    this.#on = on;
   }
 
   play(): void {}

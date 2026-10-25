@@ -49,8 +49,6 @@ export interface AudioView {
   chapter?: number;
   /** Progress to the finish line, 0..1 (levelProgress); −1 = no finish line. */
   progress?: number;
-  /** Retired with the Gusts concept (Controls v3 §5.3): read by nothing; the session stops writing it. */
-  gust?: number;
   /** SimState.sun.locked ('lock'). */
   locked?: boolean;
   /** SimState.eclipse, 0..1. */

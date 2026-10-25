@@ -319,247 +319,245 @@ export class Session {
   /** Controls v3 (docs/CONTROLS_V3.md §2.1): fills each input frame before step (bot frames skip it). */
   readonly driver: Driver = createDriver();
   /** The driver's options for the run in play (optsFor, at beginRun). */
-  private driveOpts: DriveOpts = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
-  /** The frame's sim events without the sun's detents, for audio and haptics while a glide runs (§4.5). */
-  private readonly quiet: SimEvent[] = [];
+  #driveOpts: DriveOpts = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
   readonly clock = new FixedClock();
   readonly fx: Fx;
   /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
   readonly mech = createMechanics();
   /** Cold Snaps seen this session (the "Full! Tap the frost button." cue stops after two). */
-  private snapsSeen = 0;
+  #snapsSeen = 0;
   /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */
-  private readonly moments: RunMoments;
+  readonly #moments: RunMoments;
   /** The campaign star bits last seen (a newly lit one chimes). */
-  private runStars = 0;
+  #runStars = 0;
   /** v1.6: the run's Dare counts from the sim's `feat` events, and the HUD goal pill's reused count. */
-  private readonly featSeen = new Map<FeatKind, number>();
-  private readonly hudGoalOut: HudGoal = { value: 0, target: -1, flakes: false, glyph: null, sec: false };
+  readonly #featSeen = new Map<FeatKind, number>();
+  readonly #hudGoalOut: HudGoal = { value: 0, target: -1, flakes: false, glyph: null, sec: false };
   /** When the last count-up tick buzzed (uiSound 'tick'). */
-  private tickHapticAt = Number.NEGATIVE_INFINITY;
+  #tickHapticAt = Number.NEGATIVE_INFINITY;
   readonly gov = new Governor();
   readonly cadence = new Cadence();
-  private readonly cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false, settled: false };
+  readonly #cadenceIn: CadenceInput = { now: 0, screen: 'boot', inputActive: false, timeScale: 1, reducedMotion: false, settled: false };
   readonly stats: DebugStats = { fps: 60, frameMs: 0, simMs: 0, genMs: 0, renderMs: 0, ticks: 0 };
 
-  private readonly d: SessionDeps;
-  private readonly params: Params;
-  private s: SimState;
-  private readonly prev: RenderSnap = createSnap();
-  private readonly curr: RenderSnap = createSnap();
-  private readonly snap: RenderSnap = createSnap();
-  private readonly frameEvents: SimEvent[] = [];
-  private readonly audioView: AudioView = createAudioView();
-  private readonly hints = new HintTracker();
-  private readonly hintIn: HintInput;
+  readonly #d: SessionDeps;
+  readonly #params: Params;
+  #s: SimState;
+  readonly #prev: RenderSnap = createSnap();
+  readonly #curr: RenderSnap = createSnap();
+  readonly #snap: RenderSnap = createSnap();
+  readonly #frameEvents: SimEvent[] = [];
+  readonly #audioView: AudioView = createAudioView();
+  readonly #hints = new HintTracker();
+  readonly #hintIn: HintInput;
   /** Cues shown this run (bit per CueId: each at most once per run). */
-  private cues = 0;
+  #cues = 0;
   /** An intro Trial's frames so far (Retry from the Tag Stone replays them); null on other runs. */
-  private rec: Replay | null = null;
+  #rec: Replay | null = null;
   /** The cue on the line as this session last set it (an expired timed cue still counts). */
-  private cueShown: { id: CueId; dir: -1 | 1 | undefined } | null = null;
+  #cueShown: { id: CueId; dir: -1 | 1 | undefined } | null = null;
   /** An event cue (go, shade found, first SWING, ...) keeps the line until then (performance.now ms). */
-  private cueHold = 0;
+  #cueHold = 0;
   /** The run's first lowChill came in the lesson: from then on it warns while Chill is low. */
-  private meltWarn = false;
+  #meltWarn = false;
   /** Eased visibility of the hint on the halo dial. */
-  private hintAlpha = 0;
-  private readonly renderIn: RenderInput;
+  #hintAlpha = 0;
+  readonly #renderIn: RenderInput;
 
   // Run bookkeeping.
-  private kind: RunKind = 'endless';
+  #kind: RunKind = 'endless';
   /** The campaign level the last runConfig() built (null: not a campaign run). */
-  private cfgLevel: LevelDef | null = null;
+  #cfgLevel: LevelDef | null = null;
   /** The level of each campaign run built (the Title never holds one). */
-  private readonly levelOf = new WeakMap<SimState, LevelDef>();
+  readonly #levelOf = new WeakMap<SimState, LevelDef>();
   /** The level the current run plays (null outside the campaign). */
-  private runLevel: LevelDef | null = null;
+  #runLevel: LevelDef | null = null;
   /** The finish: real time the line was crossed (−1 none) and the sim's verdict. */
-  private wonAt = -1;
-  private won: LevelWon | null = null;
-  private lifetimeRuns = 0;
-  private melody: number[] = [];
-  private dailyDate: string | null = null;
+  #wonAt = -1;
+  #won: LevelWon | null = null;
+  #lifetimeRuns = 0;
+  #melody: number[] = [];
+  #dailyDate: string | null = null;
   /** The run can count as a Daily try: its date is today and tries were left when it began. */
-  private dailyScored = false;
-  private dailyTry: number | null = null;
-  private dailyCounted = false;
-  private challenge: Challenge | null = null;
+  #dailyScored = false;
+  #dailyTry: number | null = null;
+  #dailyCounted = false;
+  #challenge: Challenge | null = null;
   /** A challenge link opened (hashchange) while a run was active: applied on the next home(). */
-  private queuedChallenge: Challenge | null = null;
-  private runChallenge: Challenge | null = null;
-  private bot: Bot | null = null;
+  #queuedChallenge: Challenge | null = null;
+  #runChallenge: Challenge | null = null;
+  #bot: Bot | null = null;
   /** Test hook: a core bot plays the runs (they stay scored, unlike ?bot=). */
-  private testBot: BotKind | null = null;
-  private usedUrlSeed = false;
-  private nextRun: SimState | null = null;
+  #testBot: BotKind | null = null;
+  #usedUrlSeed = false;
+  #nextRun: SimState | null = null;
   /** The next endless run while its world is still being generated in slices (see stepPrebuild). */
-  private nextBuild: RunBuild | null = null;
-  private nextBuildRung = -1;
+  #nextBuild: RunBuild | null = null;
+  #nextBuildRung = -1;
   /** The comfort rung a run was built at (endless runs from the ladder; others are absent). */
-  private readonly rungOf = new WeakMap<SimState, number>();
+  readonly #rungOf = new WeakMap<SimState, number>();
   /** Endless runs built as the warm-up after the climb to standard (days.ts STANDARD_WARMUP). */
-  private readonly warmups = new WeakSet<SimState>();
-  private cfgWarmup = false;
-  private nextBuildWarmup = false;
+  readonly #warmups = new WeakSet<SimState>();
+  #cfgWarmup = false;
+  #nextBuildWarmup = false;
   /** The run in play is the warm-up (applyRunResult records it as eased). */
-  private runWarmup = false;
+  #runWarmup = false;
   /** The rung the last runConfig() built (−1: not from the ladder). */
-  private cfgRung = -1;
+  #cfgRung = -1;
   /** The rung the current run is played at (−1: not an endless ladder run). */
-  private runRung = -1;
-  private runActive = false;
+  #runRung = -1;
+  #runActive = false;
   /** Guide "Always" was on at some point of this run (latched: the share's compass marker). */
-  private runAssisted = false;
+  #runAssisted = false;
   /** The best the HUD flags during this run, read when it began (checkpoints must not move it). */
-  private runPb = -1;
+  #runPb = -1;
   /** The next milestone the HUD ticks during this run (−1 none), read when it began. */
-  private runGoal = -1;
+  #runGoal = -1;
   /** This run is the warm-up a first-time player plays before a friend's challenge (its Retry takes the challenge). */
-  private warmup: Challenge | null = null;
+  #warmup: Challenge | null = null;
   /** The in-run stamp still to come: the score that triggers it (−1 none), its look and text. */
-  private stampAt = -1;
-  private stampKind: StampKind = 'teal';
-  private stampText = '';
+  #stampAt = -1;
+  #stampKind: StampKind = 'teal';
+  #stampText = '';
   /**
    * Sim-altering debug URL params are present (?day, ?t, ?chill, ?profile, ?bot, ?fast, ?guide):
    * such runs are not scored, saved, shared or counted as Daily tries.
    */
-  private readonly debugRuns: boolean;
+  readonly #debugRuns: boolean;
 
   // Death / results.
-  private deathAt = -1;
-  private dyingGame = -1;
-  private resultsAt = -1;
-  private result: RunResult | null = null;
-  private outcome: RunOutcome | null = null;
+  #deathAt = -1;
+  #dyingGame = -1;
+  #resultsAt = -1;
+  #result: RunResult | null = null;
+  #outcome: RunOutcome | null = null;
   /** The death recap's line of advice for the Results (null: none fits). */
-  private tip: string | null = null;
+  #tip: string | null = null;
   /** Today's Daily par job (Snowbot) and the date it is for. */
-  private parJob: ParJob | null = null;
-  private parDate = '';
+  #parJob: ParJob | null = null;
+  #parDate = '';
   /** The postcard of `postcardFor` (built in idle stages once its Melt Map settles) and its file. */
-  private postcardFor: RunResult | null = null;
-  private postcardJob: PostcardJob | null = null;
-  private postcardFile: File | null = null;
-  private postcardUrl: string | null = null;
-  private logoImages: HTMLImageElement[] | null = null;
+  #postcardFor: RunResult | null = null;
+  #postcardJob: PostcardJob | null = null;
+  #postcardFile: File | null = null;
+  #postcardUrl: string | null = null;
+  #logoImages: HTMLImageElement[] | null = null;
 
   /** Test hook: the last Results' recap tip. */
   get resultsTip(): string | null {
-    return this.tip;
+    return this.#tip;
   }
 
   /** Test hook: the last Results' campaign verdict (null outside the campaign or before Results). */
   campaignResults(): ResultsCampaign | null {
-    return this.lastCampaign;
+    return this.#lastCampaign;
   }
-  private lastCampaign: ResultsCampaign | null = null;
-  private resultsShown = false;
+  #lastCampaign: ResultsCampaign | null = null;
+  #resultsShown = false;
 
   // Frame state.
-  private paused = false;
-  private last = -1;
-  private time = 0;
-  private swayPhase = 0;
+  #paused = false;
+  #last = -1;
+  #time = 0;
+  #swayPhase = 0;
   /** The Title logo shadow offset last published (CSS px). */
-  private logoShadowX = Number.NaN;
-  private logoShadowY = Number.NaN;
-  private swayOut = 0;
-  private booted = false;
-  private raf = 0;
-  private cssW = 0;
-  private sizeDirty = true;
+  #logoShadowX = Number.NaN;
+  #logoShadowY = Number.NaN;
+  #swayOut = 0;
+  #booted = false;
+  #raf = 0;
+  #cssW = 0;
+  #sizeDirty = true;
   /** Cached reduced-motion decision (−1 = recompute). */
-  private rmCache = -1;
+  #rmCache = -1;
   /** The effective reduced motion the held Title run was built with. */
-  private runRm = false;
-  private cssH = 0;
-  private dpr = 1;
+  #runRm = false;
+  #cssH = 0;
+  #dpr = 1;
   /** Canvas DPR cap for this device (perf.ts deviceClass). */
-  private dprCap = 2;
-  private readonly unsub: (() => void)[] = [];
+  #dprCap = 2;
+  readonly #unsub: (() => void)[] = [];
 
   // Render cadence (cadence.ts): real and game time not yet handed to a drawn frame.
-  private drawDt = 0;
-  private drawGdt = 0;
+  #drawDt = 0;
+  #drawGdt = 0;
   /** rAF time of the last drawn frame, and whether it was a screen the governor samples. */
-  private lastDrawAt = -1;
-  private lastDrawSampled = false;
+  #lastDrawAt = -1;
+  #lastDrawSampled = false;
   /** Canvas-affecting settings the last drawn frame used (a change redraws a menu once). */
-  private drawnHighContrast = false;
-  private drawnEquipped: unknown = null;
+  #drawnHighContrast = false;
+  #drawnEquipped: unknown = null;
   /** Title frames since the Title last appeared. */
-  private titleFrames = 0;
+  #titleFrames = 0;
 
   // App-wide history sentinel (V1_PLAN §8.2): armed exactly while a Back press has something to do.
-  private sentinel = false;
+  #sentinel = false;
   /** URL when the sentinel was pushed (the entry a Back press lands on). */
-  private sentinelHref = '';
+  #sentinelHref = '';
   /** One of our own history.back() calls is in flight: its popstate is ours to ignore. */
-  private disarming = false;
-  private disarmUntil = 0;
+  #disarming = false;
+  #disarmUntil = 0;
 
   // Midnight rollover.
-  private today = localDate();
-  private todayCheckAt = Number.NEGATIVE_INFINITY;
+  #today = localDate();
+  #todayCheckAt = Number.NEGATIVE_INFINITY;
 
   // Crash containment.
-  private failures = 0;
-  private crashed = false;
-  private frameDrew = false;
+  #failures = 0;
+  #crashed = false;
+  #frameDrew = false;
 
   constructor(deps: SessionDeps) {
-    this.d = deps;
-    this.params = deps.params;
-    this.debugRuns = isDebugRun(deps.params);
+    this.#d = deps;
+    this.#params = deps.params;
+    this.#debugRuns = isDebugRun(deps.params);
     this.gov.enabled = deps.params.perf;
     // ?perf=0 is full quality for captures and A/B timing: no governor and no device-class cap.
     if (deps.params.perf) {
       const nav = navigator as Navigator & { deviceMemory?: number };
       const cls = deviceClass({ memory: nav.deviceMemory, cores: nav.hardwareConcurrency, ios: isIOS() });
-      this.dprCap = dprCap(cls);
+      this.#dprCap = dprCap(cls);
       if (cls === 'low') this.gov.startAt(1);
     }
     this.clock.fast = deps.params.fast;
     this.renderer = new Renderer(deps.canvas);
     this.fx = new Fx(this.renderer.scene, this.clock);
-    this.moments = createMoments(this.renderer.scene.banners, {
+    this.#moments = createMoments(this.renderer.scene.banners, {
       mission: () => {
-        this.d.audio.play('reward');
-        this.d.haptics.play('reward');
+        this.#d.audio.play('reward');
+        this.#d.haptics.play('reward');
       },
       comeback: (x, y) => {
         this.fx.comeback(x, y);
-        this.d.audio.play('comeback');
-        this.d.haptics.play('phew');
+        this.#d.audio.play('comeback');
+        this.#d.haptics.play('phew');
       },
     });
     const store = deps.store;
     const save = store.get();
-    this.challenge = playableChallenge(challengeFromHash(location.hash));
+    this.#challenge = playableChallenge(challengeFromHash(location.hash));
     // UI callbacks re-check the history sentinel as soon as they return (screens just changed).
     const sync =
       <A extends unknown[], R>(fn: (...a: A) => R) =>
       (...a: A): R => {
         const r = fn(...a);
-        this.syncSentinel();
+        this.#syncSentinel();
         return r;
       };
     const callbacks: UiCallbacks = {
-        startRun: sync((k: RunKind, date?: string, level?: number) => this.startRun(k, date, level)),
-        startHeld: () => this.startHeld(),
-        nextLevel: sync(() => this.nextLevel()),
-        openJourney: sync((to?: 'journey' | 'elementals') => this.openJourney(to)),
-        retry: sync(() => this.retry()),
-        retryTag: sync(() => this.retryTag()),
-        home: sync(() => this.home()),
-        pause: sync(() => this.pause()),
-        resume: sync(() => this.resume()),
-        restart: sync(() => this.retry()),
-        skipDying: sync(() => this.showResults()),
-        share: () => this.share(),
-        settingsChanged: (st) => this.settingsChanged(st),
+        startRun: sync((k: RunKind, date?: string, level?: number) => this.#startRun(k, date, level)),
+        startHeld: () => this.#startHeld(),
+        nextLevel: sync(() => this.#nextLevel()),
+        openJourney: sync((to?: 'journey' | 'elementals') => this.#openJourney(to)),
+        retry: sync(() => this.#retry()),
+        retryTag: sync(() => this.#retryTag()),
+        home: sync(() => this.#home()),
+        pause: sync(() => this.#pause()),
+        resume: sync(() => this.#resume()),
+        restart: sync(() => this.#retry()),
+        skipDying: sync(() => this.#showResults()),
+        share: () => this.#share(),
+        settingsChanged: (st) => this.#settingsChanged(st),
         buy: (id) => {
           const r = buyCosmetic(store.get(), id);
           if (!r.ok) {
@@ -588,8 +586,8 @@ export class Session {
           store.set(r.save);
           store.flush();
           this.ui.setSave(r.save);
-          this.applySettings(r.save.settings);
-          this.refreshTitleRun();
+          this.#applySettings(r.save.settings);
+          this.#refreshTitleRun();
           return { ok: true };
         }),
         resetProgress: sync((): ImportOutcome => {
@@ -598,24 +596,24 @@ export class Session {
           store.set(next);
           store.flush();
           this.ui.setSave(next);
-          this.applySettings(next.settings);
-          this.refreshTitleRun();
+          this.#applySettings(next.settings);
+          this.#refreshTitleRun();
           return { ok: true };
         }),
         dismissChallenge: () => {
-          this.challenge = null;
-          this.queuedChallenge = null;
+          this.#challenge = null;
+          this.#queuedChallenge = null;
           try {
             history.replaceState(history.state, '', location.pathname + location.search);
           } catch {
             // ignore
           }
-          this.refreshTitleRun();
+          this.#refreshTitleRun();
         },
         dragHandoff: (e) => {
           if (this.ui.current() === 'title') this.input.begin(e);
         },
-        uiSound: (name) => this.uiSound(name),
+        uiSound: (name) => this.#uiSound(name),
         runStatus: () => this.runStatus(),
         renderWardrobePreview: (canvas, equipped, subject) =>
           subject === 'sun' ? renderSunPreview(canvas, equippedLooks(equipped).shades) : renderWardrobePreview(canvas, equipped),
@@ -633,63 +631,63 @@ export class Session {
           store.flush();
           this.ui.setSave(next);
         },
-        sharePostcard: () => this.sharePostcard(),
+        sharePostcard: () => this.#sharePostcard(),
     };
     this.ui = createUi(deps.uiRoot, {
       callbacks,
       save,
-      today: this.today,
+      today: this.#today,
       version: deps.version,
     });
-    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
+    if (this.#challenge) this.ui.setChallenge(this.#challengeBanner(this.#challenge));
     this.input = createInput({
       canvas: deps.canvas,
-      accepting: () => this.accepting(),
-      onPress: () => this.onPress(),
+      accepting: () => this.#accepting(),
+      onPress: () => this.#onPress(),
       viewportWidth: () => this.renderer.scene.view.vw,
       safeBottom: () => this.renderer.scene.view.safe.bottom,
       // Controls v3 (docs/CONTROLS_V3.md §11.6): what a drag moves and what the button does now, the
       // button's disc on the last drawn frame (the play screen only), the hold or start beat, and the
       // last drawn frame's scale (camera.ts: sx = ox + x·S).
       drag: () => {
-        const s = this.s;
+        const s = this.#s;
         return s.el !== null && s.phase === 'day' && s.ready === 0 ? HEROES[s.nubs.hero].drag : 'sun';
       },
       act: () => {
-        const v = this.renderIn.drive;
+        const v = this.#renderIn.drive;
         return v.incoming !== 'none' ? v.incoming : v.act;
       },
-      buttonHit: (x, y) => this.ui.current() === 'play' && !this.paused && hudButtonHit(this.renderer.scene.hud, x, y),
-      starting: () => this.s.phase === 'hold' || this.s.ready > 0,
+      buttonHit: (x, y) => this.ui.current() === 'play' && !this.#paused && hudButtonHit(this.renderer.scene.hud, x, y),
+      starting: () => this.#s.phase === 'hold' || this.#s.ready > 0,
       uPerPx: () => 1 / this.renderer.scene.view.S,
     });
     this.mech.route = (ev) => {
       const list = [ev];
-      this.fx.onEvents(list, this.s);
-      this.d.audio.onEvents(list, this.audioView);
-      this.d.haptics.onEvents(list, 0);
+      this.fx.onEvents(list, this.#s);
+      this.#d.audio.onEvents(list, this.#audioView);
+      this.#d.haptics.onEvents(list, 0);
     };
-    this.applySettings(save.settings);
-    this.runRm = this.reducedMotion();
-    this.s = this.createTitleRun();
-    this.lifetimeRuns = save.stats.runs;
-    this.resetSnaps();
-    this.previewRun();
+    this.#applySettings(save.settings);
+    this.#runRm = this.#reducedMotion();
+    this.#s = this.#createTitleRun();
+    this.#lifetimeRuns = save.stats.runs;
+    this.#resetSnaps();
+    this.#previewRun();
 
-    this.hintIn = {
+    this.#hintIn = {
       profile: 3,
       f: 0,
       sunUp: false,
-      now: this.s.guide.now,
-      next: this.s.guide.next,
+      now: this.#s.guide.now,
+      next: this.#s.guide.next,
       theta: 0,
       dragging: false,
       invert: false,
       lessonOn: false,
     };
-    this.renderIn = {
-      s: this.s,
-      snap: this.snap,
+    this.#renderIn = {
+      s: this.#s,
+      snap: this.#snap,
       screen: 'boot',
       sway: 0,
       dragging: false,
@@ -726,55 +724,55 @@ export class Session {
     deps.audio.onStatusChange(syncMuted);
     syncMuted();
 
-    this.unsub.push(
+    this.#unsub.push(
       onPageHidden(() => {
         store.flush();
-        this.pauseIfPlaying();
+        this.#pauseIfPlaying();
       }),
       // V1_PLAN §8.5: losing focus (alt-tab, an OS dialog over the browser) pauses too; nothing
       // ever resumes by itself.
-      onWindowBlur(() => this.pauseIfPlaying()),
-      onPageVisible(() => this.checkToday()),
+      onWindowBlur(() => this.#pauseIfPlaying()),
+      onPageVisible(() => this.#checkToday()),
       // Another tab or instance saved: adopt its save instead of overwriting it later.
-      store.onExternalChange((next) => this.adoptSave(next)),
+      store.onExternalChange((next) => this.#adoptSave(next)),
       store.onDegraded(() => this.ui.notifyStorageDegraded()),
     );
-    const onPop = (): void => this.onPopState();
+    const onPop = (): void => this.#onPopState();
     window.addEventListener('popstate', onPop);
-    this.unsub.push(() => window.removeEventListener('popstate', onPop));
-    const onHash = (): void => this.onHashChange();
+    this.#unsub.push(() => window.removeEventListener('popstate', onPop));
+    const onHash = (): void => this.#onHashChange();
     window.addEventListener('hashchange', onHash);
-    this.unsub.push(() => window.removeEventListener('hashchange', onHash));
-    this.unsub.push(onSafeAreaChange(() => (this.sizeDirty = true)));
+    this.#unsub.push(() => window.removeEventListener('hashchange', onHash));
+    this.#unsub.push(onSafeAreaChange(() => (this.#sizeDirty = true)));
     const onResize = (): void => {
-      this.sizeDirty = true;
+      this.#sizeDirty = true;
     };
     if (typeof ResizeObserver === 'function') {
       const ro = new ResizeObserver(onResize);
       ro.observe(deps.canvas);
-      this.unsub.push(() => ro.disconnect());
+      this.#unsub.push(() => ro.disconnect());
     }
     window.addEventListener('orientationchange', onResize);
-    this.unsub.push(() => window.removeEventListener('orientationchange', onResize));
-    this.unsub.push(
+    this.#unsub.push(() => window.removeEventListener('orientationchange', onResize));
+    this.#unsub.push(
       onReducedMotionChange(() => {
-        this.rmCache = -1;
-        this.reducedMotionMaybeChanged();
+        this.#rmCache = -1;
+        this.#reducedMotionMaybeChanged();
       }),
     );
     window.addEventListener('resize', onResize);
     window.visualViewport?.addEventListener('resize', onResize);
-    this.unsub.push(() => {
+    this.#unsub.push(() => {
       window.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('resize', onResize);
     });
     this.gov.onChange = () => {
       // Resized at the top of the next frame, which then draws (a resize clears the canvas, and the
       // governor steps after this frame's draw).
-      this.sizeDirty = true;
+      this.#sizeDirty = true;
       this.renderer.scene.particles.limit = this.gov.particleCap;
     };
-    this.resize(true);
+    this.#resize(true);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -784,57 +782,57 @@ export class Session {
   /** Starts the loop; shows the Title (or autoplays with ?bot=) after the first frame. */
   start(onFirstFrame: () => void): void {
     const first = (now: number): void => {
-      this.raf = requestAnimationFrame(this.tick);
-      this.last = now;
-      this.runFrame(now);
-      if (!this.booted) {
-        this.booted = true;
-        if (this.params.level !== null && anyLevelDef(this.params.level)) {
+      this.#raf = requestAnimationFrame(this.#tick);
+      this.#last = now;
+      this.#runFrame(now);
+      if (!this.#booted) {
+        this.#booted = true;
+        if (this.#params.level !== null && anyLevelDef(this.#params.level)) {
           // ?level=N opens the level directly: the intro card holds until the first tap (a ?bot=
           // plays it at once).
           this.ui.show('play');
-          this.startRun('campaign', undefined, this.params.level);
-        } else if (this.params.bot) {
-          this.bot = makeBot(this.params.bot);
+          this.#startRun('campaign', undefined, this.#params.level);
+        } else if (this.#params.bot) {
+          this.#bot = makeBot(this.#params.bot);
           this.ui.show('play');
-          this.beginRun(this.s);
+          this.#beginRun(this.#s);
         } else {
           this.ui.show('title');
         }
-        this.syncSentinel();
+        this.#syncSentinel();
         onFirstFrame();
-        this.scheduleAudioPrewarm();
+        this.#scheduleAudioPrewarm();
       }
     };
-    this.raf = requestAnimationFrame(first);
+    this.#raf = requestAnimationFrame(first);
   }
 
   /** The next frame is scheduled first, so one exception never stops the game. */
-  private loop(now: number): void {
-    this.raf = requestAnimationFrame(this.tick);
-    this.runFrame(now);
+  #loop(now: number): void {
+    this.#raf = requestAnimationFrame(this.#tick);
+    this.#runFrame(now);
   }
 
   /** The rAF callback, made once (no closure per frame). */
-  private readonly tick = (now: number): void => this.loop(now);
+  readonly #tick = (now: number): void => this.#loop(now);
 
   /**
    * One frame, contained: an exception is logged and counted, and after CRASH_FRAMES failed frames
    * in a row (about 0.5 s) the save is flushed and a self-contained crash overlay offers a reload.
    * A frame that completes and draws resets the count (frames that skip their draw prove nothing).
    */
-  private runFrame(now: number): void {
-    this.frameDrew = false;
+  #runFrame(now: number): void {
+    this.#frameDrew = false;
     try {
-      this.frame(now);
-      if (this.frameDrew) this.failures = 0;
+      this.#frame(now);
+      if (this.#frameDrew) this.#failures = 0;
     } catch (e) {
       console.error(e);
-      this.failures++;
-      if (this.failures >= CRASH_FRAMES && !this.crashed) {
-        this.crashed = true;
+      this.#failures++;
+      if (this.#failures >= CRASH_FRAMES && !this.#crashed) {
+        this.#crashed = true;
         try {
-          this.d.store.flush();
+          this.#d.store.flush();
         } catch {
           // The save stays in memory; nothing more to do.
         }
@@ -844,8 +842,8 @@ export class Session {
   }
 
   /** Builds the audio noise tables once the Title is up, off the first tap's critical path. */
-  private scheduleAudioPrewarm(): void {
-    const audio = this.d.audio;
+  #scheduleAudioPrewarm(): void {
+    const audio = this.#d.audio;
     const run = (): void => audio.prewarm();
     const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
     if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run, { timeout: 2000 });
@@ -853,23 +851,23 @@ export class Session {
   }
 
   dispose(): void {
-    cancelAnimationFrame(this.raf);
-    for (const u of this.unsub) u();
+    cancelAnimationFrame(this.#raf);
+    for (const u of this.#unsub) u();
     this.input.dispose();
     this.ui.destroy();
   }
 
-  private resize(force: boolean): void {
-    const c = this.d.canvas;
+  #resize(force: boolean): void {
+    const c = this.#d.canvas;
     const w = c.clientWidth || window.innerWidth;
     const h = c.clientHeight || window.innerHeight;
-    const dpr = canvasDpr(window.devicePixelRatio || 1, this.dprCap, this.gov.dprScale);
-    if (!force && w === this.cssW && h === this.cssH && dpr === this.dpr) return;
+    const dpr = canvasDpr(window.devicePixelRatio || 1, this.#dprCap, this.gov.dprScale);
+    if (!force && w === this.#cssW && h === this.#cssH && dpr === this.#dpr) return;
     // A new size means new buffers and first-frame costs: the governor warms up again.
-    if (w !== this.cssW || h !== this.cssH) this.gov.reset();
-    this.cssW = w;
-    this.cssH = h;
-    this.dpr = dpr;
+    if (w !== this.#cssW || h !== this.#cssH) this.gov.reset();
+    this.#cssW = w;
+    this.#cssH = h;
+    this.#dpr = dpr;
     this.renderer.resize(w, h, dpr, readSafeArea());
     this.cadence.invalidate();
     // Where Nubs and his halo dial sit, for DOM overlays that must keep them visible (the Title's
@@ -878,7 +876,7 @@ export class Session {
     const v = this.renderer.scene.view;
     const nubsY = v.vy + v.nubsFrac * v.vh;
     const haloR = 40 * v.k;
-    const root = this.d.uiRoot.style;
+    const root = this.#d.uiRoot.style;
     root.setProperty('--nubs-y', `${Math.round(nubsY)}px`);
     root.setProperty('--halo-r', `${Math.round(haloR)}px`);
     root.setProperty('--nubs-clear', `${Math.round(h - nubsY + haloR)}px`);
@@ -893,42 +891,42 @@ export class Session {
    * the swaying sun, longer when the sun is low (--lsx / --lsy, CSS px; rewritten only when they
    * move a quarter pixel).
    */
-  private publishLogoShadow(sway: number): void {
-    const th = ((this.s.sun.theta + sway) * Math.PI) / 180;
+  #publishLogoShadow(sway: number): void {
+    const th = ((this.#s.sun.theta + sway) * Math.PI) / 180;
     const k = 6 * (1 + 0.6 * (1 - this.renderer.scene.light.elev));
     const x = -Math.cos(th) * k;
     const y = Math.sin(th) * k;
-    if (Math.abs(x - this.logoShadowX) < 0.25 && Math.abs(y - this.logoShadowY) < 0.25) return;
-    this.logoShadowX = x;
-    this.logoShadowY = y;
+    if (Math.abs(x - this.#logoShadowX) < 0.25 && Math.abs(y - this.#logoShadowY) < 0.25) return;
+    this.#logoShadowX = x;
+    this.#logoShadowY = y;
     const root = document.documentElement.style;
     root.setProperty('--lsx', `${x.toFixed(1)}px`);
     root.setProperty('--lsy', `${y.toFixed(1)}px`);
   }
 
-  private frame(now: number): void {
+  #frame(now: number): void {
     const t0 = performance.now();
-    const realMs = this.last < 0 ? 16.7 : now - this.last;
-    this.last = now;
+    const realMs = this.#last < 0 ? 16.7 : now - this.#last;
+    this.#last = now;
     const real = Math.min(0.1, Math.max(0, realMs / 1000));
-    this.time += real;
+    this.#time += real;
     this.stats.fps += (1000 / Math.max(1, realMs) - this.stats.fps) * 0.05;
-    if (this.sizeDirty) {
+    if (this.#sizeDirty) {
       // Re-read size and safe-area insets (a notch can change without the canvas resizing).
-      this.sizeDirty = false;
-      this.resize(true);
+      this.#sizeDirty = false;
+      this.#resize(true);
     }
-    if (now - this.todayCheckAt >= TODAY_CHECK_MS) {
-      this.todayCheckAt = now;
-      this.checkToday();
+    if (now - this.#todayCheckAt >= TODAY_CHECK_MS) {
+      this.#todayCheckAt = now;
+      this.#checkToday();
     }
 
     const screen = this.ui.current();
-    const won = this.s.phase === 'won';
-    const stepping = !this.paused && (screen === 'play' || screen === 'dying') && this.s.phase !== 'dead' && !won;
-    const s = this.s;
+    const won = this.#s.phase === 'won';
+    const stepping = !this.#paused && (screen === 'play' || screen === 'dying') && this.#s.phase !== 'dead' && !won;
+    const s = this.#s;
     let n = 0;
-    const events = this.frameEvents;
+    const events = this.#frameEvents;
     events.length = 0;
     const tSim = performance.now();
     if (stepping) {
@@ -936,23 +934,23 @@ export class Session {
       n = this.clock.advance(real);
       // Controls v3 (§2.1): the driver fills each input frame before step (bot frames skip it), and
       // the recording keeps what it added, so replays stay exact.
-      const frames = this.bot ? null : this.input.takeFrames(n);
-      const ctl = this.bot ? null : this.input.controls();
+      const frames = this.#bot ? null : this.input.takeFrames(n);
+      const ctl = this.#bot ? null : this.input.controls();
       for (let i = 0; i < n; i++) {
-        takeSnap(s, this.prev);
-        const f = this.bot ? this.bot.next(s) : (frames?.[i] ?? null);
+        takeSnap(s, this.#prev);
+        const f = this.#bot ? this.#bot.next(s) : (frames?.[i] ?? null);
         if (!f) break;
         if (ctl) this.driver.fill(s, f, ctl[i] as DriveControl);
         step(s, f);
-        if (this.rec) recordFrame(this.rec, f);
+        if (this.#rec) recordFrame(this.#rec, f);
         for (const ev of s.events) {
           events.push(ev);
-          this.onTickEvent(ev);
+          this.#onTickEvent(ev);
         }
         if (s.phase === 'dead' || s.phase === 'won') break;
       }
-      if (n > 0) takeSnap(s, this.curr);
-      this.moments.update(s, (this.bot?.drive ?? this.driver.view).due);
+      if (n > 0) takeSnap(s, this.#curr);
+      this.#moments.update(s, (this.#bot?.drive ?? this.driver.view).due);
     } else {
       // The death, the finish freeze and the Results keep game time flowing for the effects.
       const flowing = screen === 'dying' || screen === 'results' || (won && screen === 'play');
@@ -961,25 +959,20 @@ export class Session {
     }
     this.stats.ticks = n;
     this.stats.simMs = performance.now() - tSim;
-    lerpSnap(this.prev, this.curr, this.clock.alpha, this.snap);
+    lerpSnap(this.#prev, this.#curr, this.clock.alpha, this.#snap);
 
     // Route events, and the driver's notes (§2.4). A bot run shows its touch driver's view, or keeps
     // the session's driver fresh (so the HUD's button stays true).
-    const view = this.fillAudioView(screen);
+    const view = this.#fillAudioView(screen);
     const dr = this.driver;
-    const bd = this.bot?.drive;
-    if (!bd && (this.bot || n === 0)) dr.observe(s);
-    const dv = (this.renderIn.drive = bd ?? dr.view);
+    const bd = this.#bot?.drive;
+    if (!bd && (this.#bot || n === 0)) dr.observe(s);
+    const dv = (this.#renderIn.drive = bd ?? dr.view);
     if (events.length > 0) {
       // §4.5: a magnet glide is a real drag in the sim; its detents tick the dial but never buzz or click.
-      let quiet = events;
-      if (dv.glide === dv.glide) {
-        quiet = this.quiet;
-        quiet.length = 0;
-        for (const ev of events) if (ev.e !== 'detent') quiet.push(ev);
-      }
-      this.d.audio.onEvents(quiet, view);
-      this.d.haptics.onEvents(quiet, s.sun.omega);
+      const glide = (view.glide = dv.glide === dv.glide);
+      this.#d.audio.onEvents(events, view);
+      this.#d.haptics.onEvents(events, s.sun.omega, glide);
       this.fx.onEvents(events, s);
     }
     // The driver's notes (§2.4): a repeat refusal (a ≥ 16) still says why, but never buzzes or fizzes.
@@ -988,86 +981,86 @@ export class Session {
       const a = dr.notes[2 * i + 1] as number;
       this.fx.onDrive(code, a);
       if (code !== NOTE_REFUSE || a < 16) {
-        this.d.audio.onDrive(code, a);
-        this.d.haptics.onDrive(code, a);
+        this.#d.audio.onDrive(code, a);
+        this.#d.haptics.onDrive(code, a);
       }
-      this.onNote(code, a);
+      this.#onNote(code, a);
     }
     dr.clearNotes();
-    this.checkDailyTry();
-    if (stepping) this.checkStamp();
+    this.#checkDailyTry();
+    if (stepping) this.#checkStamp();
 
     // Idle-time world generation (keeps step() from ever validating a chunk inside a tick).
     const tGen = performance.now();
     if (screen !== 'boot') generateSome(s.world, s.nubs.y + TUNING.world.idleAhead, IDLE_BUDGET);
     // The next run's world is built only while no run is being played.
-    if (screen !== 'play' && screen !== 'pause') this.stepPrebuild(Math.min(PREBUILD_MAX_MS, Math.max(PREBUILD_MS, realMs * PREBUILD_SHARE)));
-    if (screen !== 'play' && screen !== 'pause' && screen !== 'dying' && screen !== 'boot') this.stepPar();
+    if (screen !== 'play' && screen !== 'pause') this.#stepPrebuild(Math.min(PREBUILD_MAX_MS, Math.max(PREBUILD_MS, realMs * PREBUILD_SHARE)));
+    if (screen !== 'play' && screen !== 'pause' && screen !== 'dying' && screen !== 'boot') this.#stepPar();
     this.stats.genMs = performance.now() - tGen;
 
     const gdt = stepping || screen === 'dying' || screen === 'results' || (won && screen === 'play') ? this.clock.gameDt : screen === 'pause' ? 0 : real;
-    if (this.deathAt >= 0) this.dyingGame += this.clock.gameDt;
+    if (this.#deathAt >= 0) this.#dyingGame += this.clock.gameDt;
     this.fx.update(stepping ? this.clock.gameDt : 0, s, s.phase === 'day' || s.phase === 'night');
-    this.updateHints(real, screen);
-    this.updateDeathFlow();
-    this.updateWinFlow();
+    this.#updateHints(real, screen);
+    this.#updateDeathFlow();
+    this.#updateWinFlow();
 
     // Render input (cheap; filled every frame so hints and sway stay continuous).
-    const r = this.renderIn;
+    const r = this.#renderIn;
     const screenNow = this.ui.current();
-    r.s = this.s;
-    r.screen = this.renderScreen(screenNow);
-    this.swayPhase += real;
-    if (screenNow === 'title' || (screenNow === 'play' && this.s.phase === 'hold')) {
+    r.s = this.#s;
+    r.screen = this.#renderScreen(screenNow);
+    this.#swayPhase += real;
+    if (screenNow === 'title' || (screenNow === 'play' && this.#s.phase === 'hold')) {
       // The sun turns with the ghost hand's swing (a rightward drag turns it clockwise), so the
       // Title shows what a drag does; without the hand's clock, a plain 0.3 Hz sway.
-      const rm = this.reducedMotion();
+      const rm = this.#reducedMotion();
       const p = rm ? -1 : this.ui.ghostProgress();
       if (rm) r.sway = 0;
       else if (p >= 0) r.sway = (this.input.invert ? SWAY_DEG : -SWAY_DEG) * ghostSwingX(p);
-      else r.sway = SWAY_DEG * Math.sin(this.swayPhase * Math.PI * 2 * 0.3);
-      this.swayOut = r.sway;
+      else r.sway = SWAY_DEG * Math.sin(this.#swayPhase * Math.PI * 2 * 0.3);
+      this.#swayOut = r.sway;
     } else {
-      this.swayOut *= Math.exp(-real / 0.12);
-      if (Math.abs(this.swayOut) < 0.01) this.swayOut = 0;
-      r.sway = this.swayOut;
+      this.#swayOut *= Math.exp(-real / 0.12);
+      if (Math.abs(this.#swayOut) < 0.01) this.#swayOut = 0;
+      r.sway = this.#swayOut;
     }
     // A glide never lights the dial as a drag: the input's state says, or a bot's sun.
     const inp = this.input;
     const inputDown = inp.pointerDown || inp.keyDown;
-    r.dragging = inputDown || inp.steering || inp.vaning || (this.bot !== null && this.s.sun.mode === 'dragging');
+    r.dragging = inputDown || inp.steering || inp.vaning || (this.#bot !== null && this.#s.sun.mode === 'dragging');
     r.buttonDown = inp.buttonDown;
-    r.hand = this.params.hand ?? this.d.store.get().settings.hand;
-    r.aimDeg = this.driveOpts.aimDeg;
-    r.nowOnly = this.driveOpts.nowOnly;
-    r.guideAlpha = this.currentGuideAlpha();
-    this.fillHintView(real, screenNow);
-    const save = this.d.store.get();
-    r.pbMinutes = this.runActive ? this.runPb : this.livePb();
-    r.goalMinutes = this.runActive ? this.runGoal : this.liveGoal();
-    r.challengeMinutes = this.runChallenge ? this.runChallenge.m : -1;
-    r.challengeName = this.runChallenge?.n ?? '';
-    this.fillCampaignView();
-    this.fx.mech = this.mech.fill(this.s, this.time);
-    r.dying = this.deathAt >= 0 ? Math.max(0, this.dyingGame) : -1;
-    r.mapT = this.resultsAt >= 0 && screenNow === 'results' ? this.time - this.resultsAt : -1;
+    r.hand = this.#params.hand ?? this.#d.store.get().settings.hand;
+    r.aimDeg = this.#driveOpts.aimDeg;
+    r.nowOnly = this.#driveOpts.nowOnly;
+    r.guideAlpha = this.#currentGuideAlpha();
+    this.#fillHintView(real, screenNow);
+    const save = this.#d.store.get();
+    r.pbMinutes = this.#runActive ? this.#runPb : this.#livePb();
+    r.goalMinutes = this.#runActive ? this.#runGoal : this.#liveGoal();
+    r.challengeMinutes = this.#runChallenge ? this.#runChallenge.m : -1;
+    r.challengeName = this.#runChallenge?.n ?? '';
+    this.#fillCampaignView();
+    this.fx.mech = this.mech.fill(this.#s, this.#time);
+    r.dying = this.#deathAt >= 0 ? Math.max(0, this.#dyingGame) : -1;
+    r.mapT = this.#resultsAt >= 0 && screenNow === 'results' ? this.#time - this.#resultsAt : -1;
     r.sheetTop = screenNow === 'results' ? this.ui.resultsSheetTop() : null;
-    r.time = this.time;
+    r.time = this.#time;
     r.highContrast = save.settings.highContrast;
     this.renderer.scene.banners.levelKeys = this.ui.keyboardMode();
     this.ui.ghostClearMeter(this.renderer.scene.hud.meterShown);
-    r.reducedMotion = this.reducedMotion();
+    r.reducedMotion = this.#reducedMotion();
     r.equipped = save.equipped;
     r.softShadows = this.gov.softShadows;
     r.govLevel = this.gov.level;
-    r.paused = this.paused || screenNow === 'pause';
+    r.paused = this.#paused || screenNow === 'pause';
     this.fx.reducedMotion = r.reducedMotion;
 
     // Render cadence (cadence.ts): time not handed to a drawn frame carries over to the next one.
-    this.drawDt += real;
-    this.drawGdt += gdt;
-    if (r.highContrast !== this.drawnHighContrast || r.equipped !== this.drawnEquipped) this.cadence.invalidate();
-    const ci = this.cadenceIn;
+    this.#drawDt += real;
+    this.#drawGdt += gdt;
+    if (r.highContrast !== this.#drawnHighContrast || r.equipped !== this.#drawnEquipped) this.cadence.invalidate();
+    const ci = this.#cadenceIn;
     ci.now = now;
     ci.screen = r.screen;
     ci.inputActive = inputDown;
@@ -1076,70 +1069,70 @@ export class Session {
     ci.settled = this.renderer.settled;
     const draw = this.cadence.shouldDraw(ci);
     if (draw) {
-      r.dt = Math.min(MAX_DRAW_DT, this.drawDt);
-      r.gdt = Math.min(MAX_DRAW_DT, this.drawGdt);
-      this.drawDt = 0;
-      this.drawGdt = 0;
-      this.drawnHighContrast = r.highContrast;
-      this.drawnEquipped = r.equipped;
+      r.dt = Math.min(MAX_DRAW_DT, this.#drawDt);
+      r.gdt = Math.min(MAX_DRAW_DT, this.#drawGdt);
+      this.#drawDt = 0;
+      this.#drawGdt = 0;
+      this.#drawnHighContrast = r.highContrast;
+      this.#drawnEquipped = r.equipped;
       const tRender = performance.now();
       this.renderer.draw(r);
       this.stats.renderMs = performance.now() - tRender;
       this.cadence.drawn(now);
-      this.frameDrew = true;
-      if (screenNow === 'results' && this.renderer.settled) this.startPostcard();
-      if (screenNow === 'title') this.publishLogoShadow(r.sway);
+      this.#frameDrew = true;
+      if (screenNow === 'results' && this.renderer.settled) this.#startPostcard();
+      if (screenNow === 'title') this.#publishLogoShadow(r.sway);
     }
     if (r.screen === 'title') {
       // Past the boot frames, keep the play HUD's row built for the held run (change-detected, so
       // it is built once), so the first play frame after a tap doesn't build it.
-      if (++this.titleFrames > TITLE_HUD_PREBUILD_FRAMES) this.renderer.prebuildHud(r);
+      if (++this.#titleFrames > TITLE_HUD_PREBUILD_FRAMES) this.renderer.prebuildHud(r);
     } else {
-      this.titleFrames = 0;
+      this.#titleFrames = 0;
     }
-    this.d.audio.update(view, real);
-    this.syncSentinel();
+    this.#d.audio.update(view, real);
+    this.#syncSentinel();
     this.stats.frameMs = performance.now() - t0;
     if (draw) {
       // The governor weighs the interval between drawn frames against this frame's own work (see
       // perf.ts), on the screens that draw at full rate; capped and menu screens never trip it.
       const sampled = r.screen === 'play' || r.screen === 'dying' || r.screen === 'title';
-      if (sampled && this.lastDrawSampled && this.lastDrawAt >= 0) {
-        const interval = now - this.lastDrawAt;
+      if (sampled && this.#lastDrawSampled && this.#lastDrawAt >= 0) {
+        const interval = now - this.#lastDrawAt;
         this.gov.sample(interval, this.stats.frameMs, Math.min(0.25, interval / 1000));
       }
-      this.lastDrawAt = now;
-      this.lastDrawSampled = sampled;
+      this.#lastDrawAt = now;
+      this.#lastDrawSampled = sampled;
     }
   }
 
-  private readonly liveStatsOut = {} as SimState['stats'];
+  readonly #liveStatsOut = {} as SimState['stats'];
   /** s.stats, except on a grove Trial (T7) before the finish: stats.grove is set at the finish, so count the trees standing now. */
-  private liveStats(): SimState['stats'] {
-    const s = this.s;
+  #liveStats(): SimState['stats'] {
+    const s = this.#s;
     if (s.el === null || s.trial?.dare.kind !== 'grove' || s.phase === 'won') return s.stats;
-    Object.assign(this.liveStatsOut, s.stats);
-    this.liveStatsOut.grove = groveCount(s);
-    return this.liveStatsOut;
+    Object.assign(this.#liveStatsOut, s.stats);
+    this.#liveStatsOut.grove = groveCount(s);
+    return this.#liveStatsOut;
   }
 
   /** The HUD's campaign row for the renderer (null outside a campaign run). */
-  private fillCampaignView(): void {
-    const r = this.renderIn;
-    const level = this.runLevel;
+  #fillCampaignView(): void {
+    const r = this.#renderIn;
+    const level = this.#runLevel;
     if (!level) {
       r.campaign = null;
       return;
     }
-    const s = this.s;
+    const s = this.#s;
     let c = r.campaign;
     if (!c) {
-      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, gust: 0, stars: 0, coolLeft: 1, goalGlyph: null, goalSec: false };
+      c = { id: 0, progress: 0, goalValue: 0, goalTarget: -1, goalFlakes: false, markGate: -1, markEclipse: -1, stars: 0, coolLeft: 1, goalGlyph: null, goalSec: false };
       r.campaign = c;
     }
-    const relaxed = this.relaxed();
-    const st = this.liveStats();
-    const goal = hudGoal(level, st, this.hudGoalOut, relaxed, this.featSeen);
+    const relaxed = this.#relaxed();
+    const st = this.#liveStats();
+    const goal = hudGoal(level, st, this.#hudGoalOut, relaxed, this.#featSeen);
     c.id = level.id;
     c.progress = levelProgress(s);
     c.goalValue = goal.value;
@@ -1149,27 +1142,27 @@ export class Session {
     c.goalSec = goal.sec;
     c.markGate = level.concepts.includes('gate') ? 0.5 : -1;
     c.markEclipse = level.concepts.includes('eclipse') ? 0.5 : -1;
-    c.stars = starState(level, st, s.phase === 'won', relaxed, this.featSeen);
+    c.stars = starState(level, st, s.phase === 'won', relaxed, this.#featSeen);
     c.coolLeft = 1 - Math.min(1, s.stats.litTotal / level.stars.sunSec);
     // A star earned mid-run (the goal, the flakes) chimes; the finish has its own jingle.
-    if (c.stars & ~this.runStars & 3 && s.phase === 'day') {
-      this.d.audio.play('claim');
-      this.d.haptics.play('claim');
+    if (c.stars & ~this.#runStars & 3 && s.phase === 'day') {
+      this.#d.audio.play('claim');
+      this.#d.haptics.play('claim');
     }
-    this.runStars = c.stars;
+    this.#runStars = c.stars;
   }
 
   /** The run's goal is relaxed to the finish (the soft-fail). */
-  private relaxed(): boolean {
-    return this.s.cfg.relaxedGoal === true;
+  #relaxed(): boolean {
+    return this.#s.cfg.relaxedGoal === true;
   }
 
   /** Goal misses recorded on level `id` (the soft-fail's count). */
-  private misses(id: number): number {
-    return this.d.store.get().campaign.misses?.[id - 1] ?? 0;
+  #misses(id: number): number {
+    return this.#d.store.get().campaign.misses?.[id - 1] ?? 0;
   }
 
-  private renderScreen(id: ScreenId): RenderScreen {
+  #renderScreen(id: ScreenId): RenderScreen {
     switch (id) {
       case 'boot':
       case 'title':
@@ -1183,9 +1176,9 @@ export class Session {
     }
   }
 
-  private fillAudioView(screen: ScreenId): AudioView {
-    const v = this.audioView;
-    const s = this.s;
+  #fillAudioView(screen: ScreenId): AudioView {
+    const v = this.#audioView;
+    const s = this.#s;
     let mode: ScreenMode;
     if (this.ui.isRotateBlocking()) mode = 'paused';
     else if (screen === 'title' || screen === 'boot') mode = 'title';
@@ -1226,24 +1219,24 @@ export class Session {
   // Runs
   // -------------------------------------------------------------------------------------------
 
-  private reducedMotion(): boolean {
-    const m = this.d.store.get().settings.reducedMotion;
+  #reducedMotion(): boolean {
+    const m = this.#d.store.get().settings.reducedMotion;
     if (m !== 'auto') return m === 'on';
-    if (this.rmCache < 0) this.rmCache = prefersReducedMotion() ? 1 : 0;
-    return this.rmCache === 1;
+    if (this.#rmCache < 0) this.#rmCache = prefersReducedMotion() ? 1 : 0;
+    return this.#rmCache === 1;
   }
 
   /** The effective reduced motion may have changed (setting, OS preference, another tab's save). */
-  private reducedMotionMaybeChanged(): void {
-    const rm = this.reducedMotion();
-    if (rm === this.runRm) return;
+  #reducedMotionMaybeChanged(): void {
+    const rm = this.#reducedMotion();
+    if (rm === this.#runRm) return;
     // Runs bake it into their config (sun follow and inertia caps): rebuild the held run.
-    this.runRm = rm;
-    this.refreshTitleRun();
+    this.#runRm = rm;
+    this.#refreshTitleRun();
   }
 
-  private debugStart(cfg: RunConfig): RunConfig {
-    const p = this.params;
+  #debugStart(cfg: RunConfig): RunConfig {
+    const p = this.#params;
     if (p.day !== null) cfg.startDay = p.day;
     const t = startTFor(p.t, p.day ?? 1);
     if (t !== null) cfg.startT = t;
@@ -1255,12 +1248,12 @@ export class Session {
    * A fresh run for `kind` (endless seeds are random unless ?seed= is given; Dailies on `date`).
    * `ahead` = how far the world is built now; the first tick completes the rest (same world).
    */
-  private makeRun(kind: RunKind, date?: string, ahead?: number, level?: number): SimState {
-    const run = createRun(this.runConfig(kind, date, level), undefined, ahead);
-    if (import.meta.env.MODE !== 'single' && this.params.elfix) fixture(run);
-    this.rungOf.set(run, this.cfgRung);
-    if (this.cfgWarmup) this.warmups.add(run);
-    if (this.cfgLevel) this.levelOf.set(run, this.cfgLevel);
+  #makeRun(kind: RunKind, date?: string, ahead?: number, level?: number): SimState {
+    const run = createRun(this.#runConfig(kind, date, level), undefined, ahead);
+    if (import.meta.env.MODE !== 'single' && this.#params.elfix) fixture(run);
+    this.#rungOf.set(run, this.#cfgRung);
+    if (this.#cfgWarmup) this.#warmups.add(run);
+    if (this.#cfgLevel) this.#levelOf.set(run, this.#cfgLevel);
     return run;
   }
 
@@ -1268,53 +1261,53 @@ export class Session {
    * The comfort rung of the next endless run (A2): the tutorial rung on the very first run, then
    * the save's rung (at least 1) while adaptive comfort is on, else the standard rules.
    */
-  private comfortRung(): number {
-    const save = this.d.store.get();
+  #comfortRung(): number {
+    const save = this.#d.store.get();
     if (save.stats.runs === 0) return 0;
     return save.settings.comfort ? Math.max(1, save.stats.comfort) : COMFORT_MAX;
   }
 
   /** The config of a fresh run of `kind`, with the run bookkeeping (kind, daily, challenge) set. */
-  private runConfig(kind: RunKind, date?: string, level?: number): RunConfig {
-    const save = this.d.store.get();
-    const p = this.params;
-    const rm = this.reducedMotion();
+  #runConfig(kind: RunKind, date?: string, level?: number): RunConfig {
+    const save = this.#d.store.get();
+    const p = this.#params;
+    const rm = this.#reducedMotion();
     let cfg: RunConfig;
-    this.runChallenge = null;
-    this.dailyDate = null;
-    this.dailyScored = false;
-    this.cfgRung = -1;
-    this.cfgWarmup = false;
-    this.cfgLevel = null;
+    this.#runChallenge = null;
+    this.#dailyDate = null;
+    this.#dailyScored = false;
+    this.#cfgRung = -1;
+    this.#cfgWarmup = false;
+    this.#cfgLevel = null;
     const def = kind === 'campaign' ? anyLevelDef(level ?? 1) : null;
     if (def) {
       // A campaign level (CAMPAIGN_PLAN §4) or an Elementals Trial: the level's own rules, never the
       // comfort ladder.
-      this.cfgLevel = def;
+      this.#cfgLevel = def;
       cfg = campaignConfig(def, rm, save.flags.tutorialDone, relaxedGoalFor(def, save.campaign.misses?.[def.id - 1] ?? 0));
-      this.kind = 'campaign';
-    } else if (kind === 'daily' || (kind === 'endless' && p.daily && !this.usedUrlSeed)) {
+      this.#kind = 'campaign';
+    } else if (kind === 'daily' || (kind === 'endless' && p.daily && !this.#usedUrlSeed)) {
       const d = kind === 'daily' ? (date ?? localDate()) : (p.date ?? localDate());
-      cfg = this.dailyConfig(d, rm);
-      if (kind === 'endless') this.usedUrlSeed = true;
-      this.kind = 'daily';
-    } else if (kind === 'challenge' && this.challenge) {
-      const c = this.challenge;
-      this.runChallenge = c;
+      cfg = this.#dailyConfig(d, rm);
+      if (kind === 'endless') this.#usedUrlSeed = true;
+      this.#kind = 'daily';
+    } else if (kind === 'challenge' && this.#challenge) {
+      const c = this.#challenge;
+      this.#runChallenge = c;
       if (c.k === 'd') {
-        cfg = this.dailyConfig(c.d, rm);
+        cfg = this.#dailyConfig(c.d, rm);
       } else {
         // The sender's exact rules (CC-8, A1; decodeChallenge resolves a v1.0 code's to the v1.0
         // world's); never a lesson, hint or cue.
         const profile = c.p ?? 3;
         cfg = { seed: c.seed >>> 0, mode: 'challenge', profile, tutorial: profile === 0, reducedMotion: rm, drain: c.dr ?? 55, noonCloud: c.nc ?? 0, plan: c.pl === 1 };
       }
-      this.kind = 'challenge';
+      this.#kind = 'challenge';
     } else {
       let seed: number;
-      if (p.seed !== null && !this.usedUrlSeed) {
+      if (p.seed !== null && !this.#usedUrlSeed) {
         seed = p.seed;
-        this.usedUrlSeed = true;
+        this.#usedUrlSeed = true;
       } else {
         seed = randomSeed();
       }
@@ -1326,18 +1319,18 @@ export class Session {
         if (!p.bot && profile <= 1 && !save.flags.tutorialDone) cfg.lesson = true;
       } else {
         // The comfort ladder (A2); ?rung= forces a rung, a forced forecast plays the standard rules.
-        const rung = p.rung ?? (p.forecast !== null ? COMFORT_MAX : this.comfortRung());
+        const rung = p.rung ?? (p.forecast !== null ? COMFORT_MAX : this.#comfortRung());
         // The first run at standard after the climb is the warm-up (not when a rung is forced).
         const warmup = p.rung === null && p.forecast === null && warmupDue(save);
         const r = rungConfig(rung, { tutorialDone: save.flags.tutorialDone, warmup });
         cfg = { seed, mode: 'endless', profile: r.profile, tutorial: r.tutorial, reducedMotion: rm, drain: r.drain, noonCloud: r.noonCloud };
         if (r.lesson) cfg.lesson = true;
-        this.cfgRung = rung;
-        this.cfgWarmup = r.warmup;
+        this.#cfgRung = rung;
+        this.#cfgWarmup = r.warmup;
       }
-      this.kind = 'endless';
+      this.#kind = 'endless';
     }
-    this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
+    this.#dailyScored = this.#dailyDate !== null && this.#dailyEligible(this.#dailyDate);
     if (p.profile !== null && cfg.mode !== 'endless') {
       // Debug override applies to every mode.
       cfg.profile = p.profile;
@@ -1346,23 +1339,23 @@ export class Session {
     if (p.forecast !== null) cfg.forecast = p.forecast;
     if (p.plan !== null) cfg.plan = p.plan;
     if (p.rules) cfg.v16 = p.rules;
-    return this.debugStart(cfg);
+    return this.#debugStart(cfg);
   }
 
   /** A Daily on `date`: the standard rules without the noon cloud; the Day Plan from PLAN_START_DATE (A1). */
-  private dailyConfig(date: string, rm: boolean): RunConfig {
-    this.dailyDate = date;
+  #dailyConfig(date: string, rm: boolean): RunConfig {
+    this.#dailyDate = date;
     return { seed: dailySeed(date), mode: 'daily', profile: 3, tutorial: false, reducedMotion: rm, dailyDate: date, noonCloud: 0, plan: date >= PLAN_START_DATE };
   }
 
   /** A Daily of `date` would count as a try now: it is today's and tries are left. */
-  private dailyEligible(date: string): boolean {
-    return !this.debugRuns && date === localDate() && dailyStatus(this.d.store.get(), date).tries < DAILY_TRIES;
+  #dailyEligible(date: string): boolean {
+    return !this.#debugRuns && date === localDate() && dailyStatus(this.#d.store.get(), date).tries < DAILY_TRIES;
   }
 
   /** A challenge is open on a save that has never finished a run: the tutorial run comes first. */
-  private inWarmup(): boolean {
-    return this.challenge !== null && this.d.store.get().stats.runs === 0;
+  #inWarmup(): boolean {
+    return this.#challenge !== null && this.#d.store.get().stats.runs === 0;
   }
 
   /**
@@ -1370,64 +1363,64 @@ export class Session {
    * press on the canvas or a tray drag starts it) unless the tutorial warm-up comes first,
    * otherwise the next endless run.
    */
-  private createTitleRun(): SimState {
-    this.finishPrebuild();
-    this.runLevel = null;
-    if (this.challenge && !this.inWarmup()) return this.makeRun('challenge', undefined, TITLE_AHEAD);
-    if (this.nextRun && this.nextRun.cfg.mode === 'endless' && this.nextRun.phase === 'hold') {
-      const r = this.nextRun;
-      this.nextRun = null;
-      this.kind = 'endless';
-      this.runChallenge = null;
-      this.dailyDate = null;
-      this.dailyScored = false;
+  #createTitleRun(): SimState {
+    this.#finishPrebuild();
+    this.#runLevel = null;
+    if (this.#challenge && !this.#inWarmup()) return this.#makeRun('challenge', undefined, TITLE_AHEAD);
+    if (this.#nextRun && this.#nextRun.cfg.mode === 'endless' && this.#nextRun.phase === 'hold') {
+      const r = this.#nextRun;
+      this.#nextRun = null;
+      this.#kind = 'endless';
+      this.#runChallenge = null;
+      this.#dailyDate = null;
+      this.#dailyScored = false;
       return r;
     }
-    return this.makeRun('endless', undefined, TITLE_AHEAD);
+    return this.#makeRun('endless', undefined, TITLE_AHEAD);
   }
 
   /**
    * Something the held runs depend on changed (save reset or restored, another tab's save, reduced
    * motion, the challenge): drop the prebuilt next run and, between runs, rebuild the Title's.
    */
-  private refreshTitleRun(): void {
-    this.nextRun = null;
-    this.nextBuild = null;
-    if (this.runActive) return;
-    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
-    this.lifetimeRuns = this.d.store.get().stats.runs;
-    this.runRm = this.reducedMotion();
-    this.s = this.createTitleRun();
-    this.renderIn.s = this.s;
-    this.resetSnaps();
-    this.resetRender();
+  #refreshTitleRun(): void {
+    this.#nextRun = null;
+    this.#nextBuild = null;
+    if (this.#runActive) return;
+    if (this.#challenge) this.ui.setChallenge(this.#challengeBanner(this.#challenge));
+    this.#lifetimeRuns = this.#d.store.get().stats.runs;
+    this.#runRm = this.#reducedMotion();
+    this.#s = this.#createTitleRun();
+    this.#renderIn.s = this.#s;
+    this.#resetSnaps();
+    this.#resetRender();
     this.cadence.invalidate();
-    this.previewRun();
+    this.#previewRun();
   }
 
   /** Tells the Title which Day 1 the held run plays (null for plan-off worlds). */
-  private previewRun(): void {
-    const w = this.s.world;
+  #previewRun(): void {
+    const w = this.#s.world;
     this.ui.setRunPreview(w.planOn ? worldPlan(w, 1) : null);
   }
 
-  private resetSnaps(): void {
-    takeSnap(this.s, this.prev);
-    takeSnap(this.s, this.curr);
-    takeSnap(this.s, this.snap);
+  #resetSnaps(): void {
+    takeSnap(this.#s, this.#prev);
+    takeSnap(this.#s, this.#curr);
+    takeSnap(this.#s, this.#snap);
   }
 
-  private resetRender(): void {
+  #resetRender(): void {
     const sc = this.renderer.scene;
     clearParticles(sc.particles);
     clearRings(sc.rings);
     clearPops(sc.pops);
     resetBanners(sc.banners);
     resetNubsAnim(sc.nubs);
-    resetFootprints(sc.footprints, this.s.nubs.y);
+    resetFootprints(sc.footprints, this.#s.nubs.y);
     // Shake and zoom pulses belong to the run that made them.
     Object.assign(sc.cam, createCameraFx());
-    sc.cam.reducedMotion = this.reducedMotion();
+    sc.cam.reducedMotion = this.#reducedMotion();
     sc.sun.guilty = 0;
     resetDeathBeat(sc.death);
     sc.relief = 0;
@@ -1440,47 +1433,47 @@ export class Session {
    * Makes `run` the current run and starts its bookkeeping (it may still be in 'hold'). A press that
    * starts the run keeps its pending input (its downEdge is the run's start frame).
    */
-  private beginRun(run: SimState, keepInput = false, card = true): void {
-    this.s = run;
-    this.renderIn.s = run;
-    this.dropPostcard();
-    this.resetSnaps();
-    this.resetRender();
+  #beginRun(run: SimState, keepInput = false, card = true): void {
+    this.#s = run;
+    this.#renderIn.s = run;
+    this.#dropPostcard();
+    this.#resetSnaps();
+    this.#resetRender();
     this.fx.resetRun();
     this.mech.reset();
     if (!SINGLE) gustTicks.length = 0;
-    this.featSeen.clear();
+    this.#featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
     // An intro Trial records its frames for Retry from the Tag Stone (§7.11).
-    this.rec = run.trial?.intro ? createReplay(run.cfg) : null;
-    const botKind = this.params.bot ?? this.testBot;
-    this.bot = botKind ? makeBot(botKind) : null;
-    this.d.audio.resetRun();
-    this.melody = [];
-    this.hints.reset();
-    this.hintAlpha = 0;
-    this.cues = 0;
-    this.cueShown = null;
-    this.cueHold = 0;
-    this.verbDone = false;
-    this.taught = 0;
-    this.teachMode = 'off';
-    this.meltWarn = false;
-    const rung = (this.runRung = this.rungOf.get(run) ?? -1);
-    this.runWarmup = this.warmups.has(run);
-    this.runLevel = this.levelOf.get(run) ?? null;
-    this.wonAt = -1;
-    this.won = null;
-    const store = this.d.store;
+    this.#rec = run.trial?.intro ? createReplay(run.cfg) : null;
+    const botKind = this.#params.bot ?? this.#testBot;
+    this.#bot = botKind ? makeBot(botKind) : null;
+    this.#d.audio.resetRun();
+    this.#melody = [];
+    this.#hints.reset();
+    this.#hintAlpha = 0;
+    this.#cues = 0;
+    this.#cueShown = null;
+    this.#cueHold = 0;
+    this.#verbDone = false;
+    this.#taught = 0;
+    this.#teachMode = 'off';
+    this.#meltWarn = false;
+    const rung = (this.#runRung = this.#rungOf.get(run) ?? -1);
+    this.#runWarmup = this.#warmups.has(run);
+    this.#runLevel = this.#levelOf.get(run) ?? null;
+    this.#wonAt = -1;
+    this.#won = null;
+    const store = this.#d.store;
     const save = store.get();
     // Controls v3 (§11.6): the driver's options for this run: aim help for the setting and the run
     // (blind levels 0, fog levels now-only), Auto Snap on the comfort rungs up to
     // TUNING.drive.autoSnap.rungs, Auto actions. A settings change applies from the next run.
-    const p = this.params;
+    const p = this.#params;
     const st = save.settings;
     const aim = aimRadius(p.aim ?? st.aim, { mode: run.cfg.mode, level: run.cfg.level ?? null, rung, trial: run.trial !== null, blind: run.mods.has('blind') });
-    this.driveOpts = {
+    this.#driveOpts = {
       aimDeg: aim.deg,
       track: aim.track,
       nowOnly: run.mods.has('fog'),
@@ -1488,70 +1481,70 @@ export class Session {
       autoAct: p.autoAct ?? st.autoAct,
       reducedMotion: run.cfg.reducedMotion,
     };
-    this.driver.begin(run, this.driveOpts);
-    this.dailyTry = null;
-    this.dailyCounted = false;
+    this.driver.begin(run, this.#driveOpts);
+    this.#dailyTry = null;
+    this.#dailyCounted = false;
     // Eligibility is decided when the run begins (the Title may have held it since yesterday).
-    this.dailyScored = this.dailyDate !== null && this.dailyEligible(this.dailyDate);
-    this.deathAt = -1;
-    this.dyingGame = -1;
-    this.resultsAt = -1;
-    this.result = null;
-    this.outcome = null;
-    this.resultsShown = false;
-    this.paused = false;
-    this.runActive = true;
-    this.runAssisted = this.assisted(save.settings);
-    this.runPb = this.livePb();
-    this.runGoal = this.liveGoal();
-    this.lifetimeRuns = save.stats.runs;
-    this.warmup = run.cfg.mode === 'endless' && this.inWarmup() ? this.challenge : null;
-    this.armStamp(run);
-    this.moments.begin(save, this.runLevel, !this.debugRuns, run.cfg.relaxedGoal === true);
-    this.runStars = 0;
-    if (!this.debugRuns) {
+    this.#dailyScored = this.#dailyDate !== null && this.#dailyEligible(this.#dailyDate);
+    this.#deathAt = -1;
+    this.#dyingGame = -1;
+    this.#resultsAt = -1;
+    this.#result = null;
+    this.#outcome = null;
+    this.#resultsShown = false;
+    this.#paused = false;
+    this.#runActive = true;
+    this.#runAssisted = this.#assisted(save.settings);
+    this.#runPb = this.#livePb();
+    this.#runGoal = this.#liveGoal();
+    this.#lifetimeRuns = save.stats.runs;
+    this.#warmup = run.cfg.mode === 'endless' && this.#inWarmup() ? this.#challenge : null;
+    this.#armStamp(run);
+    this.#moments.begin(save, this.#runLevel, !this.#debugRuns, run.cfg.relaxedGoal === true);
+    this.#runStars = 0;
+    if (!this.#debugRuns) {
       const begun = beginRun(save);
       if (begun.save !== save) {
         store.set(begun.save);
         this.ui.setSave(begun.save);
       }
     }
-    this.setGhost('off');
+    this.#setGhost('off');
     // The level's intro card holds until the first tap (§4).
-    if (card && this.runLevel && run.phase === 'hold') {
-      showLevelCard(this.renderer.scene.banners, introCard(this.runLevel, run.cfg.relaxedGoal === true), this.runLevel.biome);
+    if (card && this.#runLevel && run.phase === 'hold') {
+      showLevelCard(this.renderer.scene.banners, introCard(this.#runLevel, run.cfg.relaxedGoal === true), this.#runLevel.biome);
     }
   }
 
-  private ghost: GhostMode = 'off';
+  #ghost: GhostMode = 'off';
   /** The intro Drip has slid (the ghost hand has taught the steer). */
-  private verbDone = false;
+  #verbDone = false;
   /** §6.1 teaching: the moments taught this run (bits: 1 the Cold Snap, 2 Ember or Sprout, 4 Gust), the ghost of the one on ('off' none) and when its slow time ends (this.time, s). */
-  private taught = 0;
-  private teachMode: GhostMode = 'off';
-  private teachEnd = 0;
+  #taught = 0;
+  #teachMode: GhostMode = 'off';
+  #teachEnd = 0;
 
-  private setGhost(mode: GhostMode, at = false): void {
+  #setGhost(mode: GhostMode, at = false): void {
     if (!at) this.ui.setGhostAt(NaN, NaN);
-    if (mode === this.ghost) return;
-    this.ghost = mode;
+    if (mode === this.#ghost) return;
+    this.#ghost = mode;
     this.ui.setGhostThumb(mode);
   }
 
   /** The intro Drip's ghost (§6.1, ELEMENTALS_V2 §7.9): a steer on the first puddle ahead in reach, anchored there on the last drawn frame, until Drip has slid. */
-  private verbGhost(): void {
-    const s = this.s;
-    if (Math.abs((s.el as NonNullable<SimState['el']>).dxTarget) >= 8) this.verbDone = true;
-    const o = !this.verbDone && s.trial?.intro === 'drip' && s.nubs.hero === 'drip' ? this.ahead('puddle') : undefined;
-    if (!o) return this.setGhost('off');
+  #verbGhost(): void {
+    const s = this.#s;
+    if (Math.abs((s.el as NonNullable<SimState['el']>).dxTarget) >= 8) this.#verbDone = true;
+    const o = !this.#verbDone && s.trial?.intro === 'drip' && s.nubs.hero === 'drip' ? this.#ahead('puddle') : undefined;
+    if (!o) return this.#setGhost('off');
     const v = this.renderer.scene.view;
     this.ui.setGhostAt(Math.max(40, Math.min(v.vw - 40, v.ox + o.x * v.S - v.vx)), v.oy - o.y * v.S - v.vy);
-    this.setGhost('steer', true);
+    this.#setGhost('steer', true);
   }
 
   /** The first object of `kinds` ahead in reach (near..range): no standing tree, no bridge, weather awake. */
-  private ahead(kinds: string): ElObj | undefined {
-    const s = this.s;
+  #ahead(kinds: string): ElObj | undefined {
+    const s = this.#s;
     const E = TUNING.elements;
     for (const x of (s.el as NonNullable<SimState['el']>).objs) {
       const d = x.y - s.nubs.y;
@@ -1568,28 +1561,28 @@ export class Session {
    * driver takes, onNote; a vane notch), the first TEACH_S real seconds in slow time (updateHints).
    * Returns the ghost mode ('off': none).
    */
-  private teach(): GhostMode {
-    const s = this.s;
-    const v = this.renderIn.drive;
+  #teach(): GhostMode {
+    const s = this.#s;
+    const v = this.#renderIn.drive;
     const h = s.nubs.hero;
     const snap = v.act === 'snap';
     const bit = snap ? 1 : h === 'gust' ? 4 : 2;
     // A moment holds while its act can be done: the snap ready, a pick, weather ahead under a calm vane.
-    if (!(snap ? v.state === 1 : h === 'gust' ? !v.vane && this.ahead('rain fog') : v.pick >= 0)) this.teachMode = 'off';
-    else if (!(this.taught & bit) && (snap ? this.runLevel?.introduces === 'snap' || !this.d.store.get().flags.snapTeach : s.trial?.intro === h)) {
-      this.taught |= bit;
-      this.teachMode = h === 'gust' ? 'vane' : 'press';
-      this.teachEnd = this.time + TEACH_S;
+    if (!(snap ? v.state === 1 : h === 'gust' ? !v.vane && this.#ahead('rain fog') : v.pick >= 0)) this.#teachMode = 'off';
+    else if (!(this.#taught & bit) && (snap ? this.#runLevel?.introduces === 'snap' || !this.#d.store.get().flags.snapTeach : s.trial?.intro === h)) {
+      this.#taught |= bit;
+      this.#teachMode = h === 'gust' ? 'vane' : 'press';
+      this.#teachEnd = this.#time + TEACH_S;
       if (snap) {
-        this.cue('snap-ready');
-        if (!this.debugRuns) {
-          this.d.store.update((sv) => {
+        this.#cue('snap-ready');
+        if (!this.#debugRuns) {
+          this.#d.store.update((sv) => {
             sv.flags.snapTeach = true;
           });
         }
       }
     }
-    return this.teachMode;
+    return this.#teachMode;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1597,7 +1590,7 @@ export class Session {
   // -------------------------------------------------------------------------------------------
 
   /** Back has something to do in the game: any screen but the Title (and boot), or an open modal. */
-  private wantsSentinel(): boolean {
+  #wantsSentinel(): boolean {
     const sc = this.ui.current();
     return (sc !== 'boot' && sc !== 'title') || this.ui.isModalOpen();
   }
@@ -1607,31 +1600,31 @@ export class Session {
    * true, taken back (history.back(), its popstate ignored) when in-app navigation turns it false.
    * Checked every frame and right after UI callbacks.
    */
-  private syncSentinel(): void {
-    if (this.disarming) {
+  #syncSentinel(): void {
+    if (this.#disarming) {
       // Wait for our own pop before pushing again (the history traversal is asynchronous).
-      if (performance.now() < this.disarmUntil) return;
-      this.disarming = false;
+      if (performance.now() < this.#disarmUntil) return;
+      this.#disarming = false;
     }
-    const want = this.wantsSentinel();
-    if (want === this.sentinel) return;
+    const want = this.#wantsSentinel();
+    if (want === this.#sentinel) return;
     if (want) {
       try {
         history.pushState({ shady: 1 }, '');
-        this.sentinel = true;
-        this.sentinelHref = location.href;
+        this.#sentinel = true;
+        this.#sentinelHref = location.href;
       } catch {
         // History may be unavailable (sandboxed iframes): play on without the sentinel.
       }
       return;
     }
-    this.sentinel = false;
+    this.#sentinel = false;
     try {
-      this.disarming = true;
-      this.disarmUntil = performance.now() + DISARM_WAIT_MS;
+      this.#disarming = true;
+      this.#disarmUntil = performance.now() + DISARM_WAIT_MS;
       history.back();
     } catch {
-      this.disarming = false;
+      this.#disarming = false;
     }
   }
 
@@ -1642,16 +1635,16 @@ export class Session {
    * the Title with nothing open there is no sentinel, so Back leaves the game.
    * (A native shell routes its back button here too: see src/game/README.md.)
    */
-  private onPopState(): void {
-    if (this.disarming) {
-      this.disarming = false;
+  #onPopState(): void {
+    if (this.#disarming) {
+      this.#disarming = false;
       return;
     }
     // Not our entry (a fragment navigation, or nothing armed): leave it to the browser.
-    if (!this.sentinel || location.href !== this.sentinelHref) return;
-    this.sentinel = false;
+    if (!this.#sentinel || location.href !== this.#sentinelHref) return;
+    this.#sentinel = false;
     this.handleBack();
-    this.syncSentinel();
+    this.#syncSentinel();
   }
 
   /** The app's Back action (also what a native back button should call). */
@@ -1664,72 +1657,72 @@ export class Session {
     const sc = ui.current();
     if (sc === 'play') {
       ui.show('pause');
-      this.pause();
+      this.#pause();
     } else if (sc !== 'pause' && sc !== 'boot' && sc !== 'title') {
       ui.back();
     }
   }
 
-  private accepting(): boolean {
-    if (this.paused || this.ui.isRotateBlocking()) return false;
+  #accepting(): boolean {
+    if (this.#paused || this.ui.isRotateBlocking()) return false;
     const sc = this.ui.current();
     return sc === 'title' || sc === 'play';
   }
 
-  private onPress(): void {
+  #onPress(): void {
     // Audio unlocks from the engine's own gesture listeners (on a first pointerdown it builds the
     // context in a task right after the event, so the press itself stays light).
     if (this.ui.current() === 'title') {
       // Before Endless unlocks (v1.4), a press plays the next Journey level, like the Play button.
-      const save = this.d.store.get();
-      if (this.challenge === null && !featureUnlocked(save, 'endless')) {
+      const save = this.#d.store.get();
+      if (this.#challenge === null && !featureUnlocked(save, 'endless')) {
         this.ui.show('play');
-        this.startRun('campaign', undefined, continueLevel(save));
-        this.syncSentinel();
+        this.#startRun('campaign', undefined, continueLevel(save));
+        this.#syncSentinel();
         return;
       }
       // Any press on the canvas starts the Title's run with catch semantics (θ stays θ0); with a
       // challenge link open, that is the challenge run.
       this.ui.show('play');
-      this.beginRun(this.s, true);
-      this.syncSentinel();
-    } else if (this.wonAt >= 0 && this.time - this.wonAt >= FINISH_SKIP_S) {
+      this.#beginRun(this.#s, true);
+      this.#syncSentinel();
+    } else if (this.#wonAt >= 0 && this.#time - this.#wonAt >= FINISH_SKIP_S) {
       // A tap after the FINISH stamp has landed goes straight to the Results.
-      this.showResults();
+      this.#showResults();
     }
   }
 
-  private startRun(want: RunKind, date?: string, level?: number): void {
-    this.d.audio.ensure();
-    const held = !this.runActive && this.s.phase === 'hold';
+  #startRun(want: RunKind, date?: string, level?: number): void {
+    this.#d.audio.ensure();
+    const held = !this.#runActive && this.#s.phase === 'hold';
     // A first-time player plays the tutorial run before a friend's challenge (CC-8 warm-up).
-    const kind = want === 'challenge' && this.inWarmup() ? 'endless' : want;
+    const kind = want === 'challenge' && this.#inWarmup() ? 'endless' : want;
     if (kind === 'campaign') {
       // A level waits on its intro card for the first press (the clock held at its start time).
-      this.beginRun(this.makeRun('campaign', undefined, undefined, level ?? this.runLevel?.id ?? 1));
-      this.setGhost('both');
+      this.#beginRun(this.#makeRun('campaign', undefined, undefined, level ?? this.#runLevel?.id ?? 1));
+      this.#setGhost('both');
       return;
     }
     if (kind === 'endless') {
-      if (!held || this.s.cfg.mode !== 'endless' || this.kind !== 'endless') this.s = this.makeRun('endless');
-      this.beginRun(this.s);
+      if (!held || this.#s.cfg.mode !== 'endless' || this.#kind !== 'endless') this.#s = this.#makeRun('endless');
+      this.#beginRun(this.#s);
       this.input.tap();
       return;
     }
     // Daily and challenge runs wait for the first press (clock held at dawn). The Title already
     // holds the challenge run while a challenge link is open.
     const run =
-      kind === 'challenge' && held && this.kind === 'challenge' && this.challenge !== null && this.runChallenge === this.challenge
-        ? this.s
-        : this.makeRun(kind, date);
-    this.beginRun(run);
-    this.setGhost('both');
+      kind === 'challenge' && held && this.#kind === 'challenge' && this.#challenge !== null && this.#runChallenge === this.#challenge
+        ? this.#s
+        : this.#makeRun(kind, date);
+    this.#beginRun(run);
+    this.#setGhost('both');
   }
 
   /** Space/Enter in play: a run held on its level card (or at dawn) starts as a tap starts it. */
-  private startHeld(): boolean {
-    if (this.ui.current() !== 'play' || this.s.phase !== 'hold') return false;
-    this.d.audio.ensure();
+  #startHeld(): boolean {
+    if (this.ui.current() !== 'play' || this.#s.phase !== 'hold') return false;
+    this.#d.audio.ensure();
     this.input.tap();
     return true;
   }
@@ -1739,48 +1732,48 @@ export class Session {
    * frames headless on a fresh run of the Trial up to the telegraph of the TAG that began the lost
    * leg (the same state the player had there), then waits on the Pause card for the player.
    */
-  private retryTag(): void {
-    const t = this.s.trial;
-    const rec = this.rec;
-    if (t === null || rec === null || this.s.relayIdx < 1) return this.retry();
-    this.d.audio.ensure();
-    this.finishPrebuild();
-    const stop = tagTick(t, this.s.relayIdx - 1) - TUNING.elements.tagSoonTicks;
-    const run = this.makeRun('campaign', undefined, undefined, t.id);
+  #retryTag(): void {
+    const t = this.#s.trial;
+    const rec = this.#rec;
+    if (t === null || rec === null || this.#s.relayIdx < 1) return this.#retry();
+    this.#d.audio.ensure();
+    this.#finishPrebuild();
+    const stop = tagTick(t, this.#s.relayIdx - 1) - TUNING.elements.tagSoonTicks;
+    const run = this.#makeRun('campaign', undefined, undefined, t.id);
     let i = 0;
     while (i < rec.frames.length && run.tickAbs < stop - 1) step(run, rec.frames[i++] as InputFrame);
     // On the telegraph's first tick the finger that was down lifts (a sun drag at 0 °/s; a hold lets go).
     const lift: InputFrame = { dTheta: 0, down: false, downEdge: false, upEdge: true, release: 0, key: 0, verb: VERB_RELEASE };
     step(run, lift);
-    this.beginRun(run, false, false);
+    this.#beginRun(run, false, false);
     // The new run's recording starts with the frames that brought it here (a second retry works too).
-    this.rec?.frames.push(...rec.frames.slice(0, i), lift);
-    this.pauseIfPlaying();
+    this.#rec?.frames.push(...rec.frames.slice(0, i), lift);
+    this.#pauseIfPlaying();
     // §11.5: arms, jobs and the vane start empty again.
-    this.say(CONTROL_TEXT['cue.retryTag'] as string);
+    this.#say(CONTROL_TEXT['cue.retryTag'] as string);
   }
 
-  private retry(): void {
-    this.d.audio.ensure();
-    this.finishPrebuild();
+  #retry(): void {
+    this.#d.audio.ensure();
+    this.#finishPrebuild();
     // After the warm-up, Retry ("Take the challenge") plays the friend's run.
-    if (this.warmup && this.challenge) this.kind = 'challenge';
+    if (this.#warmup && this.#challenge) this.#kind = 'challenge';
     let run: SimState;
-    if (this.kind === 'campaign') {
+    if (this.#kind === 'campaign') {
       // Retry restarts the same level at once, without its intro card (Pause > Restart too).
-      run = this.makeRun('campaign', undefined, undefined, this.runLevel?.id ?? 1);
-    } else if (this.kind === 'endless' && this.nextRun && this.nextRun.cfg.mode === 'endless') {
-      run = this.nextRun;
-      this.nextRun = null;
-      this.kind = 'endless';
-      this.runChallenge = null;
-      this.dailyDate = null;
+      run = this.#makeRun('campaign', undefined, undefined, this.#runLevel?.id ?? 1);
+    } else if (this.#kind === 'endless' && this.#nextRun && this.#nextRun.cfg.mode === 'endless') {
+      run = this.#nextRun;
+      this.#nextRun = null;
+      this.#kind = 'endless';
+      this.#runChallenge = null;
+      this.#dailyDate = null;
     } else {
       // A Daily replays its own date (a past date stays a practice run of that date).
-      const date = this.kind === 'daily' && this.dailyDate !== null ? this.dailyDate : undefined;
-      run = this.makeRun(this.kind, date);
+      const date = this.#kind === 'daily' && this.#dailyDate !== null ? this.#dailyDate : undefined;
+      run = this.#makeRun(this.#kind, date);
     }
-    this.beginRun(run, false, false);
+    this.#beginRun(run, false, false);
     this.input.tap();
   }
 
@@ -1789,77 +1782,77 @@ export class Session {
    * Trial's next is the next open Trial (the Results' nextId), and without one it leaves for the
    * Elementals screen.
    */
-  private nextLevel(): void {
-    this.d.audio.ensure();
-    const id = this.runLevel?.id ?? 0;
+  #nextLevel(): void {
+    this.#d.audio.ensure();
+    const id = this.#runLevel?.id ?? 0;
     const trial = isTrialId(id);
-    const next = trial ? (this.lastCampaign?.nextId ? anyLevelDef(this.lastCampaign.nextId) : null) : levelDef(id + 1);
+    const next = trial ? (this.#lastCampaign?.nextId ? anyLevelDef(this.#lastCampaign.nextId) : null) : levelDef(id + 1);
     if (!next) {
       this.ui.show(trial ? 'elementals' : 'title');
-      this.home();
+      this.#home();
       return;
     }
-    this.finishPrebuild();
-    this.beginRun(this.makeRun('campaign', undefined, undefined, next.id));
-    this.setGhost('both');
+    this.#finishPrebuild();
+    this.#beginRun(this.#makeRun('campaign', undefined, undefined, next.id));
+    this.#setGhost('both');
   }
 
   /**
    * Results > Map and the Title's Journey pill: leaves the run like Home and shows the Journey map
    * (a Trial's Results: the Elementals screen).
    */
-  private openJourney(to: 'journey' | 'elementals' = 'journey'): void {
-    this.home();
+  #openJourney(to: 'journey' | 'elementals' = 'journey'): void {
+    this.#home();
     if (this.ui.current() !== to) this.ui.show(to);
   }
 
-  private home(): void {
-    this.d.audio.stopMelody();
-    this.runActive = false;
-    this.paused = false;
-    this.release();
-    if (this.queuedChallenge) {
-      this.challenge = this.queuedChallenge;
-      this.queuedChallenge = null;
+  #home(): void {
+    this.#d.audio.stopMelody();
+    this.#runActive = false;
+    this.#paused = false;
+    this.#release();
+    if (this.#queuedChallenge) {
+      this.#challenge = this.#queuedChallenge;
+      this.#queuedChallenge = null;
     }
     // The banner drops its warm-up note once the first run is done.
-    if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
-    this.lifetimeRuns = this.d.store.get().stats.runs;
-    this.s = this.createTitleRun();
-    this.renderIn.s = this.s;
-    this.resetSnaps();
-    this.resetRender();
-    this.previewRun();
-    this.deathAt = -1;
-    this.dyingGame = -1;
-    this.resultsAt = -1;
-    this.setGhost('both');
+    if (this.#challenge) this.ui.setChallenge(this.#challengeBanner(this.#challenge));
+    this.#lifetimeRuns = this.#d.store.get().stats.runs;
+    this.#s = this.#createTitleRun();
+    this.#renderIn.s = this.#s;
+    this.#resetSnaps();
+    this.#resetRender();
+    this.#previewRun();
+    this.#deathAt = -1;
+    this.#dyingGame = -1;
+    this.#resultsAt = -1;
+    this.#setGhost('both');
   }
 
   /** Drops the input's fingers, keys and presses, and interrupts the driver (§2.1: pause, blur, a new run). */
-  private release(): void {
+  #release(): void {
     this.input.releaseAll();
     this.driver.interrupt();
   }
 
-  private pause(): void {
-    this.paused = true;
-    this.release();
-    this.setGhost('off');
-    this.cue(null);
+  #pause(): void {
+    this.#paused = true;
+    this.#release();
+    this.#setGhost('off');
+    this.#cue(null);
   }
 
-  private pauseIfPlaying(): void {
+  #pauseIfPlaying(): void {
     if (this.ui.current() !== 'play') return;
     this.ui.show('pause');
-    this.pause();
-    this.syncSentinel();
+    this.#pause();
+    this.#syncSentinel();
   }
 
-  private resume(): void {
-    this.d.audio.ensure();
-    this.paused = false;
-    this.release();
+  #resume(): void {
+    this.#d.audio.ensure();
+    this.#paused = false;
+    this.#release();
     this.clock.acc = 0;
   }
 
@@ -1867,10 +1860,10 @@ export class Session {
   // Challenges, the date, other tabs
   // -------------------------------------------------------------------------------------------
 
-  private challengeBanner(c: Challenge): ChallengeBanner {
+  #challengeBanner(c: Challenge): ChallengeBanner {
     const b: ChallengeBanner = { minutes: c.m };
     if (c.n) b.name = c.n;
-    if (this.inWarmup()) b.warmup = true;
+    if (this.#inWarmup()) b.warmup = true;
     if (c.k === 'd') {
       const n = dailyNumber(c.d);
       b.note = c.d === localDate() ? `Daily #${n}` : `Daily #${n} · practice run`;
@@ -1879,37 +1872,37 @@ export class Session {
   }
 
   /** A challenge link opened in this document (same-document navigation to #c=…). */
-  private onHashChange(): void {
+  #onHashChange(): void {
     const c = playableChallenge(challengeFromHash(location.hash));
-    if (!c || sameChallenge(c, this.challenge)) return;
-    if (this.runActive) {
+    if (!c || sameChallenge(c, this.#challenge)) return;
+    if (this.#runActive) {
       // Never swap a run mid-play: the banner appears when the player is back on the Title.
-      this.queuedChallenge = c;
+      this.#queuedChallenge = c;
       return;
     }
-    this.challenge = c;
-    this.queuedChallenge = null;
-    this.ui.setChallenge(this.challengeBanner(c));
-    this.refreshTitleRun();
+    this.#challenge = c;
+    this.#queuedChallenge = null;
+    this.ui.setChallenge(this.#challengeBanner(c));
+    this.#refreshTitleRun();
   }
 
   /** Midnight: tell the UI when the local date changes (Daily number, tries, history). */
-  private checkToday(): void {
+  #checkToday(): void {
     const d = localDate();
-    if (d === this.today) return;
-    this.today = d;
+    if (d === this.#today) return;
+    this.#today = d;
     this.ui.setToday(d);
   }
 
   /** Another tab or instance wrote the save and the store adopted it. */
-  private adoptSave(next: Save): void {
+  #adoptSave(next: Save): void {
     this.ui.setSave(next);
-    this.applySettings(next.settings);
-    if (!this.runActive) {
-      this.lifetimeRuns = next.stats.runs;
-      this.refreshTitleRun();
+    this.#applySettings(next.settings);
+    if (!this.#runActive) {
+      this.#lifetimeRuns = next.stats.runs;
+      this.#refreshTitleRun();
     }
-    this.reducedMotionMaybeChanged();
+    this.#reducedMotionMaybeChanged();
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1917,14 +1910,14 @@ export class Session {
   // -------------------------------------------------------------------------------------------
 
   /** The walking element's verb: HEROES[hero].verb on a Trial past the start beat, else 'sun' (§7.9). */
-  private verbNow(): Verb {
-    const s = this.s;
+  #verbNow(): Verb {
+    const s = this.#s;
     return s.el !== null && s.phase === 'day' && s.ready === 0 ? HEROES[s.nubs.hero].verb : 'sun';
   }
 
-  private onTickEvent(ev: SimEvent): void {
-    if (!SINGLE && ev.e === 'gust') gustTicks.push(this.s.tick);
-    this.moments.onEvent(ev, this.s);
+  #onTickEvent(ev: SimEvent): void {
+    if (!SINGLE && ev.e === 'gust') gustTicks.push(this.#s.tick);
+    this.#moments.onEvent(ev, this.#s);
     this.mech.onEvent(ev);
     switch (ev.e) {
       case 'tag':
@@ -1932,70 +1925,70 @@ export class Session {
         this.input.handoff();
         this.driver.interrupt();
         // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. Drag: steer Drip · …"
-        this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
-        this.ui.showCue(this.cueShown.id);
+        this.#cueShown = { id: `tag-${ev.to}`, dir: undefined };
+        this.ui.showCue(this.#cueShown.id);
         break;
       case 'feat':
-        this.featSeen.set(ev.kind, ev.value);
+        this.#featSeen.set(ev.kind, ev.value);
         break;
       case 'flake':
-        if (this.melody.length < MELODY_MAX) this.melody.push(ev.degree);
+        if (this.#melody.length < MELODY_MAX) this.#melody.push(ev.degree);
         break;
       case 'start':
         // The first tap: the level's intro card leaves.
-        if (this.runLevel) dismissLevelCard(this.renderer.scene.banners);
+        if (this.#runLevel) dismissLevelCard(this.renderer.scene.banners);
         break;
       case 'go':
-        if (this.s.cfg.profile <= 1 || (this.runLevel !== null && this.s.cfg.lesson === true)) {
-          this.cue('keep-shade');
+        if (this.#s.cfg.profile <= 1 || (this.#runLevel !== null && this.#s.cfg.lesson === true)) {
+          this.#cue('keep-shade');
           // The cue line (2 s) is read first: no tip stacks over it.
           holdToasts(this.renderer.scene.banners, 2.4);
         }
         break;
       case 'levelWon':
-        this.onLevelWon(ev);
+        this.#onLevelWon(ev);
         break;
       case 'lessonDone':
-        if (!this.debugRuns) {
-          this.d.store.update((sv) => {
+        if (!this.#debugRuns) {
+          this.#d.store.update((sv) => {
             sv.flags.tutorialDone = true;
           });
-          this.d.store.flush();
+          this.#d.store.flush();
         }
-        this.cue('shade-found');
+        this.#cue('shade-found');
         break;
       case 'frostReady':
         // v1.5: the meter is full; until the player has snapped twice this session, say how (not
         // under a snap, which no swipe can cast: the cast's own pour often refills a charge).
         // Not on a Trial: its ability coin is not "Frost" (the hero tips teach the swipe there).
-        if (this.snapsSeen < 2 && this.s.snapTicks === 0 && this.s.trial === null) this.cue('snap-ready');
+        if (this.#snapsSeen < 2 && this.#s.snapTicks === 0 && this.#s.trial === null) this.#cue('snap-ready');
         break;
       case 'snap':
-        this.snapsSeen++;
+        this.#snapsSeen++;
         // The "Frost full!" line has done its job: clear it so it never covers the snap.
-        if (this.cueShown?.id === 'snap-ready') this.cue(null);
+        if (this.#cueShown?.id === 'snap-ready') this.#cue(null);
         break;
       case 'snapEnd':
         // A charge filled under the snap: now it can be cast.
-        if (this.snapsSeen < 2 && this.s.nubs.frost >= 1 && this.s.trial === null) this.cue('snap-ready');
+        if (this.#snapsSeen < 2 && this.#s.nubs.frost >= 1 && this.#s.trial === null) this.#cue('snap-ready');
         break;
       case 'swing':
         // The first SWING of a lifetime explains itself once (nothing else in the game names it).
-        if (this.d.store.get().stats.swings === 0 && this.s.stats.swings === 1) this.cue('swing');
+        if (this.#d.store.get().stats.swings === 0 && this.#s.stats.swings === 1) this.#cue('swing');
         break;
       case 'lowChill':
         // The first scare of a new player. Inside the lesson it is a live warning that keeps the
         // drag instruction (A16) and lasts while Nubs is lit with Chill low (lessonCue).
         // Not on a Trial: "Find thick teal" is Nubs' rule (the hero tips teach each hero's).
-        if (this.lifetimeRuns > 2 || this.s.trial !== null) break;
-        if (this.s.lessonOn) this.meltWarn = true;
-        else this.cue('melting');
+        if (this.#lifetimeRuns > 2 || this.#s.trial !== null) break;
+        if (this.#s.lessonOn) this.#meltWarn = true;
+        else this.#cue('melting');
         break;
       case 'hourEnd':
-        if (this.dailyTry !== null && this.dailyDate) {
-          const store = this.d.store;
-          const strip = { hourGlyphs: this.s.hourGlyphs, assisted: this.runAssisted };
-          const next = dailyProgress(store.get(), this.dailyDate, this.s.minutes, this.s.stats.snow, strip);
+        if (this.#dailyTry !== null && this.#dailyDate) {
+          const store = this.#d.store;
+          const strip = { hourGlyphs: this.#s.hourGlyphs, assisted: this.#runAssisted };
+          const next = dailyProgress(store.get(), this.#dailyDate, this.#s.minutes, this.#s.stats.snow, strip);
           if (next !== store.get()) {
             store.set(next);
             store.flush();
@@ -2003,7 +1996,7 @@ export class Session {
         }
         break;
       case 'death':
-        this.onDeath();
+        this.#onDeath();
         break;
       default:
         break;
@@ -2011,75 +2004,75 @@ export class Session {
   }
 
   /** Daily: a try is counted (and saved at once) when the run passes 6:30 AM. */
-  private checkDailyTry(): void {
-    const s = this.s;
-    if (this.dailyScored && !this.debugRuns && this.dailyDate && !this.dailyCounted && s.phase !== 'hold' && s.minutes >= DAILY_COUNT_MINUTES) {
-      this.dailyCounted = true;
-      const r = dailyTryStarted(this.d.store.get(), this.dailyDate);
-      this.dailyTry = r.tryNumber;
-      if (r.save !== this.d.store.get()) {
-        this.d.store.set(r.save);
-        this.d.store.flush();
+  #checkDailyTry(): void {
+    const s = this.#s;
+    if (this.#dailyScored && !this.#debugRuns && this.#dailyDate && !this.#dailyCounted && s.phase !== 'hold' && s.minutes >= DAILY_COUNT_MINUTES) {
+      this.#dailyCounted = true;
+      const r = dailyTryStarted(this.#d.store.get(), this.#dailyDate);
+      this.#dailyTry = r.tryNumber;
+      if (r.save !== this.#d.store.get()) {
+        this.#d.store.set(r.save);
+        this.#d.store.flush();
         this.ui.setSave(r.save);
       }
     }
   }
 
-  private onDeath(): void {
-    if (this.deathAt >= 0) return;
-    this.deathAt = this.time;
+  #onDeath(): void {
+    if (this.#deathAt >= 0) return;
+    this.#deathAt = this.#time;
     // The death plays at its own pace (hit-stop, slow-mo), never inside the lesson's slow time.
-    this.hints.stop();
+    this.#hints.stop();
     this.clock.assist = 1;
-    this.dyingGame = 0;
-    this.checkDailyTry();
-    const save = this.d.store.get();
-    const result = buildRunResult(this.s);
+    this.#dyingGame = 0;
+    this.#checkDailyTry();
+    const save = this.#d.store.get();
+    const result = buildRunResult(this.#s);
     // A Trial's recap tip names the cause (docs/ELEMENTALS_V2.md §7.2), else the fallen element's;
     // Nubs melting keeps today's recap tips.
     const d = result.death;
-    const who = d.who ?? this.s.nubs.hero;
+    const who = d.who ?? this.#s.nubs.hero;
     // Sprout short of Sap for the bridge that took it: the Sap tip, not the timing one.
-    const el = this.s.el;
+    const el = this.#s.el;
     const co = el?.objs[el.causeObj];
-    const sap = who === 'sprout' && co !== undefined && co.size < needOf(co) && this.s.nubs.chill < 10;
-    const heroTip = this.s.trial ? (CAUSE_TIPS[sap ? 'sprout:sap' : `${who}:${d.heroCause}`] ?? CAUSE_TIPS[d.heroCause ?? ''] ?? HEROES[who].deathTip) : '';
-    this.tip = heroTip || deathTip(deathRecap(this.s), save.settings.invert, save.stats.runs);
-    result.melody = this.melody.slice();
+    const sap = who === 'sprout' && co !== undefined && co.size < needOf(co) && this.#s.nubs.chill < 10;
+    const heroTip = this.#s.trial ? (CAUSE_TIPS[sap ? 'sprout:sap' : `${who}:${d.heroCause}`] ?? CAUSE_TIPS[d.heroCause ?? ''] ?? HEROES[who].deathTip) : '';
+    this.#tip = heroTip || deathTip(deathRecap(this.#s), save.settings.invert, save.stats.runs);
+    result.melody = this.#melody.slice();
     // Latched: Guide "Always" at any point of the run marks it assisted.
-    result.assisted = this.runAssisted;
-    this.result = result;
-    this.applyResult(save, result);
-    this.setGhost('off');
-    this.cue(null);
-    this.release();
+    result.assisted = this.#runAssisted;
+    this.#result = result;
+    this.#applyResult(save, result);
+    this.#setGhost('off');
+    this.#cue(null);
+    this.#release();
     if (this.ui.current() === 'play') this.ui.show('dying');
     // Start building the next endless run: its world is generated a slice per frame while the
     // death and the Results play (stepPrebuild), so Retry is instant and no frame hitches.
-    this.startPrebuild();
+    this.#startPrebuild();
   }
 
   /** Folds the finished run into the save (debug runs leave it alone) and keeps the outcome for the Results. */
-  private applyResult(save: Save, result: RunResult): void {
-    if (this.debugRuns) {
+  #applyResult(save: Save, result: RunResult): void {
+    if (this.#debugRuns) {
       // Debug runs leave the save alone: no Snow, bests, missions, achievements or Daily tries.
-      this.outcome = debugRunOutcome(save, result);
+      this.#outcome = debugRunOutcome(save, result);
       return;
     }
-    const options: ApplyRunOptions = { today: localDate(), dailyTry: this.dailyTry, playSeconds: this.s.tick / 60 };
-    if (this.runChallenge) options.challengeTarget = this.runChallenge.m;
-    if (this.runRung >= 0) options.rung = this.runRung;
-    if (this.runWarmup) options.warmup = true;
+    const options: ApplyRunOptions = { today: localDate(), dailyTry: this.#dailyTry, playSeconds: this.#s.tick / 60 };
+    if (this.#runChallenge) options.challengeTarget = this.#runChallenge.m;
+    if (this.#runRung >= 0) options.rung = this.#runRung;
+    if (this.#runWarmup) options.warmup = true;
     // v1.6 soft-fail: a level's finish reached with its goal missed counts toward relaxing it.
-    if (this.won && !this.won.passed && result.level) options.goalMiss = true;
+    if (this.#won && !this.#won.passed && result.level) options.goalMiss = true;
     const { save: next, outcome } = applyRunResult(save, result, options);
-    this.d.store.set(next);
-    this.d.store.flush();
+    this.#d.store.set(next);
+    this.#d.store.flush();
     this.ui.setSave(next);
-    this.outcome = outcome;
+    this.#outcome = outcome;
     if (!next.flags.persistRequested) {
       void requestPersistence();
-      this.d.store.update((sv) => {
+      this.#d.store.update((sv) => {
         sv.flags.persistRequested = true;
       });
     }
@@ -2090,89 +2083,89 @@ export class Session {
    * the goal was not met), the result is built (the core fills `result.level` and
    * `stats.minChill`), and after FINISH_FREEZE_S the Results show.
    */
-  private onLevelWon(ev: LevelWon): void {
-    const level = this.runLevel;
-    if (!level || this.wonAt >= 0) return;
-    this.wonAt = this.time;
-    this.won = ev;
-    this.hints.stop();
+  #onLevelWon(ev: LevelWon): void {
+    const level = this.#runLevel;
+    if (!level || this.#wonAt >= 0) return;
+    this.#wonAt = this.#time;
+    this.#won = ev;
+    this.#hints.stop();
     this.clock.assist = 1;
-    const save = this.d.store.get();
-    const result = buildRunResult(this.s);
-    result.melody = this.melody.slice();
-    result.assisted = this.runAssisted;
-    this.result = result;
-    this.tip = null;
-    this.applyResult(save, result);
-    this.fx.finish(ev.passed, ev.passed ? 'FINISH' : missLine(level), ev.stars, this.s.nubs.x, this.s.nubs.y);
-    this.d.haptics.play('best');
-    this.setGhost('off');
-    this.cue(null);
-    this.release();
+    const save = this.#d.store.get();
+    const result = buildRunResult(this.#s);
+    result.melody = this.#melody.slice();
+    result.assisted = this.#runAssisted;
+    this.#result = result;
+    this.#tip = null;
+    this.#applyResult(save, result);
+    this.fx.finish(ev.passed, ev.passed ? 'FINISH' : missLine(level), ev.stars, this.#s.nubs.x, this.#s.nubs.y);
+    this.#d.haptics.play('best');
+    this.#setGhost('off');
+    this.#cue(null);
+    this.#release();
   }
 
-  private updateWinFlow(): void {
-    if (this.wonAt < 0 || this.resultsShown) return;
-    if (this.time - this.wonAt >= FINISH_FREEZE_S) this.showResults();
+  #updateWinFlow(): void {
+    if (this.#wonAt < 0 || this.#resultsShown) return;
+    if (this.#time - this.#wonAt >= FINISH_FREEZE_S) this.#showResults();
   }
 
-  private updateDeathFlow(): void {
-    if (this.deathAt < 0 || this.resultsShown) return;
-    if (this.time - this.deathAt >= DYING_S) this.showResults();
+  #updateDeathFlow(): void {
+    if (this.#deathAt < 0 || this.#resultsShown) return;
+    if (this.#time - this.#deathAt >= DYING_S) this.#showResults();
   }
 
-  private showResults(): void {
-    if (this.resultsShown || !this.result || !this.outcome) return;
-    this.resultsShown = true;
-    const daily = this.result.mode === 'daily';
+  #showResults(): void {
+    if (this.#resultsShown || !this.#result || !this.#outcome) return;
+    this.#resultsShown = true;
+    const daily = this.#result.mode === 'daily';
     const view: ResultsView = {
-      result: this.result,
-      outcome: this.outcome,
-      dailyTry: daily ? this.dailyTry : undefined,
+      result: this.#result,
+      outcome: this.#outcome,
+      dailyTry: daily ? this.#dailyTry : undefined,
       // K5: every Daily (k:'d' challenges too) says which date it was and whether it could count.
-      ...(daily && this.dailyDate !== null ? { dailyDate: this.dailyDate, dailyScored: this.dailyScored } : {}),
-      ...(this.runChallenge ? { challengeTarget: this.runChallenge.m, challengeName: this.runChallenge.n ?? '' } : {}),
-      ...(this.warmup ? { warmupFor: { minutes: this.warmup.m, name: this.warmup.n ?? '' } } : {}),
-      ...(this.debugRuns ? { debug: true } : {}),
-      ...(this.tip !== null ? { tip: this.tip } : {}),
-      ...(this.runLevel ? { campaign: this.campaignView(this.runLevel, this.result) } : {}),
+      ...(daily && this.#dailyDate !== null ? { dailyDate: this.#dailyDate, dailyScored: this.#dailyScored } : {}),
+      ...(this.#runChallenge ? { challengeTarget: this.#runChallenge.m, challengeName: this.#runChallenge.n ?? '' } : {}),
+      ...(this.#warmup ? { warmupFor: { minutes: this.#warmup.m, name: this.#warmup.n ?? '' } } : {}),
+      ...(this.#debugRuns ? { debug: true } : {}),
+      ...(this.#tip !== null ? { tip: this.#tip } : {}),
+      ...(this.#runLevel ? { campaign: this.#campaignView(this.#runLevel, this.#result) } : {}),
     };
-    this.lastCampaign = view.campaign ?? null;
+    this.#lastCampaign = view.campaign ?? null;
     this.ui.show('results', view);
-    this.resultsAt = this.time;
-    this.d.audio.playMelody(this.result.melody, this.result.day);
-    if (this.outcome.newBest) {
-      this.d.audio.play('newBest');
-      this.d.haptics.play('best');
+    this.#resultsAt = this.#time;
+    this.#d.audio.playMelody(this.#result.melody, this.#result.day);
+    if (this.#outcome.newBest) {
+      this.#d.audio.play('newBest');
+      this.#d.haptics.play('best');
       this.fx.confetti(40);
     }
-    const save = this.d.store.get();
-    if (!this.debugRuns && shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone(), inApp: isInAppBrowser() })) {
+    const save = this.#d.store.get();
+    if (!this.#debugRuns && shouldShowInstallSheet(save, { ios: isIOS(), standalone: isStandalone(), inApp: isInAppBrowser() })) {
       this.ui.showInstallSheet();
-      this.d.store.update((sv) => {
+      this.#d.store.update((sv) => {
         sv.flags.installSheetShown = true;
       });
     }
-    this.startPrebuild();
-    if (this.params.bot) {
+    this.#startPrebuild();
+    if (this.#params.bot) {
       // ?bot= autoplay: on to the next run (the next level in the campaign).
       window.setTimeout(() => {
         if (this.ui.current() === 'results') {
           this.ui.show('play');
-          if (this.runLevel && this.won?.passed) this.nextLevel();
-          else this.retry();
+          if (this.#runLevel && this.#won?.passed) this.#nextLevel();
+          else this.#retry();
         }
       }, 1500);
     }
   }
 
   /** ResultsView.campaign: the level's verdict (stars, the goal line, the next level, the concept it taught). */
-  private campaignView(level: LevelDef, result: RunResult): ResultsCampaign {
-    const won = this.won;
+  #campaignView(level: LevelDef, result: RunResult): ResultsCampaign {
+    const won = this.#won;
     const passed = won !== null && won.passed;
     // A Trial's Next is the next open Trial (docs/ELEMENTALS.md §4.10), or none.
     const trial = isTrialId(level.id);
-    const nextTrial = trial ? nextOpenTrial(this.d.store.get(), level.id - TRIAL_BASE) : null;
+    const nextTrial = trial ? nextOpenTrial(this.#d.store.get(), level.id - TRIAL_BASE) : null;
     const next = trial ? null : levelDef(level.id + 1);
     const view: ResultsCampaign = {
       id: level.id,
@@ -2180,12 +2173,12 @@ export class Session {
       passed,
       stars: won?.stars ?? 0,
       nextId: nextTrial !== null ? TRIAL_BASE + nextTrial : next ? next.id : null,
-      goalLine: goalLine(level, result.stats, passed, this.relaxed(), this.featSeen, this.misses(level.id)),
+      goalLine: goalLine(level, result.stats, passed, this.#relaxed(), this.#featSeen, this.#misses(level.id)),
       // The goal cards (UI v2): each rule and whether this run met it (won: the finish was reached).
-      starRules: starRules(level, this.relaxed()),
-      starBits: starState(level, result.stats, won !== null, this.relaxed(), this.featSeen),
+      starRules: starRules(level, this.#relaxed()),
+      starBits: starState(level, result.stats, won !== null, this.#relaxed(), this.#featSeen),
     };
-    if (this.rec !== null && this.s.phase === 'dead' && this.s.relayIdx > 0) view.tagRetry = true;
+    if (this.#rec !== null && this.#s.phase === 'dead' && this.#s.relayIdx > 0) view.tagRetry = true;
     if (level.introduces) {
       // The sheet reads "New: {name} {blurb}"; a concept named after its level keeps just the blurb.
       const c = CONCEPTS[level.introduces];
@@ -2195,27 +2188,27 @@ export class Session {
   }
 
   /** runConfig('endless') without disturbing the current run's kind/challenge bookkeeping. */
-  private endlessConfigQuiet(): RunConfig {
-    const kind = this.kind;
-    const ch = this.runChallenge;
-    const dd = this.dailyDate;
-    const ds = this.dailyScored;
-    const lv = this.runLevel;
-    const cfg = this.runConfig('endless');
-    this.kind = kind;
-    this.runChallenge = ch;
-    this.dailyDate = dd;
-    this.dailyScored = ds;
-    this.runLevel = lv;
+  #endlessConfigQuiet(): RunConfig {
+    const kind = this.#kind;
+    const ch = this.#runChallenge;
+    const dd = this.#dailyDate;
+    const ds = this.#dailyScored;
+    const lv = this.#runLevel;
+    const cfg = this.#runConfig('endless');
+    this.#kind = kind;
+    this.#runChallenge = ch;
+    this.#dailyDate = dd;
+    this.#dailyScored = ds;
+    this.#runLevel = lv;
     return cfg;
   }
 
   /** Starts preparing the next endless run (after an endless run ends), if none is ready. */
-  private startPrebuild(): void {
-    if (this.kind !== 'endless' || this.nextRun || this.nextBuild) return;
-    this.nextBuild = prepareRun(this.endlessConfigQuiet());
-    this.nextBuildRung = this.cfgRung;
-    this.nextBuildWarmup = this.cfgWarmup;
+  #startPrebuild(): void {
+    if (this.#kind !== 'endless' || this.#nextRun || this.#nextBuild) return;
+    this.#nextBuild = prepareRun(this.#endlessConfigQuiet());
+    this.#nextBuildRung = this.#cfgRung;
+    this.#nextBuildWarmup = this.#cfgWarmup;
   }
 
   /**
@@ -2223,142 +2216,142 @@ export class Session {
    * novice bot plays today's Daily world for at most PAR_MS a frame; the result goes into the save.
    * A new local date restarts it.
    */
-  private stepPar(): void {
-    const save = this.d.store.get();
-    const today = this.today;
-    if (!this.d.store.canPersist || !isDailyUnlocked(save) || save.pars[today] !== undefined) {
-      this.parJob = null;
+  #stepPar(): void {
+    const save = this.#d.store.get();
+    const today = this.#today;
+    if (!this.#d.store.canPersist || !isDailyUnlocked(save) || save.pars[today] !== undefined) {
+      this.#parJob = null;
       return;
     }
-    if (!this.parJob || this.parDate !== today) {
-      this.parJob = createParJob(dailySeed(today), today >= PLAN_START_DATE);
-      this.parDate = today;
+    if (!this.#parJob || this.#parDate !== today) {
+      this.#parJob = createParJob(dailySeed(today), today >= PLAN_START_DATE);
+      this.#parDate = today;
     }
-    const job = this.parJob;
+    const job = this.#parJob;
     const t0 = performance.now();
     let done = false;
     do done = job.step(PAR_TICKS);
     while (!done && performance.now() - t0 < PAR_MS);
     if (!done) return;
-    this.parJob = null;
-    const next = setDailyPar(this.d.store.get(), today, job.minutes);
-    this.d.store.set(next);
-    this.d.store.flush();
+    this.#parJob = null;
+    const next = setDailyPar(this.#d.store.get(), today, job.minutes);
+    this.#d.store.set(next);
+    this.#d.store.flush();
     this.ui.setSave(next);
   }
 
   /** Spends up to `ms` of this frame generating the next run's world; creates the run when done. */
-  private stepPrebuild(ms: number): void {
-    const b = this.nextBuild;
+  #stepPrebuild(ms: number): void {
+    const b = this.#nextBuild;
     if (!b) return;
     const t0 = performance.now();
     let done = false;
     do done = prepareSome(b, PREBUILD_SLICE);
     while (!done && performance.now() - t0 < ms);
-    if (done) this.finishPrebuild();
+    if (done) this.#finishPrebuild();
   }
 
   /** Finishes a pending prebuild now (Retry or Home came before its last slice). */
-  private finishPrebuild(): void {
-    const b = this.nextBuild;
+  #finishPrebuild(): void {
+    const b = this.#nextBuild;
     if (!b) return;
-    this.nextBuild = null;
-    this.nextRun = createRun(b.cfg, b);
-    this.rungOf.set(this.nextRun, this.nextBuildRung);
-    if (this.nextBuildWarmup) this.warmups.add(this.nextRun);
+    this.#nextBuild = null;
+    this.#nextRun = createRun(b.cfg, b);
+    this.#rungOf.set(this.#nextRun, this.#nextBuildRung);
+    if (this.#nextBuildWarmup) this.#warmups.add(this.#nextRun);
   }
 
   /**
    * Starts the postcard of the settled Results (once per run; not for debug runs, which can't be
    * shared): one idle callback per stage, then the PNG is encoded off the main thread.
    */
-  private startPostcard(): void {
-    const result = this.result;
+  #startPostcard(): void {
+    const result = this.#result;
     const sheetTop = this.ui.resultsSheetTop();
-    if (!result || this.debugRuns || this.postcardFor === result || sheetTop === null) return;
-    this.postcardFor = result;
+    if (!result || this.#debugRuns || this.#postcardFor === result || sheetTop === null) return;
+    this.#postcardFor = result;
     const v = this.renderer.scene.view;
     const dpr = v.dpr;
-    const death = this.s.death;
+    const death = this.#s.death;
     const { day, minute } = splitMinutes(result.minutes);
     const first = Math.max(1, result.hourGlyphs.length - 1);
     const days = result.hourGlyphs.slice(first - 1);
     const daily = result.mode === 'daily' && result.dailyDate !== undefined ? `Daily #${dailyNumber(result.dailyDate)}` : '';
-    this.logoImages ??= [logoLayers().shadow, logoLayers().word].map((svg) => {
+    this.#logoImages ??= [logoLayers().shadow, logoLayers().word].map((svg) => {
       const img = new Image();
       img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
       return img;
     });
     const job = createPostcardJob({
-      source: this.d.canvas,
+      source: this.#d.canvas,
       srcX: v.vx * dpr,
       srcY: v.vy * dpr,
       srcW: v.vw * dpr,
       srcH: Math.max(1, (sheetTop - v.vy) * dpr),
-      focusX: (v.ox + (death ? death.x : this.s.nubs.x) * v.S) * dpr,
-      focusY: (v.oy - (death ? death.y : this.s.nubs.y) * v.S) * dpr,
+      focusX: (v.ox + (death ? death.x : this.#s.nubs.x) * v.S) * dpr,
+      focusY: (v.oy - (death ? death.y : this.#s.nubs.y) * v.S) * dpr,
       callouts: Array.from(calloutBoxes.subarray(0, 4 * calloutsDrawn()), (x) => x * dpr),
       day,
       time: formatTimeOfDay(minute),
       deathLine: result.death.line,
       days,
-      forecasts: days.map((_, i) => worldPlan(this.s.world, first + i).forecast),
+      forecasts: days.map((_, i) => worldPlan(this.#s.world, first + i).forecast),
       daily,
-      url: this.sharePayload(result).url ?? '',
-      shades: equippedLooks(this.d.store.get().equipped).shades,
-      logo: this.logoImages,
+      url: this.#sharePayload(result).url ?? '',
+      shades: equippedLooks(this.#d.store.get().equipped).shades,
+      logo: this.#logoImages,
     });
-    this.postcardJob = job;
+    this.#postcardJob = job;
     const next = (): void => {
-      if (this.postcardJob !== job) return;
+      if (this.#postcardJob !== job) return;
       // The crop needs the settled map still on screen; the footer waits (briefly) for the wordmark.
-      if (job.stage === 0 && this.ui.current() !== 'results') return this.dropPostcard();
-      if (job.stage === 2 && this.logoImages?.some((img) => !img.complete) && job.stageMs.length < 12) {
+      if (job.stage === 0 && this.ui.current() !== 'results') return this.#dropPostcard();
+      if (job.stage === 2 && this.#logoImages?.some((img) => !img.complete) && job.stageMs.length < 12) {
         job.stageMs.push(0);
         return idle(next);
       }
       if (!stepPostcard(job)) return idle(next);
       job.canvas.toBlob((blob) => {
-        if (this.postcardJob !== job || !blob) return;
-        this.postcardFile = new File([blob], postcardName(day, formatTimeOfDay(minute)), { type: 'image/png' });
-        this.postcardUrl = URL.createObjectURL(blob);
+        if (this.#postcardJob !== job || !blob) return;
+        this.#postcardFile = new File([blob], postcardName(day, formatTimeOfDay(minute)), { type: 'image/png' });
+        this.#postcardUrl = URL.createObjectURL(blob);
         job.stage = 4;
-        this.ui.setPostcard(this.postcardUrl);
+        this.ui.setPostcard(this.#postcardUrl);
       }, 'image/png');
     };
     idle(next);
   }
 
   /** Forgets the postcard (a new run started): its thumbnail URL is revoked. */
-  private dropPostcard(): void {
-    this.postcardJob = null;
-    this.postcardFile = null;
-    if (this.postcardUrl !== null) {
-      URL.revokeObjectURL(this.postcardUrl);
-      this.postcardUrl = null;
+  #dropPostcard(): void {
+    this.#postcardJob = null;
+    this.#postcardFile = null;
+    if (this.#postcardUrl !== null) {
+      URL.revokeObjectURL(this.#postcardUrl);
+      this.#postcardUrl = null;
       this.ui.setPostcard(null);
     }
   }
 
   /** Test hook: whether the postcard file is ready, and each drawing stage's ms. */
   postcardState(): { ready: boolean; stageMs: number[]; bytes: number; name: string } {
-    const f = this.postcardFile;
-    return { ready: f !== null, stageMs: this.postcardJob?.stageMs.slice() ?? [], bytes: f?.size ?? 0, name: f?.name ?? '' };
+    const f = this.#postcardFile;
+    return { ready: f !== null, stageMs: this.#postcardJob?.stageMs.slice() ?? [], bytes: f?.size ?? 0, name: f?.name ?? '' };
   }
 
   /**
    * The Postcard pill: the postcard file plus the share text through the native sheet (or a
    * download and a copied link), called synchronously in the click; the text alone until it is ready.
    */
-  private sharePostcard(): Promise<ShareOutcome> {
-    if (!this.result || this.debugRuns) return Promise.resolve('failed');
-    const text = this.sharePayload(this.result).text;
-    return this.postcardFile ? shareFiles({ file: this.postcardFile, text }) : shareText({ text });
+  #sharePostcard(): Promise<ShareOutcome> {
+    if (!this.#result || this.#debugRuns) return Promise.resolve('failed');
+    const text = this.#sharePayload(this.#result).text;
+    return this.#postcardFile ? shareFiles({ file: this.#postcardFile, text }) : shareText({ text });
   }
 
-  private share(): Promise<ShareOutcome> {
-    if (!this.result || this.debugRuns) return Promise.resolve('failed');
-    return shareText({ text: this.sharePayload(this.result).text });
+  #share(): Promise<ShareOutcome> {
+    if (!this.#result || this.#debugRuns) return Promise.resolve('failed');
+    return shareText({ text: this.#sharePayload(this.#result).text });
   }
 
   /**
@@ -2366,22 +2359,22 @@ export class Session {
    * and whether the world had the Day Plan. No web address (a file: build, a native shell without
    * VITE_SHARE_URL) means no link line.
    */
-  private sharePayload(result: RunResult): { text: string; url: string | null } {
-    const save = this.d.store.get();
+  #sharePayload(result: RunResult): { text: string; url: string | null } {
+    const save = this.#d.store.get();
     const par = result.dailyDate !== undefined ? (save.pars[result.dailyDate] ?? null) : null;
-    return buildShare(result, shareBase(), this.dailyTry, { name: save.settings.name, par, plan: this.s.world.planOn });
+    return buildShare(result, shareBase(), this.#dailyTry, { name: save.settings.name, par, plan: this.#s.world.planOn });
   }
 
   // -------------------------------------------------------------------------------------------
   // Assists, settings, sounds
   // -------------------------------------------------------------------------------------------
 
-  private currentGuideAlpha(): number {
-    const s = this.s;
-    const save = this.d.store.get();
-    const setting: GuideSetting = this.params.guide ?? save.settings.guide;
+  #currentGuideAlpha(): number {
+    const s = this.#s;
+    const save = this.#d.store.get();
+    const setting: GuideSetting = this.#params.guide ?? save.settings.guide;
     const frac = Math.min(1, s.dayTick / dayTicks(s.day));
-    return guideAlpha(setting, s.cfg.profile, this.lifetimeRuns, s.day, frac);
+    return guideAlpha(setting, s.cfg.profile, this.#lifetimeRuns, s.day, frac);
   }
 
   /**
@@ -2389,27 +2382,27 @@ export class Session {
    * best on a Daily, else from lifetime run 3 on the recent best at this run's rules (the best of
    * the last 10 runs at its rung, once there are 3; challenges play the standard rules).
    */
-  private livePb(): number {
-    const save = this.d.store.get();
-    if (this.kind === 'campaign') return -1;
-    if (this.dailyDate) {
-      const st = dailyStatus(save, this.dailyDate);
+  #livePb(): number {
+    const save = this.#d.store.get();
+    if (this.#kind === 'campaign') return -1;
+    if (this.#dailyDate) {
+      const st = dailyStatus(save, this.#dailyDate);
       return st.bestMinutes > 0 ? st.bestMinutes : -1;
     }
-    const recent = this.recentBestOf(this.s);
+    const recent = this.#recentBestOf(this.#s);
     return recent > 0 && save.stats.runs >= 3 ? recent : -1;
   }
 
   /** recentBestAt for the rules `run` is played at (its comfort rung and warm-up; else standard). */
-  private recentBestOf(run: SimState): number {
-    const rung = this.rungOf.get(run) ?? -1;
-    return recentBestAt(this.d.store.get(), rung >= 0 ? rung : COMFORT_MAX, this.warmups.has(run));
+  #recentBestOf(run: SimState): number {
+    const rung = this.#rungOf.get(run) ?? -1;
+    return recentBestAt(this.#d.store.get(), rung >= 0 ? rung : COMFORT_MAX, this.#warmups.has(run));
   }
 
   /** The HUD's white tick: the next milestone of endless runs. */
-  private liveGoal(): number {
-    if (this.kind !== 'endless') return -1;
-    return nextMilestone(this.d.store.get()) ?? -1;
+  #liveGoal(): number {
+    if (this.#kind !== 'endless') return -1;
+    return nextMilestone(this.#d.store.get()) ?? -1;
   }
 
   /**
@@ -2417,61 +2410,61 @@ export class Session {
    * run with three runs of history at its rules stamps 'PAST YOUR RECENT BEST' when it beats that,
    * once.
    */
-  private armStamp(run: SimState): void {
-    this.stampAt = -1;
-    const c = this.runChallenge;
+  #armStamp(run: SimState): void {
+    this.#stampAt = -1;
+    const c = this.#runChallenge;
     if (run.cfg.mode === 'challenge' && c) {
       const name = c.n ?? '';
-      this.stampAt = c.m;
-      this.stampKind = 'teal';
-      this.stampText = name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!';
-    } else if (run.cfg.mode === 'endless' && this.recentBestOf(run) > 0) {
+      this.#stampAt = c.m;
+      this.#stampKind = 'teal';
+      this.#stampText = name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!';
+    } else if (run.cfg.mode === 'endless' && this.#recentBestOf(run) > 0) {
       // Against runs at the same rules only: a best set on an easier rung isn't this run's bar.
-      this.stampAt = this.recentBestOf(run) + 1;
-      this.stampKind = 'gold';
-      this.stampText = 'PAST YOUR RECENT BEST';
+      this.#stampAt = this.#recentBestOf(run) + 1;
+      this.#stampKind = 'gold';
+      this.#stampText = 'PAST YOUR RECENT BEST';
     }
   }
 
   /** Fires the run's stamp on the first tick its score is reached. */
-  private checkStamp(): void {
-    const s = this.s;
-    if (this.stampAt < 0 || s.phase === 'hold' || s.minutes < this.stampAt) return;
-    this.stampAt = -1;
-    this.fx.celebrate(this.stampKind, this.stampText);
-    this.d.haptics.play('best');
+  #checkStamp(): void {
+    const s = this.#s;
+    if (this.#stampAt < 0 || s.phase === 'hold' || s.minutes < this.#stampAt) return;
+    this.#stampAt = -1;
+    this.fx.celebrate(this.#stampKind, this.#stampText);
+    this.#d.haptics.play('best');
   }
 
-  private updateHints(dt: number, screen: ScreenId): void {
+  #updateHints(dt: number, screen: ScreenId): void {
     // Paused (or a menu over a paused run): the hint and the lesson's time scale hold still.
-    if (this.paused || screen === 'pause' || screen === 'settings') return;
+    if (this.#paused || screen === 'pause' || screen === 'settings') return;
     let slow = false;
     if (screen === 'title') {
-      this.setGhost('both');
+      this.#setGhost('both');
     } else if (screen === 'play') {
-      const s = this.s;
+      const s = this.#s;
       if (s.phase === 'hold') {
-        this.setGhost('both');
-      } else if (this.kind === 'challenge') {
+        this.#setGhost('both');
+      } else if (this.#kind === 'challenge') {
         // The sender's rules: no ghost hint.
-        this.setGhost('off');
-      } else if (this.teach() !== 'off') {
+        this.#setGhost('off');
+      } else if (this.#teach() !== 'off') {
         // Controls v3 (§6.1): a teaching moment's ghost, on the button (a press) or in the band below
         // Nubs (a vane drag), in slow time for its first seconds (never on a Daily).
         const v = this.renderer.scene.view;
         const b = hudButton(this.renderer.scene.hud);
-        const press = this.teachMode === 'press';
+        const press = this.#teachMode === 'press';
         this.ui.setGhostAt(press ? b.x - v.vx : v.vw / 2, press ? b.y - v.vy : v.nubsFrac * v.vh + TEACH_BAND);
-        this.setGhost(this.teachMode, true);
-        slow = this.time < this.teachEnd && this.kind !== 'daily';
-      } else if (this.verbNow() !== 'sun') {
+        this.#setGhost(this.#teachMode, true);
+        slow = this.#time < this.#teachEnd && this.#kind !== 'daily';
+      } else if (this.#verbNow() !== 'sun') {
         // Elementals v2 (§7.9): no drag ghost or lesson hint while an element plays its own verb; the
         // intro Drip's ghost steers on its first puddle.
-        this.hints.stop();
-        this.verbGhost();
+        this.#hints.stop();
+        this.#verbGhost();
       } else {
         const dragging = this.input.pointerDown || this.input.keyDown;
-        const h = this.hintIn;
+        const h = this.#hintIn;
         const lessonOn = s.lessonOn;
         h.profile = s.cfg.profile;
         h.f = s.nubs.f;
@@ -2482,18 +2475,18 @@ export class Session {
         h.dragging = dragging;
         h.invert = this.input.invert;
         h.lessonOn = lessonOn;
-        if (this.hints.update(dt, h) && !this.debugRuns) {
-          this.d.store.update((sv) => {
+        if (this.#hints.update(dt, h) && !this.#debugRuns) {
+          this.#d.store.update((sv) => {
             sv.flags.hintsShown += 1;
           });
         }
-        this.lessonCue();
-        this.setGhost(this.hints.showing(dragging) ? this.hints.dir : 'off');
+        this.#lessonCue();
+        this.#setGhost(this.#hints.showing(dragging) ? this.#hints.dir : 'off');
         // The lesson's slow time runs from its first hint until the sim ends the lesson (A5).
-        slow = this.hints.lessonStarted && lessonOn;
+        slow = this.#hints.lessonStarted && lessonOn;
       }
     } else {
-      this.hints.stop();
+      this.#hints.stop();
     }
     // Ease the lesson's slow time in and out (about 0.2 s).
     const target = slow ? LESSON_TIME_SCALE : 1;
@@ -2503,24 +2496,24 @@ export class Session {
   }
 
   /** The finger direction toward the hint's target: −1 ← or +1 → (invert honoured by the tracker). */
-  private dragDir(): -1 | 1 {
-    return this.hints.dir === 'left' ? -1 : 1;
+  #dragDir(): -1 | 1 {
+    return this.#hints.dir === 'left' ? -1 : 1;
   }
 
   /** Shows an event cue once per run (never in challenge runs); null clears the cue line. */
-  private cue(id: CueId | null, dir?: -1 | 1): void {
+  #cue(id: CueId | null, dir?: -1 | 1): void {
     if (id === null) {
-      this.cueShown = null;
-      this.cueHold = 0;
+      this.#cueShown = null;
+      this.#cueHold = 0;
       this.ui.showCue(null);
       return;
     }
     const bit = id === 'keep-shade' ? 1 : id === 'drag' ? 2 : id === 'shade-found' ? 4 : id === 'melting' ? 8 : id === 'swing' ? 16 : 32;
-    if (this.kind === 'challenge' || (this.cues & bit) !== 0) return;
-    this.cues |= bit;
-    this.cueShown = { id, dir };
+    if (this.#kind === 'challenge' || (this.#cues & bit) !== 0) return;
+    this.#cues |= bit;
+    this.#cueShown = { id, dir };
     const ms = cueDuration(id, dir);
-    this.cueHold = ms === null ? 0 : performance.now() + ms;
+    this.#cueHold = ms === null ? 0 : performance.now() + ms;
     this.ui.showCue(id, dir);
   }
 
@@ -2528,15 +2521,15 @@ export class Session {
    * A live cue (the lesson's): shown whenever its words or arrow differ from the line's, as often
    * as needed, but never over an event cue that is still up.
    */
-  private liveCue(id: CueId | null, dir?: -1 | 1): void {
-    if (this.kind === 'challenge' || performance.now() < this.cueHold) return;
-    const cur = this.cueShown;
+  #liveCue(id: CueId | null, dir?: -1 | 1): void {
+    if (this.#kind === 'challenge' || performance.now() < this.#cueHold) return;
+    const cur = this.#cueShown;
     if (id === null) {
-      if (cur !== null) this.cue(null);
+      if (cur !== null) this.#cue(null);
       return;
     }
     if (cur !== null && cur.id === id && cur.dir === dir) return;
-    this.cueShown = { id, dir };
+    this.#cueShown = { id, dir };
     this.ui.showCue(id, dir);
   }
 
@@ -2546,29 +2539,29 @@ export class Session {
    * Nubs in the shade" once the hint rests in shade. Nothing arrowed is left behind when the hint
    * or the lesson ends.
    */
-  private lessonCue(): void {
-    const s = this.s;
-    const cur = this.cueShown;
+  #lessonCue(): void {
+    const s = this.#s;
+    const cur = this.#cueShown;
     const arrowed = cur !== null && cur.dir !== undefined;
     if (!s.lessonOn) {
-      if (arrowed) this.liveCue(null);
+      if (arrowed) this.#liveCue(null);
       return;
     }
     const lit = s.nubs.f > 0;
-    const melting = this.meltWarn && lit && s.nubs.chill < TUNING.nubs.lowChill;
-    if (this.hints.lesson) this.liveCue(melting ? 'melting' : 'drag', this.dragDir());
-    else if (melting) this.liveCue('melting');
-    else if (arrowed || cur?.id === 'melting') this.liveCue(lit ? null : 'keep-shade');
+    const melting = this.#meltWarn && lit && s.nubs.chill < TUNING.nubs.lowChill;
+    if (this.#hints.lesson) this.#liveCue(melting ? 'melting' : 'drag', this.#dragDir());
+    else if (melting) this.#liveCue('melting');
+    else if (arrowed || cur?.id === 'melting') this.#liveCue(lit ? null : 'keep-shade');
   }
 
   /** The hint as the halo dial shows it: the target while a hint or the lesson is on, eased. */
-  private fillHintView(dt: number, screen: ScreenId): void {
-    const hv = this.renderIn.hint;
-    const h = this.hints;
-    const on = screen === 'play' && this.s.phase !== 'hold' && (h.lesson || h.active > 0) && !Number.isNaN(h.target);
+  #fillHintView(dt: number, screen: ScreenId): void {
+    const hv = this.#renderIn.hint;
+    const h = this.#hints;
+    const on = screen === 'play' && this.#s.phase !== 'hold' && (h.lesson || h.active > 0) && !Number.isNaN(h.target);
     if (on) {
       // Ease the target as its arc drifts and grows, so the glow glides instead of jumping.
-      if (Number.isNaN(hv.target) || this.hintAlpha < 0.05 || hv.turn !== h.turn) {
+      if (Number.isNaN(hv.target) || this.#hintAlpha < 0.05 || hv.turn !== h.turn) {
         hv.target = h.target;
         hv.width = h.targetW;
       } else {
@@ -2580,29 +2573,29 @@ export class Session {
       }
       hv.turn = h.turn;
     }
-    if (!this.paused) this.hintAlpha += ((on ? 1 : 0) - this.hintAlpha) * Math.min(1, dt * 8);
-    if (this.hintAlpha < 0.01 && !on) this.hintAlpha = 0;
-    hv.alpha = this.hintAlpha;
-    hv.phase = on && this.ghost !== 'off' && this.ghost !== 'both' ? this.ui.ghostProgress() : -1;
+    if (!this.#paused) this.#hintAlpha += ((on ? 1 : 0) - this.#hintAlpha) * Math.min(1, dt * 8);
+    if (this.#hintAlpha < 0.01 && !on) this.#hintAlpha = 0;
+    hv.alpha = this.#hintAlpha;
+    hv.phase = on && this.#ghost !== 'off' && this.#ghost !== 'both' ? this.ui.ghostProgress() : -1;
   }
 
-  private settingsChanged(st: Settings): void {
-    const comfortChanged = st.comfort !== this.d.store.get().settings.comfort;
-    this.d.store.update((sv) => {
+  #settingsChanged(st: Settings): void {
+    const comfortChanged = st.comfort !== this.#d.store.get().settings.comfort;
+    this.#d.store.update((sv) => {
       sv.settings = st;
     });
     // The next endless run's rung depends on adaptive comfort (not on the player's name, A16).
-    if (comfortChanged) this.refreshTitleRun();
-    this.applySettings(st);
-    this.ui.setSave(this.d.store.get());
+    if (comfortChanged) this.#refreshTitleRun();
+    this.#applySettings(st);
+    this.ui.setSave(this.#d.store.get());
     // Switching to Guide "Always", Strong aim help or Auto actions mid-run marks the run assisted, even if it is switched back.
-    if (this.runActive && this.assisted(st)) this.runAssisted = true;
-    this.reducedMotionMaybeChanged();
+    if (this.#runActive && this.#assisted(st)) this.#runAssisted = true;
+    this.#reducedMotionMaybeChanged();
   }
 
-  private applySettings(st: Settings): void {
-    this.d.audio.setVolumes(st.sfx, st.music);
-    this.d.haptics.setEnabled(st.haptics);
+  #applySettings(st: Settings): void {
+    this.#d.audio.setVolumes(st.sfx, st.music);
+    this.#d.haptics.setEnabled(st.haptics);
     this.input.sensitivity = st.sensitivity;
     this.input.invert = st.invert;
   }
@@ -2611,42 +2604,42 @@ export class Session {
    * A driver note (§2.4): its words on the cue line (aria-live: refusal reasons, "Armed", "Growing",
    * the calm cues) and its tips; Nubs' first rescue capture's tip marks the profile.
    */
-  private onNote(code: number, a: number): void {
+  #onNote(code: number, a: number): void {
     // A press the driver takes ends a teaching moment (§6.1).
-    if (code === NOTE_PRESS) this.teachMode = 'off';
+    if (code === NOTE_PRESS) this.#teachMode = 'off';
     if (!SINGLE && (code === NOTE_PRESS || code === NOTE_REFUSE)) {
       answered++;
       if (code === NOTE_REFUSE) lastRefuse = a;
     }
-    const t = noteText(code, a, this.renderIn.drive);
-    if (t) this.say(t);
-    this.moments.onDrive(code, a, this.s, t);
+    const t = noteText(code, a, this.#renderIn.drive);
+    if (t) this.#say(t);
+    this.#moments.onDrive(code, a, this.#s, t);
   }
 
   /** Words on the cue line from the controls (a `ctl:` cue, 1.6 s; event and lesson cues wait it out). */
-  private say(t: string): void {
+  #say(t: string): void {
     const id: CueId = `ctl:${t}`;
-    this.cueShown = { id, dir: undefined };
-    this.cueHold = performance.now() + 1600;
+    this.#cueShown = { id, dir: undefined };
+    this.#cueHold = performance.now() + 1600;
     this.ui.showCue(id);
   }
 
   /** The run counts as assisted (the share's 🧭, latched): Guide "Always", Strong aim help or Auto actions (§8.1). */
-  private assisted(st: Settings): boolean {
-    const p = this.params;
+  #assisted(st: Settings): boolean {
+    const p = this.#params;
     return (p.guide ?? st.guide) === 'always' || (p.aim ?? st.aim) === 'strong' || (p.autoAct ?? st.autoAct);
   }
 
   /** The Pause card's view of the run in progress (UiCallbacks.runStatus; also the test hook's). */
   runStatus(): RunStatusView | null {
-    if (!this.runActive) return null;
-    const s = this.s;
+    if (!this.#runActive) return null;
+    const s = this.#s;
     const now = formatScore(s.minutes);
-    const level = this.runLevel;
+    const level = this.#runLevel;
     if (level) {
-      const relaxed = this.relaxed();
-      const seen = this.featSeen;
-      const st = this.liveStats();
+      const relaxed = this.#relaxed();
+      const seen = this.#featSeen;
+      const st = this.#liveStats();
       const bits = starState(level, st, s.phase === 'won', relaxed, seen);
       const labels = starRules(level, relaxed);
       // The goal's own count (a finish goal: the progress); an open Dare's count (a finale's names both).
@@ -2681,14 +2674,14 @@ export class Session {
         ],
       };
     }
-    const c = this.runChallenge;
-    const title = this.kind === 'daily' ? 'Daily Solstice' : this.kind === 'challenge' ? 'Challenge' : 'Endless';
-    const goal = c ? `Beat ${c.n ? `${c.n}: ` : ''}${formatScore(c.m)}` : this.runPb > 0 ? `Best: ${formatScore(this.runPb)}` : '';
+    const c = this.#runChallenge;
+    const title = this.#kind === 'daily' ? 'Daily Solstice' : this.#kind === 'challenge' ? 'Challenge' : 'Endless';
+    const goal = c ? `Beat ${c.n ? `${c.n}: ` : ''}${formatScore(c.m)}` : this.#runPb > 0 ? `Best: ${formatScore(this.#runPb)}` : '';
     return { title, goal, now, stars: [] };
   }
 
-  private uiSound(name: UiSoundName): void {
-    const a = this.d.audio;
+  #uiSound(name: UiSoundName): void {
+    const a = this.#d.audio;
     switch (name) {
       case 'buy':
       case 'equip':
@@ -2702,15 +2695,15 @@ export class Session {
       case 'claim':
         // The reward cues have their own sound and a haptic of the same name.
         a.play(name);
-        this.d.haptics.play(name);
+        this.#d.haptics.play(name);
         return;
       case 'tick': {
         // Count-ups tick fast: the click every time, the haptic at most every TICK_HAPTIC_MS.
         a.play('tick');
         const t = performance.now();
-        if (t - this.tickHapticAt >= TICK_HAPTIC_MS) {
-          this.tickHapticAt = t;
-          this.d.haptics.play('tick');
+        if (t - this.#tickHapticAt >= TICK_HAPTIC_MS) {
+          this.#tickHapticAt = t;
+          this.#d.haptics.play('tick');
         }
         return;
       }
@@ -2721,7 +2714,7 @@ export class Session {
         a.play('uiTap');
         break;
     }
-    this.d.haptics.play('ui');
+    this.#d.haptics.play('ui');
   }
 
   // -------------------------------------------------------------------------------------------
@@ -2729,11 +2722,11 @@ export class Session {
   // -------------------------------------------------------------------------------------------
 
   get state(): SimState {
-    return this.s;
+    return this.#s;
   }
 
   get isPaused(): boolean {
-    return this.paused;
+    return this.#paused;
   }
 
   /**
@@ -2741,16 +2734,16 @@ export class Session {
    * the lesson (whose Chill floor would otherwise keep him alive).
    */
   forceDeath(): void {
-    const s = this.s;
+    const s = this.#s;
     if (s.phase === 'dead') return;
     if (this.ui.current() === 'pause') {
       // A paused run (blur, Back, the pause button) resumes so the melt can happen.
       this.ui.show('play');
-      this.resume();
+      this.#resume();
     }
     if (s.phase === 'hold') {
       if (this.ui.current() === 'title') this.ui.show('play');
-      this.beginRun(s);
+      this.#beginRun(s);
       this.input.tap();
     }
     s.cfg.lesson = false;
@@ -2760,19 +2753,19 @@ export class Session {
   }
 
   get active(): boolean {
-    return this.runActive;
+    return this.#runActive;
   }
 
   /**
    * Test hook state() (CC-15): the sim at a glance plus the run's rules: profile, comfort rung (−1
    * when not an endless ladder run), drain, noon cloud, today's forecast and biome, lesson on;
    * campaign: the level id (−1 none), its concepts, the progress to the finish (0..1) and the
-   * concept fields the renderer reads (eclipse, gust, lock, moonlit).
+   * concept fields the renderer reads (eclipse, lock, moonlit).
    */
   testState() {
     if (SINGLE) throw new Error('test hook');
-    const s = this.s;
-    const dv = this.renderIn.drive;
+    const s = this.#s;
+    const dv = this.#renderIn.drive;
     return {
       phase: s.phase,
       ready: s.ready,
@@ -2783,8 +2776,8 @@ export class Session {
       theta: s.sun.theta,
       f: s.nubs.f,
       profile: s.cfg.profile,
-      rung: this.runActive ? this.runRung : (this.rungOf.get(s) ?? -1),
-      warmup: this.runActive ? this.runWarmup : this.warmups.has(s),
+      rung: this.#runActive ? this.#runRung : (this.#rungOf.get(s) ?? -1),
+      warmup: this.#runActive ? this.#runWarmup : this.#warmups.has(s),
       drain: effectiveDrain(s),
       noonCloud: effectiveNoonCloud(s.cfg),
       forecast: s.params.forecast,
@@ -2823,8 +2816,8 @@ export class Session {
         refuse: dv.refuse,
         refuseNote: lastRefuse,
         answered,
-        down: this.renderIn.buttonDown,
-        aimDeg: this.driveOpts.aimDeg,
+        down: this.#renderIn.buttonDown,
+        aimDeg: this.#driveOpts.aimDeg,
       },
       el:
         s.el === null
@@ -2858,33 +2851,33 @@ export class Session {
    */
   testSkipToLeg(i: number, before = 0): void {
     if (SINGLE) throw new Error('test hook');
-    const s = this.s;
+    const s = this.#s;
     const bot = makeBot('reactive');
     if (!bot || s.el === null) return;
     for (let n = 0; n < 60_000 && s.relayIdx < i && s.phase !== 'dead' && s.phase !== 'won'; n++) {
       if (before > 0 && s.relayIdx === i - 1 && nextTagTicks(s) <= before) break;
       const f = bot.next(s);
       step(s, f);
-      if (this.rec) recordFrame(this.rec, f);
-      for (const ev of s.events) this.onTickEvent(ev);
+      if (this.#rec) recordFrame(this.#rec, f);
+      for (const ev of s.events) this.#onTickEvent(ev);
     }
-    this.release();
+    this.#release();
     // The bot's last frame may leave the sun mid-drag (no lift reaches the sim): a tap at 0 °/s ends it.
     if (s.sun.mode === 'dragging') this.input.tap();
-    this.driver.begin(s, this.driveOpts);
-    takeSnap(s, this.prev);
-    takeSnap(s, this.curr);
+    this.driver.begin(s, this.#driveOpts);
+    takeSnap(s, this.#prev);
+    takeSnap(s, this.#curr);
   }
 
   /** Test hook: sets the run's Snow (HUD layout checks with long numbers). */
   testSetSnow(n: number): void {
-    if (Number.isFinite(n) && n >= 0) this.s.stats.snow = Math.floor(n);
+    if (Number.isFinite(n) && n >= 0) this.#s.stats.snow = Math.floor(n);
   }
 
   /** Test hook: the config of the current run (the Title's held run between runs). */
   runCfg(): { mode: string; profile: number; tutorial: boolean; reducedMotion: boolean; seed: number; dailyDate: string | null; drain: number } {
     if (SINGLE) throw new Error('test hook');
-    const s = this.s;
+    const s = this.#s;
     const c = s.cfg;
     return {
       mode: c.mode,
@@ -2899,8 +2892,8 @@ export class Session {
 
   /** Test hook: a core bot plays this run and the next ones (null: hands back to the input). */
   setTestBot(kind: BotKind | null): void {
-    this.testBot = kind;
-    this.bot = kind ? makeBot(kind) : this.params.bot ? makeBot(this.params.bot) : null;
+    this.#testBot = kind;
+    this.#bot = kind ? makeBot(kind) : this.#params.bot ? makeBot(this.#params.bot) : null;
   }
 
   /**
@@ -2910,17 +2903,17 @@ export class Session {
    */
   pixelAB(a: Partial<RenderOptions>, b: Partial<RenderOptions>): PixelAB | null {
     if (SINGLE) throw new Error('test hook');
-    const canvas = this.d.canvas;
+    const canvas = this.#d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
     const opts = this.renderer.options;
     const keep = { ...opts };
     const pixels = (o: Partial<RenderOptions>): Uint8ClampedArray => {
       Object.assign(opts, keep, o);
-      this.renderer.draw(this.renderIn);
+      this.renderer.draw(this.#renderIn);
       return g.getImageData(0, 0, canvas.width, canvas.height).data;
     };
-    return this.frozen(() => {
+    return this.#frozen(() => {
       try {
         pixels(a);
         const pa = pixels(a);
@@ -2952,8 +2945,8 @@ export class Session {
    * Runs `fn` with the render input frozen (no real or game time passes; particles, pops, the
    * camera and UI timers hold still), then restores it and has the next frame drawn as usual.
    */
-  private frozen<T>(fn: () => T): T {
-    const r = this.renderIn;
+  #frozen<T>(fn: () => T): T {
+    const r = this.#renderIn;
     const keep = { dt: r.dt, gdt: r.gdt, paused: r.paused, mapT: r.mapT, sheetTop: r.sheetTop };
     r.dt = 0;
     r.gdt = 0;
@@ -2968,7 +2961,7 @@ export class Session {
 
   /** Test hook: the best flag the HUD shows (the run's snapshot while one is active). */
   hudPb(): number {
-    return this.renderIn.pbMinutes;
+    return this.#renderIn.pbMinutes;
   }
 
   /**
@@ -2979,13 +2972,13 @@ export class Session {
   mapProbe(mapT: number): MapProbe | null {
     if (SINGLE) throw new Error('test hook');
     const sheetTop = this.ui.current() === 'results' ? this.ui.resultsSheetTop() : null;
-    if (sheetTop === null || this.resultsAt < 0) return null;
+    if (sheetTop === null || this.#resultsAt < 0) return null;
     const rr = this.renderer;
-    const canvas = this.d.canvas;
+    const canvas = this.#d.canvas;
     const g = canvas.getContext('2d');
     if (!g) return null;
-    return this.frozen(() => {
-      const r = this.renderIn;
+    return this.#frozen(() => {
+      const r = this.#renderIn;
       r.mapT = mapT;
       r.sheetTop = sheetTop;
       try {
@@ -3037,8 +3030,8 @@ export class Session {
   /** Test hook: the ghost hint's state. */
   hintState(): { mode: string; target: number; width: number; turn: number; lesson: boolean; shown: number } {
     if (SINGLE) throw new Error('test hook');
-    const h = this.hints;
-    return { mode: this.ghost, target: h.target, width: h.targetW, turn: h.turn, lesson: h.lesson, shown: h.shown };
+    const h = this.#hints;
+    return { mode: this.#ghost, target: h.target, width: h.targetW, turn: h.turn, lesson: h.lesson, shown: h.shown };
   }
 
   /**
@@ -3048,7 +3041,7 @@ export class Session {
    */
   demo(name: string): void {
     if (SINGLE) throw new Error('test hook');
-    const s = this.s;
+    const s = this.#s;
     // Controls v3 (§12.2): 'snapReady' fills the run's meter (the Bank's charge too), so the button's press really casts.
     if (name === 'snapReady') {
       s.nubs.frost = Math.max(s.nubs.frost, 1);
@@ -3056,7 +3049,7 @@ export class Session {
     }
     if (name === 'cool') cool = true;
     // v1.5: bud, bloom, snapReady, snap, deep (game/mechanics.ts).
-    if (this.mech.demo(name, s, this.snap, this.time)) return;
+    if (this.mech.demo(name, s, this.#snap, this.#time)) return;
     let ev: SimEvent | null = null;
     switch (name) {
       case 'phew':
@@ -3091,13 +3084,13 @@ export class Session {
         this.fx.confetti(40);
         return;
       case 'passed': {
-        const name = this.runChallenge?.n ?? '';
+        const name = this.#runChallenge?.n ?? '';
         this.fx.celebrate('teal', name ? `PASSED ${name.toUpperCase()}!` : 'TARGET PASSED!');
         return;
       }
       case 'postcard':
         // What the Postcard pill does (no user activation here: the download path in Chromium).
-        void this.sharePostcard();
+        void this.#sharePostcard();
         return;
       case 'finish':
         this.fx.finish(true, 'FINISH', 2, s.nubs.x, s.nubs.y);
@@ -3106,11 +3099,11 @@ export class Session {
       case 'dares': {
         // v1.6 Dares on the level being played (render and UI only): one Dare (Bloom 2, one
         // bloomed so far) or a finale's two.
-        const lv = this.runLevel;
+        const lv = this.#runLevel;
         if (!lv) return;
-        this.runLevel = { ...lv, feats: name === 'dare' ? [{ kind: 'blooms', target: 2 }] : [{ kind: 'blooms', target: 2 }, { kind: 'parry', target: 3 }] };
-        this.featSeen.set('blooms', 1);
-        if (s.phase === 'hold') showLevelCard(this.renderer.scene.banners, introCard(this.runLevel, this.relaxed()), lv.biome);
+        this.#runLevel = { ...lv, feats: name === 'dare' ? [{ kind: 'blooms', target: 2 }] : [{ kind: 'blooms', target: 2 }, { kind: 'parry', target: 3 }] };
+        this.#featSeen.set('blooms', 1);
+        if (s.phase === 'hold') showLevelCard(this.renderer.scene.banners, introCard(this.#runLevel, this.#relaxed()), lv.biome);
         return;
       }
       case 'swing':
@@ -3122,11 +3115,11 @@ export class Session {
     }
     const list = [ev];
     this.fx.onEvents(list, s);
-    this.d.audio.onEvents(list, this.audioView);
+    this.#d.audio.onEvents(list, this.#audioView);
   }
 
   /** Debug geometry toggles (?debug=1). */
   setDebugDraw(d: DebugDraw | null): void {
-    this.renderIn.debug = d;
+    this.#renderIn.debug = d;
   }
 }

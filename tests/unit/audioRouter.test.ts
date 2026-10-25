@@ -265,10 +265,6 @@ describe('SfxRouter campaign', () => {
     t.frames(0.1);
     expect(t.names().at(-1)).toBe('lock');
     expect(t.played.at(-1)?.params.index).toBe(1);
-    // The retired Gusts concept's view field plays nothing.
-    t.view.gust = 1;
-    t.frames(0.1);
-    expect(t.names()).not.toContain('gust');
   });
 
   it("whooshes the vane governor's gusts once a second at most", () => {

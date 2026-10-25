@@ -446,8 +446,6 @@ export interface HudCampaign {
   /** Marker positions (0..1) on the progress bar, −1 none. */
   markGate: number;
   markEclipse: number;
-  /** Retired with the Gusts concept (Controls v3 §5.3): read by nothing; the session stops writing it. */
-  gust?: number;
   /** The stars so far (game/campaign.ts starState bits: 1 goal met, 2 flakes star, 4 cool run lost). */
   stars: number;
   /** The cool run's sun budget left, 1..0 (a ring drains around the third pip as Nubs spends it). */

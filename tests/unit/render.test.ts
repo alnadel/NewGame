@@ -752,7 +752,7 @@ describe('Controls v3 dial and Trial cues (docs/CONTROLS_V3.md §7.2)', () => {
     }
   });
 
-  it('strokes the calm-now ghosts in one more path only while the vane is set', () => {
+  it('draws one arrival ghost per cloud whatever the notch: after CORE cut 1 it is the calm-now ghost', () => {
     const env = fakeCanvas();
     try {
       const s = createRun(campaignConfig(1004));
@@ -771,7 +771,7 @@ describe('Controls v3 dial and Trial cues (docs/CONTROLS_V3.md §7.2)', () => {
       };
       const calm = strokes();
       dr.view.vane = 1;
-      expect(strokes()).toBe(calm + 1);
+      expect(strokes()).toBe(calm);
     } finally {
       env.restore();
     }

@@ -263,7 +263,11 @@ export default defineConfig({
   base: './',
   plugins: [shortCss(), shadySW()],
   build: {
-    target: 'es2020',
+    // The script targets the same floor as the CSS below (Controls v3 integration): a page that cannot
+    // lay out its UI below these browsers gains nothing from es2020 output. Native class fields and
+    // `#private` members then ship as they are, so the minifier shortens every `#name` (the session,
+    // fx, audio, perf and haptics classes keep their internals private this way, about 8.4 KB).
+    target: ['chrome105', 'edge105', 'firefox121', 'safari16'],
     // The UI's floor is CSS container queries and :has() (they lay out the Title, Results, Pause,
     // the dialogs and the menus), so the CSS targets the first browsers that have both. A target
     // derived from es2020 made lightningcss split every :focus-visible/:is() selector list into

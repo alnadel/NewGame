@@ -537,8 +537,6 @@ const DASHES = [7, 6];
 /** Per object, its arrival ghost's x and colour class (−1 none; weatherGood + 1, + 3 above the view). */
 const gxs = new Float64Array(64);
 const gcs = new Int8Array(64);
-/** Per object, its calm-now ghost's x (NaN none). */
-const cxs = new Float64Array(64);
 /** The pick ring's dashes: Ember's short ones, Sprout's leaf dashes (the dial's). */
 const PICK_DASH = [3, 4];
 const LEAF_DASH = [8, 6];
@@ -764,22 +762,10 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     gcs[i] = -1;
     if (o.state === EL_GONE || !o.awake || !isWeather(o.kind) || o.y + E.weather.ryRatio * o.r < ny) continue;
     const t = Math.max(0, arriveTicks(s, o.y));
+    // Controls v3 (§3.5): where the cloud lands under the vane. CORE's cut list 1 (§12.3) left only the
+    // calm-now prediction for every notch, so this one ghost is the calm-now ghost.
     gxs[i] = driveWeatherX(s, o, t, d.vane);
-    // Controls v3 (§3.5): while the vane is set, where the cloud lands if you calm now.
-    cxs[i] = d.vane !== 0 ? driveWeatherX(s, o, t, 0) : NaN;
     gcs[i] = weatherGood(s, o) + 1 + (o.y - E.weather.ryRatio * o.r > topY ? 3 : 0);
-  }
-  if (d.vane !== 0) {
-    // The calm-now ghosts: finer ink dashes, fainter than the ghosts they shadow.
-    g.setLineDash([3, 6]);
-    g.lineWidth = 2 * lw;
-    g.strokeStyle = cssa(0x2b2140, 0.45);
-    g.beginPath();
-    for (let i = 0; i < n; i++) {
-      const c = cxs[i] as number;
-      if ((gcs[i] as number) >= 0 && (gcs[i] as number) < 3) ell(g, v.ox + c * S, v.oy - (objs[i] as ElObj).y * S, (objs[i] as ElObj).r * S, E.weather.ryRatio * (objs[i] as ElObj).r * S);
-    }
-    g.stroke();
   }
   g.setLineDash([6, 5]);
   for (let c = -1; c < 3; c++) {

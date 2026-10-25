@@ -57,21 +57,21 @@ export function glide(p: AudioParam, t: number, from: number, to: number, dur: n
  * would not be audible so the automation timeline doesn't grow every frame.
  */
 export class Smoothed {
-  private readonly param: AudioParam;
-  private target: number;
+  readonly #param: AudioParam;
+  #target: number;
 
   constructor(param: AudioParam, initial: number) {
-    this.param = param;
-    this.target = initial;
+    this.#param = param;
+    this.#target = initial;
     param.value = initial;
   }
 
   /** Glides toward `value` with time constant `tau` (s), starting at `now`. */
   set(value: number, now: number, tau: number): void {
-    const diff = Math.abs(value - this.target);
-    if (diff <= 0.005 * Math.max(Math.abs(value), Math.abs(this.target)) + 1e-6) return;
-    this.target = value;
-    this.param.setTargetAtTime(value, now, tau);
+    const diff = Math.abs(value - this.#target);
+    if (diff <= 0.005 * Math.max(Math.abs(value), Math.abs(this.#target)) + 1e-6) return;
+    this.#target = value;
+    this.#param.setTargetAtTime(value, now, tau);
   }
 }
 
@@ -89,19 +89,19 @@ export class Voice {
   readonly out: GainNode;
   /** Latest scheduled stop time of any of its sources (Infinity while a source is open-ended). */
   end: number;
-  private readonly nodes: AudioNode[] = [];
-  private readonly sources: AudioScheduledSourceNode[] = [];
-  private live = 0;
-  private finished = false;
-  private readonly onFinish: (v: Voice) => void;
+  readonly #nodes: AudioNode[] = [];
+  readonly #sources: AudioScheduledSourceNode[] = [];
+  #live = 0;
+  #finished = false;
+  readonly #onFinish: (v: Voice) => void;
 
   constructor(ctx: BaseAudioContext, dest: AudioNode, t0: number, onFinish: (v: Voice) => void) {
     this.ctx = ctx;
     this.end = t0;
-    this.onFinish = onFinish;
+    this.#onFinish = onFinish;
     this.out = ctx.createGain();
     this.out.connect(dest);
-    this.nodes.push(this.out);
+    this.#nodes.push(this.out);
   }
 
   /** A gain node; pass `dest = null` to leave it unconnected (e.g. an LFO depth for a param). */
@@ -109,7 +109,7 @@ export class Voice {
     const g = this.ctx.createGain();
     g.gain.value = value;
     if (dest) g.connect(dest);
-    this.nodes.push(g);
+    this.#nodes.push(g);
     return g;
   }
 
@@ -119,7 +119,7 @@ export class Voice {
     f.frequency.value = freq;
     f.Q.value = q;
     f.connect(dest);
-    this.nodes.push(f);
+    this.#nodes.push(f);
     return f;
   }
 
@@ -127,7 +127,7 @@ export class Voice {
   panner(pan: number, dest: AudioNode = this.out): AudioNode & { pan?: AudioParam } {
     const node = makePanner(this.ctx, pan);
     node.connect(dest);
-    this.nodes.push(node);
+    this.#nodes.push(node);
     return node;
   }
 
@@ -138,7 +138,7 @@ export class Voice {
     o.frequency.value = freq;
     o.connect(dest);
     o.start(start);
-    this.track(o, stop);
+    this.#track(o, stop);
     return o;
   }
 
@@ -149,7 +149,7 @@ export class Voice {
     s.loop = true;
     s.connect(dest);
     s.start(start, Math.random() * buffer.duration * 0.9);
-    this.track(s, stop);
+    this.#track(s, stop);
     return s;
   }
 
@@ -169,7 +169,7 @@ export class Voice {
 
   /** Schedules every source to stop at `at` (used by open-ended voices such as pad chords). */
   stopAt(at: number): void {
-    for (const s of this.sources) s.stop(at);
+    for (const s of this.#sources) s.stop(at);
     this.end = at;
   }
 
@@ -179,10 +179,10 @@ export class Voice {
     this.stopAt(now + 0.05);
   }
 
-  private track(src: AudioScheduledSourceNode, stop: number | undefined): void {
-    this.sources.push(src);
-    this.nodes.push(src);
-    this.live++;
+  #track(src: AudioScheduledSourceNode, stop: number | undefined): void {
+    this.#sources.push(src);
+    this.#nodes.push(src);
+    this.#live++;
     if (stop === undefined) {
       this.end = Number.POSITIVE_INFINITY;
     } else {
@@ -190,24 +190,24 @@ export class Voice {
       if (stop + STOP_TAIL > this.end) this.end = stop + STOP_TAIL;
     }
     src.onended = () => {
-      if (--this.live === 0) this.finish();
+      if (--this.#live === 0) this.#finish();
     };
   }
 
-  private finish(): void {
-    if (this.finished) return;
-    this.finished = true;
-    for (const n of this.nodes) n.disconnect();
-    this.nodes.length = 0;
-    this.sources.length = 0;
-    this.onFinish(this);
+  #finish(): void {
+    if (this.#finished) return;
+    this.#finished = true;
+    for (const n of this.#nodes) n.disconnect();
+    this.#nodes.length = 0;
+    this.#sources.length = 0;
+    this.#onFinish(this);
   }
 }
 
 /** Caps concurrent voices; when full, the oldest voice is stolen. */
 export class VoicePool {
   readonly cap: number;
-  private readonly voices: Voice[] = [];
+  readonly #voices: Voice[] = [];
 
   constructor(cap: number) {
     this.cap = cap;
@@ -215,16 +215,16 @@ export class VoicePool {
 
   add(v: Voice, now: number): void {
     // Drop entries whose sources already stopped (onended can lag, or never come while suspended).
-    for (let i = this.voices.length - 1; i >= 0; i--) {
-      if ((this.voices[i] as Voice).end < now) this.voices.splice(i, 1);
+    for (let i = this.#voices.length - 1; i >= 0; i--) {
+      if ((this.#voices[i] as Voice).end < now) this.#voices.splice(i, 1);
     }
-    if (this.voices.length >= this.cap) this.voices.shift()?.kill(now);
-    this.voices.push(v);
+    if (this.#voices.length >= this.cap) this.#voices.shift()?.kill(now);
+    this.#voices.push(v);
   }
 
   remove(v: Voice): void {
-    const i = this.voices.indexOf(v);
-    if (i >= 0) this.voices.splice(i, 1);
+    const i = this.#voices.indexOf(v);
+    if (i >= 0) this.#voices.splice(i, 1);
   }
 }
 
@@ -313,9 +313,9 @@ export class AudioGraph {
   readonly out: GainNode;
   readonly white: AudioBuffer;
   readonly crackle: AudioBuffer;
-  private readonly pools: Readonly<Record<BusName, VoicePool>>;
-  private readonly busLevels: Readonly<Record<BusName, Smoothed>>;
-  private readonly outLevel: Smoothed;
+  readonly #pools: Readonly<Record<BusName, VoicePool>>;
+  readonly #busLevels: Readonly<Record<BusName, Smoothed>>;
+  readonly #outLevel: Smoothed;
 
   constructor(ctx: BaseAudioContext, destination: AudioNode = ctx.destination) {
     this.ctx = ctx;
@@ -332,7 +332,7 @@ export class AudioGraph {
     };
     this.out = ctx.createGain();
     this.master.connect(air).connect(dyn(COMP)).connect(dyn(LIMIT)).connect(this.out).connect(destination);
-    this.outLevel = new Smoothed(this.out.gain, OUTPUT_TRIM);
+    this.#outLevel = new Smoothed(this.out.gain, OUTPUT_TRIM);
 
     const bus = (): GainNode => {
       const g = ctx.createGain();
@@ -340,12 +340,12 @@ export class AudioGraph {
       return g;
     };
     this.buses = { sfx: bus(), music: bus(), amb: bus() };
-    this.busLevels = {
+    this.#busLevels = {
       sfx: new Smoothed(this.buses.sfx.gain, 0.8),
       music: new Smoothed(this.buses.music.gain, 0.6),
       amb: new Smoothed(this.buses.amb.gain, 0.6 * AMB_PER_MUSIC),
     };
-    this.pools = { sfx: new VoicePool(VOICE_CAPS.sfx), music: new VoicePool(VOICE_CAPS.music), amb: new VoicePool(VOICE_CAPS.amb) };
+    this.#pools = { sfx: new VoicePool(VOICE_CAPS.sfx), music: new VoicePool(VOICE_CAPS.music), amb: new VoicePool(VOICE_CAPS.amb) };
     this.white = noiseBuffer(ctx, Math.floor(ctx.sampleRate * NOISE_SECONDS), warm?.white ?? null, fillWhite);
     const rate = ctx.sampleRate;
     this.crackle = noiseBuffer(ctx, crackleLength(rate), warm && warm.rate === rate ? warm.crackle : null, (d) => fillCrackle(d, rate));
@@ -360,7 +360,7 @@ export class AudioGraph {
    * limiter; pass `pooled = false` for long-lived voices that manage their own lifetime.
    */
   voice(bus: BusName, when: number, dest: AudioNode = this.buses[bus], pooled = true): Voice {
-    const pool = this.pools[bus];
+    const pool = this.#pools[bus];
     const v = new Voice(this.ctx, dest, when, pooled ? (done) => pool.remove(done) : () => undefined);
     if (pooled) pool.add(v, this.ctx.currentTime);
     return v;
@@ -370,13 +370,13 @@ export class AudioGraph {
   setVolumes(sfx: number, music: number): void {
     const now = this.ctx.currentTime;
     const m = clamp01(music);
-    this.busLevels.sfx.set(clamp01(sfx), now, 0.05);
-    this.busLevels.music.set(m, now, 0.05);
-    this.busLevels.amb.set(m * AMB_PER_MUSIC, now, 0.05);
+    this.#busLevels.sfx.set(clamp01(sfx), now, 0.05);
+    this.#busLevels.music.set(m, now, 0.05);
+    this.#busLevels.amb.set(m * AMB_PER_MUSIC, now, 0.05);
   }
 
   setMuted(muted: boolean): void {
-    this.outLevel.set(muted ? 0 : OUTPUT_TRIM, this.ctx.currentTime, 0.03);
+    this.#outLevel.set(muted ? 0 : OUTPUT_TRIM, this.ctx.currentTime, 0.03);
   }
 }
 
@@ -401,40 +401,40 @@ interface UserActivationLike {
 export class AudioEngine {
   /** The mix graph, once the context exists. */
   graph: AudioGraph | null = null;
-  private ctx: AudioContext | null = null;
-  private unavailable = false;
-  private disposed = false;
-  private armed = false;
+  #ctx: AudioContext | null = null;
+  #unavailable = false;
+  #disposed = false;
+  #armed = false;
   /** A first-gesture ensure() is queued (see onGesture). */
-  private deferred = false;
-  private suspendedForHidden = false;
-  private lastStatus: AudioStatus = 'locked';
-  private readonly targets: EventTarget[] = [];
-  private readonly graphListeners: ((g: AudioGraph) => void)[] = [];
-  private readonly statusListeners: ((s: AudioStatus) => void)[] = [];
+  #deferred = false;
+  #suspendedForHidden = false;
+  #lastStatus: AudioStatus = 'locked';
+  readonly #targets: EventTarget[] = [];
+  readonly #graphListeners: ((g: AudioGraph) => void)[] = [];
+  readonly #statusListeners: ((s: AudioStatus) => void)[] = [];
 
   constructor() {
-    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onVisibility);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.#onVisibility);
   }
 
   get status(): AudioStatus {
-    if (this.unavailable) return 'unavailable';
-    if (!this.ctx) return 'locked';
-    return this.ctx.state;
+    if (this.#unavailable) return 'unavailable';
+    if (!this.#ctx) return 'locked';
+    return this.#ctx.state;
   }
 
   get running(): boolean {
-    return this.ctx !== null && this.ctx.state === 'running';
+    return this.#ctx !== null && this.#ctx.state === 'running';
   }
 
   /** Runs `cb` with the graph as soon as it exists (immediately if it already does). */
   onGraph(cb: (g: AudioGraph) => void): void {
     if (this.graph) cb(this.graph);
-    else this.graphListeners.push(cb);
+    else this.#graphListeners.push(cb);
   }
 
   onStatus(cb: (s: AudioStatus) => void): void {
-    this.statusListeners.push(cb);
+    this.#statusListeners.push(cb);
   }
 
   /**
@@ -443,9 +443,9 @@ export class AudioEngine {
    * honours resume() there).
    */
   ensure(): void {
-    if (this.unavailable || this.disposed || !allowedToStart()) return;
-    if (!this.ctx && !this.create()) return;
-    const ctx = this.ctx as AudioContext;
+    if (this.#unavailable || this.#disposed || !allowedToStart()) return;
+    if (!this.#ctx && !this.#create()) return;
+    const ctx = this.#ctx as AudioContext;
     if (ctx.state === 'running' || ctx.state === 'closed') return;
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     ctx.resume().catch(() => {
@@ -459,37 +459,37 @@ export class AudioEngine {
    * runs. Listeners re-arm whenever the context drops out of 'running'.
    */
   attachUnlock(target: EventTarget): void {
-    this.targets.push(target);
-    if (this.armed) for (const type of UNLOCK_EVENTS) target.addEventListener(type, this.onGesture, LISTEN);
-    else this.syncListeners();
+    this.#targets.push(target);
+    if (this.#armed) for (const type of UNLOCK_EVENTS) target.addEventListener(type, this.#onGesture, LISTEN);
+    else this.#syncListeners();
   }
 
   dispose(): void {
-    this.disposed = true;
-    this.setArmed(false);
-    this.targets.length = 0;
-    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onVisibility);
-    if (this.ctx && this.ctx.state !== 'closed') void this.ctx.close().catch(() => undefined);
+    this.#disposed = true;
+    this.#setArmed(false);
+    this.#targets.length = 0;
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.#onVisibility);
+    if (this.#ctx && this.#ctx.state !== 'closed') void this.#ctx.close().catch(() => undefined);
   }
 
-  private create(): boolean {
+  #create(): boolean {
     const w = globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
     const Ctor = w.AudioContext ?? w.webkitAudioContext;
     try {
       if (!Ctor) throw new Error('no WebAudio');
-      this.ctx = new Ctor({ latencyHint: 'interactive' });
-      this.graph = new AudioGraph(this.ctx);
+      this.#ctx = new Ctor({ latencyHint: 'interactive' });
+      this.graph = new AudioGraph(this.#ctx);
     } catch {
-      this.ctx = null;
+      this.#ctx = null;
       this.graph = null;
-      this.unavailable = true;
-      this.emitStatus();
+      this.#unavailable = true;
+      this.#emitStatus();
       return false;
     }
-    this.ctx.addEventListener('statechange', this.onStateChange);
+    this.#ctx.addEventListener('statechange', this.#onStateChange);
     const graph = this.graph;
-    for (const cb of this.graphListeners.splice(0)) cb(graph);
-    this.onStateChange();
+    for (const cb of this.#graphListeners.splice(0)) cb(graph);
+    this.#onStateChange();
     return true;
   }
 
@@ -501,12 +501,12 @@ export class AudioEngine {
    * calls ensure() inside its own handler, which also covers iOS (its touches only activate on the
    * way up). Once a context exists, every gesture resumes it synchronously.
    */
-  private readonly onGesture = (e: Event): void => {
-    if (!this.ctx && (e.type === 'pointerdown' || e.type === 'keydown')) {
-      if (!this.deferred) {
-        this.deferred = true;
+  readonly #onGesture = (e: Event): void => {
+    if (!this.#ctx && (e.type === 'pointerdown' || e.type === 'keydown')) {
+      if (!this.#deferred) {
+        this.#deferred = true;
         setTimeout(() => {
-          this.deferred = false;
+          this.#deferred = false;
           this.ensure();
         }, 0);
       }
@@ -515,48 +515,48 @@ export class AudioEngine {
     this.ensure();
   };
 
-  private readonly onStateChange = (): void => {
-    this.syncListeners();
-    this.emitStatus();
+  readonly #onStateChange = (): void => {
+    this.#syncListeners();
+    this.#emitStatus();
   };
 
-  private readonly onVisibility = (): void => {
-    const ctx = this.ctx;
+  readonly #onVisibility = (): void => {
+    const ctx = this.#ctx;
     if (!ctx || ctx.state === 'closed') return;
     if (document.visibilityState === 'hidden') {
       if (ctx.state === 'running') {
-        this.suspendedForHidden = true;
+        this.#suspendedForHidden = true;
         void ctx.suspend().catch(() => undefined);
       }
-    } else if (this.suspendedForHidden) {
-      this.suspendedForHidden = false;
+    } else if (this.#suspendedForHidden) {
+      this.#suspendedForHidden = false;
       // Works without a new gesture where the browser keeps sticky activation; otherwise the
       // re-armed gesture listeners pick it up on the next touch.
       if (allowedToStart()) void ctx.resume().catch(() => undefined);
     }
   };
 
-  private syncListeners(): void {
-    const needUnlock = !this.disposed && !this.unavailable && (!this.ctx || (this.ctx.state !== 'running' && this.ctx.state !== 'closed'));
-    this.setArmed(needUnlock);
+  #syncListeners(): void {
+    const needUnlock = !this.#disposed && !this.#unavailable && (!this.#ctx || (this.#ctx.state !== 'running' && this.#ctx.state !== 'closed'));
+    this.#setArmed(needUnlock);
   }
 
-  private setArmed(on: boolean): void {
-    if (on === this.armed) return;
-    this.armed = on;
-    for (const t of this.targets) {
+  #setArmed(on: boolean): void {
+    if (on === this.#armed) return;
+    this.#armed = on;
+    for (const t of this.#targets) {
       for (const type of UNLOCK_EVENTS) {
-        if (on) t.addEventListener(type, this.onGesture, LISTEN);
-        else t.removeEventListener(type, this.onGesture, LISTEN);
+        if (on) t.addEventListener(type, this.#onGesture, LISTEN);
+        else t.removeEventListener(type, this.#onGesture, LISTEN);
       }
     }
   }
 
-  private emitStatus(): void {
+  #emitStatus(): void {
     const s = this.status;
-    if (s === this.lastStatus) return;
-    this.lastStatus = s;
-    for (const cb of this.statusListeners) cb(s);
+    if (s === this.#lastStatus) return;
+    this.#lastStatus = s;
+    for (const cb of this.#statusListeners) cb(s);
   }
 }
 

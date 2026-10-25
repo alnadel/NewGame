@@ -96,48 +96,48 @@ function rnd(a: number, b: number): number {
 }
 
 export class Fx {
-  private readonly sc: RenderScene;
-  private readonly clock: FixedClock;
+  readonly #sc: RenderScene;
+  readonly #clock: FixedClock;
   reducedMotion = false;
-  private steamAcc = 0;
-  private sweatAcc = 0;
-  private frostAcc = 0;
-  private breathAcc = 0;
-  private wispAcc = 0;
-  private leafAcc = 0;
-  private glintAcc = 0;
+  #steamAcc = 0;
+  #sweatAcc = 0;
+  #frostAcc = 0;
+  #breathAcc = 0;
+  #wispAcc = 0;
+  #leafAcc = 0;
+  #glintAcc = 0;
   /** Game seconds until HIGH NOON lands (the sim's noonBanner comes 2 s early), or 0. */
-  private noonIn = 0;
+  #noonIn = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
-  private stampImpact = -1;
+  #stampImpact = -1;
   /** Seconds until another sun-exit ring may show. */
-  private sunT = 0;
+  #sunT = 0;
   /** The way the sun last turned (+1 counter-clockwise, −1 clockwise): a SWING's arc sweeps that way. */
-  private turn: 1 | -1 = 1;
+  #turn: 1 | -1 = 1;
   /** v1.5: the mechanics as the renderer sees them (the session's MechView), the snow from the snap cloud, the last DEEP pop. */
   mech: MechView | null = null;
-  private snowAcc = 0;
-  private deepT = -1e9;
+  #snowAcc = 0;
+  #deepT = -1e9;
   /** v1.6: the run's first ring trick and first frost gain were shown. */
-  private trickSeen = false;
-  private gainSeen = false;
-  private readonly c2 = new Float64Array(2);
+  #trickSeen = false;
+  #gainSeen = false;
+  readonly #c2 = new Float64Array(2);
   /** Zoom pulses are on (Nubs walks). */
-  private zoom = true;
+  #zoom = true;
 
   constructor(scene: RenderScene, clock: FixedClock) {
-    this.sc = scene;
-    this.clock = clock;
+    this.#sc = scene;
+    this.#clock = clock;
   }
 
   /** A new run begins: drop pending timers from the last one (a HIGH NOON due after its melt). */
   resetRun(): void {
-    this.noonIn = 0;
-    this.leafAcc = 0;
-    this.glintAcc = 0;
-    this.snowAcc = 0;
-    this.deepT = -1e9;
-    this.trickSeen = this.gainSeen = false;
+    this.#noonIn = 0;
+    this.#leafAcc = 0;
+    this.#glintAcc = 0;
+    this.#snowAcc = 0;
+    this.#deepT = -1e9;
+    this.#trickSeen = this.#gainSeen = false;
     resetBlooms();
   }
 
@@ -147,20 +147,20 @@ export class Fx {
    * time: the chip always shows; only the haptic and the fizz go quiet on a repeat).
    */
   onDrive(code: number, a: number): void {
-    const h = this.sc.hud;
+    const h = this.#sc.hud;
     if (code === NOTE_PRESS || code === NOTE_AUTO || (code === NOTE_CALM && a < 2)) h.btnFlash = BTN_FLASH_S;
     else if (code === NOTE_REFUSE) h.btnNo = BTN_NO_S;
   }
 
   /** Routes one frame's events. */
   onEvents(events: readonly SimEvent[], s: SimState): void {
-    const sc = this.sc;
+    const sc = this.#sc;
     const nx = s.nubs.x;
     const ny = s.nubs.y;
     // On a Trial, Nubs' own ring cues (shade in and out, glare) follow only Nubs; so do the zoom
     // pulses (§1.4: another element's taps and holds read the plain camera).
     const snowman = s.nubs.hero === 'nubs';
-    this.zoom = snowman;
+    this.#zoom = snowman;
     // The frame's frost gains pop as one (a snap's pour and the glass it lands come on one tick).
     let gainH = 0;
     for (const ev of events) {
@@ -227,9 +227,9 @@ export class Fx {
           break;
         case 'shadeExit':
           // Out in the sun: a hot ring snaps out of the dial (at most one every 0.6 s at a ragged edge).
-          if (snowman && this.sunT <= 0) {
+          if (snowman && this.#sunT <= 0) {
             addRing(sc.rings, nx, ny, 36, 48, 0.28, 2.5, 0.75, HOT);
-            this.sunT = 0.6;
+            this.#sunT = 0.6;
           }
           break;
         case 'multUp':
@@ -239,7 +239,7 @@ export class Fx {
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.6);
           hop(sc.nubs, ev.level >= 5 ? 9 : 5);
           if (ev.level >= 5) {
-            this.clock.addHitStop(0.04);
+            this.#clock.addHitStop(0.04);
             sc.banners.goldPulse = 0.45;
           }
           break;
@@ -247,7 +247,7 @@ export class Fx {
           if (ev.from > 1) sc.hud.multShake = 0.2;
           break;
         case 'phew': {
-          this.clock.slowMo(0.4, 0.35);
+          this.#clock.slowMo(0.4, 0.35);
           addHeadline(sc.pops, 'PHEW!', POP_PHEW, 1.1);
           addPlus(sc.pops, 3);
           hop(sc.nubs, 7);
@@ -264,7 +264,7 @@ export class Fx {
         case 'noonBanner':
           // The sim warns 2 s early (the audio's cue); the stamp lands at noon, with the clock. A Trial
           // has no HIGH NOON (its noon falls on an element leg; TAG! stamps and tips hold that slot).
-          if (s.el === null) this.noonIn = 2;
+          if (s.el === null) this.#noonIn = 2;
           break;
         case 'noonPassed':
           // The boss blinks first: a worried sun for 1.5 s, the ruler's sparkle and one cool pulse.
@@ -302,12 +302,12 @@ export class Fx {
           // The hand-off: the sun's sweep flashes on the dial, a SWING! pop (one a second at most;
           // a chain updates it) and a little hop.
           sc.halo.swingT = SWING_ARC_S;
-          sc.halo.swingDeg = ev.deg * this.turn;
+          sc.halo.swingDeg = ev.deg * this.#turn;
           addSwing(sc.pops, ev.chain);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.5);
           hop(sc.nubs, 4);
           // A beat of weight: a 30 ms hit-stop and a teal ring off the dial.
-          this.clock.addHitStop(0.03);
+          this.#clock.addHitStop(0.03);
           addRing(sc.rings, nx, ny, 40, 58, 0.35, 3, 0.85, TEAL);
           break;
         case 'gateArch':
@@ -337,8 +337,8 @@ export class Fx {
           break;
         case 'deepEnter':
           // Deep shade: the ring sinks to indigo (halo.ts); DEEP and an inward ring, now and then.
-          if (sc.worldTime - this.deepT >= DEEP_POP_GAP) {
-            this.deepT = sc.worldTime;
+          if (sc.worldTime - this.#deepT >= DEEP_POP_GAP) {
+            this.#deepT = sc.worldTime;
             addHeadline(sc.pops, 'DEEP', POP_DEEP, 0.9);
             addRing(sc.rings, nx, ny, 50, 30, 0.4, 3, 0.7, 0x1f2a66);
           }
@@ -355,8 +355,8 @@ export class Fx {
           sc.hud.ringFlash = RING_FLASH_S;
           // The run's first trick says what charged.
           // Left of and above the Snow pop (+5 of a bloom or a parry, at the same moment) so the two never read as one.
-          if (!this.trickSeen) addPop(sc.pops, '+RING', POP_MULT, -58, 262, 0.8);
-          this.trickSeen = true;
+          if (!this.#trickSeen) addPop(sc.pops, '+RING', POP_MULT, -58, 262, 0.8);
+          this.#trickSeen = true;
           break;
         case 'frostGain':
           if (ev.source !== 'cash') gainH += ev.amountH;
@@ -377,14 +377,14 @@ export class Fx {
           // The hand-off out of the frost: LANDING!, a ring (gold into its own sunflower), a beat.
           addHeadline(sc.pops, 'LANDING!', POP_SWING, 1);
           addRing(sc.rings, nx, ny, 40, 60, 0.35, 3, 0.85, ev.own ? SUN_GOLD : TEAL);
-          if (ev.own) this.burst(ev.x, ev.y, 30, 12, 60, SUN_GOLD);
+          if (ev.own) this.#burst(ev.x, ev.y, 30, 12, 60, SUN_GOLD);
           hop(sc.nubs, 5);
-          this.clock.addHitStop(0.03);
+          this.#clock.addHitStop(0.03);
           break;
         case 'clusterSaved':
           if (ev.brittle) {
             addHeadline(sc.pops, 'GLASS SAVED!', POP_DEEP, 0.9);
-            this.burst(ev.x, ev.y, 10, 14, 70, 0xffffff);
+            this.#burst(ev.x, ev.y, 10, 14, 70, 0xffffff);
           }
           break;
         case 'flareParry':
@@ -404,8 +404,8 @@ export class Fx {
           addHeadline(sc.pops, 'DARE ✓', POP_MULT, 1);
           break;
         case 'death': {
-          this.clock.addHitStop(0.08);
-          this.clock.slowMo(0.3, 0.58);
+          this.#clock.addHitStop(0.08);
+          this.#clock.slowMo(0.3, 0.58);
           addShake(sc.cam, 6, 0.25);
           // The push-in on the puddle: 1 → 1.18 from 80 to 600 ms, held into the Melt Map pull.
           holdZoom(sc.cam, 0.18, 0.08, 0.52);
@@ -413,7 +413,7 @@ export class Fx {
           // A fallen Elemental leaves no meltwater: a puff in its colour (its art shows the rest).
           const who = ev.info.who;
           if (who && who !== 'nubs') {
-            this.burst(ev.info.x, ev.info.y, 10, 14, 60, heroArcColor(who));
+            this.#burst(ev.info.x, ev.info.y, 10, 14, 60, heroArcColor(who));
             break;
           }
           for (let i = 0; i < 14; i++) {
@@ -436,8 +436,8 @@ export class Fx {
           hop(sc.nubs, 8);
           sc.nubs.happy = 0.9;
           addRing(sc.rings, nx, ny, 6, 60, 0.45, 3.5, 0.9, c);
-          this.burst(nx, ny, 20, 16, 110, c);
-          if (!this.reducedMotion) this.clock.slowMo(0.5, 0.3);
+          this.#burst(nx, ny, 20, 16, 110, c);
+          if (!this.reducedMotion) this.#clock.slowMo(0.5, 0.3);
           break;
         }
         case 'tagClean':
@@ -448,18 +448,18 @@ export class Fx {
         case 'feed':
           // A fire starts (melting ice or a drying puddle: water); Ember feeds on its own fire: "+n".
           if (ev.e === 'feed') addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
-          this.burst(ev.x, ev.y, 8, 12, 70, ev.e === 'burn' && (ev.kind === 'ice' || ev.kind === 'puddle') ? ICE : EMBER);
+          this.#burst(ev.x, ev.y, 8, 12, 70, ev.e === 'burn' && (ev.kind === 'ice' || ev.kind === 'puddle') ? ICE : EMBER);
           break;
         case 'burnOut':
         case 'doused':
         case 'fizz':
           // Ash (a melt or a drying ends in steam); a doused fire's steam; a refused verb's grey puff.
-          if (ev.e === 'fizz') this.puff(nx, ny, ASH);
-          else this.puff(ev.x, ev.y, ev.e === 'burnOut' && ev.kind !== 'puddle' ? ASH : 0xffffff);
+          if (ev.e === 'fizz') this.#puff(nx, ny, ASH);
+          else this.#puff(ev.x, ev.y, ev.e === 'burnOut' && ev.kind !== 'puddle' ? ASH : 0xffffff);
           break;
         case 'bump':
           // The wall shatters, the walker hops: BUMP!
-          this.burst(ev.x, ev.y, 8, 16, 110, ev.kind === 'ice' ? 0xbfe6ff : ev.kind === 'gate' ? 0xc98b4e : 0x5e9a36);
+          this.#burst(ev.x, ev.y, 8, 16, 110, ev.kind === 'ice' ? 0xbfe6ff : ev.kind === 'gate' ? 0xc98b4e : 0x5e9a36);
           addHeadline(sc.pops, 'BUMP!', POP_BANG, 0.8);
           hop(sc.nubs, 6);
           addShake(sc.cam, 3, 0.15);
@@ -470,27 +470,27 @@ export class Fx {
           break;
         case 'grown':
           addHeadline(sc.pops, ev.tree ? 'TREE!' : 'BRIDGE!', POP_MULT, 0.9);
-          this.burst(ev.x, ev.y, 12, 14, 70, LIME);
+          this.#burst(ev.x, ev.y, 12, 14, 70, LIME);
           break;
         case 'drink':
           // A splash and the size it grew; Drip bulges for a moment (its art).
-          this.puff(nx, ny, ICE);
+          this.#puff(nx, ny, ICE);
           addPop(sc.pops, `+${Math.round(ev.delta)}`, POP_DEEP, 20, 120, 0.9);
           sc.nubs.happy = Math.max(sc.nubs.happy, 0.3);
           break;
         case 'sizzle':
           // A hot stone: Drip flashes and steams; Ember sparks.
-          if (ev.hero !== 'drip') this.burst(nx, ny, 10, 10, 80, 0xffd36b);
+          if (ev.hero !== 'drip') this.#burst(nx, ny, 10, 10, 80, 0xffd36b);
           else {
             sc.nubs.glare = 0.25;
-            this.puff(nx, ny, 0xffffff);
+            this.#puff(nx, ny, 0xffffff);
           }
           break;
         default:
           break;
       }
     }
-    if (gainH > 0) this.gain(gainH);
+    if (gainH > 0) this.#gain(gainH);
   }
 
 
@@ -499,47 +499,47 @@ export class Fx {
    * burst, a gold ring spreads, its Snow pops over Nubs with BLOOM!, a short hit-stop.
    */
   bloom(x: number, y: number, snow: number): void {
-    const sc = this.sc;
+    const sc = this.#sc;
     if (!this.reducedMotion) registerBloom(x, y, sc.worldTime);
-    this.burst(x, y, 40, 16, 70, SUN_GOLD);
+    this.#burst(x, y, 40, 16, 70, SUN_GOLD);
     addRing(sc.rings, x, y, 6, 34, 0.5, 3, 0.9, SUN_GOLD);
     if (snow > 0) addPlus(sc.pops, snow);
     // Through the headline rows, so it never lands on a DEEP, PHEW or SWING! of the same moment.
     addHeadline(sc.pops, 'BLOOM!', POP_MULT, 0.9);
     hop(sc.nubs, 4);
-    this.clock.addHitStop(0.04);
+    this.#clock.addHitStop(0.04);
   }
 
   /**
    * v1.6: frost gained (hundredths) pops beside Nubs in frost blue, to a tenth of a snap (none under
    * 0.05); the run's first worth a tenth or more says "snap".
    */
-  private gain(h: number): void {
+  #gain(h: number): void {
     if (h < 5) return;
-    const first = !this.gainSeen && h >= 10;
-    addPop(this.sc.pops, first ? `${snapsText(h)} snap` : snapsText(h), POP_DEEP, 20, 120, 0.9);
-    if (h >= 10) this.gainSeen = true;
+    const first = !this.#gainSeen && h >= 10;
+    addPop(this.#sc.pops, first ? `${snapsText(h)} snap` : snapsText(h), POP_DEEP, 20, 120, 0.9);
+    if (h >= 10) this.#gainSeen = true;
   }
 
   /** A Cold Snap lands over Nubs (v1.5): COLD SNAP!, an ice ring and shards, a cool wash, a beat. */
   snap(x: number, y: number): void {
-    const sc = this.sc;
+    const sc = this.#sc;
     addHeadline(sc.pops, 'COLD SNAP!', POP_SNAP, 1.1);
     sc.banners.coolPulse = 0.5;
     addRing(sc.rings, x, y, 6, 72, 0.55, 3.5, 0.95, ICE);
-    this.burst(x, y, 2, 22, 130, 0xbfe6ff);
+    this.#burst(x, y, 2, 22, 130, 0xbfe6ff);
     sc.nubs.happy = 0.9;
     hop(sc.nubs, 6);
-    this.clock.addHitStop(0.05);
-    if (this.zoom) addZoomPulse(sc.cam, 0.04, 0.4);
+    this.#clock.addHitStop(0.05);
+    if (this.#zoom) addZoomPulse(sc.cam, 0.04, 0.4);
   }
 
   /** n sparkles bursting out of (x, y, z) at about `speed` u/s. */
-  private burst(x: number, y: number, z: number, n: number, speed: number, color: number): void {
+  #burst(x: number, y: number, z: number, n: number, speed: number, color: number): void {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rnd(-0.15, 0.15);
       const sp = speed * rnd(0.7, 1.2);
-      spawn(this.sc.particles, P_SPARKLE, x, y, z, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 50), 0.6, 4.5, 1.5, color);
+      spawn(this.#sc.particles, P_SPARKLE, x, y, z, Math.cos(a) * sp, Math.sin(a) * sp, rnd(10, 50), 0.6, 4.5, 1.5, color);
     }
   }
 
@@ -548,8 +548,8 @@ export class Fx {
    * lands with a 3 u camera shake (none under reduced motion); `face` dresses a TAG!.
    */
   stamp(kind: StampKind, text: string, hold: number, face?: FaceName): void {
-    showStamp(this.sc.banners, kind, text, hold, face);
-    this.stampImpact = STAMP_IN;
+    showStamp(this.#sc.banners, kind, text, hold, face);
+    this.#stampImpact = STAMP_IN;
   }
 
   /** A stamp that celebrates (a target passed): the stamp plus confetti. */
@@ -564,15 +564,15 @@ export class Fx {
    * line in rose, with no confetti.
    */
   finish(passed: boolean, text: string, stars: number, x: number, y: number): void {
-    const sc = this.sc;
+    const sc = this.#sc;
     this.stamp(passed ? 'finish' : 'miss', text, 1.2);
     if (passed) {
       sc.banners.stampStars = stars;
       this.confetti(64);
       hop(sc.nubs, 9);
       sc.nubs.happy = 1;
-      if (this.zoom) addZoomPulse(sc.cam, 0.06, 0.5);
-      this.clock.addHitStop(0.06);
+      if (this.#zoom) addZoomPulse(sc.cam, 0.06, 0.5);
+      this.#clock.addHitStop(0.06);
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2;
         spawn(sc.particles, P_SPARKLE, x, y, 14, Math.cos(a) * 110, Math.sin(a) * 110, rnd(20, 70), 0.6, 5, 1.5, GOLD);
@@ -588,7 +588,7 @@ export class Fx {
    * game/moments.ts). PHEW's little brother: no slow-mo, a gold headline, a cool ring and a hop.
    */
   comeback(x: number, y: number): void {
-    const sc = this.sc;
+    const sc = this.#sc;
     addHeadline(sc.pops, 'COMEBACK!', POP_PHEW, 1.1);
     hop(sc.nubs, 6);
     sc.nubs.happy = Math.max(sc.nubs.happy, 0.8);
@@ -602,15 +602,15 @@ export class Fx {
 
   /** Continuous effects, once per frame with game dt. */
   update(dt: number, s: SimState, playing: boolean): void {
-    if (this.stampImpact >= 0 && (this.stampImpact -= dt) < 0) addShake(this.sc.cam, 3, 0.2);
-    this.sunT -= dt;
-    if (this.noonIn > 0 && (this.noonIn -= dt) <= 0) {
-      this.noonIn = 0;
+    if (this.#stampImpact >= 0 && (this.#stampImpact -= dt) < 0) addShake(this.#sc.cam, 3, 0.2);
+    this.#sunT -= dt;
+    if (this.#noonIn > 0 && (this.#noonIn -= dt) <= 0) {
+      this.#noonIn = 0;
       if (playing && s.phase === 'day') this.stamp('noon', 'HIGH NOON', 1.1);
     }
-    if (s.sun.dTheta !== 0) this.turn = s.sun.dTheta > 0 ? 1 : -1;
+    if (s.sun.dTheta !== 0) this.#turn = s.sun.dTheta > 0 ? 1 : -1;
     if (dt <= 0 || !playing) return;
-    const sc = this.sc;
+    const sc = this.#sc;
     const nb = s.nubs;
     const p = sc.particles;
     const daylight = s.phase === 'day';
@@ -620,44 +620,44 @@ export class Fx {
     const snowman = nb.hero === 'nubs';
     if (daylight && snowman && nb.f > 0) {
       // Steam at 30·f per second, rising 30 u/s and growing 3 → 9 u over 0.8 s.
-      this.steamAcc += dt * 30 * Math.min(2, nb.f);
-      while (this.steamAcc >= 1) {
-        this.steamAcc -= 1;
+      this.#steamAcc += dt * 30 * Math.min(2, nb.f);
+      while (this.#steamAcc >= 1) {
+        this.#steamAcc -= 1;
         // Steam inherits Nubs' walking speed so it rises from him instead of trailing behind.
         spawn(p, P_STEAM, nb.x + rnd(-8, 8), nb.y + rnd(0, 6), rnd(70, 92), rnd(-6, 6), walk * rnd(0.9, 1), 40, 0.8, 2.5, 8, 0xffffff);
       }
     } else {
-      this.steamAcc = 0;
+      this.#steamAcc = 0;
     }
     if (daylight && snowman && nb.chill < 60) {
-      this.sweatAcc += dt;
-      if (this.sweatAcc >= 0.4) {
-        this.sweatAcc = 0;
+      this.#sweatAcc += dt;
+      if (this.#sweatAcc >= 0.4) {
+        this.#sweatAcc = 0;
         const side = Math.random() < 0.5 ? -1 : 1;
         spawn(p, P_DRIP, nb.x + side * rnd(5, 8), nb.y + 2, rnd(34, 44), side * rnd(10, 22), walk * 0.9, rnd(30, 60), 1.2, 1.4, 1.2, 0x7fc8ff);
       }
     }
     if (daylight && snowman && nb.f === 0) {
       // Cold breath: a small puff from the mouth every 1.6 s, drifting the way he looks.
-      this.breathAcc += dt;
-      if (this.breathAcc >= 1.6) {
-        this.breathAcc = 0;
+      this.#breathAcc += dt;
+      if (this.#breathAcc >= 1.6) {
+        this.#breathAcc = 0;
         const lx = sc.nubs.lookX;
         const ly = sc.nubs.lookY;
         const size = 0.6 + 0.4 * Math.max(0, nb.chill / nb.maxChill);
         spawn(p, P_BREATH, nb.x + lx * 4 * size, nb.y - ly * 2 * size, 68 * size, lx * 4, -ly * 4 + walk, 0, 0.7, 2, 5, 0xffffff);
       }
     } else {
-      this.breathAcc = 1;
+      this.#breathAcc = 1;
     }
     const mech = this.mech;
-    if (mech?.snapCloud && !this.reducedMotion) this.snowfall(dt, s, mech.snapCloud);
-    else this.snowAcc = 0;
+    if (mech?.snapCloud && !this.reducedMotion) this.#snowfall(dt, s, mech.snapCloud);
+    else this.#snowAcc = 0;
     if (daylight && snowman && nb.f === 0) {
       // Frost sparkles: 2 per second on the ground within 16 u, living 1.2 s (5 in deep shade).
-      this.frostAcc += dt * (mech?.deep ? 5 : 2);
-      while (this.frostAcc >= 1) {
-        this.frostAcc -= 1;
+      this.#frostAcc += dt * (mech?.deep ? 5 : 2);
+      while (this.#frostAcc >= 1) {
+        this.#frostAcc -= 1;
         const a = rnd(0, Math.PI * 2);
         const r = rnd(4, 16);
         spawn(p, P_FROST, nb.x + Math.cos(a) * r, nb.y + Math.sin(a) * r, 0, 0, 0, 0, 1.2, 3.2, 3.2, FROST);
@@ -671,9 +671,9 @@ export class Fx {
     const heatDay = fc === 'heat' && daylight && dayFrac > 0.17 && dayFrac < 0.83;
     const boss = daylight ? bossWeight(dayFrac, fc === 'heat') : 0;
     if (boss > 0.3 || heatDay) {
-      this.wispAcc += dt * (heatDay ? 14 : 7);
-      while (this.wispAcc >= 1) {
-        this.wispAcc -= 1;
+      this.#wispAcc += dt * (heatDay ? 14 : 7);
+      while (this.#wispAcc >= 1) {
+        this.#wispAcc -= 1;
         const a = rnd(0, Math.PI * 2);
         const r = rnd(44, 160);
         const x = nb.x + Math.cos(a) * r;
@@ -687,7 +687,7 @@ export class Fx {
         if (lit) spawn(p, P_WISP, x, y, 0, 0, 0, 18 / OBLIQUE, 1.4, 1, 1, 0xffffff);
       }
     } else {
-      this.wispAcc = 0;
+      this.#wispAcc = 0;
     }
     // The air: Breezy days and windy chapters blow leaves across the screen (at most 6 at once,
     // the wind's way); spring chapters drop petals and winter ones snow (v1.3; none under reduced
@@ -695,9 +695,9 @@ export class Fx {
     const v = sc.view;
     const air = this.reducedMotion || !daylight ? '' : fc === 'breezy' ? 'leaf' : themeFor(s.level?.chapter).air;
     if (air !== '') {
-      this.leafAcc += dt * (air === 'snow' ? 8 : 1.6);
-      if (this.leafAcc >= 1) {
-        this.leafAcc -= 1;
+      this.#leafAcc += dt * (air === 'snow' ? 8 : 1.6);
+      if (this.#leafAcc >= 1) {
+        this.#leafAcc -= 1;
         if (air === 'leaf' && countKind(p, P_LEAF) < 6) {
           const dir = s.day % 2 === 0 ? -1 : 1;
           const li = spawn(p, P_LEAF, dir > 0 ? v.vx - 20 : v.vx + v.vw + 20, v.vy + rnd(0.1, 0.8) * v.vh, 0, dir * rnd(110, 170), 0, 0, rnd(3.5, 5.5), rnd(11, 15), 0, LEAVES[Math.floor(rnd(0, LEAVES.length))] as number);
@@ -709,13 +709,13 @@ export class Fx {
         }
       }
     } else {
-      this.leafAcc = 0;
+      this.#leafAcc = 0;
     }
     // Dazzle: glints flash on lit ground around Nubs (at most 6 at once).
     if (fc === 'dazzle' && daylight) {
-      this.glintAcc += dt * 5;
-      while (this.glintAcc >= 1) {
-        this.glintAcc -= 1;
+      this.#glintAcc += dt * 5;
+      while (this.#glintAcc >= 1) {
+        this.#glintAcc -= 1;
         if (countKind(p, P_GLINT) >= 6) continue;
         const a = rnd(0, Math.PI * 2);
         const r = rnd(30, 200);
@@ -726,7 +726,7 @@ export class Fx {
         p.rot[gi] = rnd(0, Math.PI);
       }
     } else {
-      this.glintAcc = 0;
+      this.#glintAcc = 0;
     }
     if (s.phase === 'night') {
       // A steady pool of 14 fireflies within 140 u of Nubs, each wandering for 5-8 s.
@@ -742,33 +742,33 @@ export class Fx {
   }
 
   /** Eight puffs rising off (x, y): ash, steam or a splash. */
-  private puff(x: number, y: number, color: number): void {
-    for (let i = 0; i < 8; i++) spawn(this.sc.particles, P_PUFF, x + rnd(-12, 12), y + rnd(-4, 4), rnd(2, 12), rnd(-12, 12), rnd(-4, 4), rnd(14, 30), 0.8, 3, 8, color);
+  #puff(x: number, y: number, color: number): void {
+    for (let i = 0; i < 8; i++) spawn(this.#sc.particles, P_PUFF, x + rnd(-12, 12), y + rnd(-4, 4), rnd(2, 12), rnd(-12, 12), rnd(-4, 4), rnd(14, 30), 0.8, 3, 8, color);
   }
 
   /** Snow falling from the Cold Snap's cloud body to the ground under it, riding along with it. */
-  private snowfall(dt: number, s: SimState, cl: Cloud): void {
+  #snowfall(dt: number, s: SimState, cl: Cloud): void {
     // From the body as drawn: over its shadow, SNAP_LIFT up (render/clouds.ts).
-    cloudCenter(cl, s.tAbs, this.c2);
+    cloudCenter(cl, s.tAbs, this.#c2);
     const r = s.cot > 0 ? cloudOffset(cl.z, s.cot) : 0;
-    const cx = (this.c2[0] as number) - s.ux * r;
-    const cy = (this.c2[1] as number) - s.uy * r;
+    const cx = (this.#c2[0] as number) - s.ux * r;
+    const cy = (this.#c2[1] as number) - s.uy * r;
     const z = SNAP_LIFT / OBLIQUE;
-    this.snowAcc += dt * SNOWFALL_RATE;
-    while (this.snowAcc >= 1) {
-      this.snowAcc -= 1;
+    this.#snowAcc += dt * SNOWFALL_RATE;
+    while (this.#snowAcc >= 1) {
+      this.#snowAcc -= 1;
       const a = rnd(0, Math.PI * 2);
       const d = Math.sqrt(Math.random()) * 0.8;
-      spawn(this.sc.particles, P_SNOWFALL, cx + Math.cos(a) * cl.rx * d, cy + Math.sin(a) * cl.ry * d, z, cl.vx, cl.vy, -z / SNOWFALL_S, SNOWFALL_S + 0.35, rnd(1.8, 3), 0, 0xffffff);
+      spawn(this.#sc.particles, P_SNOWFALL, cx + Math.cos(a) * cl.rx * d, cy + Math.sin(a) * cl.ry * d, z, cl.vx, cl.vy, -z / SNOWFALL_S, SNOWFALL_S + 0.35, rnd(1.8, 3), 0, 0xffffff);
     }
   }
 
   /** Dawn petals (screen space). */
   petals(n: number): void {
-    const v = this.sc.view;
+    const v = this.#sc.view;
     for (let i = 0; i < n; i++) {
       spawn(
-        this.sc.particles,
+        this.#sc.particles,
         P_PETAL,
         v.vx + rnd(0, v.vw),
         v.vy - rnd(10, 160),
@@ -786,10 +786,10 @@ export class Fx {
 
   /** New-best confetti (screen space). */
   confetti(n: number): void {
-    const v = this.sc.view;
+    const v = this.#sc.view;
     for (let i = 0; i < n; i++) {
       spawn(
-        this.sc.particles,
+        this.#sc.particles,
         P_CONFETTI,
         v.vx + v.vw / 2 + rnd(-40, 40),
         v.vy + v.vh * 0.32,

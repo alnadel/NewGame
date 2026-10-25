@@ -57,44 +57,44 @@ export class Governor {
   /** Last evaluated cadence (ms) and whether it counted as a capped display rate (debug overlay). */
   median = 0;
   capped = false;
-  private readonly intervals = new Float32Array(WINDOW);
-  private readonly work = new Float32Array(WINDOW);
-  private readonly sorted = new Float32Array(WINDOW);
-  private head = 0;
-  private count = 0;
-  private sumInterval = 0;
-  private sumWork = 0;
-  private sinceEval = 0;
-  private msSinceEval = 0;
-  private warmup = WARMUP_S;
-  private cooldown = 0;
-  private clean = 0;
-  private stepsUp = 0;
+  readonly #intervals = new Float32Array(WINDOW);
+  readonly #work = new Float32Array(WINDOW);
+  readonly #sorted = new Float32Array(WINDOW);
+  #head = 0;
+  #count = 0;
+  #sumInterval = 0;
+  #sumWork = 0;
+  #sinceEval = 0;
+  #msSinceEval = 0;
+  #warmup = WARMUP_S;
+  #cooldown = 0;
+  #clean = 0;
+  #stepsUp = 0;
   /** Called after a change of DPR scale. */
   onChange: (() => void) | null = null;
 
   /** Mean rAF interval over the window (ms). */
   get mean(): number {
-    return this.count > 0 ? this.sumInterval / this.count : 0;
+    return this.#count > 0 ? this.#sumInterval / this.#count : 0;
   }
 
   /** Mean JS work per frame over the window (ms). */
   get meanWork(): number {
-    return this.count > 0 ? this.sumWork / this.count : 0;
+    return this.#count > 0 ? this.#sumWork / this.#count : 0;
   }
 
   /** Restarts the window and the warm-up (call after a resize: new buffers, first-frame costs). */
   reset(): void {
-    this.intervals.fill(0);
-    this.work.fill(0);
-    this.head = 0;
-    this.count = 0;
-    this.sumInterval = 0;
-    this.sumWork = 0;
-    this.sinceEval = 0;
-    this.msSinceEval = 0;
-    this.warmup = WARMUP_S;
-    this.clean = 0;
+    this.#intervals.fill(0);
+    this.#work.fill(0);
+    this.#head = 0;
+    this.#count = 0;
+    this.#sumInterval = 0;
+    this.#sumWork = 0;
+    this.#sinceEval = 0;
+    this.#msSinceEval = 0;
+    this.#warmup = WARMUP_S;
+    this.#clean = 0;
   }
 
   /**
@@ -103,33 +103,33 @@ export class Governor {
    */
   sample(intervalMs: number, workMs: number, dtReal: number): void {
     if (!this.enabled || intervalMs > 250) return;
-    this.cooldown -= dtReal;
-    if (this.warmup > 0) {
-      this.warmup -= dtReal;
+    this.#cooldown -= dtReal;
+    if (this.#warmup > 0) {
+      this.#warmup -= dtReal;
       return;
     }
-    this.sumInterval += intervalMs - (this.intervals[this.head] as number);
-    this.sumWork += workMs - (this.work[this.head] as number);
-    this.intervals[this.head] = intervalMs;
-    this.work[this.head] = workMs;
-    this.head = (this.head + 1) % WINDOW;
-    if (this.count < WINDOW) this.count++;
-    this.sinceEval++;
-    this.msSinceEval += intervalMs;
-    if (this.count < WINDOW && (this.sumInterval < MIN_SPAN_MS || this.count < MIN_SAMPLES)) return;
-    if (this.sinceEval < EVAL_EVERY && this.msSinceEval < EVAL_MS) return;
-    const dt = this.msSinceEval / 1000;
-    this.sinceEval = 0;
-    this.msSinceEval = 0;
-    this.evaluate(dt);
+    this.#sumInterval += intervalMs - (this.#intervals[this.#head] as number);
+    this.#sumWork += workMs - (this.#work[this.#head] as number);
+    this.#intervals[this.#head] = intervalMs;
+    this.#work[this.#head] = workMs;
+    this.#head = (this.#head + 1) % WINDOW;
+    if (this.#count < WINDOW) this.#count++;
+    this.#sinceEval++;
+    this.#msSinceEval += intervalMs;
+    if (this.#count < WINDOW && (this.#sumInterval < MIN_SPAN_MS || this.#count < MIN_SAMPLES)) return;
+    if (this.#sinceEval < EVAL_EVERY && this.#msSinceEval < EVAL_MS) return;
+    const dt = this.#msSinceEval / 1000;
+    this.#sinceEval = 0;
+    this.#msSinceEval = 0;
+    this.#evaluate(dt);
   }
 
-  private evaluate(dt: number): void {
+  #evaluate(dt: number): void {
     // Quantiles of the filled part of the ring (unfilled slots sort last as +∞).
-    const n = this.count;
-    const s = this.sorted;
+    const n = this.#count;
+    const s = this.#sorted;
     s.fill(Infinity);
-    for (let i = 0; i < n; i++) s[i] = this.intervals[(this.head - n + i + WINDOW) % WINDOW] as number;
+    for (let i = 0; i < n; i++) s[i] = this.#intervals[(this.#head - n + i + WINDOW) % WINDOW] as number;
     s.sort();
     const q1 = s[Math.floor(n * 0.25)] as number;
     const med = s[Math.floor(n * 0.5)] as number;
@@ -141,22 +141,22 @@ export class Governor {
 
     const late = this.capped ? work > CAPPED_WORK_SHARE * med : this.mean > LIMIT_MS;
     if (late) {
-      this.clean = 0;
-      if (this.cooldown <= 0 && this.level < MAX_LEVEL) this.change(1);
+      this.#clean = 0;
+      if (this.#cooldown <= 0 && this.level < MAX_LEVEL) this.#change(1);
       return;
     }
     const smooth = steady && med <= UP_MEDIAN_MS && work <= UP_WORK_MS;
-    this.clean = smooth ? this.clean + dt : 0;
-    if (this.clean >= UP_AFTER_S && this.level > this.floor && this.stepsUp === 0 && this.cooldown <= 0) {
-      this.stepsUp++;
-      this.change(-1);
+    this.#clean = smooth ? this.#clean + dt : 0;
+    if (this.#clean >= UP_AFTER_S && this.level > this.floor && this.#stepsUp === 0 && this.#cooldown <= 0) {
+      this.#stepsUp++;
+      this.#change(-1);
     }
   }
 
-  private change(dir: 1 | -1): void {
+  #change(dir: 1 | -1): void {
     this.level += dir;
-    this.cooldown = COOLDOWN_S;
-    this.apply();
+    this.#cooldown = COOLDOWN_S;
+    this.#apply();
     this.reset();
     this.onChange?.();
   }
@@ -165,11 +165,11 @@ export class Governor {
   startAt(level: number): void {
     this.level = Math.max(0, Math.min(MAX_LEVEL, level));
     this.floor = this.level;
-    this.apply();
+    this.#apply();
   }
 
   /** Settings for the current level. */
-  private apply(): void {
+  #apply(): void {
     const l = this.level;
     this.softShadows = l < 1;
     this.dprScale = l >= 3 ? 0.625 : l >= 2 ? 0.75 : 1;
