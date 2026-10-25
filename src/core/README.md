@@ -1701,3 +1701,27 @@ adds their rows and, with `--streams N --json FILE` / `--compare FILE`, the §9.
 gates against the humanDial baseline; `sim --check` adds the idleTouch and humanTouch rung rows;
 `sim --trials` adds G5e, G5f, G8, G8b, G9 and the advisory G10, G11 and G4t, and `--perf` the
 driver's µs per tick on T7; `node scripts/bench-step.ts --drive` times it at an Endless noon.
+
+### 18.5 Measured (the branch's last commit) and what is still open
+
+- `sim --campaign --bot all --tries 3 --compare <baseline>` (humanDial on C0c's content, 20 held-out
+  streams × 3 tries, SHA-256 `dce2686f…05ee`): oracle 200/200, reactive 100% of 1-100, the
+  Feat-seeking oracle ★2 on 100% and every Dare of 1-10; idleTouch passes nothing plain idle does not
+  (idle's 11: L2, 14, 15, 18, 26, 29, 32, 34, 51, 111, 156; L29 and L32 are new teaching slots);
+  humanTouch 95.8% of 1-40 on its first try, its resting variant 95.0%; the five new teaching slots
+  20/20 each. **Failing:** the substituted-level gate on 7 of 46 (L54 1 vs 3, L139 2 vs 7, L162 10 vs
+  12, L163 2 vs 4, L164 7 vs 11, L168 0 vs 12, L169 2 vs 9: L169's retired slot already drops, the
+  others are past `SUB_OVERRIDE`'s 8 entries) and the chapter gate on ch6, 7, 12, 14, 15, 17 and 20
+  (ch17 134 vs 164: its substitutes, sprint, fleet, ration and dense, are real difficulty where the
+  retired gusts, slippery and heavy cost the bots nothing). On the 154 unchanged levels humanTouch
+  passes more streams than humanDial (2369 vs 2345 within 3 tries), so the driver is not the cause.
+- `sim --check --seeds 40`: every target met; idleTouch reaches no first night at R2-R4 (0 of 40
+  each); humanTouch's median death is at or past humanDial's on every rung.
+- `sim --trials --check --perf`: every gate passes but **G5e** on T4 (+1 walks Gust's leg), T6 (−1)
+  and T7 (−1): a governed vane at notch 1 is a steady breeze, stronger than the swipes these weather
+  layouts were pinned against; no single §6.5 move of a T4 weather object (48 tried) fails +1 with
+  G1-G4 kept. Driver 0.61 µs per tick on T7.
+- `bench-step`: step ×1.070, guide ×0.892; `--gen` passes; `--drive` 0.35 µs per tick.
+- **Cut list** (§12.3): the branch was over CORE's +3,456 B (C0c alone is +6,020 B over C0b), so
+  `driveWeatherX`'s set-vane prediction, the ending rescue and Auto Snap are cut in one commit (about
+  110 B here); the branch stays over.

@@ -344,3 +344,7 @@ bar, by design of the Dares (it no longer earns ★2 without seeking it; humanFe
   Pass (was Slick Sun).
 - **Bake and goldens:** the re-bake changed only the 46 levels and `LEVEL_BAKE_RUN`; the goldens
   only campaign 32 and 100.
+- **Gates** (`sim --campaign --compare`, src/core/README.md §18.5): oracle, reactive and the
+  Feat-seeking oracle as before; the five teaching slots 20/20 for humanTouch; still short of the
+  humanDial baseline on 7 substituted levels (L54, 139, 162, 163, 164, 168, 169) and in chapters 6, 7,
+  12, 14, 15, 17 and 20, beyond the 8 `SUB_OVERRIDE` entries.

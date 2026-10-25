@@ -344,7 +344,8 @@ const RETIRED_SUBS: Readonly<Record<RetiredId, readonly ConceptId[]>> = Object.f
  */
 export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.freeze({
   // §9.5 "substituted levels" (humanTouch's first tries over the 12 baseline streams against
-  // humanDial's on the old level, which needs ≥ its count − 1), each the first later choice that met it:
+  // humanDial's on the old level, which needs ≥ its count − 1), each the first later choice that met it
+  // (measured before CORE's cut list took the ending rescue out of the driver, which redraws them):
   // L73 gusts → sparse 4 vs 12; dense 12.
   73: 'dense',
   // L79 gusts → sparse 1 vs 10, dense 6; dropped 9.
