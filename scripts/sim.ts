@@ -2,7 +2,8 @@
 //
 //   node scripts/sim.ts [--seeds N] [--seed-from S] [--days D] [--bot B|all] [--profile P] [--forecast F] [--check] [--margin PTS] [--workers W] [--mech]
 //   node scripts/sim.ts --career N [--runs R] [--bot B] [--meta] [--workers W]
-//   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|all] [--tries N] [--workers W] [--nomech]
+//   node scripts/sim.ts --campaign [--level N,…] [--bot oracle|reactive|humanDial|…|all] [--tries N] [--workers W] [--nomech]
+//                      [--streams N --json FILE] [--compare FILE]
 //   v1.6 (docs/V1_6_PLAN.md): [--off ring,bank,garden,brittle,flares,noonHeat] and [--on …] (the
 //   shipped rules are V16_SHIP: the Frost Bank off) on any of the above;
 //   [--policy plain|chase|naive|safe] [--hours] on the report; the modes --decisions, --release
@@ -34,6 +35,15 @@
 // ≥ 75% of 1-40 and ≥ 90% of 1-10). Exit 1 on a hard miss. --nomech: the bots ignore the v1.5 core
 // mechanics (to measure what using them is worth).
 //
+// Controls v3 (docs/CONTROLS_V3.md §9.5): --campaign --bot all adds humanTouch, its rest variant,
+// idle and idleTouch (both with the lesson off) and their rows; --streams N --json FILE writes a human
+// bot's comparison streams (the humanDial baseline on the old content); --compare FILE plays
+// humanTouch on the same streams and judges the hard gates: each of the 46 substituted levels
+// (first try, 12 streams, ≥ the baseline − 1), the new teaching slots (≥ 17 of 20 first tries) and
+// every chapter (passes within --tries over the streams ≥ the baseline's); idleTouch passes no level
+// idle does not. --check adds idleTouch on rungs R0-R4 (hard on R2-R4: no seed reaches the first
+// night) and humanTouch's advisory rows.
+//
 // --career N plays N careers of R runs (default 40) on the comfort ladder (run seed
 // hashString(`career-${c}-${r}`), rungConfig/comfortAfterRun between runs). --meta folds every run
 // through the meta API (A14): beginRun, applyRunResult, stale missions swapped, the cheapest
@@ -44,10 +54,10 @@
 // module (sim16/world.ts, CORE-2: --hours, --bake) add per-run metrics gathered in the workers,
 // their tables and gates after the v1.5 report, and their own modes.
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
-import { CAMPAIGN_LEVELS, featMet, featValue, isBossFinale, LEVEL_COUNT, ORACLE_PLANS, SOFT_FAIL_MISSES, type FeatKind, type LevelDef } from '../src/config/campaign.ts';
+import { CAMPAIGN_LEVELS, featMet, featValue, isBossFinale, LEVEL_COUNT, ORACLE_PLANS, retiredLevel, SOFT_FAIL_MISSES, type FeatKind, type LevelDef } from '../src/config/campaign.ts';
 import { comfortAfterRun, isWarmup, rungConfig, type ComfortPrev, type ProfileId } from '../src/config/days.ts';
 import { FORECAST_IDS, PLAN_START_DATE, type ForecastId } from '../src/config/forecasts.ts';
 import { TUNING } from '../src/config/tuning.ts';
@@ -290,7 +300,7 @@ async function runCareer(c: number, runs: number, kind: BotKind, days: number, w
     const rc = rungConfig(rung, { tutorialDone, warmup: isWarmup(rung, prevRung) });
     const cfg: RunConfig = { ...headlessConfig(hashString(`career-${c}-${r}`), rc.profile, rc.drain, rc.noonCloud), tutorial: rc.tutorial, lesson: rc.lesson };
     if (v16) cfg.v16 = v16;
-    const { out: o, result } = playRun(cfg, kind, days);
+    const { out: o, result } = playRun(cfg, kind, days, false, true, { rung });
     if (o.lessonDone) tutorialDone = true;
     let missionDone = false;
     if (api && save) {
@@ -516,7 +526,8 @@ function sim16Ctx(o: { seedFrom: number; seeds: number; days: number; workers: n
 function rungJobs(bot: BotKind): Job[] {
   return [0, 1, 2, 3, 4].map((rung) => {
     const rc = rungConfig(rung, { tutorialDone: rung > 0 });
-    return { bot, profile: rc.profile, drain: rc.drain, noonCloud: rc.noonCloud, lesson: rc.lesson, rung };
+    // The touch bots' drivers read the rung (aim help's radius, Auto Snap on R0-R1).
+    return { bot, profile: rc.profile, drain: rc.drain, noonCloud: rc.noonCloud, lesson: rc.lesson, rung, ...(bot.endsWith('Touch') ? { opts: { rung } } : {}) };
   });
 }
 
@@ -607,8 +618,11 @@ async function careerMain(workers: number, days: number, off: Partial<V16Rules>)
   for (const a of api.ACHIEVEMENTS) console.log(`  ${a.id.padEnd(16)} ${((100 * out.filter((o) => o.achievements.includes(a.id)).length) / out.length).toFixed(0)}%`);
 }
 
-/** The --campaign rows: the v1.5 bots, and v1.6's Feat-seeking oracle and humanFeat (docs/V1_6_PLAN.md §2.6). */
-const CAMPAIGN_BOTS: readonly string[] = ['oracle', 'reactive', 'humanDial', 'oracle+feats', 'humanFeat'];
+/**
+ * The --campaign rows: the v1.5 bots, v1.6's Feat-seeking oracle and humanFeat (docs/V1_6_PLAN.md
+ * §2.6), and Controls v3's humanTouch, its rest variant, idle and idleTouch (§9.5).
+ */
+const CAMPAIGN_BOTS: readonly string[] = ['oracle', 'reactive', 'humanDial', 'oracle+feats', 'humanFeat', 'humanTouch', 'humanTouch+rest', 'idle', 'idleTouch'];
 
 async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<void> {
   const levelArg = arg('level', '');
@@ -616,7 +630,7 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   // --tries N: the human models play each level N times (another player's decisions each try).
   const tries = Math.max(1, Number(arg('tries', '1')));
   const bots: string[] = botArg === 'all' ? [...CAMPAIGN_BOTS] : botArg.split(',');
-  const kindOf = (b: string): BotKind => (b === 'oracle+feats' ? 'oracle' : (b as BotKind));
+  const kindOf = (b: string): BotKind => (b === 'oracle+feats' ? 'oracle' : b === 'humanTouch+rest' ? 'humanTouch' : (b as BotKind));
   for (const b of bots) if (!BOT_KINDS.includes(kindOf(b))) throw new Error(`unknown bot ${b}`);
   const ids = levelArg !== '' ? levelArg.split(',').map(Number) : Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1);
   for (const id of ids) if (!CAMPAIGN_LEVELS[id - 1]) throw new Error(`unknown level ${id}`);
@@ -626,16 +640,26 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   for (const id of ids) {
     for (const bot of bots) {
       const l = CAMPAIGN_LEVELS[id - 1] as LevelDef;
-      const extra = { ...(v16 ? { v16 } : {}), ...(bot === 'oracle+feats' ? { opts: { feats: true }, label: bot } : {}), ...(bot === 'reactive' && verbGoal(l) ? { relaxed: true } : {}) };
+      const extra = {
+        ...(v16 ? { v16 } : {}),
+        ...(bot === 'oracle+feats' ? { opts: { feats: true }, label: bot } : {}),
+        ...(bot === 'humanTouch+rest' ? { opts: { rest: true }, label: bot } : {}),
+        ...(bot === 'reactive' && verbGoal(l) ? { relaxed: true } : {}),
+        // §9.5: idle and idleTouch both play with the lesson off.
+        ...(bot === 'idle' || bot === 'idleTouch' ? { lesson: false } : {}),
+      };
       for (let t = 0; t < (bot.startsWith('human') ? tries : 1); t++) msgs.push({ kind: 'level', id, bot: kindOf(bot), salt: t, mech, ...extra });
     }
   }
   // Controls v3 (docs/CONTROLS_V3.md §9.5): --streams N adds the human comparison streams of each
   // human bot asked for, labelled `<bot>~`: stream s's try t (t < --tries) plays decision stream
   // streamSalt(s, t) (held out: the bake plays 101-110 and 201-220). --json writes their outcomes.
-  const streams = Math.max(0, Number(arg('streams', '0')));
-  const streamBots = streams > 0 ? bots.filter((b) => b.startsWith('human')) : [];
-  for (const id of ids) for (const bot of streamBots) for (let t = 0; t < tries; t++) for (let k = 0; k < streams; k++) msgs.push({ kind: 'level', id, bot: kindOf(bot), salt: streamSalt(k, t), mech, label: `${bot}~` });
+  const compare = arg('compare', '');
+  const base = compare !== '' ? (JSON.parse(readFileSync(compare, 'utf8')) as StreamFile) : null;
+  const streams = base ? base.streams : Math.max(0, Number(arg('streams', '0')));
+  const streamTries = base ? base.tries : tries;
+  const streamBots = base ? ['humanTouch'] : streams > 0 ? bots.filter((b) => b.startsWith('human')) : [];
+  for (const id of ids) for (const bot of streamBots) for (let t = 0; t < streamTries; t++) for (let k = 0; k < streams; k++) msgs.push({ kind: 'level', id, bot: kindOf(bot), salt: streamSalt(k, t), mech, label: `${bot}~` });
   const t0 = performance.now();
   const outs = await pool<LevelOut>(msgs, workers);
   const wall = (performance.now() - t0) / 1000;
@@ -790,12 +814,61 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
   if (bosses.length) line(false, parryBosses.length === bosses.length, 'every boss finale offers a parry Dare (advisory)', `${parryBosses.length} of ${bosses.length}${parryBosses.length < bosses.length ? ` (without: ${bosses.filter((l) => !parryBosses.includes(l)).map((l) => `L${l.id}`).join(', ')})` : ''}`);
   const two = daring.filter((l) => l.feats.length >= 2).length;
   console.log(`  (row) levels with two Dares: ${two}`);
+  // Controls v3 (docs/CONTROLS_V3.md §9.5).
+  if (bots.includes('idle') && bots.includes('idleTouch')) {
+    const idlePass = ids.filter((id) => of('idle', id, id).some((o) => o.passed));
+    const extra = ids.filter((id) => of('idleTouch', id, id).some((o) => o.passed) && !idlePass.includes(id));
+    console.log(`  (row) idle passes (lesson off; advisory, pre-existing content): ${idlePass.length ? idlePass.map((id) => `L${id}`).join(', ') : 'none'}`);
+    line(true, extra.length === 0, 'idleTouch (the driver at Standard) passes no level that plain idle does not (lesson off)', extra.length ? `also passes: ${extra.map((id) => `L${id}`).join(', ')}` : `${of('idleTouch').filter((o) => o.passed).length} passes, all idle's too`);
+  }
+  if (bots.includes('humanTouch')) {
+    gate(false, 'humanTouch passes ≥ 90% of levels 1-40 on its first try (advisory)', 'humanTouch', 40, 0.9);
+    if (bots.includes('humanTouch+rest')) {
+      const a = pct(of('humanTouch', 1, 40));
+      const b = pct(of('humanTouch+rest', 1, 40));
+      line(false, b >= a - 2, 'humanTouch resting its thumb ≥ humanTouch − 2 points on 1-40 (advisory)', `${b.toFixed(1)}% vs ${a.toFixed(1)}%`);
+    }
+    const share = (bot: string, f: (o: LevelOut) => boolean): string => `${((100 * of(bot).filter(f).length) / Math.max(1, of(bot).length)).toFixed(1)}%`;
+    const who = ['humanTouch', 'humanDial', 'oracle'].filter((b) => bots.includes(b));
+    console.log(`  (row) Dare met: ${who.map((b) => `${b} ${share(b, (o) => o.featMet)}`).join(', ')}; cool-run star (★3): ${who.map((b) => `${b} ${share(b, (o) => o.stars === 3)}`).join(', ')}`);
+  }
+  if (base) {
+    // The baseline: humanDial on the old content, stream s's try t at index t · streams + s.
+    const mine = (id: number): string => streamString(outs.filter((o) => o.bot === 'humanTouch~' && o.id === id), streams, streamTries);
+    const firsts = (str: string, n: number): number => [...str.slice(0, Math.min(n, streams))].filter((c) => c === '1').length;
+    const within = (str: string): number => {
+      let n = 0;
+      for (let k = 0; k < streams; k++) for (let t = 0; t < streamTries; t++) if (str[t * streams + k] === '1') {
+        n++;
+        break;
+      }
+      return n;
+    };
+    const old = (id: number): string => base.levels[id] ?? '';
+    const subs = ids.filter(retiredLevel);
+    const badSubs = subs.filter((id) => firsts(mine(id), 12) < firsts(old(id), 12) - 1);
+    line(true, badSubs.length === 0, `substituted levels: humanTouch's first try over 12 streams ≥ humanDial's on the old definition − 1 (${subs.length} levels)`, badSubs.length ? `short: ${badSubs.map((id) => `L${id} ${firsts(mine(id), 12)} vs ${firsts(old(id), 12)}`).join(', ')}` : `worst margin ${Math.min(...subs.map((id) => firsts(mine(id), 12) - firsts(old(id), 12)))}`);
+    const slots = [16, 29, 30, 31, 32].filter((id) => ids.includes(id));
+    const badSlots = slots.filter((id) => firsts(mine(id), 20) < 17);
+    line(true, badSlots.length === 0, 'new teaching slots: humanTouch passes on its first try on ≥ 17 of 20 streams', slots.map((id) => `L${id} ${firsts(mine(id), 20)}/20`).join(', '));
+    const chapters = [...new Set(ids.map((id) => Math.ceil(id / 10)))];
+    const badCh: string[] = [];
+    const cells: string[] = [];
+    for (const c of chapters) {
+      const lv = ids.filter((id) => Math.ceil(id / 10) === c);
+      const a = lv.reduce((n, id) => n + within(mine(id)), 0);
+      const b = lv.reduce((n, id) => n + within(old(id)), 0);
+      cells.push(`${c}: ${a}/${b}`);
+      if (a < b) badCh.push(`ch${c} ${a} < ${b}`);
+    }
+    line(true, badCh.length === 0, `chapters: humanTouch's passes within ${streamTries} tries over ${streams} streams ≥ humanDial's on the old content`, badCh.length ? badCh.join(', ') : cells.join(' '));
+  }
   const json = arg('json', '');
   if (json !== '' && streamBots.length > 0) {
-    const file: StreamFile = { what: 'SHADY --campaign streams (docs/CONTROLS_V3.md §9.5)', bot: streamBots[0] as string, streams, tries, levels: {} };
-    for (const id of ids) file.levels[id] = streamString(outs.filter((o) => o.bot === `${file.bot}~` && o.id === id), streams, tries);
+    const file: StreamFile = { what: 'SHADY --campaign streams (docs/CONTROLS_V3.md §9.5)', bot: streamBots[0] as string, streams, tries: streamTries, levels: {} };
+    for (const id of ids) file.levels[id] = streamString(outs.filter((o) => o.bot === `${file.bot}~` && o.id === id), streams, streamTries);
     writeFileSync(json, `${JSON.stringify(file)}\n`);
-    console.log(`\n  wrote ${file.bot}'s ${streams} streams × ${tries} tries on ${ids.length} levels to ${json}`);
+    console.log(`\n  wrote ${file.bot}'s ${streams} streams × ${streamTries} tries on ${ids.length} levels to ${json}`);
   }
   if (failures.length) {
     console.log(`\n${failures.length} gate(s) failed.`);
@@ -886,7 +959,9 @@ async function main(): Promise<void> {
       : [];
   // v1.6: --policy on the reactive rows that use the mechanics, --off on every row.
   if (policy !== null) base = base.map((j) => (j.bot === 'reactive' && !j.noMech ? { ...j, opts: { ...j.opts, policy } } : j));
-  const jobs = [...base, ...advisory, ...forecastJobs].map((j) => withOff(j, off));
+  // Controls v3 (docs/CONTROLS_V3.md §9.5): idleTouch and humanTouch on the comfort rungs (with --check).
+  const touchJobs: Job[] = check && !fc && botArg === 'all' && profileArg === '' ? [...rungJobs('idleTouch'), ...rungJobs('humanTouch')] : [];
+  const jobs = [...base, ...advisory, ...forecastJobs, ...touchJobs].map((j) => withOff(j, off));
 
   const msgs: WorkerMsg[] = [];
   jobs.forEach((job, ji) => {
@@ -934,6 +1009,11 @@ async function main(): Promise<void> {
   if (advisory.length) {
     console.log('ADVISORY (perception-limited human model on the comfort rungs):');
     advisory.forEach((_, i) => rowLine(base.length + i));
+  }
+  const touchAt = base.length + advisory.length + forecastJobs.length;
+  if (touchJobs.length) {
+    console.log('CONTROLS V3 (the touch bots through their driver: idleTouch, humanTouch on the comfort rungs):');
+    touchJobs.forEach((_, i) => rowLine(touchAt + i));
   }
 
   mechTable(base.map((j, ji) => ({ j, rs: of(ji) })), days);
@@ -1017,6 +1097,18 @@ async function main(): Promise<void> {
     const spm = swingsPerMin(rs);
     advLines.push(`  ${spm >= 1 && spm <= 2 ? 'PASS' : 'MISS'}  reactive p3 1.0-2.0 SWINGs per minute: ${spm.toFixed(2)} (SWING Snow ${(100 * swingSnowShare(rs)).toFixed(1)}% of run Snow)`);
   }
+  // Controls v3 advisory rows (§9.5): humanTouch outlives humanDial on every rung; idleTouch R0-R1 printed.
+  touchJobs.forEach((j, i) => {
+    if (j.bot !== 'humanTouch') return;
+    const hd = advisory.findIndex((a) => a.rung === j.rung);
+    if (hd < 0) return;
+    const a = median(deathMinutes(of(touchAt + i)));
+    const b = median(deathMinutes(of(base.length + hd)));
+    advLines.push(`  ${a >= b ? 'PASS' : 'MISS'}  humanTouch R${j.rung} outlives humanDial R${j.rung} (median): ${clockOf(a, days)} vs ${clockOf(b, days)}`);
+  });
+  touchJobs.forEach((j, i) => {
+    if (j.bot === 'idleTouch' && (j.rung ?? 0) <= 1) advLines.push(`  (row) idleTouch R${j.rung}: first night ${(100 * firstNight(of(touchAt + i))).toFixed(0)}%, median death ${clockOf(median(deathMinutes(of(touchAt + i))), days)}`);
+  });
   if (advLines.length) {
     console.log('\nAdvisory (PASS/MISS never fails --check):');
     for (const l of advLines) console.log(l);
@@ -1068,6 +1160,13 @@ async function main(): Promise<void> {
   for (const f of forecastJobs.length ? FORECAST_IDS : []) {
     gates(`[${f}] `, (bot, profile) => of(jobs.findIndex((j) => j.forecast === f && j.bot === bot && j.profile === profile && j.rung === undefined)), true);
   }
+  // Controls v3 (§9.5): aim help never plays alone on the comfort rungs R2-R4.
+  touchJobs.forEach((j, i) => {
+    if (j.bot !== 'idleTouch' || (j.rung ?? 0) < 2) return;
+    const rs = of(touchAt + i);
+    const n = rs.filter((r) => !r.died || r.minutes >= 720).length;
+    report(n === 0, `idleTouch R${j.rung} (the driver at Standard) reaches the first night on 0 seeds`, `${n} of ${rs.length}`);
+  });
   const worldFails = failures.filter((f) => f.includes('rescues') || f.includes('unresolved'));
   console.log(`  ${worldFails.length ? 'FAIL' : 'PASS'}  world: rescues per chunk ≤ 0.8 and unresolved = 0 on every checked world kind${worldFails.length ? `: ${worldFails.join('; ')}` : ''}`);
   if (failures.length) {

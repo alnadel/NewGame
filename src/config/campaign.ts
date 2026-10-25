@@ -424,6 +424,15 @@ export function mechanicsOf(levelId: number | null): Mechanics {
 }
 
 /**
+ * Controls v3 (§5.3, §9.4): one of the 46 levels the retirement changed: a new teaching slot (L16,
+ * 29-32) or a composed level whose draw carried a retired id. Tooling (the gates of §9.5) reads it.
+ */
+export function retiredLevel(id: number): boolean {
+  if (id <= TEACH_LEVELS) return id === 16 || (id >= 29 && id <= 32);
+  return composeDraw(id, levelSeed(id, 0), CHAPTERS[chapterOf(id) - 1] as Chapter).some(isRetired);
+}
+
+/**
  * Draws the concepts of composed level `id` (41-200): the chapter's headline first, two or three in
  * all (retired ids included: `substitute` replaces them).
  */
