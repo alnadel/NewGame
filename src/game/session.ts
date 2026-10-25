@@ -136,7 +136,7 @@ import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { createMechanics } from './mechanics.ts';
-import { hudButton, hudButtonHit } from '../render/hud.ts';
+import { hudButton, hudButtonHit, hudScale } from '../render/hud.ts';
 import { createInput, type Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
@@ -880,6 +880,9 @@ export class Session {
     root.setProperty('--nubs-y', `${Math.round(nubsY)}px`);
     root.setProperty('--halo-r', `${Math.round(haloR)}px`);
     root.setProperty('--nubs-clear', `${Math.round(h - nubsY + haloR)}px`);
+    // Controls v3: the top of the action button's meter pill (its centre 88k up, the pill 66k above
+    // that, 20k tall each way): a TAG's cue hangs below the dial only when it fits above this.
+    root.setProperty('--pill-top', `${Math.round(v.vy + v.vh - v.safe.bottom - 174 * hudScale(v))}px`);
     root.setProperty('--world-left', `${Math.round(v.vx)}px`);
     root.setProperty('--world-top', `${Math.round(v.vy)}px`);
     root.setProperty('--world-width', `${Math.round(v.vw)}px`);

@@ -201,8 +201,10 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
     shownCue = id === null ? null : { id, dir };
     cueEl.classList.toggle('is-on', id !== null);
     if (id === null) return;
-    // Elementals v2: a TAG's line hangs below the dial, clear of what lies ahead (verb ghost, first target, CLEAN!).
-    cueEl.classList.toggle('is-tag', id.startsWith('tag-'));
+    // Elementals v2: a TAG's line hangs below the dial, clear of what lies ahead (verb ghost, first
+    // target, CLEAN!), when two lines of it (65 px) fit above the action button's meter pill (Controls
+    // v3); on short screens (360x640) it takes the cue's place above the dial instead.
+    cueEl.classList.toggle('is-tag', id.startsWith('tag-') && (rootPx('--nubs-y') ?? 0) + (rootPx('--halo-r') ?? 0) + 109 <= (rootPx('--pill-top') ?? 1e9));
     renderCue(id, dir);
     const ms = cueDuration(id, dir);
     if (ms !== null) cueTimer = window.setTimeout(() => showCue(null), ms);
