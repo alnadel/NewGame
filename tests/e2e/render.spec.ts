@@ -283,7 +283,9 @@ test.describe('draw-call budget', () => {
   // there; v1.1 adds about 85 decal blits, a contact-AO sprite per caster and the atmosphere layer.
   test('a full-quality play frame stays within its canvas-call budget', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile', 'one run is enough');
-    await seedSave(page, OPEN_SAVE);
+    // The first-run lesson passed, so the frame draws the action button (Controls v3 §12.4: the button
+    // replaces the coin; a lesson run shows none before its first full meter).
+    await seedSave(page, { ...OPEN_SAVE, flags: { tutorialDone: true } });
     await countCalls(page);
     await openGame(page, 'test=1&perf=0&seed=42&day=1&t=9:00&plan=0');
     await keepAlive(page);
@@ -317,7 +319,8 @@ test.describe('draw-call budget', () => {
     expect(per.drawImage, JSON.stringify(per)).toBeLessThanOrEqual(190);
     // 190 and 77: the frame shows the first bud tip, whose icon disc now draws its glyph (v1.6 fix
     // round 1; it was blank): +3 fills and +1 stroke over the 185 and 75 measured before. On the
-    // exact tick (review of economy iteration 2) it measures 148-150 / 175 / 71, loaded or not.
+    // exact tick (review of economy iteration 2) it measures 148-150 / 175 / 71, loaded or not; with
+    // Controls v3's camera and the action button, 156 / 183 / 73.
     expect(per.fill, JSON.stringify(per)).toBeLessThanOrEqual(190);
     expect(per.stroke, JSON.stringify(per)).toBeLessThanOrEqual(77);
   });
@@ -355,7 +358,10 @@ test.describe('Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4)', () => 
   // Steam's world (five cottages in view) and its chapter's snow (Flurry Fields: ~24 flakes) issue
   // 200 fills at that moment before any trial art (measured at C0c); the trial's objects, Tag Stones
   // and HUD chips are cached sprites, so its frame measures 195-198: its fill ceiling allows the world.
-  const FILL: Record<number, number> = { 5: 216 };
+  // Controls v3's camera (§5.2) shows more of the world ahead of Nubs: T7's frame went from 181 fills
+  // at C0c to 192 with it (T2 174 → 188 and T4 164 → 184 stay under 190), all of it world, so its
+  // ceiling allows the world too (docs/CONTROLS_V3.md §16).
+  const FILL: Record<number, number> = { 5: 216, 7: 196 };
 
   for (const n of [1, 2, 3, 4, 5, 6, 7]) {
     test(`Trial ${n}, 3 s into leg 1: the Nubs frame's ceilings, ≤ 3 passes and ≤ 12 sprite layer redraws a second`, async ({ page }, info) => {
@@ -487,7 +493,7 @@ test.describe('Controls v3 action button (docs/CONTROLS_V3.md §7.1, §12.2)', (
     b = await button(page);
     c = await px(page, b.x - 24 * k, b.y);
     expect(Math.min(...c), String(c)).toBeGreaterThan(200);
-    // The chevron's white fill brightens the rim's east side (the pale ground was there before).
+    // The chevron (white, ink-edged) changes the rim's east side, whatever the ground there was.
     const strip = async (): Promise<number[]> => {
       const out: number[] = [];
       for (let i = -6; i <= 7; i++) out.push(Math.max(...(await px(page, b.x + (51 + i) * k, b.y))));
@@ -498,7 +504,8 @@ test.describe('Controls v3 action button (docs/CONTROLS_V3.md §7.1, §12.2)', (
     await page.waitForTimeout(300);
     expect((await state(page)).drive.vane).toBe(1);
     const after = await strip();
-    expect(after.filter((v, i) => v > (before[i] as number) + 12).length, `${before} → ${after}`).toBeGreaterThanOrEqual(5);
+    expect(after.filter((v, i) => Math.abs(v - (before[i] as number)) > 12).length, `${before} → ${after}`).toBeGreaterThanOrEqual(5);
+    expect(Math.max(...after), `${before} → ${after}`).toBeGreaterThanOrEqual(250);
     await info.attach('gust-vane', { body: await page.screenshot(), contentType: 'image/png' });
     expect(errors).toEqual([]);
   });
