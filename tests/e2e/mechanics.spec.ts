@@ -1,5 +1,5 @@
-// v1.5 core mechanics on the game side (docs/V1_5_PLAN.md): the Cold Snap input (a quick swipe
-// down anywhere, Down/S, a tap on the full frost meter) and the render-only demos of buds, a bloom,
+// v1.5 core mechanics on the game side (docs/V1_5_PLAN.md): the Cold Snap input (Down/S, a tap on
+// the full frost meter) and the render-only demos of buds, a bloom,
 // the full meter, a snap and deep shade. Input is measured where it is made (the test hook's
 // mech().snaps counts the snaps input asked for), so these hold whatever the sim does with them.
 import { expect, test, type Page } from '@playwright/test';
@@ -14,7 +14,7 @@ async function playLevel(page: Page): Promise<{ cx: number; cy: number }> {
   const box = (await page.locator('canvas#game').boundingBox())!;
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height * 0.45;
-  // A swipe down on the intro card (the hold) starts the run but never snaps.
+  // A stroke down on the intro card (the hold) starts the run but never snaps.
   await swipe(page, cx, cy, 0, 90, 90, 3);
   expect((await mech(page)).snaps).toBe(0);
   await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.state().phase)).toBe('day');
@@ -34,21 +34,9 @@ async function swipe(page: Page, x: number, y: number, dx: number, dy: number, m
   await page.mouse.up();
 }
 
-test('a quick swipe down asks for one Cold Snap; horizontal drags and flicks never do', async ({ page }) => {
-  const errors = watchErrors(page);
-  const { cx, cy } = await playLevel(page);
-  // One quick stroke (a loaded machine delivers stepped moves too late for a swipe).
-  await swipe(page, cx, cy, 6, 110, 30, 1);
-  expect((await mech(page)).snaps).toBe(1);
-  // A drag that drifts down, a fast flick and an upward stroke: no snap.
-  await swipe(page, cx - 120, cy, 240, 40, 300, 10);
-  await swipe(page, cx + 100, cy, -200, 24, 80, 4);
-  await swipe(page, cx, cy + 60, 0, -120, 120);
-  expect((await mech(page)).snaps).toBe(1);
-  expect(errors).toEqual([]);
-});
-
-test('Down and S ask for a Cold Snap during play', async ({ page, isMobile }) => {
+// Controls v3 C0a (docs/CONTROLS_V3.md §11.1): the swipe and the coin tap are gone; the button and
+// the keys come back through the driver, and these cases are rewritten when UI lands (§12.2).
+test.fixme('Down and S ask for a Cold Snap during play', async ({ page, isMobile }) => {
   test.skip(isMobile, 'keyboard: the desktop project');
   await playLevel(page);
   await page.keyboard.press('ArrowDown');
@@ -56,7 +44,7 @@ test('Down and S ask for a Cold Snap during play', async ({ page, isMobile }) =>
   expect((await mech(page)).snaps).toBe(2);
 });
 
-test('the frost meter shows full and a tap on it asks for a Cold Snap', async ({ page }) => {
+test.fixme('the frost meter shows full and a tap on it asks for a Cold Snap', async ({ page }) => {
   await playLevel(page);
   await page.evaluate(() => window.__SHADY_TEST__!.demo('snapReady'));
   await expect.poll(async () => (await mech(page)).meter).toBe(true);

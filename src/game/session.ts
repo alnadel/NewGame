@@ -7,7 +7,6 @@ import {
   bridged,
   buildRunResult,
   burnSweet,
-  burnTarget,
   CAUSE_TIPS,
   COMFORT_MAX,
   CONCEPTS,
@@ -26,7 +25,6 @@ import {
   formatTimeOfDay,
   generateSome,
   groveCount,
-  growTarget,
   HEROES,
   isTrialId,
   lerpSnap,
@@ -42,7 +40,6 @@ import {
   rungConfig,
   splitMinutes,
   step,
-  tagLocked,
   tagTick,
   takeSnap,
   TRIAL_BASE,
@@ -131,7 +128,6 @@ import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { createMechanics } from './mechanics.ts';
-import { hudMeterHit } from '../render/hud.ts';
 import { Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
@@ -627,26 +623,10 @@ export class Session {
       onPress: () => this.onPress(),
       viewportWidth: () => this.renderer.scene.view.vw,
       safeBottom: () => this.renderer.scene.view.safe.bottom,
-      // v1.5 Cold Snap: only while a run plays past its start (never on the Title, the intro card,
-      // a pause or a menu), and the meter only where it is drawn.
-      // Elementals v2: only while Nubs walks and no TAG is due (the sim refuses the rest).
-      canSnap: () => this.ui.current() === 'play' && !this.paused && this.runActive && this.s.phase === 'day' && this.s.ready === 0 && (this.s.el === null || (this.s.nubs.hero === 'nubs' && !tagLocked(this.s))),
-      meterHit: (x, y) => hudMeterHit(this.renderer.scene.hud, x, y),
-      // Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the walking element's verb, the last drawn
-      // frame's ground mapping (camera.ts: sx = ox + x·S, sy = oy − y·S) and the targets under a press.
+      // Elementals v2 (docs/ELEMENTALS_V2.md §7.9): the walking element's verb and the last drawn
+      // frame's scale (camera.ts: sx = ox + x·S).
       verb: () => this.verbNow(),
-      toWorld: (x, y, out) => {
-        const v = this.renderer.scene.view;
-        if (x < v.vx || x > v.vx + v.vw || y < v.vy || y > v.vy + v.vh) return false;
-        out[0] = (x - v.ox) / v.S;
-        out[1] = (v.oy - y) / v.S;
-        return true;
-      },
       uPerPx: () => 1 / this.renderer.scene.view.S,
-      canTarget: (wx, wy) => {
-        const verb = this.verbNow();
-        return verb === 'burn' ? burnTarget(this.s, wx, wy) >= 0 : verb === 'grow' ? growTarget(this.s, wx, wy) >= 0 : false;
-      },
     });
     this.mech.route = (ev) => {
       const list = [ev];
@@ -1398,7 +1378,6 @@ export class Session {
     this.featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
-    this.input.dropVerbs();
     // An intro Trial records its frames for Retry from the Tag Stone (§7.11).
     this.rec = run.trial?.intro ? createReplay(run.cfg) : null;
     const botKind = this.params.bot ?? this.testBot;
@@ -1823,8 +1802,6 @@ export class Session {
     this.mech.onEvent(ev);
     switch (ev.e) {
       case 'tag':
-        // §4.1: a TAG ends the verb slot, and the sun press too when a held-sun leg (steer, blow) is involved.
-        this.input.cut(HEROES[ev.from].sunHeld || HEROES[ev.to].sunHeld);
         // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. The sun holds."
         this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
         this.ui.showCue(this.cueShown.id);

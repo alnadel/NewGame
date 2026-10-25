@@ -1,15 +1,13 @@
 // Elementals v2 (docs/ELEMENTALS_V2.md §7.9, §7.11, §9.6): the Title's pill (once the first-run lesson
 // is passed) opens the Elementals screen; the roster of five and the seven Trial tiles show their lock
-// states and labels, the stage its verb row; T1 from the screen starts level 1001 with Nubs, and each
-// element's verb is played with real pointer events on its own leg (testSkipToLeg): Ember's tap burns
-// the wall under the finger and leaves the sun alone, Up burns the next one; Drip follows a drag by
-// the finger's world distance with the sun held, Left steers west, the Pause button steers nothing;
-// Sprout's 1 s holds grow a soil patch and a gap; Gust's left swipe blows the wind west. The Cold
-// Snap coin snaps on a Nubs leg only. The Results say "Trial 1", Retry keeps it and "Trials" returns;
+// states and labels, the stage its verb row; Drip follows a drag by the finger's world distance with
+// the sun held (testSkipToLeg), Left steers west, the Pause button steers nothing. (Controls v3 C0a,
+// docs/CONTROLS_V3.md §11.1: the tap, hold and swipe cases are gone until UI rewrites them, §12.2.)
+// The Results say "Trial 1", Retry keeps it and "Trials" returns;
 // the stored save keeps elementals2 apart from the Journey; the reactive bot passes T1 and T4; a
 // point 340 u ahead of the walker lies below the HUD band.
 import { expect, test, type Page } from '@playwright/test';
-import { openGame, runCfg, screen, seedSave, skipToLeg, state, waitForScreen, watchErrors, worldToScreen, type ShadyState } from './helpers.ts';
+import { openGame, screen, seedSave, skipToLeg, state, waitForScreen, watchErrors, worldToScreen, type ShadyState } from './helpers.ts';
 
 /** Endless open (Level 3 passed) and the first-run lesson passed; nothing played on the Elementals yet. */
 function openSave(el?: object): object {
@@ -28,9 +26,6 @@ async function openElementals(page: Page): Promise<void> {
 const stored = (page: Page): Promise<{ elementals?: unknown; elementals2?: { stars: number[]; seen: boolean }; campaign: { stars: number[] } }> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('shady.save') ?? '{}'));
 
-type Obj = NonNullable<ShadyState['el']>['objs'][number];
-const WALLS = ['bramble', 'gate', 'ice'];
-
 /** Opens Trial n (?trial=), starts it and hands leg `leg` to the input, the game clock at `scale`. */
 async function playLeg(page: Page, n: number, leg: number, scale = 0.5): Promise<ShadyState> {
   await page.goto(`/?trial=${n}&test=1`);
@@ -43,20 +38,6 @@ async function playLeg(page: Page, n: number, leg: number, scale = 0.5): Promise
   // A drawn frame on the new leg (the camera follows the walker), and the sun settled.
   await page.waitForTimeout(300);
   return state(page);
-}
-
-/** The first object of `kinds` ahead of the walker on screen (24 CSS px ahead at least, below the HUD), with its screen point. */
-async function firstAhead(page: Page, kinds: string[], pred: (o: Obj) => boolean = (o) => o.state === 0): Promise<{ i: number; x: number; y: number }> {
-  const s = await state(page);
-  const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
-  const objs = s.el!.objs;
-  for (let i = 0; i < objs.length; i++) {
-    const o = objs[i] as Obj;
-    if (!kinds.includes(o.k) || !pred(o)) continue;
-    const p = await worldToScreen(page, o.x, o.y);
-    if (p.y < nubs.y - 24 && p.y > 90) return { i, ...p };
-  }
-  throw new Error(`no ${kinds.join('/')} ahead`);
 }
 
 test('the Title pill waits for the first-run lesson, then opens T1-T4; NEW until the screen is opened', async ({ page }) => {
@@ -130,43 +111,6 @@ test('an element tap points Play at its next Trial and shows its verb', async ({
   await expect(page.locator('.scr-elementals .el-verb small')).toHaveText('← → steer');
 });
 
-test("T1 from the screen starts with Nubs; Ember's tap burns the wall under the finger and leaves the sun alone; Up burns the next", async ({ page }) => {
-  const errors = watchErrors(page);
-  await seedSave(page, openSave());
-  await openGame(page);
-  await openElementals(page);
-  await page.locator('.trial-tile[data-trial="1"]').click();
-  await waitForScreen(page, 'play');
-  expect((await runCfg(page)).mode).toBe('campaign');
-  let s = await state(page);
-  expect([s.level, s.hero, s.verb]).toEqual([1001, 'nubs', 'sun']);
-  await page.keyboard.press('Space');
-  await expect.poll(async () => (await state(page)).phase).toBe('day');
-  await skipToLeg(page, 1);
-  await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(0.5));
-  await page.waitForTimeout(300);
-  s = await state(page);
-  expect([s.hero, s.verb, s.sunHeld]).toEqual(['ember', 'burn', false]);
-  // The sun settles (the bot's last drag has no lift), then a tap on the first wall burns it.
-  await expect.poll(async () => (await state(page)).omega, { timeout: 5000 }).toBe(0);
-  const wall = await firstAhead(page, WALLS);
-  const before = await state(page);
-  await page.mouse.move(wall.x, wall.y);
-  await page.mouse.down();
-  await page.mouse.up();
-  await expect.poll(async () => ((await state(page)).el!.objs[wall.i] as Obj).state, { timeout: 5000 }).toBeGreaterThan(0);
-  const after = await state(page);
-  // No catch, no turn: θ and ω are as they were.
-  expect(after.theta).toBe(before.theta);
-  expect(after.omega).toBe(0);
-  // Up burns the next wall ahead.
-  const lit = (x: ShadyState): number => x.el!.objs.filter((o) => WALLS.includes(o.k) && o.state > 0).length;
-  const n0 = lit(after);
-  await page.keyboard.press('ArrowUp');
-  await expect.poll(async () => lit(await state(page)), { timeout: 5000 }).toBeGreaterThan(n0);
-  expect(errors).toEqual([]);
-});
-
 test("T2: Drip follows a drag by the finger's world distance, the sun holds, Left steers west, Pause steers nothing", async ({ page }) => {
   // A slow clock: Drip's Size and Gust's Lift drain in the sun and rain while the test plays.
   let s = await playLeg(page, 2, 1, 0.25);
@@ -208,58 +152,6 @@ test("T2: Drip follows a drag by the finger's world distance, the sun holds, Lef
   await waitForScreen(page, 'play');
   await page.waitForTimeout(300);
   expect(Math.abs((await state(page)).el!.dx - dx2)).toBeLessThan(0.01);
-});
-
-test("T3: Sprout's 1 s holds grow the first soil patch and the first gap", async ({ page }) => {
-  const s = await playLeg(page, 3, 1);
-  expect([s.hero, s.verb]).toEqual(['sprout', 'grow']);
-  const hold = async (p: { x: number; y: number }): Promise<void> => {
-    await page.mouse.move(p.x, p.y);
-    await page.mouse.down();
-    await page.waitForTimeout(1000);
-    await page.mouse.up();
-  };
-  const plot = await firstAhead(page, ['plot'], (o) => o.size === 0);
-  await hold(plot);
-  await expect.poll(async () => ((await state(page)).el!.objs[plot.i] as Obj).size).toBeGreaterThan(0);
-  const gap = await firstAhead(page, ['gap'], (o) => o.size === 0);
-  await hold(gap);
-  await expect.poll(async () => ((await state(page)).el!.objs[gap.i] as Obj).size).toBeGreaterThan(0);
-  await expect.poll(async () => (await state(page)).el!.hold).toBe(-1);
-});
-
-test("T4: Gust's left swipe blows the wind west (the sun holds)", async ({ page }) => {
-  const s = await playLeg(page, 4, 1, 0.25);
-  expect([s.hero, s.verb]).toEqual(['gust', 'blow']);
-  await expect.poll(async () => (await state(page)).sunHeld).toBe(true);
-  const theta = (await state(page)).theta;
-  const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
-  const y = nubs.y - 140;
-  await page.mouse.move(nubs.x + 30, y);
-  await page.mouse.down();
-  for (let i = 1; i <= 3; i++) await page.mouse.move(nubs.x + 30 - 20 * i, y);
-  await page.mouse.up();
-  await expect.poll(async () => (await state(page)).el!.wind, { timeout: 5000 }).toBeLessThan(0);
-  const after = await state(page);
-  // A swipe costs 8 Lift (T4 keeps costMul 1).
-  expect(after.el!.spent).toBe(8);
-  expect(after.theta).toBe(theta);
-});
-
-test('the Cold Snap coin snaps on a Nubs leg and not on an Ember leg', async ({ page }) => {
-  await playLeg(page, 1, 0, 1);
-  // The start beat (the sim's ready count) ends before input may snap; the TAG's lock is 3.9 s in.
-  await page.waitForTimeout(1300);
-  await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.mech())).meter, { timeout: 5000 }).toBe(true);
-  const m = await page.evaluate(() => window.__SHADY_TEST__!.mech());
-  await page.mouse.click(m.meterX, m.meterY);
-  expect((await page.evaluate(() => window.__SHADY_TEST__!.mech())).snaps).toBe(1);
-  await skipToLeg(page, 1);
-  await page.waitForTimeout(300);
-  expect((await state(page)).hero).toBe('ember');
-  await page.mouse.click(m.meterX, m.meterY);
-  await page.keyboard.press('ArrowDown');
-  expect((await page.evaluate(() => window.__SHADY_TEST__!.mech())).snaps).toBe(1);
 });
 
 test("every Trial's intro card keeps its whole sentence, and the Pause card names the walker's verb and keys", async ({ page }, info) => {

@@ -27,13 +27,13 @@
 //
 // v1.5 frost meter (Cold Snap): an ice coin in the world rect's bottom-right corner, clear of the
 // edge and home-bar zones, shown on runs that fill it. Its ring fills ice-blue around a snowflake;
-// full, it glows and breathes with a bobbing "swipe down" chevron over it and a tap on it snaps
-// (game/input.ts asks hudMeterHit); while a snap lasts the ring drains white.
+// full, it glows and breathes with a bobbing chevron over it; while a snap lasts the ring drains
+// white. (Controls v3: the coin takes no taps; the action button replaces it.)
 //
 // Elementals v2 (docs/ELEMENTALS_V2.md §7.10): on a Trial the Cold Snap's coin shows only on Nubs'
 // legs (in the 3 s before a TAG it dims under a "TAG" chip: no snap then); another element's leg
 // shows a non-interactive meter pill in its place (its glyph and number on its face colour, one
-// cached sprite; it never sets meterShown, so a tap there is plain world). A wind chip under the
+// cached sprite; it never sets meterShown). A wind chip under the
 // row's right end shows an arrow per 15 u/s of the wind the way it blows, the breeze's share dimmed,
 // while Gust walks or a wind blows.
 //
@@ -742,7 +742,7 @@ export function drawHud(g: CanvasRenderingContext2D, h: HudState, v: View, inp: 
 
 /**
  * Elementals v2: the walking element's meter pill in the coin slot (its glyph and number on its
- * face colour). It never sets meterShown, so a tap there is plain world (hudMeterHit is false).
+ * face colour). It never sets meterShown.
  */
 function meterPill(g: CanvasRenderingContext2D, v: View, inp: HudInput, hero: HeroId): void {
   const k = hudScale(v);
@@ -831,13 +831,12 @@ function fillGradient(g: CanvasRenderingContext2D, h: HudState, level: boolean):
 const LEVEL_FILL = [0, '#B6F56A', 0.5, '#7FDB45', 1, '#3FB52A'];
 const DAY_FILL = [0, '#FF9E6B', 0.22, '#FFD27A', 0.5, '#FFF2B0', 0.78, '#FFC23D', 1, '#E3829E'];
 
-/** The frost meter's coin and ring radii, the ring's width and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px); a tap this far outside the ring still counts. */
+/** The frost meter's coin and ring radii, the ring's width and its margins from the world rect's right edge and the bottom inset (× the HUD scale, CSS px). */
 const METER_R = 28;
 const METER_RING = 34;
 const METER_RING_W = 6;
 const METER_SIDE = 34;
 const METER_BOTTOM = 44;
-const METER_SLOP = 10;
 /** v1.6: the Frost Bank's two charge coins hung under the meter: radius and spacing (× the HUD scale). */
 const BANK_R = 9;
 const BANK_DX = 11;
@@ -845,11 +844,6 @@ const BANK_DX = 11;
 export const SPILL_S = 0.6;
 export const POUR_S = 0.8;
 export const RING_FLASH_S = 0.35;
-
-/** (x, y) in CSS px is on the frost meter drawn ready last frame (a tap there snaps). */
-export function hudMeterHit(h: HudState, x: number, y: number): boolean {
-  return h.meterShown && h.meterFull && Math.hypot(Math.max(0, Math.abs(x - h.meterX) - h.meterSpan), y - h.meterY) <= h.meterR + METER_SLOP;
-}
 
 /**
  * The frost meter (see the header): an ice coin whose ring fills with frost, and with the Frost
