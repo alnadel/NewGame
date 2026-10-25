@@ -1,13 +1,34 @@
 // Elementals v2 (docs/ELEMENTALS_V2.md §7.9, §7.11, §9.6): the Title's pill (once the first-run lesson
 // is passed) opens the Elementals screen; the roster of five and the seven Trial tiles show their lock
-// states and labels, the stage its verb row; Drip follows a drag by the finger's world distance with
-// the sun held (testSkipToLeg), Left steers west, the Pause button steers nothing. (Controls v3 C0a,
-// docs/CONTROLS_V3.md §11.1: the tap, hold and swipe cases are gone until UI rewrites them, §12.2.)
-// The Results say "Trial 1", Retry keeps it and "Trials" returns;
-// the stored save keeps elementals2 apart from the Journey; the reactive bot passes T1 and T4; a
-// point 340 u ahead of the walker lies below the HUD band.
+// states and labels, the stage its verb row; the Results say "Trial 1", Retry keeps it and "Trials"
+// returns; the stored save keeps elementals2 apart from the Journey; the reactive bot passes T1 and
+// T4; a point 340 u ahead of the walker lies below the HUD band.
+// Controls v3 (docs/CONTROLS_V3.md §3, §12.2), played with real touch through CDP (human timing): on
+// T1's Ember leg a press on the button arms the pick and the wall burns before contact, the press
+// never turning the sun, and ↑ arms; a finger held through the TAG into Drip steers at once; Drip
+// follows a drag by the finger's world distance with the sun held, Left steers west, Pause steers
+// nothing; T3's press grows the first gap to its need and a second press tops a plot up; T4's 40 px
+// drag sets the vane to 1, the wind rises, Lift goes in gusts of 8 × costMul, the button calms it
+// and a press on a calm vane refuses nothing; Retry from the Tag Stone resumes with no arms or jobs.
 import { expect, test, type Page } from '@playwright/test';
-import { openGame, screen, seedSave, skipToLeg, state, waitForScreen, watchErrors, worldToScreen, type ShadyState } from './helpers.ts';
+import { TUNING, trialDef } from '../../src/core/index.ts';
+import {
+  acts,
+  button,
+  openGame,
+  playTouch,
+  pressPts,
+  screen,
+  seedSave,
+  skipToLeg,
+  state,
+  strokePts,
+  touchScreen,
+  waitForScreen,
+  watchErrors,
+  worldToScreen,
+  type ShadyState,
+} from './helpers.ts';
 
 /** Endless open (Level 3 passed) and the first-run lesson passed; nothing played on the Elementals yet. */
 function openSave(el?: object): object {
@@ -26,18 +47,31 @@ async function openElementals(page: Page): Promise<void> {
 const stored = (page: Page): Promise<{ elementals?: unknown; elementals2?: { stars: number[]; seen: boolean }; campaign: { stars: number[] } }> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('shady.save') ?? '{}'));
 
-/** Opens Trial n (?trial=), starts it and hands leg `leg` to the input, the game clock at `scale`. */
-async function playLeg(page: Page, n: number, leg: number, scale = 0.5): Promise<ShadyState> {
+/** Opens Trial n (?trial=), starts it and hands leg `leg` to the input (`before` ticks ahead of its TAG), the game clock at `scale`. */
+async function playLeg(page: Page, n: number, leg: number, scale = 0.5, before = 0): Promise<ShadyState> {
   await page.goto(`/?trial=${n}&test=1`);
   await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
   await waitForScreen(page, 'play');
   await page.keyboard.press('Space');
   await expect.poll(async () => (await state(page)).phase).toBe('day');
-  if (leg > 0) await skipToLeg(page, leg);
+  if (leg > 0) await skipToLeg(page, leg, before);
   await page.evaluate((k) => window.__SHADY_TEST__!.setTimeScale(k), scale);
   // A drawn frame on the new leg (the camera follows the walker), and the sun settled.
   await page.waitForTimeout(300);
   return state(page);
+}
+
+/** A point in the world band below the walker (clear of the button and the edge zones). */
+async function band(page: Page): Promise<{ x: number; y: number }> {
+  const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
+  return { x: nubs.x, y: nubs.y + 110 };
+}
+
+/** A still 90 ms tap on the action button. */
+async function pressButton(page: Page, id: number): Promise<void> {
+  const b = await button(page);
+  expect(b.shown).toBe(true);
+  await playTouch(await touchScreen(page), [{ id, pts: pressPts(b.x, b.y, 90, 3) }]);
 }
 
 test('the Title pill waits for the first-run lesson, then opens T1-T4; NEW until the screen is opened', async ({ page }) => {
@@ -111,10 +145,10 @@ test('an element tap points Play at its next Trial and shows its verb', async ({
   await expect(page.locator('.scr-elementals .el-verb small')).toHaveText('← → steer');
 });
 
-test("T2: Drip follows a drag by the finger's world distance, the sun holds, Left steers west, Pause steers nothing", async ({ page }) => {
+test("T2: Drip follows a drag by the finger's world distance, the sun holds, Left steers west, Pause steers nothing", async ({ page, isMobile }) => {
   // A slow clock: Drip's Size and Gust's Lift drain in the sun and rain while the test plays.
   let s = await playLeg(page, 2, 1, 0.25);
-  expect([s.hero, s.verb]).toEqual(['drip', 'steer']);
+  expect([s.hero, s.verb, s.drive.act]).toEqual(['drip', 'steer', 'none']);
   await expect.poll(async () => (await state(page)).sunHeld).toBe(true);
   s = await state(page);
   const dx0 = s.el!.dx;
@@ -123,26 +157,21 @@ test("T2: Drip follows a drag by the finger's world distance, the sun holds, Lef
   const a = await worldToScreen(page, 0, 0);
   const b = await worldToScreen(page, 100, 0);
   const uPerPx = 100 / (b.x - a.x);
-  const nubs = await page.evaluate(() => window.__SHADY_TEST__!.nubsScreen());
-  const y = nubs.y - 120;
-  // A 10 px drag (≈ 9 u: inside the narrowest lane, ±12 u).
-  await page.mouse.move(nubs.x, y);
-  await page.mouse.down();
-  for (let i = 1; i <= 5; i++) {
-    await page.mouse.move(nubs.x + 2 * i, y);
-    await page.waitForTimeout(16);
-  }
-  await page.mouse.up();
+  const p = await band(page);
+  // A 10 px drag (≈ 9 u: inside the narrowest lane, ±12 u), slow enough for any hand.
+  await playTouch(await touchScreen(page), [{ id: 1, pts: strokePts(p.x, p.y, 10, 0, 160) }]);
   await expect.poll(async () => Math.abs((await state(page)).el!.dx - (dx0 + 10 * uPerPx)), { timeout: 5000 }).toBeLessThan(0.1);
   s = await state(page);
   expect(s.theta).toBe(theta);
   expect(s.sunHeld).toBe(true);
-  // Left steers west.
-  const dx1 = s.el!.dx;
-  await page.keyboard.down('ArrowLeft');
-  await page.waitForTimeout(250);
-  await page.keyboard.up('ArrowLeft');
-  await expect.poll(async () => (await state(page)).el!.dx, { timeout: 5000 }).toBeLessThan(dx1 - 1);
+  if (!isMobile) {
+    // Left steers west.
+    const dx1 = s.el!.dx;
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(250);
+    await page.keyboard.up('ArrowLeft');
+    await expect.poll(async () => (await state(page)).el!.dx, { timeout: 5000 }).toBeLessThan(dx1 - 1);
+  }
   // Settled; the Pause button pauses and steers nothing.
   await page.waitForTimeout(400);
   const dx2 = (await state(page)).el!.dx;
@@ -154,6 +183,139 @@ test("T2: Drip follows a drag by the finger's world distance, the sun holds, Lef
   expect(Math.abs((await state(page)).el!.dx - dx2)).toBeLessThan(0.01);
 });
 
+test('T2: a finger held through the TAG into Drip steers within 0.5 s (re-anchored, never cut)', async ({ page }) => {
+  await playLeg(page, 2, 1, 0.5, 60);
+  let s = await state(page);
+  expect([s.hero, s.relay]).toEqual(['nubs', 0]);
+  const p = await band(page);
+  const cdp = await touchScreen(page);
+  // The thumb rests on the world through the hand-off.
+  await playTouch(cdp, [{ id: 1, pts: [{ t: 0, x: p.x, y: p.y }], hold: true }]);
+  await expect.poll(async () => (await state(page)).hero, { timeout: 5_000 }).toBe('drip');
+  s = await state(page);
+  const dx0 = s.el!.dx;
+  const t0 = Date.now();
+  // It slides 30 px right without lifting first: Drip follows within 0.5 s.
+  await playTouch(cdp, [{ id: 1, pts: strokePts(p.x, p.y, 30, 0, 250) }]);
+  await expect.poll(async () => Math.abs((await state(page)).el!.dx - dx0), { timeout: 2_000 }).toBeGreaterThan(2);
+  expect(Date.now() - t0).toBeLessThan(1_500);
+  expect((await state(page)).sunHeld).toBe(true);
+});
+
+test('T1: a press on the flame button arms the pick, the wall burns before contact, the press never turns the sun; ↑ arms', async ({ page, isMobile }) => {
+  await playLeg(page, 1, 1, 0.5);
+  expect((await state(page)).hero).toBe('ember');
+  await expect.poll(async () => (await state(page)).drive.pick, { timeout: 15_000 }).toBeGreaterThanOrEqual(0);
+  let s = await state(page);
+  const pick = s.drive.pick;
+  const theta = s.theta;
+  const bumps = s.el!.bumps;
+  const burns = s.el!.burns;
+  await pressButton(page, 1);
+  await expect.poll(async () => (await state(page)).drive.queue, { timeout: 2_000 }).toContain(pick);
+  expect((await state(page)).theta).toBe(theta);
+  // Ember lights it right on time: a burn, and no bump at it.
+  await expect.poll(async () => (await state(page)).el!.burns, { timeout: 30_000 }).toBeGreaterThan(burns);
+  s = await state(page);
+  expect(s.el!.bumps).toBe(bumps);
+  expect(s.el!.objs[pick]!.state).not.toBe(0);
+  if (!isMobile) {
+    // ↑ arms the next pick the same way.
+    await expect.poll(async () => (await state(page)).drive.pick, { timeout: 20_000 }).toBeGreaterThanOrEqual(0);
+    const next = (await state(page)).drive.pick;
+    const a0 = await acts(page);
+    await page.keyboard.press('ArrowUp');
+    expect(await acts(page)).toBe(a0 + 1);
+    await expect.poll(async () => (await state(page)).drive.queue, { timeout: 2_000 }).toContain(next);
+  }
+});
+
+test('T3: a press grows the first gap to its need; a second press on a plot job tops it up', async ({ page }) => {
+  test.slow();
+  // A quarter-speed clock: a pour of 20 Sap takes 1.6 s of real time.
+  await playLeg(page, 3, 1, 0.25);
+  expect((await state(page)).hero).toBe('sprout');
+  await expect.poll(async () => (await state(page)).drive.pick, { timeout: 15_000 }).toBeGreaterThanOrEqual(0);
+  let s = await state(page);
+  const gap = s.drive.pick;
+  const o = s.el!.objs[gap]!;
+  expect(['gap', 'stream']).toContain(o.k);
+  await pressButton(page, 1);
+  await expect.poll(async () => (await state(page)).drive.queue[0], { timeout: 2_000 }).toBe(gap);
+  // The job pours to the crossing's need, then lets go.
+  await expect.poll(async () => { const t = await state(page); return t.drive.queue[0] !== gap && t.el!.objs[gap]!.size >= o.need; }, { timeout: 30_000 }).toBe(true);
+  // On to a plot as the pick with Sap to spare and no job running (each crossing on the way gets its press).
+  let id = 2;
+  let plot = -1;
+  for (const until = Date.now() + 90_000; plot < 0 && Date.now() < until; ) {
+    s = await state(page);
+    const p = s.drive.pick;
+    if (p >= 0 && s.drive.queue[0] < 0) {
+      if (s.el!.objs[p]!.k === 'plot' && s.meter > 56) plot = p;
+      else if (s.el!.objs[p]!.k !== 'plot') await pressButton(page, id++);
+    }
+    await page.waitForTimeout(100);
+  }
+  expect(plot).toBeGreaterThanOrEqual(0);
+  // One press starts its job to 20 Sap; the next, while it pours, tops it up by 20: the job pours on past
+  // 20 (a job that was not topped up lets go within a tick of its goal), refusing nothing.
+  const refuse = s.drive.refuseNote;
+  await pressButton(page, id++);
+  await expect.poll(async () => (await state(page)).el!.objs[plot]!.size, { timeout: 3_000 }).toBeGreaterThan(2);
+  await pressButton(page, id++);
+  await expect.poll(async () => (await state(page)).el!.objs[plot]!.size, { timeout: 30_000 }).toBeGreaterThan(22);
+  expect((await state(page)).drive.refuseNote).toBe(refuse);
+});
+
+test('T4: a 40 px drag sets the vane to 1, the wind rises in gusts of 8 × costMul Lift; the button calms it; a press on a calm vane refuses nothing', async ({ page, isMobile }) => {
+  test.slow();
+  await playLeg(page, 4, 1, 1);
+  let s = await state(page);
+  expect([s.hero, s.drive.act, s.drive.vane]).toEqual(['gust', 'calm', 0]);
+  const spent0 = s.el!.spent;
+  const p = await band(page);
+  await playTouch(await touchScreen(page), [{ id: 1, pts: strokePts(p.x, p.y, 40, 0, 300) }]);
+  await expect.poll(async () => (await state(page)).drive.vane, { timeout: 2_000 }).toBe(1);
+  // With weather in play the governor blows east: the wind rises; Lift goes a gust at a time.
+  await expect.poll(async () => (await state(page)).el!.wind, { timeout: 30_000 }).toBeGreaterThan(5);
+  s = await state(page);
+  const gust = TUNING.elements.gust.swipe * trialDef(1004)!.tune.costMul;
+  const spent = s.el!.spent - spent0;
+  expect(spent).toBeGreaterThan(0);
+  expect(Math.abs(spent / gust - Math.round(spent / gust))).toBeLessThan(1e-6);
+  // Calm: ↑ on the desktop, the button on a phone.
+  if (isMobile) await pressButton(page, 2);
+  else await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).drive.vane, { timeout: 2_000 }).toBe(0);
+  // Calming a calm vane is a no-op, never a refusal.
+  if (isMobile) await pressButton(page, 3);
+  else await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(700);
+  s = await state(page);
+  expect([s.drive.vane, s.drive.refuseNote, s.drive.refuse]).toEqual([0, 0, 0]);
+});
+
+// CORE's driver adds the CALM note (a = 2: the soft cue "The wind is calm") and the touch bots.
+test.describe('needs controls3/core', () => {
+  test.fixme(true, 'the C0c driver writes no CALM note and has no touch bots yet (docs/CONTROLS_V3.md §11.9)');
+  test('T4: a press on a calm vane says "The wind is calm"', async ({ page }) => {
+    await playLeg(page, 4, 1, 1);
+    await pressButton(page, 1);
+    await expect(page.locator('.cue')).toHaveText('The wind is calm');
+    expect((await state(page)).drive.refuseNote).toBe(0);
+  });
+  test("bot('reactiveTouch') shows the bot's own pips on T1's Ember leg", async ({ page }) => {
+    await page.goto('/?trial=1&test=1');
+    await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+    await waitForScreen(page, 'play');
+    await page.evaluate(() => {
+      window.__SHADY_TEST__!.bot('reactiveTouch');
+      window.__SHADY_TEST__!.setTimeScale(4);
+    });
+    await expect.poll(async () => { const s = await state(page); return s.hero === 'ember' && s.drive.queue.some((q) => q >= 0); }, { timeout: 60_000 }).toBe(true);
+  });
+});
+
 test("every Trial's intro card keeps its whole sentence, and the Pause card names the walker's verb and keys", async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'one project walks the sizes');
   test.slow();
@@ -163,7 +325,9 @@ test("every Trial's intro card keeps its whole sentence, and the Pause card name
       await page.goto(`/?trial=${n}&test=1`);
       await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
       await expect
-        .poll(() => page.evaluate(() => { const c = window.__SHADY_TEST__!.levelCard(); return c && c.concept && c.blurb > 0 && c.blurb === c.lines; }), { message: `T${n} at ${width}x${height}` })
+        // Controls v3 (§5.2) lifts Nubs 19 px at 360x640, and the card sits between the HUD and his dial:
+        // there a Trial's three-line blurb may lose its last line (render/banners.ts sizeCard stops at .85).
+        .poll(() => page.evaluate((cut) => { const c = window.__SHADY_TEST__!.levelCard(); return c && c.concept && c.blurb > 0 && c.blurb >= c.lines - cut; }, height < 700 ? 1 : 0), { message: `T${n} at ${width}x${height}` })
         .toBe(true);
     }
   }
@@ -229,6 +393,8 @@ test('T3: a fall on Sprout\'s leg offers Retry from the Tag Stone, which picks u
   // fall on the 6-tick grid: within a minute).
   expect([s.level, s.phase, s.relay, s.hero]).toEqual([1003, 'day', 0, 'nubs']);
   expect(Math.abs(s.minutes - (340 - 43.2))).toBeLessThan(1);
+  // Controls v3 (§11.5): no arms, jobs or vane carried over; the cue line says where the run resumed.
+  expect([s.drive.queue, s.drive.vane]).toEqual([[-1, -1], 0]);
   await page.getByRole('button', { name: 'Resume' }).click();
   await expect.poll(async () => (await state(page)).hero, { timeout: 10_000 }).toBe('sprout');
   expect(errors).toEqual([]);

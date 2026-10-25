@@ -2803,6 +2803,7 @@ export class Session {
       drive: {
         act: dv.act,
         state: dv.state,
+        fill: dv.fill,
         pick: dv.pick,
         queue: Array.from(dv.queue),
         due: dv.due,
@@ -2823,7 +2824,7 @@ export class Session {
               wind: s.el.wind,
               hold: s.el.hold,
               spent: s.el.spent,
-              objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, veiled: veiled(s, o) })),
+              objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, need: needOf(o), veiled: veiled(s, o) })),
               burns: s.stats.burns ?? 0,
               drinks: s.stats.drinks ?? 0,
               trees: s.stats.trees ?? 0,

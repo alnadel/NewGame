@@ -47,7 +47,7 @@ export interface ShadyState {
     wind: number;
     hold: number;
     spent: number;
-    objs: { k: string; x: number; y: number; state: number; size: number; grown: number; veiled: boolean }[];
+    objs: { k: string; x: number; y: number; state: number; size: number; grown: number; need: number; veiled: boolean }[];
     burns: number;
     drinks: number;
     trees: number;
@@ -59,6 +59,8 @@ export interface ShadyState {
 export interface ShadyDrive {
   act: 'none' | 'snap' | 'burn' | 'grow' | 'calm';
   state: number;
+  /** The frost meter (snap) or the running job's size / goal (grow). */
+  fill: number;
   pick: number;
   queue: number[];
   due: number;
@@ -239,10 +241,14 @@ export function pressPts(x: number, y: number, ms: number, wobble = 0, t0 = 0): 
   });
 }
 
+/** The fingers each CDP session holds down between plays (a finger held through one play moves on in the next). */
+const DOWN = new WeakMap<CDPSession, Map<number, { x: number; y: number; id: number }>>();
+
 /** Plays the fingers' touches on the wall clock (all of them sent, then awaited together). */
 export async function playTouch(cdp: CDPSession, fingers: Finger[]): Promise<void> {
   const evs = fingers.flatMap((f) => f.pts.map((p, k) => ({ f, k, t: p.t }))).sort((a, b) => a.t - b.t);
-  const down = new Map<number, { x: number; y: number; id: number }>();
+  let down = DOWN.get(cdp);
+  if (!down) DOWN.set(cdp, (down = new Map()));
   const sent: Promise<unknown>[] = [];
   const t0 = Date.now();
   const send = (type: 'touchStart' | 'touchMove' | 'touchEnd', touchPoints: { x: number; y: number; id: number }[]): void => {
