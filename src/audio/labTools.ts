@@ -200,7 +200,7 @@ export function levelCases(): LevelCase[] {
           ...Array.from({ length: 6 }, (_, i) => cue(2 + i * 0.09, 'bell', { degree: 9 - i })),
           ...[2, 2.6, 3.2, 3.8].map((t) => cue(t, 'heartbeat', { strong: true })),
           ...Array.from({ length: 8 }, (_, i) => cue(2 + i * 0.05, 'detent', { index: i })),
-          ...(['glare', 'phew', 'crystal', 'catch', 'cloud', 'gust', 'lock', 'death', 'noon'] as const).map((n, i) => cue(2.05 + i * 0.05, n)),
+          ...(['glare', 'phew', 'crystal', 'cloud', 'gust', 'lock', 'death', 'noon'] as const).map((n, i) => cue(2.05 + i * 0.05, n)),
           cue(2.15, 'multUp', { level: 5 }),
           cue(2.5, 'levelWin', { level: 3 }),
         ];

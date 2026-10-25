@@ -3,11 +3,12 @@
 // Map never drawing under the Results sheet (K10), camera shake and zoom that end (and never start
 // under reduced motion), the lazily painted ground tiles, the matched shadow composite (GR2) and
 // the death beat with its recap tip and callouts that never overlap (GR12), the postcard (GR14),
-// the Daily par computed in idle slices (GR15) and the Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4).
+// the Daily par computed in idle slices (GR15), the Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4)
+// and the Controls v3 action button in each leg's look, for either hand (docs/CONTROLS_V3.md §7.1, §12.2).
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { dayStartTick, dayTicks } from '../../src/core/index.ts';
-import { drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, skipToLeg, state, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
+import { button, drag, keepAlive, OPEN_SAVE, openGame, pageDate, seedSave, skipToLeg, state, waitForRunStart, waitForScreen, watchErrors } from './helpers.ts';
 
 function center(page: Page): { x: number; y: number } {
   const v = page.viewportSize() ?? { width: 390, height: 844 };
@@ -417,6 +418,112 @@ test.describe('Elementals v2 trial frames (docs/ELEMENTALS_V2.md §9.4)', () => 
       expect(errors).toEqual([]);
     });
   }
+});
+
+test.describe('Controls v3 action button (docs/CONTROLS_V3.md §7.1, §12.2)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+
+  /** The game canvas's pixel (r, g, b) at CSS point (x, y) (dpr 1). */
+  const px = (page: Page, x: number, y: number): Promise<number[]> =>
+    page.evaluate(([cx, cy]) => {
+      const c = document.getElementById('game') as HTMLCanvasElement;
+      return Array.from(c.getContext('2d')!.getImageData(Math.round(cx as number), Math.round(cy as number), 1, 1).data.slice(0, 3));
+    }, [x, y]);
+
+  /** Trial n started with a tap, on leg `leg` (fast-forwarded), time frozen after `ms`. */
+  async function onLeg(page: Page, n: number, leg: number, ms = 600): Promise<void> {
+    await page.goto(`/?test=1&perf=0&trial=${n}`);
+    await waitForScreen(page, 'play');
+    await page.mouse.click(195, 380);
+    await waitForRunStart(page);
+    if (leg > 0) await skipToLeg(page, leg);
+    await page.waitForTimeout(ms);
+  }
+
+  /** A still tap on the button (commits on its lift). */
+  async function press(page: Page): Promise<void> {
+    const b = await button(page);
+    await page.mouse.move(b.x, b.y);
+    await page.mouse.down();
+    await page.waitForTimeout(40);
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+  }
+
+  test("shows each leg's act on its disc: frost, flame with its arm pips, Drip's Size pill in its place, Gust's calm with the vane's chevron", async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one run is enough');
+    const errors = watchErrors(page);
+    await seedSave(page, OPEN_SAVE);
+    // Nubs' leg: the Cold Snap's ice disc (blue on its left side, clear of the snowflake).
+    await onLeg(page, 1, 0);
+    let b = await button(page);
+    expect(b.shown).toBe(true);
+    expect(b.side).toBe('right');
+    expect(390 - (b.x + b.r)).toBeCloseTo(18, 0);
+    const k = b.r / 52;
+    let c = await px(page, b.x - 24 * k, b.y);
+    expect(c[2]!, String(c)).toBeGreaterThan(c[0]! + 40);
+    // Ember's leg: the flame's red disc; two presses arm walls and fill the pips under the ring.
+    await onLeg(page, 1, 1, 1500);
+    b = await button(page);
+    c = await px(page, b.x - 24 * k, b.y);
+    expect(c[0]!, String(c)).toBeGreaterThan(c[2]! + 60);
+    const pip = (): Promise<number[]> => px(page, b.x - 11 * k - 7.5 * k, b.y + 42 * k - k);
+    const off = await pip();
+    await press(page);
+    await press(page);
+    expect((await state(page)).drive.queue[0]).toBeGreaterThanOrEqual(0);
+    const lit = await pip();
+    expect(lit[0]!, `${off} → ${lit}`).toBeGreaterThan(off[0]! + 60);
+    await info.attach('ember-armed', { body: await page.screenshot(), contentType: 'image/png' });
+    // Drip's leg: no button; its Size pill (blue) sits at the button's centre.
+    await onLeg(page, 2, 1);
+    b = await button(page);
+    expect(b.shown).toBe(false);
+    c = await px(page, b.x + 42 * k, b.y);
+    expect(c[2]!, String(c)).toBeGreaterThan(c[0]! + 60);
+    // Gust's leg: the calm disc (pale); a 40 px drag sets the vane east and a chevron shows on the rim.
+    await onLeg(page, 4, 1);
+    b = await button(page);
+    c = await px(page, b.x - 24 * k, b.y);
+    expect(Math.min(...c), String(c)).toBeGreaterThan(200);
+    // The chevron's white fill brightens the rim's east side (the pale ground was there before).
+    const strip = async (): Promise<number[]> => {
+      const out: number[] = [];
+      for (let i = -6; i <= 7; i++) out.push(Math.max(...(await px(page, b.x + (51 + i) * k, b.y))));
+      return out;
+    };
+    const before = await strip();
+    await drag(page, 120, 600, 40);
+    await page.waitForTimeout(300);
+    expect((await state(page)).drive.vane).toBe(1);
+    const after = await strip();
+    expect(after.filter((v, i) => v > (before[i] as number) + 12).length, `${before} → ${after}`).toBeGreaterThanOrEqual(5);
+    await info.attach('gust-vane', { body: await page.screenshot(), contentType: 'image/png' });
+    expect(errors).toEqual([]);
+  });
+
+  test('mirrors to the left for a left hand, in reduced motion and high contrast', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'one run is enough');
+    const errors = watchErrors(page);
+    await seedSave(page, { ...OPEN_SAVE, settings: { unlockAll: true, hand: 'left', reducedMotion: 'on', highContrast: true } });
+    await onLeg(page, 1, 1, 1500);
+    const b = await button(page);
+    expect(b.side).toBe('left');
+    expect(b.x - b.r).toBeCloseTo(18, 0);
+    const k = b.r / 52;
+    const c = await px(page, b.x - 24 * k, b.y);
+    expect(c[0]!, String(c)).toBeGreaterThan(c[2]! + 60);
+    // The left button takes presses (each arms a wall or is refused with a still red ring: no shake).
+    const acts = (): Promise<number> => page.evaluate(() => window.__SHADY_TEST__!.acts());
+    const a0 = await acts();
+    await press(page);
+    await press(page);
+    await press(page);
+    expect(await acts()).toBe(a0 + 3);
+    await info.attach('left-rm-hc', { body: await page.screenshot(), contentType: 'image/png' });
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('forecast signatures', () => {

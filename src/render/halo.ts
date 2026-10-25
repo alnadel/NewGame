@@ -106,12 +106,15 @@ export interface HaloState {
   /** v1.5 deep shade, eased 0..1, and the sparkles' orbit phase. */
   deep: number;
   deepSpin: number;
+  /** Controls v3 (§7.2): a hand-off's finger glow (s left) and its colour. */
+  tagGlow: number;
+  tagCol: number;
 }
 
 export const SWING_ARC_S = 0.3;
 
 export function createHalo(): HaloState {
-  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0, swingT: 0, swingDeg: 0, heat: 0, beat: 0, deep: 0, deepSpin: 0 };
+  return { alpha: 1, flash: new Float32Array(24), arrow: 0, arrowA: 0, swingT: 0, swingDeg: 0, heat: 0, beat: 0, deep: 0, deepSpin: 0, tagGlow: 0, tagCol: 0 };
 }
 
 export interface HaloInput {
@@ -147,9 +150,17 @@ export interface HaloInput {
   /** Campaign concepts (v1.2): No Dial hides the shade arcs and the hint; Fog hides the `next` arcs; Sun Lock shows a padlock. */
   blind: boolean;
   hideNext: boolean;
-  /** Sun Lock: locked now, or about to lock (the padlock blinks in 0.6 s ahead). */
+  /** Sun Lock: locked now; Controls v3 (§7.2): the ticks to the next lock in its last second (a ring drains round the pointer), else 0. */
   locked: boolean;
-  lockSoon: boolean;
+  lockIn: number;
+  /**
+   * Controls v3 (§7.2): the finger's target θ while a world finger turns the sun (the ghost sun),
+   * where a lift there would settle (NaN: it would not move), and the hand-over glide's target
+   * (NaN none). All NaN when off.
+   */
+  ghost: number;
+  settle: number;
+  glide: number;
   /** v1.5: angles that grow a bud now (gold arcs), or null; Nubs in deep shade. */
   bud: Uint8Array | null;
   deep: boolean;
@@ -175,7 +186,8 @@ export function createHaloIn(): HaloInput {
   const none = new Uint8Array(360);
   return {
     cx: 0, cy: 0, R: 1, theta: 0, dragging: false, dTheta: 0, chill: 100, maxChill: 100, sunUp: false, guideAlpha: 0, now: none, next: none, glare: none, fade: 1, time: 0,
-    hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockSoon: false,
+    hintTarget: Number.NaN, hintWidth: 0, hintTurn: 0, hintPhase: -1, hintAlpha: 0, reducedMotion: false, blind: false, hideNext: false, locked: false, lockIn: 0,
+    ghost: NaN, settle: NaN, glide: NaN,
     bud: null, deep: false, mech: null, trial: null, hc: false,
   };
 }
@@ -194,6 +206,7 @@ export function updateHalo(h: HaloState, dt: number, dragging: boolean, chill: n
   h.alpha += (target - h.alpha) * Math.min(1, dt * (target > h.alpha ? 12 : 3));
   for (let i = 0; i < 24; i++) if ((h.flash[i] as number) > 0) h.flash[i] = Math.max(0, (h.flash[i] as number) - dt);
   h.swingT = Math.max(0, h.swingT - dt);
+  h.tagGlow = Math.max(0, h.tagGlow - dt);
   if (dragging && Math.abs(dTheta) > 0.05) {
     const dir = dTheta > 0 ? 1 : -1;
     h.arrow = dir;
@@ -673,6 +686,45 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     }
   }
 
+  // Controls v3 (§7.2): the hand-over's dashed sweep from θ to its target; the ghost sun at the
+  // finger's target (hollow) and its settle point (filled); a hand-off's finger glow in the new
+  // walker's colour (it was handed over, not dropped).
+  if (Number.isFinite(inp.glide)) {
+    const e = inp.theta + (((((inp.glide - inp.theta) % 360) + 540) % 360) - 180);
+    g.setLineDash(TAG_DASH);
+    g.lineWidth = 3;
+    g.strokeStyle = cssa(0xffffff, 0.9 * inp.fade);
+    g.beginPath();
+    arcPath(g, cx, cy, R + 3, Math.min(e, inp.theta), Math.max(e, inp.theta));
+    g.stroke();
+    g.setLineDash(NO_DASH);
+  }
+  for (let i = 0; i < 2; i++) {
+    const t = i ? inp.settle : inp.ghost;
+    if (!Number.isFinite(t)) continue;
+    const gx = cx + Math.cos(-t * DEG) * R;
+    const gy = cy + Math.sin(-t * DEG) * R;
+    g.beginPath();
+    g.arc(gx, gy, i ? 4 : 7, 0, TAU);
+    g.lineWidth = 4.5;
+    g.strokeStyle = cssa(INK, 0.5);
+    g.stroke();
+    g.lineWidth = 2;
+    g.strokeStyle = '#FFFFFF';
+    g.stroke();
+    if (i) {
+      g.fillStyle = cssa(TEAL, 1);
+      g.fill();
+    }
+  }
+  if (h.tagGlow > 0 && inp.dragging) {
+    g.lineWidth = 10;
+    g.strokeStyle = cssa(h.tagCol, (2 * h.tagGlow) * inp.fade);
+    g.beginPath();
+    g.arc(cx, cy, R, 0, TAU);
+    g.stroke();
+  }
+
   // The sun pointer: never fades (the fallback when a thumb covers everything else).
   const a = -inp.theta * DEG;
   const sx = cx + Math.cos(a) * R;
@@ -686,10 +738,20 @@ export function drawHalo(g: CanvasRenderingContext2D, h: HaloState, inp: HaloInp
     g.arc(sx, sy, 5, 0, TAU);
     g.fill();
   }
-  if (inp.locked || inp.lockSoon) {
-    // Sun Lock: a padlock just outside the pointer, on an ink plate; the ring greys over. It
-    // blinks in just before the lock (steady under reduced motion), so the lock never surprises.
-    const la = inp.locked ? f : f * (inp.reducedMotion ? 0.6 : 0.35 + 0.65 * Math.abs(Math.sin(inp.time * TAU * 2.5)));
+  if (inp.lockIn > 0) {
+    // Controls v3 (§7.2): the second before a lock, a ring round the pointer drains to it.
+    g.beginPath();
+    g.arc(sx, sy, 12, -Math.PI / 2, -Math.PI / 2 + (TAU * inp.lockIn) / 60);
+    g.lineWidth = 5;
+    g.strokeStyle = cssa(INK, 0.6 * f);
+    g.stroke();
+    g.lineWidth = 2.5;
+    g.strokeStyle = cssa(0xffffff, f);
+    g.stroke();
+  }
+  if (inp.locked) {
+    // Sun Lock: a padlock just outside the pointer, on an ink plate; the ring greys over.
+    const la = f;
     g.strokeStyle = cssa(INK, 0.35 * la);
     g.lineWidth = 3;
     g.beginPath();

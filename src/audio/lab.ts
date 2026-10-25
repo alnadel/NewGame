@@ -122,7 +122,6 @@ const sceneSection = section(
   slider('chapter', 0, 20, 1, 0, set('chapter')),
   slider('progress', -1, 1, 0.01, -1, set('progress')),
   slider('eclipse', 0, 1, 0.01, 0, set('eclipse')),
-  slider('gust', -1, 1, 1, 0, set('gust')),
   el('div', { className: 'buttons' }, toggle('locked', set('locked')), toggle('moonlit', set('moonlit')), toggle('fog', set('fog'))),
   note('Try: play/day with mult ×1→×5, chill below 40 (arpeggio drops) and 25 (heartbeat), f above 0 (sizzle), day % 50 (cicadas), chapter 1-20 (palettes), progress past 0.85 (final stretch).'),
 );

@@ -115,17 +115,6 @@ export const RECIPES = {
     v.burst(g.white, t, 0.04 * k, 0.0005, 0.0055, v.filter('bandpass', 3200, 0.9));
   },
 
-  /** Catching a coasting sun: a lowpassed knock, a short falling body and a wooden "tok". */
-  catch(g, t) {
-    const v = g.voice('sfx', t);
-    v.burst(g.white, t, 0.2, 0.002, 0.08, v.filter('lowpass', 500, 0.9));
-    for (const [f, peak, dur] of [
-      [125, 0.18, 0.06],
-      [250, 0.07, 0.05],
-      [700, 0.035, 0.03],
-    ] as const) glide(v.tone('sine', f, t, peak, 0.003, dur).frequency, t, f, f * 0.8, dur);
-  },
-
   /** Shade re-entry: root + fifth with a 5 Hz ±3 cent vibrato and a breath of "haah". */
   ahh(g, t, p) {
     const v = g.voice('sfx', t);
@@ -514,6 +503,11 @@ export const RECIPES = {
     const root = tonic5(p);
     seq(v, t, root, [[0, 0], [0, 7]], 'pluck', 0.1, 0.4);
     seq(v, t + 0.12, root, [[0, 4], [0, 12]], 'bell', 0.05, 0.8, 1.4);
+  },
+
+  /** Controls v3 (§7.3): aim help settled the sun into shade: one small glassy bell two octaves up. */
+  clink(g, t, p) {
+    bellTone(g.voice('sfx', t), t, tonic5(p) * 4, 0.035, 0.3, 0.08);
   },
 
   /** Error: two soft low blips a semitone apart, "nuh-uh". */

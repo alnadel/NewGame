@@ -24,7 +24,6 @@ export const P_BREATH = 11; // cold breath in the shade
 export const P_WISP = 12; // heat shimmer rising off lit ground around noon
 export const P_LEAF = 13; // screen space: a leaf blown across a Breezy day
 export const P_GLINT = 14; // a four-point glint on lit ground (Dazzle)
-export const P_GUST = 15; // screen space: a wind streak flying across during a gust (v1.2 Gusts)
 export const P_SNOW = 16; // screen space: a snowflake drifting down (a winter chapter's air)
 export const P_SNOWFALL = 17; // v1.5: a flake falling from the Cold Snap's cloud (world space)
 
@@ -203,11 +202,6 @@ export function updateParticles(p: Particles, dt: number, nx: number, ny: number
         }
         break;
 
-      case P_GUST:
-        // A streak rides the gust straight across, swaying a little.
-        p.vy[i] = 14 * Math.sin(life * 6 + i);
-        if (p.x[i]! < -200 || p.x[i]! > 4200) p.life[i] = 0;
-        break;
       case P_CONFETTI:
       case P_PETAL:
         p.vy[i] = p.vy[i]! + (k === P_CONFETTI ? 260 : 60) * dt;
@@ -320,7 +314,7 @@ function drawAirPass(g: CanvasRenderingContext2D, p: Particles, v: View, glows: 
     const life = p.life[i]!;
     if (life <= 0) continue;
     const k = p.kind[i]!;
-    if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL || k === P_LEAF || k === P_SNOW || k === P_GUST) continue;
+    if (k === P_FROST || k === P_BURST || k === P_CONFETTI || k === P_PETAL || k === P_LEAF || k === P_SNOW) continue;
     if ((k === P_SPARKLE || k === P_FIREFLY || k === P_GLINT) !== glows) continue;
     const t = 1 - life / p.maxLife[i]!;
     const sx = v.ox + p.x[i]! * S;
@@ -462,38 +456,6 @@ export function drawScreenParticles(g: CanvasRenderingContext2D, p: Particles, d
     }
   }
   g.globalAlpha = 1;
-}
-
-/**
- * Gust streaks (screen space, drawn inside the world clip under the HUD): a tapered white line
- * trailing the way it flies, fading in and out, with a faint second line beneath it.
- */
-export function drawGustStreaks(g: CanvasRenderingContext2D, p: Particles): void {
-  g.lineCap = 'round';
-  for (let i = 0; i < p.cap; i++) {
-    const life = p.life[i]!;
-    if (life <= 0 || p.kind[i] !== P_GUST) continue;
-    const t = 1 - life / p.maxLife[i]!;
-    const a = Math.min(1, life * 2.5, t * 6) * 0.9;
-    const x = p.x[i]!;
-    const y = p.y[i]!;
-    const len = p.size0[i]!;
-    const dir = p.vx[i]! >= 0 ? 1 : -1;
-    const sag = 6 * Math.sin(t * 6 + i);
-    g.strokeStyle = cssa(0xffffff, a);
-    g.lineWidth = p.size1[i]!;
-    g.beginPath();
-    g.moveTo(x - dir * len, y + sag);
-    g.quadraticCurveTo(x - dir * len * 0.4, y - sag * 0.5, x, y);
-    g.stroke();
-    g.strokeStyle = cssa(0xffffff, a * 0.4);
-    g.lineWidth = Math.max(0.8, p.size1[i]! * 0.6);
-    g.beginPath();
-    g.moveTo(x - dir * len * 0.7, y + 5 + sag);
-    g.lineTo(x - dir * len * 0.15, y + 5);
-    g.stroke();
-  }
-  g.lineCap = 'butt';
 }
 
 // ---------------------------------------------------------------------------------------------

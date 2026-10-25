@@ -58,7 +58,7 @@ export interface ShadyAudio {
 
   /** Every SimEvent of the frame (all ticks), in order, with the current view. */
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void;
-  /** Controls v3 (docs/CONTROLS_V3.md §7.3): one driver note (code, a). Silent until ART's branch routes them. */
+  /** Controls v3 (docs/CONTROLS_V3.md §7.3): one driver note (code, a): its cue (sfxRouter driveCue) or none. */
   onDrive(code: number, a: number): void;
   /** Once per rendered frame (also while paused or on menus) with real seconds elapsed. Pumps the scheduler. */
   update(view: Readonly<AudioView>, dtReal: number): void;
@@ -156,7 +156,9 @@ class ShadyAudioImpl implements ShadyAudio {
     this.engine.graph?.setMuted(muted);
   }
 
-  onDrive(): void {}
+  onDrive(code: number, a: number): void {
+    this.router.onDrive(code, a);
+  }
 
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void {
     this.router.onEvents(events, view);

@@ -3,14 +3,15 @@
 // shared by the palette and the cached sprite (quantized night, G15), the shadow path's winding
 // (GR1), the matched shadow composite (GR2), the noon boss (GR10) and the ground decals (GR11).
 import { describe, expect, it } from 'vitest';
-import { campaignConfig, createBot, createRun, dayTicks, elFixture, headlessConfig, queryCasters, step, validatedY, type Caster, type Cloud, type SimState } from '../../src/core/index.ts';
+import { campaignConfig, createBot, createDriver, createRun, dayTicks, elFixture, headlessConfig, queryCasters, step, validatedY, type Caster, type Cloud, type DriveView, type SimState } from '../../src/core/index.ts';
 import { drawClouds } from '../../src/render/clouds.ts';
 import { drawElAir, drawElCues, drawElGround, drawElWalls } from '../../src/render/trial.ts';
 import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src/game/camera.ts';
 import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
 import { createDecals, decorIn, FOOTPRINT_CLEAR, PUDDLE, TRAIL_CLEAR, trailDistance } from '../../src/render/decor.ts';
-import { createHalo, createShadeSplit, heroArcColor, splitShade, updateHalo } from '../../src/render/halo.ts';
+import { createHalo, createHaloIn, createShadeSplit, drawHalo, heroArcColor, splitShade, updateHalo } from '../../src/render/halo.ts';
+import { createHud, drawHud, hudButton, hudButtonHit, hudScale, type HudInput } from '../../src/render/hud.ts';
 import { heroArt } from '../../src/render/heroes.ts';
 import { createNubsAnim, createPose } from '../../src/render/nubs.ts';
 import { addHeadline, addPlus, addSwing, createPops, POP_PHEW, updatePops, type Pops } from '../../src/render/particles.ts';
@@ -598,10 +599,13 @@ describe('Elementals v2 trial objects (render/trial.ts)', () => {
       const objs = (s.el as { objs: unknown[] }).objs.length;
       expect(second).toBeGreaterThanOrEqual(objs - 4);
       expect(second).toBeLessThanOrEqual(objs + 4);
-      // The cues stroke at most ten paths (§9.4), here with every kind of ring at once.
+      // The cues stroke at most ten paths (§9.4), here with every kind of ring at once (Controls v3:
+      // and the button's pick ring with its tether, two strokes more).
+      const dr = createDriver();
+      dr.begin(s, NEUTRAL);
       const s0 = env.calls.stroke ?? 0;
-      drawElCues(env.g, v, s, 0, true, false, false, 60);
-      expect((env.calls.stroke ?? 0) - s0).toBeLessThanOrEqual(10);
+      drawElCues(env.g, v, s, 0, true, false, false, 60, dr.view, 320, 756, 46);
+      expect((env.calls.stroke ?? 0) - s0).toBeLessThanOrEqual(12);
     } finally {
       env.restore();
     }
@@ -623,6 +627,151 @@ describe('Elementals v2 trial objects (render/trial.ts)', () => {
       };
       expect(draws(rain)).toBe(0);
       expect(draws(rain.map((c) => ({ ...c, kind: 'parked' as const })))).toBeGreaterThan(0);
+    } finally {
+      env.restore();
+    }
+  });
+});
+
+const NEUTRAL = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
+
+describe('Controls v3 action button (render/hud.ts, docs/CONTROLS_V3.md §1.1, §7.1)', () => {
+  /** A Trial run past its hold on leg `leg`'s walker, the driver's view of it and a HUD input. */
+  function scene(hero: 'nubs' | 'ember' | 'drip', w: number, hand: 'right' | 'left'): { inp: HudInput; v: ReturnType<typeof createView>; d: DriveView } {
+    const s = createRun(campaignConfig(1001));
+    s.phase = 'day';
+    s.nubs.hero = hero;
+    const dr = createDriver();
+    dr.begin(s, NEUTRAL);
+    dr.observe(s);
+    const v = createView();
+    layoutView(v, w, 844, 1, { top: 0, right: 0, bottom: 0, left: 0 });
+    const inp: HudInput = { s, pbMinutes: -1, challengeMinutes: -1, goalMinutes: -1, alpha: 1, time: 0, campaign: null, mech: null, reducedMotion: false, hc: false, drive: dr.view, hand, buttonDown: false };
+    return { inp, v, d: dr.view };
+  }
+
+  it('lays the button out at hudScale 0.85, 1 and 1.3 for either hand: centre 70k from the side, 88k above the inset, hit radius 52k', () => {
+    const env = fakeCanvas();
+    try {
+      for (const [w, k] of [[331, 0.85], [390, 1], [600, 1.3]] as const) {
+        for (const hand of ['right', 'left'] as const) {
+          const { inp, v } = scene('nubs', w, hand);
+          expect(hudScale(v)).toBeCloseTo(k, 9);
+          const h = createHud();
+          drawHud(env.g, h, v, inp);
+          const b = hudButton(h);
+          expect(b.shown).toBe(true);
+          expect(b.x).toBeCloseTo(hand === 'right' ? v.vx + v.vw - 70 * k : v.vx + 70 * k, 6);
+          expect(b.y).toBeCloseTo(v.vy + v.vh - 88 * k, 6);
+          expect(b.r).toBeCloseTo(52 * k, 6);
+          expect(hudButtonHit(h, b.x + b.r - 1, b.y)).toBe(true);
+          expect(hudButtonHit(h, b.x + b.r + 1, b.y)).toBe(false);
+        }
+      }
+      // At 390 px the hit disc spans x 268-372: 18 px clear of the side, outside the 16 px edge zone.
+      const { inp, v } = scene('nubs', 390, 'right');
+      const h = createHud();
+      drawHud(env.g, h, v, inp);
+      const b = hudButton(h);
+      expect(390 - (b.x + b.r)).toBeCloseTo(18, 6);
+      expect(b.x - b.r).toBeCloseTo(268, 6);
+    } finally {
+      env.restore();
+    }
+  });
+
+  it("puts an element's meter pill above the button and Drip's Size pill at its centre (no button there)", () => {
+    const env = fakeCanvas();
+    const imgs: number[][] = [];
+    (env.g as unknown as Record<string, unknown>).drawImage = (...a: unknown[]) => imgs.push(a.slice(1) as number[]);
+    try {
+      /** The centres of the images drawn by one HUD frame. */
+      const centres = (hero: 'ember' | 'drip'): { b: ReturnType<typeof hudButton>; c: [number, number][] } => {
+        const { inp, v } = scene(hero, 390, 'right');
+        const h = createHud();
+        imgs.length = 0;
+        drawHud(env.g, h, v, inp);
+        return { b: hudButton(h), c: imgs.filter((a) => a.length === 4).map((a) => [(a[0] as number) + (a[2] as number) / 2, (a[1] as number) + (a[3] as number) / 2]) };
+      };
+      const ember = centres('ember');
+      expect(ember.b.shown).toBe(true);
+      // The pill sprite is centred 66k above the button's centre (52k + 14k), 1k down for its drop.
+      expect(ember.c.some(([x, y]) => Math.abs(x - ember.b.x) < 2 && Math.abs(y - (ember.b.y - 66 + 1)) < 2)).toBe(true);
+      const drip = centres('drip');
+      expect(drip.b.shown).toBe(false);
+      expect(drip.c.some(([x, y]) => Math.abs(x - drip.b.x) < 2 && Math.abs(y - (drip.b.y + 1)) < 2)).toBe(true);
+    } finally {
+      env.restore();
+    }
+  });
+
+  it('takes no presses outside the day, or with no act', () => {
+    const env = fakeCanvas();
+    try {
+      const { inp, v, d } = scene('nubs', 390, 'right');
+      const h = createHud();
+      inp.s.phase = 'hold';
+      drawHud(env.g, h, v, inp);
+      expect(hudButton(h).shown).toBe(false);
+      inp.s.phase = 'day';
+      d.act = 'none';
+      drawHud(env.g, h, v, inp);
+      expect(hudButtonHit(h, hudButton(h).x, hudButton(h).y)).toBe(false);
+    } finally {
+      env.restore();
+    }
+  });
+});
+
+describe('Controls v3 dial and Trial cues (docs/CONTROLS_V3.md §7.2)', () => {
+  it('draws the ghost sun (hollow) and its settle point (filled) only while they are set, and the lock ring in the last second', () => {
+    const env = fakeCanvas();
+    try {
+      const h = createHalo();
+      const inp = createHaloIn();
+      Object.assign(inp, { cx: 200, cy: 400, R: 40, theta: 90, sunUp: true, fade: 1, guideAlpha: 1 });
+      const strokes = (): number => {
+        const s0 = env.calls.stroke ?? 0;
+        const f0 = env.calls.fill ?? 0;
+        drawHalo(env.g, h, inp);
+        return (env.calls.stroke ?? 0) - s0 + 100 * ((env.calls.fill ?? 0) - f0);
+      };
+      const base = strokes();
+      inp.ghost = 110;
+      expect(strokes() - base).toBe(2);
+      inp.settle = 130;
+      expect(strokes() - base).toBe(104);
+      inp.ghost = inp.settle = NaN;
+      inp.lockIn = 30;
+      expect(strokes() - base).toBe(2);
+      inp.lockIn = 0;
+      inp.glide = 40;
+      expect(strokes() - base).toBe(1);
+    } finally {
+      env.restore();
+    }
+  });
+
+  it('strokes the calm-now ghosts in one more path only while the vane is set', () => {
+    const env = fakeCanvas();
+    try {
+      const s = createRun(campaignConfig(1004));
+      elFixture(s);
+      s.phase = 'day';
+      s.nubs.hero = 'gust';
+      const v = createView();
+      layoutView(v, 390, 844, 1, { top: 0, right: 0, bottom: 0, left: 0 });
+      setPlayCamera(v, createCameraFx(), s.nubs.x, s.nubs.y + 180);
+      const dr = createDriver();
+      dr.begin(s, NEUTRAL);
+      const strokes = (): number => {
+        const s0 = env.calls.stroke ?? 0;
+        drawElCues(env.g, v, s, 0, true, false, false, 60, dr.view, 320, 756, 46);
+        return (env.calls.stroke ?? 0) - s0;
+      };
+      const calm = strokes();
+      dr.view.vane = 1;
+      expect(strokes()).toBe(calm + 1);
     } finally {
       env.restore();
     }

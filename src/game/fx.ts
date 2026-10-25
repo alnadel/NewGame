@@ -13,10 +13,11 @@
 // CLEAN!, an element's fall. The snowman's steam, sweat, breath and frost stay his: an element's
 // states show in its art. v2 (docs/ELEMENTALS_V2.md §7.10): a fire's sparks (water for ice and
 // puddles), ash and steam puffs, Ember feeding ("+n"), a grey puff for a refused verb, BUMP!, a hold's
-// ring, BRIDGE!/TREE!, Drip's splash ("+30"), a hot stone's steam or sparks, a gust's wind streaks
-// (none under reduced motion); no zoom pulses while another element walks (§1.4).
+// ring, BRIDGE!/TREE!, Drip's splash ("+30"), a hot stone's steam or sparks; no zoom pulses while
+// another element walks (§1.4). Controls v3 (docs/CONTROLS_V3.md §7.2): the wind streaks are retired
+// with the Gusts concept (the vane's chevrons and the wind chip show the wind).
 
-import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
+import { cloudCenter, cloudOffset, dayParams, dayTicks, HEROES, noonHeatAt, NOTE_AUTO, NOTE_CALM, NOTE_PRESS, NOTE_REFUSE, worldPlan, type SimEvent, type SimState } from '../core/index.ts';
 import { pointLitWeight } from '../core/sim/pickups.ts';
 import {
   addHeadline,
@@ -32,7 +33,6 @@ import {
   P_FLAKE_FLY,
   P_FROST,
   P_GLINT,
-  P_GUST,
   P_LEAF,
   P_PETAL,
   P_PUFF,
@@ -51,7 +51,7 @@ import {
   spawn,
 } from '../render/particles.ts';
 import { flashDetent, heroArcColor, SWING_ARC_S } from '../render/halo.ts';
-import { POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
+import { BTN_FLASH_S, BTN_NO_S, POUR_S, RING_FLASH_S, snapsText, SPILL_S } from '../render/hud.ts';
 import { hop } from '../render/nubs.ts';
 import { showDayCard, showNightCard, showStamp, STAMP_IN, type StampKind } from '../render/banners.ts';
 import type { FaceName } from '../render/candy.ts';
@@ -106,7 +106,6 @@ export class Fx {
   private wispAcc = 0;
   private leafAcc = 0;
   private glintAcc = 0;
-  private gustAcc = 0;
   /** Game seconds until HIGH NOON lands (the sim's noonBanner comes 2 s early), or 0. */
   private noonIn = 0;
   /** Seconds until the current stamp lands (its camera shake), or −1. */
@@ -142,8 +141,16 @@ export class Fx {
     resetBlooms();
   }
 
-  /** Controls v3 (docs/CONTROLS_V3.md §2.4, §7): one driver note (code, a). No effects yet (ART's branch adds them). */
-  onDrive(_code: number, _a: number): void {}
+  /**
+   * Controls v3 (docs/CONTROLS_V3.md §2.4, §7.1): one driver note (code, a) on the button: an
+   * accepted press, a calm or an automatic act flashes it, a refused press shakes it red (every
+   * time: the chip always shows; only the haptic and the fizz go quiet on a repeat).
+   */
+  onDrive(code: number, a: number): void {
+    const h = this.sc.hud;
+    if (code === NOTE_PRESS || code === NOTE_AUTO || (code === NOTE_CALM && a < 2)) h.btnFlash = BTN_FLASH_S;
+    else if (code === NOTE_REFUSE) h.btnNo = BTN_NO_S;
+  }
 
   /** Routes one frame's events. */
   onEvents(events: readonly SimEvent[], s: SimState): void {
@@ -160,9 +167,6 @@ export class Fx {
       switch (ev.e) {
         case 'detent':
           flashDetent(sc.halo, ev.index);
-          break;
-        case 'catch':
-          sc.sun.squash = 0.08;
           break;
         case 'go': {
           // End of the start beat: a little cheer and a kick of snow dust as Nubs sets off; on a
@@ -423,8 +427,12 @@ export class Fx {
         // Elementals.
         case 'tag': {
           // TAG!: the incoming element's stamp, a hop, a ring and sparks in its colour, 0.3 s of slow-mo.
+          // Controls v3 (§6.1): the 1.2 s banner names the element with its drag and button lines,
+          // and a finger held through the hand-off glows on the dial for 300 ms.
           const c = heroArcColor(ev.to);
           this.stamp('tag', 'TAG!', 0.7, HEROES[ev.to].face);
+          sc.halo.tagGlow = 0.3;
+          sc.halo.tagCol = c;
           hop(sc.nubs, 8);
           sc.nubs.happy = 0.9;
           addRing(sc.rings, nx, ny, 6, 60, 0.45, 3.5, 0.9, c);
@@ -477,10 +485,6 @@ export class Fx {
             sc.nubs.glare = 0.25;
             this.puff(nx, ny, 0xffffff);
           }
-          break;
-        case 'gust':
-          // Wind streaks across the view the way it blows (none under reduced motion).
-          if (!this.reducedMotion) this.streaks(ev.dir, 8);
           break;
         default:
           break;
@@ -707,18 +711,6 @@ export class Fx {
     } else {
       this.leafAcc = 0;
     }
-    // Gusts (v1.2): while a gust turns the sun, wind streaks fly across the screen the way it pushes
-    // (+1 counter-clockwise reads as a leftward drag), at most 14 at once.
-    const gust = s.sun.gust;
-    if (gust !== 0) {
-      this.gustAcc += dt * 16;
-      while (this.gustAcc >= 1) {
-        this.gustAcc -= 1;
-        this.streaks(gust > 0 ? -1 : 1, 1);
-      }
-    } else {
-      this.gustAcc = 0;
-    }
     // Dazzle: glints flash on lit ground around Nubs (at most 6 at once).
     if (fc === 'dazzle' && daylight) {
       this.glintAcc += dt * 5;
@@ -752,17 +744,6 @@ export class Fx {
   /** Eight puffs rising off (x, y): ash, steam or a splash. */
   private puff(x: number, y: number, color: number): void {
     for (let i = 0; i < 8; i++) spawn(this.sc.particles, P_PUFF, x + rnd(-12, 12), y + rnd(-4, 4), rnd(2, 12), rnd(-12, 12), rnd(-4, 4), rnd(14, 30), 0.8, 3, 8, color);
-  }
-
-  /** n wind streaks flying across the view the way `dir` blows (+1 east), at most 14 at once. */
-  private streaks(dir: number, n: number): void {
-    const p = this.sc.particles;
-    const v = this.sc.view;
-    for (let i = 0; i < n && countKind(p, P_GUST) < 14; i++) {
-      const speed = rnd(760, 1100);
-      const gi = spawn(p, P_GUST, dir > 0 ? v.vx - 40 : v.vx + v.vw + 40, v.vy + rnd(0.1, 0.92) * v.vh, 0, dir * speed, 0, 0, (v.vw + 120) / speed + 0.2, rnd(60, 130), rnd(1.6, 3), 0xffffff);
-      p.vrot[gi] = 0;
-    }
   }
 
   /** Snow falling from the Cold Snap's cloud body to the ground under it, riding along with it. */

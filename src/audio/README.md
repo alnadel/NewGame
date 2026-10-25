@@ -102,7 +102,8 @@ Fill one reused object from `SimState` and the UI state machine every frame (`Se
 | `omega` | `state.sun.omega` (°/s) | Softens detent clicks during fast spins |
 | `chapter`? | `state.level?.chapter ?? 0` | The chapter's music palette (0 = default score) |
 | `progress`? | `levelProgress(state)`, −1 outside the campaign | "Finish line near" cue and the final stretch at ≥ 0.85 |
-| `gust`?, `locked`? | `state.sun.gust`, `state.sun.locked` | Gust whoosh (towards the wind), lock clink / release |
+| `locked`? | `state.sun.locked` | Lock clink / release (`gust`? is retired with the Gusts concept: read by nothing) |
+| `glide`? | the driver view's `glide` is finite (Controls v3) | A magnet glide's sun detents are silent |
 | `eclipse`? | `state.eclipse` (0..1) | Eclipse cue, drone, score muffle |
 | `moonlit`?, `fog`? | `state.moonlit`, `state.mods.has('fog')` | Night bed by day; score muffled to 1.4 kHz |
 
@@ -140,7 +141,7 @@ from 0 with the layer's fade; a layer unwanted for ≥ 1 s and five of its fade 
 | Event | Cue | Rule |
 |---|---|---|
 | `detent` | Detent click (pitch ladder by `index`) | ≥ 50 ms apart and ≤ 20/s; softer (to 60 %) as \|ω\| → 600°/s |
-| `catch` | Catch thunk | |
+| `catch` | none (Controls v3: no coasting sun in play; the recipe is gone) | |
 | `flake` | Flake bell at `degree` (0..9, octaves 5-6) | **Quantized** to the next free 16th note; ≤ 12/s |
 | `crystal` | Ice-crystal triad | |
 | `flower` | Frost-flower music-box note | Climbs the pentatonic scale each night; quantized |
@@ -166,9 +167,18 @@ from 0 with the layer's fade; a layer unwanted for ≥ 1 s and five of its fade 
 | `start`, `go`, `shadeExit`, `lowChill` | none | Carried by continuous layers |
 | `hourEnd`, `ballPassed`, `lessonDone` | none | Bookkeeping |
 
-View edges in play (day or night): a gust starting → **gust** whoosh (≤ 1/s); `locked` on/off →
+View edges in play (day or night): `locked` on/off →
 **lock** clink / release; `eclipse` leaving 0 → **eclipse** falling shimmer; `progress` crossing
 0.85 → **finishNear** lift (once per run, re-armed by `resetRun`). `newBest` ducks to 50 % for 2 s.
+
+Controls v3 (docs/CONTROLS_V3.md §7.3): `onDrive(code, a)` plays a driver note's cue (`driveCue`,
+`sfxRouter.ts`): `PRESS` → **uiTap** (the UI's click); a first `REFUSE` of its reason this leg and
+`EXPIRE` → **uiError** (the fizz; a repeat, `a ≥ 16`, is silent, its chip still shows); a capture
+`SETTLE` (`a = 1`) → **clink**, one small glassy bell two octaves up (the one new recipe); `NOTCH` →
+**detent** on the ladder by notch; `BUFFER`, a track `SETTLE`, `CALM`, `WAIT_LOW`, `HANDOVER` and `AUTO`
+play nothing of their own (an act's sim event carries its sound). While `view.glide` is set (a
+magnet glide runs) sun detents are silent. The Gust element's `gust` whoosh plays once a second at
+most (the vane's governor gusts on its own); a `catch` plays nothing (no coasting sun in play).
 
 ## Music system
 
@@ -233,7 +243,7 @@ live AudioNode count (created minus disconnected) between 48 and 194 with no upw
 `npx vite`, then open `/audio-lab.html`: a button per cue (plus bell degrees, multiplier levels and
 star tiers), router event buttons (detent storm, quantized flake run, melt storm, PHEW dip, dawn
 duck, level won/missed, swing chain), sliders for the whole `AudioView` including the campaign
-fields (palette, final stretch, eclipse, gust, lock, moonlit, fog), the results melody, a live
+fields (palette, final stretch, eclipse, lock, moonlit, fog), the results melody, a live
 meter and the **level check**: every cue and scene rendered offline through the real chain, with
 peak, loudest-100 ms RMS, pre-compressor peak, length, a cut-off check and a waveform/spectrogram
 per row. `window.__AUDIO_LAB__` exposes `{ audio, view, runLevelCheck, results }` for automation.

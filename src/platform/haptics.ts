@@ -33,7 +33,11 @@ export type HapticName =
   | 'bloom'
   | 'frost'
   | 'snap'
-  | 'deep';
+  | 'deep'
+  | 'act'
+  | 'refuse'
+  | 'settle'
+  | 'notch';
 
 /** A single pulse (ms) or an on/off/on... sequence (ms). */
 export type HapticPattern = number | readonly number[];
@@ -66,6 +70,12 @@ export const HAPTIC_PATTERNS: Readonly<Record<HapticName, HapticPattern>> = {
   frost: [6, 40, 6],
   snap: [25, 40, 35],
   deep: 8,
+  // Controls v3 (docs/CONTROLS_V3.md §7.3): an accepted press or calm, a refused press, aim help's
+  // capture, a vane notch.
+  act: 8,
+  refuse: [30, 40, 30],
+  settle: 6,
+  notch: 6,
 };
 
 export const HAPTIC_RULES = {
@@ -102,6 +112,8 @@ const DEFER_RANK: Readonly<Partial<Record<HapticName, number>>> = {
   best: 6,
   rankUp: 6,
   death: 7,
+  act: 2,
+  refuse: 3,
 };
 
 const DETENT_STEP = 15;
@@ -183,13 +195,23 @@ export function hapticForEvent(ev: SimEvent): HapticName | null {
       return 'flake';
     case 'sizzle':
       return 'glare';
-    case 'gust':
-      return 'detent';
     default:
       // 'lowChill' is carried by the repeating heartbeat (audio.onHeartbeat → play('heartbeat'));
-      // the rest have no haptic. 'best' and 'ui' are played by the UI directly.
+      // the rest have no haptic. 'best' and 'ui' are played by the UI directly. Controls v3 (§7.3):
+      // a 'gust' buzzes nothing, since the vane's governor gusts with no finger down (the vane's
+      // notch has its own pattern).
       return null;
   }
+}
+
+/**
+ * Controls v3 (§7.3): the haptic a driver note asks for, or null: a press or a calm (not the soft
+ * "already calm") 'act', a first refusal of its reason this leg or an expired arm 'refuse' (a repeat,
+ * a ≥ 16, is silent: its chip still shows), a capture 'settle', a vane notch 'notch'; nothing else
+ * buzzes, so magnet motion never reads as a phantom input.
+ */
+export function hapticForNote(code: number, a: number): HapticName | null {
+  return code === 1 || (code === 6 && a < 2) ? 'act' : (code === 2 && a < 16) || code === 8 ? 'refuse' : code === 4 && a === 1 ? 'settle' : code === 5 ? 'notch' : null;
 }
 
 export interface Haptics {
@@ -202,9 +224,12 @@ export interface Haptics {
   play(name: HapticName): void;
   /** A sun detent crossing: index = floor(θ/15) after it, dir = ±1, omega = sun speed (°/s). */
   detent(index: number, dir: 1 | -1, omega: number): void;
-  /** Forwards a frame's SimEvents; `omega` is the sun's current angular velocity (°/s). */
-  onEvents(events: readonly SimEvent[], omega: number): void;
-  /** Controls v3 (docs/CONTROLS_V3.md §7.3): one driver note (code, a). None buzz yet (ART's branch adds the patterns). */
+  /**
+   * Forwards a frame's SimEvents; `omega` is the sun's current angular velocity (°/s). Controls v3
+   * (§4.5): `glide` (a magnet glide runs: the driver view's glide is finite) silences sun detents.
+   */
+  onEvents(events: readonly SimEvent[], omega: number, glide?: boolean): void;
+  /** Controls v3 (docs/CONTROLS_V3.md §7.3): one driver note (code, a): hapticForNote's pattern. */
   onDrive(code: number, a: number): void;
 }
 
@@ -315,13 +340,16 @@ export class WebVibrateHaptics implements Haptics {
     this.fire('detent', now);
   }
 
-  onDrive(): void {}
+  onDrive(code: number, a: number): void {
+    const name = hapticForNote(code, a);
+    if (name) this.play(name);
+  }
 
-  onEvents(events: readonly SimEvent[], omega: number): void {
+  onEvents(events: readonly SimEvent[], omega: number, glide = false): void {
     if (!this.on) return;
     for (const ev of events) {
       if (ev.e === 'detent') {
-        this.detent(ev.index, ev.dir, omega);
+        if (!glide) this.detent(ev.index, ev.dir, omega);
         continue;
       }
       const name = hapticForEvent(ev);
