@@ -609,7 +609,8 @@ async function measureDares(pool: TaskPool<BakeTask, unknown>, l: LevelDef, worl
 
 /**
  * `sim --bake`: every level's world variant, offers, flares and measured Dares, in the worker pool;
- * writes the file. `--level N,…` bakes only those levels and prints their Dares (the file is kept).
+ * writes the file. `--level N,…` bakes only those levels and prints their Dares (the file is kept);
+ * with `--write` it writes them into the file, every other entry as it was (a lever's re-bake, §5.3).
  */
 export async function bakeMain(ctx: Sim16Ctx): Promise<void> {
   const t0 = performance.now();
@@ -636,7 +637,13 @@ export async function bakeMain(ctx: Sim16Ctx): Promise<void> {
         if (l.id % 10 === 0 && l.id > 40) worst = Math.max(worst, rescuesFlares);
       }
     }
-    if (only) {
+    if (only && process.argv.includes('--write')) {
+      // Controls v3 (§5.3 levers): re-bake only these levels; every other entry is kept as it is.
+      const merged = new Map<number, LevelBake>(CAMPAIGN_LEVELS.map((l) => [l.id, LEVEL_BAKE[l.id] as LevelBake]));
+      for (const [id, b] of entries) merged.set(id, b);
+      entries.length = 0;
+      for (const l of CAMPAIGN_LEVELS) entries.push([l.id, merged.get(l.id) as LevelBake]);
+    } else if (only) {
       for (const [id, b] of entries) {
         const lv = bakedLevel(levelDef(id) as LevelDef, b);
         const dares = bakeFeats(lv, b).map((f) => `${f.kind} ${f.target}`).join(' | ');

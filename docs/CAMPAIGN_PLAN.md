@@ -330,3 +330,17 @@ reactive 100% of 1-100 (teaching verb goals scored as finish), the Feat-seeking 
 and every Dare of levels 1-10. Advisory: reactive three stars on 41-200 2.5% (≤ 50%); humanDial
 passes all of levels 1-10 with the soft-fail; humanDial's mean stars on 41-200 0.73 miss the 0.95
 bar, by design of the Dares (it no longer earns ★2 without seeking it; humanFeat earns 1.32 there).
+
+## 9. Controls v3 in the Journey (docs/CONTROLS_V3.md §5.3, §9)
+
+- **Retired:** `dazzle`, `slippery`, `clockwork`, `gusts`, `heavy` (§3). Sun Lock stays, with a 1.0 s
+  countdown ring before each lock.
+- **Teaching slots:** L16 Wide Open · Big Sky, L29 Drought · Cloudless, L30 Crowded · Thicket, L31 Moon
+  Sun · Moonlit, L32 Lowland · Short Grass (finish goals; Dares and world variants from the bake).
+- **Composed levels** keep their draws and substitute (§3); 41 composed levels changed. Levers
+  (`SUB_OVERRIDE`, at most 8, each with its measurement in `campaign.ts`): L73 dense, L79 dropped,
+  L80 dropped, L92 dropped, L103 sparse, L123 lowland, L164 dense, L165 dropped.
+- **Names:** L85 Pine Hollow (was Slippery Sun), L94 Stop Clock (was Heavy Hands), L165 Cloudburst
+  Pass (was Slick Sun).
+- **Bake and goldens:** the re-bake changed only the 46 levels and `LEVEL_BAKE_RUN`; the goldens
+  only campaign 32 and 100.

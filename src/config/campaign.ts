@@ -342,7 +342,26 @@ const RETIRED_SUBS: Readonly<Record<RetiredId, readonly ConceptId[]>> = Object.f
  * spec's §16): SUB_OVERRIDE moves a substituted level to a later substitute (null drops the slot);
  * TOUCH_READS makes a new teaching slot's bake also require humanTouch's first-try share.
  */
-export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.freeze({});
+export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.freeze({
+  // §9.5 "substituted levels" (humanTouch's first tries over the 12 baseline streams against
+  // humanDial's on the old level, which needs ≥ its count − 1), each the first later choice that met it:
+  // L73 gusts → sparse 4 vs 12; dense 12.
+  73: 'dense',
+  // L79 gusts → sparse 1 vs 10, dense 6; dropped 9.
+  79: null,
+  // L80 gusts → sparse 0 vs 4, dense 2; dropped 4.
+  80: null,
+  // L92 clockwork → sparse 5 vs 12, dense 7, lowland 7; dropped 11.
+  92: null,
+  // L103 heavy → ration 7 vs 11; sparse 12.
+  103: 'sparse',
+  // L123 dazzle → dense 5 vs 9; lowland 12.
+  123: 'lowland',
+  // L164 slippery → sprint 4 vs 11 (sparse does not fit beside fleet); dense 10.
+  164: 'dense',
+  // L165 heavy → sprint 0 vs 6 (ration and sparse do not fit); dropped 10.
+  165: null,
+});
 export const TOUCH_READS: readonly number[] = Object.freeze([]);
 
 const isRetired = (c: DrawId): c is RetiredId => c in RETIRED_DRAW;
