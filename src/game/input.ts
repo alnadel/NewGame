@@ -3,21 +3,36 @@
 //
 // - Pointer Events with getCoalescedEvents(). Two slots: the world slot (one pointer that drags) and
 //   the button slot (the action button's disc, host.buttonHit, tested before the edge zones).
-// - The world slot: the first pointer wins and keeps it until it lifts (a later world press is
-//   ignored, never captured). What it drags is host.drag() at touch-down: 'sun' turns the sun
-//   (Δθ = −dx / viewportWidth × 360° × sensitivity, inverted on request), 'steer' slides Drip by the
-//   finger's world distance (host.uPerPx; no sensitivity or invert), 'vane' moves Gust's vane by
-//   dx / VANE_PX notches and its lift snaps the vane to its notch (vaneUp). A sun lift (pointerup,
-//   pointercancel, lostpointercapture) is an upEdge at 0 °/s: nothing coasts.
-// - The button slot: a touch on the disc that lifts within BUTTON_SLOP of its touch-down point is a
-//   press (acts++, snaps++ on a Cold Snap leg, host.onPress()); at most 2 wait for their batches, and
-//   each reaches the driver on the first tick of one (DriveControl.act). The C0b skeleton: a press
-//   commits on its lift; a touch that moves BUTTON_SLOP first acts nothing.
-// - Pointerdowns within 20 CSS px of the left/right edges, or inside the bottom safe inset + 16 px,
-//   are ignored (OS back / home gestures live there).
-// - handoff() (every TAG): a world finger that is down keeps its slot and takes the new leg's drag
-//   kind from where it is (zero jump): into 'sun' a downEdge, out of 'sun' an upEdge at 0 °/s;
-//   pending steer and vane deltas are dropped, held keys and waiting presses stay.
+// - Edge zones (§1.1): a pointerdown within EDGE_SIDE_PX of the left/right edges, or inside the
+//   bottom max(safe inset, 8 px), is ignored for its whole life (OS back / home gestures, the grip).
+// - The world slot (§1.2): the first pointer wins and keeps it until it lifts; a later world press
+//   is ignored (never captured) for its whole life, unless the owner is still (it has not travelled
+//   YIELD_PX in the last YIELD_MS of its life): then the new pointer takes the slot from its own press
+//   point with zero jump and the old one is ignored until it lifts. What it drags is host.drag() at
+//   touch-down: 'sun' turns the sun (Δθ = −dx / viewportWidth × 360° × sensitivity × boost, inverted
+//   on request), 'steer' slides Drip by the finger's world distance (host.uPerPx; no sensitivity or
+//   invert), 'vane' moves Gust's vane by dx / VANE_PX notches and its lift snaps the vane to its notch
+//   (vaneUp). A sun lift (pointerup, pointercancel, lostpointercapture) is an upEdge at 0 °/s:
+//   nothing coasts.
+//   - Start slop: a press that begins in the run's hold or start beat sends no turn until it is
+//     START_SLOP px from its press point (then the whole displacement), so a start tap turns nothing.
+//   - Swing Boost (Settings, off by default): the turn grows to 1.6× from 400 to 1000 px/s of finger
+//     speed (smoothstep), the speed read over the last SPEED_MS of an 8-sample ring.
+//   - Rest: a sun finger that has not travelled REST_PX in REST_MS rests (DriveControl.rest): aim help
+//     treats it as no hand.
+// - The button slot (§1.3): a touch on the disc presses in at once (buttonDown) and becomes a press
+//   when it lifts within BUTTON_SLOP of its touch-down point, or stays there for BUTTON_COMMIT_MS
+//   (acts++, snaps++ on a Cold Snap leg, host.onPress()); at most 2 wait for their batches, and each
+//   reaches the driver on the first tick of one (DriveControl.act). A touch that moves BUTTON_SLOP
+//   first is a world drag from its touch-down point (if the world slot is free, or its owner still)
+//   and acts nothing; after a timed commit the same move drags from where the finger is (the act
+//   stays). No drag is ever dead.
+// - handoff() (every TAG, §1.5): a world finger that is down keeps its slot and takes the new leg's
+//   drag kind from where it is (zero jump): into 'sun' a downEdge and a TAG_RAMP_SUN_MS ramp; into
+//   'steer' motion is dropped while the finger moves faster than TAG_STEER_FAST, then ramps in over
+//   TAG_RAMP_STEER_MS; into 'vane' nothing moves the vane until the finger pauses (under
+//   TAG_VANE_PAUSE px/s for TAG_VANE_PAUSE_MS). Out of 'sun' an upEdge at 0 °/s. Pending steer and
+//   vane deltas are dropped; held keys and waiting presses stay.
 // - dTheta is quantized to 1/1024° and steer to 1/64 u so live play equals replays. Input writes
 //   only dTheta, down, downEdge, upEdge, key and steer; the driver writes the rest (§1.7).
 // - Keys (§1.4): ← → / A D turn on sun legs (key ±1; Shift held, ±2 = the sim's fine rate) and steer
@@ -27,13 +42,32 @@
 // - Wheel (CC-6): each wheel event is one synthetic tap frame (catch and release at 0 °/s) turning
 //   −15°·sign(deltaY) per notch (line mode) or −0.35°·deltaY (pixel mode), at most ±45° per event,
 //   on sun legs only and never while a world finger is down; on the Title it starts the run like a key.
+// - Times are the pointer events' timeStamps and, between events, `now()` (performance.now: the same
+//   clock), so a still finger's commit, rest and pause are noticed when a batch is taken.
 
 import type { DragKind, DriveAct, DriveControl, InputFrame } from '../core/index.ts';
 
-const EDGE_PX = 20;
-const BOTTOM_EXTRA = 16;
-/** A button touch that moves this far (CSS px) before it lifts is not a press. */
-const BUTTON_SLOP = 12;
+/** Edge zones (CSS px): the sides, and the least bottom band (the safe inset when larger). */
+export const EDGE_SIDE_PX = 16;
+const EDGE_BOTTOM_PX = 8;
+/** A button touch that moves this far (CSS px) before it commits is a drag; one that stays this long (ms) commits. */
+export const BUTTON_SLOP = 12;
+export const BUTTON_COMMIT_MS = 120;
+/** A world owner within YIELD_PX for YIELD_MS yields to a new press; a sun finger within REST_PX for REST_MS rests. */
+export const YIELD_PX = 4;
+export const YIELD_MS = 300;
+export const REST_PX = 3;
+export const REST_MS = 300;
+/** Start slop (CSS px): a press in the hold or start beat turns nothing until it is this far from its press point. */
+const START_SLOP = 10;
+/** TAG follow-through guards (§1.5): ms, px/s. */
+export const TAG_RAMP_SUN_MS = 150;
+export const TAG_RAMP_STEER_MS = 300;
+export const TAG_STEER_FAST = 600;
+export const TAG_VANE_PAUSE = 40;
+export const TAG_VANE_PAUSE_MS = 120;
+/** The finger's speed is read over this window (ms). */
+const SPEED_MS = 50;
 /** CSS px of horizontal drag per vane notch (§1.2). */
 const VANE_PX = 36;
 /** Presses waiting for their batches. */
@@ -45,6 +79,12 @@ const WHEEL_MAX = 45;
 
 const qTheta = (d: number): number => Math.round(d * 1024) / 1024;
 const qSteer = (u: number): number => Math.round(u * 64) / 64;
+
+/** Swing Boost (§1.2): 1 + 0.6 · smoothstep(400, 1000, v) for a finger speed v (px/s). */
+export function swingBoost(v: number): number {
+  const t = Math.max(0, Math.min(1, (v - 400) / 600));
+  return 1 + 0.6 * t * t * (3 - 2 * t);
+}
 
 export interface InputHost {
   canvas: HTMLCanvasElement;
@@ -78,24 +118,50 @@ export function isControl(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.isContentEditable;
 }
 
-/** The control of every tick after a batch's first (nothing lands there). */
+/** The controls of every tick after a batch's first (nothing lands there but `rest`). */
 const IDLE: Readonly<DriveControl> = { act: 0, vane: 0, vaneUp: false, rest: false };
+const IDLE_REST: Readonly<DriveControl> = { act: 0, vane: 0, vaneUp: false, rest: true };
 
 function newFrame(): InputFrame {
   return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0, snap: false, verb: 0, vx: 0, vy: 0, steer: 0 };
 }
 
+/** The follow-through guard a hand-off left on the world finger (§1.5). */
+const G_NONE = 0;
+const G_SUN = 1;
+const G_STEER = 2;
+const G_VANE = 3;
+
 export class Input {
   sensitivity = 1;
   invert = false;
-  /** Swing Boost (§1.2; UI's branch adds the curve). */
+  /** Swing Boost (§1.2, Settings; off by default). */
   swingBoost = false;
+  /** The clock the pointer timestamps share (performance.now; tests replace it). */
+  now: () => number = () => performance.now();
   private readonly host: InputHost;
   /** The world slot: its pointer, what it drags and whether it is down. */
   private active = -1;
   private kind: DragKind = 'sun';
-  private lastX = 0;
   private held = false;
+  /** The finger's baseline x (motion already sent), its last sample, and its press x while the start slop holds (NaN none). */
+  private lastX = 0;
+  private curX = 0;
+  private curY = 0;
+  private slopX = Number.NaN;
+  /** Path (px) since the yield and rest clocks last restarted, and when they did (ms). */
+  private yPath = 0;
+  private yAt = 0;
+  private rPath = 0;
+  private rAt = 0;
+  /** The world finger's last 8 samples (x, ms), for its speed. */
+  private readonly ringX = new Float64Array(8);
+  private readonly ringT = new Float64Array(8);
+  private ringN = 0;
+  /** The hand-off guard (G_*), its clock (the TAG, or the steer's first slow sample; −1 not yet) and the vane's slow start (−1 none). */
+  private guard = G_NONE;
+  private gAt = 0;
+  private slowAt = -1;
   private pending = 0;
   private downEdge = false;
   private upEdge = false;
@@ -109,11 +175,12 @@ export class Input {
   private steerPending = 0;
   private vanePending = 0;
   private vaneUp = false;
-  /** The button slot: its pointer (−1 free), its touch-down point (CSS px) and whether it moved BUTTON_SLOP. */
+  /** The button slot: its pointer (−1 free), its touch-down point (CSS px) and time, and whether it committed by time. */
   private bId = -1;
   private bX = 0;
   private bY = 0;
-  private bFar = false;
+  private bAt = 0;
+  private bDone = false;
   /** Presses waiting for their batches. */
   private waiting = 0;
   private readonly frames: InputFrame[] = [];
@@ -181,9 +248,12 @@ export class Input {
 
   /** True when this pointerdown position is in an ignored edge zone. */
   isEdge(x: number, y: number): boolean {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    return x < EDGE_PX || x > w - EDGE_PX || y > h - (this.host.safeBottom() + BOTTOM_EXTRA);
+    return x < EDGE_SIDE_PX || x > window.innerWidth - EDGE_SIDE_PX || y > window.innerHeight - Math.max(this.host.safeBottom(), EDGE_BOTTOM_PX);
+  }
+
+  /** The world slot can take a new pointer at time t: it is free, or its owner has been still (§1.2). */
+  private free(t: number): boolean {
+    return !this.held || t - this.yAt >= YIELD_MS;
   }
 
   private onDown(e: PointerEvent): void {
@@ -191,29 +261,44 @@ export class Input {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const x = e.clientX;
     const y = e.clientY;
+    const t = e.timeStamp;
     const button = this.bId < 0 && this.host.buttonHit(x, y);
-    // The button first; then the world slot, whose first pointer wins (a later press is ignored).
-    if (!button && (this.held || this.isEdge(x, y))) return;
+    // The button first; then the world slot (a later press is ignored unless the owner is still).
+    if (!button && (!this.free(t) || this.isEdge(x, y))) return;
     e.preventDefault();
     try {
       this.host.canvas.setPointerCapture(e.pointerId);
     } catch {
       // Capture is best-effort; window listeners still follow the pointer.
     }
-    if (!button) return this.begin(e);
+    if (!button) return this.take(e.pointerId, x, y, t);
     this.bId = e.pointerId;
     this.bX = x;
     this.bY = y;
-    this.bFar = false;
+    this.bAt = t;
+    this.bDone = false;
   }
 
   /** Takes the world slot for a pointer (also the Title tray's drag handoff), dragging what host.drag() names. */
   begin(e: PointerEvent): void {
-    this.active = e.pointerId;
+    this.take(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+  }
+
+  /** Pointer `id` owns the world slot from (x, y) at time t (a still owner it replaces is ignored until it lifts). */
+  private take(id: number, x: number, y: number, t: number): void {
+    const wasSun = this.held && this.kind === 'sun';
+    this.active = id;
     this.kind = this.host.drag();
     this.held = true;
-    this.lastX = e.clientX;
+    this.lastX = this.curX = x;
+    this.curY = y;
+    this.slopX = this.host.starting() ? x : Number.NaN;
+    this.yPath = this.rPath = this.ringN = 0;
+    this.yAt = this.rAt = t;
+    this.push(x, t);
+    this.guard = G_NONE;
     if (this.kind === 'sun') this.touch();
+    else if (wasSun) this.upEdge = true;
     this.presses++;
     this.host.onPress();
   }
@@ -225,33 +310,103 @@ export class Input {
   }
 
   private onMove(e: PointerEvent): void {
-    if (e.pointerId === this.bId) {
-      this.bFar ||= Math.hypot(e.clientX - this.bX, e.clientY - this.bY) >= BUTTON_SLOP;
-      return;
-    }
-    if (e.pointerId !== this.active || !this.held) return;
+    const id = e.pointerId;
+    if (id !== this.bId && (id !== this.active || !this.held)) return;
     const list = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null;
     if (list && list.length > 0) {
-      for (const ce of list) this.moveTo(ce.clientX);
+      for (const ce of list) this.sample(id, ce.clientX, ce.clientY, ce.timeStamp);
     } else {
-      this.moveTo(e.clientX);
+      this.sample(id, e.clientX, e.clientY, e.timeStamp);
     }
   }
 
-  private moveTo(x: number): void {
-    const dx = x - this.lastX;
+  /** One (coalesced) sample of pointer `id`. */
+  private sample(id: number, x: number, y: number, t: number): void {
+    if (id === this.bId) {
+      if (Math.hypot(x - this.bX, y - this.bY) < BUTTON_SLOP) return;
+      // A drag after all (§1.3): the press-in springs back and the world slot takes it, from its
+      // touch-down point (or from here after a timed commit); with the slot busy it is ignored until it lifts.
+      this.bId = -1;
+      if (!this.free(t)) return;
+      if (this.bDone) this.take(id, x, y, t);
+      else this.take(id, this.bX, this.bY, this.bAt);
+    }
+    if (id === this.active && this.held) this.moveTo(x, y, t);
+  }
+
+  /** Records a world sample (x, ms) in the speed ring. */
+  private push(x: number, t: number): void {
+    const i = this.ringN++ & 7;
+    this.ringX[i] = x;
+    this.ringT[i] = t;
+  }
+
+  /** The world finger's horizontal speed (px/s) at time t, over the last SPEED_MS of its samples. */
+  private speed(t: number): number {
+    const n = this.ringN;
+    const x = this.ringX[(n - 1) & 7] as number;
+    // The newest sample at least SPEED_MS old (the oldest kept if none is).
+    let k = n - 1;
+    while (k > Math.max(0, n - 8) && (this.ringT[k & 7] as number) > t - SPEED_MS) k--;
+    const dt = t - (this.ringT[k & 7] as number);
+    return n > 0 && dt > 0 ? (Math.abs(x - (this.ringX[k & 7] as number)) * 1000) / dt : 0;
+  }
+
+  /** A guarded vane finger's pause (§1.5): under TAG_VANE_PAUSE for TAG_VANE_PAUSE_MS ends the guard. */
+  private pause(t: number): void {
+    if (this.guard !== G_VANE) return;
+    if (this.speed(t) >= TAG_VANE_PAUSE) this.slowAt = -1;
+    else if (this.slowAt < 0) this.slowAt = t;
+    else if (t - this.slowAt >= TAG_VANE_PAUSE_MS) this.guard = G_NONE;
+  }
+
+  private moveTo(x: number, y: number, t: number): void {
+    const d = Math.hypot(x - this.curX, y - this.curY);
+    this.curX = x;
+    this.curY = y;
+    this.push(x, t);
+    // The still clocks restart whenever the finger has travelled their distance.
+    if ((this.yPath += d) >= YIELD_PX) {
+      this.yPath = 0;
+      this.yAt = t;
+    }
+    if ((this.rPath += d) >= REST_PX) {
+      this.rPath = 0;
+      this.rAt = t;
+    }
+    if (this.slopX === this.slopX) {
+      // Start slop: nothing until START_SLOP px from the press point, then the whole displacement.
+      if (Math.abs(x - this.slopX) < START_SLOP) return;
+      this.slopX = Number.NaN;
+    }
+    let k = 1;
+    const g = this.guard;
+    if (g === G_SUN) k = Math.min(1, (t - this.gAt) / TAG_RAMP_SUN_MS);
+    else if (g === G_STEER) {
+      // Dropped while the swing is fast; from its first slow sample, a ramp.
+      if (this.gAt < 0 && this.speed(t) <= TAG_STEER_FAST) this.gAt = t;
+      k = this.gAt < 0 ? 0 : Math.min(1, (t - this.gAt) / TAG_RAMP_STEER_MS);
+    } else if (g === G_VANE) {
+      this.pause(t);
+      k = this.guard === G_VANE ? 0 : 1;
+    }
+    if (k >= 1) this.guard = G_NONE;
+    const dx = (x - this.lastX) * k;
     this.lastX = x;
     if (dx === 0) return;
     if (this.kind === 'steer') this.steerPending += dx * this.host.uPerPx();
     else if (this.kind === 'vane') this.vanePending += dx / VANE_PX;
-    else this.pending += (-dx / Math.max(1, this.host.viewportWidth())) * 360 * this.sensitivity * (this.invert ? -1 : 1);
+    else {
+      const boost = this.swingBoost ? swingBoost(this.speed(t)) : 1;
+      this.pending += (-dx / Math.max(1, this.host.viewportWidth())) * 360 * this.sensitivity * (this.invert ? -1 : 1) * boost;
+    }
   }
 
   private onUp(e: PointerEvent, cancel: boolean): void {
     if (e.pointerId === this.bId) {
       this.bId = -1;
-      // A still touch is a press (a cancelled one is not).
-      if (!this.bFar && !cancel) this.press();
+      // A still touch is a press on its lift (not a cancelled one, nor one that committed by time).
+      if (!this.bDone && !cancel) this.press();
       return;
     }
     if (e.pointerId !== this.active || !this.held) return;
@@ -331,8 +486,9 @@ export class Input {
 
   /**
    * Every TAG (§1.5): a world finger that is down keeps its slot with the new leg's drag kind, from
-   * where it is (zero jump). Into 'sun' it touches down on the next batch; out of 'sun' it lifts at
-   * 0 °/s. Pending steer and vane deltas are dropped; held keys and waiting presses stay.
+   * where it is (zero jump), guarded against the swing's follow-through. Into 'sun' it touches down on
+   * the next batch; out of 'sun' it lifts at 0 °/s. Pending steer and vane deltas are dropped; held
+   * keys and waiting presses stay.
    */
   handoff(): void {
     this.steerPending = 0;
@@ -343,6 +499,11 @@ export class Input {
     if (this.kind === 'sun') this.upEdge = true;
     else if (k === 'sun') this.touch();
     this.kind = k;
+    this.lastX = this.curX;
+    this.slopX = Number.NaN;
+    this.guard = k === 'sun' ? G_SUN : k === 'steer' ? G_STEER : G_VANE;
+    this.gAt = k === 'sun' ? this.now() : -1;
+    this.slowAt = -1;
   }
 
   /** Drops any finger, keys, presses and pending motion (pause, resume, new run, blur). */
@@ -386,12 +547,20 @@ export class Input {
    * Builds `n` InputFrames for this frame's ticks (and their DriveControls, for controls()). Pending
    * rotation (and Drip's slide) is split evenly (quantized, remainder carried); a touch-down lands on
    * the first frame and a lift on the last; a waiting press, the vane's change and its lift on the
-   * first control. With n = 0 (hit-stop) everything keeps accumulating.
+   * first control, `rest` on each. First a still button touch commits once it has waited
+   * BUTTON_COMMIT_MS, and a guarded vane finger's pause is noticed. With n = 0 (hit-stop) everything
+   * keeps accumulating.
    */
   takeFrames(n: number): readonly InputFrame[] {
     this.out.length = 0;
     this.ctl.length = 0;
     if (n <= 0) return this.out;
+    const t = this.now();
+    if (this.bId >= 0 && !this.bDone && t - this.bAt >= BUTTON_COMMIT_MS) {
+      this.bDone = true;
+      this.press();
+    }
+    if (this.held) this.pause(t);
     while (this.frames.length < n) this.frames.push(newFrame());
     // Left/A turns counter-clockwise (+); Shift held is the fine rate (±2). On vane legs the keys move the vane instead.
     const fine = this.shift;
@@ -403,6 +572,8 @@ export class Input {
     this.steerPending -= steer * n;
     if (Math.abs(this.steerPending) < 1e-9) this.steerPending = 0;
     const down = this.held && this.kind === 'sun';
+    // §1.2: rest only while the sun finger has been still through the whole batch.
+    const rest = down && !this.downEdge && t - this.rAt >= REST_MS;
     for (let i = 0; i < n; i++) {
       const f = this.frames[i] as InputFrame;
       f.dTheta = per;
@@ -417,13 +588,14 @@ export class Input {
       f.vy = 0;
       f.steer = steer;
       this.out.push(f);
-      this.ctl.push(i === 0 ? this.c0 : IDLE);
+      this.ctl.push(i === 0 ? this.c0 : rest ? IDLE_REST : IDLE);
     }
     const c0 = this.c0;
     c0.act = this.waiting > 0 ? 1 : 0;
     if (this.waiting > 0) this.waiting--;
     c0.vane = this.vanePending;
     c0.vaneUp = this.vaneUp;
+    c0.rest = rest;
     this.vanePending = 0;
     this.vaneUp = false;
     const first = this.frames[0] as InputFrame;
@@ -453,7 +625,7 @@ export class Input {
     return this.out;
   }
 
-  /** The DriveControls of the last takeFrames batch (§1.7; `rest` is always false in this skeleton). */
+  /** The DriveControls of the last takeFrames batch (§1.7). */
   controls(): readonly Readonly<DriveControl>[] {
     return this.ctl;
   }
