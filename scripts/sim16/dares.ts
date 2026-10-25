@@ -31,7 +31,7 @@ if (SIZE_SALTS.length !== DARE_PLAYERS) throw new Error('SIZE_SALTS must hold DA
 /** The seekers' target while sizing: never met, so they seek the whole level. */
 const SEEK_ALL = 1e9;
 
-export type SizeBot = 'reactive' | 'oracle' | 'humanDial' | 'oracleFeat' | 'humanFeat';
+export type SizeBot = 'reactive' | 'oracle' | 'humanDial' | 'oracleFeat' | 'humanFeat' | 'humanTouch';
 
 /**
  * One sizing run: a bot on a level (its world: `seed` and `flares`, the level's own when left out),
@@ -179,6 +179,12 @@ export const CONFIRM_SALTS: readonly number[] = Array.from({ length: 20 }, (_, i
 export function notRuns(run: DareRunner, w: DareWorld, snap: boolean, salts: readonly number[] = SIZE_SALTS): Promise<DareRunOut[]> {
   const base = { id: w.id, seek: null, snap, seed: w.seed, flares: w.flares, ...(w.goal === undefined ? {} : { goal: w.goal }) };
   return Promise.all([run({ ...base, bot: 'reactive', salt: 0 }), run({ ...base, bot: 'oracle', salt: 0 }), ...salts.map((salt) => run({ ...base, bot: 'humanDial', salt }))]);
+}
+
+/** Controls v3 TOUCH_READS (docs/CONTROLS_V3.md §5.3): humanTouch's runs on a world, `salts` its streams. */
+export function touchRuns(run: DareRunner, w: DareWorld, snap: boolean, salts: readonly number[]): Promise<DareRunOut[]> {
+  const base = { id: w.id, seek: null, snap, seed: w.seed, flares: w.flares, ...(w.goal === undefined ? {} : { goal: w.goal }) };
+  return Promise.all(salts.map((salt) => run({ ...base, bot: 'humanTouch', salt })));
 }
 
 /** What the bake measures of Dare `kind` on a world (campaign.ts DareMeasure). */

@@ -7,7 +7,7 @@
 // final rises become the level's baked flares. A second world, built with those flares, gives the
 // offers the Dare targets are sized from: sunflower buds between the start and the finish, gazing
 // balls with a glare-free line (a turn-limited path that survives the level on the validator's
-// rows without ever touching that ball's glare), glass clusters, and lock and gust windows. Each
+// rows without ever touching that ball's glare), glass clusters, and lock windows. Each
 // entry carries levelBakeKey of the level's inputs, so a stale entry is ignored and the vitest
 // (tests/unit/levelBake.test.ts) can tell the file is current.
 
@@ -35,6 +35,7 @@ import {
   secondMeasures,
   sizeDare,
   snapByGoal,
+  TOUCH_READS,
   type DareMeasure,
   type FeatKind,
   type FeatSpec,
@@ -54,16 +55,15 @@ import { BINS, binOf, createMaskScene, glareMask, markCaster, markEllipse, SAMPL
 import { FLARE_KEPT, SNAP_ID_BASE, type Caster, type Flare, type GazingBall } from '../../src/core/objects.ts';
 import { glareOffset } from '../../src/core/shadows.ts';
 import { campaignConfig } from '../../src/core/level.ts';
-import { sunGustAt, sunLockedAt } from '../../src/core/sim/sun.ts';
+import { sunLockedAt } from '../../src/core/sim/sun.ts';
 import { trailX } from '../../src/core/trail.ts';
-import { CONFIRM_SALTS, measureDare, notRuns, playDareRun, SIZE_SALTS, TaskPool, type DareRunner, type DareRunOut, type DareRunSpec, type DareWorld } from './dares.ts';
+import { CONFIRM_SALTS, measureDare, notRuns, playDareRun, SIZE_SALTS, TaskPool, touchRuns, type DareRunner, type DareRunOut, type DareRunSpec, type DareWorld } from './dares.ts';
 import type { Sim16Ctx } from './registry.ts';
 
 const STEP = TUNING.validator.stepTicks;
 const TURN = TUNING.validator.turnBins;
 const DEAD = -1e9;
 const LOCK_TICKS = Math.round(1.2 * TICK_HZ);
-const GUST_TICKS = 2 * TICK_HZ;
 
 /** The in-game minute (after Day 1 6:00 AM) of absolute tick `tick`, exact enough for tickAtMinute to give the tick back. */
 export function minuteOfTick(tick: number): number {
@@ -300,8 +300,6 @@ function offersOf(w: World): { deep: number; rideBest: number; rides: number; sw
   return { deep, rideBest: Math.round((10 * rideBest) / TICK_HZ) / 10, rides, swings, shadeRun };
 }
 
-/** A gust window counts as holdable when its shade is this many degrees wider each side (the wind's drift, countered late). */
-const GUST_EDGE = 4;
 const held = new Uint8Array(BINS);
 
 /** True when some bin is fully shaded on every validator row of ticks [t0, t1) (eroded by `edge` bins). */
@@ -321,11 +319,11 @@ function holdable(w: World, t0: number, t1: number, edge: number): boolean {
 }
 
 /**
- * Lock and gust windows wholly inside the level's daylight ticks [a, b) of its day: all of them, and
- * the holdable ones (some bin fully shaded through the whole window on the validator's rows).
+ * Lock windows wholly inside the level's daylight ticks [a, b) of its day: all of them, and the
+ * holdable ones (some bin fully shaded through the whole window on the validator's rows).
  */
 function windowsOf(w: World, l: LevelDef): { windows: number; holdable: number } {
-  if (!l.concepts.includes('lock') && !l.concepts.includes('gusts')) return { windows: 0, holdable: 0 };
+  if (!l.concepts.includes('lock')) return { windows: 0, holdable: 0 };
   const a = w.startTick;
   const end = tickAtMinute(l.startMinute + l.lengthMinutes);
   let n = 0;
@@ -337,10 +335,6 @@ function windowsOf(w: World, l: LevelDef): { windows: number; holdable: number }
     if (l.concepts.includes('lock') && sunLockedAt(d) && !sunLockedAt(d - 1) && t + LOCK_TICKS <= end) {
       n++;
       if (holdable(w, t, t + LOCK_TICKS, 0)) h++;
-    }
-    if (l.concepts.includes('gusts') && sunGustAt(d) >= 0 && sunGustAt(d - 1) < 0 && t + GUST_TICKS <= end) {
-      n++;
-      if (holdable(w, t, t + GUST_TICKS, GUST_EDGE)) h++;
     }
   }
   return { windows: n, holdable: h };
@@ -568,9 +562,13 @@ async function lessonVariant(pool: TaskPool<BakeTask, unknown>, l: LevelDef): Pr
     const passes = hd.filter((x) => x.passed).length;
     if (v === 0) own = passes;
     if (!lessonReads(passes, hd.length, (o as DareRunOut).passed, (r as DareRunOut).won)) continue;
+    // Controls v3 TOUCH_READS (a lever for the new teaching slots): humanTouch must read it too.
+    const touch = (salts: readonly number[]): Promise<boolean> =>
+      TOUCH_READS.includes(l.id) ? touchRuns(run, dareWorld(lv), snapByGoal(l), salts).then((t) => lessonReads(t.filter((x) => x.passed).length, t.length, true, true)) : Promise.resolve(true);
+    if (!(await touch(SIZE_SALTS))) continue;
     // Confirmed on fresh streams (the search would otherwise find worlds that suit its streams by luck).
     const [, , ...fresh] = await notRuns(run, dareWorld(lv), snapByGoal(l), CONFIRM_SALTS);
-    if (lessonReads(fresh.filter((x) => x.passed).length, fresh.length, true, true)) return { variant: v, passes, tried: v + 1 };
+    if (lessonReads(fresh.filter((x) => x.passed).length, fresh.length, true, true) && (await touch(CONFIRM_SALTS))) return { variant: v, passes, tried: v + 1 };
   }
   return { variant: 0, passes: own, tried: TEACH_VARIANTS_MAX + 1 };
 }

@@ -7,21 +7,19 @@ import type { BiomeId } from './days.ts';
 import type { ForecastId } from './forecasts.ts';
 
 /**
- * Every concept: the first forty in teaching order (level n teaches CONCEPT_IDS[n − 1], n ≤ 40).
- * v1.5 teaches the three core mechanics in chapter 1 (deep shade at 5, Sunflowers at 8, Cold Snap
- * at 10, the chapter's finale) and keeps every other teaching level where it was except Old Town
- * (11), Gates (13), Long Shadows (14), Heat Wave (15) and Mirror Sun … Giants (16-20, three places
- * later); Wide Open, Crowded and Drought, plain knob concepts, are no longer taught on a level of
- * their own and appear only in composed levels (41-200). v1.6 (docs/V1_6_PLAN.md §2.3, §2.5) teaches
- * Glass Flakes at 21 (Lowland's slot) and the Solar Flare at 38 (Moon Sun's); Lowland and Moon Sun
- * stay composed concepts (COMPOSE_ORDER in campaign.ts is unchanged).
+ * Every concept, in teaching order (level n teaches CONCEPT_IDS[n − 1]). v1.5 teaches the three core
+ * mechanics in chapter 1 (deep shade at 5, Sunflowers at 8, Cold Snap at 10, the chapter's finale);
+ * v1.6 (docs/V1_6_PLAN.md §2.3, §2.5) Glass Flakes at 21 and the Solar Flare at 38. Controls v3
+ * (docs/CONTROLS_V3.md §5.3) retires the five concepts whose challenge was the controls themselves
+ * (Mirror Sun, Heavy Sun, Slippery Sun, Clockwork, Gusts): their teaching slots 16, 29, 30, 31 and 32
+ * now teach Wide Open, Drought, Crowded, Moon Sun and Lowland, so all forty concepts are taught. The
+ * composed levels keep their draws (campaign.ts COMPOSE_ORDER and RETIRED_DRAW).
  */
 export const CONCEPT_IDS = Object.freeze([
   'drag', 'flakes', 'cloud', 'noon', 'deep', 'glare', 'swing', 'bloom', 'breezy', 'snap',
-  'oldtown', 'overcast', 'gate', 'long', 'heat', 'dazzle', 'market', 'sprint', 'stroll', 'giants',
-  'brittle', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
-  'clockwork', 'gusts', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'flare', 'marathon', 'boss',
-  'sparse', 'dense', 'drought', 'lowland', 'moonlit',
+  'oldtown', 'overcast', 'gate', 'long', 'heat', 'sparse', 'market', 'sprint', 'stroll', 'giants',
+  'brittle', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'drought', 'dense',
+  'moonlit', 'lowland', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'flare', 'marathon', 'boss',
 ] as const);
 
 /** Levels 1..TEACH_LEVELS each teach the next concept of CONCEPT_IDS. */
@@ -37,16 +35,16 @@ export type ConceptId = (typeof CONCEPT_IDS)[number];
 
 /**
  * Concept families. A composed level never carries two concepts of the same kind, except 'world'
- * (CAMPAIGN_PLAN §3). 'dial' (sun-control rules: mirror, heavy, slippery, clockwork, gusts, lock)
- * lets a control concept share a level with a time-of-day one ('sun').
+ * (CAMPAIGN_PLAN §3). 'dial' (Sun Lock, and the retired sun-control rules a composed level's draw
+ * still reads, campaign.ts RETIRED_DRAW) lets it share a level with a time-of-day one ('sun').
  */
 export type ConceptKind = 'teach' | 'world' | 'sun' | 'dial' | 'chill' | 'sky' | 'goal';
 
 /**
  * What a concept changes on the day row (after the forecast). Multipliers multiply, latMax adds,
  * the rest override (the last concept in the level's list wins); anything left out keeps the day's
- * value. Behaviour concepts (dazzle's mirror, eclipse, gusts, lock, clockwork, moonlit's palette,
- * fog, blind) have no tune entry for their rule: the sim and the renderer read SimState.mods.
+ * value. Behaviour concepts (eclipse, lock, moonlit's palette, fog, blind) have no tune entry for
+ * their rule: the sim and the renderer read SimState.mods.
  */
 export interface DayTuning {
   /** Caster spacing ×. */
@@ -75,9 +73,9 @@ export interface DayTuning {
   readonly regenMul?: number;
   /** Max Chill (Chill starts there too). */
   readonly maxChill?: number;
-  /** Sun follow-rate cap (°/s). */
+  /** Sun follow-rate cap (°/s); no concept sets it since Controls v3 (dormant, like the coast). */
   readonly sunFollow?: number;
-  /** Coasting factor per tick (0 = the sun never coasts). */
+  /** Coasting factor per tick (0 = the sun never coasts); no concept sets it since Controls v3. */
   readonly sunFriction?: number;
   /** Walk speed × (the clock is unchanged: the level covers more or less ground per minute). */
   readonly walkMul?: number;
@@ -97,7 +95,7 @@ export interface ConceptLevel {
   readonly lengthMinutes?: number;
   /** The level's goal kind (composed levels too; the teaching levels' verb goals live in campaign.ts). */
   readonly goal?: 'flakes';
-  /** A cap on the level's effective drain (lock, gusts, eclipse: rules the validator does not model). */
+  /** A cap on the level's effective drain (lock, eclipse: rules the validator does not model). */
   readonly drainCap?: number;
   /**
    * What the concept is worth in drain points (Chill/s at f = 1): the campaign builder takes it off
@@ -124,14 +122,11 @@ export interface Concept {
 const concept = (id: ConceptId, name: string, title: string, kind: ConceptKind, blurb: string, icon: string, tune?: DayTuning, level?: ConceptLevel): Concept =>
   Object.freeze({ id, name, title, blurb, icon, kind, ...(tune ? { tune: Object.freeze(tune) } : {}), ...(level ? { level: Object.freeze(level) } : {}) });
 
-/** Coasting factor per tick for a decay of 0.35/s: e^(−0.35/60) (precomputed; no Math.exp in config). */
-const SLIPPERY_FRICTION = 0.994183647521183;
-
 export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   deep: concept('deep', 'Deep Shade', 'Double Shade', 'teach', 'Where two shadows overlap the shade runs deep: Chill and the multiplier fill twice as fast.', 'deep'),
   bloom: concept('bloom', 'Sunflowers', 'Sun Garden', 'teach', 'Buds face the sun. Shine from their side (gold on the dial) and they bloom into tall sunflowers: new shade.', 'bloom'),
-  snap: concept('snap', 'Cold Snap', 'Frost Cloud', 'teach', 'Sunflowers grown from cool shade fill the frost meter. Full? Swipe down: a frosty cloud rides over Nubs.', 'snap', undefined, { cost: 3 }),
-  drag: concept('drag', 'Sun Drag', 'First Shade', 'teach', 'Drag anywhere: you are the sun. Every shadow swings with you.', 'drag', { cloudCount: 0 }),
+  snap: concept('snap', 'Cold Snap', 'Frost Cloud', 'teach', 'Sunflowers grown from cool shade fill the frost meter. Full? Tap the frost button: a frosty cloud rides over Nubs.', 'snap', undefined, { cost: 3 }),
+  drag: concept('drag', 'Sun Drag', 'First Shade', 'teach', 'Drag anywhere: you are the sun. Let go near the teal and it settles into shade.', 'drag', { cloudCount: 0 }),
   flakes: concept('flakes', 'Snowflakes', 'Flake Trail', 'goal', 'Collect the flakes before the sun melts them. Shade keeps them whole.', 'flake', { flakesPerCluster: 4 }, { goal: 'flakes', cost: 3 }),
   cloud: concept('cloud', 'Clouds', 'Umbrella', 'sky', 'Clouds are moving shade. Ride one while it lasts.', 'cloud', { waitersOnly: true }, { cost: -2 }),
   noon: concept('noon', 'Noon', 'High Noon', 'sun', 'A high sun throws short shadows. Noon is the boss.', 'sun', { epsNoon: 48 }, { startMinute: 270, lengthMinutes: 180 }),
@@ -143,7 +138,6 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   long: concept('long', 'Long Shadows', 'Autumn Light', 'sky', 'A low sun all day, casters set back from the path: only long shadows reach.', 'shadow', undefined, { forecast: 'long', cost: 8 }),
   heat: concept('heat', 'Heat Wave', 'Hot Spell', 'sky', 'A higher sun. Extra flakes, Snow ×1.5.', 'heat', undefined, { forecast: 'heat', cost: 4 }),
   overcast: concept('overcast', 'Overcast', 'Grey Day', 'sky', 'Big slow clouds, sparse cover.', 'overcast', undefined, { forecast: 'overcast', cost: -6 }),
-  dazzle: concept('dazzle', 'Mirror Sun', 'Looking Glass', 'dial', 'The sun turns against your drag: drag left to swing it right.', 'dazzle', undefined, { cost: 5 }),
   market: concept('market', 'Market Day', 'Stall Street', 'sky', 'Stalls and gate arches crowd the street.', 'market', undefined, { forecast: 'market', biome: 'oldtown', cost: 2 }),
   sprint: concept('sprint', 'Sprint', 'Hurry Up', 'world', 'Nubs walks fast. Shade comes and goes quicker.', 'sprint', { walkMul: 1.35 }, { cost: 13 }),
   stroll: concept('stroll', 'Stroll', 'Dawdle', 'world', 'Nubs dawdles, and the sun bites harder.', 'stroll', { walkMul: 0.75, drainMul: 1.25 }, { cost: -12 }),
@@ -159,11 +153,7 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   meltfast: concept('meltfast', 'Quick Melt', 'Snatch', 'goal', 'Flakes melt in half a second of sun: shade them before you reach them.', 'melt', { meltBudget: 0.5 }, { cost: 4 }),
   hardy: concept('hardy', 'Hardy Flakes', 'Snow Pile', 'goal', 'These flakes never melt. Collect them all.', 'hardy', { meltBudget: Infinity, flakesPerCluster: 5 }, { goal: 'flakes', cost: -2 }),
   flurry: concept('flurry', 'Flurry', 'Snow Globe', 'goal', 'Flakes everywhere: big clusters, close together. Each one cools Nubs.', 'flurry', { flakesPerCluster: 7, clusterGap: 0.6 }, { cost: -4 }),
-  heavy: concept('heavy', 'Heavy Sun', 'Slow Hands', 'dial', 'The sun is slow to follow and never coasts.', 'heavy', { sunFollow: 220, sunFriction: 0 }, { cost: 5 }),
-  slippery: concept('slippery', 'Slippery Sun', 'Ice Rink', 'dial', 'A flick coasts a long way. Catch it.', 'slippery', { sunFriction: SLIPPERY_FRICTION }, { cost: 9 }),
-  clockwork: concept('clockwork', 'Clockwork', 'Cuckoo', 'dial', 'The sun snaps to 30° steps when you let go.', 'clockwork', undefined, { cost: -1 }),
-  gusts: concept('gusts', 'Gusts', 'Windy Day', 'dial', 'Every 8 s a gust of wind pushes the sun for 2 s.', 'gusts', undefined, { drainCap: 40, cost: 2 }),
-  lock: concept('lock', 'Sun Lock', 'Stop and Go', 'dial', 'Every 7 s the sun locks for a moment. Plan ahead.', 'lock', undefined, { drainCap: 40, cost: 3 }),
+  lock: concept('lock', 'Sun Lock', 'Stop and Go', 'dial', 'Every 7 s the sun locks for a moment. Watch the ring run out and park it on shade that lasts.', 'lock', undefined, { drainCap: 40, cost: 3 }),
   fog: concept('fog', 'Fog', 'Pea Soup', 'teach', 'You cannot see far ahead. The dial shows only the now.', 'fog', undefined, { cost: 3 }),
   blind: concept('blind', 'No Dial', 'Blindfold', 'teach', 'The safe arcs are hidden. Read the shadows.', 'blind', undefined, { cost: 3 }),
   eclipse: concept('eclipse', 'Eclipse', 'Moon Shadow', 'sky', 'Halfway along, the sun goes dark for 6 s and comes back on the far side. Be ready to swing!', 'eclipse', undefined, { drainCap: 45, cost: 4 }),
@@ -188,7 +178,6 @@ export const CONCEPT_CONFLICTS: readonly (readonly [ConceptId, ConceptId])[] = O
   ['swing', 'sprint'],
   ['swing', 'thaw'],
   ['swing', 'stroll'],
-  ['swing', 'slippery'],
   ['flakes', 'sprint'],
   ['hardy', 'sprint'],
 ]);
