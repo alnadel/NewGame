@@ -95,7 +95,7 @@ test('the first pointer wins: a second finger landing mid-drag turns nothing', a
   await expect.poll(async () => Math.abs(angleDiff((await state(page)).theta, want)), { timeout: 3_000 }).toBeLessThan(1);
 });
 
-test('the button: a 500 ms press casts a Cold Snap; a press it cannot take is refused with its reason, the repeat with +16', async ({ page }) => {
+test('the button: a 500 ms press casts a Cold Snap; a press it cannot take is refused with its reason (busy, then charging), the repeat with +16', async ({ page }) => {
   // Level 12 starts with a full meter (the Frost Bank's start charge).
   await playLevel12(page);
   await expect.poll(async () => (await state(page)).drive.state).toBe(1);
@@ -115,6 +115,16 @@ test('the button: a 500 ms press casts a Cold Snap; a press it cannot take is re
   await playTouch(cdp, [{ id: 3, pts: pressPts(b.x, b.y, 100, 2) }]);
   await expect.poll(async () => (await state(page)).drive.refuseNote, { timeout: 3_000 }).toBe(23);
   expect((await state(page)).drive.refuse).toBe(7);
+  // The snap over (fast-forwarded), the meter charges: a press is refused for it (charging: 1), the
+  // next with +16.
+  await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(4));
+  await expect.poll(async () => (await mech(page)).snapLeft, { timeout: 5_000 }).toBe(0);
+  await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(1));
+  await playTouch(cdp, [{ id: 4, pts: pressPts(b.x, b.y, 100, 2) }]);
+  await expect.poll(async () => (await state(page)).drive.refuseNote, { timeout: 3_000 }).toBe(1);
+  await expect(page.locator('.cue')).toContainText('Cold Snap charging');
+  await playTouch(cdp, [{ id: 5, pts: pressPts(b.x, b.y, 100, 2) }]);
+  await expect.poll(async () => (await state(page)).drive.refuseNote, { timeout: 3_000 }).toBe(17);
 });
 
 test('a 100 px drag that starts on the button turns the sun 1:1 and acts nothing', async ({ page }) => {
