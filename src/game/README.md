@@ -430,8 +430,8 @@ vane and the finger's state into the sim's verbs.
   time (never on a Daily), until the act is done (a PRESS note, a vane notch) or no longer applies.
   Drip's ghost steers at its first puddle.
 - **Tips** (`moments.ts`): `onDrive(code, a)` tips the first refusal of each reason in a teaching
-  run, the vane's first ±2 notch, the first auto-calm and the first settle (`flags.settleTip`) once
-  each; `update(s, due)` tips an act that falls due.
+  run; `update(s, due)` tips an act that falls due. The vane, calm and settle tips (§6.1, §6.2) are
+  cut for the bundle budget.
 - **Settings** (§8): Aim help (Standard, Strong, Light, Off), Button side and Auto actions, applied
   from the next run (Swing Boost is cut for the bundle budget; `settings.swingBoost` stays in the save,
   unread). URL: `?aim=` and `?autoact=1` (debug runs), `?hand=left|right`.

@@ -2620,11 +2620,7 @@ export class Session {
     }
     const t = noteText(code, a, this.renderIn.drive);
     if (t) this.say(t);
-    if (this.moments.onDrive(code, a, this.s, t) && !this.debugRuns) {
-      this.d.store.update((sv) => {
-        sv.flags.settleTip = true;
-      });
-    }
+    this.moments.onDrive(code, a, this.s, t);
   }
 
   /** Words on the cue line from the controls (a `ctl:` cue, 1.6 s; event and lesson cues wait it out). */
