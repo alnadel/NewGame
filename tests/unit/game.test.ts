@@ -701,7 +701,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     inp.dispose();
   });
 
-  it('handoff into steer: motion over 600 px/s is dropped, then ramps in over 300 ms from the first slow sample', () => {
+  it('handoff into steer: motion over 600 px/s is dropped, then ramps in over 300 ms from the first slow sample (fast stretches inside the ramp dropped too)', () => {
     const { h, inp, down, move } = mk();
     down(1, 200);
     for (let i = 1; i <= 5; i++) {
@@ -726,6 +726,24 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     move(1, 350);
     // 20 px × 0.5 + 20 px × 1, at 0.5 u/px.
     expect(sum(take(inp, 1).f, 'steer')).toBe(15);
+    inp.dispose();
+  });
+
+  it('handoff into steer: a back-and-forth carried through the TAG steers nothing while fast, even after a slow turnaround', () => {
+    const { h, inp, down, move } = mk();
+    down(1, 200);
+    take(inp, 1);
+    h.drag = 'steer';
+    inp.handoff();
+    // A turnaround (slow), then 10 px every 8 ms (1250 px/s) inside the ramp: dropped once the 50 ms
+    // speed reads it (a fraction of a pixel leaks while it does).
+    h.t = 300;
+    move(1, 201);
+    for (let i = 1; i <= 6; i++) {
+      h.t = 300 + 8 * i;
+      move(1, 201 + 10 * i);
+    }
+    expect(sum(take(inp, 1).f, 'steer')).toBeLessThan(0.5);
     inp.dispose();
   });
 

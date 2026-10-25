@@ -182,8 +182,15 @@ const IDLE_BUDGET = 12;
  * so the tooling-only methods below (state, demos, pixel and map probes) compile away there.
  */
 const SINGLE = import.meta.env.MODE === 'single';
-/** Test hook: the last REFUSE note's `a` (the reason, + 16 on a repeat this leg); never kept in the single-file build. */
+/**
+ * Test hook: the last REFUSE note's `a` (the reason, + 16 on a repeat this leg), the presses answered
+ * (PRESS and REFUSE notes), the run's gust ticks, and demo('cool') (the walker's meter kept full,
+ * so a touch test plays on); never kept in the single-file build.
+ */
 let lastRefuse = 0;
+let cool = false;
+let answered = 0;
+const gustTicks: number[] = [];
 /**
  * World built before the Title's first frame: the view above Nubs plus the 540 u shadow reach, with
  * margin (GR19). Idle frames generate the rest; a tap at once pays the remainder on the first tick.
@@ -925,6 +932,7 @@ export class Session {
     events.length = 0;
     const tSim = performance.now();
     if (stepping) {
+      if (!SINGLE && cool) s.nubs.chill = s.nubs.maxChill;
       n = this.clock.advance(real);
       // Controls v3 (§2.1): the driver fills each input frame before step (bot frames skip it), and
       // the recording keeps what it added, so replays stay exact.
@@ -1440,6 +1448,7 @@ export class Session {
     this.resetRender();
     this.fx.resetRun();
     this.mech.reset();
+    if (!SINGLE) gustTicks.length = 0;
     this.featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
@@ -1914,6 +1923,7 @@ export class Session {
   }
 
   private onTickEvent(ev: SimEvent): void {
+    if (!SINGLE && ev.e === 'gust') gustTicks.push(this.s.tick);
     this.moments.onEvent(ev, this.s);
     this.mech.onEvent(ev);
     switch (ev.e) {
@@ -2605,7 +2615,10 @@ export class Session {
   private onNote(code: number, a: number): void {
     // A press the driver takes ends a teaching moment (§6.1).
     if (code === NOTE_PRESS) this.teachMode = 'off';
-    if (!SINGLE && code === NOTE_REFUSE) lastRefuse = a;
+    if (!SINGLE && (code === NOTE_PRESS || code === NOTE_REFUSE)) {
+      answered++;
+      if (code === NOTE_REFUSE) lastRefuse = a;
+    }
     const t = noteText(code, a, this.renderIn.drive);
     if (t) this.say(t);
     if (this.moments.onDrive(code, a, this.s, t) && !this.debugRuns) {
@@ -2814,6 +2827,8 @@ export class Session {
         glide: Number.isFinite(dv.glide) ? dv.glide : null,
         refuse: dv.refuse,
         refuseNote: lastRefuse,
+        answered,
+        down: this.renderIn.buttonDown,
         aimDeg: this.driveOpts.aimDeg,
       },
       el:
@@ -2824,6 +2839,7 @@ export class Session {
               wind: s.el.wind,
               hold: s.el.hold,
               spent: s.el.spent,
+              gusts: gustTicks.slice(),
               objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, need: needOf(o), veiled: veiled(s, o) })),
               burns: s.stats.burns ?? 0,
               drinks: s.stats.drinks ?? 0,
@@ -3038,8 +3054,12 @@ export class Session {
   demo(name: string): void {
     if (SINGLE) throw new Error('test hook');
     const s = this.s;
-    // Controls v3 (§12.2): 'snapReady' fills the run's meter too, so the button's press really casts.
-    if (name === 'snapReady') s.nubs.frost = Math.max(s.nubs.frost, 1);
+    // Controls v3 (§12.2): 'snapReady' fills the run's meter (the Bank's charge too), so the button's press really casts.
+    if (name === 'snapReady') {
+      s.nubs.frost = Math.max(s.nubs.frost, 1);
+      s.nubs.frostH = Math.max(s.nubs.frostH, TUNING.bank.costH);
+    }
+    if (name === 'cool') cool = true;
     // v1.5: bud, bloom, snapReady, snap, deep (game/mechanics.ts).
     if (this.mech.demo(name, s, this.snap, this.time)) return;
     let ev: SimEvent | null = null;

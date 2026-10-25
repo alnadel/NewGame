@@ -29,8 +29,9 @@
 //   stays). No drag is ever dead.
 // - handoff() (every TAG, §1.5): a world finger that is down keeps its slot and takes the new leg's
 //   drag kind from where it is (zero jump): into 'sun' a downEdge and a TAG_RAMP_SUN_MS ramp; into
-//   'steer' motion is dropped while the finger moves faster than TAG_STEER_FAST, then ramps in over
-//   TAG_RAMP_STEER_MS; into 'vane' nothing moves the vane until the finger pauses (under
+//   'steer' motion is dropped while the finger moves faster than TAG_STEER_FAST (until the ramp is
+//   done) and ramps in over TAG_RAMP_STEER_MS from its first slower sample (a back-and-forth carried
+//   through the TAG steers nothing on its fast stretches); into 'vane' nothing moves the vane until the finger pauses (under
 //   TAG_VANE_PAUSE px/s for TAG_VANE_PAUSE_MS). Out of 'sun' an upEdge at 0 °/s. Pending steer and
 //   vane deltas are dropped; held keys and waiting presses stay.
 // - dTheta is quantized to 1/1024° and steer to 1/64 u so live play equals replays. Input writes
@@ -249,10 +250,11 @@ export function createInput(host: InputHost): Input {
   /** The world finger's horizontal speed (px/s) at time t, over the last SPEED_MS of its samples. */
   const speed = (t: number): number => {
     const n = ringN;
-    // The newest sample at least SPEED_MS old (the oldest kept if none is).
+    // The newest sample at least SPEED_MS old (the oldest kept if none is): where the finger was
+    // SPEED_MS ago, as a finger stays where its last sample put it.
     let k = n - 1;
     while (k > Math.max(0, n - 8) && (ringT[k & 7] as number) > t - SPEED_MS) k--;
-    const dt = t - (ringT[k & 7] as number);
+    const dt = Math.min(SPEED_MS, t - (ringT[k & 7] as number));
     return n > 0 && dt > 0 ? (Math.abs((ringX[(n - 1) & 7] as number) - (ringX[k & 7] as number)) * 1000) / dt : 0;
   };
 
@@ -305,9 +307,10 @@ export function createInput(host: InputHost): Input {
     let k = 1;
     if (guard === G_SUN) k = Math.min(1, (t - gAt) / TAG_RAMP_SUN_MS);
     else if (guard === G_STEER) {
-      // Dropped while the swing is fast; from its first slow sample, a ramp.
-      if (gAt < 0 && speed(t) <= TAG_STEER_FAST) gAt = t;
-      k = gAt < 0 ? 0 : Math.min(1, (t - gAt) / TAG_RAMP_STEER_MS);
+      // Dropped while the swing is fast (all through the guard); from its first slow sample, a ramp.
+      const fast = speed(t) > TAG_STEER_FAST;
+      if (gAt < 0 && !fast) gAt = t;
+      k = gAt < 0 || fast ? 0 : Math.min(1, (t - gAt) / TAG_RAMP_STEER_MS);
     } else if (guard === G_VANE) {
       pause(t);
       k = guard === G_VANE ? 0 : 1;

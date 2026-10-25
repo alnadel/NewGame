@@ -47,6 +47,8 @@ export interface ShadyState {
     wind: number;
     hold: number;
     spent: number;
+    /** The ticks of this run's gusts. */
+    gusts: number[];
     objs: { k: string; x: number; y: number; state: number; size: number; grown: number; need: number; veiled: boolean }[];
     burns: number;
     drinks: number;
@@ -72,6 +74,10 @@ export interface ShadyDrive {
   refuse: number;
   /** The last REFUSE note's a: the reason, + 16 on a repeat this leg (0 none). */
   refuseNote: number;
+  /** The presses the driver answered (PRESS and REFUSE notes) since the page loaded. */
+  answered: number;
+  /** The button's press-in look on the frame drawn last. */
+  down: boolean;
   aimDeg: number;
 }
 
