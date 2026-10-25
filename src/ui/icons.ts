@@ -87,9 +87,8 @@ const ICONS = {
   // v1.4: the Snow Globe (rewards: chapters, ranks, the streak).
   globe: `<circle cx="12" cy="10" r="7"/><path d="M6.2 15.6 5 20.6h14l-1.2-5"/><path d="M12 6.8v6.4M9.2 8.4l5.6 3.2M9.2 11.6l5.6-3.2" stroke-width="1.6"/>`,
   basket: `<path d="M3.8 9.6h16.4l-1.6 9.6a1.6 1.6 0 0 1-1.6 1.4H7a1.6 1.6 0 0 1-1.6-1.4Z"/><path d="M8.4 9.6 11 4M15.6 9.6 13 4M9.4 13.4v3.6M12 13.4v3.6M14.6 13.4v3.6"/>`,
-  // Elementals v2 (docs/ELEMENTALS_V2.md §7.11): the one gesture set (HEROES[h].gesture): drag the
-  // sun, steer (a drop slid sideways); Controls v3 (docs/CONTROLS_V3.md §11.8) placeholders until UI
-  // draws its own: press (a press and its ring), vane (a sideways drag).
+  // The one gesture set (HEROES[h].gesture; Elementals v2 §7.11, Controls v3 §11.8): drag the sun,
+  // press the button (a press and its ring), steer (a drop slid sideways), the vane (a sideways drag).
   'g-drag': DRAG,
   'g-press': `<circle cx="12" cy="12" r="2.8" ${FILL}/><circle cx="12" cy="12" r="7.4"/>`,
   'g-steer': `<path d="M12 6.4s3.4 3.6 3.4 6a3.4 3.4 0 0 1-6.8 0c0-2.4 3.4-6 3.4-6Z"/><path d="M5.6 9.6 3.2 12l2.4 2.4M18.4 9.6l2.4 2.4-2.4 2.4"/>`,

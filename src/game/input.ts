@@ -31,9 +31,9 @@
 //   drag kind from where it is (zero jump): into 'sun' a downEdge and a TAG_RAMP_SUN_MS ramp; into
 //   'steer' motion is dropped while the finger moves faster than TAG_STEER_FAST (until the ramp is
 //   done) and ramps in over TAG_RAMP_STEER_MS from its first slower sample (a back-and-forth carried
-//   through the TAG steers nothing on its fast stretches); into 'vane' nothing moves the vane until the finger pauses (under
-//   TAG_VANE_PAUSE px/s for TAG_VANE_PAUSE_MS). Out of 'sun' an upEdge at 0 °/s. Pending steer and
-//   vane deltas are dropped; held keys and waiting presses stay.
+//   through the TAG steers nothing on its fast stretches); into 'vane' nothing moves the vane until
+//   the finger pauses (under TAG_VANE_PAUSE px/s for TAG_VANE_PAUSE_MS). Out of 'sun' an upEdge at
+//   0 °/s. Pending steer and vane deltas are dropped; held keys and waiting presses stay.
 // - dTheta is quantized to 1/1024° and steer to 1/64 u so live play equals replays. Input writes
 //   only dTheta, down, downEdge, upEdge, key and steer; the driver writes the rest (§1.7).
 // - Keys (§1.4): ← → / A D turn on sun legs (key ±1; Shift held, ±2 = the sim's fine rate) and steer

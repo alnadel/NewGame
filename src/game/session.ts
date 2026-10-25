@@ -1931,7 +1931,7 @@ export class Session {
         // Controls v3 (§1.5, §2.1): a finger held through the hand-off keeps working with the new leg's meaning.
         this.input.handoff();
         this.driver.interrupt();
-        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. The sun holds."
+        // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. Drag: steer Drip · …"
         this.cueShown = { id: `tag-${ev.to}`, dir: undefined };
         this.ui.showCue(this.cueShown.id);
         break;

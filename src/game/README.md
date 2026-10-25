@@ -12,8 +12,8 @@ replaced by "SHADY couldn't start." and a Reload button (`game/crash.ts`).
 | `game/cadence.ts` | The render cadence: which rAFs call `renderer.draw` (pure; unit-tested). |
 | `game/crash.ts` | The self-contained crash overlay (`#crash`) and the boot-failure splash, built with inline styles. |
 | `game/loop.ts` | `FixedClock`: 60 Hz accumulator, max 5 ticks/frame (× `?fast`), slow-mo, hit-stop, the sustained `assist` scale (the first lesson's slow time), interpolation alpha. |
-| `game/input.ts` | Pointer Events (+ coalesced) and arrow/A-D keys → per-tick `InputFrame`s (quantized dTheta/release, edge-ignore zones, latest pointer wins, release velocity); Elementals v2's verb slot, taps, holds, steering, swipes and act keys. |
-| `game/camera.ts` | View metrics and letterboxing, Nubs at 68 %/70 %, shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
+| `game/input.ts` | Controls v3 (docs/CONTROLS_V3.md §1): Pointer Events (+ coalesced), keys and the wheel → per-tick `InputFrame`s and the driver's `DriveControl`s: the world slot (one drag: the sun, Drip or Gust's vane), the button slot (the action button), edge zones, yield, rest and the TAG hand-off. `createInput(host)`. |
+| `game/camera.ts` | View metrics and letterboxing, Nubs at 60-72 % of the view height (Controls v3 §5.2: the targeting range in view below the HUD), shake and zoom pulses. Screen-space mapping `sx = ox + x·S`, `sy = oy − (y + 0.25·z)·S`. |
 | `game/fx.ts` | SimEvents → particles, rings, pops, HUD/banner timers, Nubs reactions, slow-mo and hit-stop; continuous steam, sweat, frost sparkles and fireflies. |
 | `game/assist.ts` | Guide Auto alpha rules (V1_PLAN §6.3), the ghost-thumb hint tracker (§6.2) with its sticky target arc and the first lesson, and the ui.css ghost keyframes as functions (so the canvas moves in step with the DOM hand). |
 | `game/perf.ts` | Frame-time governor, four levels (v1.1 GR4): 0 full → 1 crisp shadows → 2 DPR × 0.75 → 3 DPR × 0.625 and a 200-particle cap (never below 1 device px per CSS px). Late rAF intervals step it down, a steady 28-45 Hz display cadence with light JS work does not; 2 s warm-up after boot/resize; one step back up after 10 s of clean frames. `deviceClass()`: ≤ 4 GB or ≤ 4 cores (not iOS) starts at crisp shadows with DPR capped at 1.5. |
@@ -240,48 +240,28 @@ See CAMPAIGN_PLAN §4 for the contract; the core names (`CONCEPTS`, `levelDef`, 
 A Trial (ids 1001..1007, core `trialLevel`, `trialDef`) runs through the campaign flow above with
 its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a debug run);
 `?elfix=1` puts its objects into every kind and state for art review (bot builds only).
-- **Input** (`input.ts`, §1.3, §7.9): the host names the walking element's verb (`verb()`: 'sun'
-  before the start beat and off Trials), maps CSS px to the ground on the last drawn frame
-  (`toWorld`, `uPerPx`) and says whether a press starts on a target (`canTarget`: core
-  `burnTarget`/`growTarget`). 'sun' is today's press, byte for byte. On 'burn' and 'grow' legs a
-  press that starts on a target goes to the **verb slot** (while it is free) and is held back from
-  the sun: a burn press released within 300 ms and 12 px is a **tap** (`VERB_TAP` + its ground point,
-  quantized to 1/8 u; no catch, no turn); a grow press still for 220 ms is a **hold** (`VERB_HOLD`)
-  until it lifts or moves 24 px (`VERB_RELEASE`); moving 12 px first, or a burn press past 300 ms,
-  makes it a sun press with the turn it made. Every other press is the **sun slot**'s (latest wins),
-  so a second finger turns the sun during a hold. On 'steer' legs every press slides Drip by the
-  finger's world distance (`steer`, 1/64 u, no invert or sensitivity); on 'blow' legs a press moving
-  24 px sideways within 300 ms (|dx| ≥ 1.5·|dy|) blows one gust (`VERB_WEST`/`VERB_EAST`). Keys:
-  Up/W burns (`VERB_KEY_BURN`) or holds until up (`VERB_KEY_HOLD`, `VERB_RELEASE`); Left/Right turn
-  the sun, steer Drip (`key`) or blow one gust per press (Gust, `key` 0); Down/S and the coin snap
-  only on 'sun'. The wheel turns the sun on 'sun', 'burn' and 'grow' legs and does nothing on held-sun
-  legs (Drip's wheel steering is cut for the bundle budget). A queued verb (a queue of 4) lands on the
-  first frame of the next batch; `takeFrames` resets `verb`, `vx`, `vy` and `steer` on every frame.
-  `cut(all)` on every `tag` ends the verb slot (a held-back press is dropped, a hold sends
-  `VERB_RELEASE`) and, with `all` (a steer or blow leg on either side), the sun slot's press;
-  `releaseAll()` lets a hold go too.
+- **Input**: Controls v3 replaced the verb slot, taps, holds and swipes with one drag and one
+  button (below).
 - **`campaign.ts` variants**: `introCard` (kicker `levelTag` "TRIAL 3", the Trial's card chip, blurb,
   goal and star rules, with the intro element's glyph, or `'elementals'` on a mixer, from
   `trialGlyph`), `starRules`, `goalText`, `goalLine`, `starState` (the goal, the Dare by
   `trialDareValue`, and Steady: `stats.minChill` never under `steady`), and `hudGoal` (the Dare,
   ticks shown as seconds) with `trialDareGlyph` (burns Ember, drinks Drip, trees and the grove
   Sprout, the rain ride Gust). `campaignConfig` never relaxes a Trial.
-- **Session**: `canSnap` only while Nubs walks and no TAG is due. Every `tag` calls `input.cut` and
-  announces the hand-off on the cue line (aria-live, CueId `tag-<element>`: "Drip's turn. The sun
-  holds.", hung below the dial so what lies ahead stays clear). Results > Map and Back after a Trial call `openJourney('elementals')`; Next goes to the
+- **Session**: every `tag` hands a held finger to the new leg (`input.handoff`, `driver.interrupt`) and
+  announces the hand-off on the cue line (aria-live, CueId `tag-<element>`: "Drip's turn. Drag: steer
+  Drip · No button: the sun holds", hung below the dial so what lies ahead stays clear). Results > Map and Back after a Trial call `openJourney('elementals')`; Next goes to the
   next open Trial (`nextOpenTrial`), else to the Elementals screen. The recap tip is `CAUSE_TIPS`
   (`'<element>:<cause>'`, then `'<cause>'`; Sprout short of Sap for the bridge that took it:
   `'sprout:sap'`), else the element's `deathTip` (Nubs melting keeps today's recap tips). On T7 the
   HUD and Pause count the grove standing now (`liveStats`: `stats.grove` is set at the finish). The Pause card reads "Trial 3 · Green Bridge", the walking element's tagline
   and "{verbLine} · {keyLine}". `fillAudioView`'s health is the walker's steady health (`elHealth`;
-  Sprout's Sap never beats). The drag ghost and the lesson hint are off while an element plays its
-  own verb; on an intro Trial the DOM ghost plays the intro verb (tap, hold, steer, a swipe) on the
-  first target of the leg in reach (Ember's once the tap is due, `burnSweet`), anchored on the last
-  drawn frame (`ui.setGhostAt`), until the first verb of the run lands. **Retry from the Tag Stone**
+  Sprout's Sap never beats). The drag ghost and the lesson hint are off while an element walks;
+  teaching is by doing (Controls v3, below). **Retry from the Tag Stone**
   (intro Trials): the run's frames are recorded (`recordFrame`, bot frames too); after a loss in
   leg ≥ 1 the Results offer it, and `retryTag()` replays them headless on a fresh run to the
-  telegraph of the TAG that began the lost leg, lifts the finger there (a drag at 0 °/s, a hold let
-  go) and waits on the Pause card. A new run drops verbs left queued from the last (`dropVerbs`).
+  telegraph of the TAG that began the lost leg, lifts the finger there (a drag at 0 °/s) and waits on
+  the Pause card with the driver begun again (no arms, jobs or presses).
 - **Tips** (`moments.ts`, §10.3): until a Trial is passed (`save.elementals2`) it shows its
   elements' `ELEMENT_TIPS` while each walks ('tag' as its first leg begins, Nubs' on his second;
   'target', 'low', 'water', 'stone', 'plot' when the moment comes, looked for every 6 ticks), the
@@ -304,13 +284,9 @@ its own words. `?trial=n` opens Trial n at boot (Params.level = 1000 + n; not a 
 
 See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it readable.
 
-- **Input** (`input.ts`): a Cold Snap is asked for by a quick swipe down anywhere (≥ 40 px or 5 % of
-  the viewport height, ≥ 2.2× more down than sideways, within 450 ms of the press; a press that first
-  moves 14 px sideways or upward is a drag for good, so drags and flicks never snap; a press that
-  snaps takes back the turn it made and releases at 0 °/s), by Down or S, or by a short tap on the
-  frost meter (`hudMeterHit`). `InputFrame.snap` is set on the next tick's first frame, only while
-  `canSnap()` (a run in play past its hold and start beat; never the Title, an intro card, a pause or
-  a menu). `Input.snaps` counts them (test hook `mech().snaps`).
+- **Input**: a Cold Snap is a press of the action button (the frost meter is the button on a Nubs
+  leg), ↑/W or ↓/S; the driver casts it (`InputFrame.snap`) or refuses it with its reason (Controls
+  v3 below). `Input.snaps` counts the snap presses (test hook `mech().snaps`).
 - **`mechanics.ts`**: fills the renderer's `MechView` every frame from the sim (read defensively):
   the meter shows on a run once its frost first moves, deep shade, the snap's share left, the snap
   cloud to draw (while it lives) and the dial's bud mask (`guide.bud`). `mechanicOf(concept)` finds
@@ -323,14 +299,14 @@ See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it r
   or its green back; it pops up on `bloom`). Unknown caster kinds draw their prisms, slabs and discs
   plainly. The dial (`halo.ts`) has gold bud arcs just outside the ring and, in deep shade, an indigo
   ring with three circling frost glints. The HUD's frost meter sits in the world rect's bottom-right
-  corner (fills ice-blue; full: a deep-blue plate, a glow, a breathing pulse and a bobbing "swipe
-  down" chevron; during a snap the ring drains white). The snap cloud (`clouds.ts`) is frosty, drawn
+  corner (fills ice-blue; full: a deep-blue plate, a glow and a breathing pulse; during a snap the
+  ring drains white). Controls v3 makes it the action button (`render/hud.ts` `hudButton`). The snap cloud (`clouds.ts`) is frosty, drawn
   over its own shadow so it reads as riding over Nubs, gathers in 0.3 s and melts away at its end;
   snow falls from it (`fx.ts`, `P_SNOWFALL`).
 - **Feedback** (`fx.ts`, audio, haptics): budGrow gold motes and a ring tick (sound: a tick climbing
   the scale, ≤ 8/s), bloom (petals, BLOOM!, +Snow, a short hit-stop; a bell run), frostReady (a cool
-  ring; a glassy shimmer; the cue line "Frost full! Swipe ↓…" until the player has snapped twice in
-  the session), snap (COLD SNAP!, an ice ring and shards, a cool wash; a crack and whoosh that duck
+  ring; a glassy shimmer; the cue line "Full! Tap the frost button." ("Press ↓" on a keyboard) until
+  the player has snapped twice in the session), snap (COLD SNAP!, an ice ring and shards, a cool wash; a crack and whoosh that duck
   the score), snapEnd, deepEnter (DEEP at most every 4 s; a low whoom ≤ 1 per 2.5 s).
 - **Tips** (`moments.ts`): the level that teaches a mechanic shows its `MECH_TIPS` at their moments
   until passed; a new player's endless and daily runs get one tip per mechanic moment.
@@ -364,8 +340,8 @@ less…", red-hot (`snapCash.hot`) "A red-hot snap only shades you…", the Noon
 the scorch…". A flare miss that scorches pops SCORCHED! and tips "Missed! The flare scorched your
 tank. A Cold Snap heals it." The first saved glass cluster (its frost waits for the next
 snap) tips "Glass saved! Its frost waits for your next snap." (in Endless and on the glass's own level). A
-charge filled under a snap waits for snapEnd: the frost tip and the "Frost full! Swipe ↓" cue never
-show while no swipe can cast.
+charge filled under a snap waits for snapEnd: the frost tip and the "Full!" cue never show while no
+press can cast.
 
 - **Flow Ring** (`hud.ts`): the charge runs clockwise round the multiplier badge from its top, the
   pill's own outline dashed on (`ringCharge` over `TUNING.ring.need` of the level; at ×5 the gold
@@ -422,25 +398,73 @@ show while no swipe can cast.
   and patterns (only losing ×5 sounds).
 - **Meta**: missions 'mult-3' asks ×4 and 'hold-x5' ×5 (T8).
 
+## Controls v3 (game side, docs/CONTROLS_V3.md)
+
+One drag and one action button on every leg; the core driver (`core/drive`) turns the presses, the
+vane and the finger's state into the sim's verbs.
+- **Input** (`input.ts`, §1): `createInput(host)` returns the session's `Input` (a closure, so the
+  minifier shortens its state). The world slot: the first pointer wins; a still owner (4 px in
+  300 ms) yields to a new press; a press in the hold or start beat turns nothing for its first 10 px;
+  the edge zones are 16 px at the sides and max(safe inset, 8 px) at the bottom. `host.drag()` names
+  what it drags: the sun (Δθ = −dx / viewport width × 360° × sensitivity, × Swing Boost when on),
+  Drip (`steer`, the finger's world distance) or Gust's vane (36 px a notch, snapped on lift). A lift
+  never coasts; a finger 3 px still for 300 ms rests (`DriveControl.rest`). The button slot: the disc
+  presses in at once; a press counts on lift within 12 px or after 120 ms still (at most 2 wait for
+  their batches); a touch moving 12 px first is a world drag from its touch point and acts nothing.
+  ↑/W press, ↓/S presses on a Cold Snap leg, ←/→ turn, steer or notch the vane, the wheel turns the
+  sun. `handoff()` on every TAG keeps a held finger with the new leg's drag: into the sun a 150 ms
+  ramp; into Drip fast motion is dropped and the rest ramps in over 300 ms; into Gust the vane waits
+  for a 120 ms pause.
+- **Session**: each batch `takeFrames(n)` and `controls()` feed `driver.fill(s, f, ctl)` before
+  `step` (the recording keeps the driver's verbs, so replays stay exact). `beginRun` builds the run's
+  `DriveOpts`: `aimRadius(settings.aim or ?aim, ctx)` (mode, level, rung, Trial, No Dial), fog's
+  now-only guide, Auto Snap on the lowest comfort rungs, Auto actions and reduced motion. The notes
+  (§2.4) go to fx, audio and haptics (a repeat refusal stays silent), the cue line (`ui/labels.ts`
+  `noteText`: "Armed", "Growing", the refusal reasons, the calm cues) and the tips; a magnet glide's
+  detents tick the dial without a buzz or click. Aim help Strong and Auto actions mark a run
+  assisted, as the always-on guide does.
+- **Camera** (§5.2): Nubs sits at (352 u + the HUD band) over the view height, within 60-72 %.
+- **Teaching by doing** (§6): the first full meter on the Cold Snap's level (or a player's first ever,
+  `flags.snapTeach`), an intro Trial's first pick (Ember, Sprout) and Gust's first weather ahead: the
+  DOM ghost hand taps the button or drags the vane in the band under Nubs, its first 2.5 s in slow
+  time (never on a Daily), until the act is done (a PRESS note, a vane notch) or no longer applies.
+  Drip's ghost steers at its first puddle.
+- **Tips** (`moments.ts`): `onDrive(code, a)` tips the first refusal of each reason in a teaching
+  run, the vane's first ±2 notch, the first auto-calm and the first settle (`flags.settleTip`) once
+  each; `update(s, due)` tips an act that falls due.
+- **Settings** (§8): Aim help (Standard, Strong, Light, Off), Swing Boost, Button side and Auto
+  actions, applied from the next run. URL: `?aim=`, `?boost=0|1` and `?autoact=1` (debug runs),
+  `?hand=left|right`.
+- **Copy**: the controls' words are `CONTROL_TEXT` (config/controls.ts); the intro cards, tips and
+  the Pause card's key line speak of one drag and one button.
+
 ## Test hook (`?test=1`)
 
 `screen()`, `state()` (`phase, day, minutes, chill, snow, theta, f`, and in v1.1 `profile, rung`
 (−1 outside endless), `drain, noonCloud, forecast, biome, lessonOn`, and in v1.2 `level` (−1
-outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `gust`, `locked`, `moonlit`, and for
+outside the campaign), `mods`, `levelProgress` (0..1), `eclipse`, `locked`, `moonlit`, and for
 the Elementals `hero`, `relay` (the relay index), `charge` (the Cold Snap's), `meter`, `verb`,
-`sunHeld`, `omega` and `el` (dx, wind, hold, spent, the objects and the counts)), `forceDeath()`,
-`testWorldToScreen(x, y)` and `testSkipToLeg(i)` (bot builds),
+`sunHeld`, `omega` and `el` (dx, wind, hold, spent, the run's gust ticks, the objects with their
+`need`, and the counts); Controls v3 adds `ready` (the start beat's ticks left), `sunMode`, `lag`
+and `drive` (the driver's view: act, state, fill, pick, queue, due, buffered, incoming, vane,
+vaneResting, glide, refuse, plus `refuseNote` (the last REFUSE note's a), `answered` (PRESS and
+REFUSE notes so far), `down` (the button's press-in look as drawn) and `aimDeg`)), `forceDeath()`,
+`testWorldToScreen(x, y)` and `testSkipToLeg(i, before)` (bot builds), `button()` (the action
+button's centre, radius, whether it takes presses, and its side), `acts()` (presses input accepted),
+`testGuide()` (the guide's now, next and lasting bins),
 `runHeadless(seed, ticks, bot)`, `setTimeScale(n)`, `audioState()`; for tooling: `paused()`,
 `presses()`, `demo(name)` (fx and audio only: `phew`, `mult`, `mult5`, `noon`, `dawn`, `night`,
-`cloud`, `glare`, `flake`, `best`, in v1.1 `passed`, `swing`, `highnoon`, `postcard`, and in v1.2
-`finish`), `campaign()` (the last Results' `ResultsView.campaign`, or null), `perf()`
+`cloud`, `glare`, `flake`, `best`, in v1.1 `passed`, `swing`, `highnoon`, `postcard`, in v1.2
+`finish`, and in Controls v3 `cool`: the walker's meter kept full for the rest of the page, so a touch
+test plays on), `campaign()` (the last Results' `ResultsView.campaign`, or null), `perf()`
 (frame, sim, generation and render ms, layer counters, the DPR, `govLevel`, `draws`, and in v1.1
 `fullScreenPasses, decals`), `nubsScreen()`, `timeScale()`, `hint()`, `runCfg()`, `cameraFx()`,
 `hudPb()`, `renderOptions({ mapOverlay, multiplyShadows, decor })`, `pixelAB(a, b)`,
 `mapProbe(mapT)` (whole device pixels of the world rect only), `mapCallouts()` (Melt Map callout
 boxes, CSS px), `resultsTip()`, `postcard()` (`{ ready, stageMs, bytes, name }`) and `bot(kind)`
 (a core bot plays; unlike `?bot=` the runs stay scored), and in v1.5 `mech()` (the MechView, the
-meter's centre and the snaps input asked for) and the demos above. v1.6: `mech()` adds the pips, the
+meter's centre and the snaps input asked for) and the demos above (`snapReady` fills the sim's meter
+and the Bank's charge too, so a press really casts). v1.6: `mech()` adds the pips, the
 banked chip, the ring (on, fill, bleeding), each dial layer's bins, the flare's phase, share left and
 outcomes, Noon Heat and the badge's centre; demos `ring`, `bleed`, `trick`, `pips`, `spill`, `cash`,
 `bank`, `land`, `landing`, `deepBand`, `glass`, `flare`, `flareSoon` (a kept flare 5 s ahead, played
