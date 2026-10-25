@@ -238,14 +238,27 @@ describe('URL params', () => {
 });
 
 describe('view letterboxing (archive/TECH_SPEC §9.1)', () => {
-  it('fits 360 u across a phone and puts Nubs at 68-70 %', () => {
+  it('fits 360 u across a phone and puts Nubs as high as keeps 352 u ahead below the HUD (Controls v3 §5.2)', () => {
     const v = createView();
-    layoutView(v, 390, 844, 2, NO_INSETS);
+    layoutView(v, 390, 844, 2, { ...NO_INSETS, top: 47 });
     expect(v.k).toBeCloseTo(390 / 360);
     expect(v.viewH).toBeCloseTo(844 / (390 / 360));
-    expect(v.nubsFrac).toBe(0.7);
+    expect(v.nubsFrac).toBe(0.6);
+    layoutView(v, 430, 932, 2, { ...NO_INSETS, top: 47 });
+    expect(v.nubsFrac).toBe(0.6);
+    layoutView(v, 412, 915, 2, NO_INSETS);
+    expect(v.nubsFrac).toBe(0.6);
     layoutView(v, 360, 640, 2, NO_INSETS);
-    expect(v.nubsFrac).toBe(0.68);
+    expect(v.nubsFrac).toBeCloseTo(0.65, 9);
+    layoutView(v, 360, 640, 2, { ...NO_INSETS, top: 24 });
+    expect(v.nubsFrac).toBeCloseTo(0.6875, 9);
+    layoutView(v, 1280, 720, 1, NO_INSETS);
+    expect(v.nubsFrac).toBeCloseTo(0.6756, 3);
+    // Every size keeps 352 u visible between Nubs and the HUD band.
+    for (const [w, hh, top] of [[390, 844, 47], [360, 640, 0], [360, 640, 24], [1280, 720, 0], [430, 932, 47]] as const) {
+      layoutView(v, w, hh, 1, { ...NO_INSETS, top });
+      expect(v.nubsFrac * v.viewH - (top + 64) / v.k).toBeGreaterThanOrEqual(352 - 1e-9);
+    }
   });
   it('pillarboxes wide screens at 600 u tall', () => {
     const v = createView();

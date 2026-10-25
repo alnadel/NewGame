@@ -149,6 +149,8 @@ export function defaults(now: number = Date.now()): Save {
       persistRequested: false,
       storageWarned: false,
       missionsV2: true,
+      snapTeach: false,
+      settleTip: false,
     },
   };
 }
@@ -477,6 +479,8 @@ function sanitize(r: Rec, now: number): Save {
       persistRequested: bool(flags.persistRequested, false),
       storageWarned: bool(flags.storageWarned, false),
       missionsV2: true,
+      snapTeach: bool(flags.snapTeach, false),
+      settleTip: bool(flags.settleTip, false),
     },
   };
 }

@@ -23,6 +23,12 @@
 // 'stone' and 'plot' when the moment comes), the hand-off tips (RELAY_TIPS, at the first telegraph
 // into Drip, into Gust, and any other) and a mixer's own (MIXER_TIPS, at go). A TAG drops the stale
 // toasts and the outgoing element's tips.
+//
+// Controls v3 (docs/CONTROLS_V3.md §6.2, §13.1): the tips teach the one drag and the one button, and
+// the driver's notes and view add triggers (onDrive, update's `due`): 'due' the first amber due prompt
+// on an Ember or Sprout leg, 'vane' the first gale notch, 'calm' the first auto-calm, the first
+// refusal of each reason (its chip text), and 'settle' Nubs' first rescue capture once per profile
+// (flags.settleTip, outside the first-run lesson).
 
 import {
   burnTarget,
@@ -30,6 +36,10 @@ import {
   FLARE_KEPT,
   growTarget,
   levelProgress,
+  NOTE_CALM,
+  NOTE_NOTCH,
+  NOTE_REFUSE,
+  NOTE_SETTLE,
   queryBuds,
   tagLocked,
   trialDef,
@@ -54,21 +64,23 @@ import { mechanicOf, type Mechanic } from './mechanics.ts';
  * Elementals v2: 'tag' an element's first leg begins; 'target' its first target enters the window;
  * 'low' its steady health first under 40; 'water' (Ember) a puddle or rain ahead, (Sprout) rain on
  * Sprout or a site; 'stone' (Drip) a hot stone ahead; 'plot' (Sprout) a soil patch in the window.
+ * Controls v3: 'due', 'vane', 'calm' and 'settle' (the driver's, see the header).
  */
 export type TipOn =
   | 'go' | 'p25' | 'p60' | 'flake' | 'melt' | 'cloud' | 'goal' | 'bud' | 'bloom' | 'frost' | 'snap' | 'deep' | 'mult' | 'drop'
   | 'cash' | 'hot' | 'amber' | 'heal' | 'noon' | 'snapBud' | 'glass' | 'glassSaved' | 'soon' | 'scorch' | 'tagSoon' | 'tag'
-  | 'target' | 'low' | 'water' | 'stone' | 'plot';
+  | 'target' | 'low' | 'water' | 'stone' | 'plot' | 'due' | 'vane' | 'calm' | 'settle';
 
 type Tips = readonly (readonly [TipOn, string])[];
 
 /** Elementals v2 (§10.3): each element's tips, shown while it walks until the Trial is passed. */
 export const ELEMENT_TIPS: Readonly<Record<HeroId, Tips>> = {
   ember: [
-    ['tag', "Ember's turn! Tap a wall just before Ember reaches it."],
-    ['target', 'Tap when the ring pulses: Ember walks through its own fire and takes it back.'],
-    ['water', 'Puddles and rain douse Ember, and rain puts fires out. Tap a puddle to dry it.'],
+    ['tag', "Ember's turn! Tap the flame button once for each wall ahead."],
+    ['target', 'Tap early: Ember waits and burns the ringed wall right on time.'],
+    ['water', 'Puddles and rain douse Ember. Once the walls are armed, one more tap dries the puddle on its path.'],
     ['low', 'Low flame! Turn the sun onto Ember to refuel.'],
+    ['due', 'A wall is close! Tap the flame button.'],
   ],
   drip: [
     ['tag', "Drip's turn! Drag sideways: Drip follows your finger. The sun holds."],
@@ -76,26 +88,32 @@ export const ELEMENT_TIPS: Readonly<Record<HeroId, Tips>> = {
     ['stone', 'Hot stones shrink Drip. Steer around the orange glow.'],
   ],
   sprout: [
-    ['tag', "Sprout's turn! Hold the soil patch until its ring closes."],
-    ['target', 'Hold on the gap now: a bridge takes time to grow. Sun on it helps.'],
-    ['plot', 'A closed ring stands a tree. Save the rest of your Sap for bridges.'],
+    ['tag', "Sprout's turn! Tap the leaf button: Sprout grows the next plant."],
+    ['target', 'Tap now: a bridge takes time to grow. Sun on it helps.'],
+    ['plot', 'Tap again for a bigger tree (20 Sap a tap). Save some for bridges.'],
     ['water', 'Rain gives Sprout sap and makes plants grow fast.'],
+    ['due', 'Gap ahead! Tap the leaf button.'],
   ],
   gust: [
-    ['tag', "Gust's turn! Swipe left or right to blow the weather off the trail."],
-    ['target', 'Each swipe costs Lift. Swipe early: the wind keeps pushing.'],
-    ['low', 'Low Lift! Swipe less and stay dry: clear air restores Lift.'],
+    ['tag', "Gust's turn! Drag left or right to set the wind. Watch where the clouds will land."],
+    ['target', 'The wind keeps blowing, and it costs Lift. Tap the button to calm it when the faint ghost cloud sits where you want it.'],
+    ['low', 'Low Lift! Calm the wind and stay dry: clear air restores Lift.'],
+    ['vane', 'A gale costs a lot of Lift. Calm it once the clouds are clear.'],
+    ['calm', 'Lift ran low, so the wind calmed. Drag again to blow once Lift is back.'],
   ],
   // Every Trial starts with Nubs: his 'tag' tip is for his second leg.
-  nubs: [['tag', 'Nubs again: drag to turn the sun and stay in shade.']],
+  nubs: [['tag', 'Nubs again: drag to turn the sun. Let go near the teal and it settles in.']],
 };
 
 /** Elementals v2: the hand-off tips, at the first telegraph into Drip, into Gust, and any other (no element). */
 export const RELAY_TIPS: readonly (readonly [TipOn, string, HeroId?])[] = [
-  ['tagSoon', 'Drip is next: the sun will hold. Turn it to the dashed arcs now!', 'drip'],
+  ['tagSoon', 'Drip is next: the sun will hold. Let go and it settles on the dashed arcs.', 'drip'],
   ['tagSoon', 'Gust is next: the sun will hold where you leave it.', 'gust'],
-  ['tagSoon', 'Hand-off soon! The next element plays its own way.'],
+  ['tagSoon', "Hand-off soon! Aim at the next element's arc if you like: the sun stays there. The button changes with each element."],
 ];
+
+/** Controls v3 (§6.1, §13.1): Nubs' aim-help tip at his first rescue capture, once per profile. */
+export const SETTLE_TIP = 'Let go near the teal: the sun slides into shade.';
 
 /** Elementals v2: the mixers' own tips (Trial n), at go. */
 export const MIXER_TIPS: Readonly<Record<number, Tips>> = {
@@ -156,8 +174,8 @@ export const MECH_TIPS: Readonly<Record<Mechanic, readonly (readonly [TipOn, str
     ['p60', 'Where gold meets teal, one angle cools Nubs and grows the bud.'],
   ],
   snap: [
-    ['go', 'Sunflowers grown in shade fill the frost. Full? Swipe down.'],
-    ['frost', 'A snap is ready! Swipe down, press ↓ or tap the meter.'],
+    ['go', 'Sunflowers grown in shade fill the frost. Full? Tap the frost button.'],
+    ['frost', 'A snap is ready! Tap the frost button or press ↓.'],
     ['snapBud', 'The frost has you. The sun is free: grow a bud!'],
     ['cash', 'A white snap pours your ring into the frost and cools you full.'],
     ['hot', 'A red-hot snap only shades you. Snap before the gauge turns red.'],
@@ -240,8 +258,13 @@ export interface RunMoments {
   begin(save: Save, level: LevelDef | null, scored: boolean, relaxed?: boolean): void;
   /** One tick's event (Session.onTickEvent). */
   onEvent(ev: SimEvent, s: SimState): void;
-  /** Once per stepped frame, after the ticks. */
-  update(s: SimState): void;
+  /**
+   * Controls v3: a driver note (code, a) and its cue-line words (labels.ts noteText; '' none). True
+   * when Nubs' once-per-profile settle tip showed (the session sets flags.settleTip).
+   */
+  onDrive(code: number, a: number, s: SimState, text: string): boolean;
+  /** Once per stepped frame, after the ticks, with the driver view's due prompt (0 none). */
+  update(s: SimState, due?: number): void;
 }
 
 /** The run's moments, toasting into `banners` (closures, so the minifier shortens the state). */
@@ -276,18 +299,24 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   /** A missed flare scorched the tank (a snap or nightfall heals it); a charge filled under a snap (its tip waits for the end). */
   let scorched = false;
   let frostLater = false;
+  /** Controls v3: the run teaches (a fresh Trial or level, a new player's run), and the refusal reasons whose tip has shown (bit per reason). */
+  let teaching = false;
+  let refused = 0;
 
   /**
    * Shows the level's tip for `on` (an element's: `who`'s; `exact`: only those whose third field is
    * `who`, none or not), once per run (an `urgent` one ahead of any other toast).
    */
-  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string, exact = false): void => {
+  const tip = (on: TipOn, hold = TIP_HOLD, urgent = false, who?: string, exact = false): boolean => {
+    let shown = false;
     for (let i = 0; i < tips.length; i++) {
       const t = tips[i] as readonly [TipOn, string, string?];
       if (t[0] !== on || ((who || exact) && t[2] !== who) || (tipsShown & (1 << i)) !== 0) continue;
       tipsShown |= 1 << i;
+      shown = true;
       showToast(banners, 'tip', 'TIP', t[1], t[2] ?? tipGlyph, hold, urgent);
     }
+    return shown;
   };
 
   /** Elementals v2: the walking element's moments (§7.11) in its window ahead (near..range u). */
@@ -331,7 +360,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
   return {
     begin(save, lv, scored, relaxed = false) {
       tracked.length = 0;
-      done = total = lastCheck = tipsShown = 0;
+      done = total = lastCheck = tipsShown = refused = 0;
       burn = spent = false;
       shadeAt = -1;
       level = relaxed ? null : lv;
@@ -350,6 +379,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       else if (!lv && save.stats.runs < NEW_PLAYER_RUNS) tips.push(...FIRST_TIPS);
       // Last, so it takes the place of the level's own 'go' tip.
       if (relaxed) tips.push(['go', SOFT_FAIL_TIP]);
+      teaching = tips.length > 0;
+      if (!save.flags.settleTip) tips.push(['settle', SETTLE_TIP, 'nubs']);
       budTip = tips.some((t) => t[0] === 'bud');
       snapBudTip = tips.some((t) => t[0] === 'snapBud');
       glassTip = tips.some((t) => t[0] === 'glass');
@@ -422,7 +453,7 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           tip('bloom');
           break;
         case 'frostReady':
-          // Under a snap no swipe casts: the tip waits for its end.
+          // Under a snap no press casts: the tip waits for its end.
           if (s.snapTicks > 0) frostLater = true;
           else tip('frost');
           break;
@@ -465,7 +496,21 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       }
     },
 
-    update(s) {
+    onDrive(code, a, s, text) {
+      if (tips.length === 0 || s.phase !== 'day') return false;
+      const h = s.nubs.hero;
+      const bit = 1 << (a & 15);
+      if (code === NOTE_REFUSE && text && teaching && !(refused & bit)) {
+        // The first refusal of each reason says it as a tip too.
+        refused |= bit;
+        showToast(banners, 'tip', 'TIP', text, tipGlyph, TIP_HOLD);
+      } else if (code === NOTE_NOTCH && (a === 2 || a === -2)) tip('vane', TIP_HOLD, false, h);
+      else if (code === NOTE_CALM && a === 1) tip('calm', TIP_HOLD, false, h);
+      else if (code === NOTE_SETTLE && a === 1 && h === 'nubs' && !s.lessonOn) return tip('settle', TIP_HOLD, false, h);
+      return false;
+    },
+
+    update(s, due = 0) {
       if (s.phase !== 'day') return;
       if (soonRise >= 0 && s.tickAbs >= soonRise) {
         // The rim has run out: the flare tip leaves now.
@@ -478,6 +523,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           tip('p25');
         }
         if (p >= 0.6) tip('p60');
+        // Controls v3: the first due prompt on an Ember or Sprout leg goes ahead of any other toast.
+        if (due > 0) tip('due', TIP_HOLD, true, s.nubs.hero);
         if (s.el !== null && s.tick - elAt >= MISSION_EVERY) {
           elAt = s.tick;
           elementTips(s);

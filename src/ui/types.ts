@@ -29,7 +29,8 @@ export type ScreenId =
  * - `shade-found`: "Shade! Thick teal = safe" (1.4 s). `melting`: "Melting! Find thick teal" (1.6 s).
  */
 /** Elementals v2: `tag-<element>` announces a TAG ("Drip's turn. The sun holds."). */
-export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing' | 'snap-ready' | `tag-${HeroId}`;
+/** A cue line id; Controls v3's `ctl:` cues carry their own words (labels.ts noteText). */
+export type CueId = 'keep-shade' | 'drag' | 'shade-found' | 'melting' | 'swing' | 'snap-ready' | `tag-${HeroId}` | `ctl:${string}`;
 
 export type RunKind = 'endless' | 'daily' | 'challenge' | 'campaign';
 
@@ -137,12 +138,12 @@ export interface ChallengeBanner {
   warmup?: boolean;
 }
 
-/** Ghost-thumb hint: a looping left-right swipe (Title) or a one-way swipe (in-play hint). */
 /**
- * The ghost hand: 'both' swings both ways, 'left'/'right' drags once; Elementals v2 (§7.9) adds the
- * intro verbs ('tap', 'hold', 'steer'; a swipe is 'left'/'right'), played where setGhostAt anchors it.
+ * The ghost hand: 'both' swings both ways, 'left'/'right' drags once; played where setGhostAt anchors
+ * it, Drip's 'steer' (Elementals v2 §7.9) and Controls v3's teaching (docs/CONTROLS_V3.md §6.1, §11.8):
+ * 'press' taps the action button, 'vane' drags 40 px sideways and lifts.
  */
-export type GhostMode = 'off' | 'both' | 'left' | 'right' | 'tap' | 'hold' | 'steer';
+export type GhostMode = 'off' | 'both' | 'left' | 'right' | 'steer' | 'press' | 'vane';
 
 export interface ToastOptions {
   icon?: ToastIcon;

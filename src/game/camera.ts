@@ -1,6 +1,7 @@
 // Camera and view metrics (archive/TECH_SPEC §9.1, V1_PLAN §9): the 360 u world viewport fitted to the
-// screen (letterboxed outside 600-860 u of height), Nubs at 68 % (70 % on tall screens) of the
-// view height, trauma shake and zoom pulses. Everything is drawn in CSS-pixel screen space:
+// screen (letterboxed outside 600-860 u of height), Nubs as high as keeps the whole targeting range
+// in view below the HUD (Controls v3, docs/CONTROLS_V3.md §5.2: 60-72 % of the view height), trauma
+// shake and zoom pulses. Everything is drawn in CSS-pixel screen space:
 //   sx = ox + x·S        sy = oy − (y + 0.25·z)·S
 // so the renderer never draws under a flipped transform (text, sprites and arcs stay upright).
 
@@ -9,6 +10,9 @@ import type { Insets } from '../platform/safeArea.ts';
 export const VIEW_WIDTH = 360;
 const MIN_VIEW_H = 600;
 const MAX_VIEW_H = 860;
+/** §5.2: the world (u) that stays visible ahead of Nubs (the 340 u targeting range + 12), and the HUD band (CSS px under the top inset). */
+const AHEAD_U = 352;
+const HUD_PX = 64;
 /** Oblique projection: a point at height z is drawn 0.25·z higher. */
 export const OBLIQUE = 0.25;
 
@@ -97,7 +101,9 @@ export function layoutView(v: View, cssW: number, cssH: number, dpr: number, saf
   }
   v.k = k;
   v.viewH = viewH;
-  v.nubsFrac = viewH > 760 ? 0.7 : 0.68;
+  // §5.2: Nubs rides as high as keeps AHEAD_U visible below the HUD band, so the thumb's band
+  // under him stays clear of the dial on tall phones.
+  v.nubsFrac = Math.min(0.72, Math.max(0.6, (AHEAD_U + (safe.top + HUD_PX) / k) / viewH));
 }
 
 /** Maps world point (cx, cy) to screen (scx, scy) at scale S, then derives culling bounds. */
