@@ -1768,6 +1768,16 @@ feature code, not dead code." C0a + C0b measured 781,974 B. **Measured at the El
 allowances of 14,336, 20,480 and 7,168 B; UI's 2,690 B over, left after its whole cut list, came from
 the integration reserve (`docs/ELEMENTALS_V2.md` §13.1).
 
+**Amended for Controls v3** (`docs/CONTROLS_V3.md` §12.3, §16.3): **815 KiB (834,560 B)**, up from 810 KiB.
+Reason: "Controls v3 (docs/CONTROLS_V3.md): nine touch recognizers replaced by one drag and one button with a driver, aim help that never plays alone, arming, pour jobs and the vane; five control concepts retired; shipped feature code." C0a + C0b measured 824,994 B. **Measured at the Controls v3 merge:** 840,695 B,
+6,135 B over: CORE added 9,764 B over C0b against 3,456 B (C0c's skeleton alone was 6,020 B), ART 2,609 B over C0c
+against 2,688 B and UI 3,319 B over C0c (its own files 2,166 B against 2,176 B; the rest is the core and render code its
+readers pull in). Every team had applied its cut list. The integrator took back 8,664 B with no feature cut: the script
+build targets the same browsers as the CSS (`vite.config.ts`), so class fields and `#private` members ship natively, and
+the TypeScript `private` members of the session, Fx, the audio router, engine and music, the perf governor and haptics
+became `#private` ones, which the minifier shortens (−227 B and −8,212 B); dead merge leftovers went (−373 B), and the
+TAG cue's placement fix added 148 B. **Release: 832,031 B (812.5 KiB), 2,529 B under.**
+
 ---
 
 ## 14. Work split (five builders)

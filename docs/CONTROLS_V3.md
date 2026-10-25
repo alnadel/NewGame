@@ -1600,7 +1600,8 @@ button, bot views) about 0.9 KB more. The budget becomes **815 KiB = 834,560 B**
 integrator in `docs/V1_6_PLAN.md` A3 and `docs/UI_V2.md` §13 with the reason "Controls v3
 (docs/CONTROLS_V3.md): nine touch recognizers replaced by one drag and one button with a driver,
 aim help that never plays alone, arming, pour jobs and the vane; five control concepts retired;
-shipped feature code."
+shipped feature code." **Recorded at the merge** (§16.3): the merged build measured 840,695 B and ships at
+832,031 B, 2,529 B under, with no feature cut beyond the teams' own cut lists.
 
 | Step | Size gate |
 |---|---|
@@ -1881,3 +1882,230 @@ list) and the final `build:single`.
     `view.state` is ready, low (a plot with Sap ≤ 30) or working (pouring). `view.due` stays 0.
   - Driver cost per tick (fill with its observe, Node, reactive sun frames with presses every 20
     ticks): median 0.3-3.5 µs on T1, T3, T4 and T7; the Sprout pick's downwind test is the most.
+
+### 16.2 Merge record
+
+The three branches merged into `claude/mobile-game-web-prototype-54l0ia` with `--no-ff` in §11.0's
+order: `controls3/core` (e7dcaff, 15 commits over C0c) as b59c05c, `controls3/art` (2e28880) as 9737965
+and `controls3/ui` (e3f5d7b) as 4bccbc6. The teams' files were disjoint, nothing conflicted, and the
+typecheck was clean after each merge. The integrator's commits after them: b3813d5 (the bundle, §16.3,
+and ART's merge notes), 92cc862 (UI's fixme cases), f3f6072 (the TAG cue), 07a9ec2 (render.spec), and
+the record you are reading. Every merge note was applied:
+- **ART → UI: the glide flag.** The session sets `AudioView.glide` and passes `Haptics.onEvents(events,
+  omega, glide)` while `drive.glide` is finite; its own detent filter (§11.6) is gone, since both routes
+  now drop a glide's detents themselves.
+- **ART → UI: `HudCampaign.gust` and `AudioView.gust`.** The last writer (the campaign view's initializer)
+  and both optional fields are gone, with the audioRouter test line that set one.
+- **CORE → ART: the set-vane ghost.** After CORE's cut 1, `driveWeatherX(s, o, t, n)` is `weatherXAt`
+  for every notch, so the arrival ghost is the calm-now ghost and ART's second, ink-dashed pass drew
+  the same ellipses again. The second pass is gone (render.test: one ghost per cloud whatever the notch).
+  §3.5's two ghosts come back with the set-vane prediction if the lead restores cut 1.
+- **ART → UI: the TAG cue and the meter pill.** At 360×640 the two-line TAG cue hung below the dial
+  covered the pill and the top of the button. The session publishes `--pill-top` (174k above the
+  bottom inset), and the cue hangs below the dial only when two lines (65 px) fit above it, else it
+  takes the cue line's usual place above the dial. Measured: 390×844 and 430×932 keep it below (its
+  bottom 650 px against the pill's 670; 708 against 740), and 360×640 lifts it.
+- **ART → UI: `buttonDown`.** The session copies `input.buttonDown` into `RenderInput` every frame; no
+  change needed.
+- **ART: the Endless draw-call frame.** It was a first-run lesson run with no button; it now seeds a
+  passed lesson, so it measures the frame §12.4 means: drawImage 156, fill 183, stroke 73 (ceilings
+  190, 190, 77).
+- **UI → CORE: the fixme cases.** controls.spec's aim help pair and elementals.spec's CALM note and
+  reactiveTouch pips run. The magnet case needed three test fixes once it met the real magnet (the
+  magnet was right each time): it lifts 8° short of a lasting arc on a lit bin, moving toward it (a
+  lift past the arc glides back against the stroke, which waits `againstTicks` by design, §4.2, and
+  cut 2 left no rescue from ending shade); the sim stands still while the target is chosen and the
+  stroke played, then runs at 1/8 speed so the hook's polling stays inside the 15-tick grace; and the
+  case starts again from the new angle, at most four times, when seed 42's morning arcs moved under
+  the lift. 24 of 24 over six repeats on both projects.
+- **UI → ART: render.spec's Trial 7 frame** measures 192 fills with the §5.2 camera (181 at C0c; T2
+  174 → 188 and T4 164 → 184 stay under 190). The camera shows more of the world and the trial art is
+  cached, so T7's fill ceiling allows the world, 196, as T5's already did (216). A deviation from
+  §12.4's "the same ceilings", recorded here.
+- **render.spec's Gust chevron check** counted pixels brighter than the ground; with the new framing the
+  ground east of the button is pale (233), so the white chevron barely beat it and its ink edge counted
+  against it. It now counts changed pixels and requires a white one.
+- **CORE: the baseline** (`/home/user/controls3-core-base.json`, outside the repo) hashes to the
+  recorded SHA-256 (§16.4); the golden and bake diffs are §16.6's gates 3 and 4.
+
+### 16.3 Sizes and the budget
+
+| Step | `build:single` | Delta | Allowance |
+|---|---|---|---|
+| C0a + C0b (10ef53b) | 824,994 B | | ≤ 825,000 B: pass |
+| C0c (7aaa9ce) | 831,014 B | +6,020 over C0b | counted in CORE's |
+| `controls3/core` (e7dcaff) | 834,758 B | +9,764 over C0b | +3,456 B: **6,308 B over** after its whole cut list |
+| `controls3/art` (2e28880) | 833,623 B | +2,609 over C0c | +2,688 B: pass, after cut-list items 1-3 |
+| `controls3/ui` (e3f5d7b) | 834,333 B | +3,319 over C0c (its own files +2,166 over C0b) | +2,176 B: pass for its own files, after items 1 and 3; `CONTROL_TEXT` (+618), `aimRadius` (+408) and `hudButton` (+61) are CORE's and ART's code its readers pull in |
+| merged (4bccbc6) | 840,695 B | +15,701 over C0b | 8,320 B + the 1,240 B reserve: **6,135 B over** 834,560 B |
+| the script targets the CSS floor | 840,468 B | −227 | |
+| `#private` session | 834,972 B | −5,496 | |
+| ART's merge notes (glide flag, gust fields, the doubled ghost) | 834,599 B | −373 | |
+| `#private` Fx −415, audio router −245, engine −650, music −791, perf −329, haptics −286 | 831,883 B | −2,716 | |
+| the TAG cue's placement | 832,031 B | +148 | |
+| **release (this record)** | **832,031 B (812.5 KiB)** | | **≤ 834,560 B: pass (2,529 B under)** |
+
+**How it fits with no feature cut.** By source map, the session spent 15,160 B of its 45,363 on 1,300
+`this.member` accesses: class members keep their names through the minifier. The script build now
+targets the browsers the CSS already targets (`chrome105, edge105, firefox121, safari16`: the UI
+cannot lay out below them), so class fields and `#private` members ship natively, and the TypeScript
+`private` members of seven classes became ES `#private` members, renamed through the language service
+(declaration and every reference). The minifier shortens `#name`s, as it does locals. Behaviour is
+unchanged: `useDefineForClassFields` stays false and the transform keeps public and private
+initialisers in declaration order in the constructor, no private method is passed unbound (`#tick`
+is an arrow field), and the typecheck rejects any outside access (none existed; the test hook uses
+public members only). It is a new idiom for these files, kept to classes with many private members
+outside `src/core` (the sim's classes keep `private`).
+
+**Amendment recorded** (§12.3): **815 KiB = 834,560 B** in `docs/V1_6_PLAN.md` A3 and `docs/UI_V2.md`
+§13, with §12.3's reason. The cut lists stay as the teams applied them: CORE's 1-3 (b554779: the
+set-vane prediction, the ending rescue, Auto Snap), ART's 1-3 (the TAG banner's two lines, the
+button's scale pulses, the dial dimming with the settle-arc highlight and the capture flash) and UI's
+1 and 3 (Swing Boost, the `vane`, `calm` and `settle` tips). Restoring any of them inside the
+2,529 B left is the lead's call (CORE's b554779 reverts on its own; ART's three cost about 276 + 180
++ 370 B, UI's about 379 + 597 B).
+
+### 16.4 Levers and the baseline
+
+- **Baseline** (§9.5): humanDial, 20 held-out streams × 3 tries, on C0c (7aaa9ce) with `node
+  scripts/sim.ts --campaign --bot humanDial --tries 3 --streams 20 --json`, kept outside the repo at
+  `/home/user/controls3-core-base.json`, SHA-256
+  `dce2686f2ed95b1e1cc33bda154adddee90b4d8ffad09fd7a22d730ecedd05ee` (checked again at the merge).
+- **The refactor's proof commit** is 039bfa7 (`drive/pick.ts` and `bots/elements.ts` only; the golden
+  diff empty).
+- **`SUB_OVERRIDE`**, all 8 entries (§5.3's cap), each the first later choice that met the
+  substituted-level gate when CORE chose it (humanTouch's first tries over the 12 baseline streams
+  against humanDial's on the old level), measured before cut 2 redrew the streams:
+  L73 gusts → sparse 4 vs 12; **dense** 12. L79 gusts → sparse 1 vs 10, dense 6; **dropped** 9. L80 gusts
+  → sparse 0 vs 4, dense 2; **dropped** 4. L92 clockwork → sparse 5 vs 12, dense 7, lowland 7;
+  **dropped** 11. L103 heavy → ration 7 vs 11; **sparse** 12. L123 dazzle → dense 5 vs 9; **lowland** 12.
+  L164 slippery → sprint 4 vs 11 (sparse does not fit beside fleet); **dense** 10. L165 heavy → sprint 0
+  vs 6 (ration and sparse do not fit); **dropped** 10. The three dropped slots leave L79 (breezy) and L92
+  (ration) with one concept; `campaign.test` and `campaignGame.test` allow it.
+- **`TOUCH_READS`**: empty (the five teaching slots pass 20/20). **`AIM_OVERRIDE`**: empty (idleTouch and
+  the parked sun fail everywhere they must). **G9's global lever** (arms or jobs 2 → 3): not taken. **§6.5
+  Trial levers**: none, so no `trials` golden entry moved.
+
+### 16.5 Deviations as built
+
+**CORE**
+- Cut list 1-3 applied in one revertible commit (b554779): `driveWeatherX` reads `weatherXAt` for every
+  notch; `aimPlan` rescues only a lit sun (no `ending` parameter); the driver never casts Auto Snap
+  (`DriveOpts.autoSnap` stays in the contract, ignored). `NOTE_AUTO` carries a = 2 (arm) and 3 (job)
+  only. About 110 B in the branch.
+- Auto actions' plot rule matches the touch bots' press (a plot short of treeMin, not downwind, no plot
+  job running, Sap above treeMin + plotSap), so Auto actions plays exactly the reactive verbs on T1 and
+  T3 (§12.1).
+- G5e's player sets the notch once on the leg's first tick and keeps the governor's auto-calm.
+- reactiveTouch and humanTouch map Gust differently from §10.2's letter: a gale when the wanted wind
+  dir·wind ≥ band[1]; humanTouch calms after 30 ticks with no wanted swipe, reactiveTouch at its first
+  no-want decision (the literal mapping lost Gust Trials for reactiveTouch).
+- G5f's parked player steers Drip with G5b's plan lanes, not reactive's adaptive steer (adaptive Drip
+  let a parked sun pass T2 and T5 through Drip skill, which is not aim help).
+- humanTouch on Trials draws from humanEl's rng label, so G8 compares the same decision streams.
+- The idle advisory row includes L29 and L32 (new teaching slots, gentle enough for idle with the lesson
+  off); idleTouch adds none.
+- `tests/unit/campaignGame.test.ts` (UI's file): L32's gust check is "`sun.gust` stays 0", and a composed
+  level may have one concept.
+- No dedicated unit test for Ember's shower wait (the due invariant runs on every Ember tick of T1, T5
+  and T7 with the reactive bot instead of a randomized sweep).
+
+**ART**
+- Cut-list items 1-3 (§16.3); items 4 (the lock countdown ring) and 5 (the vane chevrons) shipped.
+- `drawGustStreaks` and `P_GUST` are removed entirely (§7.2 names them), so the Gust element's own
+  `gust` event lost its streaks too (the chevrons and the wind chip show the wind). Its whoosh is
+  throttled to one a second and it buzzes nothing (§7.3: nothing buzzes untouched but `SETTLE`).
+- The catch cue, recipe and mascot squash are gone (§1.6); the `catch` haptic stays (burn and feed use it).
+- Due amber is `#FFC83D` (not Ember's orange), and due also turns the pick ring solid (shape, not
+  colour alone). The press-in to 0.92 stays under reduced motion (direct feedback, not a bounce).
+- The calm-now ghost was ink dashes at alpha 0.45 (white vanished on Old Town's ground); at the merge it
+  is the arrival ghost itself (§16.2).
+- The sap pip is Sprout's leaf glyph; `meterShown` means "the action button is drawn"; the button hides
+  in the hold (the driver's act is `none` there); the TAG finger glow is drawn on the walker's dial, not
+  under the finger (`RenderInput` carries no pointer position).
+
+**UI**
+- Input is a closure factory, `createInput(host)`, returning §11.6's `Input` interface (minus
+  `swingBoost`), not `class Input`: about 2.9 KB smaller.
+- The yield and rest rules use path accumulators whose clocks start at touch-down; finger speed is the
+  displacement since 50 ms ago over min(50 ms, sample age); Drip's TAG guard drops fast motion through
+  the whole ramp.
+- `?aim` and `?autoact` make a run a debug run; `?hand` does not. Settings changes apply from the next run.
+- Cut-list items 1 (Swing Boost: `settings.swingBoost` stays in the save, unread; `?boost` is gone) and 3
+  (the `vane`, `calm` and `settle` tips; `flags.settleTip` removed). Item 2 not applied (it shares code
+  with the Cold Snap lesson: about 0 B).
+- Refusal tips show only in teaching runs. `pause.css`'s compact query moved from 22em to 24em (the Pause
+  card clears the halo at 430×932). elementals.spec allows one fewer intro-card blurb line under 700 px.
+- touch.spec's latency bound counts a sample on time within 50 ms or by the game's second frame after
+  the event; long touch cases keep the walker alive with the test-only `demo('cool')`, and
+  `demo('snapReady')` also fills the Bank charge.
+
+**Integrator**
+- The script build targets the CSS floor, and seven classes' `private` members are `#private` (§16.3).
+- The calm-now ghost's second pass is gone with CORE's cut 1 (§16.2); §3.5's two ghosts return with it.
+- The TAG cue's placement rule (`--pill-top`), render.spec's T7 fill ceiling (196) and chevron check,
+  the Nubs frame with the button, and the magnet e2e's test-side fixes (§16.2).
+
+### 16.6 Release gates (§12.5) at the merge
+
+1. `npm run typecheck`: clean (both configs).
+2. `npm test`: 57 files, 1,189 of 1,189 (the architecture scan included). One full run before the merge
+   commits showed an order-dependent `share.test` failure under `isolate: false` that passed alone and
+   on the re-run; not seen again.
+3. `node scripts/golden.ts`: `hashes.json` unchanged at HEAD; against C0c only `campaign` 32 and 100
+   (`32`, `32:600`, `32:1200`, `100`, `100:600`, `100:1200`, `100:1800`); no Trial entry moved; the
+   proof commit 039bfa7 touches no golden.
+4. `levelBake.gen.ts` against C0c: exactly the 46 retired-concept levels (16, 29-32, 54, 71-76, 78-81,
+   83, 85, 87, 89, 90, 92, 93, 96-100, 103, 112, 114, 123, 130, 139, 144, 145, 161-165, 167-170, 177) and
+   `LEVEL_BAKE_RUN`.
+5. `sim --check --seeds 40`: all targets met (4 min 22 s). idleTouch reaches the first night at R2, R3 and
+   R4 on 0 of 40 each (R0 5%, R1 0%, advisory); humanTouch outlives humanDial at every rung (median R0
+   Day 2 11:33 AM vs 11:28, R1 11:55 vs 11:30, R2 10:46 vs 9:28, R3 9:17 vs 8:57, R4 Day 1 12:21 PM both).
+6. `sim --campaign --bot all --tries 3 --compare` (baseline digest matches): **2 hard gates fail.**
+   Pass: oracle 200/200; reactive 100% of 1-100; the Feat-seeking oracle ★2 on 100% and every Dare of
+   1-10; idleTouch passes nothing plain idle does not (11 passes, all idle's); the five teaching slots
+   20/20 each. **Fail: substituted levels** (7 of 46: L54 1 vs 3, L139 2 vs 7, L162 10 vs 12, L163 2 vs 4,
+   L164 7 vs 11, L168 0 vs 12, L169 2 vs 9) and **chapters** (ch6 154 < 158, ch7 178 < 182, ch12 179 <
+   182, ch14 134 < 141, ch15 126 < 133, ch17 134 < 164, ch20 94 < 95). Advisory: humanTouch 95.8% of 1-40
+   on its first try (failed 10, 38, 39), its resting variant 95.0%; humanDial 93.3%; Dare met humanTouch
+   9.8%, humanDial 7.7%, oracle 10.5%; cool-run star humanTouch 1.2%, humanDial 0.5%, oracle 8.5%.
+   **Idle passes** (lesson off): L2, 14, 15, 18, 26, 29, 32, 34, 51, 111, 156; idleTouch the same 11.
+7. `sim --trials --check` (56 s), then `--perf`: **G5e fails** on T4 (+1 walks Gust's leg), T6 (−1) and
+   T7 (−1); every other gate passes (G6 waivers on T1, T2, T4, T5 and G4's on T5 as accepted before). G5f:
+   idleTouch fails every Trial, the parked sun every degree. G8: humanTouch 15/16 (humanEl 15), 16/16
+   (15), 13/16 (13), 12/16 (12), 16/16 (16), 15/16 (13), 15/16 (13). G8b: reactiveTouch 8/8 everywhere.
+   **G9 shortest windows** (reactiveTouch salt 0): T1 m376 137 ticks, T3 m408 263, T5 m436 101, T6 m511
+   280, T7 m423 105; T2 and T4 have no targets. G10 (advisory): 82, 87, 67, 91, 91, 79, 96% of refreshes.
+   **G11** (advisory), mashTouch vs reactiveTouch Dare share and stars: T1 100% 3.00 vs 100% 3.00, T2
+   100% 2.38 vs 100% 2.38, T4 100% 2.38 vs the same, T5 88% 2.75 vs 88% 2.75 (MISS: a content follow-up
+   for the mixer, §10.3), T3 0% 2.00 vs 100% 3.00, T6 0% 2.00 vs 100% 3.00, T7 0% 1.00 vs 100% 2.00
+   (PASS). G4t (advisory): 94, 100, 81, 75, 100, 94, 94%. `--perf`: the driver 0.50 µs per tick on T7
+   (gate ≤ 5), 0.33-1.20 elsewhere.
+8. `bench-step`: step ×1.053 (min ×1.096; gate ≤ 1.10), guide ×1.025 (≤ 1.5); `--gen` passes (p99 slice
+   1.04 ms, paired 0.875 × base); `--drive` 0.23 µs per tick (≤ 5).
+9. Playwright, the full suite with the default workers (2), both projects: 439 passed, 64 skipped (by
+   design: one-project cases), 1 failed in 21.4 min. The failure, touch.spec's latency case on mobile
+   (one press-in of 30 a frame late under two workers' load), passed 3 of 3 alone (`--workers=1`): a
+   load flake, not a defect.
+10. `npm run build:single`: **832,031 B ≤ 834,560 B** (§16.3).
+
+### 16.7 Open for the lead
+
+1. **§9.5's substituted-level and chapter gates (hard) fail**, as at CORE's branch, and §5.3's levers are
+   spent: `SUB_OVERRIDE` holds its 8 entries and L169 already drops its slot yet measures 2 vs 9. The
+   chapters that fail are those with the most substituted levels (ch17 has nine), and on the 154
+   unchanged levels humanTouch matches humanDial (2,346 vs 2,345 passes), so the driver is not the cause.
+   The gate compares humanTouch on substitutes that are real pacing and scarcity (sprint, fleet, ration,
+   dense) against humanDial on retired concepts that cost the bots almost nothing, so most substitutions
+   read as "harder". The choices are the lead's: raise `SUB_OVERRIDE`'s cap and drop the slots of the
+   failing levels (easier levels, the challenge §5.3 meant to keep partly gone), accept the measured
+   differences as the intended difficulty and amend the gate, or a content pass on chapters 6, 7, 12,
+   14, 15, 17 and 20.
+2. **G5e (hard) fails on T4, T6 and T7.** A constant breeze held from the leg's first tick walks the Gust
+   leg; no single §6.5 move of T4's weather (48 tried by CORE) fails +1 while keeping G1-G4, and a lower
+   Gust start (−10 Lift) drops humanTouch to 0/16. A multi-object re-authoring of the three Gust legs, with
+   their `trials` golden entries re-pinned, is the remaining route, and it is a content round, not a merge
+   fix: T4's G4 already sits at its band's floor (75%), and controls.spec, touch.spec, elementals.spec and
+   render.spec all play T4's layout.
+3. **G11** misses on T5 (mashTouch equals reactiveTouch); recorded as a content follow-up for the mixer.
+4. The 2,529 B left under the budget can buy back cut-list items (§16.3).

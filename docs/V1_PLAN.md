@@ -1,5 +1,7 @@
 # SHADY v1: Authoritative build plan
 
+Input and controls: superseded by docs/CONTROLS_V3.md (§3.3).
+
 **Precedence:** `V1_1_PLAN.md`, then `V1_PLAN.md`, then the module READMEs; `GDD.md` is the design background. The older docs are history in `archive/`.
 
 > **One-liner:** You are the sun. Don't melt Nubs.

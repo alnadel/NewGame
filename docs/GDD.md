@@ -1,5 +1,7 @@
 # SHADY: Game Design Document v1.0
 
+Input and controls: superseded by docs/CONTROLS_V3.md (§2.3, §3.2, §14).
+
 Code name `shady`. Store title: **SHADY: Don't Melt Nubs**. Platforms: web/PWA first, then iOS and Android through Capacitor. Portrait, played with one thumb.
 
 ---

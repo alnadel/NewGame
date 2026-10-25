@@ -1,5 +1,7 @@
 # SHADY Elementals v2: every element plays its own way
 
+Input and controls: superseded by docs/CONTROLS_V3.md (§1.3, §7.9).
+
 User request: "I was thinking the concept of different elements will have maybe different factors and
 core mechanic other than just revolving around sun."
 
