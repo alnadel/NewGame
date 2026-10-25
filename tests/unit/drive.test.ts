@@ -8,6 +8,9 @@ import { TUNING } from '../../src/config/tuning.ts';
 import { aimRadius } from '../../src/core/drive/aim.ts';
 import {
   createDriver,
+  NOTE_BUFFER,
+  NOTE_CALM,
+  NOTE_NOTCH,
   NOTE_PRESS,
   NOTE_REFUSE,
   REFUSE_BUSY,
@@ -158,8 +161,8 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     s.nubs.frost = 1;
     f = frame();
     d.fill(s, f, ctl());
-    expect([f.snap, d.view.buffered, d.noteN, d.notes[0], d.notes[1]]).toEqual([true, false, 1, 1, 1]);
-    d.clearNotes();
+    expect([f.snap, d.view.buffered]).toEqual([true, false]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 1], [NOTE_PRESS, 1]]);
     step(s, f);
     expect(s.snapTicks).toBeGreaterThan(0);
     // A press that never becomes legal is refused when its wait runs out.
@@ -170,10 +173,10 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     d.fill(t, frame(), ctl({ act: 1 }));
     // It waits 18 ticks after its own (still buffered on the 17th), refused on the 18th.
     for (let i = 0; i < 17; i++) d.fill(t, frame(), ctl());
-    expect([d.view.buffered, d.noteN]).toEqual([true, 0]);
+    expect([d.view.buffered, d.noteN]).toEqual([true, 1]);
     d.fill(t, frame(), ctl());
     expect([d.view.buffered, d.view.refuse, d.view.refuseTick]).toEqual([false, REFUSE_CHARGING, 19]);
-    expect(drain(d)).toEqual([[NOTE_REFUSE, REFUSE_CHARGING]]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_CHARGING]]);
     t.nubs.frost = 1;
     f = frame();
     d.fill(t, f, ctl());
@@ -182,7 +185,7 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     t.nubs.frost = 0;
     d.fill(t, frame(), ctl({ act: 1 }));
     for (let i = 0; i < 18; i++) d.fill(t, frame(), ctl());
-    expect(drain(d)).toEqual([[NOTE_REFUSE, REFUSE_CHARGING + 16]]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_CHARGING + 16]]);
   });
 
   it('refuses a Cold Snap with the first reason that applies: locked, wait, busy', () => {
@@ -198,20 +201,20 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     step(beat, TAP);
     beat.nubs.frost = 1;
     expect(beat.ready).toBeGreaterThan(0);
-    expect(refuse(beat)).toEqual([[NOTE_REFUSE, REFUSE_WAIT]]);
+    expect(refuse(beat)).toEqual([[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_WAIT]]);
     // A snap is on.
     const on = endless();
     on.nubs.frost = 1;
     step(on, { ...NO_INPUT, snap: true });
     on.nubs.frost = 1;
     expect(on.snapTicks).toBeGreaterThan(0);
-    expect(refuse(on)).toEqual([[NOTE_REFUSE, REFUSE_BUSY]]);
+    expect(refuse(on)).toEqual([[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_BUSY]]);
     // A TAG is due: locked, with the ticks to it on the view.
     const tag = trialTo(1001, 'nubs', (s) => tagLocked(s));
     tag.nubs.frost = 1;
     d.begin(tag, OPTS);
     expect([d.view.state, d.view.lockTicks]).toEqual([2, nextTagTicks(tag)]);
-    expect(refuse(tag)).toEqual([[NOTE_REFUSE, REFUSE_LOCKED]]);
+    expect(refuse(tag)).toEqual([[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_LOCKED]]);
   });
 
   it('a press on a leg with no button is dropped silently, and a buffered press does not outlive its leg', () => {
@@ -228,7 +231,7 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     tick(t, d, { act: 1 });
     expect(t.nubs.hero).toBe('nubs');
     for (let i = 0; i < 18; i++) expect(tick(t, d).snap).toBe(false);
-    expect(drain(d)).toEqual([]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 2]]);
   });
 
   it('a press in the last 30 ticks before a TAG into Ember is kept and arms on Ember\'s first tick', () => {
@@ -243,7 +246,7 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
       d.interrupt();
       tick(s, d);
     }
-    expect(drain(d)).toEqual([]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 2]]);
     const p = emberPick(s, new Int16Array([-1, -1]));
     expect(p).toBeGreaterThanOrEqual(0);
     tick(s, d);
@@ -369,13 +372,13 @@ describe('Ember (§3.2)', () => {
     expect(drain(d)).toEqual([[NOTE_PRESS, 2], [NOTE_PRESS, 2]]);
     tick(s, d, { act: 1 });
     for (let k = 0; k < 18; k++) tick(s, d);
-    expect(drain(d)).toEqual([[NOTE_REFUSE, REFUSE_FULL]]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 2], [NOTE_REFUSE, REFUSE_FULL]]);
     const t = trialTo(1001, 'ember');
     for (const o of objs(t)) o.state = EL_GONE;
     d.begin(t, OPTS);
     tick(t, d, { act: 1 });
     for (let k = 0; k < 18; k++) tick(t, d);
-    expect(drain(d)).toEqual([[NOTE_REFUSE, REFUSE_NOTHING]]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 2], [NOTE_REFUSE, REFUSE_NOTHING]]);
   });
 
   it('an arm waits for Flame above its cost, then fires; an arm past its last working tick drops', () => {
@@ -492,7 +495,7 @@ describe('Sprout (§3.3)', () => {
       sap(s);
       tick(s, d);
     }
-    expect(drain(d)).toEqual([[NOTE_PRESS, 3], [NOTE_PRESS, 3], [NOTE_REFUSE, REFUSE_FULL]]);
+    expect(drain(d)).toEqual([[NOTE_PRESS, 3], [NOTE_PRESS, 3], [NOTE_BUFFER, 3], [NOTE_REFUSE, REFUSE_FULL]]);
     // A plot job (here with the crossings gone): two more presses take its goal from 20 to 60 (capped);
     // a fourth has nothing to do.
     const u = trialTo(1003, 'sprout');
@@ -513,7 +516,7 @@ describe('Sprout (§3.3)', () => {
       step(u, g);
     }
     expect([size < 60, o.size]).toEqual([true, 60]);
-    expect(drain(d)).toEqual([[NOTE_PRESS, 3], [NOTE_PRESS, 3], [NOTE_PRESS, 3], [NOTE_REFUSE, REFUSE_NOTHING]]);
+    expect(drain(d)).toEqual([[NOTE_PRESS, 3], [NOTE_PRESS, 3], [NOTE_PRESS, 3], [NOTE_BUFFER, 3], [NOTE_REFUSE, REFUSE_NOTHING]]);
     // A new plot job needs Sap above 30.
     const t = trialTo(1003, 'sprout');
     for (const x of objs(t)) if (isCrossing(x)) x.state = EL_GONE;
@@ -527,7 +530,7 @@ describe('Sprout (§3.3)', () => {
       sap(t, 30);
       tick(t, d);
     }
-    expect(drain(d)).toEqual([[NOTE_REFUSE, REFUSE_LOW]]);
+    expect(drain(d)).toEqual([[NOTE_BUFFER, 3], [NOTE_REFUSE, REFUSE_LOW]]);
   });
 
   it('drops a job whose plot already stands as a tree (a pre-empted plot that stood meanwhile)', () => {
@@ -622,12 +625,13 @@ describe('Gust (§3.5)', () => {
     expect(d.view.vane).toBe(0);
     tick(s, d, { vane: -1, vaneUp: true });
     expect(d.view.vane).toBe(-1);
-    // A Calm press stills it; on a calm vane a press does nothing.
-    expect(drain(d)).toEqual([]);
+    // The notch changes and the auto-calm (CALM a = 1).
+    expect(drain(d)).toEqual([[NOTE_NOTCH, -1], [NOTE_CALM, 1], [NOTE_NOTCH, -1]]);
+    // A Calm press stills it (PRESS, CALM a = 0); on a calm vane a press does nothing but CALM a = 2 (no REFUSE).
     tick(s, d, { act: 1 });
     expect([d.view.vane, d.view.state]).toEqual([0, 0]);
     tick(s, d, { act: 1 });
-    expect(drain(d)).toEqual([[NOTE_PRESS, 4]]);
+    expect(drain(d)).toEqual([[NOTE_PRESS, 4], [NOTE_CALM, 0], [NOTE_CALM, 2]]);
     // No weather in play: the vane keeps its notch, dimmed, and blows nothing.
     for (const o of el.objs) if (o.kind === 'rain' || o.kind === 'fog') o.state = EL_GONE;
     tick(s, d, { vane: 2, vaneUp: true });
