@@ -22,12 +22,16 @@
 //
 // Controls v3 (docs/CONTROLS_V3.md §10.2): the timing the driver shares (Ember's ignition moment,
 // the shower and downwind tests, Gust's Lift floor and its weather test) lives in drive/pick.ts; the
-// policy calls it with its own press lead and keeps its own target order and margins.
+// policy calls it with its own press lead and keeps its own target order and margins. The `touch`
+// variant plays the v3 controls through a driver instead (the touch bots): no taps, holds or swipes;
+// `press` decides the button from the driver's view (Ember once per pick, Sprout once per crossing
+// and per plot) and sets the Gust vane from the swipe decisions; Drip steers as before.
 
 import type { HeroId } from '../../../config/heroes.ts';
 import { TUNING } from '../../../config/tuning.ts';
 import { DT, TICK_HZ } from '../../clock.ts';
 import { worldYAtTick } from '../../gen/plan.ts';
+import type { DriveControl, DriveView } from '../../drive/driver.ts';
 import { downwind, emberDue, emberLeft, gustFloor, overlapQ, paceOf, showered } from '../../drive/pick.ts';
 import { EL_GONE, EL_IDLE, type ElObj, type ElState } from '../../objects.ts';
 import { rngFor, type Rng } from '../../rng.ts';
@@ -76,6 +80,8 @@ const FOG_VEIL = 10;
 const RAIN_SHADE = 28;
 /** Drip's lane decisions in flight (humanEl's finger lags them). */
 const STEER_Q = 4;
+/** humanTouch presses Calm once no swipe was wanted for this many ticks (§10.2 says 90: the vane then over-pushes, §16). */
+const CALM_AFTER = 30;
 
 /** Ground points enter the frame on the 1/8 u grid, steers on the 1/64 u grid (§7.9). */
 const q8 = (v: number): number => Math.round(v * 8) / 8;
@@ -195,6 +201,8 @@ export interface ElPolicyOpts {
   readonly spam?: { readonly dir: -1 | 1; readonly every: number };
   /** G5(b): leg indices whose verb is switched off. */
   readonly off?: readonly number[];
+  /** Controls v3 (§10.2): play the button and the vane through a driver (press()), not taps, holds and swipes. */
+  readonly touch?: boolean;
 }
 
 export interface ElPolicy {
@@ -202,11 +210,17 @@ export interface ElPolicy {
   busy(): boolean;
   /** Fills the element fields of `f` (which holds the sun play) for the walking element. */
   fill(s: SimState, f: InputFrame): void;
+  /**
+   * Touch (§10.2): the button and the vane for this tick into `c`, from the driver's view `v`. A
+   * press waits for `free` (no sun drag in progress); returns true when it pressed.
+   */
+  press(s: SimState, v: Readonly<DriveView>, c: DriveControl, free: boolean): boolean;
 }
 
 export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
   const salt = opts.salt ?? 0;
   const human = opts.human === true;
+  const touch = opts.touch === true;
   const hand = createHand();
   const lane = new Float64Array(2);
   let run: SimState | null = null;
@@ -226,6 +240,14 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
   const steerTo = new Float64Array(STEER_Q);
   let steerN = 0;
   let lateSwipe = 0;
+  // Touch (§10.2): objects pressed for once; the wanted vane notch, when it lands and the notch it
+  // lands as (a wrong way first), the last tick a change was wanted.
+  let pressed = new Uint8Array(0);
+  let vaneWant = 0;
+  let vaneAt = -1;
+  let vaneSet = 0;
+  let wantAny = -1e9;
+  let fix = 0;
 
   function reset(s: SimState): void {
     run = s;
@@ -235,6 +257,11 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
     delay = new Int32Array(n);
     jitter = new Int8Array(n);
     if (salt > 0 || human) for (let i = 0; i < n; i++) jitter[i] = rng.int(-6, 6);
+    pressed = new Uint8Array(n);
+    vaneAt = -1;
+    vaneWant = 0;
+    wantAny = -1e9;
+    fix = 0;
     Object.assign(hand, createHand());
     hand.regrab = human ? msTicks(150) : REGRAB;
     wake.clear();
@@ -264,6 +291,31 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
 
   return {
     busy: () => hand.mode !== 0,
+    press(s: SimState, v: Readonly<DriveView>, c: DriveControl, free: boolean): boolean {
+      const el = s.el;
+      c.act = 0;
+      c.vane = 0;
+      c.vaneUp = false;
+      if (el === null || s.phase !== 'day' || s.ready > 0) return false;
+      if (s !== run) reset(s);
+      const hero = s.nubs.hero;
+      if (hero === 'gust') return vane(s, el, v, c, free);
+      const p = v.pick;
+      // The reaction delay runs from the tick the target becomes the pick.
+      if (p < 0 || pressed[p] === 1 || (hero !== 'ember' && hero !== 'sprout') || !ready(s, p) || !free) return false;
+      const o = el.objs[p] as ElObj;
+      const q0 = v.queue[0] as number;
+      if (hero === 'ember') {
+        // Once per target while an arm is free.
+        if (q0 >= 0 && (v.queue[1] as number) >= 0) return false;
+      } else if (o.kind === 'plot') {
+        // A plot once, with Sap for its tree and the reserve, not downwind, when no plot job runs.
+        if (s.nubs.chill <= SP.treeMin + PLOT_SAP || downwind(s, el, o) || (v.queue[1] as number) >= 0 || (q0 >= 0 && (el.objs[q0] as ElObj).kind === 'plot')) return false;
+      } else if ((v.queue[1] as number) >= 0) return false;
+      pressed[p] = 1;
+      c.act = 1;
+      return true;
+    },
     fill(s: SimState, f: InputFrame): void {
       const el = s.el;
       f.verb = 0;
@@ -278,6 +330,12 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       }
       const hero = s.nubs.hero;
       const on = s.phase === 'day' && s.ready === 0 && !(opts.off?.includes(relay) ?? false);
+      if (touch) {
+        // The button and the vane are press()'s; the sun holds on Drip and Gust legs, Drip steers.
+        if (hero === 'drip' || hero === 'gust') f.dTheta = 0;
+        if (on && hero === 'drip') drip(s, el, f);
+        return;
+      }
       // humanEl starts a press only with the finger off the sun (between its drags).
       if (on && hand.mode === 0 && !(human && f.down)) {
         if (hero === 'ember') ember(s, el);
@@ -466,6 +524,73 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
     if (east <= west && now - east >= bar) dir = 1;
     else if (west < east && now - west >= bar) dir = -1;
     if (dir !== 0) swipe(s, f, dir);
+  }
+
+  /**
+   * Touch Gust (§10.2): every 6 ticks gust()'s swipe decision becomes a vane target: a wanted swipe
+   * `dir` sets the notch to dir (2·dir when the wind already blows the breeze's band that way); a
+   * decision that wants none calms a set vane (reactiveTouch at once, humanTouch once no swipe was
+   * wanted for CALM_AFTER ticks). humanTouch sets a notch after its reaction delay, 5% the wrong way
+   * (corrected one delay later) and 10% one decision late.
+   */
+  function vane(s: SimState, el: ElState, v: Readonly<DriveView>, c: DriveControl, free: boolean): boolean {
+    let calm = false;
+    if (el.legTick % 6 === 0) {
+      const dir = gustWant(s, el);
+      if (dir !== 0 && dir === dir) {
+        // A gale when the wind already blows the breeze's band that way (a breeze would not kick).
+        const n = dir * el.wind >= (TUNING.drive.gust.band[1] as number) ? 2 * dir : dir;
+        wantAny = s.tick;
+        // A new notch, or the one wanted again after an auto-calm.
+        if (n !== vaneWant || (vaneAt < 0 && v.vane !== n)) {
+          vaneWant = n;
+          vaneSet = n;
+          vaneAt = s.tick;
+          fix = 0;
+          if (human) {
+            vaneAt += msTicks(250 + 80 * gaussian(rng));
+            if (rng.chance(0.05)) {
+              vaneSet = -n;
+              fix = 1;
+            }
+            if (rng.chance(0.1)) vaneAt += 6;
+          }
+        }
+      } else calm = dir === 0 && (!human || s.tick - wantAny >= CALM_AFTER);
+    }
+    if (vaneAt >= 0 && s.tick >= vaneAt) {
+      c.vane = vaneSet - v.vane;
+      c.vaneUp = true;
+      if (fix === 1) {
+        // The wrong way, put right after one more reaction delay.
+        fix = 0;
+        vaneSet = vaneWant;
+        vaneAt = s.tick + msTicks(250 + 80 * gaussian(rng));
+      } else vaneAt = -1;
+      return false;
+    }
+    if (v.vane !== 0 && vaneAt < 0 && calm && free) {
+      c.act = 1;
+      vaneWant = 0;
+      return true;
+    }
+    return false;
+  }
+
+  /** gust()'s decision as a wanted swipe way (0 none wanted; NaN not decided: within SWIPE_EVERY of the last, or at the Lift floor). */
+  function gustWant(s: SimState, el: ElState): number {
+    if (s.tick - lastSwipe < SWIPE_EVERY || s.nubs.chill <= gustFloor(s, el)) return NaN;
+    const now = harm(s, el, 0);
+    const kick = G.kick * (inWeather(el, 'fog', s.nubs.x, s.nubs.y) ? G.fogMuffle : 1);
+    let dir = rideDir(s, el);
+    if (dir === 0 || dir * el.wind > G.windMax - kick / 2 || harm(s, el, dir * kick) > now + G.swipe) {
+      const east = harm(s, el, kick);
+      const west = harm(s, el, -kick);
+      const bar = G.swipe * (s.trial?.tune.costMul ?? 1) + SWIPE_GAIN;
+      dir = east <= west && now - east >= bar ? 1 : west < east && now - west >= bar ? -1 : 0;
+    }
+    if (dir !== 0) lastSwipe = s.tick;
+    return dir;
   }
 
   /** One swipe `dir` now (humanEl: 5% the wrong way, 10% one swipe late). */

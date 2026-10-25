@@ -19,6 +19,17 @@
 // v1.6 hooks: the reactive and oracle bots call the economy terms in bots/econ.ts (CORE-1) and the
 // world terms in bots/world.ts (CORE-2) at fixed points, with the bot's BotOptions; the contract
 // stubs return their input unchanged.
+//
+// Controls v3 (docs/CONTROLS_V3.md §10.2): the touch bots play through a driver of their own (the
+// run's Standard aim help, Auto Snap on Endless rungs R0-R1) and expose its view as `drive`:
+// - humanTouch: humanDial's sun play (on its decision stream) with Cold Snaps as presses; on Trials
+//   the element policy's touch variant at human timing. One thumb: a press waits for a sun drag to
+//   end and the next drag starts ≥ 150 ms after it. { rest: true } rests the thumb on the world
+//   between strokes instead of lifting it.
+// - reactiveTouch: the reactive sun play, presses the tick a target becomes the pick, the vane with
+//   no delay or errors. { park: θ } drags the sun to θ in the start beat and never touches it again.
+// - idleTouch: the start tap and nothing else. mashTouch: reactiveTouch with a blind press every 30
+//   ticks on Ember and Sprout legs.
 
 import { TUNING } from '../../config/tuning.ts';
 import { dayAtTick, dayStartTick, DT, TICK_HZ } from '../clock.ts';
@@ -29,17 +40,31 @@ import { BINS, binOf } from '../intervals.ts';
 import { rngFor, type Rng } from '../rng.ts';
 import { econOracleBonus, econOracleSnap, econReactiveScore, econReactiveSnap } from './bots/econ.ts';
 import { worldHumanTarget, worldOracleBonus, worldOracleDelta, worldOracleSnap, worldReactiveAim, worldReactiveScore } from './bots/world.ts';
-import { createElPolicy, type ElPolicy, type ElPolicyOpts } from './bots/elements.ts';
+import { createElPolicy, REGRAB, type ElPolicy, type ElPolicyOpts } from './bots/elements.ts';
 import { elHealth, nextTagHero, tagLocked } from './elements.ts';
 import { snapReady } from './mechanics.ts';
 import { effectiveDrain } from './nubs.ts';
 import { sunLockedAt } from './sun.ts';
 import type { InputFrame, SimState } from './types.ts';
 import type { DareTerms } from './bots/dares.ts';
-import type { DriveView } from '../drive/driver.ts';
+import { aimRadius } from '../drive/aim.ts';
+import { createDriver, type DriveControl, type DriveOpts, type Driver, type DriveView } from '../drive/driver.ts';
 
-export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat' | 'humanEl';
-export const BOT_KINDS: readonly BotKind[] = Object.freeze(['idle', 'novice', 'reactive', 'oracle', 'human', 'humanDial', 'humanFeat', 'humanEl'] as BotKind[]);
+export type BotKind = 'idle' | 'novice' | 'reactive' | 'oracle' | 'human' | 'humanDial' | 'humanFeat' | 'humanEl' | 'humanTouch' | 'reactiveTouch' | 'idleTouch' | 'mashTouch';
+export const BOT_KINDS: readonly BotKind[] = Object.freeze([
+  'idle',
+  'novice',
+  'reactive',
+  'oracle',
+  'human',
+  'humanDial',
+  'humanFeat',
+  'humanEl',
+  'humanTouch',
+  'reactiveTouch',
+  'idleTouch',
+  'mashTouch',
+] as BotKind[]);
 
 /** v1.6 reactive-bot policies (docs/V1_6_PLAN.md §2.2): today's play, timed greed, greed all day, never gold. */
 export type BotPolicy = 'plain' | 'chase' | 'naive' | 'safe';
@@ -88,6 +113,12 @@ export interface BotOptions {
   dares?: DareTerms;
   /** Elementals v2 (reactive, humanEl): the element policy's variant (G5's tap on sight, spam Gust, verbs off). */
   el?: ElPolicyOpts;
+  /** Controls v3 humanTouch: rest the thumb on the world between strokes (§10.2's rest variant). */
+  rest?: boolean;
+  /** Controls v3 reactiveTouch: the parked sun (G5f): one drag to this θ in the start beat, then no sun input. */
+  park?: number;
+  /** Controls v3 touch bots: the Endless comfort rung (aim help's radius, Auto Snap on R0-R1; −1 off the ladder). */
+  rung?: number;
 }
 
 /** What a v1.6 hook (bots/econ.ts, bots/world.ts) knows about the bot calling it. */
@@ -111,6 +142,56 @@ const quantize = (d: number): number => Math.round(d * 1024) / 1024;
 
 function frame(): InputFrame {
   return { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
+}
+
+/** A touch bot's driver (§10.2): its control for the tick, its own frame, the run it was begun on. */
+interface Touch {
+  readonly driver: Driver;
+  readonly ctl: DriveControl;
+  readonly out: InputFrame;
+  run: SimState | null;
+  readonly rung: number;
+}
+
+function touchKit(ctx: BotHookCtx): Touch {
+  return { driver: createDriver(), ctl: { act: 0, vane: 0, vaneUp: false, rest: false }, out: frame(), run: null, rung: ctx.opts.rung ?? -1 };
+}
+
+/** The driver's options for a touch bot's run: Standard aim help for the run (§4.3), Auto Snap on Endless rungs R0-R1 (§3.1). */
+export function touchOpts(s: SimState, rung: number): DriveOpts {
+  const endless = s.cfg.mode === 'endless';
+  const a = aimRadius('standard', { mode: s.cfg.mode, level: s.cfg.level ?? null, rung: endless ? rung : -1, trial: s.trial !== null, blind: s.mods.has('blind') });
+  return { aimDeg: a.deg, track: a.track, nowOnly: s.mods.has('fog'), autoSnap: endless && rung >= 0 && rung <= TUNING.drive.autoSnap.rungs, autoAct: false, reducedMotion: s.cfg.reducedMotion };
+}
+
+/** Before a touch bot decides: begins its driver on a new run, else refreshes the view it reads. */
+function touchLook(k: Touch, s: SimState): Readonly<DriveView> {
+  if (s !== k.run) {
+    k.run = s;
+    k.driver.begin(s, touchOpts(s, k.rung));
+  } else k.driver.observe(s);
+  return k.driver.view;
+}
+
+/** The bot's frame `f` copied into the touch bot's own, filled by its driver with the tick's control (§2.1). */
+function touchFill(k: Touch, s: SimState, f: InputFrame): InputFrame {
+  const o = k.out;
+  o.dTheta = f.dTheta;
+  o.down = f.down;
+  o.downEdge = f.downEdge;
+  o.upEdge = f.upEdge;
+  o.release = 0;
+  o.key = f.key;
+  o.snap = false;
+  o.verb = f.verb ?? 0;
+  o.vx = f.vx ?? 0;
+  o.vy = f.vy ?? 0;
+  o.steer = f.steer ?? 0;
+  k.driver.fill(s, o, k.ctl);
+  k.ctl.act = 0;
+  k.ctl.vane = 0;
+  k.ctl.vaneUp = false;
+  return o;
 }
 
 /** Finger held, turning toward `target` (°) at ≤ rate °/s. The first call touches down. */
@@ -139,6 +220,20 @@ function idleBot(): Bot {
       f.down = false;
       started = true;
       return f;
+    },
+  };
+}
+
+/** idleTouch (§10.2): the idle bot's frames through a driver at the run's Standard radius. */
+function idleTouchBot(ctx: BotHookCtx): Bot {
+  const idle = idleBot();
+  const k = touchKit(ctx);
+  return {
+    kind: 'idleTouch',
+    drive: k.driver.view,
+    next(s: SimState): InputFrame {
+      touchLook(k, s);
+      return touchFill(k, s, idle.next(s));
     },
   };
 }
@@ -245,19 +340,53 @@ function intoDrip(s: SimState): boolean {
   return s.el !== null && tagLocked(s) && nextTagHero(s) === 'drip';
 }
 
-function reactiveBot(ctx: BotHookCtx): Bot {
+/**
+ * The reactive bot; `touch` (reactiveTouch, mashTouch) plays the v3 controls through its own driver:
+ * Cold Snaps and element acts as presses, the vane for Gust; `mash` presses blind every 30 ticks on
+ * Ember and Sprout legs; BotOptions.park parks the sun instead of playing it.
+ */
+function reactiveBot(ctx: BotHookCtx, touch = false, mash = false): Bot {
   const mech = ctx.mech;
   const cfg = TUNING.bots.reactive;
   const f = frame();
   const score = new Float64Array(BINS);
-  const el: ElPolicy = createElPolicy({ ...ctx.opts.el, salt: ctx.salt });
+  const el: ElPolicy = createElPolicy({ ...ctx.opts.el, salt: ctx.salt, touch });
+  const k = touch ? touchKit(ctx) : null;
+  const park = ctx.opts.park;
   let seenGuide = -1;
   let target = -1;
   let started = false;
   let rng: Rng | null = null;
+  /** The touch bots' play after the sun's: Cold Snaps and element acts as presses, the vane. */
+  const touchNext = (s: SimState, out: InputFrame, k: Touch): InputFrame => {
+    const v = touchLook(k, s);
+    const snap = out.snap === true;
+    if (s.el !== null) el.fill(s, out);
+    const h = s.nubs.hero;
+    if (mash && (h === 'ember' || h === 'sprout')) k.ctl.act = s.el !== null && s.phase === 'day' && s.ready === 0 && s.el.legTick % 30 === 0 ? 1 : 0;
+    else if (!el.press(s, v, k.ctl, true) && snap && park === undefined) k.ctl.act = 1;
+    return touchFill(k, s, out);
+  };
   return {
-    kind: 'reactive',
+    kind: touch ? (mash ? 'mashTouch' : 'reactiveTouch') : 'reactive',
+    ...(k ? { drive: k.driver.view } : {}),
     next(s: SimState): InputFrame {
+      if (k !== null && park !== undefined) {
+        // The parked sun: the start tap, one drag to θ in the start beat, then no sun input at all.
+        f.dTheta = 0;
+        f.downEdge = !started;
+        f.upEdge = !started;
+        f.down = false;
+        f.snap = false;
+        if (started && s.phase === 'day' && s.ready > 0 && target < 0) {
+          target = park;
+          f.downEdge = true;
+          f.down = true;
+          f.dTheta = quantize(angleDiff(park, s.sun.theta));
+        } else if (target >= 0 && s.sun.mode === 'dragging') f.upEdge = true;
+        started = true;
+        return touchNext(s, f, k);
+      }
       if (target < 0) target = s.sun.theta;
       const g = s.guide;
       if (g.tick !== seenGuide) {
@@ -289,6 +418,7 @@ function reactiveBot(ctx: BotHookCtx): Bot {
       // v1.5 Cold Snap: lit and low, with no safe angle close by (or nearly melted).
       out.snap = mech && snapReady(s) && exposed(s) && (gauge(s) < cfg.snapLast || (gauge(s) < cfg.snapChill && !safeNear(g.now, s.sun.theta, cfg.snapNearDeg)));
       out.snap = econReactiveSnap(ctx, s, out.snap);
+      if (k !== null) return touchNext(s, out, k);
       // Elementals v2 (§6.3): the walking element's verb on a Trial (Nubs legs keep the play above).
       if (s.el !== null) el.fill(s, out);
       return out;
@@ -549,7 +679,7 @@ function wideLasting(now: Uint8Array, next: Uint8Array, minArc: number, out: Uin
  * The human model; `lastingShare` is the share of decisions that read the lasting shade (0 for
  * 'human', so it draws exactly the v1.0 stream).
  */
-function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl', lastingShare: number, salt: number, ctx: BotHookCtx): Bot {
+function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl' | 'humanTouch', lastingShare: number, salt: number, ctx: BotHookCtx): Bot {
   const cfg = TUNING.bots.human;
   const msTicks = (ms: number): number => Math.round((ms * TICK_HZ) / 1000);
   const f = frame();
@@ -565,19 +695,31 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl', lasting
   let moveT = 0;
   let moveDist = 0;
   let sent = 0;
+  // humanTouch (§10.2): its driver; ticks before the next drag may start (after a press); the rest
+  // variant's thumb resting on the world, the ticks it has been still, and the leg it rests in.
+  const touch = kind === 'humanTouch';
+  const k = touch ? touchKit(ctx) : null;
+  const rest = touch && ctx.opts.rest === true;
+  let block = 0;
+  let resting = false;
+  let still = 0;
+  let restLeg = -1;
 
   function moveTick(): InputFrame {
     moveT++;
     const step = quantize(moveDist * minJerk(moveT / moveTicks) - sent);
     sent += step;
     f.dTheta = step;
-    f.downEdge = moveT === 1;
+    f.downEdge = moveT === 1 && !resting;
     f.down = true;
     if (moveT >= moveTicks) {
-      // The finger stops and lifts: release at ω = 0, then a short pause before looking again.
-      f.down = false;
-      f.upEdge = true;
+      // The finger stops and lifts: release at ω = 0, then a short pause before looking again (the
+      // rest variant keeps it down, still).
+      f.down = rest;
+      f.upEdge = !rest;
       f.release = 0;
+      resting = rest;
+      still = 0;
       moveTicks = 0;
       cooldown = msTicks(cfg.settleMs);
     }
@@ -587,16 +729,19 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl', lasting
   // v1.5: humanDial snaps in a panic (the meter glows on the HUD): lit with Chill under HUMAN_SNAP_CHILL.
   const snaps = kind !== 'human';
   const feat = kind === 'humanFeat';
-  // Elementals v2 (§6.3): humanEl plays the element legs with the element policy at human timing.
-  const el = kind === 'humanEl' ? createElPolicy({ ...ctx.opts.el, salt, human: true }) : null;
+  // Elementals v2 (§6.3): humanEl plays the element legs with the element policy at human timing
+  // (humanTouch with its touch variant).
+  const el = kind === 'humanEl' || touch ? createElPolicy({ ...ctx.opts.el, salt, human: true, touch }) : null;
   return {
     kind,
+    ...(k ? { drive: k.driver.view } : {}),
     next(s: SimState): InputFrame {
       if (el !== null && s.el !== null && el.busy()) {
         // The finger is on a tap or a hold: no sun play meanwhile.
         el.fill(s, f);
         return f;
       }
+      if (k !== null) return touchNext(s, k);
       const out = decide(s);
       if (el !== null && s.el !== null) el.fill(s, out);
       out.snap = snaps && snapReady(s) && exposed(s) && gauge(s) < HUMAN_SNAP_CHILL;
@@ -606,11 +751,45 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl', lasting
     },
   };
 
+  /**
+   * humanTouch's tick: the sun play, the element policy, then the button (a Cold Snap when humanDial
+   * would snap, or the policy's press) once no drag is in progress; a resting thumb lifts to press.
+   */
+  function touchNext(s: SimState, k: Touch): InputFrame {
+    const v = touchLook(k, s);
+    if (resting && s.relayIdx !== restLeg) resting = false; // a hand-off: the thumb grips afresh
+    restLeg = s.relayIdx;
+    if (block > 0) block--;
+    const out = decide(s);
+    if (el !== null && s.el !== null) el.fill(s, out);
+    const free = moveTicks === 0 && !out.downEdge;
+    const c = k.ctl;
+    let pressed = el !== null && s.el !== null && el.press(s, v, c, free);
+    if (!pressed && free && snaps && snapReady(s) && exposed(s) && gauge(s) < HUMAN_SNAP_CHILL) {
+      c.act = 1;
+      pressed = true;
+    }
+    if (pressed) {
+      block = REGRAB;
+      if (resting) {
+        out.down = false;
+        out.upEdge = true;
+        resting = false;
+      }
+    }
+    still = resting && out.dTheta === 0 ? still + 1 : 0;
+    c.rest = resting && still >= msTicks(300);
+    return touchFill(k, s, out);
+  }
+
   function decide(s: SimState): InputFrame {
-    if (!rng) rng = salt ? rngFor(s.cfg.seed, 'bot', kind, salt) : rngFor(s.cfg.seed, 'bot', kind);
+    // humanTouch plays the decision stream of the player it is measured against (humanEl on a
+    // Trial, humanDial elsewhere): the same player with the new controls.
+    const label = touch ? (s.trial !== null ? 'humanEl' : 'humanDial') : kind;
+    if (!rng) rng = salt ? rngFor(s.cfg.seed, 'bot', label, salt) : rngFor(s.cfg.seed, 'bot', label);
     remember(ring, s);
     f.dTheta = 0;
-    f.down = false;
+    f.down = resting;
     f.downEdge = false;
     f.upEdge = false;
     f.release = 0;
@@ -627,6 +806,7 @@ function humanBot(kind: 'human' | 'humanDial' | 'humanFeat' | 'humanEl', lasting
       cooldown--;
       return f;
     }
+    if (block > 0) return f;
     if (s.phase !== 'day' || !s.sunUp) return f;
     if (lag < 0) {
       lag = msTicks(rng.range(cfg.lagMinMs, cfg.lagMaxMs));
@@ -699,6 +879,14 @@ export function createBot(kind: BotKind, salt = 0, mechanics = true, opts: BotOp
       return humanBot('humanFeat', TUNING.bots.human.lastingShare, salt, ctx);
     case 'humanEl':
       return humanBot('humanEl', TUNING.bots.human.lastingShare, salt, ctx);
+    case 'humanTouch':
+      return humanBot('humanTouch', TUNING.bots.human.lastingShare, salt, ctx);
+    case 'reactiveTouch':
+      return reactiveBot(ctx, true);
+    case 'mashTouch':
+      return reactiveBot(ctx, true, true);
+    case 'idleTouch':
+      return idleTouchBot(ctx);
     default:
       return oracleBot(ctx);
   }
