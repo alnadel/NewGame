@@ -57,6 +57,38 @@ describe('determinism', () => {
     }
   }, 60_000);
 
+  it('Controls v3: humanTouch on T5 and T7 and L3 runs with glides (and resting glides) replay bit for bit from the driven frames', () => {
+    const cases = [
+      { id: 1005, opts: {} },
+      { id: 1007, opts: {} },
+      { id: 3, opts: {} },
+      { id: 3, opts: { rest: true } },
+    ];
+    for (const { id, opts } of cases) {
+      const cfg = campaignConfig(id);
+      const live = createRun(cfg);
+      const bot = createBot('humanTouch', 1, true, opts);
+      const rec = createReplay(cfg);
+      const liveHashes: string[] = [];
+      let glides = 0;
+      for (let i = 0; i < 6000 && live.phase !== 'dead' && live.phase !== 'won'; i++) {
+        const f = bot.next(live);
+        if (bot.drive && bot.drive.glide === bot.drive.glide) glides++;
+        recordFrame(rec, f);
+        step(live, f);
+        if ((i + 1) % 150 === 0) liveHashes.push(hashState(live));
+      }
+      expect(liveHashes.length).toBeGreaterThan(3);
+      if (id === 3) expect(glides, JSON.stringify(opts)).toBeGreaterThan(0);
+      const replayHashes: string[] = [];
+      const replayed = playReplay(rec, (s, i) => {
+        if ((i + 1) % 150 === 0) replayHashes.push(hashState(s));
+      });
+      expect(replayHashes).toEqual(liveHashes);
+      expect(hashState(replayed)).toBe(hashState(live));
+    }
+  }, 120_000);
+
   it('a Nubs replay records only the original seven fields (§7.9), equal to the frames played', () => {
     const cfg = headlessConfig(23, 3);
     const live = createRun(cfg);

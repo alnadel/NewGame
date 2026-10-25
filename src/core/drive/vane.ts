@@ -1,11 +1,12 @@
-// Controls v3 Gust vane predictions (docs/CONTROLS_V3.md §3.5; CORE). The C0b contract: the arrival
-// ghost reads today's weatherXAt for every notch until the governor lands.
+// Controls v3 Gust vane predictions (docs/CONTROLS_V3.md §3.5; CORE): where a weather object lands.
+// CORE's cut list 1 (§12.3, the bundle over its allowance): the set-vane prediction is cut, so every
+// notch reads the calm-now ghost, today's weatherXAt.
 
 import type { ElObj } from '../objects.ts';
 import { weatherXAt } from '../sim/elements.ts';
 import type { SimState } from '../sim/types.ts';
 
-/** §3.5: weather object o's x after `ticks` with the vane held at notch n (the governor's gusts, no Lift limit); n = 0 is "calm now". */
-export function driveWeatherX(s: SimState, o: ElObj, ticks: number, _n: number): number {
-  return weatherXAt(s, o, ticks);
+/** Weather object o's x after `ticks`: the calm-now prediction for every notch n (cut list 1, §12.3). */
+export function driveWeatherX(s: SimState, o: ElObj, ticks: number, n: number): number {
+  return n === n ? weatherXAt(s, o, ticks) : NaN;
 }

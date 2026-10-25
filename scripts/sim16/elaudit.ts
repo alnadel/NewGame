@@ -33,6 +33,7 @@ import { createWorld } from '../../src/core/gen/world.ts';
 import { BINS, binOf, createMaskScene, litMask } from '../../src/core/intervals.ts';
 import { campaignConfig, minuteStart, resolveLevelConfig } from '../../src/core/level.ts';
 import { EL_GONE, EL_ID_BASE, SNAP_ID_BASE, TREE_ID_BASE, type Cloud, type ElObj, type ElState } from '../../src/core/objects.ts';
+import { createDriver, type DriveControl, type Driver } from '../../src/core/drive/driver.ts';
 import { createElPolicy, createHand, handCut, handFrame, handPress, handRelease, HOLD_PRESS, REGRAB, TAP_PRESS, type ElPolicy } from '../../src/core/sim/bots/elements.ts';
 import { createRun, type RunBuild } from '../../src/core/sim/create.ts';
 import { burnTarget, createEl, elStart, growTarget, heroStart, inWeather, laneOf, needOf, standTree, tagTick } from '../../src/core/sim/elements.ts';
@@ -276,6 +277,11 @@ export interface PlayerOpts {
   readonly tapOnSight?: boolean;
   /** Up to this leg only the schedules are known (a replay ignores later legs). */
   readonly upTo?: number;
+  /**
+   * Controls v3 G5e (docs/CONTROLS_V3.md §10.3): Gust legs play this vane notch, held from the leg's
+   * first tick through a driver (its governor and auto-calm, no Calm press), instead of the Gust policy.
+   */
+  readonly vane?: number;
 }
 
 export type Player = (s: SimState) => InputFrame;
@@ -321,6 +327,10 @@ export function planPlayer(plan: Plan, o: PlayerOpts): Player {
   let first = true;
   let relay = 0;
   let handoff = -1;
+  // G5e: the driver that holds the vane (begun on its first Gust tick, filled on Gust legs only).
+  const vctl: DriveControl = { act: 0, vane: 0, vaneUp: false, rest: false };
+  let drv: Driver | null = null;
+  let vaneLeg = -1;
   return (s) => {
     f.verb = 0;
     f.vx = 0;
@@ -383,6 +393,18 @@ export function planPlayer(plan: Plan, o: PlayerOpts): Player {
           const L = lanes[Math.min(lanes.length - 1, Math.max(0, k))] as number;
           f.steer = q64(L - el.dxTarget);
         }
+      } else if (hero === 'gust' && o.vane !== undefined) {
+        f.dTheta = 0;
+        if (drv === null) {
+          drv = createDriver();
+          drv.begin(s, { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false });
+        }
+        // Set once on the leg's first tick and never touched again: the governor's rules (its
+        // auto-calm at the policy floor included) and no Calm press.
+        vctl.vane = s.relayIdx !== vaneLeg ? o.vane : 0;
+        vctl.vaneUp = vctl.vane !== 0;
+        vaneLeg = s.relayIdx;
+        drv.fill(s, f, vctl);
       } else if (hero === 'gust') {
         f.dTheta = 0;
         const g = gust as ElPolicy;

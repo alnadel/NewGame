@@ -1622,3 +1622,107 @@ and objects, the authoring string, whose run starts at its own minute) and `--pe
 
 Every waiver is accepted by the lead (`WAIVERS` in `scripts/sim16/trials.ts`; docs/ELEMENTALS_V2.md §13.3). `--perf`: every Trial tick
 ≤ 0.7× and guide refresh ≤ 0.7× a Nubs run's; no Trial passes a constant sun on a 0.25° scan either; `createRun` ≤ 26 ms unprepared, ≤ 0.4 ms prepared.
+
+## 18. Controls v3 (docs/CONTROLS_V3.md, CORE)
+
+One drag and one button replace the nine touch recognizers. The core gains a **driver**
+(`src/core/drive`), a pure per-tick policy that turns the button's presses, the Gust vane and the
+finger state into ordinary `InputFrame` fields before `step()`; `step()` itself is unchanged and
+`recordFrame` records the frame after the driver, so a recorded run replays bit for bit without it
+(§11.5). `src/core/drive` imports only core and config and keeps the determinism rules (no
+`Math.exp/log/pow`, no wall clock, no per-tick allocation).
+
+### 18.1 The driver (`drive/driver.ts`)
+
+- **API.** `createDriver()` → `{ begin(s, opts), interrupt(), fill(s, f, c), observe(s), view, notes,
+  noteN, clearNotes() }`. `DriveOpts`: `aimDeg` and `track` (`aimRadius`), `nowOnly` ('fog'),
+  `autoSnap` (Endless R0-R1; ignored since CORE's cut list 3, §18.5), `autoAct` (Settings → Auto actions), `reducedMotion`. `DriveControl`
+  per tick: `act` (a press lands), `vane` (notches: drag px / 36, keys ±1), `vaneUp` (snap the raw
+  value to its notch), `rest` (the sun finger is down and still). `fill` runs only in the day phase.
+- **Order in `fill`** (§2.2): an interrupted glide or one whose leg ended closes; the hand and the
+  sun move are read from the frame as the input filled it (the engagement clock, the stroke's net
+  turn, the re-grip **carry** of an unfinished chase and the **undo** of a glide made since a lift at
+  most `againstTicks` old); the vane (`vaneNotch`: symmetric rounding, ±0.5 → ±1); presses join the
+  buffer (`bufferTicks` 18; in the last `preTagTicks` before a TAG into Ember or Sprout a press waits
+  for the incoming element's first tick) and resolve or are refused with the first reason that
+  applies (`charging`, `locked`, `nothing`, `low`, `full`, `wait`, `busy`; +16 on a repeat this leg);
+  the walking element's verb (Ember's arms: tapped at their moment with Flame covering them,
+  `WAIT_LOW` once, `EXPIRE` past the last working tick; Sprout's jobs: hold to the goal, release the
+  tick after, pre-emption by an urgent crossing; Gust's governor: one gust per `every` ticks below
+  the notch's band, auto-calm at the policy floor); Auto actions; aim help.
+- **Aim help** (§4): planned on guide refresh ticks only, with the sun up, past the start beat,
+  unlocked, no eclipse, **no lesson** (`s.lessonOn`), no hand, the sun settled, at least
+  `regripTicks` after a real lift, `gapTicks` between glide starts, and only within `engageTicks`
+  (300) of the last sun move (button presses, a resting finger and the start tap are not moves). The
+  hand-over takes the last `handTicks` before a TAG into Drip (`handPlan`); otherwise the magnet
+  (`aimPlan`) settles a lit sun into lasting shade (the rescue from ending shade is cut, §18.5), or
+  tracks a sun near its arc's edge back inside. Never against the stroke by more
+  than `againstDeg` within `againstTicks` of the lift. A glide is eased over `glideTicks` ticks at
+  `rate` (`rateReduced`) and its steps sum to `q1024(Δ)` exactly; it has its own edges unless the
+  finger rests (then none), and a downEdge or a key ends it.
+- **View** (`DriveView`, updated by `fill` and `observe`): the act, the button state, fill, the lock
+  countdown, the next act's cost, the pick, the queue (arms in ignition order; Sprout's running and
+  queued jobs), due (§3.2 from the pick's last working tick when it is a wall, §3.3 from `growLeft`
+  when it is a crossing), the buffered flag, the incoming act, the vane with its resting flag and
+  cost, the glide target and whether it is the hand-over, the last refusal.
+- **Notes** (pairs in `notes[0 .. 2·noteN)`, at most 8 between drains): `PRESS`, `REFUSE`, `BUFFER`,
+  `SETTLE` (a glide ended: 0 track, 1 rescue), `NOTCH`, `CALM` (0 a press, 1 auto-calm, 2 a calm vane),
+  `WAIT_LOW`, `EXPIRE`, `HANDOVER` (the marked bin), `AUTO` (2 an arm, 3 a job; 1, a snap, is cut).
+
+### 18.2 Aim, vane and the shared policy
+
+- `drive/aim.ts`: `aimRadius(setting, ctx)` (§4.3 with `AIM_OVERRIDE`), `aimPlan`, `settleTarget`
+  (the dial's preview: the same plan without track), `handPlan`, `aimOut` (the last plan's kind and
+  marked bin), `q1024`, `glideTicks`, `glideStep`. Bins follow `binOf` (bin b covers
+  [b − 0.5, b + 0.5)); glare stops the search for Nubs; a bud, glass glint, flare rim or (in a TAG
+  telegraph) `guide.tag` under the sun is honoured.
+- `drive/vane.ts`: `driveWeatherX(s, o, ticks, n)`: a weather object's x after `ticks`; since CORE's
+  cut list 1 (§18.5) the calm-now prediction (`weatherXAt`) for every notch.
+- `drive/pick.ts` (C0c): the timing and picks the driver and the bots share.
+
+### 18.3 Journey content (§5.3)
+
+`dazzle`, `slippery`, `clockwork`, `gusts` and `heavy` are retired: `ConceptId`, `CONCEPTS`,
+`DARE_OF`, the conflicts, `sun.ts` (the mirror, the clockwork snap, the gust push; `SunState.gust`
+stays 0 and keeps its hash feed) and `feats.ts`' gust windows lose them. `CONCEPT_IDS` has 40 ids,
+all taught: L16 Wide Open (Big Sky), L29 Drought (Cloudless), L30 Crowded (Thicket), L31 Moon Sun
+(Moonlit), L32 Lowland (Short Grass). Composed levels keep their draws (`composeDraw` over
+`DrawId`, the retired ids frozen in `RETIRED_DRAW`), then `substitute` replaces each retired id by
+the first fitting entry of `RETIRED_SUBS` (or `SUB_OVERRIDE`); `retiredLevel(id)` names the 46
+changed levels. Renamed: L85 Pine Hollow, L94 Stop Clock, L165 Cloudburst Pass. The re-bake changed
+only those 46 entries and `LEVEL_BAKE_RUN`; the goldens only campaign 32 and 100.
+
+### 18.4 Touch bots and gates
+
+`humanTouch`, `reactiveTouch`, `idleTouch` and `mashTouch` (§10.2) play through their own driver
+(`touchOpts(s, rung)`: the run's Standard radius, `autoSnap` on R0-R1) and expose its view as
+`drive`; `humanTouch` takes `{ rest: true }`, `reactiveTouch` `{ park: θ }`. `sim --campaign`
+adds their rows and, with `--streams N --json FILE` / `--compare FILE`, the §9.5 recalibration
+gates against the humanDial baseline; `sim --check` adds the idleTouch and humanTouch rung rows;
+`sim --trials` adds G5e, G5f, G8, G8b, G9 and the advisory G10, G11 and G4t, and `--perf` the
+driver's µs per tick on T7; `node scripts/bench-step.ts --drive` times it at an Endless noon.
+
+### 18.5 Measured (the branch's last commit) and what is still open
+
+- `sim --campaign --bot all --tries 3 --compare <baseline>` (humanDial on C0c's content, 20 held-out
+  streams × 3 tries, SHA-256 `dce2686f…05ee`): oracle 200/200, reactive 100% of 1-100, the
+  Feat-seeking oracle ★2 on 100% and every Dare of 1-10; idleTouch passes nothing plain idle does not
+  (idle's 11: L2, 14, 15, 18, 26, 29, 32, 34, 51, 111, 156; L29 and L32 are new teaching slots);
+  humanTouch 95.8% of 1-40 on its first try, its resting variant 95.0%; the five new teaching slots
+  20/20 each. **Failing:** the substituted-level gate on 7 of 46 (L54 1 vs 3, L139 2 vs 7, L162 10 vs
+  12, L163 2 vs 4, L164 7 vs 11, L168 0 vs 12, L169 2 vs 9: L169's retired slot already drops, the
+  others are past `SUB_OVERRIDE`'s 8 entries) and the chapter gate on ch6, 7, 12, 14, 15, 17 and 20
+  (ch17 134 vs 164: its substitutes, sprint, fleet, ration and dense, are real difficulty where the
+  retired gusts, slippery and heavy cost the bots nothing). On the 154 unchanged levels humanTouch
+  passes as many streams as humanDial (2346 vs 2345 within 3 tries), so the driver is not the cause.
+- `sim --check --seeds 40`: every target met; idleTouch reaches no first night at R2-R4 (0 of 40
+  each); humanTouch's median death is at or past humanDial's on every rung.
+- `sim --trials --check --perf`: every gate passes but **G5e** on T4 (+1 walks Gust's leg), T6 (−1)
+  and T7 (−1): a governed vane at notch 1 is a steady breeze, stronger than the swipes these weather
+  layouts were pinned against; no single §6.5 move of a T4 weather object (48 tried) fails +1 with
+  G1-G4 kept. Driver 0.61 µs per tick on T7.
+- `bench-step`: step ×1.070, guide ×0.892; `--gen` passes; `--drive` 0.35 µs per tick.
+- **Cut list** (§12.3): the branch was over CORE's +3,456 B (C0c alone is +6,020 B over C0b), so
+  `driveWeatherX`'s set-vane prediction, the ending rescue and Auto Snap are cut in one commit (about
+  110 B here); the branch stays over: `build:single` 834,758 B, +9,764 B over C0b (824,994 B) and
+  +3,744 B over C0c (831,014 B), against CORE's +3,456 B and the 834,560 B release budget.

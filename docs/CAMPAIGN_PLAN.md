@@ -48,7 +48,7 @@ export const CHAPTERS: readonly { id: number; name: string; biome: BiomeId }[]; 
 - **Goal `flakes`/`snow`:** the run still ends at the finish line; stars/pass depend on the goal: pass = goal met at the finish (`levelWon` carries `passed: boolean`). A level failed at the finish (goal not met) emits `levelWon` with `passed: false` and `stars: 0`.
 - **Stars** (computed in core, `starsFor(level, stats)`): 1 = passed; +1 if `stats.flakes ≥ stars.flakes`; +1 if `stats.litTotal ≤ stars.sunSec` and `stats.minChill ≥ stars.minChill` (§3). `RunStats` gains `minChill` (lowest Chill during daylight; 100 when never lit).
 - **RunConfig** gains `level?: number` (the level id). `createRun` reads `levelDef(id)` and derives seed, profile 3, plan off, `forecast`, biome (Day 1 biome forced via a new `cfg.biome?`), `startDay 1`, `startT` from `startMinute`, `drain`, `mods = level.concepts`, and the finish line. `RunResult` gains `level?: { id; passed; stars; introduces }` and `RunMode` gains `'campaign'`.
-- **Mods.** `RunConfig.mods?: readonly ConceptId[]` (part of world identity; debug runs may pass any set). `dayParams(day, profile, plan, mods)` applies each concept's `tune` on top of the forecast. Every reader goes through `paramsAt`, so the clock, the validator, the sim and the renderer agree. The sim consults `s.mods` (a `Set`) for behaviour concepts (sun rules, eclipse, lock, gusts).
+- **Mods.** `RunConfig.mods?: readonly ConceptId[]` (part of world identity; debug runs may pass any set). `dayParams(day, profile, plan, mods)` applies each concept's `tune` on top of the forecast. Every reader goes through `paramsAt`, so the clock, the validator, the sim and the renderer agree. The sim consults `s.mods` (a `Set`) for behaviour concepts (eclipse, lock; Controls v3 retired the sun rules and gusts).
 
 ## 3. Concept catalog (`CONCEPTS: Record<ConceptId, Concept>`)
 
@@ -56,7 +56,7 @@ export const CHAPTERS: readonly { id: number; name: string; biome: BiomeId }[]; 
 interface Concept { id: ConceptId; name: string /* short concept name: "Glare" */; title: string /* its teaching level: "Glass Garden" */; blurb: string; icon: string /* glyphs.ts id */; kind: 'teach'|'world'|'sun'|'dial'|'chill'|'sky'|'goal'; tune?: Partial<DayTuning>; level?: { biome?; forecast?; startMinute?; lengthMinutes?; goal?; drainCap?; cost? } }
 ```
 
-Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapter 1; Wide Open, Crowded and Drought compose only). `tune` fields multiply (spacing, heightScale, cloudCount, cloudRx, clusterGap, drainMul, regenMul, walkMul), add (latMax) or override (the rest). `cost` is what the concept is worth in drain points (calibrated with `sim --campaign --tries` on the human model): the builder takes it off the level's drain, so a hard concept does not stack on the curve. Behaviour concepts are listed with their rule. v1.3 reworked the overlapping pairs: `dazzle` (was the `glare` balls under another name) is now the Mirror Sun, `thaw` (was a drain multiplier, like `ration`) now slows healing, `fleet` (was "more clouds", like `breezy`) is open country where clouds are the shade, `eclipse` now brings the sun back on the far side.
+Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapter 1; Controls v3, §9: Wide Open, Drought, Crowded, Moon Sun and Lowland take the five control concepts' slots 16 and 29-32). `tune` fields multiply (spacing, heightScale, cloudCount, cloudRx, clusterGap, drainMul, regenMul, walkMul), add (latMax) or override (the rest). `cost` is what the concept is worth in drain points (calibrated with `sim --campaign --tries` on the human model): the builder takes it off the level's drain, so a hard concept does not stack on the curve. Behaviour concepts are listed with their rule. v1.3 reworked the overlapping pairs: `dazzle` (was the `glare` balls under another name) became the Mirror Sun (retired by Controls v3), `thaw` (was a drain multiplier, like `ration`) now slows healing, `fleet` (was "more clouds", like `breezy`) is open country where clouds are the shade, `eclipse` now brings the sun back on the far side.
 
 | # | id | name · title | kind | rule (cost) |
 |---|---|---|---|---|
@@ -75,7 +75,7 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 | 13 | `gate` | Gates · The Gate | world | arch at the midpoint, +10 Snow fully shaded (3) |
 | 14 | `long` | Long Shadows · Autumn Light | sky | forecast long (8) |
 | 15 | `heat` | Heat Wave · Hot Spell | sky | forecast heat (4) |
-| 16 | `dazzle` | Mirror Sun · Looking Glass | dial | every turn of the input is reversed (5) |
+| 16 | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7) |
 | 17 | `market` | Market Day · Stall Street | sky | forecast market, Old Town (2) |
 | 18 | `sprint` | Sprint · Hurry Up | world | walk ×1.35 (13) |
 | 19 | `stroll` | Stroll · Dawdle | world | walk ×0.75, drain ×1.25 (−12) |
@@ -88,10 +88,10 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 | 26 | `meltfast` | Quick Melt · Snatch | goal | flakes melt in 0.5 s: the flake star needs shade ahead (4) |
 | 27 | `hardy` | Hardy Flakes · Snow Pile | goal | flakes never melt; flake goal; clusters of 5 (−2) |
 | 28 | `flurry` | Flurry · Snow Globe | goal | clusters of 7, gap ×0.6 (−4) |
-| 29 | `heavy` | Heavy Sun · Slow Hands | dial | follow ≤ 220°/s, no coast (5) |
-| 30 | `slippery` | Slippery Sun · Ice Rink | dial | coast e^(−0.35/60) per tick (9) |
-| 31 | `clockwork` | Clockwork · Cuckoo | dial | release snaps to 30° (−1) |
-| 32 | `gusts` | Gusts · Windy Day | dial | a 2 s ±25°/s gust every 8 s; drain ≤ 40 (2) |
+| 29 | `drought` | Drought · Cloudless | sky | no clouds (12) |
+| 30 | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7) |
+| 31 | `moonlit` | Moon Sun · Moonlit | sun | εnoon 30, drain ×0.7, night palette (5) |
+| 32 | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11) |
 | 33 | `lock` | Sun Lock · Stop and Go | dial | 1.2 s lock every 7 s; drain ≤ 40 (3) |
 | 34 | `fog` | Fog · Pea Soup | teach | render: the world fades beyond 260 u (3) |
 | 35 | `blind` | No Dial · Blindfold | teach | render: no safe arcs on the halo (3) |
@@ -100,17 +100,20 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 | 38 | `flare` | Solar Flare · Sunspots | sky | three Heat Flares at 30/55/80% of the level (d 10, 72-tick warning); goal: parry 2 (v1.6) (4) |
 | 39 | `marathon` | Marathon · The Long Walk | sun | 1080 min across a night (9) |
 | 40 | `boss` | Heat Dome · Into the Dome | sun | εnoon 80, 9 AM + 360 min (12) |
-| – | `sparse` | Wide Open · Big Sky | world | spacing ×1.45 (7); not taught on a level of its own since v1.5 (composed levels only) |
-| – | `dense` | Crowded · Thicket | world | spacing ×0.7, latMax −10 (−7); not taught on a level of its own since v1.5 (composed levels only) |
-| – | `drought` | Drought · Cloudless | sky | no clouds (12); not taught on a level of its own since v1.5 (composed levels only) |
-| – | `lowland` | Lowland · Short Grass | world | heights ×0.6 (11); composed levels only since v1.6 (its level went to `brittle`) |
-| – | `moonlit` | Moon Sun · Moonlit | sun | εnoon 30, drain ×0.7, night palette (5); composed levels only since v1.6 (its level went to `flare`) |
+
+**Retired (Controls v3, §9).** `dazzle` (Mirror Sun), `heavy` (Heavy Sun), `slippery` (Slippery
+Sun), `clockwork` and `gusts` made the controls themselves the obstacle; they are gone from
+`ConceptId`, `CONCEPTS`, `DARE_OF` and the sim. Composed levels still draw them (`DrawId`, frozen
+in `RETIRED_DRAW`) and then substitute: `dazzle` → `dense`, `lowland`, `sparse`; `slippery` →
+`sprint`, `sparse`, `dense`; `clockwork` → `sparse`, `dense`, `lowland`; `gusts` → `fleet`, `breezy`,
+`sparse`, `dense`; `heavy` → `sprint`, `ration`, `sparse` (the first that fits; none fitting drops the
+slot). Sun Lock stays.
 
 **The curve (v1.3).** `drain = (curve(id) − Σ cost) / drainMul`, clamped to 22-55 (effective ≤ 62, ≤ the concepts' `drainCap`). `curve` is a sawtooth in effective drain points: the teaching chapters climb 28 → 34 by chapter (+1 every three levels, finales +6); composed chapters run from base − 5 up to base + 2 with the finale at base + 7, base = 37 + 0.6·(chapter − 5) (37 → 46). Lengths: teaching levels end before noon (240 minutes from dawn in chapter 1, 300 after), their finales an hour longer (300 in chapter 1, then noon); composed chapters grow 360 → 720 by chapter, their first two levels 30 minutes shorter. Time concepts keep their own windows. Levels 41-200 compose 2-3 concepts (never two of a kind except `world`, never a conflicting pair), the chapter's headline first; finales take three, led by the chapter's first concept.
 
 **Goals and stars (v1.3).** Flake goal: 55% of the flakes the level offers; Snow goal: 0.7 Snow per flake offered (min 5). Stars: 1 for passing, +1 for flakes ≥ 65% of those offered (80% on a flake-goal level), +1 for a **cool run**: at most `stars.sunSec` seconds in the sun (22% of the level's daylight, `RunStats.litTotal`) and the lowest Chill ≥ `stars.minChill` (20% of the tank). The cool-run star is the skill star: the human model earns it on ~6% of its passes, the oracle on ~60%.
 
-**Fairness.** `node scripts/sim.ts --campaign [--tries N]` runs the oracle, reactive and humanDial bots on all 200 levels (humanDial N times with different decision streams) and prints a per-chapter pass/stars table. Hard gates: oracle 200/200, reactive ≥ 95% of levels 1-100. Advisory: humanDial ≥ 75% of levels 1-40 and ≥ 90% of 1-10. The validator accounts for `heightScale`, `walkMul`, `maxChill`, `drainMul` and `regenMul`; `lock`, `gusts`, `eclipse` and the mirror are not modelled (drain caps and costs cover them).
+**Fairness.** `node scripts/sim.ts --campaign [--tries N]` runs the oracle, reactive and humanDial bots on all 200 levels (humanDial N times with different decision streams) and prints a per-chapter pass/stars table. Hard gates: oracle 200/200, reactive ≥ 95% of levels 1-100. Advisory: humanDial ≥ 75% of levels 1-40 and ≥ 90% of 1-10. The validator accounts for `heightScale`, `walkMul`, `maxChill`, `drainMul` and `regenMul`; `lock` and `eclipse` are not modelled (drain caps and costs cover them).
 
 ## 4. Game layer (session/render)
 
@@ -121,7 +124,7 @@ Teaching order = level 1..40 (v1.5 order, §7: the three core mechanics in chapt
 - **Results (campaign variant, UI contract §5):** stars with pop-in, level name, the goal line, buttons **Next level** (primary, when passed), **Retry**, **Map**, plus Share (text: "SHADY Journey · Level 12 ★★☆ — Glass Garden").
 - **Death:** as today (Melt Map + tip), buttons Retry / Map.
 - `?level=N` opens the level directly (debug run only when combined with other debug params; otherwise a normal campaign run). `__SHADY_TEST__.state()` gains `level`, `mods`, `levelProgress` (0..1).
-- Render signatures per concept kind: fog (gradient mask over the world beyond 260 u), blind (halo arcs off), eclipse (sky dims to night over 0.5 s with stars, back over 0.5 s), gusts (wind streaks in the gust direction, only during gusts), lock (padlock on the halo), moonlit (night palette, moon as the sun glyph), giants/lowland (nothing special; the heights speak).
+- Render signatures per concept kind: fog (gradient mask over the world beyond 260 u), blind (halo arcs off), eclipse (sky dims to night over 0.5 s with stars, back over 0.5 s), lock (padlock on the halo; Controls v3: a 1.0 s countdown ring before each lock), moonlit (night palette, moon as the sun glyph), giants/lowland (nothing special; the heights speak).
 
 ## 5. UI + meta
 
@@ -327,3 +330,21 @@ reactive 100% of 1-100 (teaching verb goals scored as finish), the Feat-seeking 
 and every Dare of levels 1-10. Advisory: reactive three stars on 41-200 2.5% (≤ 50%); humanDial
 passes all of levels 1-10 with the soft-fail; humanDial's mean stars on 41-200 0.73 miss the 0.95
 bar, by design of the Dares (it no longer earns ★2 without seeking it; humanFeat earns 1.32 there).
+
+## 9. Controls v3 in the Journey (docs/CONTROLS_V3.md §5.3, §9)
+
+- **Retired:** `dazzle`, `slippery`, `clockwork`, `gusts`, `heavy` (§3). Sun Lock stays, with a 1.0 s
+  countdown ring before each lock.
+- **Teaching slots:** L16 Wide Open · Big Sky, L29 Drought · Cloudless, L30 Crowded · Thicket, L31 Moon
+  Sun · Moonlit, L32 Lowland · Short Grass (finish goals; Dares and world variants from the bake).
+- **Composed levels** keep their draws and substitute (§3); 41 composed levels changed. Levers
+  (`SUB_OVERRIDE`, at most 8, each with its measurement in `campaign.ts`): L73 dense, L79 dropped,
+  L80 dropped, L92 dropped, L103 sparse, L123 lowland, L164 dense, L165 dropped.
+- **Names:** L85 Pine Hollow (was Slippery Sun), L94 Stop Clock (was Heavy Hands), L165 Cloudburst
+  Pass (was Slick Sun).
+- **Bake and goldens:** the re-bake changed only the 46 levels and `LEVEL_BAKE_RUN`; the goldens
+  only campaign 32 and 100.
+- **Gates** (`sim --campaign --compare`, src/core/README.md §18.5): oracle, reactive and the
+  Feat-seeking oracle as before; the five teaching slots 20/20 for humanTouch; still short of the
+  humanDial baseline on 7 substituted levels (L54, 139, 162, 163, 164, 168, 169) and in chapters 6, 7,
+  12, 14, 15, 17 and 20, beyond the 8 `SUB_OVERRIDE` entries.

@@ -1,6 +1,6 @@
 // v1.6 Dares in the sim (docs/V1_6_PLAN.md §2.6; CORE-2 owns this file): the RunStats Dare and
 // verb-goal counters (deepTicks, snapSavedTicks and earnedSnapSavedTicks, cloudsRidden, gateShaded
-// and gateDeep, flipTicks, lock and gust windows), the glass cluster tracking (sim/glass.ts) and the
+// and gateDeep, flipTicks, lock windows; the retired Gusts' gustHeld/gustWindows stay 0), the glass cluster tracking (sim/glass.ts) and the
 // `feat` / `featMet` events of a campaign level's Dares (LevelDef.feats, counted by featValue in
 // config/campaign.ts). Counters are integer ticks or counts, so the HUD's live count and the verdict
 // agree. Per-tick work is allocation-free (events excepted).
@@ -12,7 +12,7 @@ import { ECLIPSE_SEC } from '../gen/world.ts';
 import type { Cloud } from '../objects.ts';
 import { cloudAlive, cloudShades } from '../shadows.ts';
 import { updateClusters } from './glass.ts';
-import { sunGustAt, sunLockedAt } from './sun.ts';
+import { sunLockedAt } from './sun.ts';
 import type { SimState } from './types.ts';
 
 const RIDE_TICKS = Math.round(0.5 * TICK_HZ);
@@ -20,7 +20,6 @@ const ECLIPSE_TICKS = ECLIPSE_SEC * TICK_HZ;
 /** flipTicks stops counting this long after the flip (ticks). */
 const FLIP_WINDOW = 10 * TICK_HZ;
 const LOCK_TICKS = Math.round(1.2 * TICK_HZ);
-const GUST_TICKS = 2 * TICK_HZ;
 const RECENT = TUNING.death.recentTicks;
 
 /** The Dare values at the start of the tick (snapshotFeats), for the level's feats in order. */
@@ -66,17 +65,13 @@ function heldFor(s: SimState, n: number): boolean {
   return true;
 }
 
-/** Lock and gust windows of the level's daylight: counted when they end, held when Nubs stayed fully shaded through them. */
+/** Lock windows of the level's daylight: counted when they end, held when Nubs stayed fully shaded through them. */
 function updateWindows(s: SimState): void {
   const st = s.stats;
   const d = s.dayTick;
   if (s.mods.has('lock') && !sunLockedAt(d) && sunLockedAt(d - 1)) {
     st.lockWindows = (st.lockWindows ?? 0) + 1;
     if (heldFor(s, LOCK_TICKS)) st.lockHeld = (st.lockHeld ?? 0) + 1;
-  }
-  if (s.mods.has('gusts') && sunGustAt(d) < 0 && sunGustAt(d - 1) >= 0) {
-    st.gustWindows = (st.gustWindows ?? 0) + 1;
-    if (heldFor(s, GUST_TICKS)) st.gustHeld = (st.gustHeld ?? 0) + 1;
   }
 }
 

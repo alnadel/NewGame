@@ -52,7 +52,7 @@ export interface LevelBake {
   readonly balls: number;
   /** Glass clusters on the trail. */
   readonly glass: number;
-  /** Lock and gust windows in the level's daylight, and the holdable ones (some bin fully shaded through the window). */
+  /** Lock windows in the level's daylight, and the holdable ones (some bin fully shaded through the window). */
   readonly windows: number;
   readonly holdable: number;
   /** Plain flakes on the trail. */
@@ -132,19 +132,27 @@ export interface LevelDef {
   readonly flares: readonly LevelFlare[];
 }
 
+/**
+ * What a composed level's draw picks from: a concept, or one of the five Controls v3 retired
+ * (docs/CONTROLS_V3.md §5.3). The draws keep them, so every composed level draws exactly as before;
+ * a retired draw is then replaced by its first fitting substitute (RETIRED_SUBS).
+ */
+export type DrawId = ConceptId | 'dazzle' | 'slippery' | 'clockwork' | 'gusts' | 'heavy';
+type RetiredId = Exclude<DrawId, ConceptId>;
+
 export interface Chapter {
   readonly id: number;
   readonly name: string;
   readonly biome: BiomeId;
   /** The chapter's signature concepts: every level draws its first from them; finales take three. */
-  readonly concepts: readonly ConceptId[];
+  readonly concepts: readonly DrawId[];
 }
 
 export const LEVEL_COUNT = 200;
 export const CHAPTER_COUNT = 20;
 export const LEVELS_PER_CHAPTER = 10;
 
-const ch = (id: number, name: string, biome: BiomeId, concepts: readonly ConceptId[]): Chapter =>
+const ch = (id: number, name: string, biome: BiomeId, concepts: readonly DrawId[]): Chapter =>
   Object.freeze({ id, name, biome, concepts: Object.freeze(concepts.slice()) });
 
 /** 20 themed chapters, biomes alternating from the Meadow. Chapters 1-4 teach the catalog. */
@@ -177,15 +185,15 @@ const NAMES: readonly (readonly string[])[] = [
   ['Arch Street', 'Stall Row', 'Tight Alley', 'Mirror Lane', 'Baker\'s Gate', 'Crowded Square', 'Lantern Walk', 'Glass Corner', 'Market Gate', 'The Grand Arch'],
   ['Warm Morning', 'Dry Grass', 'High Sun', 'Thin Shade', 'Heat Shimmer', 'Parched Field', 'Noon Blaze', 'Baked Earth', 'Scorched Path', 'The Furnace'],
   ['Salt Breeze', 'Gull Wind', 'Rolling Fog', 'Fleet Harbour', 'Rope Walk', 'Quay Gusts', 'Grey Sky', 'Storm Jetty', 'Pier Squall', 'The Gale'],
-  ['Tall Pines', 'Long Shade', 'Giant Steps', 'Stone Giants', 'Slippery Sun', 'Oak Shadow', 'Far Fields', 'Towering Grove', 'Big Country', 'The Colossus'],
-  ['Tick Tock', 'Gear Street', 'Locked Sun', 'Heavy Hands', 'Half Tank', 'Clock Square', 'Detent Lane', 'Spring Wound', 'Escapement', 'The Great Clock'],
+  ['Tall Pines', 'Long Shade', 'Giant Steps', 'Stone Giants', 'Pine Hollow', 'Oak Shadow', 'Far Fields', 'Towering Grove', 'Big Country', 'The Colossus'],
+  ['Tick Tock', 'Gear Street', 'Locked Sun', 'Stop Clock', 'Half Tank', 'Clock Square', 'Detent Lane', 'Spring Wound', 'Escapement', 'The Great Clock'],
   ['Snowfall', 'Flake Storm', 'Frost Bloom', 'Quick Thaw', 'Hardy Patch', 'White Field', 'Drift Walk', 'Flurry Rise', 'Frozen Trail', 'The Blizzard'],
   ['Last Light', 'Dusk Lane', 'Low Roofs', 'Fog Street', 'Moon Walk', 'Lamplight', 'Long Evening', 'Gloaming', 'Night Market', 'The Witching Hour'],
   ['Glass Field', 'Mirror Meadow', 'Dazzle Dawn', 'Blind Noon', 'Bright Glare', 'Shining Grass', 'Sun Catchers', 'Prism Walk', 'Lens Flare', 'The Glasshouse'],
   ['Dark Noon', 'Shadow Row', 'Locked Street', 'Dry Spell', 'Thin Ice Lane', 'Black Sun', 'Umbra', 'Corona Walk', 'Totality', 'The Eclipse'],
   ['Slow Start', 'Quick March', 'Grey Miles', 'Long Haul', 'Steady Pace', 'Far Horizon', 'Endless Road', 'Dawn to Dusk', 'Night Crossing', 'The Marathon'],
   ['Opening Bell', 'Rush Hour', 'Swing Street', 'Gate Run', 'Fast Stalls', 'Busy Square', 'Quick Trade', 'Hand-off Lane', 'Bargain Dash', 'The Big Sale'],
-  ['First Gust', 'Fleet Shadows', 'Wild Wind', 'Heavy Weather', 'Slick Sun', 'Storm Front', 'Crosswind', 'Squall Line', 'Thunderhead', 'The Tempest'],
+  ['First Gust', 'Fleet Shadows', 'Wild Wind', 'Heavy Weather', 'Cloudburst Pass', 'Storm Front', 'Crosswind', 'Squall Line', 'Thunderhead', 'The Tempest'],
   ['Frost Lane', 'Half Measure', 'Hardy Row', 'Snow Square', 'Cold Snap', 'Ice Street', 'Rimed Walls', 'Flurry Court', 'Deep Freeze', 'The Ice Palace'],
   ['Warm Dawn', 'Dry Noon', 'Heat Haze', 'Scorched Grass', 'Blazing Sun', 'White Noon', 'Furnace Field', 'Burning Walk', 'Dome Rising', 'The Heat Dome'],
   ['Hot Walls', 'Dark Square', 'Locked Noon', 'Packed Street', 'Cornered', 'Black Noon', 'Sun Trap', 'Final Lane', 'Last Shade', 'The Summit'],
@@ -213,6 +221,7 @@ export interface LevelStats {
   readonly flipTicks?: number;
   readonly lockHeld?: number;
   readonly lockWindows?: number;
+  /** The retired Gusts' windows (Controls v3: always 0). */
   readonly gustHeld?: number;
   readonly gustWindows?: number;
   readonly snapSavedTicks?: number;
@@ -298,14 +307,99 @@ const COMPOSE_EXCLUDED: ReadonlySet<ConceptId> = new Set<ConceptId>(['drag', 'bo
 
 /**
  * The order composed levels draw their pool in: v1.2's teaching order, so the v1.5 reordering of
- * CONCEPT_IDS left every composed level (41-200) exactly as it was.
+ * CONCEPT_IDS left every composed level (41-200) exactly as it was (Controls v3 keeps its retired ids).
  */
-const COMPOSE_ORDER: readonly ConceptId[] = Object.freeze([
+const COMPOSE_ORDER: readonly DrawId[] = Object.freeze([
   'drag', 'flakes', 'cloud', 'noon', 'oldtown', 'glare', 'swing', 'gate', 'breezy', 'long',
   'heat', 'overcast', 'dazzle', 'market', 'sprint', 'stroll', 'giants', 'lowland', 'sparse', 'dense',
   'drought', 'fleet', 'thaw', 'frosty', 'ration', 'meltfast', 'hardy', 'flurry', 'heavy', 'slippery',
   'clockwork', 'gusts', 'lock', 'fog', 'blind', 'eclipse', 'sunset', 'moonlit', 'marathon', 'boss',
-] as ConceptId[]);
+] as DrawId[]);
+
+/**
+ * Controls v3 (§5.3): what the draw reads of a retired id, frozen as it was (kind 'dial', no required
+ * biome, the old ['swing', 'slippery'] conflict), so every rng draw stays byte-identical.
+ */
+const RETIRED_DRAW: Readonly<Record<RetiredId, { readonly conflicts: readonly ConceptId[] }>> = Object.freeze({
+  dazzle: { conflicts: [] },
+  slippery: { conflicts: ['swing'] },
+  clockwork: { conflicts: [] },
+  gusts: { conflicts: [] },
+  heavy: { conflicts: [] },
+});
+
+/** Each retired id's substitutes in order (§5.3): the first that fits the level takes its slot. */
+const RETIRED_SUBS: Readonly<Record<RetiredId, readonly ConceptId[]>> = Object.freeze({
+  dazzle: ['dense', 'lowland', 'sparse'],
+  slippery: ['sprint', 'sparse', 'dense'],
+  clockwork: ['sparse', 'dense', 'lowland'],
+  gusts: ['fleet', 'breezy', 'sparse', 'dense'],
+  heavy: ['sprint', 'ration', 'sparse'],
+});
+
+/**
+ * Fairness levers (§5.3; empty unless a gate needed one, each entry with its reason here and in the
+ * spec's §16): SUB_OVERRIDE moves a substituted level to a later substitute (null drops the slot);
+ * TOUCH_READS makes a new teaching slot's bake also require humanTouch's first-try share.
+ */
+export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.freeze({
+  // §9.5 "substituted levels" (humanTouch's first tries over the 12 baseline streams against
+  // humanDial's on the old level, which needs ≥ its count − 1), each the first later choice that met it
+  // (measured before CORE's cut list took the ending rescue out of the driver, which redraws them):
+  // L73 gusts → sparse 4 vs 12; dense 12.
+  73: 'dense',
+  // L79 gusts → sparse 1 vs 10, dense 6; dropped 9.
+  79: null,
+  // L80 gusts → sparse 0 vs 4, dense 2; dropped 4.
+  80: null,
+  // L92 clockwork → sparse 5 vs 12, dense 7, lowland 7; dropped 11.
+  92: null,
+  // L103 heavy → ration 7 vs 11; sparse 12.
+  103: 'sparse',
+  // L123 dazzle → dense 5 vs 9; lowland 12.
+  123: 'lowland',
+  // L164 slippery → sprint 4 vs 11 (sparse does not fit beside fleet); dense 10.
+  164: 'dense',
+  // L165 heavy → sprint 0 vs 6 (ration and sparse do not fit); dropped 10.
+  165: null,
+});
+export const TOUCH_READS: readonly number[] = Object.freeze([]);
+
+const isRetired = (c: DrawId): c is RetiredId => c in RETIRED_DRAW;
+
+/** The draw's compatibility test (conceptsCompatible, with the retired ids' frozen kind and conflicts). */
+function drawCompatible(a: DrawId, b: DrawId): boolean {
+  if (!isRetired(a) && !isRetired(b)) return conceptsCompatible(a, b);
+  if (a === b) return false;
+  const r = isRetired(a) ? a : (b as RetiredId);
+  const o = r === a ? b : a;
+  return !isRetired(o) && CONCEPTS[o].kind !== 'dial' && !RETIRED_DRAW[r].conflicts.includes(o);
+}
+
+/** A drawn concept's required biome (none for a retired id). */
+const drawBiome = (c: DrawId): BiomeId | undefined => (isRetired(c) ? undefined : CONCEPTS[c].level?.biome);
+
+/**
+ * §5.3: a composed level's draw with each retired id replaced, in the level's concept order, by the
+ * first of its substitutes (or SUB_OVERRIDE's) that fits: compatible with every concept of the level
+ * that was not retired and every substitute already placed, not present, and its required biome
+ * absent or the chapter's. None fitting drops the slot.
+ */
+export function substitute(id: number, drawn: readonly DrawId[], chapter: Chapter): ConceptId[] {
+  const kept = drawn.filter((c): c is ConceptId => !isRetired(c));
+  const out: ConceptId[] = [];
+  for (const c of drawn) {
+    if (!isRetired(c)) {
+      out.push(c);
+      continue;
+    }
+    const o = SUB_OVERRIDE[id];
+    const subs = o !== undefined ? (o === null ? [] : [o]) : RETIRED_SUBS[c];
+    const fit = subs.find((x) => !kept.includes(x) && !out.includes(x) && (drawBiome(x) ?? chapter.biome) === chapter.biome && kept.every((k) => conceptsCompatible(x, k)) && out.every((k) => conceptsCompatible(x, k)));
+    if (fit !== undefined) out.push(fit);
+  }
+  return out;
+}
 
 /** Which v1.5 core mechanics a run has (docs/V1_5_PLAN.md §2): Sunflower buds, the Cold Snap, deep shade. */
 export interface Mechanics {
@@ -349,17 +443,29 @@ export function mechanicsOf(levelId: number | null): Mechanics {
   return m;
 }
 
-/** Draws the concepts of composed level `id` (41-200): the chapter's headline first, two or three in all. */
-function composeConcepts(id: number, seed: number, chapter: Chapter): ConceptId[] {
+/**
+ * Controls v3 (§5.3, §9.4): one of the 46 levels the retirement changed: a new teaching slot (L16,
+ * 29-32) or a composed level whose draw carried a retired id. Tooling (the gates of §9.5) reads it.
+ */
+export function retiredLevel(id: number): boolean {
+  if (id <= TEACH_LEVELS) return id === 16 || (id >= 29 && id <= 32);
+  return composeDraw(id, levelSeed(id, 0), CHAPTERS[chapterOf(id) - 1] as Chapter).some(isRetired);
+}
+
+/**
+ * Draws the concepts of composed level `id` (41-200): the chapter's headline first, two or three in
+ * all (retired ids included: `substitute` replaces them).
+ */
+export function composeDraw(id: number, seed: number, chapter: Chapter): DrawId[] {
   const rng = rngFor(seed, 'campaign', id);
   const i = (id - 1) % LEVELS_PER_CHAPTER;
   const finale = i === LEVELS_PER_CHAPTER - 1;
   const n = finale ? 3 : i < 3 ? 2 : rng.next() < 0.45 ? 3 : 2;
-  const fits = (c: ConceptId): boolean => (CONCEPTS[c].level?.biome ?? chapter.biome) === chapter.biome;
+  const fits = (c: DrawId): boolean => (drawBiome(c) ?? chapter.biome) === chapter.biome;
   const signature = chapter.concepts.filter(fits);
-  const pool = COMPOSE_ORDER.filter((c) => fits(c) && !COMPOSE_EXCLUDED.has(c));
-  const chosen: ConceptId[] = [];
-  const ok = (c: ConceptId): boolean => chosen.every((d) => conceptsCompatible(c, d));
+  const pool = COMPOSE_ORDER.filter((c) => fits(c) && !COMPOSE_EXCLUDED.has(c as ConceptId));
+  const chosen: DrawId[] = [];
+  const ok = (c: DrawId): boolean => chosen.every((d) => drawCompatible(c, d));
   // The headline: a finale leads with the chapter's first concept; other levels draw one.
   chosen.push(finale ? (signature[0] as ConceptId) : rng.pick(signature));
   while (chosen.length < n) {
@@ -386,7 +492,7 @@ function makeLevel(id: number): LevelDef {
   const introduces: ConceptId | null = id <= TEACH_LEVELS ? (CONCEPT_IDS[id - 1] as ConceptId) : null;
   // v1.6: every boss finale of chapters 5-20 also carries the Solar Flare, appended after the draw
   // (so the composition's draws are unchanged).
-  const composed = introduces ? [introduces] : composeConcepts(id, seed, chapter);
+  const composed = introduces ? [introduces] : substitute(id, composeDraw(id, seed, chapter), chapter);
   const concepts: readonly ConceptId[] = isBossFinale(id) ? [...composed, 'flare'] : composed;
   const biome = requiredBiome(concepts) ?? chapter.biome;
   let forecast: ForecastId = 'clear';
@@ -469,7 +575,7 @@ const TEACH_TARGETS: Readonly<Partial<Record<GoalKind, number>>> = Object.freeze
 /** Every concept's Dare (§2.6 table). */
 export const DARE_OF: Readonly<Record<ConceptId, FeatKind>> = Object.freeze({
   bloom: 'blooms', drought: 'blooms', sparse: 'blooms', lowland: 'blooms', heat: 'blooms',
-  swing: 'swings', dazzle: 'swings', clockwork: 'swings', slippery: 'swings',
+  swing: 'swings',
   deep: 'deep', dense: 'deep', giants: 'deep', oldtown: 'deep', noon: 'deep', sprint: 'deep',
   snap: 'snapSave', thaw: 'snapSave', ration: 'snapSave', boss: 'snapSave',
   flare: 'parry',
@@ -479,8 +585,8 @@ export const DARE_OF: Readonly<Record<ConceptId, FeatKind>> = Object.freeze({
   cloud: 'ride', breezy: 'ride', fleet: 'ride', overcast: 'ride',
   gate: 'gates', market: 'gates',
   eclipse: 'flip',
-  lock: 'still', gusts: 'still',
-  drag: 'ring', long: 'ring', stroll: 'ring', sunset: 'ring', frosty: 'ring', marathon: 'ring', moonlit: 'ring', heavy: 'ring', hardy: 'ring',
+  lock: 'still',
+  drag: 'ring', long: 'ring', stroll: 'ring', sunset: 'ring', frosty: 'ring', marathon: 'ring', moonlit: 'ring', hardy: 'ring',
 } satisfies Record<ConceptId, FeatKind>);
 
 /** True for the boss finales of chapters 5-20 (levels 50, 60, …, 200): they carry the Solar Flare. */

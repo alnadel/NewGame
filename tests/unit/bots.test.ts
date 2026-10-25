@@ -5,6 +5,7 @@ import { BOT_KINDS, createBot } from '../../src/core/sim/bots.ts';
 import { createRun } from '../../src/core/sim/create.ts';
 import { hashState } from '../../src/core/sim/hash.ts';
 import { headlessConfig, runBot, runHeadless } from '../../src/core/sim/headless.ts';
+import { campaignConfig } from '../../src/core/level.ts';
 import { computeCoverage } from '../../src/core/sim/nubs.ts';
 import { step } from '../../src/core/sim/step.ts';
 import type { SimState } from '../../src/core/sim/types.ts';
@@ -44,6 +45,31 @@ describe('bots', () => {
     expect(trace(3).hashes).not.toEqual(trace(8).hashes);
     // The same seed through runHeadless matches too (?bot=human and the test hook use this path).
     expect(runHeadless(5, 2400, kind)).toBe(runHeadless(5, 2400, kind));
+  });
+
+  it('Controls v3: the touch bots expose their driver as drive; idleTouch plays idle\'s frames (no move, so no glide)', () => {
+    for (const kind of ['humanTouch', 'reactiveTouch', 'idleTouch', 'mashTouch'] as const) {
+      expect(BOT_KINDS).toContain(kind);
+      const bot = createBot(kind);
+      expect(bot.drive).toBeDefined();
+      const s = createRun(campaignConfig(1001));
+      for (let i = 0; i < 400; i++) step(s, bot.next(s));
+      expect(bot.drive!.act).not.toBe(undefined);
+    }
+    for (const cfg of [headlessConfig(4, 3), campaignConfig(3), campaignConfig(1001)]) {
+      const a = createRun(cfg);
+      const b = createRun(cfg);
+      const idle = createBot('idle');
+      const touch = createBot('idleTouch');
+      for (let i = 0; i < 3000 && a.phase !== 'dead' && a.phase !== 'won'; i++) {
+        const fa = { ...idle.next(a) };
+        const fb = { ...touch.next(b) };
+        for (const k of ['dTheta', 'down', 'downEdge', 'upEdge', 'release', 'key'] as const) expect(fb[k], `${k} at ${i}`).toBe(fa[k]);
+        step(a, fa);
+        step(b, fb);
+      }
+      expect(hashState(b)).toBe(hashState(a));
+    }
   });
 
   it('humanDial plays differently from human: some of its decisions aim for the lasting shade', () => {

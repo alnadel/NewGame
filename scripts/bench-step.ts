@@ -3,6 +3,7 @@
 //
 //   node scripts/bench-step.ts [--base c956421 | --base-dir DIR] [--head-dir DIR] [--bot reactive|oracle] [--seeds 12] [--days 4] [--reps 9] [--check]
 //   node scripts/bench-step.ts --gen [--base …] [--seeds 30] [--days 4] [--reps 3] [--check]
+//   node scripts/bench-step.ts --drive [--seeds 12] [--days 4] [--reps 3] [--check]
 //
 // Each variant records its own bot's input frames on seeds 1000.. (profile 3, mechanics on), then
 // replays them on fresh runs whose worlds are generated up front, so only step() is timed (the bot
@@ -21,6 +22,11 @@
 // when HEAD's p99 slice or its frames over 1 or 2 ms a minute are over 1.1 × the base's, or its p99
 // is over 1.5 ms while the base's is not (fix round 2: glass contests ran inside a chunk placement,
 // 20 ms; a loaded machine pushes the base over 1.5 ms too, and then only the paired bars decide).
+//
+// --drive times the Controls v3 driver on HEAD alone (docs/CONTROLS_V3.md §12.4: ≤ 5 µs per tick
+// median on an Endless noon): its fill on the reactive bot's frames (copied) with a press every 20
+// ticks, called every tick and timed from 11:00 AM to 1:00 PM of each day (seeds 1000.., profile 3,
+// the median over the timed ticks of each rep, then over --reps 3). --check exits 1 over 5 µs.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -38,9 +44,10 @@ function arg(name: string, def: string): string {
 const base = arg('base', 'c956421');
 const botKind = arg('bot', 'reactive');
 const gen = process.argv.includes('--gen');
+const drive = process.argv.includes('--drive');
 const seeds = Number(arg('seeds', gen ? '30' : '12'));
 const days = Number(arg('days', '4'));
-const reps = Math.max(gen ? 3 : 1, Number(arg('reps', gen ? '3' : '9')));
+const reps = Math.max(gen ? 3 : 1, Number(arg('reps', gen || drive ? '3' : '9')));
 const check = process.argv.includes('--check');
 const ROOT = arg('head-dir', HERE);
 const baseDir = arg('base-dir', '');
@@ -174,10 +181,57 @@ function passGuide(v: Variant): number {
 const median = (a: readonly number[]): number => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] as number;
 const min = (a: readonly number[]): number => Math.min(...a);
 
+/** --drive: the driver's per-tick µs at an Endless noon (11:00 AM to 1:00 PM), one rep over the seeds. */
+async function driveUs(root: string): Promise<{ us: number[]; reps: number[] }> {
+  const imp = async (p: string): Promise<any> => import(pathToFileURL(join(root, p)).href);
+  const [create, step, bots, headless, driver, clock] = await Promise.all([
+    imp('src/core/sim/create.ts'),
+    imp('src/core/sim/step.ts'),
+    imp('src/core/sim/bots.ts'),
+    imp('src/core/sim/headless.ts'),
+    imp('src/core/drive/driver.ts'),
+    imp('src/core/clock.ts'),
+  ]);
+  const out: number[] = [];
+  const per: number[] = [];
+  for (let r = 0; r < reps; r++) {
+    const us: number[] = [];
+    for (let i = 0; i < seeds; i++) {
+      const s = create.createRun(headless.headlessConfig(1000 + i, 3));
+      const b = bots.createBot('reactive', 0, true);
+      const d = driver.createDriver();
+      d.begin(s, bots.touchOpts(s, -1));
+      const c = { act: 0, vane: 0, vaneUp: false, rest: false };
+      const f = { dTheta: 0, down: false, downEdge: false, upEdge: false, release: 0, key: 0 };
+      const end = clock.dayStartTick(days);
+      while (s.phase !== 'dead' && s.phase !== 'won' && s.tickAbs < end) {
+        const bf = b.next(s);
+        Object.assign(f, bf);
+        c.act = s.tickAbs % 20 === 0 ? 1 : 0;
+        const m = s.phase === 'day' ? clock.minutesOfDay(s.day, s.dayTick) : -1;
+        const a = performance.now();
+        d.fill(s, f, c);
+        const dt = performance.now() - a;
+        if (m >= 300 && m <= 420) us.push(1000 * dt);
+        step.step(s, bf);
+      }
+    }
+    per.push(median(us));
+    if (r === reps - 1) out.push(...us);
+  }
+  return { us: out, reps: per };
+}
+
 const dir = baseDir || mkdtempSync(join(tmpdir(), 'shady-bench-'));
 try {
-  if (!baseDir) execFileSync('sh', ['-c', `git -C '${HERE}' archive ${base} src | tar -x -C '${dir}'`]);
-  if (gen) {
+  if (!baseDir && !drive) execFileSync('sh', ['-c', `git -C '${HERE}' archive ${base} src | tar -x -C '${dir}'`]);
+  if (drive) {
+    const { us, reps: per } = await driveUs(ROOT);
+    const med = median(per);
+    console.log(`bench-step --drive: driver fill at an Endless noon, ${seeds} seeds × ${days - 1} days, ${reps} reps, ${us.length} timed ticks a rep`);
+    console.log(`  ${(ROOT === HERE ? 'HEAD' : 'head').padEnd(16)} ${med.toFixed(2)} µs/tick median (reps ${per.map((x) => x.toFixed(2)).join(', ')}; p99 ${[...us].sort((x, y) => x - y)[Math.floor(0.99 * us.length)]?.toFixed(2) ?? '?'} µs)  gate ≤ 5 µs: ${med <= 5 ? 'PASS' : 'FAIL'}`);
+    if (check && med > 5) process.exitCode = 1;
+  } else if (gen) {
     const gv = [
       { label: baseDir ? 'base' : `base ${base}`, m: await load(dir) },
       { label: ROOT === HERE ? 'HEAD' : 'head', m: await load(ROOT) },

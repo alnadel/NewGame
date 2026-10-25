@@ -12,7 +12,7 @@ import { stepLit } from '../../gen/validator.ts';
 import { ECLIPSE_SEC } from '../../gen/world.ts';
 import { BINS, binOf, createMaskScene, glareMask, markCaster, markEllipse, SAMPLE_DX, SAMPLE_DY, SAMPLES } from '../../intervals.ts';
 import { PICKUP_ALIVE, SNAP_ID_BASE, type Caster, type Pickup } from '../../objects.ts';
-import { sunGustAt, sunLockedAt } from '../sun.ts';
+import { sunLockedAt } from '../sun.ts';
 import type { SimState } from '../types.ts';
 import { glassValue } from './glassplan.ts';
 
@@ -451,32 +451,22 @@ function windowHold(s: SimState): void {
   if (windowMask(s)) pullTo(mask, 0, W.still, W.stillReach);
 }
 
-/** `mask`: the bins fully shaded through the next lock or gust window within W.stillLead ticks; false when none is. */
+/** `mask`: the bins fully shaded through the next lock window within W.stillLead ticks; false when none is. */
 function windowMask(s: SimState): boolean {
-  const lock = s.mods.has('lock');
-  const gust = s.mods.has('gusts');
-  if (!lock && !gust) return false;
+  if (!s.mods.has('lock')) return false;
   const d = s.dayTick;
   let a = -1;
-  for (let k = 0; k <= W.stillLead && a < 0; k++) if ((lock && sunLockedAt(d + k)) || (gust && sunGustAt(d + k) >= 0)) a = k;
+  for (let k = 0; k <= W.stillLead && a < 0; k++) if (sunLockedAt(d + k)) a = k;
   if (a < 0) return false;
   let e = a;
-  while (e < a + 200 && ((lock && sunLockedAt(d + e)) || (gust && sunGustAt(d + e) >= 0))) e++;
+  while (e < a + 200 && sunLockedAt(d + e)) e++;
   mask.fill(1);
   for (let j = Math.floor((s.tickAbs + a) / STEP); j <= Math.ceil((s.tickAbs + e) / STEP); j++) {
     stepLit(s.world, j, row);
     for (let b = 0; b < BINS; b++) if (row[b] !== 0) mask[b] = 0;
   }
-  if (gust) {
-    tmp.set(mask);
-    for (let b = 0; b < BINS; b++) {
-      if (tmp[b] !== 1) continue;
-      for (let k = -STILL_EDGE; k <= STILL_EDGE; k++) if (tmp[(b + k + BINS) % BINS] !== 1) mask[b] = 0;
-    }
-  }
   return true;
 }
-const STILL_EDGE = 4;
 
 /** True when a Cold Snap is charged (the Frost Bank's cost in hundredths). */
 function snapCharged(s: SimState): boolean {
@@ -552,12 +542,10 @@ function flipLeft(s: SimState): number {
   return left >= 0 && left <= W.flipLead ? left : -1;
 }
 
-/** True when a lock or gust window starts within W.stillLead ticks (or is on). */
+/** True when a lock window starts within W.stillLead ticks (or is on). */
 function windowAhead(s: SimState): boolean {
-  const lock = s.mods.has('lock');
-  const gust = s.mods.has('gusts');
-  if (!lock && !gust) return false;
-  for (let k = 0; k <= W.stillLead; k += 6) if ((lock && sunLockedAt(s.dayTick + k)) || (gust && sunGustAt(s.dayTick + k) >= 0)) return true;
+  if (!s.mods.has('lock')) return false;
+  for (let k = 0; k <= W.stillLead; k += 6) if (sunLockedAt(s.dayTick + k)) return true;
   return false;
 }
 
