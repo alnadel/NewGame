@@ -133,7 +133,7 @@ import { showCrashOverlay } from './crash.ts';
 import { Fx } from './fx.ts';
 import { createMechanics } from './mechanics.ts';
 import { hudButtonHit } from '../render/hud.ts';
-import { Input } from './input.ts';
+import { createInput, type Input } from './input.ts';
 import { FixedClock } from './loop.ts';
 import { dailyDateInBounds, isDebugRun, startTFor, type Params } from './params.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from './perf.ts';
@@ -633,7 +633,7 @@ export class Session {
       version: deps.version,
     });
     if (this.challenge) this.ui.setChallenge(this.challengeBanner(this.challenge));
-    this.input = new Input({
+    this.input = createInput({
       canvas: deps.canvas,
       accepting: () => this.accepting(),
       onPress: () => this.onPress(),

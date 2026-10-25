@@ -6,7 +6,7 @@ import { cssEaseInOut, ghostSwingX, ghostSwipe, guideAlpha, HintTracker, nearest
 import { createView, layoutView } from '../../src/game/camera.ts';
 import { FixedClock } from '../../src/game/loop.ts';
 import { dailyDateInBounds, isDebugRun, parseParams, startTFor } from '../../src/game/params.ts';
-import { Input, swingBoost, type InputHost } from '../../src/game/input.ts';
+import { createInput, swingBoost, type Input, type InputHost } from '../../src/game/input.ts';
 import { createDriver, createRun, NOTE_REFUSE, REFUSE_CHARGING, step, type DragKind, type DriveAct, type DriveControl, type InputFrame } from '../../src/core/index.ts';
 import { canvasDpr, deviceClass, dprCap, Governor } from '../../src/game/perf.ts';
 import { Cadence, type CadenceInput } from '../../src/game/cadence.ts';
@@ -256,11 +256,18 @@ describe('view letterboxing (archive/TECH_SPEC §9.1)', () => {
   });
 });
 
+/** Dispatches a synthetic event of `type` with `props` on `t` (the input listens on the canvas and the window). */
+function fire(t: EventTarget, type: string, props: Record<string, unknown>): void {
+  const e = new Event(type, { cancelable: true });
+  for (const [k, v] of Object.entries(props)) Object.defineProperty(e, k, { value: v });
+  t.dispatchEvent(e);
+}
+
 describe('input frames (V1_PLAN §3.1)', () => {
-  // A minimal DOM stand-in: Input only needs addEventListener on the canvas and on window.
+  // A minimal DOM stand-in: the input only needs addEventListener on the canvas and on window.
   const g = globalThis as unknown as { window?: EventTarget & { innerWidth: number; innerHeight: number } };
-  const made = !g.window;
-  if (made) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
+  if (!g.window) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
+  const win = g.window;
   const canvas = new EventTarget() as unknown as HTMLCanvasElement;
   const host: InputHost = {
     canvas,
@@ -276,11 +283,14 @@ describe('input frames (V1_PLAN §3.1)', () => {
   };
 
   const ev = (x: number, t: number): PointerEvent => ({ pointerId: 1, clientX: x, clientY: 300, timeStamp: t, pointerType: 'touch', button: 0 }) as unknown as PointerEvent;
+  const pointer = (type: string, x: number): void => fire(win, type, { pointerId: 1, clientX: x, clientY: 300, timeStamp: 0, pointerType: 'touch', button: 0 });
+  const wheel = (deltaY: number, deltaMode: number): void => fire(win, 'wheel', { deltaY, deltaMode });
+  const key = (k: string, down: boolean, shiftKey: boolean): void => fire(win, down ? 'keydown' : 'keyup', { key: k, shiftKey, repeat: false });
 
   it('quantizes, splits rotation across ticks and puts edges first/last', () => {
-    const inp = new Input(host);
+    const inp = createInput(host);
     inp.begin(ev(200, 0));
-    (inp as unknown as { moveTo(x: number): void }).moveTo(190);
+    pointer('pointermove', 190);
     const f = inp.takeFrames(2);
     expect(f.length).toBe(2);
     expect(f[0]!.downEdge).toBe(true);
@@ -293,7 +303,7 @@ describe('input frames (V1_PLAN §3.1)', () => {
   });
 
   it('a tap in one tick is downEdge + upEdge with the finger up', () => {
-    const inp = new Input(host);
+    const inp = createInput(host);
     inp.tap();
     const f = inp.takeFrames(1);
     expect(f[0]!.downEdge && f[0]!.upEdge).toBe(true);
@@ -302,9 +312,7 @@ describe('input frames (V1_PLAN §3.1)', () => {
   });
 
   it('a wheel event is one tap frame turning 15° per notch or 0.35° per pixel, capped at 45° (CC-6)', () => {
-    const inp = new Input(host);
-    const wheel = (deltaY: number, deltaMode: number): void =>
-      (inp as unknown as { onWheel(e: WheelEvent): void }).onWheel({ deltaY, deltaMode, target: null, preventDefault: () => {} } as unknown as WheelEvent);
+    const inp = createInput(host);
     wheel(3, 1);
     let f = inp.takeFrames(1);
     expect(f[0]!.downEdge && f[0]!.upEdge).toBe(true);
@@ -324,9 +332,7 @@ describe('input frames (V1_PLAN §3.1)', () => {
   });
 
   it('Shift turns the rotation keys to the fine rate (key ±2)', () => {
-    const inp = new Input(host);
-    const key = (k: string, down: boolean, shiftKey: boolean): void =>
-      (inp as unknown as { onKey(e: KeyboardEvent, d: boolean): void }).onKey({ key: k, shiftKey, repeat: false, target: null, preventDefault: () => {} } as unknown as KeyboardEvent, down);
+    const inp = createInput(host);
     key('ArrowLeft', true, false);
     expect(inp.takeFrames(1)[0]!.key).toBe(1);
     key('ArrowLeft', true, true);
@@ -334,15 +340,15 @@ describe('input frames (V1_PLAN §3.1)', () => {
     key('ArrowLeft', false, true);
     key('d', true, true);
     expect(inp.takeFrames(1)[0]!.key).toBe(-2);
+    key('d', false, false);
     inp.dispose();
   });
 
   it('a lift releases at 0 °/s however fast the finger moved (Controls v3: nothing coasts)', () => {
-    const inp = new Input(host);
-    const mv = inp as unknown as { moveTo(x: number): void; onUp(e: PointerEvent, cancel: boolean): void };
+    const inp = createInput(host);
     inp.begin(ev(300, 0));
-    for (let i = 1; i <= 5; i++) mv.moveTo(300 - i * 10);
-    mv.onUp(ev(250, 50), false);
+    for (let i = 1; i <= 5; i++) pointer('pointermove', 300 - i * 10);
+    pointer('pointerup', 250);
     const f = inp.takeFrames(3);
     expect(f[2]!.upEdge).toBe(true);
     expect(f[2]!.down).toBe(false);
@@ -351,7 +357,7 @@ describe('input frames (V1_PLAN §3.1)', () => {
   });
 
   it('holds input through hit-stop (n = 0)', () => {
-    const inp = new Input(host);
+    const inp = createInput(host);
     inp.begin(ev(200, 0));
     expect(inp.takeFrames(0).length).toBe(0);
     expect(inp.takeFrames(1)[0]!.downEdge).toBe(true);
@@ -362,8 +368,8 @@ describe('input frames (V1_PLAN §3.1)', () => {
 describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
   const g = globalThis as unknown as { window?: EventTarget & { innerWidth: number; innerHeight: number } };
   if (!g.window) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
+  const win = g.window;
   const canvas = new EventTarget() as unknown as HTMLCanvasElement;
-  type Priv = { onDown(e: PointerEvent): void; onMove(e: PointerEvent): void; onUp(e: PointerEvent, cancel: boolean): void; onKey(e: KeyboardEvent, down: boolean): void; onWheel(e: WheelEvent): void };
   /** An Input whose leg (drag kind, act, start beat) and clock the test sets; the button's disc is x ≥ 280, 500 ≤ y ≤ 600. */
   const mk = () => {
     const h = { drag: 'sun' as DragKind, act: 'snap' as DriveAct, starting: false, pressed: 0, safe: 0, t: 0 };
@@ -379,19 +385,17 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
       starting: () => h.starting,
       uPerPx: () => 0.5,
     };
-    const inp = new Input(host);
+    const inp = createInput(host);
     inp.now = () => h.t;
-    const p = inp as unknown as Priv;
     /** Pointer `id` at (x, y) at the test clock: down, a move, up (or a cancel). */
-    const down = (id: number, x: number, y = 300): void => p.onDown(pe(id, x, y, h.t));
-    const move = (id: number, x: number, y = 300): void => p.onMove(pe(id, x, y, h.t));
-    const up = (id: number, x: number, y = 300, cancel = false): void => p.onUp(pe(id, x, y, h.t), cancel);
-    return { h, inp, p, down, move, up };
+    const pe = (id: number, x: number, y: number) => ({ pointerId: id, clientX: x, clientY: y, timeStamp: h.t, pointerType: 'touch', button: 0 });
+    const down = (id: number, x: number, y = 300): void => fire(canvas, 'pointerdown', pe(id, x, y));
+    const move = (id: number, x: number, y = 300): void => fire(win, 'pointermove', pe(id, x, y));
+    const up = (id: number, x: number, y = 300, cancel = false): void => fire(win, cancel ? 'pointercancel' : 'pointerup', pe(id, x, y));
+    const key = (k: string, isDown = true, repeat = false): void => fire(win, isDown ? 'keydown' : 'keyup', { key: k, shiftKey: false, repeat });
+    const wheel = (): void => fire(win, 'wheel', { deltaY: 3, deltaMode: 1 });
+    return { h, host, inp, down, move, up, key, wheel };
   };
-  const pe = (id: number, x: number, y: number, t = 0): PointerEvent =>
-    ({ pointerId: id, clientX: x, clientY: y, timeStamp: t, pointerType: 'touch', button: 0, preventDefault: () => {} }) as unknown as PointerEvent;
-  const ke = (key: string, repeat = false): KeyboardEvent =>
-    ({ key, shiftKey: false, repeat, altKey: false, ctrlKey: false, metaKey: false, target: null, preventDefault: () => {} }) as unknown as KeyboardEvent;
   const take = (inp: Input, n: number) => ({ f: inp.takeFrames(n), c: inp.controls() });
   const sum = (f: readonly InputFrame[], k: 'dTheta' | 'steer'): number => f.reduce((a, x) => a + (x[k] ?? 0), 0);
 
@@ -577,7 +581,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
   });
 
   it('no button on a Drip leg or in the hold: the corner is world; the button is tested before the edge zones', () => {
-    const { h, inp, down } = mk();
+    const { h, host, inp, down } = mk();
     h.act = 'none';
     h.drag = 'steer';
     down(1, 300, 560);
@@ -585,7 +589,6 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     inp.releaseAll();
     // A disc reaching into the side zone still takes its touches there.
     h.act = 'snap';
-    const host = (inp as unknown as { host: InputHost }).host;
     const hit = host.buttonHit;
     host.buttonHit = (x, y) => x >= 340 && y >= 500;
     down(2, 350, 560);
@@ -610,8 +613,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
   });
 
   it('keys per leg: ↑ presses any act, ↓ only the Cold Snap; ← → move the vane one notch on Gust (no repeat); ↑ starts a held run; act keys never move the sun', () => {
-    const { h, inp, p } = mk();
-    const key = (k: string, down = true, repeat = false): void => p.onKey(ke(k, repeat), down);
+    const { h, inp, key } = mk();
     key('ArrowDown');
     key('w');
     expect([inp.acts, inp.snaps]).toEqual([2, 2]);
@@ -648,8 +650,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
   });
 
   it('the wheel turns the sun on sun legs only', () => {
-    const { h, inp, p } = mk();
-    const wheel = (): void => p.onWheel({ deltaY: 3, deltaMode: 1, target: null, preventDefault: () => {} } as unknown as WheelEvent);
+    const { h, inp, wheel } = mk();
     wheel();
     expect(take(inp, 1).f[0]!.dTheta).toBe(-15);
     h.drag = 'vane';
@@ -751,7 +752,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
   it('a single-pointer drag and key script past the start beat matches the v2 frames on dTheta, down, downEdge, upEdge and key (only release is new: 0)', () => {
     // The v2 rule: −dx / 360 px × 360° per px, the turn split evenly per batch (quantized, remainder
     // carried), a touch-down on a batch's first frame and a lift on its last.
-    const { h, inp, p, down, move, up } = mk();
+    const { h, inp, down, move, up, key } = mk();
     const script: [string, number][] = [['d', 200], ['m', 190], ['b', 3], ['m', 171], ['m', 172.5], ['b', 2], ['u', 160], ['b', 2], ['kL', 0], ['b', 2], ['kl', 0], ['d', 220], ['b', 1], ['m', 260], ['u', 260], ['b', 3]];
     const got: [number, boolean, boolean, boolean, number][] = [];
     let x = 0;
@@ -777,7 +778,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
         up0 = true;
         held = false;
       } else if (op === 'kL' || op === 'kl') {
-        p.onKey(ke('ArrowLeft'), op === 'kL');
+        key('ArrowLeft', op === 'kL');
         keyL = op === 'kL';
       } else {
         for (const f of inp.takeFrames(v)) got.push([f.dTheta + 0, f.down, f.downEdge, f.upEdge, f.key]);
