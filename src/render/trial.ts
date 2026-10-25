@@ -641,7 +641,7 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     const x = v.ox + o.x * S;
     const y = v.oy - (o.y + (isWall(o.kind) ? 6 : 0)) * S;
     const ang = Math.atan2(y - by, x - bx);
-    const col = d.due > 1 ? RED : d.due ? AMBER : burn ? EMBER : LIME;
+    const col = d.due > 1 ? 0xff4d3d : d.due ? 0xffc83d : burn ? EMBER : LIME;
     g.lineWidth = 1.2;
     g.strokeStyle = 'rgba(43,33,64,.5)';
     g.beginPath();
@@ -651,7 +651,8 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     for (let p = hc ? 0 : 1; p < 2; p++) {
       g.beginPath();
       ringPath(g, v, o, 6 + (rm ? 0 : 1.5 * pulse));
-      if (p) g.setLineDash(burn ? PICK_DASH : LEAF_DASH);
+      // Due turns the dashes solid (shape, not colour alone).
+      if (p && !d.due) g.setLineDash(burn ? PICK_DASH : LEAF_DASH);
       g.lineWidth = (p ? 3.5 : 7) * lw;
       g.strokeStyle = p ? cssa(col, 1) : '#2B2140';
       g.stroke();
@@ -768,15 +769,18 @@ export function drawElCues(g: CanvasRenderingContext2D, v: View, s: SimState, ti
     cxs[i] = d.vane !== 0 ? driveWeatherX(s, o, t, 0) : NaN;
     gcs[i] = weatherGood(s, o) + 1 + (o.y - E.weather.ryRatio * o.r > topY ? 3 : 0);
   }
-  g.setLineDash([3, 6]);
-  g.lineWidth = 2 * lw;
-  g.strokeStyle = cssa(0xffffff, 0.38);
-  g.beginPath();
-  for (let i = 0; i < n; i++) {
-    const c = cxs[i] as number;
-    if ((gcs[i] as number) >= 0 && (gcs[i] as number) < 3 && Number.isFinite(c)) ell(g, v.ox + c * S, v.oy - (objs[i] as ElObj).y * S, (objs[i] as ElObj).r * S, E.weather.ryRatio * (objs[i] as ElObj).r * S);
+  if (d.vane !== 0) {
+    // The calm-now ghosts: finer ink dashes, fainter than the ghosts they shadow.
+    g.setLineDash([3, 6]);
+    g.lineWidth = 2 * lw;
+    g.strokeStyle = cssa(0x2b2140, 0.45);
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const c = cxs[i] as number;
+      if ((gcs[i] as number) >= 0 && (gcs[i] as number) < 3) ell(g, v.ox + c * S, v.oy - (objs[i] as ElObj).y * S, (objs[i] as ElObj).r * S, E.weather.ryRatio * (objs[i] as ElObj).r * S);
+    }
+    g.stroke();
   }
-  g.stroke();
   g.setLineDash([6, 5]);
   for (let c = -1; c < 3; c++) {
     let any = false;

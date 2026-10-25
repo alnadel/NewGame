@@ -874,6 +874,8 @@ export const BTN_NO_S = 0.35;
 const ACT_FACE: Readonly<Record<DriveAct, Face>> = { none: FACE.ice, snap: FACE.ice, burn: FACE.red, grow: FACE.green, calm: FACE.cloud };
 const ACT_GLYPH: Readonly<Record<DriveAct, string>> = { none: '', snap: '', burn: 'ember', grow: 'sprout', calm: 'calm' };
 const RED = '#FF4D3D';
+/** Due's amber: yellower than Ember's orange, so a due wall never reads as Ember's own colour. */
+const AMBER = '#FFC83D';
 
 /**
  * Controls v3 (§7.1): the action button. One disc with the act's icon (snowflake, flame, leaf,
@@ -954,11 +956,14 @@ function drawButton(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudI
     g.stroke();
   }
   if (due > 0) {
-    // Due: an amber ring outside the rim (red when urgent; thicker in high contrast).
-    g.lineWidth = (inp.hc ? 5 : 3.5) * k;
-    g.strokeStyle = due > 1 ? RED : '#FFB347';
+    // Due: an amber band outside the rim on an ink edge (red when urgent).
     g.beginPath();
-    g.arc(bx, y, R + 7 * k, 0, TAU);
+    g.arc(bx, y, R + 8 * k, 0, TAU);
+    g.lineWidth = 8 * k;
+    g.strokeStyle = INK;
+    g.stroke();
+    g.lineWidth = 5 * k;
+    g.strokeStyle = due > 1 ? RED : AMBER;
     g.stroke();
   }
   if (d.buffered) {
@@ -973,6 +978,8 @@ function drawButton(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudI
   g.lineCap = 'butt';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
+  // The marks over the disc keep full strength on a dimmed (locked) one.
+  g.globalAlpha = inp.alpha;
   if (st === 2) {
     // Locked: a padlock and the seconds to the TAG.
     drawGlyph(g, 'lock', bx, y - 6 * k, 22 * k, INK);
@@ -981,7 +988,6 @@ function drawButton(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudI
     // Low: the next act's cost in red under the icon.
     outlined(g, String(Math.ceil(d.cost)), bx, y + 21 * k, 15 * k, RED);
   }
-  g.globalAlpha = inp.alpha;
   const side = inp.hand === 'left' ? 1 : -1;
   if (inc) {
     // Incoming: an arrow at the rim's upper outer corner.

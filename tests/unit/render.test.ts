@@ -10,7 +10,7 @@ import { createCameraFx, createView, layoutView, setPlayCamera } from '../../src
 import { createBanners, showDayCard } from '../../src/render/banners.ts';
 import { cssa, hex } from '../../src/render/color.ts';
 import { createDecals, decorIn, FOOTPRINT_CLEAR, PUDDLE, TRAIL_CLEAR, trailDistance } from '../../src/render/decor.ts';
-import { createHalo, createShadeSplit, heroArcColor, splitShade, updateHalo } from '../../src/render/halo.ts';
+import { createHalo, createHaloIn, createShadeSplit, drawHalo, heroArcColor, splitShade, updateHalo } from '../../src/render/halo.ts';
 import { createHud, drawHud, hudButton, hudButtonHit, hudScale, type HudInput } from '../../src/render/hud.ts';
 import { heroArt } from '../../src/render/heroes.ts';
 import { createNubsAnim, createPose } from '../../src/render/nubs.ts';
@@ -717,6 +717,61 @@ describe('Controls v3 action button (render/hud.ts, docs/CONTROLS_V3.md §1.1, �
       d.act = 'none';
       drawHud(env.g, h, v, inp);
       expect(hudButtonHit(h, hudButton(h).x, hudButton(h).y)).toBe(false);
+    } finally {
+      env.restore();
+    }
+  });
+});
+
+describe('Controls v3 dial and Trial cues (docs/CONTROLS_V3.md §7.2)', () => {
+  it('draws the ghost sun (hollow) and its settle point (filled) only while they are set, and the lock ring in the last second', () => {
+    const env = fakeCanvas();
+    try {
+      const h = createHalo();
+      const inp = createHaloIn();
+      Object.assign(inp, { cx: 200, cy: 400, R: 40, theta: 90, sunUp: true, fade: 1, guideAlpha: 1 });
+      const strokes = (): number => {
+        const s0 = env.calls.stroke ?? 0;
+        const f0 = env.calls.fill ?? 0;
+        drawHalo(env.g, h, inp);
+        return (env.calls.stroke ?? 0) - s0 + 100 * ((env.calls.fill ?? 0) - f0);
+      };
+      const base = strokes();
+      inp.ghost = 110;
+      expect(strokes() - base).toBe(2);
+      inp.settle = 130;
+      expect(strokes() - base).toBe(104);
+      inp.ghost = inp.settle = NaN;
+      inp.lockIn = 30;
+      expect(strokes() - base).toBe(2);
+      inp.lockIn = 0;
+      inp.glide = 40;
+      expect(strokes() - base).toBe(1);
+    } finally {
+      env.restore();
+    }
+  });
+
+  it('strokes the calm-now ghosts in one more path only while the vane is set', () => {
+    const env = fakeCanvas();
+    try {
+      const s = createRun(campaignConfig(1004));
+      elFixture(s);
+      s.phase = 'day';
+      s.nubs.hero = 'gust';
+      const v = createView();
+      layoutView(v, 390, 844, 1, { top: 0, right: 0, bottom: 0, left: 0 });
+      setPlayCamera(v, createCameraFx(), s.nubs.x, s.nubs.y + 180);
+      const dr = createDriver();
+      dr.begin(s, NEUTRAL);
+      const strokes = (): number => {
+        const s0 = env.calls.stroke ?? 0;
+        drawElCues(env.g, v, s, 0, true, false, false, 60, dr.view, 320, 756, 46);
+        return (env.calls.stroke ?? 0) - s0;
+      };
+      const calm = strokes();
+      dr.view.vane = 1;
+      expect(strokes()).toBe(calm + 1);
     } finally {
       env.restore();
     }

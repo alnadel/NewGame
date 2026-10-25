@@ -103,6 +103,7 @@ Fill one reused object from `SimState` and the UI state machine every frame (`Se
 | `chapter`? | `state.level?.chapter ?? 0` | The chapter's music palette (0 = default score) |
 | `progress`? | `levelProgress(state)`, −1 outside the campaign | "Finish line near" cue and the final stretch at ≥ 0.85 |
 | `locked`? | `state.sun.locked` | Lock clink / release (`gust`? is retired with the Gusts concept: read by nothing) |
+| `glide`? | the driver view's `glide` is finite (Controls v3) | A magnet glide's sun detents are silent |
 | `eclipse`? | `state.eclipse` (0..1) | Eclipse cue, drone, score muffle |
 | `moonlit`?, `fog`? | `state.moonlit`, `state.mods.has('fog')` | Night bed by day; score muffled to 1.4 kHz |
 
@@ -169,6 +170,15 @@ from 0 with the layer's fade; a layer unwanted for ≥ 1 s and five of its fade 
 View edges in play (day or night): `locked` on/off →
 **lock** clink / release; `eclipse` leaving 0 → **eclipse** falling shimmer; `progress` crossing
 0.85 → **finishNear** lift (once per run, re-armed by `resetRun`). `newBest` ducks to 50 % for 2 s.
+
+Controls v3 (docs/CONTROLS_V3.md §7.3): `onDrive(code, a)` plays a driver note's cue (`driveCue`,
+`sfxRouter.ts`): `PRESS` → **uiTap** (the UI's click); a first `REFUSE` of its reason this leg and
+`EXPIRE` → **uiError** (the fizz; a repeat, `a ≥ 16`, is silent, its chip still shows); a capture
+`SETTLE` (`a = 1`) → **clink**, one small glassy bell two octaves up (the one new recipe); `NOTCH` →
+**detent** on the ladder by notch; `BUFFER`, a track `SETTLE`, `CALM`, `WAIT_LOW`, `HANDOVER` and `AUTO`
+play nothing of their own (an act's sim event carries its sound). While `view.glide` is set (a
+magnet glide runs) sun detents are silent. The Gust element's `gust` whoosh plays once a second at
+most (the vane's governor gusts on its own); a `catch` plays nothing (no coasting sun in play).
 
 ## Music system
 
