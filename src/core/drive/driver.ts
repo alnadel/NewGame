@@ -316,9 +316,9 @@ export function createDriver(): Driver {
   }
 
   /**
-   * Auto actions (§3.6), the reactive policy: Ember arms every pick while an arm is free; Sprout
-   * gives every crossing a job when it is picked, and a plot not downwind a job to treeMin when no
-   * job runs and Sap is above plotSap + plotMin.
+   * Auto actions (§3.6), the reactive policy (the touch bots' presses): Ember arms every pick while
+   * an arm is free; Sprout gives every crossing a job when it is picked, and a plot short of treeMin,
+   * not downwind, a job to treeMin when no plot job runs and Sap covers the tree above plotSap.
    */
   function auto(s: SimState, el: ElState): void {
     if (s.nubs.hero === 'ember') {
@@ -332,7 +332,7 @@ export function createDriver(): Driver {
       const p = k < 0 ? -1 : sproutPick(s, jobs);
       if (p < 0) return;
       const o = el.objs[p] as ElObj;
-      if (o.kind === 'plot' && (k > 0 || o.size >= SP.treeMin || downwind(s, el, o) || s.nubs.chill <= DS.plotSap + DS.plotMin)) return;
+      if (o.kind === 'plot' && (o.size >= SP.treeMin || downwind(s, el, o) || s.nubs.chill <= SP.treeMin + DS.plotSap || (k > 0 && (el.objs[jobs[0] as number] as ElObj).kind === 'plot'))) return;
       jobs[k] = p;
       goals[k] = jobGoal(o);
       note(NOTE_AUTO, 3);
