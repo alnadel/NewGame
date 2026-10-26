@@ -563,7 +563,9 @@ does nothing:
 - **no hand** this tick (a resting finger, §1.2, is no hand), and the sun is settled: `s.sun.mode ===
   'idle'` (a lift's chase has finished), or `'dragging'` under a resting finger with `|s.sun.lag| <
   0.01°`;
-- **re-grip grace:** at least `regripTicks` (15, 250 ms) since the last real lift (§4.5);
+- **re-grip grace:** at least `regripTicks` (15, 250 ms) since the last real lift (§4.5); the release of a
+  key turn is a lift too, its direction the key's (fix round 3), so a keyboard nudge out of shade is
+  not glided back at the next refresh;
 - planning happens on guide refresh ticks (`s.guide.tick` changed) and at most one new glide starts
   per `gapTicks` (30) ticks.
 
@@ -2180,11 +2182,15 @@ list counted from 0).
   act: T1's first wall b376 → b381 (its due prompt 1.28 → 1.63 s after the TAG), T5's b245 → b258
   (0.78 → 1.68 s), T6's first crossing x511 → x518 (Sprout's prompt was 0.57 s after its TAG), T7's
   crossings x355 → x362 and s383 → s377 with the TAG into Ember 394 → 383 (b423 due 1.55 s after it).
+- **F1, keyboard nudges.** A key turn never counted as a lift, so the next refresh glided the sun back
+  into the arc a key tap had just left (3-tick taps of the fine key netted −3.7° with aim help against
+  −71.5° without, in the review's probe). The release of a key turn now sets the lift and the stroke's
+  direction (§4.1); the touch bots never press keys, so no gate or golden moved.
 - **F16, the race.** A glide could start a frame before a deliberate touch and keep its first step
   (2.7-3.4°). A real `downEdge` within `raceTicks` (3) of a glide's start now undoes it (§4.5).
 - Not CORE's: F6 (the TAG ramp's negative scale) is `input.ts`, fixed by the UX fixer; F8's session half
   likewise.
-- Regression tests in `tests/unit/drive.test.ts`: own closing edge, nightfall refusal, mashing refusal
+- Regression tests in `tests/unit/drive.test.ts`: a key release as a lift, own closing edge, nightfall refusal, mashing refusal
   once, Calm at notch 0, `glideTick` on the last step, the 45-tick pre-TAG window, the race undo, the
   low-Lift governor and the ending rescue.
 
@@ -2221,7 +2227,7 @@ list counted from 0).
   dropped.
 - The ending rescue (CORE's cut 2, §4.2) is back: on the 154 unchanged levels humanTouch passed 2,345
   streams within 3 tries without the rescue and 2,381 with it, against humanDial's 2,345 (aim help
-  off: 2,337). Its bytes are inside the branch's +695 B (`build:single` below).
+  off: 2,337). Its bytes are inside the branch's +739 B (`build:single` below).
 - Re-baked per the bake policy: `levelBake.gen.ts` changed only L54, 79, 112, 139, 145, 162, 163, 164,
   165, 167, 168, 169 and `LEVEL_BAKE_RUN`; no `campaign` golden moved.
 
@@ -2254,7 +2260,7 @@ list counted from 0).
    per tick (≤ 5); `--gen` passes (p99 slice 1.44 ms, paired 0.936 × base). Its first run under load
    failed the paired p99 (1.302); the merge's tree, timed right after, failed it too (1.183) with the
    same slice count (13,234 vs 13,233): world generation is unchanged on this branch.
-8. `npm run build:single`: 832,726 B (+695 B over the merge's 832,031 B; 1,834 B under 834,560 B),
+8. `npm run build:single`: 832,770 B (+739 B over the merge's 832,031 B; 1,790 B under 834,560 B),
    without the UX fixer's branch.
 
 **Open for the lead**

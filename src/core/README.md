@@ -1644,7 +1644,8 @@ finger state into ordinary `InputFrame` fields before `step()`; `step()` itself 
   it, before the driver writes anything (so a glide's own closing `upEdge` is never a move or a lift);
   an interrupted glide or one whose leg ended closes; then the engagement clock, the stroke's net
   turn, the re-grip **carry** of an unfinished chase and the **undo** of a glide made since a lift at
-  most `againstTicks` old or started at most `raceTicks` (3) before the touch-down; the vane (`vaneNotch`: symmetric rounding, ±0.5 → ±1); presses join the
+  most `againstTicks` old or started at most `raceTicks` (3) before the touch-down (a key turn's release
+  is a lift too); the vane (`vaneNotch`: symmetric rounding, ±0.5 → ±1); presses join the
   buffer (`bufferTicks` 18, not restarted by a press while one waits; in the last `preTagTicks` (45)
   before a TAG into Ember or Sprout a press waits for the incoming element's first tick; at nightfall
   a waiting press is refused at once and the act is `none` until day) and resolve or are refused with the first reason that
@@ -1736,4 +1737,4 @@ driver's µs per tick on T7; `node scripts/bench-step.ts --drive` times it at an
 - `bench-step`: step ×1.061, guide ×0.985; `--gen` passes; `--drive` 0.22 µs per tick.
 - **Cut list** (§12.3): CORE's cuts 1 (`driveWeatherX`'s set-vane prediction) and 3 (Auto Snap) stand;
   cut 2, the ending rescue, is restored in fix round 3 (`aimPlan`'s `ending` argument). `build:single`
-  832,726 B on this branch (+695 B over the merge's 832,031 B; the release budget is 834,560 B).
+  832,770 B on this branch (+739 B over the merge's 832,031 B; the release budget is 834,560 B).

@@ -1061,6 +1061,24 @@ describe('aim help: when the driver glides (§4.1, §4.5)', () => {
     expect(d.view.glide).toBeNaN();
   });
 
+  it('a key turn\'s release is a lift: no glide for 15 ticks, none against the key\'s way by more than 4° for 30', () => {
+    // Fix round 3 (review F1): taps of a key walk the sun out of shade; the next refresh must not undo them.
+    // The release is idle()'s tick 1, so the grace and the against window end one tick later than after a drag's upEdge frame.
+    const out = (key: -2 | 2): { k: number; f: InputFrame; from: number; to: number }[] => {
+      const { s, d } = magnet();
+      const b = binOf(s.sun.theta);
+      const arcs: Arc[] = key < 0 ? [[b + 2, b + 20]] : [[b + 12, b + 32]];
+      for (let k = 0; k < 3; k++) at(s, d, arcs, { key });
+      return idle(s, d, arcs, 45);
+    };
+    const back = out(-2);
+    expect(back[0]!.k).toBe(TUNING.drive.aim.againstTicks + 1);
+    expect(angleDiff(back[0]!.to, back[0]!.from)).toBeGreaterThan(TUNING.drive.aim.againstDeg);
+    const on = out(2);
+    expect(on[0]!.k).toBe(TUNING.drive.aim.regripTicks + 1);
+    expect(angleDiff(on[0]!.to, on[0]!.from)).toBeGreaterThan(0);
+  });
+
   it('two strokes 200 ms apart lose at most 1° of the swing; a re-grip carries an unfinished chase on', () => {
     const { s, d } = magnet();
     const b = binOf(s.sun.theta);

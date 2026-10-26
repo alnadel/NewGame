@@ -205,6 +205,8 @@ export function createDriver(): Driver {
   let liftAt = NEVER;
   let strokeDir = 0;
   let stroke = 0;
+  /** The key turn on the last day tick (its release is a lift, §4.1). */
+  let keyWas = 0;
   let seen = -1;
   // The glide (§4.5): its ticks (0 none) and ticks sent, its turn and that turn quantized, the steps
   // sent, its target θ, under a resting finger (no edges), its kind (0 track, 1 rescue, 2 hand-over),
@@ -637,6 +639,7 @@ export function createDriver(): Driver {
       moveAt = handAt = liftAt = gAt = NEVER;
       strokeDir = 0;
       stroke = 0;
+      keyWas = 0;
       seen = -1;
       gN = 0;
       closing = false;
@@ -662,6 +665,7 @@ export function createDriver(): Driver {
         const up = f.upEdge;
         const dt = f.dTheta;
         const held = f.down;
+        const key = f.key;
         const hand = (held && !c.rest) || dn || up || dt !== 0 || f.key !== 0;
         if (hand) handAt = now;
         // 1. An interrupted glide, or one whose leg ended, closes on this frame (no new plan on it).
@@ -685,7 +689,14 @@ export function createDriver(): Driver {
             liftAt = now;
             strokeDir = stroke >= 1 ? 1 : stroke <= -1 ? -1 : 0;
           }
+          // A key turn's release is a lift too (fix round 3): the re-grip grace and the against-the-stroke
+          // rule protect a keyboard nudge as they protect a drag.
+          if (keyWas !== 0 && key === 0) {
+            liftAt = now;
+            strokeDir = keyWas > 0 ? 1 : -1;
+          }
         }
+        keyWas = key;
         // 3. The vane (Gust legs; 0 elsewhere).
         turned = false;
         if (drag === 'vane') {
