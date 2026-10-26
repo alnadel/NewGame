@@ -2233,7 +2233,7 @@ list counted from 0).
 
 **Gates on `fix3/core`**
 1. `npm run typecheck`: clean.
-2. `npx vitest run`: 57 files, 1,194 of 1,194.
+2. `npx vitest run`: 57 files, 1,195 of 1,195.
 3. `node scripts/golden.ts`: against 358a7ee only `trials` 1001, 1004, 1005, 1006, 1007 and their frames.
 4. `sim --campaign --bot all --tries 3 --compare` (baseline digest matches; 4 min 47 s): oracle 200/200;
    reactive 100% of 1-100; the Feat-seeking oracle ★2 on 100% and every Dare of 1-10; idleTouch 11
