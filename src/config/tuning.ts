@@ -683,8 +683,8 @@ const tuning = {
   drive: {
     /** A press that is not legal yet waits this long (300 ms), then is refused. */
     bufferTicks: 18,
-    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.5 s). */
-    preTagTicks: 30,
+    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.75 s). */
+    preTagTicks: 45,
     /** Due prompts: amber within dueTicks of a required act's last moment, red within urgentTicks. */
     dueTicks: 60,
     urgentTicks: 24,
@@ -714,10 +714,15 @@ const tuning = {
       gapTicks: 30,
       /** Aim help acts only within engageTicks of the last sun move (5 s), never during the lesson. */
       engageTicks: 300,
-      /** Re-grip grace: no glide for regripTicks after a real lift; until againstTicks, none against the stroke by more than againstDeg, and a re-grip undoes a glide. */
+      /**
+       * Re-grip grace: no glide for regripTicks after a real lift; until againstTicks, none against the
+       * stroke by more than againstDeg, and a re-grip undoes a glide; so does a touch-down within
+       * raceTicks of a glide's start (the player reached for the same sun).
+       */
       regripTicks: 15,
       againstTicks: 30,
       againstDeg: 4,
+      raceTicks: 3,
       /** The pre-TAG hand-over into Drip: last ticks, reach (°), inset (°). */
       handTicks: 60,
       handReach: 30,

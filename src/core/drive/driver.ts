@@ -88,6 +88,11 @@ export interface DriveView {
   /** The glide's target θ while one runs (NaN none), and whether it is the hand-over. */
   glide: number;
   handover: boolean;
+  /**
+   * The last fill wrote a glide's motion (its last tick included): the session drops that tick's
+   * `detent` events from haptics and audio (§4.5), deciding per tick rather than per drawn frame.
+   */
+  glideTick: boolean;
   /** The last refusal's reason (§2.4 codes; 0 none) and its tick (the driver's, counted from begin). */
   refuse: number;
   refuseTick: number;
@@ -159,13 +164,14 @@ export function createDriver(): Driver {
     vaneCost: 0,
     glide: NaN,
     handover: false,
+    glideTick: false,
     refuse: 0,
     refuseTick: 0,
   };
   const notes = new Int16Array(16);
   let noteN = 0;
   let opts = NEUTRAL;
-  /** The driver's tick (fills since begin), the buffered press's tick (−1 none), the vane's raw value and its leg. */
+  /** The driver's tick (day fills since begin), the buffered press's tick (−1 none), the vane's raw value and its leg. */
   let now = 0;
   let buf = -1;
   let raw = 0;
@@ -226,9 +232,13 @@ export function createDriver(): Driver {
     gustAt = -D.gust.every;
   }
 
-  /** The button's act for the walking element (§0.1): no button without the snap mechanic, nor in a lesson run before its first full meter. */
+  /**
+   * The button's act for the walking element (§0.1): no button outside 'day' (the hold, the night, the
+   * end: nothing there can be pressed, so the input queues no press), without the snap mechanic, nor in
+   * a lesson run before its first full meter.
+   */
   function actOf(s: SimState): DriveAct {
-    if (s.phase === 'hold') return 'none';
+    if (s.phase !== 'day') return 'none';
     const a = HEROES[s.nubs.hero].act;
     if (a !== 'snap') return a;
     return !s.world.mech.snap || (s.cfg.lesson === true && !(shown ||= snapReady(s))) ? 'none' : a;
@@ -258,8 +268,10 @@ export function createDriver(): Driver {
       if (snapReady(s)) f.snap = true;
       else reason = tagLocked(s) ? REFUSE_LOCKED : s.ready > 0 ? REFUSE_WAIT : s.snapTicks > 0 ? REFUSE_BUSY : s.nubs.frost < 1 ? REFUSE_CHARGING : REFUSE_WAIT;
     } else if (a === 'calm') {
-      // Calming a calm vane does nothing and refuses nothing (a soft cue).
-      if (raw === 0) {
+      // Calming a calm vane does nothing and refuses nothing (a soft cue): the notch, not the raw
+      // value, is what the player sees (a drag still under half a notch shows a calm vane).
+      if (vaneNotch(raw) === 0) {
+        raw = 0;
         note(NOTE_CALM, 2);
         return true;
       }
@@ -457,6 +469,7 @@ export function createDriver(): Driver {
 
   /** Sends the glide's next tick (§4.5): eased steps summing to q1024(Δ) exactly; edges unless it rests under the finger. */
   function glide(f: InputFrame): void {
+    view.glideTick = true;
     gK++;
     const end = gK === gN;
     const d = end ? gQ - gSent : glideStep(gD, gN, gK);
@@ -611,6 +624,7 @@ export function createDriver(): Driver {
       closing = false;
       view.refuse = 0;
       view.refuseTick = 0;
+      view.glideTick = false;
       observe(s);
     },
     interrupt(): void {
@@ -618,29 +632,37 @@ export function createDriver(): Driver {
       closing = gN > 0;
     },
     fill(s: SimState, f: InputFrame, c: Readonly<DriveControl>): void {
+      view.glideTick = false;
       if (s.phase === 'day') {
         now++;
-        // 1. An interrupted glide, or one whose leg ended, closes on this frame.
-        if (closing || s.relayIdx !== leg) stopGlide(f);
-        closing = false;
-        if (s.relayIdx !== leg) newLeg(s);
         const el = s.el;
         const hero = s.nubs.hero;
         const drag = HEROES[hero].drag;
-        // 2. The hand and the sun move, from the frame as the input filled it (before the driver writes).
-        const hand = (f.down && !c.rest) || f.downEdge || f.upEdge || f.dTheta !== 0 || f.key !== 0;
+        // 2 (read first). The hand and the sun move, from the frame as the input filled it, before the
+        // driver writes anything: step 1's closing upEdge is the driver's own, neither a move nor a lift.
+        const dn = f.downEdge;
+        const up = f.upEdge;
+        const dt = f.dTheta;
+        const held = f.down;
+        const hand = (held && !c.rest) || dn || up || dt !== 0 || f.key !== 0;
+        // 1. An interrupted glide, or one whose leg ended, closes on this frame (no new plan on it).
+        const shut = (closing || s.relayIdx !== leg) && gN > 0;
+        if (closing || s.relayIdx !== leg) stopGlide(f);
+        closing = false;
+        if (s.relayIdx !== leg) newLeg(s);
         if (drag === 'sun') {
-          if (s.ready === 0 && (f.downEdge || f.upEdge || f.dTheta !== 0 || f.key !== 0)) moveAt = now;
+          if (s.ready === 0 && (dn || up || dt !== 0 || f.key !== 0)) moveAt = now;
           // The stroke's net turn, from its downEdge to its upEdge.
-          if (f.downEdge) stroke = 0;
-          if (f.down || f.downEdge || f.upEdge) stroke += f.dTheta;
-          if (f.downEdge) {
-            // The re-grip carry (an unfinished chase goes on) and undo (a glide since a lift ≤ 0.5 s old).
+          if (dn) stroke = 0;
+          if (held || dn || up) stroke += dt;
+          if (dn) {
+            // The re-grip carry (an unfinished chase goes on) and undo (a glide since a lift ≤ 0.5 s old,
+            // or one that started ≤ raceTicks before this touch: the player reached for the same sun).
             let add = s.sun.mode === 'chasing' ? q1024(s.sun.lag) : 0;
-            if (gAt > liftAt && now - liftAt <= A.againstTicks) add += q1024(-angleDiff(s.sun.theta, gFrom));
+            if (gAt > liftAt && (now - liftAt <= A.againstTicks || now - gAt <= A.raceTicks)) add += q1024(-angleDiff(s.sun.theta, gFrom));
             f.dTheta += add;
           }
-          if (f.upEdge) {
+          if (up) {
             liftAt = now;
             strokeDir = stroke >= 1 ? 1 : stroke <= -1 ? -1 : 0;
           }
@@ -660,7 +682,9 @@ export function createDriver(): Driver {
           if (inc !== 'none') {
             pre = inc;
             note(NOTE_BUFFER, DRIVE_ACTS.indexOf(inc));
-          } else buf = now;
+          } else if (buf < 0) buf = now;
+          // A press while one waits joins it: mashing never restarts the wait, so an illegal press is
+          // still refused when the first one's wait runs out (§2.3; later ones are repeats, +16).
         }
         if (pre !== 'none' && pre === act) {
           pre = 'none';
@@ -678,8 +702,15 @@ export function createDriver(): Driver {
           else if (hero === 'gust') gust(s, el, f);
         }
         // 7. Aim help (§4), on sun legs only.
-        if (drag === 'sun') aim(s, f, c, hand);
+        if (drag === 'sun') aim(s, f, c, hand || shut);
         else stopGlide(f);
+      } else {
+        // §2.1: nothing is written outside 'day'. A press still waiting when night falls is refused at
+        // once with its reason (its wait never outlives the day, §2.3); the end drops it; the pre-TAG
+        // press goes too.
+        if (buf >= 0 && s.phase === 'night' && view.act !== 'none') press(s, f, view.act, true);
+        buf = -1;
+        pre = 'none';
       }
       observe(s);
     },

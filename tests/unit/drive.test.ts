@@ -41,6 +41,7 @@ import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { binOf } from '../../src/core/intervals.ts';
 import { angleDiff } from '../../src/core/dmath.ts';
 import { snapReady } from '../../src/core/sim/mechanics.ts';
+import { dayTicks } from '../../src/core/clock.ts';
 import { step } from '../../src/core/sim/step.ts';
 import { NO_INPUT, VERB_EAST, VERB_HOLD, VERB_RELEASE, VERB_TAP, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 
@@ -243,7 +244,18 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     expect(drain(d)).toEqual([[NOTE_BUFFER, 2]]);
   });
 
-  it('a press in the last 30 ticks before a TAG into Ember is kept and arms on Ember\'s first tick', () => {
+  it('a press in the last 45 ticks (0.75 s) before a TAG into Ember is kept and arms on Ember\'s first tick; one earlier is refused "locked"', () => {
+    expect(TUNING.drive.preTagTicks).toBe(45);
+    // Fix round 3: a press 0.5-0.75 s before the TAG was thrown away (refused "locked"); it now waits for Ember.
+    for (const n of [TUNING.drive.preTagTicks, TUNING.drive.preTagTicks + 1]) {
+      const t = trialTo(1001, 'nubs', (s) => nextTagTicks(s) === n);
+      t.nubs.frost = 1;
+      const e = createDriver();
+      e.begin(t, OPTS);
+      tick(t, e, { act: 1 });
+      for (let i = 0; i < 18; i++) tick(t, e);
+      expect(drain(e)).toEqual(n === TUNING.drive.preTagTicks ? [[NOTE_BUFFER, 2]] : [[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_LOCKED]]);
+    }
     const s = trialTo(1001, 'nubs', (s) => nextTagTicks(s) === 20);
     const d = createDriver();
     d.begin(s, OPTS);
@@ -262,6 +274,55 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     expect(drain(d)).toEqual([[NOTE_PRESS, 2]]);
     expect(Array.from(d.view.queue)).toEqual([p, -1]);
     expect(d.view.buffered).toBe(false);
+  });
+
+  it('mashing never restarts the wait: an illegal press is refused when the first one\'s 18 ticks run out, then as a repeat', () => {
+    const s = endless();
+    s.nubs.frost = 0;
+    const d = createDriver();
+    d.begin(s, OPTS);
+    const refused: number[][] = [];
+    for (let k = 0; k < 120; k++) {
+      d.fill(s, frame(), ctl({ act: k % 15 === 0 ? 1 : 0 }));
+      for (const [code, a] of drain(d)) if (code === NOTE_REFUSE) refused.push([k, a as number]);
+    }
+    expect(refused).toEqual([[18, REFUSE_CHARGING], [48, REFUSE_CHARGING + 16], [78, REFUSE_CHARGING + 16], [108, REFUSE_CHARGING + 16]]);
+  });
+
+  it('nightfall refuses a press still waiting (never carried to dawn), and the night shows no button', () => {
+    for (const [frost, snapTicks, reason] of [[0, 0, REFUSE_CHARGING], [2, 30, REFUSE_BUSY]] as const) {
+      const s = endless();
+      const dl = dayTicks(s.day);
+      while (s.dayTick < dl - 4) {
+        s.nubs.chill = s.nubs.maxChill;
+        step(s, NO_INPUT);
+      }
+      const d = createDriver();
+      d.begin(s, OPTS);
+      s.nubs.frost = frost;
+      s.nubs.frostH = 100 * frost;
+      s.snapTicks = snapTicks;
+      const f0 = frame();
+      d.fill(s, f0, ctl({ act: 1 }));
+      step(s, f0);
+      expect(drain(d)).toEqual([[NOTE_BUFFER, 1]]);
+      let snaps = 0;
+      let refusedAt = -1;
+      for (let k = 1; s.day === 1 || s.dayTick < 120; k++) {
+        s.nubs.chill = s.nubs.maxChill;
+        const f = frame();
+        d.fill(s, f, ctl({ act: s.phase === 'night' && d.view.act !== 'none' ? 1 : 0 }));
+        if (f.snap) snaps++;
+        for (const [code, a] of drain(d)) {
+          expect([code, a]).toEqual([NOTE_REFUSE, reason]);
+          refusedAt = k;
+        }
+        if (s.phase === 'night') expect([d.view.act, d.view.buffered]).toEqual(['none', false]);
+        step(s, f);
+      }
+      // Refused on the first night tick, 4 ticks after the press; nothing fires at dawn.
+      expect([refusedAt, snaps, d.view.act]).toEqual([4, 0, 'snap']);
+    }
   });
 
   it('a lesson run shows no button until its first full meter, then keeps it', () => {
@@ -643,6 +704,14 @@ describe('Gust (§3.5)', () => {
     expect([d.view.vane, d.view.state]).toEqual([0, 0]);
     tick(s, d, { act: 1 });
     expect(drain(d)).toEqual([[NOTE_PRESS, 4], [NOTE_CALM, 0], [NOTE_CALM, 2]]);
+    // Mid-drag at notch 0 (a third of a notch) the vane reads calm: a Calm press is the no-op, and it
+    // drops the partial drag (a further third is still notch 0).
+    tick(s, d, { vane: 0.3 });
+    expect(d.view.vane).toBe(0);
+    tick(s, d, { act: 1 });
+    tick(s, d, { vane: 0.3 });
+    expect([d.view.vane, ...drain(d)]).toEqual([0, [NOTE_CALM, 2]]);
+    tick(s, d, { vaneUp: true });
     // No weather in play: the vane keeps its notch, dimmed, and blows nothing.
     for (const o of el.objs) if (o.kind === 'rain' || o.kind === 'fog') o.state = EL_GONE;
     tick(s, d, { vane: 2, vaneUp: true });
@@ -963,6 +1032,72 @@ describe('aim help: when the driver glides (§4.1, §4.5)', () => {
     at(e.s, e.d, [], { downEdge: true, down: true });
     for (let k = 0; k < 10; k++) at(e.s, e.d, [], { down: true });
     expect(Math.abs(angleDiff(e.s.sun.theta, t1 + 50))).toBeLessThan(0.01);
+  });
+
+  it('marks every glide tick (its last included) on view.glideTick, and no other', () => {
+    const { s, d } = magnet();
+    const b = binOf(s.sun.theta);
+    const arcs: Arc[] = [[b + 12, b + 32]];
+    stroke(s, d, arcs, 1, 5);
+    expect(d.view.glideTick).toBe(false);
+    const marks: boolean[] = [];
+    const moved: boolean[] = [];
+    for (let k = 0; k < 60; k++) {
+      const f = at(s, d, arcs);
+      marks.push(d.view.glideTick);
+      moved.push(f.dTheta !== 0 || f.downEdge || f.upEdge);
+    }
+    expect(moved.filter(Boolean).length).toBeGreaterThanOrEqual(2);
+    expect(marks).toEqual(moved);
+    // The last glide tick is marked though the glide is over on the view.
+    const last = moved.lastIndexOf(true);
+    expect(marks[last]).toBe(true);
+  });
+
+  it('an interrupt closes a glide with an upEdge that is no sun move: an idle player gets no help 5 s after the real last move', () => {
+    const { s, d } = magnet();
+    const b = binOf(s.sun.theta);
+    const arcs: Arc[] = [[b + 12, b + 32]];
+    stroke(s, d, arcs, 1, 5);
+    let k = 0;
+    while (Number.isNaN(d.view.glide)) {
+      at(s, d, arcs);
+      k++;
+    }
+    d.interrupt();
+    const f = at(s, d, arcs);
+    k++;
+    expect([f.upEdge, f.down, f.release]).toEqual([true, false, 0]);
+    // Parked in shade past engageTicks after the lift, then lit 6° from an arc: no glide.
+    const c = binOf(s.sun.theta);
+    while (k < TUNING.drive.aim.engageTicks + 3) {
+      at(s, d, [[c - 20, c + 20]]);
+      k++;
+    }
+    const e = binOf(s.sun.theta);
+    expect(idle(s, d, [[e + 6, e + 25]], 40)).toEqual([]);
+  });
+
+  it('a touch-down within 3 ticks of a glide\'s start undoes it, however long ago the lift was', () => {
+    expect(TUNING.drive.aim.raceTicks).toBe(3);
+    for (const late of [1, 3, 4]) {
+      const { s, d } = magnet();
+      const b = binOf(s.sun.theta);
+      // A stroke into the middle of wide shade; 60 idle ticks (past againstTicks); then the shade moves off.
+      stroke(s, d, [[b - 25, b + 25]], 1, 5);
+      expect(idle(s, d, [[b - 25, b + 25]], 60)).toEqual([]);
+      const c = binOf(s.sun.theta);
+      const arcs: Arc[] = [[c + 8, c + 28]];
+      const before = s.sun.theta;
+      const g = idle(s, d, arcs, 1);
+      expect(g).toHaveLength(1);
+      idle(s, d, arcs, late - 1);
+      at(s, d, arcs, { downEdge: true, down: true });
+      for (let k = 0; k < 10; k++) at(s, d, arcs, { down: true });
+      const off = Math.abs(angleDiff(s.sun.theta, before));
+      if (late <= 3) expect(off).toBeLessThan(0.01);
+      else expect(off).toBeGreaterThan(1);
+    }
   });
 
   it('a resting finger gets a glide with no edges, and its next move goes on from there', () => {
