@@ -49,8 +49,9 @@ contact, still turns the sun (§1.2, §1.3).
   gold bud arc, a glass glint, a flare rim or the next element's aim the player chose). It works
   only while you play: within 5 s of your last sun move, never during the first-run lesson, and
   never against a swing you are still making (a 0.25 s re-grip grace, §4.5).
-- **The button acts on a still tap**: on the lift, or once the finger has stayed still on it for
-  120 ms. A drag that starts on the button turns the sun like a drag anywhere else. The button has
+- **The button acts on a still tap**: lifted within 12 px and 300 ms of its touch-down (amended,
+  §16.8: the 120 ms still-commit is gone; a held touch does nothing). A drag that starts on the
+  button is a plain drag and turns the sun like a drag anywhere else. The button has
   its own pointer slot, so a press never turns or catches the sun. A press that is not legal yet waits
   300 ms, and a refused press always says why (the buzz only the first time per reason and leg).
 - **The game picks the target and the moment** for Ember's burns and Sprout's pours (the policy that
@@ -89,10 +90,10 @@ contact, still turns the sun (§1.2, §1.3).
 | **world slot** | The one pointer that drags (first pointer wins; a still one yields to a new press, §1.2). |
 | **button** | The round action button; its pointer slot is separate from the world slot. |
 | **act** | What the button does on this leg: `snap`, `burn`, `grow`, `calm` or `none`. |
-| **press** | One committed button touch: a still tap (lifted after moving < 12 px) or a touch that stayed within 12 px for 120 ms (or ↑/W, or ↓/S on a Nubs leg). A touch that moves 12 px first is a drag, not a press. |
+| **press** | One committed button touch: a still tap, lifted within 12 px and within 300 ms of its touch-down (or ↑/W, or ↓/S on a Nubs leg). A touch that moves 12 px at any time is a drag, not a press; a longer still touch is nothing (§16.8). |
 | **driver** | `createDriver()` in `src/core/drive/`: fills each tick's `InputFrame` from presses, the vane and the state. |
 | **pick** | The object the next press would act on (drawn as a ring with a tether to the button). **Required** targets (walls, crossings) come before **optional** ones (puddles, plots). |
-| **rest** | A world finger on the sun that has moved < 3 px in the last 300 ms. Aim help treats it as no hand. |
+| **rest** | A world finger on the sun whose samples have stayed inside a 4 px box (per axis) for 300 ms (±1.5 px of sensor jitter never ends it, §16.8). Aim help treats it as no hand. |
 | **engaged** | The last **sun move** (input `downEdge`, `upEdge`, `dTheta ≠ 0` or `key ≠ 0` on a sun leg, after the start beat) was within `engageTicks` (300 ticks, 5 s). Aim help acts only while engaged. Button presses do not count. |
 | **arm** | Ember: a pressed target waiting for its ignition moment (at most 2). |
 | **job** | Sprout: a pour into one site up to a goal (at most 2: the running one and one queued). |
@@ -100,7 +101,7 @@ contact, still turns the sun (§1.2, §1.3).
 | **magnet** | Aim help: **settle** (a lit or ending sun glides into lasting shade) and **track** (a sun near an arc's moving edge glides back inside). |
 | **hand-over** | The magnet's pre-aim in the last second before a TAG into Drip. |
 | **glide** | The driver's synthetic sun drag: a `downEdge`, per-tick `dTheta` and an `upEdge` at 0 °/s. |
-| **hand** | A world finger or a turn key on the sun this tick (`down` while not resting, `downEdge`, `upEdge`, `dTheta ≠ 0` or `key ≠ 0` on the frame as the input filled it). |
+| **hand** | A world finger or a turn key on the sun this tick (`down` while not resting, `downEdge`, `upEdge`, `dTheta ≠ 0` while not resting, or `key ≠ 0` on the frame as the input filled it). A turn key's release is a lift (§16.8). |
 | **due** | A required act whose last working moment is close (amber ≤ 1.0 s, red ≤ 0.4 s). Whenever `due > 0` the pick is that target. |
 | **re-anchor** | At a TAG, the live world pointer continues with the new leg's drag meaning from where it is. |
 | **re-grip grace** | The 15 ticks (250 ms) after a real lift in which no settle glide starts, and the 30 ticks (0.5 s) in which a glide never runs more than 4° against the last stroke and a new press undoes it (§4.5). |
@@ -122,12 +123,13 @@ contact, still turns the sun (§1.2, §1.3).
 
 - **First pointer wins; a still pointer yields.** The first accepted pointerdown in the world owns
   the slot until it lifts or is cancelled. A later world pointerdown is ignored (never captured) for
-  its whole life, **unless the owner is still**: it has moved < 4 px in total over the last 300 ms.
+  its whole life, **unless the owner is still**: its samples have stayed inside a 4 px box (per axis)
+  for the last 300 ms (§16.8: a path total let sub-pixel jitter block the thumb).
   Then the new pointer takes the slot from its own press point with zero jump (a `downEdge` on its
   first batch, the re-grip carry of §4.5 keeping any unfinished chase), and the old pointer is
   ignored until it lifts. So a grip contact that landed first never blocks the thumb, and a palm that
   lands during a real drag never steals it. A mouse counts only its primary button.
-- **Rest.** While the slot's `sun` pointer is down and has moved < 3 px in total over the last 300 ms,
+- **Rest.** While the slot's `sun` pointer is down and has stayed inside that 4 px box for 300 ms,
   `controls()` reports `rest = true` on each frame of the batch (§1.7). Aim help treats a resting
   finger as no hand (§4.1).
 - The slot's **kind** is `host.drag()` at touch-down: `'sun'`, `'steer'` (Drip) or `'vane'` (Gust).
@@ -155,20 +157,19 @@ contact, still turns the sun (§1.2, §1.3).
 
 - **Drag-through.** A pointerdown inside `host.buttonHit(x, y)` is captured by the button slot and
   shows the press-in look at once (`buttonDown`, §7.1), but acts nothing yet. It then becomes one of:
-  - **a press**, when it lifts having moved < `BUTTON_SLOP` (12 CSS px) from its touch-down point, or
-    when it has stayed within 12 px for `BUTTON_COMMIT_MS` (120 ms), whichever comes first. The press
-    is counted (`acts++`, and `snaps++` on a Nubs leg), `host.onPress()` is called, and one act is
-    queued;
-  - **a drag**, when it moves 12 px from its touch-down point before committing. If the world slot is
+  - **a press**, only when it lifts having moved < `BUTTON_SLOP` (12 CSS px) from its touch-down point
+    and within `BUTTON_TAP_MS` (300 ms) of it (the events' own times). The press is counted (`acts++`,
+    and `snaps++` on a Nubs leg), `host.onPress()` is called, and one act is queued. A touch held
+    longer acts nothing, and its press-in look springs back when the 300 ms pass (§16.8);
+  - **a drag**, when it moves 12 px from its touch-down point, at any time. If the world slot is
     free (or its owner is still, §1.2) the pointer becomes the world slot's pointer with its baseline
     at the **touch-down point**, so the whole motion counts (the sun turns 1:1 from the first pixel,
     and §1.2's start slop applies during the start beat). It acts nothing and the press-in look
     springs back. If the world slot is busy, the pointer is ignored until it lifts.
-  - After a timed commit (the 120 ms rule), a pointer that later moves 12 px also becomes a world drag,
-    from its position at that moment; the act already committed stays. No drag is ever dead.
+  - No drag is ever dead, and no swing that starts on the button ever acts (§16.8: the retired 120 ms
+    still-commit fired on about 70% of human-shaped swings that paused on landing).
 - Fire-on-down buys nothing here: every act is buffered or timed by the driver (§2.3), so no act needs
-  the touch-down instant. A tap commits on its lift (typically 60-150 ms), and a long press after
-  120 ms.
+  the touch-down instant. A tap commits on its lift (typically 60-150 ms).
 - **Refusal feedback.** A committed press that the driver refuses (§2.3) always shows its chip. The
   refusal haptic and the fizz sound play only the first time per reason per leg (a Nubs run is one
   leg); repeats are silent (§7.3).
@@ -223,7 +224,7 @@ On every `'tag'` event the session calls `input.handoff()` (it replaces `cut()`)
 |---|---|
 | Flick release coasting, catch tap | Removed. `release` is always 0. The `sun.ts` coast code stays in place, unused (the `scripted` golden still feeds it). |
 | Swipe down = Cold Snap (±18° cone) | Removed. The button (or ↑/↓). A downward drag does nothing (vertical motion is ignored). |
-| Coin tap (≤ 350 ms, < 12 px, full meter only) | Replaced by the button: a still tap (any length; commits on the lift or after 120 ms still), 300 ms buffer, refusal reasons; a drag from it turns the sun. |
+| Coin tap (≤ 350 ms, < 12 px, full meter only) | Replaced by the button: a still tap (lifted within 12 px and 300 ms, §16.8), 300 ms buffer, refusal reasons; a drag from it turns the sun. |
 | Ember: tap on a wall (held-back press, decided at lift) | Removed. The button arms the picked target; the driver sends `VERB_TAP` with its point at the ignition moment. |
 | Sprout: 220 ms still hold on a site, `HOLD_BREAK_PX`, second finger turns the sun | Removed. The button starts a pour job; the driver sends `VERB_HOLD` and `VERB_RELEASE`. The thumb stays free for the sun. |
 | Gust: sideways swipe (24 px in 300 ms, one gust per press) | Removed. The drag sets a persistent vane; the driver sends `VERB_WEST/EAST` to keep it blowing. |
@@ -776,7 +777,7 @@ meter ring around it; shape carries every state, never colour alone.
 | State (`view`) | Look |
 |---|---|
 | ready | full colour; one pulse (scale 1 → 1.08 → 1, 600 ms) when it becomes ready |
-| charging (`snap`, meter < 1) | the frost fill arc; icon at 60%; the Frost Bank's two charge coins hang under it (today's) |
+| charging (`snap`, meter < 1) | a grey disc, the frost fill arc, icon at 50% and the meter's percent under it (amended, §16.8: the light-blue disc read as ready); the Frost Bank's two charge coins hang under it (today's) |
 | locked | padlock glyph and the seconds to the TAG |
 | low | the next cost in red under the icon |
 | idle (nothing to act on) | icon at 45% |
@@ -835,7 +836,7 @@ magnet motion never reads as a phantom input.
 
 - Pointer move to sun turn: one frame (unchanged).
 - Button pointerdown to the press-in look: the same frame.
-- Button commit (the lift of a still tap, or 120 ms still) to its act: the next tick batch (≤ 1 frame).
+- Button commit (the lift of a still tap) to its act: the next tick batch (≤ 1 frame).
 - `touch.spec` (§12.2) measures move-to-θ and commit-to-`drive` change: ≤ 50 ms at the 95th
   percentile.
 
@@ -848,7 +849,7 @@ magnet motion never reads as a phantom input.
 | Field | Values | Default | Effect | Marks the run assisted (Compass 🧭) |
 |---|---|---|---|---|
 | `aim` | `'standard' \| 'strong' \| 'light' \| 'off'` | `'standard'` | §4.3 | `strong`, on any run (as Guide "Always" does) |
-| `swingBoost` | boolean | `false` | §1.2 | no |
+| `swingBoost` | boolean | `false` | §1.2 (**cut**: no toggle, the field is kept in saves and unread, §16.3, §16.8) | no |
 | `hand` | `'right' \| 'left'` | `'right'` | mirrors the button (§1.1, §7.1) | no |
 | `autoAct` | boolean | `false` | §3.6 | yes, on any run |
 | `sensitivity`, `invert` | as today | | | |
@@ -1361,7 +1362,7 @@ export class Input {
   isEdge(x: number, y: number): boolean;
   dispose(): void;
 }
-// Constants (input.ts): EDGE_SIDE_PX 16, BUTTON_SLOP 12, BUTTON_COMMIT_MS 120, YIELD_PX 4, YIELD_MS 300,
+// Constants (input.ts): EDGE_SIDE_PX 16, BUTTON_SLOP 12, BUTTON_TAP_MS 300 (was BUTTON_COMMIT_MS 120, §16.8), STILL_PX 4 (was YIELD_PX 4, REST_PX 3), YIELD_MS 300,
 // REST_PX 3, REST_MS 300, TAG_RAMP_SUN_MS 150, TAG_RAMP_STEER_MS 300, TAG_STEER_FAST 600 (px/s),
 // TAG_VANE_PAUSE 40 (px/s) for 120 ms.
 ```
@@ -1517,7 +1518,7 @@ explicit none).
   and off by default; first pointer wins; **a still owner (< 4 px in 300 ms) yields to a new press with
   zero jump; a moving owner keeps the slot against a later press**; `rest` after 3 px / 300 ms;
   `release` 0 on every lift.
-- the button slot: a still tap commits on its lift; a still press commits at 120 ms; **a touch that
+- the button slot: a still tap commits on its lift (within 300 ms; a held touch acts nothing, §16.8); **a touch that
   moves 12 px first becomes a world drag from its touch-down point and acts nothing**; a timed commit
   that then moves 12 px also drags (the act stays); a drag from the button with the world slot busy is
   ignored; queue of 2; Drip corner is world; hold-phase press is a world press; repeat refusals carry
@@ -1583,7 +1584,7 @@ explicit none).
     after a 150 ms pause, a 40 px drag sets it to 1;
   - T4 leg 1: 10 slow drags (40-120 px over 0.7-1.2 s): each leaves the vane at its notch, no gust
     spam (≥ 15 ticks between gusts);
-  - latency: pointermove to θ, and a press's commit (lift or 120 ms) to `drive` change, ≤ 50 ms at the
+  - latency: pointermove to θ, and a press's commit (the tap's lift) to `drive` change, ≤ 50 ms at the
     95th percentile; pointerdown to the press-in look in the same frame.
 - `render.spec.ts` (ART): the button in each state (`?elfix=1` and demos), both hands, reduced motion
   and high contrast; the ghost sun while dragging; the calm-now ghost on T4; Trial frames within
@@ -1743,7 +1744,8 @@ TAG banner: the element's name, then its `dragLine`, then its `actLine` (§13.1)
 
 ### 13.4 Concepts and Journey copy (`src/config/concepts.ts`)
 
-- drag: "Drag anywhere: you are the sun. Let go near the teal and it settles into shade."
+- drag: "Drag anywhere: you are the sun. Swing the shade onto Nubs." (amended, §16.8: aim help is off
+  in L1's lesson and nothing names the teal yet)
 - snap: "Sunflowers grown from cool shade fill the frost meter. Full? Tap the frost button: a frosty
   cloud rides over Nubs."
 - lock: "Every 7 s the sun locks for a moment. Watch the ring run out and park it on shade that lasts."
@@ -1757,7 +1759,7 @@ TAG banner: the element's name, then its `dragLine`, then its `actLine` (§13.1)
 
 | # | Decision | From | Reason |
 |---|---|---|---|
-| 1 | The act lives on a dedicated button, not tap-anywhere; no "tap anywhere to act" option. The button acts on a **still** tap (lift < 12 px, or 120 ms still); a touch that moves 12 px first is a world drag (amended by the review) | all three audits, both judges, review | 21-49% of sun corrections are under 12 px and would misfire anywhere; the disc sits in the right thumb's resting zone, so it must never swallow a drag, and no act needs the touch-down instant |
+| 1 | The act lives on a dedicated button, not tap-anywhere; no "tap anywhere to act" option. The button acts on a **still** tap (lift < 12 px within 300 ms; no timed commit, §16.8); a touch that moves 12 px is a world drag (amended by the review and fix round 3) | all three audits, both judges, review | 21-49% of sun corrections are under 12 px and would misfire anywhere; the disc sits in the right thumb's resting zone, so it must never swallow a drag, and no act needs the touch-down instant |
 | 2 | The button takes every **still** press on legs that have an act, legal or not (refused ones say why, silently after the first per reason); drags pass through; only Drip's corner, and a lesson run's corner before the first full meter, is world (amended by the review) | judge 2 over judge 1, review | idle pass-through is ambiguous when the button becomes legal mid-press, so still presses stay the button's; motion is unambiguous, so drags go to the world |
 | 3 | Ember arms any time (cap 2), ignition at the bot-proven moment; no "wait for the ring" refusal | feel, both judges | timing windows were the complaint; arming keeps a tap per wall, so the leg does not empty |
 | 4 | Ember's walls and Sprout's crossings are not automatic by default; full automation is the Auto actions toggle | both judges (cut onethumb's default) | keeps each element's verb and avoids the Flame re-tune and re-pins |
@@ -1795,7 +1797,7 @@ idleTouch and parked-sun gates). Every should and most coulds are in. What was r
 |---|---|---|
 | Latest pointer wins with re-anchor (the review's first choice) | **Refused**; its alternative is taken: first pointer wins, a still owner (< 4 px in 300 ms) yields | latest-wins lets a palm that lands mid-swing steal the slot and kill the drag; the yield rule fixes the grip contact without that hole |
 | Levers for an autopilot magnet (track off from L41 and R3, smaller radii per level) as the main fix | **Changed**: the engagement window (§4.1) is the fix; those levers stay only as `AIM_OVERRIDE` fallbacks | a magnet that needs a recent sun move cannot win alone anywhere, so the Journey, Endless and Trials gates pass by construction, with no per-level radius patchwork that players would feel as inconsistency |
-| After a 120 ms timed commit, the button's later motion is ignored | **Changed**: it becomes a world drag from that point (the act stays) | "no drag is ever dead" |
+| After a 120 ms timed commit, the button's later motion is ignored | **Changed**: it becomes a world drag from that point (the act stays); superseded in fix round 3 (§16.8): there is no timed commit | "no drag is ever dead" |
 | Undo only the part of a glide that ran against the stroke | **Changed**: a re-grip within 0.5 s undoes any glide since the lift | one predictable rule: the second stroke starts where the first ended |
 | Keep Heavy Sun at 220-240 °/s with the ghost sun | **Refused**; Heavy is retired | a deliberately sluggish sun is control clunk by definition; "start early" returns as `sprint` |
 | Teach "lift to settle" instead of helping a resting finger | **Refused**; a resting finger counts as no hand | the rest-and-nudge players the user described get the help without a lesson |
@@ -2109,3 +2111,67 @@ button's scale pulses, the dial dimming with the settle-arc highlight and the ca
    render.spec all play T4's layout.
 3. **G11** misses on T5 (mashTouch equals reactiveTouch); recorded as a content follow-up for the mixer.
 4. The 2,529 B left under the budget can buy back cut-list items (§16.3).
+
+### 16.8 Fix round 3: the UX fixer (`fix3/ux`, on 358a7ee)
+
+The v3 review's findings in UX's scope (the review file's 0-based numbers), each reproduced first (a
+unit test or harness that fails on 358a7ee, or a browser run), fixed with a regression test, and the
+spec changes the lead decided for streamlined controls:
+
+- **The button never fires by accident** (finding 9, lead decision 1; §0.1, §0.3, §1.3, §7.4, §14 #1).
+  An act commits only on a still tap: lifted within 12 px and within `BUTTON_TAP_MS` (300 ms) of its
+  touch-down, both times the events' own. The 120 ms still-commit is gone: a held touch does nothing
+  (its press-in look springs back at 300 ms), and a touch that moves 12 px, at any time, is a plain
+  world drag from its touch-down point. Proof: touch.spec plays 50 human-shaped swings from the disc
+  (landing pause 0-80 ms, minimum-jerk 150-450 ms, 50-150 px, a 1 px tremor) on a full meter through
+  CDP `Input.dispatchTouchEvent`: 0 acts, 0 snaps, the sun 1:1; the same spec against the pre-fix
+  input fails on its first swing (10° lost to a timed commit). game.test plays the same shapes at
+  240 Hz. Taps of 80-260 ms act once each; holds of 400-900 ms act nothing.
+- **Input robustness** (lead decision 2). A lift and a new touch-down in one batch send the lift
+  first (finding 0: the second finger's drag died). `releaseAll()` leaves a held sun finger's lift and
+  a vane finger's snap for the next batch, kept through a second call (finding 2: pause or blur
+  mid-drag left the sim sun `dragging`). Stillness for yield and rest is a box: the clock restarts only
+  when the samples since it started span 4 px on an axis (finding 11: a path total let sub-pixel
+  jitter block the thumb and end every rest); rest's radius goes from 3 to 4 px, so ±1.5 px of jitter
+  is still. touch.spec's grip contact jitters ±1.5 px and still yields.
+- **Driver edits made by UX** (findings 1, 11, 13; the core fixer owns `driver.ts` this round, so they
+  are listed for the merge): a turn key is a stroke (its press starts it, counted at the sim's key
+  rate) and its release is a lift, so key turns get the re-grip grace and the against-the-stroke rule
+  (fine-key taps out of shade: −71.5° with aim help, as without it; was −3.7°); a resting finger's
+  `dTheta` (inside the still box) is no hand and no sun move (§0.3's hand amended), so the resting
+  glide and the hand-over before Drip run under a still thumb that jitters. Finding 13 (a finger held
+  through a hand-off into Drip cancels the pre-aim) is answered this way: a thumb held still keeps the
+  hand-over (hands.test plays T2's TAG with the real input at ±0.5 px and locks on the dashed arc); a
+  thumb that really moves is the player aiming, and the sun locks where it is (§8.2: the magnet never
+  fights the finger). No glide or snap under a moving finger was added.
+- **Teaching and copy** (lead decision 3). L1's lesson plays the ghost drag and slow time at profile 3
+  (finding 18: `HintTracker` stopped above profile 1); concept tips wait while the first lesson is on.
+  L1 reached with the lesson on and under 15° of the player's own turn is not passed ("DRAG THE SUN";
+  goal line "Drag the sun to swing shade onto Nubs"), and passing L1 sets `tutorialDone`. The
+  Elementals open once L1 or the lesson is passed (finding 17). The profile's first Cold Snap lesson
+  outside L10 waits for a meter filled in play (or L10 passed) and a calm moment, 3 s past GO with
+  Nubs shaded and cool (finding 21: it fired at GO from the start charge). `flags.taught` (bits 1
+  Ember, 2 Sprout, 4 Gust; OR-merged) gives a profile that passed an intro Trial before v3 one ghost
+  lesson the first time that button matters (finding 29); Auto actions skip burn and grow. Hand-offs
+  (finding 23): the element's tip waits for the TAG's cue line (2.4 s); no tip starts while a teaching
+  or steer ghost plays; the press ghost's word sits beside the button (not over the meter pill), the
+  vane ghost drags in the bottom band beside it (not over the cue), Drip's steer ghost waits out the
+  TAG!/CLEAN! stamps; the due tip waits for a free slot instead of pushing a tip off; at most one tip
+  waits (finding 24); a Cold Snap press ends the tips that ask for it. Auto actions on: Ember's and
+  Sprout's tips never say "tap" (finding 28). Touch players see "Drag: … · Button: …" on Pause and
+  the Elementals card, the keys only in keyboard mode (finding 27). The T1, T3 and T4 card blurbs are
+  §13.2's (findings 15, 19; trials.test's cap 90 → 100 and the retired gesture words rejected); L1's
+  drag blurb drops the teal promise (finding 25, §13.4 amended). Every teaching card shrinks to keep
+  its whole blurb: none ends in an ellipsis at 390×844, 360×640, 1280×720 or 1280×800 (finding 26).
+- **Look** (lead decision 4): the charging Cold Snap is a grey disc with a faint icon and its percent
+  (finding 20, §7.1 amended); Calm's icon is two wind lines stopped by a bar (finding 30: it read as a
+  menu); Settings' Aim help control sits under its label and hint, "Standard" never breaks, and the
+  hints say 🧭 marks a run assisted (findings 22, 30). Swing Boost is marked cut in §8.1.
+- **Not taken here:** findings 3-8, 14 and 16 are the core fixer's (driver and content); 10 and 12
+  (Gust) too. The snap lesson's extra explanation line (finding 21's last clause) did not fit the
+  budget: the teach keeps §6.1's cue "Full! Tap the frost button." and L10's card says what a snap does.
+- **Gates on `fix3/ux`:** typecheck clean; vitest 58 files green (hands.test new); Playwright
+  `--workers=1` on both projects: controls, touch (mobile; desktop skips by design), elementals,
+  mechanics, layout all pass; `build:single` **834,549 B** (11 B under 834,560 B; +2,518 B over
+  832,031 B: the merge with the core fixer's branch needs room).
+

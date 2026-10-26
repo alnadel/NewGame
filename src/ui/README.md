@@ -204,8 +204,9 @@ re-render the tiles in place (focus survives).
 **Elementals** (docs/ELEMENTALS_V2.md §7.11; `'elementals'`, `screens/elementals.ts`,
 `styles/elementals.css`). The Title pill `.elementals-btn` (the proof of concept's headline: a
 violet candy pill under the logo with the faces of Ember, Drip, Sprout and Gust on
-`renderHeroPreview` canvases and the label "Elementals") shows once the first-run lesson is passed
-(`elementalsOpen`: `flags.tutorialDone` or the testing toggle; hidden under a challenge banner), and
+`renderHeroPreview` canvases and the label "Elementals") shows once Level 1 or the first-run lesson
+is passed (`elementalsOpen`: `flags.tutorialDone`, L1's stars or the testing toggle; hidden under a
+challenge banner), and
 it wears the NEW sticker, its faces pulsing, until the screen is first opened
 (`markElementalsSeen`). It is pressable like the modes (a sideways drag on it moves the sun). Where
 it crowds Nubs' goal bubble, `fit()` drops the key line, then the forecast chip, but only when that
