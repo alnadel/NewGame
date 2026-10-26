@@ -37,7 +37,7 @@ describe('level table (core)', () => {
     for (let i = 40; i < 200; i++) {
       const l = CAMPAIGN_LEVELS[i]!;
       expect(l.introduces).toBeNull();
-      // Controls v3's SUB_OVERRIDE may drop a retired slot (L79, L92: one concept).
+      // Controls v3's SUB_OVERRIDE may drop a retired slot (L92: one concept).
       expect(l.concepts.length).toBeGreaterThanOrEqual(1);
       expect(l.chapter).toBe(Math.ceil(l.id / 10));
     }

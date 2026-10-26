@@ -41,8 +41,9 @@ import { headlessConfig } from '../../src/core/sim/headless.ts';
 import { binOf } from '../../src/core/intervals.ts';
 import { angleDiff } from '../../src/core/dmath.ts';
 import { snapReady } from '../../src/core/sim/mechanics.ts';
+import { dayTicks } from '../../src/core/clock.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { NO_INPUT, VERB_EAST, VERB_HOLD, VERB_RELEASE, VERB_TAP, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
+import { NO_INPUT, VERB_EAST, VERB_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 
 const OPTS = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
 const ctl = (o: Partial<DriveControl> = {}): DriveControl => ({ act: 0, vane: 0, vaneUp: false, rest: false, ...o });
@@ -243,7 +244,18 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     expect(drain(d)).toEqual([[NOTE_BUFFER, 2]]);
   });
 
-  it('a press in the last 30 ticks before a TAG into Ember is kept and arms on Ember\'s first tick', () => {
+  it('a press in the last 45 ticks (0.75 s) before a TAG into Ember is kept and arms on Ember\'s first tick; one earlier is refused "locked"', () => {
+    expect(TUNING.drive.preTagTicks).toBe(45);
+    // Fix round 3: a press 0.5-0.75 s before the TAG was thrown away (refused "locked"); it now waits for Ember.
+    for (const n of [TUNING.drive.preTagTicks, TUNING.drive.preTagTicks + 1]) {
+      const t = trialTo(1001, 'nubs', (s) => nextTagTicks(s) === n);
+      t.nubs.frost = 1;
+      const e = createDriver();
+      e.begin(t, OPTS);
+      tick(t, e, { act: 1 });
+      for (let i = 0; i < 18; i++) tick(t, e);
+      expect(drain(e)).toEqual(n === TUNING.drive.preTagTicks ? [[NOTE_BUFFER, 2]] : [[NOTE_BUFFER, 1], [NOTE_REFUSE, REFUSE_LOCKED]]);
+    }
     const s = trialTo(1001, 'nubs', (s) => nextTagTicks(s) === 20);
     const d = createDriver();
     d.begin(s, OPTS);
@@ -262,6 +274,55 @@ describe('the button (§0.1, §3.1, §2.3)', () => {
     expect(drain(d)).toEqual([[NOTE_PRESS, 2]]);
     expect(Array.from(d.view.queue)).toEqual([p, -1]);
     expect(d.view.buffered).toBe(false);
+  });
+
+  it('mashing never restarts the wait: an illegal press is refused when the first one\'s 18 ticks run out, then as a repeat', () => {
+    const s = endless();
+    s.nubs.frost = 0;
+    const d = createDriver();
+    d.begin(s, OPTS);
+    const refused: number[][] = [];
+    for (let k = 0; k < 120; k++) {
+      d.fill(s, frame(), ctl({ act: k % 15 === 0 ? 1 : 0 }));
+      for (const [code, a] of drain(d)) if (code === NOTE_REFUSE) refused.push([k, a as number]);
+    }
+    expect(refused).toEqual([[18, REFUSE_CHARGING], [48, REFUSE_CHARGING + 16], [78, REFUSE_CHARGING + 16], [108, REFUSE_CHARGING + 16]]);
+  });
+
+  it('nightfall refuses a press still waiting (never carried to dawn), and the night shows no button', () => {
+    for (const [frost, snapTicks, reason] of [[0, 0, REFUSE_CHARGING], [2, 30, REFUSE_BUSY]] as const) {
+      const s = endless();
+      const dl = dayTicks(s.day);
+      while (s.dayTick < dl - 4) {
+        s.nubs.chill = s.nubs.maxChill;
+        step(s, NO_INPUT);
+      }
+      const d = createDriver();
+      d.begin(s, OPTS);
+      s.nubs.frost = frost;
+      s.nubs.frostH = 100 * frost;
+      s.snapTicks = snapTicks;
+      const f0 = frame();
+      d.fill(s, f0, ctl({ act: 1 }));
+      step(s, f0);
+      expect(drain(d)).toEqual([[NOTE_BUFFER, 1]]);
+      let snaps = 0;
+      let refusedAt = -1;
+      for (let k = 1; s.day === 1 || s.dayTick < 120; k++) {
+        s.nubs.chill = s.nubs.maxChill;
+        const f = frame();
+        d.fill(s, f, ctl({ act: s.phase === 'night' && d.view.act !== 'none' ? 1 : 0 }));
+        if (f.snap) snaps++;
+        for (const [code, a] of drain(d)) {
+          expect([code, a]).toEqual([NOTE_REFUSE, reason]);
+          refusedAt = k;
+        }
+        if (s.phase === 'night') expect([d.view.act, d.view.buffered]).toEqual(['none', false]);
+        step(s, f);
+      }
+      // Refused on the first night tick, 4 ticks after the press; nothing fires at dawn.
+      expect([refusedAt, snaps, d.view.act]).toEqual([4, 0, 'snap']);
+    }
   });
 
   it('a lesson run shows no button until its first full meter, then keeps it', () => {
@@ -317,11 +378,11 @@ describe('Ember (§3.2)', () => {
     }
     expect(walls).toBeGreaterThan(0);
     // T7's puddle on Ember's path is picked once no wall is eligible (here: the walls gone).
-    const s = trialTo(1007, 'ember', (s) => eligible(s, 14));
+    const s = trialTo(1007, 'ember', (s) => eligible(s, 13));
     const p = emberPick(s, NONE);
     expect(isWall(objs(s)[p] as ElObj)).toBe(true);
     for (const o of objs(s)) if (isWall(o)) o.state = EL_GONE;
-    expect(emberPick(s, NONE)).toBe(14);
+    expect(emberPick(s, NONE)).toBe(13);
   });
 
   it('a press arms the pick for free; the arm ignites at its moment, at a point that resolves to it', () => {
@@ -459,11 +520,11 @@ describe('Sprout (§3.3)', () => {
     }
     expect([...seen].sort()).toEqual(['r0', 'r1', 'r2']);
     // T7: p428 before the nearer p420, which sits downwind of Ember's required b423.
-    const s = trialTo(1007, 'sprout', (s) => sproutPick(s, NONE) === 13);
+    const s = trialTo(1007, 'sprout', (s) => sproutPick(s, NONE) === 12);
     const el = s.el as ElState;
-    expect(eligible(s, 11)).toBe(true);
-    expect((el.objs[11] as ElObj).y).toBeLessThan((el.objs[13] as ElObj).y);
-    expect([downwind(s, el, el.objs[11] as ElObj), downwind(s, el, el.objs[13] as ElObj)]).toEqual([true, false]);
+    expect(eligible(s, 10)).toBe(true);
+    expect((el.objs[10] as ElObj).y).toBeLessThan((el.objs[12] as ElObj).y);
+    expect([downwind(s, el, el.objs[10] as ElObj), downwind(s, el, el.objs[12] as ElObj)]).toEqual([true, false]);
   });
 
   it('a press starts the pick\'s job: it pours at the site\'s point and lets go the tick after the goal', () => {
@@ -622,27 +683,78 @@ describe('Gust (§3.5)', () => {
     expect([d.view.vaneResting, d.view.vaneCost]).toEqual([false, 13.0 * s.trial!.tune.costMul]);
   });
 
-  it('auto-calms at the floor (a drag sets it again), rests with no weather in play, and Calm stills a set vane only', () => {
-    const s = trialTo(1004, 'gust');
+  it('low Lift weakens the wind and never calms the vane; a drag always moves the wind while Gust can pay a gust', () => {
+    const s = trialTo(1004, 'gust', (s) => inPlay(s));
     const el = s.el as ElState;
     const d = createDriver();
     d.begin(s, OPTS);
-    tick(s, d, { vane: -0.5, vaneUp: true });
-    s.nubs.chill = gustFloor(s, el);
-    const f = tick(s, d);
-    expect([f.verb ?? 0, d.view.vane]).toEqual([0, 0]);
+    const floor = gustFloor(s, el);
+    const price = TUNING.elements.gust.swipe * s.trial!.tune.costMul;
+    const G = TUNING.drive.gust;
+    // A breeze set west at the floor keeps its notch (no CALM) and holds the weaker band.
+    s.nubs.chill = floor;
+    el.wind = 0;
+    let f = tick(s, d, { vane: -0.5, vaneUp: true });
+    expect([f.verb ?? 0, d.view.vane, d.view.vaneLow]).toEqual([VERB_WEST, -1, 1]);
+    expect(drain(d)).toEqual([[NOTE_NOTCH, -1]]);
+    // A west wind of 10 u/s: above the weak band (5), below the breeze's (15): nothing at the floor, a gust above it.
+    let gusts = 0;
+    for (let k = 0; k < 60; k++) {
+      s.nubs.chill = floor;
+      el.wind = -10;
+      f = tick(s, d);
+      if ((f.verb ?? 0) !== 0) gusts++;
+    }
+    expect([gusts, d.view.vane, d.view.vaneCost]).toEqual([0, -1, G.lowCost[1]! * s.trial!.tune.costMul]);
+    s.nubs.chill = floor + 1;
+    el.wind = -10;
+    expect([tick(s, d).verb ?? 0, d.view.vaneLow]).toEqual([VERB_WEST, 0]);
+    // A west wind of 4 u/s, under the weak band: one gust west within the spacing.
+    gusts = 0;
+    for (let k = 0; k < 16; k++) {
+      s.nubs.chill = floor;
+      el.wind = -4;
+      if ((tick(s, d).verb ?? 0) === VERB_WEST) gusts++;
+    }
+    expect(gusts).toBe(1);
+    // At one gust's price + gain it waits for Lift (vaneLow 2, no cost), the notch kept.
+    for (let k = 0; k < 30; k++) {
+      s.nubs.chill = price + G.gain;
+      el.wind = 0;
+      expect(tick(s, d).verb ?? 0).toBe(0);
+    }
+    s.nubs.chill = price + G.gain;
+    d.observe(s);
+    expect([d.view.vane, d.view.vaneLow, d.view.vaneCost]).toEqual([-1, 2, 0]);
+    // A drag there (west breeze to east breeze) still blows at once, while Gust can pay a gust; then it waits again.
+    s.nubs.chill = price + 1;
+    el.wind = 0;
+    f = tick(s, d, { vane: 2, vaneUp: true });
+    expect([f.verb ?? 0, d.view.vane]).toEqual([VERB_EAST, 1]);
+    for (let k = 0; k < 20; k++) {
+      s.nubs.chill = price + 1;
+      el.wind = 0;
+      expect(tick(s, d).verb ?? 0).toBe(0);
+    }
+    // Lift back above the floor: the full band, so Lift never decided what the vane shows.
     s.nubs.chill = 80;
-    for (let k = 0; k < 15; k++) tick(s, d);
-    expect(d.view.vane).toBe(0);
-    tick(s, d, { vane: -1, vaneUp: true });
-    expect(d.view.vane).toBe(-1);
-    // The notch changes and the auto-calm (CALM a = 1).
-    expect(drain(d)).toEqual([[NOTE_NOTCH, -1], [NOTE_CALM, 1], [NOTE_NOTCH, -1]]);
+    el.wind = 0;
+    f = tick(s, d, { vane: 2, vaneUp: true });
+    expect([f.verb ?? 0, d.view.vaneLow]).toEqual([VERB_EAST, 0]);
+    expect(drain(d).some(([c, a]) => c === NOTE_CALM && a === 1)).toBe(false);
     // A Calm press stills it (PRESS, CALM a = 0); on a calm vane a press does nothing but CALM a = 2 (no REFUSE).
     tick(s, d, { act: 1 });
     expect([d.view.vane, d.view.state]).toEqual([0, 0]);
     tick(s, d, { act: 1 });
     expect(drain(d)).toEqual([[NOTE_PRESS, 4], [NOTE_CALM, 0], [NOTE_CALM, 2]]);
+    // Mid-drag at notch 0 (a third of a notch) the vane reads calm: a Calm press is the no-op, and it
+    // drops the partial drag (a further third is still notch 0).
+    tick(s, d, { vane: 0.3 });
+    expect(d.view.vane).toBe(0);
+    tick(s, d, { act: 1 });
+    tick(s, d, { vane: 0.3 });
+    expect([d.view.vane, ...drain(d)]).toEqual([0, [NOTE_CALM, 2]]);
+    tick(s, d, { vaneUp: true });
     // No weather in play: the vane keeps its notch, dimmed, and blows nothing.
     for (const o of el.objs) if (o.kind === 'rain' || o.kind === 'fog') o.state = EL_GONE;
     tick(s, d, { vane: 2, vaneUp: true });
@@ -691,9 +803,13 @@ describe('aim help: the magnet\'s target (§4.2)', () => {
     expect(settleTarget(s, 100, 0, false)).toBeNaN();
   });
 
-  it('lasting shade is now ∧ next (now alone when that is empty, or on a fog level); ending shade is left alone (cut list 2)', () => {
+  it('lasting shade is now ∧ next (now alone when that is empty, or on a fog level); ending shade is left until the hand rests', () => {
     paint(s, [[100, 130]], [[110, 130]]);
     expect(aimPlan(s, 105, 14, false, true)).toBeNaN();
+    // Fix round 3 restores the rescue out of ending shade (cut list 2) once no hand has come for endingTicks.
+    expect(aimPlan(s, 105, 14, false, true, true)).toBe(113.5);
+    expect(aimPlan(s, 105, 14, true, true, true)).toBeNaN();
+    expect(settleTarget(s, 105, 14, false)).toBe(113.5);
     // Lit, it settles into the lasting part.
     expect(aimPlan(s, 99, 14, false, true)).toBe(113.5);
     // Fog: guide.now only, so the edge is near and the sun goes back inside.
@@ -945,6 +1061,24 @@ describe('aim help: when the driver glides (§4.1, §4.5)', () => {
     expect(d.view.glide).toBeNaN();
   });
 
+  it('a key turn\'s release is a lift: no glide for 15 ticks, none against the key\'s way by more than 4° for 30', () => {
+    // Fix round 3 (review F1): taps of a key walk the sun out of shade; the next refresh must not undo them.
+    // The release is idle()'s tick 1, so the grace and the against window end one tick later than after a drag's upEdge frame.
+    const out = (key: -2 | 2): { k: number; f: InputFrame; from: number; to: number }[] => {
+      const { s, d } = magnet();
+      const b = binOf(s.sun.theta);
+      const arcs: Arc[] = key < 0 ? [[b + 2, b + 20]] : [[b + 12, b + 32]];
+      for (let k = 0; k < 3; k++) at(s, d, arcs, { key });
+      return idle(s, d, arcs, 45);
+    };
+    const back = out(-2);
+    expect(back[0]!.k).toBe(TUNING.drive.aim.againstTicks + 1);
+    expect(angleDiff(back[0]!.to, back[0]!.from)).toBeGreaterThan(TUNING.drive.aim.againstDeg);
+    const on = out(2);
+    expect(on[0]!.k).toBe(TUNING.drive.aim.regripTicks + 1);
+    expect(angleDiff(on[0]!.to, on[0]!.from)).toBeGreaterThan(0);
+  });
+
   it('two strokes 200 ms apart lose at most 1° of the swing; a re-grip carries an unfinished chase on', () => {
     const { s, d } = magnet();
     const b = binOf(s.sun.theta);
@@ -963,6 +1097,72 @@ describe('aim help: when the driver glides (§4.1, §4.5)', () => {
     at(e.s, e.d, [], { downEdge: true, down: true });
     for (let k = 0; k < 10; k++) at(e.s, e.d, [], { down: true });
     expect(Math.abs(angleDiff(e.s.sun.theta, t1 + 50))).toBeLessThan(0.01);
+  });
+
+  it('marks every glide tick (its last included) on view.glideTick, and no other', () => {
+    const { s, d } = magnet();
+    const b = binOf(s.sun.theta);
+    const arcs: Arc[] = [[b + 12, b + 32]];
+    stroke(s, d, arcs, 1, 5);
+    expect(d.view.glideTick).toBe(false);
+    const marks: boolean[] = [];
+    const moved: boolean[] = [];
+    for (let k = 0; k < 60; k++) {
+      const f = at(s, d, arcs);
+      marks.push(d.view.glideTick);
+      moved.push(f.dTheta !== 0 || f.downEdge || f.upEdge);
+    }
+    expect(moved.filter(Boolean).length).toBeGreaterThanOrEqual(2);
+    expect(marks).toEqual(moved);
+    // The last glide tick is marked though the glide is over on the view.
+    const last = moved.lastIndexOf(true);
+    expect(marks[last]).toBe(true);
+  });
+
+  it('an interrupt closes a glide with an upEdge that is no sun move: an idle player gets no help 5 s after the real last move', () => {
+    const { s, d } = magnet();
+    const b = binOf(s.sun.theta);
+    const arcs: Arc[] = [[b + 12, b + 32]];
+    stroke(s, d, arcs, 1, 5);
+    let k = 0;
+    while (Number.isNaN(d.view.glide)) {
+      at(s, d, arcs);
+      k++;
+    }
+    d.interrupt();
+    const f = at(s, d, arcs);
+    k++;
+    expect([f.upEdge, f.down, f.release]).toEqual([true, false, 0]);
+    // Parked in shade past engageTicks after the lift, then lit 6° from an arc: no glide.
+    const c = binOf(s.sun.theta);
+    while (k < TUNING.drive.aim.engageTicks + 3) {
+      at(s, d, [[c - 20, c + 20]]);
+      k++;
+    }
+    const e = binOf(s.sun.theta);
+    expect(idle(s, d, [[e + 6, e + 25]], 40)).toEqual([]);
+  });
+
+  it('a touch-down within 3 ticks of a glide\'s start undoes it, however long ago the lift was', () => {
+    expect(TUNING.drive.aim.raceTicks).toBe(3);
+    for (const late of [1, 3, 4]) {
+      const { s, d } = magnet();
+      const b = binOf(s.sun.theta);
+      // A stroke into the middle of wide shade; 60 idle ticks (past againstTicks); then the shade moves off.
+      stroke(s, d, [[b - 25, b + 25]], 1, 5);
+      expect(idle(s, d, [[b - 25, b + 25]], 60)).toEqual([]);
+      const c = binOf(s.sun.theta);
+      const arcs: Arc[] = [[c + 8, c + 28]];
+      const before = s.sun.theta;
+      const g = idle(s, d, arcs, 1);
+      expect(g).toHaveLength(1);
+      idle(s, d, arcs, late - 1);
+      at(s, d, arcs, { downEdge: true, down: true });
+      for (let k = 0; k < 10; k++) at(s, d, arcs, { down: true });
+      const off = Math.abs(angleDiff(s.sun.theta, before));
+      if (late <= 3) expect(off).toBeLessThan(0.01);
+      else expect(off).toBeGreaterThan(1);
+    }
   });
 
   it('a resting finger gets a glide with no edges, and its next move goes on from there', () => {

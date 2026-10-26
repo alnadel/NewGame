@@ -80,11 +80,12 @@ const fit = (v: number, w: number): number => (v < w / 2 ? v : w / 2);
 
 /**
  * §4.2: where the magnet sends a sun at θ now (NaN: it leaves it alone), with radius R (bins), the
- * 'fog' now-only mask and track on or off. aimOut.kind tells a rescue (1) from a track (0). Bin b
- * covers [b − 0.5, b + 0.5), so an arc lo..hi has edges lo − 0.5 and hi + 0.5. CORE's cut list 2
- * (§12.3): only a lit sun is rescued, never one in shade that is ending.
+ * 'fog' now-only mask and track on or off; `ending` allows the rescue out of shade that is ending
+ * (the driver: no hand for endingTicks; restored in fix round 3, it was CORE's cut list 2). aimOut.kind
+ * tells a rescue (1) from a track (0). Bin b covers [b − 0.5, b + 0.5), so an arc lo..hi has edges
+ * lo − 0.5 and hi + 0.5.
  */
-export function aimPlan(s: SimState, theta: number, R: number, nowOnly: boolean, track: boolean): number {
+export function aimPlan(s: SimState, theta: number, R: number, nowOnly: boolean, track: boolean, ending = false): number {
   const g = s.guide;
   const b = binOf(theta);
   // T: the landing during a snap; else the lasting shade now ∧ next ('fog': now only); else now.
@@ -121,8 +122,8 @@ export function aimPlan(s: SimState, theta: number, R: number, nowOnly: boolean,
     if (dLo < m && dLo <= dHi) return lo - 0.5 + fit(A.inset, w);
     return dHi < m ? hi + 0.5 - fit(A.inset, w) : NaN;
   }
-  // Settle: lit (Ember: not light) now.
-  if (g.now[b] === 1) return NaN;
+  // Settle: lit (Ember: not light) now, or shade that is ending once the hand has rested.
+  if (g.now[b] === 1 && !ending) return NaN;
   const k = seek(T, b, R, s.nubs.hero === 'nubs' ? g.glare : null);
   if (k === 0) return NaN;
   aimOut.kind = 1;
@@ -131,7 +132,7 @@ export function aimPlan(s: SimState, theta: number, R: number, nowOnly: boolean,
 
 /** §4.2 for the dial's preview: where a lift at θ would settle now (NaN: it would not move). Allocation-free; the tests use it too. */
 export function settleTarget(s: SimState, theta: number, aimDeg: number, nowOnly: boolean): number {
-  return aimDeg > 0 && s.sunUp ? aimPlan(s, theta, aimDeg, nowOnly, false) : NaN;
+  return aimDeg > 0 && s.sunUp ? aimPlan(s, theta, aimDeg, nowOnly, false, true) : NaN;
 }
 
 /**

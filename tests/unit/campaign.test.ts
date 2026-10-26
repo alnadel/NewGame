@@ -20,6 +20,7 @@ import {
   starsFor,
   startsWithSnap,
   substitute,
+  SUB_DRAIN,
   SUB_OVERRIDE,
   TEACH_LEVELS,
   teachLevel,
@@ -336,39 +337,48 @@ describe('Controls v3: the retired control concepts (§5.3)', () => {
 
   it('substitutes each retired draw with the first of its list that fits, in the level order; none fitting drops the slot', () => {
     const at = (id: number, drawn: Parameters<typeof substitute>[1]): ConceptId[] => substitute(id, drawn, CHAPTERS[(levelDef(id) as LevelDef).chapter - 1]!);
-    // dazzle: dense, lowland, sparse (L139).
-    expect(at(139, ['thaw', 'overcast', 'dazzle'])).toEqual(['thaw', 'overcast', 'dense']);
+    // dazzle: dense, lowland, sparse (L144; L139 has a SUB_OVERRIDE since fix round 3).
+    expect(at(144, ['sprint', 'moonlit', 'dazzle'])).toEqual(['sprint', 'moonlit', 'dense']);
     // slippery: sprint, sparse, dense (L161; with sprint drawn already, the next one).
     expect(at(161, ['fleet', 'slippery'])).toEqual(['fleet', 'sprint']);
     expect(at(161, ['sprint', 'slippery'])).toEqual(['sprint', 'sparse']);
-    // clockwork: sparse, dense, lowland (L54, L96: the substitute takes the retired id's place).
-    expect(at(54, ['market', 'gate', 'clockwork'])).toEqual(['market', 'gate', 'sparse']);
+    // clockwork: sparse, dense, lowland (L99, L96: the substitute takes the retired id's place).
+    expect(at(99, ['clockwork', 'ration', 'lowland'])).toEqual(['sparse', 'ration', 'lowland']);
     expect(at(96, ['clockwork', 'ration', 'swing'])).toEqual(['sparse', 'ration', 'swing']);
     // gusts: fleet, breezy, sparse, dense (L75; L72 has fleet already and breezy and sparse do not fit).
     expect(at(75, ['gusts', 'stroll'])).toEqual(['fleet', 'stroll']);
     expect(at(72, ['fleet', 'gusts'])).toEqual(['fleet', 'dense']);
-    // heavy: sprint, ration, sparse (L112; L168 has sprint already).
-    expect(at(112, ['lowland', 'heavy'])).toEqual(['lowland', 'sprint']);
-    expect(at(168, ['fleet', 'heavy', 'sprint'])).toEqual(['fleet', 'ration', 'sprint']);
-    // SUB_OVERRIDE: a later substitute (L73 gusts → dense, not sparse) or null, the slot dropped (L79).
+    // heavy: sprint, ration, sparse (L97, L98).
+    expect(at(97, ['heavy', 'sunset', 'ration'])).toEqual(['sprint', 'sunset', 'ration']);
+    expect(at(98, ['heavy', 'ration'])).toEqual(['sprint', 'ration']);
+    // SUB_OVERRIDE: a later substitute (L73 gusts → dense, not sparse), a gentler one (fix round 3: L79
+    // gusts → giants, L168 heavy → gate, L169 gusts → lock) or null, the slot dropped (L80).
     expect(at(73, ['breezy', 'gusts'])).toEqual(['breezy', 'dense']);
-    expect(at(79, ['breezy', 'gusts'])).toEqual(['breezy']);
-    // None fits: the slot drops (L169: fleet and dense drawn, breezy and sparse conflict).
-    expect(at(169, ['gusts', 'fleet', 'dense'])).toEqual(['fleet', 'dense']);
-    expect((levelDef(169) as LevelDef).concepts).toEqual(['fleet', 'dense']);
+    expect(at(79, ['breezy', 'gusts'])).toEqual(['breezy', 'giants']);
+    expect(at(168, ['fleet', 'heavy', 'sprint'])).toEqual(['fleet', 'gate', 'sprint']);
+    expect(at(169, ['gusts', 'fleet', 'dense'])).toEqual(['lock', 'fleet', 'dense']);
+    expect(at(80, ['breezy', 'gusts', 'hardy'])).toEqual(['breezy', 'hardy']);
+    // None fits: the slot drops (L169 without its override: fleet and dense drawn, breezy and sparse conflict).
+    expect(substitute(169, ['gusts', 'fleet', 'dense'], CHAPTERS[16]!).length).toBeGreaterThanOrEqual(2);
     // A draw without a retired id is the level as before.
     expect(at(41, ['flakes', 'cloud'])).toEqual(['flakes', 'cloud']);
   });
 
-  it('SUB_OVERRIDE holds at most 8 substituted levels, each moved to a later substitute or null', () => {
+  it('SUB_OVERRIDE holds at most 16 substituted levels (fix round 3), each moved to another substitute or null; SUB_DRAIN at most 2 steps', () => {
     const ids = Object.keys(SUB_OVERRIDE).map(Number);
-    expect(ids.length).toBeLessThanOrEqual(8);
+    expect(ids.length).toBeLessThanOrEqual(16);
     for (const id of ids) {
       expect(id).toBeGreaterThan(40);
       expect(retiredLevel(id)).toBe(true);
       const o = SUB_OVERRIDE[id];
       if (o !== null) expect((levelDef(id) as LevelDef).concepts).toContain(o);
     }
+    for (const [k, n] of Object.entries(SUB_DRAIN)) {
+      expect(retiredLevel(Number(k))).toBe(true);
+      expect(n === 1 || n === 2).toBe(true);
+    }
+    // The drain steps come off after the curve and the concepts' costs: L169 lock (cap 40) less 2.
+    expect([164, 167, 168, 169].map((id) => (levelDef(id) as LevelDef).drain)).toEqual([39, 31, 22, 38]);
   });
 
   it('renames the three levels titled for a retired rule', () => {

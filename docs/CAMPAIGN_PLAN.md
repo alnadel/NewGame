@@ -337,14 +337,17 @@ bar, by design of the Dares (it no longer earns ★2 without seeking it; humanFe
   countdown ring before each lock.
 - **Teaching slots:** L16 Wide Open · Big Sky, L29 Drought · Cloudless, L30 Crowded · Thicket, L31 Moon
   Sun · Moonlit, L32 Lowland · Short Grass (finish goals; Dares and world variants from the bake).
-- **Composed levels** keep their draws and substitute (§3); 41 composed levels changed. Levers
-  (`SUB_OVERRIDE`, at most 8, each with its measurement in `campaign.ts`): L73 dense, L79 dropped,
-  L80 dropped, L92 dropped, L103 sparse, L123 lowland, L164 dense, L165 dropped.
+- **Composed levels** keep their draws and substitute (§3); 41 composed levels changed. Levers, each
+  with its measurement in `campaign.ts` (fix round 3: `SUB_OVERRIDE` at most 16, and `SUB_DRAIN`, at
+  most 2 drain steps): L54 dense, L73 dense, L79 giants, L80 dropped, L92 dropped, L103 sparse, L112
+  breezy, L123 lowland, L139 giants, L145 gate, L162 dense, L163 giants, L164 dense (drain −2), L165
+  gate, L167 (drain −1), L168 gate (drain −2), L169 lock (drain −2).
 - **Names:** L85 Pine Hollow (was Slippery Sun), L94 Stop Clock (was Heavy Hands), L165 Cloudburst
   Pass (was Slick Sun).
 - **Bake and goldens:** the re-bake changed only the 46 levels and `LEVEL_BAKE_RUN`; the goldens
-  only campaign 32 and 100.
+  only campaign 32 and 100. Fix round 3 re-baked L54, 79, 112, 139, 145, 162-165 and 167-169; no
+  campaign golden moved.
 - **Gates** (`sim --campaign --compare`, src/core/README.md §18.5): oracle, reactive and the
-  Feat-seeking oracle as before; the five teaching slots 20/20 for humanTouch; still short of the
-  humanDial baseline on 7 substituted levels (L54, 139, 162, 163, 164, 168, 169) and in chapters 6, 7,
-  12, 14, 15, 17 and 20, beyond the 8 `SUB_OVERRIDE` entries.
+  Feat-seeking oracle as before; the five teaching slots 20, 20, 20, 20 and 19 of 20 for humanTouch;
+  since fix round 3 every substituted level meets humanDial's baseline − 1; the chapter gate still
+  misses ch3 (199 vs 200), ch7 (181 vs 182) and ch12 (178 vs 182), docs/CONTROLS_V3.md §16.8.

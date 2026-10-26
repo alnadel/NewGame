@@ -339,8 +339,10 @@ const RETIRED_SUBS: Readonly<Record<RetiredId, readonly ConceptId[]>> = Object.f
 
 /**
  * Fairness levers (§5.3; empty unless a gate needed one, each entry with its reason here and in the
- * spec's §16): SUB_OVERRIDE moves a substituted level to a later substitute (null drops the slot);
- * TOUCH_READS makes a new teaching slot's bake also require humanTouch's first-try share.
+ * spec's §16): SUB_OVERRIDE moves a substituted level to a later or gentler substitute (null drops the
+ * slot; at most 16 entries since fix round 3, the lead's decision); SUB_DRAIN lowers a substituted
+ * level's drain by up to 2 steps (Chill/s) when no substitute alone meets the gate; TOUCH_READS makes a
+ * new teaching slot's bake also require humanTouch's first-try share.
  */
 export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.freeze({
   // §9.5 "substituted levels" (humanTouch's first tries over the 12 baseline streams against
@@ -348,8 +350,6 @@ export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.f
   // (measured before CORE's cut list took the ending rescue out of the driver, which redraws them):
   // L73 gusts → sparse 4 vs 12; dense 12.
   73: 'dense',
-  // L79 gusts → sparse 1 vs 10, dense 6; dropped 9.
-  79: null,
   // L80 gusts → sparse 0 vs 4, dense 2; dropped 4.
   80: null,
   // L92 clockwork → sparse 5 vs 12, dense 7, lowland 7; dropped 11.
@@ -358,10 +358,47 @@ export const SUB_OVERRIDE: Readonly<Record<number, ConceptId | null>> = Object.f
   103: 'sparse',
   // L123 dazzle → dense 5 vs 9; lowland 12.
   123: 'lowland',
-  // L164 slippery → sprint 4 vs 11 (sparse does not fit beside fleet); dense 10.
+  // L164 slippery → sprint 4 vs 11 (sparse does not fit beside fleet); dense 10 (fix round 3: 8 vs 11,
+  // dropped 3, gate 3, giants 3, lock 1; dense with its drain 2 steps lower, 41 → 39: 10 vs 11).
   164: 'dense',
-  // L165 heavy → sprint 0 vs 6 (ration and sparse do not fit); dropped 10.
-  165: null,
+  // Fix round 3 (the lead's decision: the cap 8 → 16, a drop or a gentler substitute per failing level,
+  // then up to 2 drain steps), measured with the restored ending rescue, first tries over 12 streams
+  // against humanDial's on the old level (and passes within 3 tries over 20 streams where the chapter
+  // gate needed them):
+  // L54 clockwork → sparse 2 vs 3 (within 10 vs 14: chapter 6); dense 5 (18 vs 14), the list's next.
+  54: 'dense',
+  // L79 gusts → dropped 8 vs 10; giants 12 (gate 10, lock 12 but 19 vs 20 within).
+  79: 'giants',
+  // L112 heavy → sprint 5 vs 5 (17 vs 20 within: chapter 12), ration 0, sparse 1, dropped 1; breezy 5 (18 vs 20).
+  112: 'breezy',
+  // L139 dazzle → dense 4 vs 7, lowland 0, sparse 0, dropped 2; giants 7 (19 vs 16 within).
+  139: 'giants',
+  // L145 dazzle → dense 0 vs 4, lowland 2, sparse 0, dropped 5 (13 vs 18 within: chapter 15); gate 8 (19 vs 18).
+  145: 'gate',
+  // L162 slippery → sprint 8 vs 12 (sparse does not fit beside fleet); dense 11, the list's next.
+  162: 'dense',
+  // L163 gusts → dense 1 vs 4 (fleet and breezy do not fit), dropped 0, lock 0, gate 0; giants 7 (16 vs 16).
+  163: 'giants',
+  // L165 heavy → dropped 9 vs 6 but 18 vs 20 within (chapter 17); gate 10 (20 vs 20).
+  165: 'gate',
+  // L168 heavy → ration 0 vs 12 (sprint already drawn), dropped 2, dense 6, lowland 5, lock 5; gate 7,
+  // with its drain 2 steps lower (24 → 22) 11 (20 vs 20 within).
+  168: 'gate',
+  // L169 gusts → dropped 4 vs 9 (its drain rose 40 → 48 with gusts' cap gone); lock 7 (lock keeps the
+  // retired gusts' drain cap of 40), with its drain 2 steps lower (40 → 38) 10 (20 vs 20 within).
+  169: 'lock',
+});
+/** Fix round 3 (§5.3 levers): drain steps taken off a substituted level after its substitute (≤ 2 each; reasons above and in §16). */
+export const SUB_DRAIN: Readonly<Record<number, number>> = Object.freeze({
+  // L164 dense 8 vs 11 → 10 (drain 41 → 39).
+  164: 2,
+  // L167 slippery → sprint 4 vs 5 with no margin (3 vs 5 on two other driver builds; dense 0, sparse 0,
+  // gate 0, giants 2): one step (32 → 31) 6 vs 5, 14 vs 11 within.
+  167: 1,
+  // L168 gate 7 vs 12 → 11 (drain 24 → 22).
+  168: 2,
+  // L169 lock 7 vs 9 → 10 (drain 40 → 38).
+  169: 2,
 });
 export const TOUCH_READS: readonly number[] = Object.freeze([]);
 
@@ -512,7 +549,7 @@ function makeLevel(id: number): LevelDef {
     cap = Math.min(cap, lv.drainCap ?? cap);
   }
   const mul = foldTuning(concepts)?.drainMul ?? 1;
-  drain = Math.max(DRAIN_MIN, Math.min(DRAIN_MAX, Math.round(drain / mul), Math.floor(cap / mul)));
+  drain = Math.max(DRAIN_MIN, Math.min(DRAIN_MAX, Math.round(drain / mul), Math.floor(cap / mul)) - (SUB_DRAIN[id] ?? 0));
   if (!concepts.includes('marathon')) lengthMinutes = Math.min(lengthMinutes, 720 - startMinute);
   const p = dayParams(1, 3, dayPlan(biome, forecast), concepts);
   const flakes = expectedFlakes(startMinute, lengthMinutes, concepts, biome, forecast);

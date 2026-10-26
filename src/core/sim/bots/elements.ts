@@ -205,6 +205,8 @@ export interface ElPolicyOpts {
   readonly touch?: boolean;
   /** Touch, G9's measure (§10.3): never press while this object is the pick (it stays unarmed and unqueued). */
   readonly skip?: number;
+  /** Touch, G8d's measure (fix round 3): the vane is left alone for this many ticks of every Gust leg (a late reaction). */
+  readonly gustDelay?: number;
 }
 
 export interface ElPolicy {
@@ -301,7 +303,7 @@ export function createElPolicy(opts: ElPolicyOpts = {}): ElPolicy {
       if (el === null || s.phase !== 'day' || s.ready > 0) return false;
       if (s !== run) reset(s);
       const hero = s.nubs.hero;
-      if (hero === 'gust') return vane(s, el, v, c, free);
+      if (hero === 'gust') return el.legTick < (opts.gustDelay ?? 0) ? false : vane(s, el, v, c, free);
       const p = v.pick;
       // The reaction delay runs from the tick the target becomes the pick.
       if (p < 0 || p === opts.skip || pressed[p] === 1 || (hero !== 'ember' && hero !== 'sprout') || !ready(s, p) || !free) return false;

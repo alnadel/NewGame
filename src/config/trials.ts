@@ -157,8 +157,10 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60 and costMul 1.2 (each easier set was too easy:
   // G5/G5b, humanEl above 95%). Measured: G1 82/60/83, G2 low 60, G3 8/8, G4 15/16 (94%), G5c on
   // sight 8 vs 59, G5b best θ241 dies at 23%, G6 burns ≥ 7 96% (WAIVERS: every finisher burns them all).
+  // Fix round 3 (G9b, Ember gets 1.5 s before anything is due): the first wall b376 → b381 (its due
+  // prompt 1.28 → 1.63 s after the TAG); every other gate as before (G9's shortest m381 158 ticks).
   trial(1, 'Kindling', 7, 'meadow', 240, 400, 34, 0, [[340, 'ember'], [556, 'nubs']], 'ember',
-    'b376 b405 t434 g448 b477 g506 b535 i580', ['burns', 7], 30, [],
+    'b381 b405 t434 g448 b477 g506 b535 i580', ['burns', 7], 30, [],
     'Tap each wall just before Ember gets there. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls', '', 468, { legStart: [80, 60, 80], costMul: 1.2 }),
   // T2 pin: salt 187; drain 26 → 28; Drip 70 → 50 and evapMul 1.2 (G5b: the held sun at a constant
   // angle walked Drip's leg), Nubs' closing leg 100 → 80. The verifier round (§13.3, §6.5 levers
@@ -186,8 +188,15 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // 80, G3 8/8, G4 12/16 (75%), G5d every spam Gust grounded in Gust's leg, G5b best θ284 dies at
   // 24%, G6 cloudRide ≥ 60 83% (WAIVERS: every finisher's Gust brings the ride cloud on; the +25%
   // target, 75, still measured 83%).
+  // Fix round 3 (Gust never feels dead; soak 36 → 30): Gust's weather re-authored so it comes from both
+  // sides in turn and a constant vane fails (G5e with no waiver): clouds drifting onto the trail from
+  // the west (r311, r402) and the east (r371, r452), each on Gust's line if nobody pushes it, and a
+  // far cloud on each side that a held wind would carry in (east r334 +90, west r431 −168); the first
+  // reaches Gust 2.2 s after the TAG; the ride cloud r520 stays. Measured: G1 82/bots/83, G2 low 68,
+  // G3 8/8, G4 15/16 (94%), G5e every constant vane dies in Gust's leg, G8 15/16, G8b 8/8, G8d (a
+  // second late) 8/8, G5b best θ284 dies at 24%, G6 cloudRide ≥ 60 96% (waived as before).
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
-    'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 60], 30, [],
+    'r311:-82:76:16 r334:90:82:3 r371:88:69:-13 r402:-118:63:19 r431:-168:85:0 r452:67:60:-13 r520:-190:90:6', ['cloudRide', 60], 30, [],
     "Swipe to blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him.", 'Rain ride 1 s', 'Ride a rain cloud 1 s', '', 605, { legStart: [80, 80, 80] }),
   // T5 pin: salt 1113 (found by the G5b scan: 0..1112 held no salt whose sun could not stay fixed);
   // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60, Drip 70 → 50, costMul and evapMul 1.2 (too
@@ -198,8 +207,10 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // ice left standing kills Drip. G4 and G6 are WAIVERS: every lever is at its bound, salts 0..6000
   // hold no other whose sun cannot stay fixed with humanEl under 90%, and a second shower over a wall
   // (one object added) changed nothing; every finisher drinks the five puddles.
+  // Fix round 3 (G9b): the first wall b245 → b258 (its due prompt 0.78 → 1.68 s after the TAG; G6 92%,
+  // every other gate as before).
   trial(5, 'Steam', 11, 'meadow', 120, 504, 34, 0, [[216, 'ember'], [390, 'drip'], [564, 'nubs']], null,
-    'b245 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-26 i436 t452:10 t474:-14 u492:26 t512:-4 u530:-17 t546:16', ['drinks', 5], 25, [1, 2],
+    'b258 u270 r296:176:50:-48 g296 t320 b344 i372 i412 u425:-26 i436 t452:10 t474:-14 u492:26 t512:-4 u530:-17 t546:16', ['drinks', 5], 25, [1, 2],
     'Melt the ice for Drip: every puddle grows him. Puddles and rain douse Ember!', 'Drink 5', 'Drink 5 puddles', '', 1113,
     { legStart: [80, 60, 50, 80], costMul: 1.2, evapMul: 1.2 }),
   // T6 pin, re-authored by the lead's decisions (docs/ELEMENTALS_V2.md §13.3): the Nubs legs move
@@ -216,8 +227,15 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // (wholly under the Fancy Maple's). Measured: G1 63/bots/65/83 (Sap low 65, 13 with 3 plots), G2
   // low 37, G3 8/8, G4 13/16 (81%), G5 idle, both verbs off and the four spams fail, G5b best θ193
   // dies at 23%, G6 trees ≥ 3 25%, G7 without the hand-off swipes Sap 41 vs 65 and 2 trees (the plan 3).
+  // Fix round 3: Gust's own weather re-authored, sides in turn with a far cloud each side that a held
+  // wind brings in (r361 east, r403 west; G5e every constant vane dies in Gust's leg, no waiver):
+  // r361:76:92:3 f372:66:55:-13 f384:-100:78:15 r403:-146:86:-2 r416:110:73:-22 r425:-116:69:18; the
+  // hand-off (f449, r461) stays. The first crossing x511 → x518 (G9b: Sprout's first due prompt was
+  // 0.57 s after its TAG; now none on the reactive run). Measured: G1 63/bots/60/83, G2 low 45, G3 8/8,
+  // G4 14/16 (88%), G6 trees ≥ 3 13%, G7 Sap −1 vs 60 without the hand-off swipes, G8 14/16, G8b 8/8,
+  // G8d 8/8, G5b best θ193 dies at 23%.
   trial(6, 'Rain Garden', 9, 'meadow', 226, 402, 38, 0, [[322, 'gust'], [437, 'sprout'], [568, 'nubs']], null,
-    'r355:-110:60:22 r365:130:55:0 r372:110:60:-24 f394:-80:75:14 r413:-150:55:0 f449:-35:55:6 r461:140:100:0 p464:43 x511:0:14 p530:-44 s548:0:14 p561:-44 p578:-44 p597:-43 p610:40', ['trees', 3], 25, [3, 4],
+    'r361:76:92:3 f372:66:55:-13 f384:-100:78:15 r403:-146:86:-2 r416:110:73:-22 r425:-116:69:18 f449:-35:55:6 r461:140:100:0 p464:43 x518:0:14 p530:-44 s548:0:14 p561:-44 p578:-44 p597:-43 p610:40', ['trees', 3], 25, [3, 4],
     'Clear the fog for Sprout and blow the rain onto its path: rain feeds plants.', 'Grow 3 trees', 'Grow 3 trees', '', 198,
     { legStart: [60, 60, 65, 80] }),
   // T7 pin, re-authored by the lead's decisions (§13.3): the Nubs legs move toward midday (start
@@ -238,8 +256,15 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // every element leg with its verb off (Drip's too: the path, reactive 0/8 and humanEl 0/16 with
   // Drip's steer off fail in Drip's leg) and the four spams fail, G5b best θ317 dies at 97%, G6 grove
   // ≥ 3 33%, G7 plot 420 burns and without the hand-off swipes Sap 52 vs 67.
-  trial(7, 'Five Elements', 17, 'meadow', 86, 564, 42, -16, [[182, 'gust'], [282, 'sprout'], [394, 'ember'], [494, 'drip'], [590, 'nubs']], null,
-    'r214:-110:60:38 r222:130:55:16 r230:110:60:-8 f245:-80:75:24 r263:-150:55:16 f294:-60:55:16 r306:140:100:16 p309:44 p340:-36 x355:0:12 s383:0:12 p420:-44 b423 p428:44 u437 r453:133:55:-24 g453 b472 t483 i518 t540:0 u545:-22 t552:3 u562:24 t575:-2', ['grove', 3], 25, [5, 6],
+  // Fix round 3: Gust's own weather re-authored against the −16 breeze, sides in turn with a far cloud
+  // each side (r215:55:88:19 r230:117:67:-2 r245:-62:61:29 r253:-113:87:16; G5e every constant vane
+  // dies in Gust's leg, no waiver); the hand-off (f294, r306) stays. G9b (1.5 s before anything is
+  // due): the crossings x355 → x362 and s383 → s377, and the TAG into Ember 394 → 383 (b423 due 1.55 s
+  // after it; Sprout 7.0 s, Ember 7.7 s). Measured: G1 53/bots/61/50/37/63, G2 low 40, G3 8/8, G4 9/16
+  // (56%), G6 grove ≥ 3 33%, G7 plot 420 burns, Sap 50 vs 61 without the hand-off, G8 11/16, G8b 8/8,
+  // G8d 8/8, G9 shortest m423 153 ticks, G11 PASS, G5b best θ317 dies at 97%.
+  trial(7, 'Five Elements', 17, 'meadow', 86, 564, 42, -16, [[182, 'gust'], [282, 'sprout'], [383, 'ember'], [494, 'drip'], [590, 'nubs']], null,
+    'r215:55:88:19 r230:117:67:-2 r245:-62:61:29 r253:-113:87:16 f294:-60:55:16 r306:140:100:16 p309:44 p340:-36 x362:0:12 s377:0:12 p420:-44 b423 p428:44 u437 r453:133:55:-24 g453 b472 t483 i518 t540:0 u545:-22 t552:3 u562:24 t575:-2', ['grove', 3], 25, [5, 6],
     'Five elements, one day. The breeze spreads fire west: keep three trees.', '3 trees standing', 'Keep 3 trees standing', 'ALL FIVE ELEMENTS', 1266,
     { legStart: [50, 60, 70, 50, 40, 60], evapMul: 1.2 }),
 ]);

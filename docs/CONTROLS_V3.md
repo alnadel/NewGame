@@ -320,9 +320,20 @@ reason. A refused press costs nothing and never moves anything.
 A refusal's `REFUSE` note carries `a = reason`, plus 16 when the same reason was already refused on
 this leg (a **repeat**). Repeats show the chip but play no haptic and no fizz (§1.3, §7.3).
 
-**Pre-TAG press.** In the last `preTagTicks` (30 ticks, 0.5 s) before a TAG into Ember or Sprout the
-button shows the incoming act (`view.incoming`), and a press then is kept and applied on the first
-tick the new element walks. It is the only press that survives a TAG.
+**Pre-TAG press.** In the last `preTagTicks` (45 ticks, 0.75 s; 30 before fix round 3) before a TAG
+into Ember or Sprout the button shows the incoming act (`view.incoming`), and a press then is kept and
+applied on the first tick the new element walks. It is the only press that survives a TAG. With the
+300 ms buffer, a press up to about 1 s before the TAG reaches the incoming element. The Trials leave
+that press room to matter: the first required Ember or Sprout act after a TAG comes due no sooner than
+1.5 s after it (G9b, §10.3).
+
+**Mashing** (fix round 3). A press while another waits joins it: mashing never restarts the 300 ms
+wait, so an illegal press is still refused once, when the first press's wait runs out, and the
+presses after it on that leg are repeats.
+
+**Night** (fix round 3). Outside `day` the act is `none` (`view.act`). A press still waiting when
+night falls is refused at once with its reason (a key press too, so it is never silently lost); the
+pre-TAG press is dropped.
 
 Ember's affordability is checked at ignition, not at the press (arming is free). Sprout's crossing
 jobs are never refused for Sap: they wait for it (§3.3).
@@ -340,7 +351,7 @@ to `fx`, `audio`, `haptics`, `moments` and the cue line. Sim events (`burn`, `gr
 | `BUFFER` 3 | the act | a press is waiting (≤ 300 ms) |
 | `SETTLE` 4 | 1 captured into shade/light, 0 a track re-inset | a glide ended |
 | `NOTCH` 5 | the vane notch | the vane changed notch |
-| `CALM` 6 | 0 pressed, 1 auto (Lift at the floor), 2 already calm (no-op) | the vane went to 0, or a Calm press found it there |
+| `CALM` 6 | 0 pressed, 2 already calm (no-op), also while a drag holds the vane at notch 0; 1 (auto) is never sent since fix round 3 (§3.5) | the vane went to 0, or a Calm press found it there |
 | `WAIT_LOW` 7 | the object | an armed ignition waits for Flame (once per arm) |
 | `EXPIRE` 8 | the object | an arm's target can no longer burn (once) |
 | `HANDOVER` 9 | the target bin | the pre-TAG hand-over glide started |
@@ -476,13 +487,17 @@ press. Lifting the finger **keeps** the notch.
 `SWIPE_GAIN` in `bots/elements.ts`, moved into `drive/pick.ts` with `ownAhead`):
 `floor = ownAhead(s, el) ? lift (20) : swipe · costMul + gain (2)`. While weather of Gust's own stretch
 can still soak it, Gust keeps 20 Lift; otherwise the hand-off pushes (T4's ride cloud, T6's and T7's
-garden cloud) may spend down to the price of one gust.
+garden cloud) may spend down to the price of one gust. Since fix round 3 the floor never stops the
+vane: it only picks the weaker band (**Low Lift** below).
 
 **The governor** keeps the wind in the notch's band with today's gust verbs and costs. With
-`σ = sign(n)` and the band floor `band[|n|]` (`[0, 15, 30]` u/s), on a tick where all hold:
-- `n ≠ 0` and `σ · s.el.wind < band[|n|]`;
-- at least `every` (15) ticks since the governor's last gust (the bots' `SWIPE_EVERY`);
-- Lift > `floor`;
+`σ = sign(n)` and the band floor `band[|n|]` (`[0, 15, 30]` u/s; `low[|n|]`, `[0, 5, 15]`, while Lift
+≤ `floor`), on a tick where all hold:
+- `n ≠ 0` and `σ · s.el.wind` below the band floor;
+- at least `every` (15) ticks since the governor's last gust (the bots' `SWIPE_EVERY`), waived on the
+  tick a drag sets a new non-zero notch (the **drag kick**);
+- Lift > one gust's price + `gain` (`swipe · costMul + 2`), or, on the drag kick, Lift > one gust's
+  price;
 - **weather is in play:** some awake rain or fog object (weather wakes 400 u ahead), not gone, whose
   far edge is not yet behind the walker;
 
@@ -493,10 +508,18 @@ on the HUD). Air restores 4 Lift/s.
 
 - **Resting:** with no weather in play the governor sends nothing; the vane keeps its notch and shows
   dimmed (`view.vaneResting`).
-- **Auto-calm:** when the vane is set, weather is in play and Lift ≤ `floor`, the vane goes to 0
-  (`CALM` with a = 1) and a chip says why. A forgotten vane never spends past the floor. A deliberate
-  drag after an auto-calm sets the vane again; the governor blows as soon as Lift is above the floor
-  (air restores 4 Lift/s), so a player can always spend down to exactly what the bots spend.
+- **Low Lift** (fix round 3; it replaces the auto-calm, which turned every drag in the rain into
+  nothing: the vane snapped back to 0 on the next tick). The governor never moves the vane. At or
+  below `floor` it keeps the weaker band `low` (`view.vaneLow` 1; about 2.7 Lift/s at a breeze and 4.9
+  at a gale, `TUNING.drive.gust.lowCost`), so the wind still blows the way the player set it, only
+  softer. At one gust's price + `gain` or less it **waits** (`view.vaneLow` 2, `view.vaneCost` 0) until
+  air (4 Lift/s) brings Lift back over that line. A forgotten vane spends no further than the bots
+  do: it gusts only above one gust's price + `gain`.
+- **The drag kick:** a drag always moves the vane (`NOTCH`), and on the tick it sets a new non-zero
+  notch the governor may gust at once, even while waiting, as long as Gust can pay for one gust. So a
+  drag always moves the wind while Gust has the Lift for it.
+- **Soak** (fix round 3): rain soaks 30 Lift/s (`TUNING.elements.gust.soak`, 36 before), so from the
+  lowest Gust start a player has about 1 s after a hand-off before Lift matters (G8d, §10.3).
 - **Calm press:** the vane goes to 0; the wind decays as today (τ 1.5 s). On a calm vane it is the
   no-op of §2.3.
 - **Keys:** ← → move one notch per keydown; ↑/W calms.
@@ -540,7 +563,9 @@ does nothing:
 - **no hand** this tick (a resting finger, §1.2, is no hand), and the sun is settled: `s.sun.mode ===
   'idle'` (a lift's chase has finished), or `'dragging'` under a resting finger with `|s.sun.lag| <
   0.01°`;
-- **re-grip grace:** at least `regripTicks` (15, 250 ms) since the last real lift (§4.5);
+- **re-grip grace:** at least `regripTicks` (15, 250 ms) since the last real lift (§4.5); the release of a
+  key turn is a lift too, its direction the key's (fix round 3), so a keyboard nudge out of shade is
+  not glided back at the next refresh;
 - planning happens on guide refresh ticks (`s.guide.tick` changed) and at most one new glide starts
   per `gapTicks` (30) ticks.
 
@@ -563,7 +588,7 @@ does nothing:
 - **Settle (rescue):** θ's bin not in `T`:
   - not in `guide.now` (lit; Ember: not light) → act now (after the re-grip grace, §4.1);
   - in `guide.now` but not in `T` (shade that is ending) → act once no hand has happened for
-    `endingTicks` (18);
+    `endingTicks` (18) (cut at the merge as CORE's cut 2; restored in fix round 3, §16.8);
   - search outward bin by bin up to `R`; the first bin of `T` reached **without crossing a glare bin**
     (Nubs only; glare is light for Ember) wins; ties: the wider arc, then counter-clockwise;
   - the glide's target lies `min(inset, W/2)` inside the arc's near edge (`inset` 4°).
@@ -628,11 +653,18 @@ it.
   the frame's `dTheta`, where `θg` is `s.sun.theta` when that glide began. The new stroke starts from exactly where the
   player's last stroke left the sun, whatever the magnet did in between. With the grace of §4.1 (no
   glide before 15 ticks) and the 4° limit of §4.2, a re-grip at 150-300 ms usually finds no glide at
-  all; the undo covers the rest.
+  all; the undo covers the rest. **Race** (fix round 3): a real `downEdge` within `raceTicks` (3) of a
+  glide's start undoes that glide the same way, lift or no lift (the magnet began a frame before the
+  player's deliberate touch, so its first step must not stick).
+- **The driver's own edges** (fix round 3): the driver reads the frame's `downEdge`, `upEdge`, `down`
+  and `dTheta` before it writes any, so a glide's closing `upEdge` (or the one a cancel adds) is never
+  read as the player's sun move (§4.1's engagement clock) or as a real lift (§4.1's re-grip grace).
 - **Notes:** `SETTLE` at a glide's end (`a = 1` for a rescue, 0 for a track).
 - **Sim events during glides:** a glide is a real drag in the sim, so it can emit `detent` events.
-  While `view.glide` is finite, the session drops `detent` from haptics and audio (the dial's tick
-  marks still draw); the only feedback for magnet motion is `SETTLE`'s clink and 6 ms tap (§7.3).
+  On a tick where `view.glideTick` is set (the driver wrote a glide step, the last one included; fix
+  round 3: `view.glide` is already NaN on the last step), the session drops `detent` from haptics and
+  audio (the dial's tick marks still draw); the only feedback for magnet motion is `SETTLE`'s clink and
+  6 ms tap (§7.3).
 
 ---
 
@@ -725,8 +757,10 @@ pacing, spacing and scarcity (the substitutes below), never as input.
 7. **Copy and docs:** §13.4; `CAMPAIGN_PLAN.md` chapter and concept tables (CORE).
 8. **Fairness levers** (each entry with its reason in a comment and in §16; no others):
    - a hard gate (§9.5) fails on a **substituted level**: CORE moves that level to the next substitute
-     in its list through `SUB_OVERRIDE: Record<number, ConceptId | null>` (at most 8 entries; `null`
-     drops the slot, the last resort, which can only make the level easier), re-bakes it and re-runs;
+     in its list through `SUB_OVERRIDE: Record<number, ConceptId | null>` (at most 16 entries since
+     fix round 3, 8 before; `null` drops the slot, which can only make the level easier), re-bakes it
+     and re-runs; a level that still fails then lowers its drain by at most 2 steps through
+     `SUB_DRAIN: Record<number, number>` (fix round 3; each entry with its numbers in §16.8);
    - a hard gate fails on a **new teaching slot** (L16, 29-32): first, one swap of two of these five
      concepts in `CONCEPT_IDS` (re-bake both); then `TOUCH_READS: readonly number[]` (at most 3
      levels), whose bake's `lessonReads` also requires humanTouch on `LESSON_SHARE` of its training
@@ -759,7 +793,7 @@ New `TipOn` triggers, fired from driver notes and the view:
 - `due`: the first amber `view.due` on an Ember or Sprout leg;
 - `refuse`: the first refusal of each reason (the reason's chip text, §13.3);
 - `vane`: the first `gale` notch;
-- `calm`: the first auto-calm;
+- `calm`: the first auto-calm (never fires since fix round 3: there is no auto-calm; UI's cut 3 had removed it);
 - `settle`: the first rescue capture (Nubs, once per profile).
 
 The tip texts are §13.1. A drag that turns nothing (an ignored edge press) gets no hint.
@@ -1051,12 +1085,14 @@ New rows: humanTouch (16 salts), reactiveTouch (8 salts), idleTouch, the parked-
 | G5f | Aim help never plays alone: idleTouch fails every Trial (G5a through the driver), and the parked sun fails every Trial at every degree (G5b through the driver) | hard (lever: `AIM_OVERRIDE`, §10.1) |
 | G8 | Touch contract: per Trial, humanTouch wins ≥ humanEl's wins − 1 (of 16) | hard |
 | G8b | reactiveTouch wins ≥ 7 of 8 per Trial | hard |
+| G8d | Late hands on Gust (fix round 3): reactiveTouch whose Gust input starts 60 ticks (1 s) into each Gust leg wins ≥ 7 of 8 on T4, T6 and T7 | hard |
 | G9 | Act windows over **pressable ticks**: on the reactiveTouch salt-0 run, for every required target (every Ember wall, every crossing) the pathBot acts on, the longest run of consecutive ticks in which it is pressable is ≥ 90 (1.5 s). A tick is pressable when the target is eligible and unveiled in range and before its last working tick (§3.2, §3.3, the walker one tick on), it is the pick computed as if it were not yet armed or queued (required-first order), fewer than 2 arms or jobs other than its own are live, and the tick is not inside the last `preTagTicks` before a TAG into a different act. Print the shortest window per Trial and the target | hard (levers §10.1) |
+| G9b | Time after a TAG (fix round 3): on the reactive salt-0 run, a driver that only watches reports, for each Ember or Sprout leg, the first tick its `view.due` turns amber; it comes no sooner than 90 ticks (1.5 s) after the leg's TAG (a leg with nothing due passes) | hard |
 | G10 | Lasting arcs on Nubs legs: the share of guide refreshes on the pathBot's Nubs legs where `now ∧ next` has an arc ≥ 6° wide (printed per Trial) | advisory |
 | G11 | Decisions matter: on T5, T6 and T7, mashTouch's Dare share (and stars) < reactiveTouch's; printed for every Trial with its wins | advisory (a miss is recorded in §16 as a content follow-up for the mixers; it does not block) |
 | G4t | humanTouch's pass share against G4's bands (75-95% intros, 45-90% mixers) | advisory |
 
-`--pick` includes G5e, G5f, G8, G8b and G9. `--perf` adds the driver's µs per tick on T7 (gate ≤ 5 µs
+`--pick` includes G5e, G5f, G8, G8b, G8d, G9 and G9b. `--perf` adds the driver's µs per tick on T7 (gate ≤ 5 µs
 median).
 
 ---
@@ -1135,8 +1171,8 @@ beyond `PRESS`/`REFUSE`.
   drive: {
     /** A press that is not legal yet waits this long (300 ms), then is refused. */
     bufferTicks: 18,
-    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.5 s). */
-    preTagTicks: 30,
+    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.75 s). */
+    preTagTicks: 45,
     /** Due prompts: amber within dueTicks of a required act's last moment, red within urgentTicks. */
     dueTicks: 60,
     urgentTicks: 24,
@@ -1146,7 +1182,7 @@ beyond `PRESS`/`REFUSE`.
      * Vane notches ±1 breeze, ±2 gale: band floors (u/s), gust spacing (ticks), the Lift floor (the
      * policy's: `lift` while own weather is ahead, else one gust's price + `gain`), steady Lift/s per notch at costMul 1.
      */
-    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0] },
+    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0], low: [0, 5, 15], lowCost: [0, 2.7, 4.9] },
     aim: {
       /** Capture radius (°): Journey L1-40, 41-100, 101-200; Endless rungs R0..R4; Daily and challenges; Trials; Strong; Light. */
       journey: [14, 12, 10],
@@ -1170,6 +1206,8 @@ beyond `PRESS`/`REFUSE`.
       regripTicks: 15,
       againstTicks: 30,
       againstDeg: 4,
+      /** A real downEdge this soon after a glide's start undoes it (fix round 3). */
+      raceTicks: 3,
       /** The pre-TAG hand-over into Drip: last ticks, reach (°), inset (°). */
       handTicks: 60,
       handReach: 30,
@@ -1254,9 +1292,13 @@ export interface DriveView {
   vane: number;
   vaneResting: boolean;
   vaneCost: number;
+  /** Fix round 3: how low Lift holds the set vane back: 0 full band, 1 the weaker band, 2 waiting for Lift. */
+  vaneLow: number;
   /** The glide's target θ while one runs (NaN none), and whether it is the hand-over. */
   glide: number;
   handover: boolean;
+  /** Fix round 3: the driver wrote a glide step this tick (the last one included). */
+  glideTick: boolean;
   /** The last refusal's reason (§2.4 codes; 0 none) and its tick. */
   refuse: number;
   refuseTick: number;
@@ -1479,8 +1521,8 @@ existing e2e passes (rewritten where §12.2 says), the new specs pass, and the d
   goals (crossing need; plot 20, +20, cap 60); top-up; queue cap; pre-emption by a queued urgent
   crossing; release the tick after the goal; plot stop at Sap 25; job drop at `near` and TAG.
 - Gust: notch math (raw, lift snap, keys; **±18 px gives ±1 symmetrically**); governor conditions
-  (band, spacing, the policy floor with and without own weather ahead, weather in play); auto-calm at
-  the floor and a re-drag after it; resting; Calm on a calm vane is `CALM` a = 2 with no `REFUSE`;
+  (band, spacing, the policy floor with and without own weather ahead, weather in play); low Lift
+  (the weaker band at the floor, waiting at one gust's price + gain, the drag kick, no auto-calm); resting; Calm on a calm vane is `CALM` a = 2 with no `REFUSE`;
   `driveWeatherX` equals stepping the sim with the governor, and with `n = 0` equals stepping it with
   no gusts.
 - Magnet: rescue (lit, ending after 18 ticks); honour bud, glass, flare and (in a telegraph)
@@ -1762,7 +1804,7 @@ TAG banner: the element's name, then its `dragLine`, then its `actLine` (§13.1)
 | 3 | Ember arms any time (cap 2), ignition at the bot-proven moment; no "wait for the ring" refusal | feel, both judges | timing windows were the complaint; arming keeps a tap per wall, so the leg does not empty |
 | 4 | Ember's walls and Sprout's crossings are not automatic by default; full automation is the Auto actions toggle | both judges (cut onethumb's default) | keeps each element's verb and avoids the Flame re-tune and re-pins |
 | 5 | Sprout: tap = job; extra taps +20 Sap; crossings before plots (the bot's order) | feel, judge 1 | "more taps = bigger tree" keeps the size decision without a hold |
-| 6 | Gust: a persistent vane with Calm, an auto-calm at the policy's Lift floor (#27) and resting with no weather | both judges, review | a held offset is a hold; a forgotten vane must not drain Lift past what the proven policy keeps |
+| 6 | Gust: a persistent vane with Calm, an auto-calm at the policy's Lift floor (#27) and resting with no weather (fix round 3: no auto-calm; low Lift weakens the wind instead, §3.5) | both judges, review | a held offset is a hold; a forgotten vane must not drain Lift past what the proven policy keeps |
 | 7 | The vane has 2 notches a side (breeze, gale), not 3 of 15 u/s | this spec | one gust is +30 u/s: a 15 u/s target cannot be held by gusts; the costs are measured from `keep` |
 | 8 | Magnet targets lasting shade (land during a snap, `tag` in the hand-over); honours bud, glass and flare; never crosses glare | judge 1, judge 2 | pulling to flare arcs and R 20 measured worse |
 | 9 | Radius 14/12/10 by chapter and rung, Daily 10, floor 10 scheduled; Light 8 and Off 0 only by choice | onethumb, both judges | measured; a 16-salt re-run shows the radius barely matters in 8-20° |
@@ -1990,13 +2032,15 @@ button's scale pulses, the dial dimming with the settle-arc highlight and the ca
 
 **CORE**
 - Cut list 1-3 applied in one revertible commit (b554779): `driveWeatherX` reads `weatherXAt` for every
-  notch; `aimPlan` rescues only a lit sun (no `ending` parameter); the driver never casts Auto Snap
+  notch; `aimPlan` rescues only a lit sun (no `ending` parameter; restored in fix round 3, §16.8); the
+  driver never casts Auto Snap
   (`DriveOpts.autoSnap` stays in the contract, ignored). `NOTE_AUTO` carries a = 2 (arm) and 3 (job)
   only. About 110 B in the branch.
 - Auto actions' plot rule matches the touch bots' press (a plot short of treeMin, not downwind, no plot
   job running, Sap above treeMin + plotSap), so Auto actions plays exactly the reactive verbs on T1 and
   T3 (§12.1).
-- G5e's player sets the notch once on the leg's first tick and keeps the governor's auto-calm.
+- G5e's player sets the notch once on the leg's first tick and keeps the governor's auto-calm (fix round
+  3: no auto-calm; the governor's low-Lift rules, §3.5).
 - reactiveTouch and humanTouch map Gust differently from §10.2's letter: a gale when the wanted wind
   dir·wind ≥ band[1]; humanTouch calms after 30 ticks with no wanted swipe, reactiveTouch at its first
   no-want decision (the literal mapping lost Gust Trials for reactiveTouch).
@@ -2091,7 +2135,8 @@ button's scale pulses, the dial dimming with the settle-arc highlight and the ca
 
 ### 16.7 Open for the lead
 
-1. **§9.5's substituted-level and chapter gates (hard) fail**, as at CORE's branch, and §5.3's levers are
+1. (Fix round 3, §16.8: the substituted-level gate passes; the chapter gate still fails on ch3, ch7 and
+   ch12.) **§9.5's substituted-level and chapter gates (hard) fail**, as at CORE's branch, and §5.3's levers are
    spent: `SUB_OVERRIDE` holds its 8 entries and L169 already drops its slot yet measures 2 vs 9. The
    chapters that fail are those with the most substituted levels (ch17 has nine), and on the 154
    unchanged levels humanTouch matches humanDial (2,346 vs 2,345 passes), so the driver is not the cause.
@@ -2101,7 +2146,7 @@ button's scale pulses, the dial dimming with the settle-arc highlight and the ca
    failing levels (easier levels, the challenge §5.3 meant to keep partly gone), accept the measured
    differences as the intended difficulty and amend the gate, or a content pass on chapters 6, 7, 12,
    14, 15, 17 and 20.
-2. **G5e (hard) fails on T4, T6 and T7.** A constant breeze held from the leg's first tick walks the Gust
+2. (Fix round 3, §16.8: resolved; G5e passes with no waiver.) **G5e (hard) fails on T4, T6 and T7.** A constant breeze held from the leg's first tick walks the Gust
    leg; no single §6.5 move of T4's weather (48 tried by CORE) fails +1 while keeping G1-G4, and a lower
    Gust start (−10 Lift) drops humanTouch to 0/16. A multi-object re-authoring of the three Gust legs, with
    their `trials` golden entries re-pinned, is the remaining route, and it is a content round, not a merge
@@ -2109,3 +2154,125 @@ button's scale pulses, the dial dimming with the settle-arc highlight and the ca
    render.spec all play T4's layout.
 3. **G11** misses on T5 (mashTouch equals reactiveTouch); recorded as a content follow-up for the mixer.
 4. The 2,529 B left under the budget can buy back cut-list items (§16.3).
+
+### 16.8 Fix round 3 (core)
+
+The review after the merge (31 findings) went to two fixers. CORE's branch, `fix3/core` from 358a7ee,
+carries the lead's three decisions: Gust must never feel dead, the substituted Journey levels must
+meet §9.5, and the driver findings in core. The finding numbers below are the lead's (the review's
+list counted from 0).
+
+**Driver**
+- **F3, the driver's own edges.** `fill` read the frame's `upEdge` after closing a glide, so the
+  `upEdge` it had just written counted as a sun move (the engagement clock ran on) and as a real lift
+  (the re-grip grace began). It now reads `downEdge`, `upEdge`, `dTheta` and `down` before it writes
+  anything (§4.5).
+- **F4, night.** A press buffered at dusk waited out the night (the driver's clock stops outside `day`)
+  and fired at dawn. Now a press still waiting at nightfall is refused at once with its reason, the
+  pre-TAG press is dropped, and the act is `none` outside the day (§2.3), so the session shows no act
+  that a key press could lose.
+- **F5, mashing.** Each press restarted the 300 ms wait, so a mashed illegal press was never refused.
+  A press while one waits now joins it, and the refusal comes once when the first wait runs out (§2.3).
+- **F7, Calm at notch 0 mid-drag.** It reported a real calm. Now it is the no-op `CALM` with a = 2.
+- **F8, detents on a glide's last tick.** `view.glide` is already NaN on the closing tick, so the
+  session's per-tick drop missed it. The core adds `view.glideTick` (§4.5, §11.3); the session's use of
+  it is the UX fixer's.
+- **F14, the time after a TAG.** `preTagTicks` 30 → 45 (0.75 s), so a press up to about 1 s before the TAG
+  reaches the incoming element. G9b (§10.3, hard) holds the content to 1.5 s before the first due
+  act: T1's first wall b376 → b381 (its due prompt 1.28 → 1.63 s after the TAG), T5's b245 → b258
+  (0.78 → 1.68 s), T6's first crossing x511 → x518 (Sprout's prompt was 0.57 s after its TAG), T7's
+  crossings x355 → x362 and s383 → s377 with the TAG into Ember 394 → 383 (b423 due 1.55 s after it).
+- **F1, keyboard nudges.** A key turn never counted as a lift, so the next refresh glided the sun back
+  into the arc a key tap had just left (3-tick taps of the fine key netted −3.7° with aim help against
+  −71.5° without, in the review's probe). The release of a key turn now sets the lift and the stroke's
+  direction (§4.1); the touch bots never press keys, so no gate or golden moved.
+- **F16, the race.** A glide could start a frame before a deliberate touch and keep its first step
+  (2.7-3.4°). A real `downEdge` within `raceTicks` (3) of a glide's start now undoes it (§4.5).
+- Not CORE's: F6 (the TAG ramp's negative scale) is `input.ts`, fixed by the UX fixer; F8's session half
+  likewise.
+- Regression tests in `tests/unit/drive.test.ts`: a key release as a lift, own closing edge, nightfall refusal, mashing refusal
+  once, Calm at notch 0, `glideTick` on the last step, the 45-tick pre-TAG window, the race undo, the
+  low-Lift governor and the ending rescue.
+
+**Gust (F10, F12)**
+- §3.5's governor never calms the vane (no `CALM` a = 1). At or below the policy floor it keeps the
+  weaker band `low` `[0, 5, 15]` u/s (`lowCost` `[0, 2.7, 4.9]` Lift/s, `view.vaneLow` 1); at one
+  gust's price + `gain` it waits for air (`view.vaneLow` 2); the tick a drag sets a new notch it may
+  gust at once while Gust can pay for one gust. A drag always moves the vane and the wind.
+- `TUNING.elements.gust.soak` 36 → 30 Lift/s: from the lowest Gust start a player has about 1 s after a
+  hand-off's grace before rain soaks Lift to the floor (24 was tried: the weather then threatened
+  too little for any layout to fail a constant vane while keeping G1-G4).
+- T4, T6 and T7's Gust weather re-authored (`trials.ts` comments give each layout and its measures):
+  near clouds drift onto the trail from each side in turn, each on Gust's line if nobody pushes it,
+  and a far cloud on each side that a held wind would carry in, so no constant vane survives. G5e:
+  every vane (−2, −1, +1, +2) dies on Gust's leg of T4, T6 and T7, with no waiver. T4's G6 waiver
+  text now reads 96% (cloudRide ≥ 60).
+- G8d (§10.3, hard): reactiveTouch whose Gust input starts 1 s into each Gust leg wins 8/8 on T4, T6
+  and T7.
+- `trials` goldens re-pinned: 1001 and 1005 (G9b's walls) and 1004, 1006 and 1007 (the Gust legs), with
+  their 600/1200/1800 frames; no other entry moved.
+
+**Journey (§5.3's levers)**
+- `SUB_OVERRIDE` cap 8 → 16 (16 entries) and `SUB_DRAIN` (at most 2 steps) per the lead. New or changed
+  entries, each with what was measured (humanTouch's first tries over the 12 baseline streams vs
+  humanDial's on the old level; within-3 passes over 20 where the chapter gate needed them): L54
+  dense (sparse 2 vs 3; dense 5); L79 giants (dropped 8 vs 10; giants 12); L112 breezy (sprint 5 vs 5
+  but 17 vs 20 within; ration 0, sparse 1, dropped 1; breezy 5, 18 vs 20); L139 giants (dense 4 vs 7,
+  lowland 0, sparse 0, dropped 2; giants 7); L145 gate (dense 0 vs 4, lowland 2, sparse 0, dropped 5;
+  gate 8); L162 dense (sprint 8 vs 12; dense 11); L163 giants (dense 1 vs 4, dropped 0, lock 0, gate 0;
+  giants 7); L164 dense with `SUB_DRAIN` 2 (drain 41 → 39: 8 → 10 vs 11); L165 gate (dropped 9 vs 6 but
+  18 vs 20 within; gate 10, 20 vs 20); L167 `SUB_DRAIN` 1 (drain 32 → 31: sprint 4 → 6 vs 5); L168 gate
+  with `SUB_DRAIN` 2 (ration 0 vs 12, dropped 2, dense 6, lowland 5, lock 5; gate 7, drain 24 → 22:
+  11); L169 lock with `SUB_DRAIN` 2 (dropped 4 vs 9; lock 7, drain 40 → 38: 10). L80 and L92 stay
+  dropped.
+- The ending rescue (CORE's cut 2, §4.2) is back: on the 154 unchanged levels humanTouch passed 2,345
+  streams within 3 tries without the rescue and 2,381 with it, against humanDial's 2,345 (aim help
+  off: 2,337). Its bytes are inside the branch's +739 B (`build:single` below).
+- Re-baked per the bake policy: `levelBake.gen.ts` changed only L54, 79, 112, 139, 145, 162, 163, 164,
+  165, 167, 168, 169 and `LEVEL_BAKE_RUN`; no `campaign` golden moved.
+
+**Gates on `fix3/core`**
+1. `npm run typecheck`: clean.
+2. `npx vitest run`: 57 files, 1,195 of 1,195.
+3. `node scripts/golden.ts`: against 358a7ee only `trials` 1001, 1004, 1005, 1006, 1007 and their frames.
+4. `sim --campaign --bot all --tries 3 --compare` (baseline digest matches; 4 min 47 s): oracle 200/200;
+   reactive 100% of 1-100; the Feat-seeking oracle ★2 on 100% and every Dare of 1-10; idleTouch 11
+   passes, all idle's; **substituted levels pass** (worst margin −1: L98 0 vs 1, L162 11 vs 12, L164
+   10 vs 11, L168 11 vs 12); the five teaching slots 20, 20, 20, 20 and 19 of 20; humanTouch 93.3% of
+   1-40 on its first try (failed 7, 10, 38, 39), resting 94.2%, humanDial 93.3%. **Chapters fail on
+   three:** ch3 199 < 200, ch7 181 < 182, ch12 178 < 182 (every other chapter at or above humanDial:
+   ch1 200/199, 2 200/200, 4 183/182, 5 178/171, 6 162/158, 8 190/187, 9 164/157, 10 159/125, 11
+   140/140, 13 156/156, 14 143/141, 15 144/133, 16 116/113, 17 170/164, 18 165/136, 19 101/92, 20 95/95).
+5. `sim --trials --check --perf` (56 s): exit 0, every Trial passes; the only waivers are the accepted
+   ones (G6 on T1, T2, T4 and T5, G4 on T5). G5e passes on T4, T6 and T7; G8 15, 16, 13, 15, 16, 14
+   and 11 of 16 (humanEl 15, 15, 13, 15, 16, 14, 9); G8b and G8d 8/8; G9 shortest T1 m381 158 ticks, T3
+   m408 263, T5 m436 101, T6 m518 280, T7 m423 153; G9b T1 1.63 s, T3 6.40 s, T5 1.68 s, T7 1.55 s
+   (T6 and T7's Sprout legs: nothing due); G11 PASS on T3, T6, T7 (MISS on T5 as before); the driver
+   0.45 µs per tick on T7.
+6. `sim --check --seeds 40` (4 min 5 s): all targets met; idleTouch reaches the first night at R2, R3
+   and R4 on 0 of 40 each (R0 5%, R1 0%). Advisory: humanTouch outlives humanDial at R0 (Day 2 11:45 AM
+   vs 11:28), R2 (10:36 vs 9:28) and R3 (9:15 vs 8:57) but not at R1 (10:54 vs 11:30) or R4 (Day 1
+   11:44 AM vs 12:21 PM). Toggling this round's driver changes one at a time on the same 40 seeds
+   (the ending rescue off, `endingTicks` 36 or 60, the race undo off) moves those medians up and down
+   by a few percent with no consistent sign across the rungs, so the two misses are within the row's
+   noise, not a cost of one change.
+7. `bench-step --check`: step ×1.061 (min ×1.067; gate ≤ 1.10), guide ×0.985 (≤ 1.5); `--drive` 0.22 µs
+   per tick (≤ 5); `--gen` passes (p99 slice 1.44 ms, paired 0.936 × base). Its first run under load
+   failed the paired p99 (1.302); the merge's tree, timed right after, failed it too (1.183) with the
+   same slice count (13,234 vs 13,233): world generation is unchanged on this branch.
+8. `npm run build:single`: 832,770 B (+739 B over the merge's 832,031 B; 1,790 B under 834,560 B),
+   without the UX fixer's branch.
+
+**Open for the lead**
+1. **The chapter gate fails on ch3, ch7 and ch12, and the levers cannot move it.** ch3 and ch7 have no
+   substituted level short of its baseline (ch3's L29 and L30 are 20/20; ch7 has none): their shortfall
+   is one stream each on unchanged levels (ch3: L21's stream 9 fails all three tries, a glass save lost
+   to a run that diverged early, not a glide over the glass; ch7: L62 19 vs 20 and L65 5 vs 6 against
+   L64 18 vs 17). ch12's −4 is L119 (unchanged, 11 vs 13) and L112 (18 vs 20, the best of six choices;
+   even 20 leaves ch12 at 180 < 182). humanTouch beats humanDial over the unchanged levels (2,381 vs
+   2,345), so the misses are the noise of a per-chapter "≥" over 20 streams: between runs of this round
+   that differed only in a few substituted levels or driver details the failing set moved (one failed
+   ch11 and ch14 by 3 each and passed ch7). The choice is the lead's: a per-chapter tolerance (for
+   example ≥ humanDial − 2, which still fails ch12 by 2), a pooled test over the unchanged levels, or
+   more streams in a new baseline.
+2. G11 still misses on T5 (the content follow-up for the mixer, §16.7 item 3).

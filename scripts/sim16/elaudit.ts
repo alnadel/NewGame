@@ -279,7 +279,7 @@ export interface PlayerOpts {
   readonly upTo?: number;
   /**
    * Controls v3 G5e (docs/CONTROLS_V3.md §10.3): Gust legs play this vane notch, held from the leg's
-   * first tick through a driver (its governor and auto-calm, no Calm press), instead of the Gust policy.
+   * first tick through a driver (its governor, no Calm press), instead of the Gust policy.
    */
   readonly vane?: number;
 }
@@ -399,8 +399,8 @@ export function planPlayer(plan: Plan, o: PlayerOpts): Player {
           drv = createDriver();
           drv.begin(s, { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false });
         }
-        // Set once on the leg's first tick and never touched again: the governor's rules (its
-        // auto-calm at the policy floor included) and no Calm press.
+        // Set once on the leg's first tick and never touched again: the governor's rules (its weaker
+        // wind at the policy floor, its wait for Lift) and no Calm press.
         vctl.vane = s.relayIdx !== vaneLeg ? o.vane : 0;
         vctl.vaneUp = vctl.vane !== 0;
         vaneLeg = s.relayIdx;

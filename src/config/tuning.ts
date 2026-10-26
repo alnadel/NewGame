@@ -667,7 +667,9 @@ const tuning = {
     },
     sprout: { root: 6, rain: 18, invest: 50, grow: 12, litMul: 2, rainMul: 1.5, treeMin: 20, treeMax: 60 },
     drip: { grow: 6, evap: 16, rain: 10, puddle: 30, stone: 20, stream: 25, range: 32, clear: 8, slide: 220, keyRate: 90, keyFine: 45 },
-    gust: { air: 4, soak: 36, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
+    // Fix round 3: gust.soak 36 → 30, so even from the lowest Gust start (60) a player has over 1 s
+    // after a hand-off's grace before rain soaks Lift to the floor (G8d proves the second on T4/T6/T7).
+    gust: { air: 4, soak: 30, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
     /** Weather drifts once the walker is within `wake` u of its y; it is gone `prune` u off the trail or `behind` u behind the walker. */
     weather: { wake: 400, prune: 420, behind: 300, ryRatio: 0.66 },
     /** Fire spreads (once, at half its burn) to burnables within reach/reachY when |windAt| ≥ spreadAt, downwind (or within `upwind` u upwind). */
@@ -683,8 +685,8 @@ const tuning = {
   drive: {
     /** A press that is not legal yet waits this long (300 ms), then is refused. */
     bufferTicks: 18,
-    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.5 s). */
-    preTagTicks: 30,
+    /** A press this close before a TAG into Ember or Sprout acts for the incoming element (0.75 s). */
+    preTagTicks: 45,
     /** Due prompts: amber within dueTicks of a required act's last moment, red within urgentTicks. */
     dueTicks: 60,
     urgentTicks: 24,
@@ -692,9 +694,11 @@ const tuning = {
     sprout: { jobs: 2, urgent: 90, step: 20, plotSap: 25, plotMin: 5, dueGrowLeft: 120, urgentGrowLeft: 60 },
     /**
      * Vane notches ±1 breeze, ±2 gale: band floors (u/s), gust spacing (ticks), the Lift floor (the
-     * policy's: `lift` while own weather is ahead, else one gust's price + `gain`), steady Lift/s per notch at costMul 1.
+     * policy's: `lift` while own weather is ahead, else one gust's price + `gain`), steady Lift/s per
+     * notch at costMul 1; at or below the floor the weaker bands `low` and their steady Lift/s (the
+     * vane is never calmed; at one gust's price + `gain` it waits for Lift).
      */
-    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0] },
+    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0], low: [0, 5, 15], lowCost: [0, 2.7, 4.9] },
     aim: {
       /** Capture radius (°): Journey L1-40, 41-100, 101-200; Endless rungs R0..R4; Daily and challenges; Trials; Strong; Light. */
       journey: [14, 12, 10],
@@ -714,10 +718,15 @@ const tuning = {
       gapTicks: 30,
       /** Aim help acts only within engageTicks of the last sun move (5 s), never during the lesson. */
       engageTicks: 300,
-      /** Re-grip grace: no glide for regripTicks after a real lift; until againstTicks, none against the stroke by more than againstDeg, and a re-grip undoes a glide. */
+      /**
+       * Re-grip grace: no glide for regripTicks after a real lift; until againstTicks, none against the
+       * stroke by more than againstDeg, and a re-grip undoes a glide; so does a touch-down within
+       * raceTicks of a glide's start (the player reached for the same sun).
+       */
       regripTicks: 15,
       againstTicks: 30,
       againstDeg: 4,
+      raceTicks: 3,
       /** The pre-TAG hand-over into Drip: last ticks, reach (°), inset (°). */
       handTicks: 60,
       handReach: 30,
