@@ -30,6 +30,7 @@ const A = D.aim;
 const EM = TUNING.elements.ember;
 const SP = TUNING.elements.sprout;
 const WE = TUNING.elements.weather;
+const EG = TUNING.elements.gust;
 
 export type AimSetting = 'standard' | 'strong' | 'light' | 'off';
 
@@ -85,6 +86,11 @@ export interface DriveView {
   vane: number;
   vaneResting: boolean;
   vaneCost: number;
+  /**
+   * Gust, a set vane with weather in play: 0 the notch's full wind, 1 a weaker wind (Lift at the
+   * policy's floor), 2 waiting for Lift (one gust's price + gain or less). Low Lift never calms the vane.
+   */
+  vaneLow: number;
   /** The glide's target θ while one runs (NaN none), and whether it is the hand-over. */
   glide: number;
   handover: boolean;
@@ -162,6 +168,7 @@ export function createDriver(): Driver {
     vane: 0,
     vaneResting: false,
     vaneCost: 0,
+    vaneLow: 0,
     glide: NaN,
     handover: false,
     glideTick: false,
@@ -188,11 +195,13 @@ export function createDriver(): Driver {
   const jobs = new Int16Array(2);
   const goals = new Float64Array(2);
   let poured = false;
-  /** The governor's last gust (driver tick). */
+  /** The governor's last gust (driver tick); the player set a new, non-calm notch this tick. */
   let gustAt = 0;
-  // Aim help (§4): the last sun move (the engagement clock), hand and real lift, the last stroke's
+  let turned = false;
+  // Aim help (§4): the last sun move (the engagement clock), the last hand and real lift, the last stroke's
   // net direction (±1, 0 under 1°) and the one in progress, the guide refresh last planned on.
   let moveAt = NEVER;
+  let handAt = NEVER;
   let liftAt = NEVER;
   let strokeDir = 0;
   let stroke = 0;
@@ -433,21 +442,27 @@ export function createDriver(): Driver {
     return false;
   }
 
+  /** How low Lift holds a set vane back (view.vaneLow): 0 full wind, 1 the weaker band (at or below the policy's floor), 2 waiting (one gust's price + gain or less). */
+  function lowOf(s: SimState, el: ElState): number {
+    const lift = s.nubs.chill;
+    return lift <= EG.swipe * (s.trial?.tune.costMul ?? 1) + D.gust.gain ? 2 : lift <= gustFloor(s, el) ? 1 : 0;
+  }
+
   /**
-   * The governor (§3.5): with the vane set and weather in play it keeps the wind in the notch's band
-   * with ordinary gusts, at most one per `every` ticks, while Lift is above the policy's floor; at the
-   * floor the vane calms (CALM a = 1).
+   * The governor (§3.5, fix round 3): with the vane set and weather in play it keeps the wind in the
+   * notch's band with ordinary gusts, at most one per `every` ticks. Low Lift weakens the wind and
+   * never calms the vane: at or below the policy's floor it keeps the weaker band `low`; at one gust's
+   * price + `gain` it waits for Lift (air restores it). The tick the player sets a new notch it may
+   * blow at once (the spacing waived), down to one gust's price: a drag always moves the wind while
+   * Gust can pay for a gust.
    */
   function gust(s: SimState, el: ElState, f: InputFrame): void {
     const n = vaneNotch(raw);
     if (n === 0 || !inPlay(s, el)) return;
-    if (s.nubs.chill <= gustFloor(s, el)) {
-      raw = 0;
-      note(NOTE_CALM, 1);
-      return;
-    }
+    const low = lowOf(s, el);
+    if (low === 2 && !(turned && s.nubs.chill > EG.swipe * (s.trial?.tune.costMul ?? 1))) return;
     const sg = n > 0 ? 1 : -1;
-    if (sg * el.wind >= (D.gust.band[sg * n] as number) || now - gustAt < D.gust.every) return;
+    if (sg * el.wind >= ((low > 0 ? D.gust.low : D.gust.band)[sg * n] as number) || (!turned && now - gustAt < D.gust.every)) return;
     f.verb = sg > 0 ? VERB_EAST : VERB_WEST;
     gustAt = now;
   }
@@ -510,7 +525,7 @@ export function createDriver(): Driver {
     let kind = 2;
     if (nextTagHero(s) === 'drip' && n >= 0 && n <= A.handTicks && g.tag.indexOf(1) >= 0) to = handPlan(s, theta);
     else {
-      to = aimPlan(s, theta, opts.aimDeg, opts.nowOnly, opts.track);
+      to = aimPlan(s, theta, opts.aimDeg, opts.nowOnly, opts.track, now - handAt >= A.endingTicks);
       kind = aimOut.kind;
     }
     if (to !== to) return;
@@ -548,6 +563,7 @@ export function createDriver(): Driver {
     view.due = 0;
     view.vaneResting = false;
     view.vaneCost = 0;
+    view.vaneLow = 0;
     view.glide = gN > 0 ? gTo : NaN;
     view.handover = gN > 0 && gKind === 2;
     q.fill(-1);
@@ -597,7 +613,9 @@ export function createDriver(): Driver {
     } else if (act === 'calm' && n !== 0) {
       view.state = 1;
       view.vaneResting = !inPlay(s, el);
-      view.vaneCost = view.vaneResting ? 0 : (D.gust.cost[n < 0 ? -n : n] as number) * (s.trial?.tune.costMul ?? 1);
+      view.vaneLow = view.vaneResting ? 0 : lowOf(s, el);
+      const k = n < 0 ? -n : n;
+      view.vaneCost = view.vaneResting || view.vaneLow === 2 ? 0 : ((view.vaneLow === 1 ? D.gust.lowCost : D.gust.cost)[k] as number) * (s.trial?.tune.costMul ?? 1);
     }
   }
 
@@ -616,7 +634,7 @@ export function createDriver(): Driver {
       pre = 'none';
       shown = false;
       newLeg(s);
-      moveAt = liftAt = gAt = NEVER;
+      moveAt = handAt = liftAt = gAt = NEVER;
       strokeDir = 0;
       stroke = 0;
       seen = -1;
@@ -645,6 +663,7 @@ export function createDriver(): Driver {
         const dt = f.dTheta;
         const held = f.down;
         const hand = (held && !c.rest) || dn || up || dt !== 0 || f.key !== 0;
+        if (hand) handAt = now;
         // 1. An interrupted glide, or one whose leg ended, closes on this frame (no new plan on it).
         const shut = (closing || s.relayIdx !== leg) && gN > 0;
         if (closing || s.relayIdx !== leg) stopGlide(f);
@@ -668,12 +687,17 @@ export function createDriver(): Driver {
           }
         }
         // 3. The vane (Gust legs; 0 elsewhere).
+        turned = false;
         if (drag === 'vane') {
           const n0 = vaneNotch(raw);
           raw += c.vane;
           raw = raw > 2.49 ? 2.49 : raw < -2.49 ? -2.49 : raw;
           if (c.vaneUp) raw = vaneNotch(raw);
-          if (vaneNotch(raw) !== n0) note(NOTE_NOTCH, vaneNotch(raw));
+          const n1 = vaneNotch(raw);
+          if (n1 !== n0) {
+            note(NOTE_NOTCH, n1);
+            turned = n1 !== 0;
+          }
         } else raw = 0;
         // 4-5. A press joins the buffer (in the pre-TAG window it waits for the incoming element's first tick) and resolves.
         const act = actOf(s);

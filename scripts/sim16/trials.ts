@@ -104,6 +104,9 @@ const G9_TICKS = 90;
 const G10_ARC = 6;
 /** G5e: the constant vanes. */
 const VANES: readonly number[] = [-2, -1, 1, 2];
+/** Fix round 3: G8d's late reaction on Gust legs (the vane untouched for its first second), G9b's first due prompt after a TAG. */
+const LATE_TICKS = 60;
+const DUE_TICKS = 90;
 
 // ---------------------------------------------------------------------------------------------
 // Runs (in the worker pool)
@@ -119,6 +122,8 @@ export type TrialPlayer =
       readonly park?: number;
       /** reactiveTouch: G9's act window of this required target, on a run that never presses for it. */
       readonly g9?: number;
+      /** G9b: measure each Ember or Sprout leg's first due prompt (a driver observing the run, no presses). */
+      readonly due?: boolean;
     }
   | {
       readonly bot: 'path';
@@ -164,6 +169,8 @@ export interface TrialRunOut {
   readonly g9?: readonly (readonly [number, number, number])[];
   /** G10 (the path bot): guide refreshes on Nubs legs, and those whose now ∧ next has an arc ≥ 6° wide. */
   readonly g10?: readonly [number, number];
+  /** G9b (a run with `due`): per Ember or Sprout leg, [its leg index, ticks from its TAG to its first due prompt (−1 none)]. */
+  readonly due?: readonly (readonly [number, number])[];
 }
 
 /** Per worker: the last audits, keyed by variant and worst flag. */
@@ -230,6 +237,12 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
   const low: number[] = [];
   const raw: number[] = [];
   const stoodAt = new Uint8Array(objs.length);
+  // G9b: a driver that only observes (nothing is pressed, so the pick is every target in turn).
+  const watch = p.bot !== 'path' && p.due === true ? createDriver() : null;
+  const due: [number, number][] = [];
+  let dueLeg = -1;
+  let dueFrom = 0;
+  if (watch) watch.begin(s, { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false });
   while (s.phase !== 'dead' && s.phase !== 'won' && s.tick < TICK_CAP) {
     if (req.length > 0 && bot?.drive) pressable(s, bot.drive.queue, req, run, best, ex);
     if (p.bot === 'path' && s.guide.tick !== seenGuide && s.nubs.hero === 'nubs' && s.phase === 'day' && s.ready === 0 && s.sunUp) {
@@ -238,6 +251,16 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
       if (lastingArc(s) >= G10_ARC) g10[1]++;
     }
     step(s, next(s));
+    if (watch && s.phase === 'day') {
+      watch.observe(s);
+      if (s.relayIdx !== dueLeg) {
+        dueLeg = s.relayIdx;
+        dueFrom = s.tick;
+        if (s.nubs.hero === 'ember' || s.nubs.hero === 'sprout') due.push([dueLeg, -1]);
+      }
+      const last = due[due.length - 1];
+      if (last && last[0] === dueLeg && last[1] < 0 && watch.view.due > 0) last[1] = s.tick - dueFrom;
+    }
     for (let i = 0; i < objs.length; i++) if ((objs[i] as ElObj).kind === 'plot' && (objs[i] as ElObj).casterId >= 0) stoodAt[i] = 1;
     if (s.ready > 0 || s.phase !== 'day') continue;
     const el = s.el as ElState;
@@ -257,6 +280,7 @@ export function playTrial(task: TrialRunTask): TrialRunOut {
     stars: o.stars,
     ...(req.length > 0 ? { g9: req.map((i) => [i, mins[i] as number, best[i] as number] as const) } : {}),
     ...(p.bot === 'path' ? { g10: [g10[0] as number, g10[1] as number] as const } : {}),
+    ...(watch ? { due } : {}),
     won: s.phase === 'won',
     passed: o.passed,
     health: s.stats.minChill,
@@ -617,12 +641,15 @@ export interface Gates {
   /** G8 humanTouch (wins against humanEl's), G8b reactiveTouch, G9 the act windows ([object, minute, longest ticks]). */
   readonly g8: { ok: boolean; wins: number; outs: TrialRunOut[] } | null;
   readonly g8b: { ok: boolean; wins: number; outs: TrialRunOut[] } | null;
+  /** Fix round 3: G8d reactiveTouch reacting LATE_TICKS late on every Gust leg; G9b each Ember or Sprout leg's first due prompt ([leg, ticks]). */
+  readonly g8d: { ok: boolean; wins: number; outs: TrialRunOut[] } | null;
   readonly g9: { ok: boolean; windows: readonly (readonly [number, number, number])[] } | null;
+  readonly g9b: { ok: boolean; legs: readonly (readonly [number, number])[] } | null;
   /** Advisory: G10 lasting arcs, G11 mashTouch against reactiveTouch (Dare share, mean stars, wins), G4t humanTouch in G4's band. */
   readonly g10: { share: number } | null;
   readonly g11: { ok: boolean; mash: number; touch: number; mashStars: number; touchStars: number; mashWins: number; outs: TrialRunOut[] } | null;
   readonly g4t: { ok: boolean; share: number } | null;
-  /** The first gate that failed (0: none; 0.5 is G0; 5 is G5 or G5b; 5.1 G5e; 5.2 G5f; 7 is G7; 8.5 G8b). */
+  /** The first gate that failed (0: none; 0.5 is G0; 5 is G5 or G5b; 5.1 G5e; 5.2 G5f; 7 is G7; 8.5 G8b; 8.7 G8d; 9.5 G9b). */
   readonly failed: number;
   /** Failed gates kept by WAIVERS ("G4: reason"). */
   readonly waived: readonly string[];
@@ -748,7 +775,9 @@ export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMA
     g5f: null,
     g8: null,
     g8b: null,
+    g8d: null,
     g9: null,
+    g9b: null,
     g10: null,
     g11: null,
     g4t: null,
@@ -826,20 +855,33 @@ export async function gates(run: TrialRunner, v: TrialVariant, humanSalts = HUMA
     const hs = wins / humanSalts;
     g.g4t = { ok: hs >= (band[0] as number) - 1e-9 && hs <= (band[1] as number) + 1e-9, share: hs };
     if (fail(8, g.g8.ok) || fail(8.5, g.g8b.ok)) return done();
+    // G8d (fix round 3): a player who reacts a second late on every Gust leg still wins (soak and the
+    // weather's timing leave that second; the touch bot's vane is untouched for LATE_TICKS of each leg).
+    if (t.cast.includes('gust')) {
+      const r8d = await Promise.all(Array.from({ length: TOUCH_SALTS }, (_, salt) => run.run({ v, p: { bot: 'reactiveTouch', salt, el: { gustDelay: LATE_TICKS } } })));
+      const wd = r8d.filter((o) => o.passed).length;
+      g.g8d = { ok: wd >= TOUCH_WINS, wins: wd, outs: r8d };
+      if (fail(8.7, g.g8d.ok)) return done();
+    }
   }
   if (want(9)) {
     // One reactiveTouch salt-0 run per required target, never pressing for it, so its window runs to its last moment.
     const outs = await Promise.all(g.g1.required.map((i) => run.run({ v, p: { bot: 'reactiveTouch', salt: 0, g9: i } })));
     const windows = outs.flatMap((o) => o.g9 ?? []);
     g.g9 = { ok: windows.every((w) => w[2] >= G9_TICKS), windows };
-    fail(9, g.g9.ok);
+    if (fail(9, g.g9.ok)) return done();
+    // G9b (fix round 3): the incoming Ember or Sprout gets DUE_TICKS after its TAG before anything is due.
+    const d = await run.run({ v, p: { bot: 'reactive', salt: 0, due: true } });
+    const legs = d.due ?? [];
+    g.g9b = { ok: legs.every((x) => x[1] < 0 || x[1] >= DUE_TICKS), legs };
+    fail(9.5, g.g9b.ok);
   }
   return done();
 }
 
 /** A gate's name for its `failed` code. */
 export function gateName(n: number): string {
-  return n === 0.5 ? 'G0' : n === 5.1 ? 'G5e' : n === 5.2 ? 'G5f' : n === 8.5 ? 'G8b' : `G${n}`;
+  return n === 0.5 ? 'G0' : n === 5.1 ? 'G5e' : n === 5.2 ? 'G5f' : n === 8.5 ? 'G8b' : n === 8.7 ? 'G8d' : n === 9.5 ? 'G9b' : `G${n}`;
 }
 
 const pct = (x: number): string => `${Math.round(100 * x)}%`;
@@ -875,10 +917,12 @@ export function report(g: Gates): string {
   }
   if (g.g8) lines.push(`  G8 ${mark(g.g8.ok)} humanTouch ${g.g8.wins}/${g.g8.outs.length} (humanEl ${g.g4?.passes ?? '?'})  deaths: ${deaths(g.g8.outs)}`);
   if (g.g8b) lines.push(`  G8b ${mark(g.g8b.ok)} reactiveTouch ${g.g8b.wins}/${TOUCH_SALTS}`);
+  if (g.g8d) lines.push(`  G8d ${mark(g.g8d.ok)} reactiveTouch ${(LATE_TICKS / TICK_HZ).toFixed(1)} s late on Gust legs ${g.g8d.wins}/${TOUCH_SALTS}  deaths: ${deaths(g.g8d.outs)}`);
   if (g.g9) {
     const w = [...g.g9.windows].sort((a, b) => a[2] - b[2])[0];
     lines.push(`  G9 ${mark(g.g9.ok)} act windows: ${g.g9.windows.length} targets, shortest ${w ? `m${w[1]} ${w[2]} ticks (${(w[2] / TICK_HZ).toFixed(2)} s)` : '—'}${g.g9.ok ? '' : `  [under ${G9_TICKS}: ${g.g9.windows.filter((x) => x[2] < G9_TICKS).map((x) => `m${x[1]} ${x[2]}`).join(', ')}]`}`);
   }
+  if (g.g9b) lines.push(`  G9b ${mark(g.g9b.ok)} first due prompt after a TAG ≥ ${DUE_TICKS} ticks: ${g.g9b.legs.length ? g.g9b.legs.map((x) => `leg ${x[0]} ${x[1] < 0 ? 'none' : `${(x[1] / TICK_HZ).toFixed(2)} s`}`).join(', ') : 'no Ember or Sprout leg'}`);
   if (g.g10) lines.push(`  G10 (advisory) lasting arcs ≥ ${G10_ARC}° on the path's Nubs legs: ${pct(g.g10.share)} of guide refreshes`);
   if (g.g11) lines.push(`  G11 (advisory) ${g.g11.ok ? 'PASS' : 'MISS'} mashTouch Dare ${pct(g.g11.mash)} stars ${g.g11.mashStars.toFixed(2)} wins ${g.g11.mashWins}/${TOUCH_SALTS} vs reactiveTouch Dare ${pct(g.g11.touch)} stars ${g.g11.touchStars.toFixed(2)}${t.n >= 5 ? '' : ' (T5-T7 only count)'}`);
   if (g.g4t) lines.push(`  G4t (advisory) ${g.g4t.ok ? 'PASS' : 'MISS'} humanTouch ${pct(g.g4t.share)} against G4's band`);

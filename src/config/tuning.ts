@@ -692,9 +692,11 @@ const tuning = {
     sprout: { jobs: 2, urgent: 90, step: 20, plotSap: 25, plotMin: 5, dueGrowLeft: 120, urgentGrowLeft: 60 },
     /**
      * Vane notches ±1 breeze, ±2 gale: band floors (u/s), gust spacing (ticks), the Lift floor (the
-     * policy's: `lift` while own weather is ahead, else one gust's price + `gain`), steady Lift/s per notch at costMul 1.
+     * policy's: `lift` while own weather is ahead, else one gust's price + `gain`), steady Lift/s per
+     * notch at costMul 1; at or below the floor the weaker bands `low` and their steady Lift/s (the
+     * vane is never calmed; at one gust's price + `gain` it waits for Lift).
      */
-    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0] },
+    gust: { band: [0, 15, 30], every: 15, lift: 20, gain: 2, cost: [0, 4.9, 13.0], low: [0, 5, 15], lowCost: [0, 2.7, 4.9] },
     aim: {
       /** Capture radius (°): Journey L1-40, 41-100, 101-200; Endless rungs R0..R4; Daily and challenges; Trials; Strong; Light. */
       journey: [14, 12, 10],

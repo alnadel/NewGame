@@ -43,7 +43,7 @@ import { angleDiff } from '../../src/core/dmath.ts';
 import { snapReady } from '../../src/core/sim/mechanics.ts';
 import { dayTicks } from '../../src/core/clock.ts';
 import { step } from '../../src/core/sim/step.ts';
-import { NO_INPUT, VERB_EAST, VERB_HOLD, VERB_RELEASE, VERB_TAP, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
+import { NO_INPUT, VERB_EAST, VERB_HOLD, VERB_RELEASE, VERB_TAP, VERB_WEST, type InputFrame, type SimState } from '../../src/core/sim/types.ts';
 
 const OPTS = { aimDeg: 0, track: false, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
 const ctl = (o: Partial<DriveControl> = {}): DriveControl => ({ act: 0, vane: 0, vaneUp: false, rest: false, ...o });
@@ -683,22 +683,65 @@ describe('Gust (§3.5)', () => {
     expect([d.view.vaneResting, d.view.vaneCost]).toEqual([false, 13.0 * s.trial!.tune.costMul]);
   });
 
-  it('auto-calms at the floor (a drag sets it again), rests with no weather in play, and Calm stills a set vane only', () => {
-    const s = trialTo(1004, 'gust');
+  it('low Lift weakens the wind and never calms the vane; a drag always moves the wind while Gust can pay a gust', () => {
+    const s = trialTo(1004, 'gust', (s) => inPlay(s));
     const el = s.el as ElState;
     const d = createDriver();
     d.begin(s, OPTS);
-    tick(s, d, { vane: -0.5, vaneUp: true });
-    s.nubs.chill = gustFloor(s, el);
-    const f = tick(s, d);
-    expect([f.verb ?? 0, d.view.vane]).toEqual([0, 0]);
+    const floor = gustFloor(s, el);
+    const price = TUNING.elements.gust.swipe * s.trial!.tune.costMul;
+    const G = TUNING.drive.gust;
+    // A breeze set west at the floor keeps its notch (no CALM) and holds the weaker band.
+    s.nubs.chill = floor;
+    el.wind = 0;
+    let f = tick(s, d, { vane: -0.5, vaneUp: true });
+    expect([f.verb ?? 0, d.view.vane, d.view.vaneLow]).toEqual([VERB_WEST, -1, 1]);
+    expect(drain(d)).toEqual([[NOTE_NOTCH, -1]]);
+    // A west wind of 10 u/s: above the weak band (5), below the breeze's (15): nothing at the floor, a gust above it.
+    let gusts = 0;
+    for (let k = 0; k < 60; k++) {
+      s.nubs.chill = floor;
+      el.wind = -10;
+      f = tick(s, d);
+      if ((f.verb ?? 0) !== 0) gusts++;
+    }
+    expect([gusts, d.view.vane, d.view.vaneCost]).toEqual([0, -1, G.lowCost[1]! * s.trial!.tune.costMul]);
+    s.nubs.chill = floor + 1;
+    el.wind = -10;
+    expect([tick(s, d).verb ?? 0, d.view.vaneLow]).toEqual([VERB_WEST, 0]);
+    // A west wind of 4 u/s, under the weak band: one gust west within the spacing.
+    gusts = 0;
+    for (let k = 0; k < 16; k++) {
+      s.nubs.chill = floor;
+      el.wind = -4;
+      if ((tick(s, d).verb ?? 0) === VERB_WEST) gusts++;
+    }
+    expect(gusts).toBe(1);
+    // At one gust's price + gain it waits for Lift (vaneLow 2, no cost), the notch kept.
+    for (let k = 0; k < 30; k++) {
+      s.nubs.chill = price + G.gain;
+      el.wind = 0;
+      expect(tick(s, d).verb ?? 0).toBe(0);
+    }
+    s.nubs.chill = price + G.gain;
+    d.observe(s);
+    expect([d.view.vane, d.view.vaneLow, d.view.vaneCost]).toEqual([-1, 2, 0]);
+    // A drag there (west breeze to east breeze) still blows at once, while Gust can pay a gust; then it waits again.
+    s.nubs.chill = price + 1;
+    el.wind = 0;
+    f = tick(s, d, { vane: 2, vaneUp: true });
+    expect([f.verb ?? 0, d.view.vane]).toEqual([VERB_EAST, 1]);
+    for (let k = 0; k < 20; k++) {
+      s.nubs.chill = price + 1;
+      el.wind = 0;
+      expect(tick(s, d).verb ?? 0).toBe(0);
+    }
+    // Lift back above the floor: the full band, so Lift never decided what the vane shows.
     s.nubs.chill = 80;
-    for (let k = 0; k < 15; k++) tick(s, d);
-    expect(d.view.vane).toBe(0);
-    tick(s, d, { vane: -1, vaneUp: true });
-    expect(d.view.vane).toBe(-1);
-    // The notch changes and the auto-calm (CALM a = 1).
-    expect(drain(d)).toEqual([[NOTE_NOTCH, -1], [NOTE_CALM, 1], [NOTE_NOTCH, -1]]);
+    el.wind = 0;
+    f = tick(s, d, { vane: 2, vaneUp: true });
+    expect([f.verb ?? 0, d.view.vaneLow]).toEqual([VERB_EAST, 0]);
+    expect(drain(d).some(([c, a]) => c === NOTE_CALM && a === 1)).toBe(false);
     // A Calm press stills it (PRESS, CALM a = 0); on a calm vane a press does nothing but CALM a = 2 (no REFUSE).
     tick(s, d, { act: 1 });
     expect([d.view.vane, d.view.state]).toEqual([0, 0]);
@@ -760,9 +803,13 @@ describe('aim help: the magnet\'s target (§4.2)', () => {
     expect(settleTarget(s, 100, 0, false)).toBeNaN();
   });
 
-  it('lasting shade is now ∧ next (now alone when that is empty, or on a fog level); ending shade is left alone (cut list 2)', () => {
+  it('lasting shade is now ∧ next (now alone when that is empty, or on a fog level); ending shade is left until the hand rests', () => {
     paint(s, [[100, 130]], [[110, 130]]);
     expect(aimPlan(s, 105, 14, false, true)).toBeNaN();
+    // Fix round 3 restores the rescue out of ending shade (cut list 2) once no hand has come for endingTicks.
+    expect(aimPlan(s, 105, 14, false, true, true)).toBe(113.5);
+    expect(aimPlan(s, 105, 14, true, true, true)).toBeNaN();
+    expect(settleTarget(s, 105, 14, false)).toBe(113.5);
     // Lit, it settles into the lasting part.
     expect(aimPlan(s, 99, 14, false, true)).toBe(113.5);
     // Fog: guide.now only, so the edge is near and the sun goes back inside.
