@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- No action bar, the game's sunset colour behind the first frame (no white flash). -->
+    <style name="Shady" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/sky</item>
+        <item name="android:statusBarColor">@color/ink</item>
+        <item name="android:navigationBarColor">@color/ink</item>
+    </style>
+    <color name="sky">#F6B07C</color>
+    <color name="ink">#34306B</color>
+</resources>

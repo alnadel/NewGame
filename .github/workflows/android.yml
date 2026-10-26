@@ -1,0 +1,61 @@
+# Builds the Android app (android/README.md) on GitHub's runners, which carry the Android SDK, and
+# publishes the APK as the "android-latest" pre-release so a phone can download and install it.
+name: Android
+
+on:
+  push:
+    branches: [claude/mobile-game-web-prototype-54l0ia, main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'scripts/inline-build.mjs'
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Offline single-file build (the app's only asset)
+        run: npm run build:single
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build the APK
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+      - run: cp android/app/build/outputs/apk/release/app-release.apk shady.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shady-apk
+          path: shady.apk
+      - name: Publish as the android-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest shady.apk --prerelease --target "$GITHUB_SHA" \
+            --title "SHADY for Android (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7} (run ${GITHUB_RUN_NUMBER}). Download shady.apk on your phone, open it and allow installing from this source. Each new build installs over the old one and keeps your saves."

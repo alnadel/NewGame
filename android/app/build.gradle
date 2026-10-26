@@ -1,0 +1,63 @@
+// The game itself is the repo's single-file build (npm run build:single -> dist-single/index.html),
+// copied in as the app's only asset, with the PWA icon as the launcher icon. No other code or deps.
+plugins {
+    id 'com.android.application'
+}
+
+def web = layout.buildDirectory.dir('generated/web')
+
+android {
+    namespace 'com.alnadel.shady'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.alnadel.shady'
+        minSdk 24
+        targetSdk 35
+        // CI numbers each build so a newer APK installs over an older one.
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName '0.1.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    signingConfigs {
+        // A fixed key kept in the repo so every build updates the installed app (and its saves)
+        // instead of needing an uninstall. It is a sideload test key, not a store key.
+        sideload {
+            storeFile rootProject.file('sideload.keystore')
+            storePassword 'android'
+            keyAlias 'shady'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.sideload
+        }
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += web.map { it.dir('assets') }
+            res.srcDirs += web.map { it.dir('res') }
+        }
+    }
+}
+
+def syncWeb = tasks.register('syncWeb', Copy) {
+    def game = rootProject.file('../dist-single/index.html')
+    doFirst {
+        if (!game.exists()) throw new GradleException('Run `npm run build:single` in the repo root first (dist-single/index.html is missing).')
+    }
+    into web
+    from(game) { into 'assets' }
+    from(rootProject.file('../public/icons/icon-192.png')) {
+        into 'res/mipmap-xxxhdpi'
+        rename { 'ic_launcher.png' }
+    }
+}
+tasks.named('preBuild') { dependsOn syncWeb }
