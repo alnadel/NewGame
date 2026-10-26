@@ -197,7 +197,7 @@ const REFUSE_KEYS = ['', 'charging', 'locked', 'nothing', 'low', 'full', 'wait',
  * "Growing" for accepted presses, the calm cues; '' for the rest.
  */
 export function noteText(code: number, a: number, v: Readonly<DriveView>): string {
-  const k = code === NOTE_PRESS ? (a === 2 ? 'cue.armed' : a === 3 ? 'cue.growing' : '') : code === NOTE_REFUSE ? `refuse.${REFUSE_KEYS[a & 15]}` : code === NOTE_CALM ? (a === 1 ? 'calm.auto' : a === 2 ? 'cue.calm' : '') : '';
+  const k = code === NOTE_PRESS ? (a === 2 ? 'cue.armed' : a === 3 ? 'cue.growing' : '') : code === NOTE_REFUSE ? `refuse.${REFUSE_KEYS[a & 15]}` : code === NOTE_CALM && a === 2 ? 'cue.calm' : '';
   const t = CONTROL_TEXT[k] ?? CONTROL_TEXT[`${k}.${v.act}`] ?? '';
   return t.replace('{pct}', String(Math.floor(v.fill * 100))).replace('{s}', String(Math.ceil(v.lockTicks / 60)));
 }

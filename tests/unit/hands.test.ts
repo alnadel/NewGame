@@ -7,9 +7,11 @@ import { angleDiff } from '../../src/core/dmath.ts';
 import { binOf } from '../../src/core/intervals.ts';
 import { campaignConfig } from '../../src/core/level.ts';
 import { headlessConfig } from '../../src/core/sim/headless.ts';
-import { createBot, createDriver, createRun, nextTagHero, nextTagTicks, NO_INPUT, step, type DriveControl, type Driver, type DriveOpts, type InputFrame, type SimState } from '../../src/core/index.ts';
+import { createBot, createDriver, createRun, nextTagHero, nextTagTicks, NO_INPUT, step, type DriveControl, type Driver, type DriveOpts, type InputFrame, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { HEROES } from '../../src/config/heroes.ts';
 import { createInput, type InputHost } from '../../src/game/input.ts';
+import { feelEvents } from '../../src/game/fx.ts';
+import { TUNING } from '../../src/config/tuning.ts';
 
 const OPTS: DriveOpts = { aimDeg: 14, track: true, nowOnly: false, autoSnap: false, autoAct: false, reducedMotion: false };
 const ctl = (o: Partial<DriveControl> = {}): DriveControl => ({ act: 0, vane: 0, vaneUp: false, rest: false, ...o });
@@ -160,5 +162,43 @@ describe('a thumb held through a hand-off into Drip (§1.5, §4.4)', () => {
     const r = holdThrough(0.5);
     expect(r.handover).toBeGreaterThan(0);
     expect(r.onArc).toBe(true);
+  });
+});
+
+describe('glide detents (§4.5, review F8)', () => {
+  it("a glide's detents, its last tick's included, never reach audio or haptics; the player's own do", () => {
+    const s = endless();
+    const d = createDriver();
+    d.begin(s, OPTS);
+    // The player drags across one detent line to 7° short of the next, where an arc starts 1° past it.
+    const det = TUNING.sun.detentDeg;
+    const line = Math.ceil((binOf(s.sun.theta) + 1) / det) * det + det;
+    const arcs: Arc[] = [[line + 1, line + 20]];
+    const go = line - 7 - s.sun.theta;
+    const ticks: { n: number; quiet: boolean; open: boolean }[] = [];
+    const feel: SimEvent[] = [];
+    const tick = (p: Partial<InputFrame> = {}): void => {
+      at(s, d, arcs, p);
+      ticks.push({ n: s.events.filter((e) => e.e === 'detent').length, quiet: d.view.glideTick, open: !Number.isNaN(d.view.glide) });
+      feelEvents(feel, s.events, d.view.glideTick);
+    };
+    tick({ downEdge: true, down: true, dTheta: go / 4 });
+    for (let k = 1; k < 4; k++) tick({ down: true, dTheta: go / 4 });
+    tick({ upEdge: true });
+    for (let k = 0; k < 120; k++) tick();
+    const own = ticks.reduce((a, t) => a + (t.quiet ? 0 : t.n), 0);
+    const quiet = ticks.reduce((a, t) => a + (t.quiet ? t.n : 0), 0);
+    expect(own).toBeGreaterThan(0);
+    expect(quiet).toBeGreaterThan(0);
+    expect(feel.filter((e) => e.e === 'detent').length).toBe(own);
+    // The retired rule (detents dropped per 4-tick batch while the view's glide is open after it)
+    // lets a glide's detent through on some batch phase: the glide ends inside its batch.
+    let leaked = 0;
+    for (let ph = 0; ph < 4; ph++)
+      for (let i = ph; i + 4 <= ticks.length; i += 4) {
+        const b = ticks.slice(i, i + 4);
+        if (!(b[3] as { open: boolean }).open) leaked += b.reduce((a, t) => a + (t.quiet ? t.n : 0), 0);
+      }
+    expect(leaked).toBeGreaterThan(0);
   });
 });

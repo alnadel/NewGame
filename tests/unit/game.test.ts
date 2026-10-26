@@ -847,6 +847,25 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     inp.dispose();
   });
 
+  it('handoff into sun: a coalesced sample stamped before the TAG turns nothing, never the wrong way (review F6)', () => {
+    const { h, inp, down, move } = mk();
+    h.drag = 'steer';
+    down(1, 200);
+    take(inp, 1);
+    h.drag = 'sun';
+    h.t = 1016;
+    inp.handoff();
+    take(inp, 1);
+    // Sampled at 1006 ms (during the last frame), delivered after the TAG: 30 px left.
+    h.t = 1006;
+    move(1, 170);
+    expect(sum(take(inp, 1).f, 'dTheta')).toBe(0);
+    h.t = 1200;
+    move(1, 160);
+    expect(sum(take(inp, 1).f, 'dTheta')).toBe(10);
+    inp.dispose();
+  });
+
   it('handoff into steer: motion over 600 px/s is dropped, then ramps in over 300 ms from the first slow sample (fast stretches inside the ramp dropped too)', () => {
     const { h, inp, down, move } = mk();
     down(1, 200);

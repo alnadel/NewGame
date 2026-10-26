@@ -95,6 +95,11 @@ function rnd(a: number, b: number): number {
   return a + Math.random() * (b - a);
 }
 
+/** §4.5: a tick's events for audio and haptics; a glide tick's detents tick the dial but never buzz or click. */
+export function feelEvents(out: SimEvent[], tick: readonly SimEvent[], quiet: boolean): void {
+  for (const ev of tick) if (!quiet || ev.e !== 'detent') out.push(ev);
+}
+
 export class Fx {
   readonly #sc: RenderScene;
   readonly #clock: FixedClock;

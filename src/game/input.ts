@@ -302,7 +302,7 @@ export function createInput(host: InputHost): Input {
       slopX = Number.NaN;
     }
     let k = 1;
-    if (guard === G_SUN) k = Math.min(1, (t - gAt) / TAG_RAMP_SUN_MS);
+    if (guard === G_SUN) k = Math.max(0, Math.min(1, (t - gAt) / TAG_RAMP_SUN_MS));
     else if (guard === G_STEER) {
       // Dropped while the swing is fast (all through the guard); from its first slow sample, a ramp.
       const fast = speed(t) > TAG_STEER_FAST;

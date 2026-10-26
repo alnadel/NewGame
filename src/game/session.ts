@@ -134,7 +134,7 @@ import { ghostSwingX, guideAlpha, HintTracker, LESSON_TIME_SCALE, type GuideSett
 import { Cadence, type CadenceInput } from './cadence.ts';
 import { createCameraFx } from './camera.ts';
 import { showCrashOverlay } from './crash.ts';
-import { Fx } from './fx.ts';
+import { feelEvents, Fx } from './fx.ts';
 import { createMechanics } from './mechanics.ts';
 import { hudButton, hudButtonHit, hudScale } from '../render/hud.ts';
 import { createInput, type Input } from './input.ts';
@@ -357,6 +357,8 @@ export class Session {
   readonly #curr: RenderSnap = createSnap();
   readonly #snap: RenderSnap = createSnap();
   readonly #frameEvents: SimEvent[] = [];
+  /** This frame's events less the detents of glide ticks (audio and haptics). */
+  readonly #feelEvents: SimEvent[] = [];
   readonly #audioView: AudioView = createAudioView();
   readonly #hints = new HintTracker();
   readonly #hintIn: HintInput;
@@ -940,7 +942,8 @@ export class Session {
     const s = this.#s;
     let n = 0;
     const events = this.#frameEvents;
-    events.length = 0;
+    const feel = this.#feelEvents;
+    events.length = feel.length = 0;
     const tSim = performance.now();
     if (stepping) {
       if (!SINGLE && cool) s.nubs.chill = s.nubs.maxChill;
@@ -962,6 +965,7 @@ export class Session {
           events.push(ev);
           this.#onTickEvent(ev);
         }
+        feelEvents(feel, s.events, !!(this.#bot ? this.#bot.drive : this.driver.view)?.glideTick);
         if (s.phase === 'dead' || s.phase === 'won') break;
       }
       if (n > 0) takeSnap(s, this.#curr);
@@ -982,12 +986,10 @@ export class Session {
     const dr = this.driver;
     const bd = this.#bot?.drive;
     if (!bd && (this.#bot || n === 0)) dr.observe(s);
-    const dv = (this.#renderIn.drive = bd ?? dr.view);
+    this.#renderIn.drive = bd ?? dr.view;
     if (events.length > 0) {
-      // §4.5: a magnet glide is a real drag in the sim; its detents tick the dial but never buzz or click.
-      const glide = (view.glide = dv.glide === dv.glide);
-      this.#d.audio.onEvents(events, view);
-      this.#d.haptics.onEvents(events, s.sun.omega, glide);
+      this.#d.audio.onEvents(feel, view);
+      this.#d.haptics.onEvents(feel, s.sun.omega);
       this.fx.onEvents(events, s);
     }
     // The driver's notes (§2.4): a repeat refusal (a ≥ 16) still says why, but never buzzes or fizzes.

@@ -16,7 +16,6 @@ export const CONTROL_TEXT: Readonly<Record<string, string>> = /* @__PURE__ */ Ob
   'refuse.low.grow': 'Low sap',
   'refuse.full.burn': 'Two walls ready',
   'refuse.full.grow': 'Two plants queued',
-  'calm.auto': 'Calm: saving Lift',
   'vane.rest': 'No weather in reach',
   'cue.armed': 'Armed',
   'cue.growing': 'Growing',
