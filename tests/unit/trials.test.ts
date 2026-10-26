@@ -84,10 +84,11 @@ describe('the trial table (§5)', () => {
     });
     expect(TRIALS.map((t) => t.intro)).toEqual(['ember', 'drip', 'sprout', 'gust', null, null, null]);
     expect(TRIALS.map((t) => t.requires)).toEqual([[], [], [], [], [1, 2], [3, 4], [5, 6]]);
-    // §5's lists (T2 less its hidden puddle, T6 and T7 as re-authored by the lead's decisions, §13.3).
-    expect(TRIALS.map((t) => t.objects.length)).toEqual([8, 12, 9, 9, 16, 15, 25]);
+    // §5's lists (T2 less its hidden puddle, T6 and T7 as re-authored by the lead's decisions, §13.3;
+    // T4, T6 and T7's Gust weather re-authored in Controls v3 fix round 3).
+    expect(TRIALS.map((t) => t.objects.length)).toEqual([8, 12, 9, 7, 16, 16, 24]);
     expect(trialDef(1007)?.breeze).toBe(-16);
-    expect(trialDef(1004)?.objects[0]).toEqual({ k: 'rain', m: 312, dx: -100, r: 55, drift: 20 });
+    expect(trialDef(1004)?.objects[0]).toEqual({ k: 'rain', m: 311, dx: -82, r: 76, drift: 16 });
     for (const id of [0, 1, 200, 201, 1000, 1008, 1001.5, NaN, undefined]) expect(isTrialId(id)).toBe(false);
     expect(levelDef(1001)).toBeNull();
     expect(CAMPAIGN_LEVELS).toHaveLength(200);

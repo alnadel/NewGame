@@ -667,7 +667,9 @@ const tuning = {
     },
     sprout: { root: 6, rain: 18, invest: 50, grow: 12, litMul: 2, rainMul: 1.5, treeMin: 20, treeMax: 60 },
     drip: { grow: 6, evap: 16, rain: 10, puddle: 30, stone: 20, stream: 25, range: 32, clear: 8, slide: 220, keyRate: 90, keyFine: 45 },
-    gust: { air: 4, soak: 36, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
+    // Fix round 3: gust.soak 36 → 30, so even from the lowest Gust start (60) a player has over 1 s
+    // after a hand-off's grace before rain soaks Lift to the floor (G8d proves the second on T4/T6/T7).
+    gust: { air: 4, soak: 30, fog: 10, swipe: 8, kick: 30, fogMuffle: 0.5, windMax: 45, keep: 0.98895, rainGain: 1, fogGain: 0.6 },
     /** Weather drifts once the walker is within `wake` u of its y; it is gone `prune` u off the trail or `behind` u behind the walker. */
     weather: { wake: 400, prune: 420, behind: 300, ryRatio: 0.66 },
     /** Fire spreads (once, at half its burn) to burnables within reach/reachY when |windAt| ≥ spreadAt, downwind (or within `upwind` u upwind). */

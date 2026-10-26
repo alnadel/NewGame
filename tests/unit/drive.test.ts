@@ -378,11 +378,11 @@ describe('Ember (§3.2)', () => {
     }
     expect(walls).toBeGreaterThan(0);
     // T7's puddle on Ember's path is picked once no wall is eligible (here: the walls gone).
-    const s = trialTo(1007, 'ember', (s) => eligible(s, 14));
+    const s = trialTo(1007, 'ember', (s) => eligible(s, 13));
     const p = emberPick(s, NONE);
     expect(isWall(objs(s)[p] as ElObj)).toBe(true);
     for (const o of objs(s)) if (isWall(o)) o.state = EL_GONE;
-    expect(emberPick(s, NONE)).toBe(14);
+    expect(emberPick(s, NONE)).toBe(13);
   });
 
   it('a press arms the pick for free; the arm ignites at its moment, at a point that resolves to it', () => {
@@ -520,11 +520,11 @@ describe('Sprout (§3.3)', () => {
     }
     expect([...seen].sort()).toEqual(['r0', 'r1', 'r2']);
     // T7: p428 before the nearer p420, which sits downwind of Ember's required b423.
-    const s = trialTo(1007, 'sprout', (s) => sproutPick(s, NONE) === 13);
+    const s = trialTo(1007, 'sprout', (s) => sproutPick(s, NONE) === 12);
     const el = s.el as ElState;
-    expect(eligible(s, 11)).toBe(true);
-    expect((el.objs[11] as ElObj).y).toBeLessThan((el.objs[13] as ElObj).y);
-    expect([downwind(s, el, el.objs[11] as ElObj), downwind(s, el, el.objs[13] as ElObj)]).toEqual([true, false]);
+    expect(eligible(s, 10)).toBe(true);
+    expect((el.objs[10] as ElObj).y).toBeLessThan((el.objs[12] as ElObj).y);
+    expect([downwind(s, el, el.objs[10] as ElObj), downwind(s, el, el.objs[12] as ElObj)]).toEqual([true, false]);
   });
 
   it('a press starts the pick\'s job: it pours at the site\'s point and lets go the tick after the goal', () => {
