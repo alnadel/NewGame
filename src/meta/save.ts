@@ -150,6 +150,7 @@ export function defaults(now: number = Date.now()): Save {
       storageWarned: false,
       missionsV2: true,
       snapTeach: false,
+      taught: 0,
     },
   };
 }
@@ -479,6 +480,7 @@ function sanitize(r: Rec, now: number): Save {
       storageWarned: bool(flags.storageWarned, false),
       missionsV2: true,
       snapTeach: bool(flags.snapTeach, false),
+      taught: int(flags.taught, 0, 0, 7),
     },
   };
 }

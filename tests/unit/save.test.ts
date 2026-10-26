@@ -456,6 +456,19 @@ describe('migrate', () => {
     const kept = migrate(JSON.stringify(m), NOW);
     expect(kept.status === 'ok' && kept.save.flags.snapTeach).toBe(true);
   });
+
+  it('the element buttons taught (flags.taught bits) default 0, clamp to 0..7 and OR in merges, two-way and three-way', () => {
+    const base = defaults(NOW);
+    expect(base.flags.taught).toBe(0);
+    const old = JSON.parse(JSON.stringify(base)) as { flags: Record<string, unknown> };
+    old.flags.taught = 99;
+    const r = migrate(JSON.stringify(old), NOW);
+    expect(r.status === 'ok' && r.save.flags.taught).toBe(7);
+    const a: Save = { ...base, flags: { ...base.flags, taught: 1 } };
+    const b: Save = { ...base, flags: { ...base.flags, taught: 4 } };
+    expect(mergeSaves(base, a, b).flags.taught).toBe(5);
+    expect(mergeSaves(null, a, b).flags.taught).toBe(5);
+  });
 });
 
 describe('storage adapter', () => {

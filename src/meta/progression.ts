@@ -222,18 +222,21 @@ export function trialBest(save: Pick<Save, 'elementals2'>, n: number): number {
   return save.elementals2?.stars[n - 1] ?? 0;
 }
 
-/** The Elementals open once the first-run lesson is passed (or the testing toggle opens everything). */
-export function elementalsOpen(save: Pick<Save, 'flags' | 'settings'>): boolean {
-  return save.flags.tutorialDone || save.settings.unlockAll;
+/**
+ * The Elementals open once Level 1 or the first-run lesson is passed, whichever comes first (or the
+ * testing toggle opens everything): a player who won L1 without the lesson's own pass is never shut out.
+ */
+export function elementalsOpen(save: Pick<Save, 'flags' | 'settings' | 'campaign'>): boolean {
+  return save.flags.tutorialDone || (save.campaign.stars[0] ?? 0) > 0 || save.settings.unlockAll;
 }
 
 /**
  * Trial n (1..7) can be played: the Elementals are open and every Trial it requires is passed (T1-T4
  * open together; T5 needs T1 and T2, T6 T3 and T4, T7 T5 and T6), or the testing toggle opens them all.
  */
-export function trialOpen(save: Pick<Save, 'elementals2' | 'settings' | 'flags'>, n: number): boolean {
+export function trialOpen(save: Pick<Save, 'elementals2' | 'settings' | 'flags' | 'campaign'>, n: number): boolean {
   const t = trialDef(TRIAL_BASE + n);
-  return t !== null && (save.settings.unlockAll || (save.flags.tutorialDone && t.requires.every((k) => trialBest(save, k) > 0)));
+  return t !== null && (save.settings.unlockAll || (elementalsOpen(save) && t.requires.every((k) => trialBest(save, k) > 0)));
 }
 
 /** An element's roster tile is open: its intro Trial passed (Nubs always), or the testing toggle. */
@@ -243,7 +246,7 @@ export function heroUnlocked(save: Pick<Save, 'elementals2' | 'settings'>, hero:
 }
 
 /** The next open Trial after Trial n (its number), or null. */
-export function nextOpenTrial(save: Pick<Save, 'elementals2' | 'settings' | 'flags'>, n: number): number | null {
+export function nextOpenTrial(save: Pick<Save, 'elementals2' | 'settings' | 'flags' | 'campaign'>, n: number): number | null {
   for (let k = n + 1; k <= TRIAL_COUNT; k++) if (trialOpen(save, k)) return k;
   return null;
 }

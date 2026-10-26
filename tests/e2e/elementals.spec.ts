@@ -108,9 +108,13 @@ test('lock states, labels and the verb row: seven Trials, five elements (Gust in
   await expect(page.locator('.trial-tile[data-trial="7"] .el-face')).toHaveCount(5);
   await expect(page.locator('.trial-tile[data-trial="1"]')).toHaveClass(/is-next/);
   await expect(page.locator('.elementals-play')).toHaveText('Play T1 · Kindling');
-  // The stage: Ember (T1's element), its verb row with the gesture icon, how it plays and its keys.
+  // The stage: Ember (T1's element), its verb row with the gesture icon and how it plays (the drag and
+  // the button); its keys only for a keyboard player.
   const verb = page.locator('.scr-elementals .el-verb');
-  await expect(verb).toContainText('Button: burn the next wall');
+  await expect(verb).toContainText('Drag: turn the sun · Button: burn the next wall');
+  await expect(verb.locator('small')).toBeHidden();
+  await page.keyboard.press('Shift');
+  await expect(verb.locator('small')).toBeVisible();
   await expect(verb.locator('small')).toHaveText('↑ burns the next wall · ← → turn the sun');
   await expect(verb.locator('svg')).toHaveCount(1);
   const heroes = page.locator('.scr-elementals .hero-tile');
@@ -338,7 +342,9 @@ test("every Trial's intro card keeps its whole sentence, and the Pause card name
   await page.getByRole('button', { name: 'Pause' }).click();
   await waitForScreen(page, 'pause');
   await expect(page.locator('.pause-card')).toContainText('Grow the way ahead.');
-  await expect(page.locator('.pause-card')).toContainText('Button: grow the next plant · ↑ grows the next one · ← → turn the sun');
+  // Paused by a tap: the drag and the button, never the keys.
+  await expect(page.locator('.pause-card')).toContainText('Drag: turn the sun · Button: grow the next plant');
+  await expect(page.locator('.pause-card')).not.toContainText('↑');
 });
 
 test('T1: the Results say Trial 1, Retry keeps it and Trials returns; the save keeps elementals2 apart from the Journey', async ({ page }) => {

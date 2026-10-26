@@ -44,6 +44,8 @@ export function createSettingsScreen(ctx: UiContext): Screen {
     );
   const stackRow = (iconName: IconName, label: string, hint: string | null, control: HTMLElement): HTMLElement => {
     const r = row(iconName, label, hint, control);
+    // Stacked: the label and hint, then the control across the row (never --wide's control beside the label).
+    r.classList.replace('set-row--wide', 'set-row--stack');
     r.classList.add('set-row--stack');
     return r;
   };
@@ -244,7 +246,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       'Controls',
       row('gauge', 'Drag speed', null, sensitivity.el),
       row('invert', 'Invert drag', 'Drag right to turn the sun the other way', invert.el),
-      stackRow('sun', 'Aim help', 'Standard: the sun slides into nearby shade. Strong: it reaches farther (marked 🧭). Light: only a nudge.', aim.el),
+      stackRow('sun', 'Aim help', 'Standard slides the sun into nearby shade. Strong reaches farther and marks your runs 🧭 assisted. Light only nudges.', aim.el),
       row('swap', 'Button side', null, hand.el),
       keys,
     )),
@@ -258,7 +260,7 @@ export function createSettingsScreen(ctx: UiContext): Screen {
       stackRow('motion', 'Reduced motion', 'No shake, zoom or sliding cards', motion.el),
       row('contrast', 'High-contrast shadows', null, contrast.el),
       stackRow('compass', 'Shade guide', 'Thick teal lasts, thin is ending. "Always" marks your shares.', guide.el),
-      row('bolt', 'Auto actions', 'Ember and Sprout act on their own (marked 🧭)', autoAct.el),
+      row('bolt', 'Auto actions', 'Ember and Sprout act on their own; your runs are marked 🧭 assisted', autoAct.el),
     )),
     section(
       'Testing',

@@ -403,14 +403,17 @@ press can cast.
 One drag and one action button on every leg; the core driver (`core/drive`) turns the presses, the
 vane and the finger's state into the sim's verbs.
 - **Input** (`input.ts`, §1): `createInput(host)` returns the session's `Input` (a closure, so the
-  minifier shortens its state). The world slot: the first pointer wins; a still owner (4 px in
-  300 ms) yields to a new press; a press in the hold or start beat turns nothing for its first 10 px;
+  minifier shortens its state). The world slot: the first pointer wins; a still owner (its samples
+  inside a 4 px box for 300 ms, so ±1.5 px of sensor jitter is still) yields to a new press; a press in the hold or start beat turns nothing for its first 10 px;
   the edge zones are 16 px at the sides and max(safe inset, 8 px) at the bottom. `host.drag()` names
   what it drags: the sun (Δθ = −dx / viewport width × 360° × sensitivity),
   Drip (`steer`, the finger's world distance) or Gust's vane (36 px a notch, snapped on lift). A lift
-  never coasts; a finger 3 px still for 300 ms rests (`DriveControl.rest`). The button slot: the disc
-  presses in at once; a press counts on lift within 12 px or after 120 ms still (at most 2 wait for
-  their batches); a touch moving 12 px first is a world drag from its touch point and acts nothing.
+  never coasts; a finger inside that box for 300 ms rests (`DriveControl.rest`). A lift and a new
+  touch-down in one batch send the lift first; `releaseAll()` (pause, blur) leaves a held sun finger's
+  lift (and a vane's snap) for the next batch. The button slot: the disc presses in at once; a press
+  counts only on a still tap, lifted within 12 px and 300 ms (at most 2 wait for their batches); a
+  held touch acts nothing (its press-in springs back at 300 ms); a touch moving 12 px, at any time, is
+  a world drag from its touch point and acts nothing.
   ↑/W press, ↓/S presses on a Cold Snap leg, ←/→ turn, steer or notch the vane, the wheel turns the
   sun. `handoff()` on every TAG keeps a held finger with the new leg's drag: into the sun a 150 ms
   ramp; into Drip fast motion is dropped and the rest ramps in over 300 ms; into Gust the vane waits
@@ -424,11 +427,18 @@ vane and the finger's state into the sim's verbs.
   detents tick the dial without a buzz or click. Aim help Strong and Auto actions mark a run
   assisted, as the always-on guide does.
 - **Camera** (§5.2): Nubs sits at (352 u + the HUD band) over the view height, within 60-72 %.
-- **Teaching by doing** (§6): the first full meter on the Cold Snap's level (or a player's first ever,
-  `flags.snapTeach`), an intro Trial's first pick (Ember, Sprout) and Gust's first weather ahead: the
-  DOM ghost hand taps the button or drags the vane in the band under Nubs, its first 2.5 s in slow
-  time (never on a Daily), until the act is done (a PRESS note, a vane notch) or no longer applies.
-  Drip's ghost steers at its first puddle.
+- **Teaching by doing** (§6): the first full meter on the Cold Snap's level (or a profile's first
+  elsewhere, `flags.snapTeach`, once the meter filled in play or L10 is passed, at a calm moment: 3 s
+  past GO, Nubs shaded and cool), an intro Trial's first pick (Ember, Sprout) and Gust's first weather
+  ahead, and once per profile the first time each element's button matters in any Trial
+  (`flags.taught`, for a profile that passed its intro before Controls v3; not under Auto actions): the
+  DOM ghost hand taps the button (its word beside the disc, clear of the meter pill) or drags the
+  vane in the bottom band beside it, its first 2.5 s in slow time (never on a Daily), until the act is
+  done (a PRESS note, a vane notch) or no longer applies. Drip's ghost steers at its first puddle once
+  the TAG's stamps are gone. No tip starts while a ghost plays or the TAG's cue line is read (one
+  message at a time). L1's lesson plays the drag ghost and slow time like the first run (HintTracker
+  runs whenever the lesson is on); L1 reached with no turn of the player's own is not passed, and
+  passing it ends the lesson (`flags.tutorialDone`).
 - **Tips** (`moments.ts`): `onDrive(code, a)` tips the first refusal of each reason in a teaching
   run; `update(s, due)` tips an act that falls due. The vane, calm and settle tips (§6.1, §6.2) are
   cut for the bundle budget.

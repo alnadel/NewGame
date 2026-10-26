@@ -76,6 +76,11 @@ describe('ghost-thumb hints (V1_PLAN §6.2)', () => {
     const p3 = new HintTracker();
     for (let i = 0; i < 50; i++) expect(p3.update(0.1, input({ profile: 3 }))).toBe(false);
   });
+  it('the first lesson hints at any profile (L1 runs at profile 3): its ghost and slow time (lessonStarted) come while it is on', () => {
+    const h = new HintTracker();
+    expect(h.update(0.35, input({ profile: 3, lessonOn: true }))).toBe(true);
+    expect([h.lesson, h.lessonStarted, h.showing(false), h.showing(true)]).toEqual([true, true, true, false]);
+  });
   it('aims at the arc that lasts (safe now and 0.6 s ahead) and honours invert', () => {
     const h = new HintTracker();
     // Now: a wide arc clockwise that is about to vanish, and one counter-clockwise that stays.
@@ -487,7 +492,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     inp.dispose();
   });
 
-  it('the button: a still tap commits on its lift; a still press commits at 120 ms; presses queue two, one per batch, never touching the sun', () => {
+  it('the button: a still tap commits on its lift (within 300 ms); a held touch acts nothing and springs back; presses queue two, one per batch, never touching the sun', () => {
     const { h, inp, down, move, up } = mk();
     down(1, 300, 560);
     expect(inp.buttonDown).toBe(true);
@@ -499,16 +504,25 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     let t = take(inp, 2);
     expect(t.c.map((x) => x.act)).toEqual([1, 0]);
     expect(t.f.some((x) => x.downEdge || x.upEdge || x.down || x.dTheta !== 0)).toBe(false);
-    // Held still: it commits on the first batch 120 ms after it went down (the lift then adds nothing).
+    // Held still: nothing while it is down; lifted at 300 ms it is still a tap.
+    h.t = 1000;
     down(2, 300, 560);
-    h.t = 219;
+    h.t = 1250;
     expect(take(inp, 1).c[0]!.act).toBe(0);
-    h.t = 220;
-    expect(take(inp, 1).c[0]!.act).toBe(1);
+    h.t = 1300;
     expect(inp.buttonDown).toBe(true);
-    h.t = 900;
     up(2, 300, 560);
-    expect(inp.acts).toBe(2);
+    expect([inp.acts, take(inp, 1).c[0]!.act]).toEqual([2, 1]);
+    // Held 301 ms: no act at any time, and the press-in look springs back once the tap window passes.
+    h.t = 2000;
+    down(9, 300, 560);
+    h.t = 2300;
+    expect([take(inp, 1).c[0]!.act, inp.buttonDown]).toEqual([0, true]);
+    h.t = 2301;
+    expect([take(inp, 1).c[0]!.act, inp.buttonDown]).toEqual([0, false]);
+    h.t = 4000;
+    up(9, 300, 560);
+    expect([inp.acts, take(inp, 1).c[0]!.act]).toEqual([2, 0]);
     // A cancel acts nothing; three presses: two wait (one per batch), the third is dropped; a Burn press is no snap.
     down(3, 300, 560);
     up(3, 300, 560, true);
@@ -522,7 +536,7 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     inp.dispose();
   });
 
-  it('drag-through: a touch that moves 12 px first is a world drag from its touch-down point and acts nothing; after a timed commit it drags from there and the act stays', () => {
+  it('drag-through: a touch that moves 12 px is a world drag from its touch-down point and acts nothing, however long it was held first', () => {
     const { h, inp, down, move, up } = mk();
     down(1, 300, 560);
     move(1, 294, 560);
@@ -537,14 +551,168 @@ describe('Controls v3 input (docs/CONTROLS_V3.md §1, §12.1)', () => {
     up(1, 280, 560);
     t = take(inp, 1);
     expect([t.f[0]!.upEdge, t.f[0]!.dTheta, inp.acts, h.pressed]).toEqual([true, 7, 0, 1]);
-    // A timed commit, then 12 px: the press stays and the drag starts where the finger is.
+    // Held still for 600 ms, then 12 px: still a plain drag from the touch-down point, no act.
     down(2, 300, 560);
-    h.t = 130;
-    expect(take(inp, 1).c[0]!.act).toBe(1);
+    h.t = 600;
+    expect(take(inp, 1).c[0]!.act).toBe(0);
     move(2, 300, 572);
     move(2, 290, 572);
     t = take(inp, 1);
-    expect([t.f[0]!.downEdge, t.f[0]!.dTheta, inp.acts]).toEqual([true, 10, 1]);
+    expect([t.f[0]!.downEdge, t.f[0]!.dTheta, inp.acts]).toEqual([true, 10, 0]);
+    up(2, 290, 572);
+    expect([take(inp, 1).f[0]!.upEdge, inp.acts]).toEqual([true, 0]);
+    inp.dispose();
+  });
+
+  it('human-shaped swings that start on the button never act and turn the sun 1:1 from the touch-down (50 swings: landing pause 0-80 ms, minimum-jerk 150-450 ms, 50-150 px)', () => {
+    const { h, inp, down, move, up } = mk();
+    // A deterministic stream (mulberry32).
+    let seed = 0x5eed;
+    const rnd = (): number => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+    let turned = 0;
+    let wanted = 0;
+    for (let i = 0; i < 50; i++) {
+      const x0 = 285 + rnd() * 70;
+      const y0 = 505 + rnd() * 90;
+      const dist = 50 + rnd() * 100;
+      const ang = Math.PI + (rnd() - 0.5) * 1.4;
+      const pauseMs = rnd() * 80;
+      const ms = 150 + rnd() * 300;
+      h.t += 500;
+      const t0 = h.t;
+      down(100 + i, x0, y0);
+      // 240 Hz samples: a landing wobble under 2 px, then min-jerk motion with a 1 px tremor.
+      let x = x0;
+      let y = y0;
+      for (let k = 1; t0 + k * (1000 / 240) <= t0 + pauseMs + ms; k++) {
+        h.t = t0 + k * (1000 / 240);
+        const u = Math.max(0, Math.min(1, (h.t - t0 - pauseMs) / ms));
+        const e = u * u * u * (10 - 15 * u + 6 * u * u);
+        x = x0 + Math.cos(ang) * dist * e + Math.sin(k * 1.3) * (u > 0 ? 1 : 1.8);
+        y = y0 + Math.sin(ang) * dist * e + Math.cos(k * 0.9) * (u > 0 ? 1 : 1.8);
+        move(100 + i, x, y);
+        if (k % 4 === 0) turned += sum(take(inp, 1).f, 'dTheta');
+      }
+      up(100 + i, x, y);
+      turned += sum(take(inp, 2).f, 'dTheta');
+      wanted += ((x0 - x) / 360) * 360;
+    }
+    expect([inp.acts, inp.snaps, h.pressed > 0]).toEqual([0, 0, true]);
+    expect(Math.abs(turned - wanted)).toBeLessThan(0.01);
+    inp.dispose();
+  });
+
+  it('one batch with a lift and a new touch-down (finger A down and up, finger B down): the lift first, then B drags the sun', () => {
+    const { h, inp, down, up, move } = mk();
+    down(1, 100);
+    up(1, 100);
+    down(2, 200);
+    // A hit-stop batch (n = 0) keeps everything; then two frames: A's lift, then B's touch-down.
+    expect(inp.takeFrames(0).length).toBe(0);
+    let t = take(inp, 2);
+    expect(t.f.map((f) => [f.upEdge, f.downEdge, f.down])).toEqual([[true, false, false], [false, true, true]]);
+    up(2, 200);
+    take(inp, 1);
+    // One frame has no room for the lift: the touch-down wins and the finger stays down.
+    down(3, 100);
+    move(3, 110);
+    up(3, 110);
+    h.t = 10;
+    down(4, 200);
+    t = take(inp, 1);
+    expect([t.f[0]!.downEdge, t.f[0]!.upEdge, t.f[0]!.down, inp.pointerDown]).toEqual([true, false, true, true]);
+    up(4, 200);
+    take(inp, 1);
+    // Down, up, down and up again: lift, the tap's touch-down, its lift (three frames).
+    down(5, 100);
+    up(5, 100);
+    down(6, 200);
+    up(6, 200);
+    t = take(inp, 3);
+    expect(t.f.map((f) => [f.upEdge, f.downEdge, f.down])).toEqual([[true, false, false], [false, true, true], [true, false, false]]);
+    // Through the sim: B's 60 px drag after that batch turns the sun 60° (it never dies).
+    const s = createRun({ seed: 7, mode: 'endless', profile: 3, tutorial: false, reducedMotion: false });
+    const run = (n: number): void => {
+      for (const f of inp.takeFrames(n)) step(s, f);
+    };
+    inp.tap();
+    run(1);
+    while (s.ready > 0) run(1);
+    h.t = 1000;
+    down(7, 150);
+    up(7, 150);
+    down(8, 200);
+    run(0);
+    run(2);
+    const th0 = s.sun.theta;
+    move(8, 140);
+    run(2);
+    for (let i = 0; i < 30; i++) run(1);
+    expect(Math.abs(((s.sun.theta - th0 + 540) % 360) - 180 - 60)).toBeLessThan(0.01);
+    inp.dispose();
+  });
+
+  it('releaseAll (pause, blur) lifts a held sun finger at 0 °/s on the next batch, even after a second call (resume); a vane finger snaps its notch', () => {
+    const { h, inp, down, move } = mk();
+    down(1, 200);
+    move(1, 190);
+    take(inp, 1);
+    inp.releaseAll();
+    inp.releaseAll();
+    let t = take(inp, 2);
+    expect(t.f.map((f) => [f.upEdge, f.down, f.release])).toEqual([[false, true, 0], [true, false, 0]]);
+    expect(inp.pointerDown).toBe(false);
+    // Nothing more after that lift; a new run's clearPending drops a waiting one.
+    expect(take(inp, 1).f[0]!.upEdge).toBe(false);
+    down(2, 200);
+    take(inp, 1);
+    inp.releaseAll();
+    inp.clearPending();
+    expect(take(inp, 1).f[0]!.upEdge).toBe(false);
+    h.drag = 'vane';
+    down(3, 100);
+    move(3, 130);
+    inp.releaseAll();
+    t = take(inp, 1);
+    expect([t.c[0]!.vane, t.c[0]!.vaneUp]).toEqual([0, true]);
+    inp.dispose();
+  });
+
+  it('sensor jitter of ±1.5 px (240 Hz, both axes) never counts as motion: a still contact yields to the thumb and a still sun finger rests; a 4 px move does restart the clock', () => {
+    const { h, inp, down, move } = mk();
+    let seed = 99;
+    const j = (): number => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed / 2147483647) * 3 - 1.5;
+    };
+    // A grip contact at x = 24 jitters for 400 ms; the thumb's press then takes the slot.
+    down(1, 24, 400);
+    for (let k = 1; k <= 96; k++) {
+      h.t = k * (1000 / 240);
+      move(1, 24 + j(), 400 + j());
+    }
+    take(inp, 1);
+    down(2, 200, 300);
+    move(2, 160, 300);
+    let t = take(inp, 1);
+    expect([t.f[0]!.downEdge, t.f[0]!.dTheta, inp.presses]).toEqual([true, 40, 2]);
+    // The thumb now rests with the same jitter: rest after 300 ms, and its turns stay within the jitter.
+    const t0 = h.t;
+    for (let k = 1; k <= 96; k++) {
+      h.t = t0 + k * (1000 / 240);
+      move(2, 160 + j(), 300 + j());
+      if (k % 4 === 0) t = take(inp, 1);
+    }
+    expect(t.c[0]!.rest).toBe(true);
+    // A real 4 px move restarts it.
+    move(2, 156, 300);
+    h.t += 16;
+    expect(take(inp, 1).c[0]!.rest).toBe(false);
     inp.dispose();
   });
 

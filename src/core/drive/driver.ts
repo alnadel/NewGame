@@ -42,7 +42,7 @@ export interface DriveControl {
   vane: number;
   /** Gust: the vane's finger lifted, or a key set it: the raw value snaps to its notch. */
   vaneUp: boolean;
-  /** The world sun finger is down and has moved < 3 px over the last 300 ms (§1.2): aim help treats it as no hand. */
+  /** The world sun finger is down and has stayed in a 4 px box per axis over the last 300 ms (§1.2): aim help treats it as no hand. */
   rest: boolean;
 }
 
@@ -205,7 +205,7 @@ export function createDriver(): Driver {
   let liftAt = NEVER;
   let strokeDir = 0;
   let stroke = 0;
-  /** The key turn on the last day tick (its release is a lift, §4.1). */
+  /** The last tick's turn key on a sun leg (a key is a stroke: its release is a lift, §4.1/§4.5). */
   let keyWas = 0;
   let seen = -1;
   // The glide (§4.5): its ticks (0 none) and ticks sent, its turn and that turn quantized, the steps
@@ -661,12 +661,14 @@ export function createDriver(): Driver {
         const drag = HEROES[hero].drag;
         // 2 (read first). The hand and the sun move, from the frame as the input filled it, before the
         // driver writes anything: step 1's closing upEdge is the driver's own, neither a move nor a lift.
+        // A resting finger's turn is its sensor jitter inside the input's still box: no hand, no move.
         const dn = f.downEdge;
         const up = f.upEdge;
         const dt = f.dTheta;
         const held = f.down;
         const key = f.key;
-        const hand = (held && !c.rest) || dn || up || dt !== 0 || f.key !== 0;
+        const turn = dt !== 0 && !c.rest;
+        const hand = (held && !c.rest) || dn || up || turn || key !== 0;
         if (hand) handAt = now;
         // 1. An interrupted glide, or one whose leg ended, closes on this frame (no new plan on it).
         const shut = (closing || s.relayIdx !== leg) && gN > 0;
@@ -674,10 +676,20 @@ export function createDriver(): Driver {
         closing = false;
         if (s.relayIdx !== leg) newLeg(s);
         if (drag === 'sun') {
-          if (s.ready === 0 && (dn || up || dt !== 0 || f.key !== 0)) moveAt = now;
+          if (s.ready === 0 && (dn || up || turn || key !== 0)) moveAt = now;
           // The stroke's net turn, from its downEdge to its upEdge.
           if (dn) stroke = 0;
           if (held || dn || up) stroke += dt;
+          // A turn key is a stroke too (from its press, at the sim's key rate), and its release a lift:
+          // the re-grip grace and the against-the-stroke rule protect a keyboard nudge as they do a drag.
+          if (key !== 0) {
+            if (keyWas === 0 && !held) stroke = 0;
+            stroke += key === 2 || key === -2 ? key * 0.75 : key * 2.5;
+          } else if (keyWas !== 0 && !held && !up) {
+            liftAt = now;
+            strokeDir = stroke >= 1 ? 1 : stroke <= -1 ? -1 : keyWas > 0 ? 1 : -1;
+          }
+          keyWas = key;
           if (dn) {
             // The re-grip carry (an unfinished chase goes on) and undo (a glide since a lift ≤ 0.5 s old,
             // or one that started ≤ raceTicks before this touch: the player reached for the same sun).
@@ -689,14 +701,7 @@ export function createDriver(): Driver {
             liftAt = now;
             strokeDir = stroke >= 1 ? 1 : stroke <= -1 ? -1 : 0;
           }
-          // A key turn's release is a lift too (fix round 3): the re-grip grace and the against-the-stroke
-          // rule protect a keyboard nudge as they protect a drag.
-          if (keyWas !== 0 && key === 0) {
-            liftAt = now;
-            strokeDir = keyWas > 0 ? 1 : -1;
-          }
-        }
-        keyWas = key;
+        } else keyWas = 0;
         // 3. The vane (Gust legs; 0 elsewhere).
         turned = false;
         if (drag === 'vane') {

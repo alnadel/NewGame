@@ -211,7 +211,17 @@ function makeBot(kind: BotKind): Bot | null {
 
 /** Controls v3 (docs/CONTROLS_V3.md §6.1): a teaching moment's slow time (real s) and the vane ghost's band below Nubs (CSS px). */
 const TEACH_S = 2.5;
-const TEACH_BAND = 130;
+/** A hand-off's stamps (TAG!, CLEAN!) hold the middle of the screen this long (s): Drip's steer ghost waits them out. */
+const TAG_STAMP_S = 1.3;
+/** The TAG's cue line is read first (s): no tip starts over it. */
+const TAG_CUE_S = 2.4;
+/** The profile's first Cold Snap lesson outside its level waits this long after GO (s), for a calm moment. */
+const SNAP_TEACH_AFTER_S = 3;
+/** The element buttons' taught bits (Save flags.taught). */
+const TAUGHT: Partial<Record<SimState['nubs']['hero'], number>> = { ember: 1, sprout: 2, gust: 4 };
+/** Level 1 reached with no turn of the player's own: its finish line and goal line (not passed). */
+const IDLE_L1_LINE = 'Nubs made it, but the sun never moved. Drag anywhere to turn it!';
+const IDLE_L1_GOAL = 'Drag the sun to swing shade onto Nubs';
 
 /** Elementals v2 (?elfix=1): every object kind and state on a Trial run, for art review; bot builds only (makeBot's gate). */
 function fixture(s: SimState): void {
@@ -943,6 +953,8 @@ export class Session {
         takeSnap(s, this.#prev);
         const f = this.#bot ? this.#bot.next(s) : (frames?.[i] ?? null);
         if (!f) break;
+        // The player's own turn (a bot's, on a bot run), before the driver adds any glide.
+        if (s.ready === 0) this.#ownTurn += Math.abs(f.dTheta) + (f.key !== 0 ? 2.5 : 0);
         if (ctl) this.driver.fill(s, f, ctl[i] as DriveControl);
         step(s, f);
         if (this.#rec) recordFrame(this.#rec, f);
@@ -1462,6 +1474,10 @@ export class Session {
     this.#verbDone = false;
     this.#taught = 0;
     this.#teachMode = 'off';
+    this.#tagAt = -1e9;
+    this.#snapEarned = false;
+    this.#ownTurn = 0;
+    this.#idleWin = false;
     this.#meltWarn = false;
     const rung = (this.#runRung = this.#rungOf.get(run) ?? -1);
     this.#runWarmup = this.#warmups.has(run);
@@ -1526,6 +1542,13 @@ export class Session {
   #taught = 0;
   #teachMode: GhostMode = 'off';
   #teachEnd = 0;
+  /** The run's GO and its last TAG (this.time, s); the meter filled in play this run (not the start charge). */
+  #goAt = 0;
+  #tagAt = -1e9;
+  #snapEarned = false;
+  /** The player's own sun turn this run (°: input frames, keys at their tap rate), and an L1 reached with none of it (not passed). */
+  #ownTurn = 0;
+  #idleWin = false;
 
   #setGhost(mode: GhostMode, at = false): void {
     if (!at) this.ui.setGhostAt(NaN, NaN);
@@ -1538,11 +1561,14 @@ export class Session {
   #verbGhost(): void {
     const s = this.#s;
     if (Math.abs((s.el as NonNullable<SimState['el']>).dxTarget) >= 8) this.#verbDone = true;
-    const o = !this.#verbDone && s.trial?.intro === 'drip' && s.nubs.hero === 'drip' ? this.#ahead('puddle') : undefined;
+    // It waits out the hand-off's stamps (TAG!, CLEAN!): nothing is drawn over them.
+    const o = !this.#verbDone && s.trial?.intro === 'drip' && s.nubs.hero === 'drip' && this.#time - this.#tagAt >= TAG_STAMP_S ? this.#ahead('puddle') : undefined;
     if (!o) return this.#setGhost('off');
     const v = this.renderer.scene.view;
     this.ui.setGhostAt(Math.max(40, Math.min(v.vw - 40, v.ox + o.x * v.S - v.vx)), v.oy - o.y * v.S - v.vy);
     this.#setGhost('steer', true);
+    // One message at a time: no tip starts while the steer ghost plays.
+    holdToasts(this.renderer.scene.banners, 0.6);
   }
 
   /** The first object of `kinds` ahead in reach (near..range): no standing tree, no bridge, weather awake. */
@@ -1570,22 +1596,38 @@ export class Session {
     const h = s.nubs.hero;
     const snap = v.act === 'snap';
     const bit = snap ? 1 : h === 'gust' ? 4 : 2;
+    const flags = this.#d.store.get().flags;
+    const el = TAUGHT[h] ?? 0;
     // A moment holds while its act can be done: the snap ready, a pick, weather ahead under a calm vane.
     if (!(snap ? v.state === 1 : h === 'gust' ? !v.vane && this.#ahead('rain fog') : v.pick >= 0)) this.#teachMode = 'off';
-    else if (!(this.#taught & bit) && (snap ? this.#runLevel?.introduces === 'snap' || !this.#d.store.get().flags.snapTeach : s.trial?.intro === h)) {
+    else if (
+      !(this.#taught & bit) &&
+      (snap
+        ? // The snap's level teaches it at once; a profile's first lesson elsewhere waits for a meter
+          // filled in play (or the level passed) and a calm moment: past GO, Nubs shaded and cool.
+          this.#runLevel?.introduces === 'snap' ||
+          (!flags.snapTeach && (this.#snapEarned || this.#passed(10)) && this.#time - this.#goAt >= SNAP_TEACH_AFTER_S && s.nubs.f === 0 && s.nubs.chill >= TUNING.nubs.lowChill)
+        : // An element's button: on its intro Trial, and once per profile the first time it matters
+          // anywhere (a profile that passed its intro before Controls v3); Auto actions burn and grow by themselves.
+          (s.trial?.intro === h || !(flags.taught & el)) && !(this.#driveOpts.autoAct && h !== 'gust'))
+    ) {
       this.#taught |= bit;
       this.#teachMode = h === 'gust' ? 'vane' : 'press';
       this.#teachEnd = this.#time + TEACH_S;
-      if (snap) {
-        this.#cue('snap-ready');
-        if (!this.#debugRuns) {
-          this.#d.store.update((sv) => {
-            sv.flags.snapTeach = true;
-          });
-        }
+      if (snap) this.#cue('snap-ready');
+      if (!this.#debugRuns) {
+        this.#d.store.update((sv) => {
+          if (snap) sv.flags.snapTeach = true;
+          else sv.flags.taught |= el;
+        });
       }
     }
     return this.#teachMode;
+  }
+
+  /** Journey level n has been passed on this profile. */
+  #passed(n: number): boolean {
+    return (this.#d.store.get().campaign.stars[n - 1] ?? 0) > 0;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1930,6 +1972,9 @@ export class Session {
         // §7.11: the cue line (aria-live) announces every hand-off: "Drip's turn. Drag: steer Drip · …"
         this.#cueShown = { id: `tag-${ev.to}`, dir: undefined };
         this.ui.showCue(this.#cueShown.id);
+        // One message at a time: the element's tip waits until the cue line has been read.
+        this.#tagAt = this.#time;
+        holdToasts(this.renderer.scene.banners, TAG_CUE_S);
         break;
       case 'feat':
         this.#featSeen.set(ev.kind, ev.value);
@@ -1942,6 +1987,7 @@ export class Session {
         if (this.#runLevel) dismissLevelCard(this.renderer.scene.banners);
         break;
       case 'go':
+        this.#goAt = this.#time;
         if (this.#s.cfg.profile <= 1 || (this.#runLevel !== null && this.#s.cfg.lesson === true)) {
           this.#cue('keep-shade');
           // The cue line (2 s) is read first: no tip stacks over it.
@@ -1961,6 +2007,8 @@ export class Session {
         this.#cue('shade-found');
         break;
       case 'frostReady':
+        // Filled in play (not the start charge): the profile's first Cold Snap lesson may come (#teach).
+        if (this.#s.ready === 0) this.#snapEarned = true;
         // v1.5: the meter is full; until the player has snapped twice this session, say how (not
         // under a snap, which no swipe can cast: the cast's own pour often refills a charge).
         // Not on a Trial: its ability coin is not "Frost" (the hero tips teach the swipe there).
@@ -2090,17 +2138,31 @@ export class Session {
     const level = this.#runLevel;
     if (!level || this.#wonAt >= 0) return;
     this.#wonAt = this.#time;
+    // Level 1 teaches the drag: reached with the lesson on and no turn of the player's own (the lesson's
+    // floor kept an idle Nubs alive), it is not passed (§6.1). Passed, it ends the first-run lesson too.
+    const idle = level.id === 1 && this.#s.cfg.lesson === true && this.#ownTurn < TUNING.lesson.swingDeg && ev.passed;
+    if (idle) ev = { ...ev, passed: false, stars: 0 };
+    this.#idleWin = idle;
     this.#won = ev;
     this.#hints.stop();
     this.clock.assist = 1;
+    if (level.id === 1 && ev.passed && !this.#debugRuns) {
+      this.#d.store.update((sv) => {
+        sv.flags.tutorialDone = true;
+      });
+    }
     const save = this.#d.store.get();
     const result = buildRunResult(this.#s);
+    if (idle && result.level) {
+      result.level = { ...result.level, passed: false, stars: 0 };
+      result.death = { ...result.death, line: IDLE_L1_LINE };
+    }
     result.melody = this.#melody.slice();
     result.assisted = this.#runAssisted;
     this.#result = result;
     this.#tip = null;
     this.#applyResult(save, result);
-    this.fx.finish(ev.passed, ev.passed ? 'FINISH' : missLine(level), ev.stars, this.#s.nubs.x, this.#s.nubs.y);
+    this.fx.finish(ev.passed, ev.passed ? 'FINISH' : idle ? 'DRAG THE SUN' : missLine(level), ev.stars, this.#s.nubs.x, this.#s.nubs.y);
     this.#d.haptics.play('best');
     this.#setGhost('off');
     this.#cue(null);
@@ -2176,7 +2238,7 @@ export class Session {
       passed,
       stars: won?.stars ?? 0,
       nextId: nextTrial !== null ? TRIAL_BASE + nextTrial : next ? next.id : null,
-      goalLine: goalLine(level, result.stats, passed, this.#relaxed(), this.#featSeen, this.#misses(level.id)),
+      goalLine: this.#idleWin ? IDLE_L1_GOAL : goalLine(level, result.stats, passed, this.#relaxed(), this.#featSeen, this.#misses(level.id)),
       // The goal cards (UI v2): each rule and whether this run met it (won: the finish was reached).
       starRules: starRules(level, this.#relaxed()),
       starBits: starState(level, result.stats, won !== null, this.#relaxed(), this.#featSeen),
@@ -2454,11 +2516,17 @@ export class Session {
       } else if (this.#teach() !== 'off') {
         // Controls v3 (§6.1): a teaching moment's ghost, on the button (a press) or in the band below
         // Nubs (a vane drag), in slow time for its first seconds (never on a Daily).
+        // One message at a time: the press ghost says its word beside the button (never over the meter
+        // pill above it); the vane ghost drags in the bottom band beside the button (under the TAG's cue
+        // line); no tip starts while either plays.
         const v = this.renderer.scene.view;
         const b = hudButton(this.renderer.scene.hud);
         const press = this.#teachMode === 'press';
-        this.ui.setGhostAt(press ? b.x - v.vx : v.vw / 2, press ? b.y - v.vy : v.nubsFrac * v.vh + TEACH_BAND);
+        const bx = b.x - v.vx;
+        const right = bx > v.vw / 2;
+        this.ui.setGhostAt(press ? bx : v.vw * (right ? 0.36 : 0.64), b.y - v.vy, right);
         this.#setGhost(this.#teachMode, true);
+        holdToasts(this.renderer.scene.banners, 0.6);
         slow = this.#time < this.#teachEnd && this.#kind !== 'daily';
       } else if (this.#verbNow() !== 'sun') {
         // Elementals v2 (§7.9): no drag ghost or lesson hint while an element plays its own verb; the
@@ -2478,6 +2546,8 @@ export class Session {
         h.dragging = dragging;
         h.invert = this.input.invert;
         h.lessonOn = lessonOn;
+        // The first lesson is the only thing taught while it is on: concept tips wait for its end.
+        if (lessonOn) holdToasts(this.renderer.scene.banners, 0.6);
         if (this.#hints.update(dt, h) && !this.#debugRuns) {
           this.#d.store.update((sv) => {
             sv.flags.hintsShown += 1;
@@ -2667,7 +2737,8 @@ export class Session {
       return {
         title: `${levelTag(level.id)} · ${level.name}`,
         // A Trial: the walking element's tagline under the title, then how it plays.
-        ...(t ? { tagline: x.tagline, verb: `${x.verbLine} · ${x.keyLine}` } : {}),
+        // Touch players read the drag and the button; keyboard players the keys.
+        ...(t ? { tagline: x.tagline, verb: this.ui.keyboardMode() ? x.keyLine : `${x.dragLine} · ${x.actLine}` } : {}),
         goal: `${goalText(level, relaxed)} · ${count}`,
         now,
         stars: [

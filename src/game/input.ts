@@ -6,8 +6,9 @@
 // - Edge zones (§1.1): a pointerdown within EDGE_SIDE_PX of the left/right edges, or inside the
 //   bottom max(safe inset, 8 px), is ignored for its whole life (OS back / home gestures, the grip).
 // - The world slot (§1.2): the first pointer wins and keeps it until it lifts; a later world press
-//   is ignored (never captured) for its whole life, unless the owner is still (it has not travelled
-//   YIELD_PX in the last YIELD_MS of its life): then the new pointer takes the slot from its own press
+//   is ignored (never captured) for its whole life, unless the owner is still (its samples have stayed
+//   inside a STILL_PX box for YIELD_MS, so sensor jitter of ±1.5 px never counts as motion): then the
+//   new pointer takes the slot from its own press
 //   point with zero jump and the old one is ignored until it lifts. What it drags is host.drag() at
 //   touch-down: 'sun' turns the sun (Δθ = −dx / viewportWidth × 360° × sensitivity, inverted on
 //   request), 'steer' slides Drip by the finger's world distance (host.uPerPx; no sensitivity or
@@ -18,15 +19,15 @@
 //     START_SLOP px from its press point (then the whole displacement), so a start tap turns nothing.
 //   - The finger's speed (for the TAG guards) is read over the last SPEED_MS of an 8-sample ring.
 //     Swing Boost (§1.2) is cut for the bundle budget (its setting stays in the save, unread).
-//   - Rest: a sun finger that has not travelled REST_PX in REST_MS rests (DriveControl.rest): aim help
-//     treats it as no hand.
+//   - Rest: a sun finger whose samples stay inside the STILL_PX box for REST_MS rests
+//     (DriveControl.rest): aim help treats it as no hand.
 // - The button slot (§1.3): a touch on the disc presses in at once (buttonDown) and becomes a press
-//   when it lifts within BUTTON_SLOP of its touch-down point, or stays there for BUTTON_COMMIT_MS
-//   (acts++, snaps++ on a Cold Snap leg, host.onPress()); at most 2 wait for their batches, and each
-//   reaches the driver on the first tick of one (DriveControl.act). A touch that moves BUTTON_SLOP
-//   first is a world drag from its touch-down point (if the world slot is free, or its owner still)
-//   and acts nothing; after a timed commit the same move drags from where the finger is (the act
-//   stays). No drag is ever dead.
+//   only as a still tap: it lifts within BUTTON_SLOP of its touch-down point and within BUTTON_TAP_MS
+//   of it (acts++, snaps++ on a Cold Snap leg, host.onPress()); at most 2 wait for their batches, and
+//   each reaches the driver on the first tick of one (DriveControl.act). A held touch acts nothing (its
+//   press-in look springs back once the tap window has passed); a touch that moves BUTTON_SLOP, at any
+//   time, is a plain world drag from its touch-down point (if the world slot is free, or its owner
+//   still) and acts nothing. No drag is ever dead and no swing ever fires the button.
 // - handoff() (every TAG, §1.5): a world finger that is down keeps its slot and takes the new leg's
 //   drag kind from where it is (zero jump): into 'sun' a downEdge and a TAG_RAMP_SUN_MS ramp; into
 //   'steer' motion is dropped while the finger moves faster than TAG_STEER_FAST (until the ramp is
@@ -51,13 +52,16 @@ import type { DragKind, DriveAct, DriveControl, InputFrame } from '../core/index
 /** Edge zones (CSS px): the sides, and the least bottom band (the safe inset when larger). */
 export const EDGE_SIDE_PX = 16;
 const EDGE_BOTTOM_PX = 8;
-/** A button touch that moves this far (CSS px) before it commits is a drag; one that stays this long (ms) commits. */
+/** A button touch that moves this far (CSS px) is a drag; a press is a tap lifted within BUTTON_TAP_MS (ms) of its touch-down. */
 export const BUTTON_SLOP = 12;
-export const BUTTON_COMMIT_MS = 120;
-/** A world owner within YIELD_PX for YIELD_MS yields to a new press; a sun finger within REST_PX for REST_MS rests. */
-export const YIELD_PX = 4;
+export const BUTTON_TAP_MS = 300;
+/**
+ * Stillness (§1.2): a finger is still while its samples since the clock last restarted fit in a box
+ * under STILL_PX on each axis (±1.5 px of sensor jitter never restarts it; a real 4 px move does). A
+ * world owner still for YIELD_MS yields to a new press; a sun finger still for REST_MS rests.
+ */
+export const STILL_PX = 4;
 export const YIELD_MS = 300;
-export const REST_PX = 3;
 export const REST_MS = 300;
 /** Start slop (CSS px): a press in the hold or start beat turns nothing until it is this far from its press point. */
 const START_SLOP = 10;
@@ -175,16 +179,16 @@ export function createInput(host: InputHost): Input {
   let active = -1;
   let kind: DragKind = 'sun';
   let held = false;
-  /** The finger's baseline x (motion already sent), its last sample, and its press x while the start slop holds (NaN none). */
+  /** The finger's baseline x (motion already sent), its last x, and its press x while the start slop holds (NaN none). */
   let lastX = 0;
   let curX = 0;
-  let curY = 0;
   let slopX = Number.NaN;
-  /** Path (px) since the yield and rest clocks last restarted, and when they did (ms). */
-  let yPath = 0;
-  let yAt = 0;
-  let rPath = 0;
-  let rAt = 0;
+  /** The box the finger's samples have stayed in since the still clock last restarted (CSS px), and when it did (ms). */
+  let x0 = 0;
+  let x1 = 0;
+  let y0 = 0;
+  let y1 = 0;
+  let stillAt = 0;
   /** The world finger's last 8 samples (x, ms), for its speed. */
   const ringX = new Float64Array(8);
   const ringT = new Float64Array(8);
@@ -194,10 +198,10 @@ export function createInput(host: InputHost): Input {
   let gAt = 0;
   let slowAt = -1;
   let pending = 0;
+  /** This batch's edges: a touch-down, an up before it (a lift, then a new touch), and an up after it (or with none). */
   let downEdge = false;
+  let upBefore = false;
   let upEdge = false;
-  /** An up happened before a later down in the same batch. */
-  let upFirst = false;
   let keyL = false;
   let keyR = false;
   /** Shift is held: rotation keys turn at the fine rate. */
@@ -206,12 +210,11 @@ export function createInput(host: InputHost): Input {
   let steerPending = 0;
   let vanePending = 0;
   let vaneUp = false;
-  /** The button slot: its pointer (−1 free), its touch-down point (CSS px) and time, and whether it committed by time. */
+  /** The button slot: its pointer (−1 free), its touch-down point (CSS px) and time (the event's). */
   let bId = -1;
   let bX = 0;
   let bY = 0;
   let bAt = 0;
-  let bDone = false;
   /** Presses waiting for their batches. */
   let waiting = 0;
   const frames: InputFrame[] = [];
@@ -224,12 +227,20 @@ export function createInput(host: InputHost): Input {
   const canvas = host.canvas;
 
   /** The world slot can take a new pointer at time t: it is free, or its owner has been still (§1.2). */
-  const free = (t: number): boolean => !held || t - yAt >= YIELD_MS;
+  const free = (t: number): boolean => !held || t - stillAt >= YIELD_MS;
 
-  /** A sun touch-down on the next batch (after an up of the same batch: the up first). */
+  /** A sun touch-down on the next batch; an up already in the batch came before it (the batch sends it first). */
   const touch = (): void => {
-    if (upEdge && !downEdge) upFirst = true;
+    if (upEdge) upBefore = true;
+    upEdge = false;
     downEdge = true;
+  };
+
+  /** The still clock restarts at (x, y) at time t. */
+  const still = (x: number, y: number, t: number): void => {
+    x0 = x1 = x;
+    y0 = y1 = y;
+    stillAt = t;
   };
 
   /** Records a world sample (x, ms) in the speed ring. */
@@ -265,10 +276,9 @@ export function createInput(host: InputHost): Input {
     kind = host.drag();
     held = true;
     lastX = curX = x;
-    curY = y;
     slopX = host.starting() ? x : Number.NaN;
-    yPath = rPath = ringN = 0;
-    yAt = rAt = t;
+    ringN = 0;
+    still(x, y, t);
     push(x, t);
     guard = G_NONE;
     if (kind === 'sun') touch();
@@ -278,19 +288,14 @@ export function createInput(host: InputHost): Input {
   };
 
   const moveTo = (x: number, y: number, t: number): void => {
-    const d = Math.hypot(x - curX, y - curY);
     curX = x;
-    curY = y;
     push(x, t);
-    // The still clocks restart whenever the finger has travelled their distance.
-    if ((yPath += d) >= YIELD_PX) {
-      yPath = 0;
-      yAt = t;
-    }
-    if ((rPath += d) >= REST_PX) {
-      rPath = 0;
-      rAt = t;
-    }
+    // The still clock restarts when a sample leaves the STILL_PX box (jitter inside it never does).
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+    if (x1 - x0 >= STILL_PX || y1 - y0 >= STILL_PX) still(x, y, t);
     if (slopX === slopX) {
       // Start slop: nothing until START_SLOP px from the press point, then the whole displacement.
       if (Math.abs(x - slopX) < START_SLOP) return;
@@ -320,12 +325,11 @@ export function createInput(host: InputHost): Input {
   const sample = (id: number, x: number, y: number, t: number): void => {
     if (id === bId) {
       if (Math.hypot(x - bX, y - bY) < BUTTON_SLOP) return;
-      // A drag after all (§1.3): the press-in springs back and the world slot takes it, from its
-      // touch-down point (or from here after a timed commit); with the slot busy it is ignored until it lifts.
+      // A drag after all (§1.3): the press-in springs back and the world slot takes it from its
+      // touch-down point (the whole motion counts); with the slot busy it is ignored until it lifts.
       bId = -1;
       if (!free(t)) return;
-      if (bDone) take(id, x, y, t);
-      else take(id, bX, bY, bAt);
+      take(id, bX, bY, bAt);
     }
     if (id === active && held) moveTo(x, y, t);
   };
@@ -360,7 +364,6 @@ export function createInput(host: InputHost): Input {
     bX = x;
     bY = y;
     bAt = t;
-    bDone = false;
   };
 
   const onMove = (e: PointerEvent): void => {
@@ -377,8 +380,8 @@ export function createInput(host: InputHost): Input {
   const onUp = (e: PointerEvent, cancel: boolean): void => {
     if (e.pointerId === bId) {
       bId = -1;
-      // A still touch is a press on its lift (not a cancelled one, nor one that committed by time).
-      if (!bDone && !cancel) press();
+      // Only a still tap is a press: lifted (not cancelled) within the slop and the tap window.
+      if (!cancel && e.timeStamp - bAt <= BUTTON_TAP_MS && Math.hypot(e.clientX - bX, e.clientY - bY) < BUTTON_SLOP) press();
       return;
     }
     if (e.pointerId !== active || !held) return;
@@ -463,7 +466,8 @@ export function createInput(host: InputHost): Input {
       return held && kind === 'vane';
     },
     get buttonDown() {
-      return bId >= 0;
+      // The press-in look springs back once the tap window has passed (a held touch acts nothing).
+      return bId >= 0 && self.now() - bAt <= BUTTON_TAP_MS;
     },
     get keyDown() {
       return keyL !== keyR;
@@ -502,54 +506,60 @@ export function createInput(host: InputHost): Input {
           // ignore
         }
       }
+      // A dropped sun finger still lifts (at 0 °/s) and a vane finger snaps its notch on the next
+      // batch, so the sim never keeps a sun 'dragging' with no finger (a pause or blur mid-drag); a
+      // lift already waiting survives a second call (pause, then resume).
+      const lift = (held && kind === 'sun') || (upEdge && !downEdge);
+      const snap = (held && kind === 'vane') || vaneUp;
       held = keyL = keyR = shift = false;
       active = bId = -1;
       self.clearPending();
+      upEdge = lift;
+      vaneUp = snap;
     },
 
     clearPending() {
       pending = steerPending = vanePending = waiting = 0;
-      downEdge = upEdge = upFirst = vaneUp = false;
+      downEdge = upEdge = upBefore = vaneUp = false;
     },
 
     tap() {
       downEdge = upEdge = true;
-      upFirst = false;
+      upBefore = false;
     },
 
     /**
      * Builds `n` InputFrames for this frame's ticks (and their DriveControls, for controls()). Pending
      * rotation (and Drip's slide) is split evenly (quantized, remainder carried); a touch-down lands
-     * on the first frame and a lift on the last; a waiting press, the vane's change and its lift on the
-     * first control, `rest` on each. First a still button touch commits once it has waited
-     * BUTTON_COMMIT_MS, and a guarded vane finger's pause is noticed. With n = 0 (hit-stop) everything
-     * keeps accumulating.
+     * on the first frame and a lift on the last, and a lift that came before the touch-down (a finger
+     * up, then another down, in one batch) on the first frame with the touch-down on the second (the
+     * turn split over the frames from the touch-down); a waiting press, the vane's change and its lift
+     * on the first control, `rest` on each. First a guarded vane finger's pause is noticed. With
+     * n = 0 (hit-stop) everything keeps accumulating.
      */
     takeFrames(n) {
       out.length = 0;
       ctl.length = 0;
       if (n <= 0) return out;
       const t = self.now();
-      if (bId >= 0 && !bDone && t - bAt >= BUTTON_COMMIT_MS) {
-        bDone = true;
-        press();
-      }
       if (held) pause(t);
       while (frames.length < n) frames.push(newFrame());
       // Left/A turns counter-clockwise (+); Shift held is the fine rate (±2). On vane legs the keys move the vane instead.
       const key: InputFrame['key'] = keyL === keyR || host.drag() === 'vane' ? 0 : keyL ? (shift ? 2 : 1) : shift ? -2 : -1;
-      const per = qTheta(pending / n);
-      pending -= per * n;
+      // The touch-down's frame: the second when a lift of the same batch came first (and there are two).
+      const i0 = downEdge && upBefore && n >= 2 ? 1 : 0;
+      const per = qTheta(pending / (n - i0));
+      pending -= per * (n - i0);
       if (Math.abs(pending) < 1e-9) pending = 0;
       const steer = qSteer(steerPending / n);
       steerPending -= steer * n;
       if (Math.abs(steerPending) < 1e-9) steerPending = 0;
       const down = held && kind === 'sun';
       // §1.2: rest only while the sun finger has been still through the whole batch.
-      const rest = down && !downEdge && t - rAt >= REST_MS;
+      const rest = down && !downEdge && t - stillAt >= REST_MS;
       for (let i = 0; i < n; i++) {
         const f = frames[i] as InputFrame;
-        f.dTheta = per;
+        f.dTheta = i < i0 ? 0 : per;
         f.downEdge = f.upEdge = f.snap = false;
         f.release = f.verb = f.vx = f.vy = 0;
         f.key = key;
@@ -565,27 +575,20 @@ export function createInput(host: InputHost): Input {
       c0.rest = rest;
       vanePending = 0;
       vaneUp = false;
-      const first = frames[0] as InputFrame;
       const last = frames[n - 1] as InputFrame;
-      if (upFirst && downEdge) {
-        if (n >= 2) {
-          first.upEdge = true;
-          first.down = false;
-          (frames[1] as InputFrame).downEdge = true;
-        } else {
-          first.downEdge = true;
-          first.down = held;
-        }
-      } else {
-        if (downEdge) first.downEdge = true;
-        if (upEdge) {
-          last.upEdge = true;
-          // Frames before the release tick still had the finger down.
-          for (let i = 0; i < n - 1; i++) (frames[i] as InputFrame).down = true;
-          last.down = false;
-        }
+      if (i0 > 0) {
+        // The earlier finger's lift first (one frame alone has no room for it: the new touch-down wins).
+        (frames[0] as InputFrame).upEdge = true;
+        (frames[0] as InputFrame).down = false;
       }
-      downEdge = upEdge = upFirst = false;
+      if (downEdge) (frames[i0] as InputFrame).downEdge = true;
+      if (upEdge) {
+        last.upEdge = true;
+        // Frames from the touch-down to the release tick still had the finger down.
+        for (let i = i0; i < n - 1; i++) (frames[i] as InputFrame).down = true;
+        last.down = false;
+      }
+      downEdge = upEdge = upBefore = false;
       return out;
     },
 

@@ -144,6 +144,11 @@
 }
 
 .ghost.is-at .ghost-word { display: flex; order: -1; margin: 0 0 10px; }
+/* The press ghost's word sits beside the button at its height, toward the screen's middle: never over
+   the meter pill above the button (one message at a time, nothing over the pill). */
+.ghost.is-at[data-mode='press'] { transform: translate(calc(var(--gx) - 50%), -32px); }
+.ghost.is-at[data-mode='press'] .ghost-word { position: absolute; top: 50%; left: calc(50% + 58px); margin: 0; transform: translateY(-50%); }
+.ghost.is-at.is-wl[data-mode='press'] .ghost-word { left: auto; right: calc(50% + 58px); }
 .ghost[data-mode='press'] .ghost-arrow { display: none; }
 .ghost[data-mode='steer'] .ghost-hand { animation: ghost-swing 1.6s ease-in-out infinite; }
 .ghost[data-mode='press'] .ghost-hand { animation: ghost-tap 1.2s ease-in-out infinite; }

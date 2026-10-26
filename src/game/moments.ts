@@ -35,6 +35,7 @@ import {
   FLARE_KEPT,
   growTarget,
   levelProgress,
+  NOTE_PRESS,
   NOTE_REFUSE,
   queryBuds,
   tagLocked,
@@ -97,6 +98,15 @@ export const ELEMENT_TIPS: Readonly<Record<HeroId, Tips>> = {
   ],
   // Every Trial starts with Nubs: his 'tag' tip is for his second leg.
   nubs: [['tag', 'Nubs again: drag to turn the sun. Let go near the teal and it settles in.']],
+};
+
+/**
+ * Auto actions on (docs/CONTROLS_V3.md §3.6): Ember and Sprout act by themselves, so their tips never
+ * say "tap": each 'tag' tip says so instead, and the tips that ask for a tap stay away.
+ */
+export const AUTO_TIPS: Readonly<Partial<Record<HeroId, string>>> = {
+  ember: "Ember's turn! Auto actions burn each wall right on time.",
+  sprout: "Sprout's turn! Auto actions grow the bridges and the trees.",
 };
 
 /** Elementals v2: the hand-off tips, at the first telegraph into Drip, into Gust, and any other (no element). */
@@ -355,9 +365,17 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
       tipPace(banners, trial !== null);
       const fresh = lv !== null && !(trial ? save.elementals2?.stars[trial.n - 1] : save.campaign.stars[lv.id - 1]);
       if (fresh && trial) {
-        // A Trial's tips until it is passed: the mixer's, the hand-offs', then each element's (its glyph and walker).
+        // A Trial's tips until it is passed: the mixer's, the hand-offs', then each element's (its glyph
+        // and walker; under Auto actions Ember's and Sprout's say so and never ask for a tap).
         tips.push(...(MIXER_TIPS[trial.n] ?? []), ...RELAY_TIPS);
-        for (const x of trial.cast) for (const t of ELEMENT_TIPS[x]) tips.push([t[0], t[1], x]);
+        for (const x of trial.cast) {
+          const auto = save.settings.autoAct ? AUTO_TIPS[x] : undefined;
+          for (const t of ELEMENT_TIPS[x]) {
+            if (!auto) tips.push([t[0], t[1], x]);
+            else if (t[0] === 'tag') tips.push(['tag', auto, x]);
+            else if (!/\btap\b/i.test(t[1])) tips.push([t[0], t[1], x]);
+          }
+        }
       } else if (fresh) tips.push(...(LEVEL_TIPS[lv.id] ?? []).map((t) => [t[0], withDare(t[1], lv)] as const));
       const mech = fresh && !trial ? mechanicOf(lv.introduces) : null;
       if (mech) tips.push(...MECH_TIPS[mech]);
@@ -481,6 +499,8 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
     },
 
     onDrive(code, a, s, text) {
+      // A Cold Snap pressed: the tips that ask for that press are done (on screen or waiting).
+      if (code === NOTE_PRESS && a === 1) for (const t of MECH_TIPS.snap.slice(0, 2)) endToast(banners, t[1]);
       const bit = 1 << (a & 15);
       if (code === NOTE_REFUSE && text && teaching && s.phase === 'day' && !(refused & bit)) {
         // The first refusal of each reason says it as a tip too.
@@ -502,8 +522,9 @@ export function createMoments(banners: Banners, sinks: MomentSinks): RunMoments 
           tip('p25');
         }
         if (p >= 0.6) tip('p60');
-        // Controls v3: the first due prompt on an Ember or Sprout leg goes ahead of any other toast.
-        if (due > 0) tip('due', TIP_HOLD, true, s.nubs.hero);
+        // Controls v3: the first due prompt on an Ember or Sprout leg, when the slot is free (it never
+        // pushes the hand-off's own tip off the screen: one message at a time).
+        if (due > 0 && banners.toasts.length === 0 && banners.toastClock >= banners.tipAt) tip('due', TIP_HOLD, false, s.nubs.hero);
         if (s.el !== null && s.tick - elAt >= MISSION_EVERY) {
           elAt = s.tick;
           elementTips(s);

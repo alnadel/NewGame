@@ -27,6 +27,15 @@
   margin-top: 2px;
 }
 
+/* A stacked segmented control's words never break mid-word ("Standard"): a long word widens its own
+   option (the others share what is left) and the words shrink on narrow phones. */
+.set-row--stack .seg { grid-auto-columns: minmax(min-content, 1fr); }
+.set-row--stack .seg-opt {
+  overflow-wrap: normal;
+  padding-inline: 8px;
+  font-size: min(var(--fs-d-md), 4.2vw);
+}
+
 /* The tile wears its section's face (settings.ts: Sound pink, Controls blue, Play green,
    Accessibility violet, the rest cloud); no gloss; the line icon in ink (≥ 4.4:1 on -hi → face). */
 .set-ic {

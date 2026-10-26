@@ -204,7 +204,8 @@ function joinSaves(local: Save, remote: Save): Save {
   for (const key of Object.keys(flags) as (keyof Save['flags'])[]) {
     const l = local.flags[key];
     const r = remote.flags[key];
-    (flags as Record<string, boolean | number>)[key] = typeof l === 'boolean' ? l || (r as boolean) : Math.max(l, r as number);
+    // Booleans only turn on; `taught` is bits (OR-ed); the counters take the larger.
+    (flags as Record<string, boolean | number>)[key] = typeof l === 'boolean' ? l || (r as boolean) : key === 'taught' ? l | (r as number) : Math.max(l, r as number);
   }
   const none = {} as Record<string, never>;
   return {
@@ -260,7 +261,7 @@ export function mergeSaves(base: Save | null, local: Save, remote: Save): Save {
     gamify: three(base.gamify, local.gamify, remote.gamify, (l, r, a) => gamifyMerge(a, l, r)),
     lastPlay: three(base.lastPlay, local.lastPlay, remote.lastPlay, (l, r) => (l > r ? l : r)),
     flags: fields(base.flags, local.flags, remote.flags, (key, l, r) =>
-      typeof l === 'boolean' ? ((l || r) as typeof l) : key === 'hintsShown' ? (Math.max(l as number, r as number) as typeof l) : l,
+      typeof l === 'boolean' ? ((l || r) as typeof l) : key === 'hintsShown' ? (Math.max(l as number, r as number) as typeof l) : key === 'taught' ? (((l as number) | (r as number)) as typeof l) : l,
     ),
   };
 }

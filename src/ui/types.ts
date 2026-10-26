@@ -292,7 +292,7 @@ export interface Ui {
   setPostcard(thumbUrl: string | null): void;
   setGhostThumb(mode: GhostMode): void;
   /** Elementals v2 (§7.9): anchors the ghost's fingertip at (x, y) CSS px in the world column (NaN: its place under Nubs). */
-  setGhostAt(x: number, y: number): void;
+  setGhostAt(x: number, y: number, wordLeft?: boolean): void;
   /** The frost meter is drawn in the corner: the ghost hand's swing stops short of it. */
   ghostClearMeter(on: boolean): void;
   /**

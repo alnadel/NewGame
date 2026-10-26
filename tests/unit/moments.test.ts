@@ -3,9 +3,9 @@
 // the COMEBACK.
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../src/config/tuning.ts';
-import { createBot, createRun, levelDef, NOTE_REFUSE, REFUSE_FULL, REFUSE_NOTHING, step, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
+import { createBot, createRun, levelDef, NOTE_PRESS, NOTE_REFUSE, REFUSE_FULL, REFUSE_NOTHING, step, trialLevel, type SimEvent, type SimState } from '../../src/core/index.ts';
 import { campaignConfig, STAR_COOL_LOST, STAR_FLAKES, STAR_GOAL, starState } from '../../src/game/campaign.ts';
-import { createMoments, ELEMENT_TIPS, LEVEL_TIPS, MECH_TIPS, MIXER_TIPS, RELAY_TIPS, withDare } from '../../src/game/moments.ts';
+import { AUTO_TIPS, createMoments, ELEMENT_TIPS, LEVEL_TIPS, MECH_TIPS, MIXER_TIPS, RELAY_TIPS, withDare } from '../../src/game/moments.ts';
 import { mechanicOf } from '../../src/game/mechanics.ts';
 import { defaults } from '../../src/meta/save.ts';
 import { createBanners, endToast, endToasts, holdToasts, resetBanners, showToast, updateBanners } from '../../src/render/banners.ts';
@@ -64,13 +64,16 @@ describe('toast queue', () => {
     run(b, 0.4);
     expect(b.toasts[0]!.text).toBe('m1');
   });
-  it('two tips of one moment both show: a tip queued under a second ago is never replaced, nothing on screen or not', () => {
+  it('one tip waits at most (one follow-up per moment): the newer replaces the waiting one, however recent', () => {
     const b = createBanners();
     showToast(b, 'tip', 'TIP', 'cash', 'coldsnap', 4);
     showToast(b, 'tip', 'TIP', 'snapBud', 'coldsnap', 4);
-    expect(b.toasts.map((t) => t.text)).toEqual(['cash', 'snapBud']);
-    run(b, 5);
     expect(b.toasts.map((t) => t.text)).toEqual(['snapBud']);
+    showToast(b, 'tip', 'TIP', 'go', 'coldsnap', 4);
+    updateBanners(b, 0.1, false);
+    showToast(b, 'tip', 'TIP', 'cash', 'coldsnap', 4);
+    showToast(b, 'tip', 'TIP', 'snapBud', 'coldsnap', 4);
+    expect(b.toasts.map((t) => t.text)).toEqual(['go', 'snapBud']);
   });
   it('a stamp or card over a toast on screen hides it and holds its clock until it has gone (fix round 3)', () => {
     const b = createBanners();
@@ -105,9 +108,10 @@ describe('toast queue', () => {
     showToast(b, 'tip', 'TIP', 'bud', 'drag', 4);
     updateBanners(b, 0.1, false);
     showToast(b, 'tip', 'TIP', 'soon', 'flare', 30, true);
+    // A plain tip behind a waiting urgent one is dropped (one tip waits at most).
     showToast(b, 'tip', 'TIP', 'deep', 'deep', 4);
     showToast(b, 'mission', 'MISSION ✓ 1/3', 'm1', null, 2);
-    expect(b.toasts.map((x) => x.text)).toEqual(['bud', 'soon', 'm1', 'deep']);
+    expect(b.toasts.map((x) => x.text)).toEqual(['bud', 'soon', 'm1']);
     run(b, 0.6);
     expect(b.toasts[0]!.text).toBe('soon');
     // On screen past TIP_YIELD_S, a mission does not make it step aside: it holds until it is ended.
@@ -117,13 +121,14 @@ describe('toast queue', () => {
     expect(b.toasts[0]!.text).toBe('soon');
     endToast(b, 'soon');
     run(b, 0.4);
-    expect(b.toasts.map((x) => x.text)).toEqual(['m1', 'm2', 'deep']);
+    expect(b.toasts.map((x) => x.text)).toEqual(['m1', 'm2']);
   });
   it('a tip waits 6 s after the last toast left (the top band rests) and while a cue is read; a mission does not', () => {
     const b = createBanners();
     showToast(b, 'tip', 'TIP', 'one', 'drag', 1);
+    updateBanners(b, 0.1, false);
     showToast(b, 'tip', 'TIP', 'two', 'drag', 1);
-    run(b, 1.7);
+    run(b, 1.6);
     expect(b.toasts.map((t) => t.text)).toEqual(['two']);
     run(b, 5);
     expect(b.toastT).toBe(-1);
@@ -433,6 +438,44 @@ describe('RunMoments', () => {
     expect(playTips(1001, 2, true).seen).toEqual([]);
   });
 
+  it('Auto actions on: Ember and Sprout never ask for a tap (their tag tip says Auto actions act)', () => {
+    for (const [id, hero] of [[1001, 'ember'], [1003, 'sprout']] as const) {
+      const save = defaults(0);
+      save.settings.autoAct = true;
+      const b = createBanners();
+      const m = createMoments(b, sinks().sinks);
+      const lv = trialLevel(id)!;
+      const s = createRun(campaignConfig(lv, false, true));
+      m.begin(save, lv, true);
+      const bot = createBot('reactive');
+      const seen: string[] = [];
+      for (let n = 0; n < 20_000 && s.relayIdx < 2 && s.phase !== 'dead' && s.phase !== 'won'; n++) {
+        step(s, bot.next(s));
+        for (const ev of s.events) m.onEvent(ev, s);
+        m.update(s, 1);
+        for (const t of b.toasts) if (!seen.includes(t.text)) seen.push(t.text);
+        b.toasts.length = 0;
+      }
+      expect(seen).toContain(AUTO_TIPS[hero]);
+      expect(seen.filter((t) => /\btap\b/i.test(t)), hero).toEqual([]);
+    }
+  });
+
+  it('a Cold Snap press ends the tips that ask for it, on screen or waiting', () => {
+    const lv = levelDef(10)!;
+    const save = defaults(0);
+    const b = createBanners();
+    const m = createMoments(b, sinks().sinks);
+    m.begin(save, lv, true);
+    const s = createRun(campaignConfig(lv, false, true));
+    m.onEvent({ e: 'go' } as SimEvent, s);
+    updateBanners(b, 0.1, false);
+    expect(b.toasts.map((t) => t.text)).toEqual([MECH_TIPS.snap[0]![1]]);
+    m.onDrive(NOTE_PRESS, 1, s, '');
+    for (let i = 0; i < 10; i++) updateBanners(b, 0.1, false);
+    expect(b.toasts).toEqual([]);
+  });
+
   it("Controls v3: the driver's triggers: due and the first refusal of each reason (docs/CONTROLS_V3.md §6.2)", () => {
     // Ember's leg of a fresh T1: the first due prompt, ahead of other toasts.
     const t1 = playTips(1001, 1);
@@ -443,8 +486,8 @@ describe('RunMoments', () => {
     // Each refusal reason once, in its chip's words (a repeat of the same reason adds nothing).
     for (const [a, text] of [[REFUSE_NOTHING, 'Nothing to burn yet'], [REFUSE_NOTHING + 16, 'Nothing to burn yet'], [REFUSE_FULL, 'Two walls ready']] as const) {
       t1.m.onDrive(NOTE_REFUSE, a, t1.s, text);
+      t1.drain();
     }
-    t1.drain();
     expect(t1.seen.filter((x) => x === 'Nothing to burn yet' || x === 'Two walls ready')).toEqual(['Nothing to burn yet', 'Two walls ready']);
     // A passed Trial, or an experienced player's Endless run, gets no refusal tips.
     const done = playTips(1001, 1, true);

@@ -16,7 +16,7 @@
 // resize, a contrast change or when the display font arrives); a frame blits it with a transform and
 // an alpha. No shadowBlur, no per-frame gradients.
 
-import { FORECASTS, HERO_IDS, type BiomeId, type ForecastId } from '../core/index.ts';
+import { FORECASTS, type BiomeId, type ForecastId } from '../core/index.ts';
 import type { View } from '../game/camera.ts';
 import { bodyFont, burst, candyRect, chip, coin, displayFont, FACE, fontGen, INK, INK_2, onDisplayFont, outlined, panel, plate, ribbon, RIBBON, starSprite, TEXT, well, type Face, type FaceName, type RibbonTone } from './candy.ts';
 import { drawGlyph } from './glyphs.ts';
@@ -205,8 +205,6 @@ const STAMP_LOOK: Readonly<Record<StampKind, readonly [Face, string]>> = {
   // Elementals: TAG! on the incoming element's face (showStamp's).
   tag: [FACE.violet, '#FFFFFF'],
 };
-/** Intro card glyphs of an element (a Trial's card). */
-const LEGEND: readonly string[] = HERO_IDS;
 /** The level card's slide-out (s). */
 const LEVEL_OUT_S = 0.3;
 /** The level card's slide-in (s). */
@@ -356,19 +354,14 @@ const TRIAL_TIP_REST = 2;
 export function tipPace(b: Banners, trial: boolean): void {
   b.tipRest = trial ? TRIAL_TIP_REST : TIP_REST;
 }
-/**
- * A waiting tip queued this recently (s) is never replaced by a newer one: the newer waits behind it
- * (two tips of one moment, such as a snap's gauge tip and the bud under it, both show).
- */
-const TIP_KEEP_S = 1;
 
 /**
  * Queues an in-run toast (see Banners.toasts). A mission goes ahead of waiting tips (and a tip that
- * has shown TIP_YIELD_S starts to leave); a new tip replaces a waiting one queued at least TIP_KEEP_S
- * ago, so tips never pile up and none of one moment is lost.
+ * has shown TIP_YIELD_S starts to leave); a new tip replaces the waiting one, so at most one tip waits
+ * (one follow-up per moment: tips never pile up behind the one on screen).
  * An `urgent` toast (a cue about to happen, the first Heat Flare) goes next at once: whatever waits
  * is dropped and the toast on screen starts to leave now. Once queued it keeps its place: a later
- * tip waits behind it instead of replacing it, a mission goes after it, and on screen it does not
+ * tip is dropped instead of replacing it, a mission goes after it, and on screen it does not
  * step aside (it leaves when its hold runs out or endToast ends it).
  */
 export function showToast(b: Banners, kind: ToastKind, kicker: string, text: string, glyph: string | null, hold: number, urgent = false): void {
@@ -382,10 +375,13 @@ export function showToast(b: Banners, kind: ToastKind, kicker: string, text: str
     return;
   }
   if (kind === 'tip') {
-    // A waiting urgent or recent tip is kept (the new one waits behind it); other waiting tips are replaced.
+    // One tip waits at most (one follow-up per moment): a waiting urgent one is kept and the new one
+    // dropped behind it; a waiting plain one is replaced by the newer.
     for (let i = q.length - 1; i >= first; i--) {
       const w = q[i] as Toast;
-      if (w.kind === 'tip' && !w.urgent && b.toastClock - w.at >= TIP_KEEP_S) q.splice(i, 1);
+      if (w.kind !== 'tip') continue;
+      if (w.urgent) return;
+      q.splice(i, 1);
     }
     if (q.length < TOAST_QUEUE) q.push(t);
     return;
@@ -874,8 +870,9 @@ function sizeCard(b: Banners, v: View, scale: number, room: number): void {
   };
   if (b.levelConcept && b.levelBlurb) {
     const fs = [1, 0.9, 0.85, 1 / scale, 0.9 / scale].filter((f) => (f >= 0.85 || scale > 1) && f <= 1);
-    // A Trial's card (an element's glyph or the Elementals glyph) says its whole sentence before a line goes.
-    if (b.levelConcept === 'elementals' || LEGEND.includes(b.levelConcept)) for (const f of scale > 1 ? [...fs, 0.8 / scale] : fs) if (at(f, true, true)) return;
+    // Every teaching card (a Journey concept, a Trial's element) says its whole sentence before a line
+    // goes: the card shrinks first (a cut blurb loses the instruction it ends on).
+    for (const f of [...fs, 0.8 / Math.max(1, scale)]) if (at(f, true, true)) return;
     for (const f of fs) if (at(f, true)) return;
   }
   // Too tall even at the last fit: the whole card scales down, not below 0.8.
