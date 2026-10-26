@@ -416,7 +416,7 @@ vane and the finger's state into the sim's verbs.
   a world drag from its touch point and acts nothing.
   ↑/W press, ↓/S presses on a Cold Snap leg, ←/→ turn, steer or notch the vane, the wheel turns the
   sun. `handoff()` on every TAG keeps a held finger with the new leg's drag: into the sun a 150 ms
-  ramp; into Drip fast motion is dropped and the rest ramps in over 300 ms; into Gust the vane waits
+  ramp (clamped at 0, so a sample stamped before the TAG turns nothing); into Drip fast motion is dropped and the rest ramps in over 300 ms; into Gust the vane waits
   for a 120 ms pause.
 - **Session**: each batch `takeFrames(n)` and `controls()` feed `driver.fill(s, f, ctl)` before
   `step` (the recording keeps the driver's verbs, so replays stay exact). `beginRun` builds the run's
@@ -424,7 +424,8 @@ vane and the finger's state into the sim's verbs.
   now-only guide, Auto Snap on the lowest comfort rungs, Auto actions and reduced motion. The notes
   (§2.4) go to fx, audio and haptics (a repeat refusal stays silent), the cue line (`ui/labels.ts`
   `noteText`: "Armed", "Growing", the refusal reasons, the calm cues) and the tips; a magnet glide's
-  detents tick the dial without a buzz or click. Aim help Strong and Auto actions mark a run
+  detents tick the dial without a buzz or click, decided per tick from the driver's `view.glideTick`
+  (`feelEvents` in `fx.ts` builds the frame's audio and haptics list). Aim help Strong and Auto actions mark a run
   assisted, as the always-on guide does.
 - **Camera** (§5.2): Nubs sits at (352 u + the HUD band) over the view height, within 60-72 %.
 - **Teaching by doing** (§6): the first full meter on the Cold Snap's level (or a profile's first
