@@ -2138,7 +2138,7 @@ button's scale pulses, the dial dimming with the settle-arc highlight and the ca
 ### 16.7 Open for the lead
 
 1. (Fix round 3, §16.8: the substituted-level gate passes; the chapter gate still fails on ch3, ch7 and
-   ch12.) **§9.5's substituted-level and chapter gates (hard) fail**, as at CORE's branch, and §5.3's levers are
+   ch12, unchanged at the round's merge, §16.10.) **§9.5's substituted-level and chapter gates (hard) fail**, as at CORE's branch, and §5.3's levers are
    spent: `SUB_OVERRIDE` holds its 8 entries and L169 already drops its slot yet measures 2 vs 9. The
    chapters that fail are those with the most substituted levels (ch17 has nine), and on the 154
    unchanged levels humanTouch matches humanDial (2,346 vs 2,345 passes), so the driver is not the cause.
@@ -2342,3 +2342,83 @@ spec changes the lead decided for streamlined controls:
   mechanics, layout all pass; `build:single` **834,549 B** (11 B under 834,560 B; +2,518 B over
   832,031 B: the merge with the core fixer's branch needs room).
 
+
+### 16.10 Fix round 3: the merge (`fix3/core` d3330a5, then `fix3/ux` 52d067b, on 358a7ee)
+
+**Merges** (`--no-ff`, CORE first). CORE's branch merged clean. UX's conflicted in three files:
+- `src/config/trials.ts`: CORE's re-authored content (T1's first wall b381, T4's two-sided Gust
+  weather) with UX's card blurbs (T1 "Tap the flame button once for each wall…", T4 "Drag to set the
+  wind…"; T3's merged clean).
+- `src/core/drive/driver.ts`: both fixers closed F1 in `fill()`. Kept as one: CORE's read-first
+  snapshot of the frame (F3: `downEdge`, `upEdge`, `dTheta`, `down`, `key` before the driver writes),
+  UX's resting-jitter rule (`turn = dTheta ≠ 0 && !rest`, F11) in `hand` and the move clock, and UX's
+  key stroke (a key turn adds to the stroke at the sim's key rate; its release with no finger down is
+  a lift whose direction is the stroke's, or the key's when the stroke is under 1°; `keyWas` resets off
+  sun legs). CORE's drive.test F1 case and UX's hands.test key-tap case both pass on it, and the
+  golden diff against CORE's branch is empty.
+- This spec: CORE's as-built is §16.8, UX's is §16.9 (its section references renumbered).
+
+**Findings neither branch closed** (each reproduced first, fixed, with a regression test):
+- **F6, the TAG ramp's sign.** A coalesced sample stamped 10 ms before a hand-off into a sun leg
+  turned the sun −2° on a 30 px leftward move (the ramp factor was negative). `moveTo` clamps the ramp
+  at 0 (`input.ts`); game.test fails on the old line with exactly that −2.
+- **F8, the session half.** The session dropped a glide's detents per batch, from `view.glide` after
+  the batch (NaN on the glide's last tick). It now builds the frame's audio and haptics list per tick
+  from the driver's `view.glideTick` (`feelEvents` in `fx.ts`); fx still gets every detent (the dial
+  ticks). hands.test: a glide that crosses a detent line in its last ticks sends none of its detents,
+  the player's own drag sends its own, and the retired per-batch rule lets one through on some batch
+  phase. `AudioView.glide` and `onEvents`' `glide` argument stay as API; the session no longer sets
+  them.
+- **F21's last clause** (the UX fixer had 11 B left): the snap lesson's cue says what a snap does,
+  "Full! Tap the frost button: a frost cloud cools Nubs." ("Full! Press ↓: a frost cloud cools
+  Nubs." on a keyboard; §6.1 amended).
+
+**Merge notes applied.** CALM a = 1 is never sent: the `calm.auto` chip is gone (labels.ts,
+controls.ts, ui-logic.test). The drag kick (§3.5) lets the governor gust on the tick a drag sets a
+new notch: the test hook records those ticks (`el.notches`, dev builds only) and touch.spec's T4
+spacing test exempts a gust on one. No e2e indexed the moved Trial content. touch.spec's press-in
+latency check read each frame in a timer queued from the frame callback, which Chrome defers during a
+touch burst (one failure: frames at 7,477-7,542 ms, their timers all at 7,728 ms, after the tap had
+lifted); it now reads the press-in inside the animation-frame task (6 of 6 alone; it failed 1 of 3
+before).
+
+**Bundle.** The merged build was 835,301 B (741 B over). With no feature cut, the TypeScript `private`
+members of the save store, the audio facade, assist, ambience, timing, cadence, the loop, storage and
+the renderer became ES `#private` members (90, renamed through the language service, as in §16.3):
+833,096 B; with this round's fixes **833,132 B**, 1,428 B under 834,560 B.
+
+**Release gates (§12.5) on the merge:**
+1. typecheck: clean.
+2. `npm test`: 58 files, 1,208/1,208.
+3. goldens: against 358a7ee only `trials` 1001, 1004, 1005, 1006 and 1007 with their frames (CORE's
+   §16.8 re-pin); none moved at the merge.
+4. bake: only levels 54, 79, 112, 139, 145, 162-165 and 167-169 (all §9.4 substitutes) and
+   `LEVEL_BAKE_RUN`.
+5. `sim --check --seeds 40` (4 min 13 s): all targets met; idleTouch R2-R4 0 of 40. Advisory:
+   humanTouch outlives humanDial at R0, R2, R3; misses at R1 (Day 2 10:54 AM vs 11:30) and R4 (Day 1
+   11:44 AM vs 12:21 PM), as on CORE's branch.
+6. `sim --campaign --bot all --tries 3 --compare` (baseline SHA-256 `dce2686f…05ee` matches; 4 min
+   33 s): oracle 200/200, reactive 100%, idleTouch 11 passes all idle's, substituted levels PASS (worst
+   margin −1), teaching slots 20, 20, 20, 20, 19 of 20, humanTouch 93.3% of 1-40 first try (resting
+   94.2%). **FAIL, one hard gate: chapters ch3 199 < 200, ch7 181 < 182, ch12 178 < 182**, the same
+   numbers as CORE's branch: the UX merge moved no bot.
+7. `sim --trials --check --perf` (57 s): exit 0, every Trial passes with only the accepted waivers (G6
+   on T1, T2, T4, T5; G4 on T5); G5e passes on T4, T6, T7; G8d 8/8; G9b T1 1.63 s, T3 6.40 s, T5
+   1.68 s, T7 1.55 s; G11 misses on T5 only among the counted Trials; the driver 0.62 µs/tick on T7.
+8. `bench-step`: step ×1.067 (gate ≤ 1.10), guide ×1.038; `--gen` PASS (p99 1.28 ms, paired ×0.907,
+   over 1 ms ×0.827, over 2 ms ×0.741); `--drive` 0.25 µs/tick.
+9. Playwright, default workers (2), both projects: 443 passed, 65 skipped, 2 failed. Alone:
+   render.spec's left-hand button test 3 of 3 (a load flake: 2 of its 3 quick presses counted),
+   touch.spec's press-in latency fixed above (a measurement race), touch.spec 13/13 after it.
+10. `build:single`: 833,132 B ≤ 834,560 B.
+
+**Open for the lead.**
+1. **Gate 6's chapter row still fails (ch3 −1, ch7 −1, ch12 −4)**, unchanged by the merge. §16.8
+   shows the granted levers cannot close it (ch12 stays short even with L112 at 20/20). The row is a
+   strict per-chapter "≥" between two bots of about equal strength on 200 Bernoulli samples a
+   chapter (the standard error of a chapter's difference is about 6 passes at ch12's 90%), so with 20
+   chapters it fails somewhere on almost every run even when humanTouch is ahead overall (2,381 vs
+   2,345 on the unchanged levels). Choosing between a tolerance of about one standard error per
+   chapter, a pooled test, or new content is the lead's call; this merge does not change the gate.
+2. G11 still misses on T5 (§16.7 item 3).
+3. The advisory humanTouch-vs-humanDial rows at R1 and R4 (row 5 above).
