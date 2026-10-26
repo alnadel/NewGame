@@ -190,6 +190,8 @@ export function createDriver(): Driver {
   let liftAt = NEVER;
   let strokeDir = 0;
   let stroke = 0;
+  /** The last tick's turn key on a sun leg (a key is a stroke: its release is a lift, §4.5). */
+  let keyWas = 0;
   let seen = -1;
   // The glide (§4.5): its ticks (0 none) and ticks sent, its turn and that turn quantized, the steps
   // sent, its target θ, under a resting finger (no edges), its kind (0 track, 1 rescue, 2 hand-over),
@@ -606,6 +608,7 @@ export function createDriver(): Driver {
       moveAt = liftAt = gAt = NEVER;
       strokeDir = 0;
       stroke = 0;
+      keyWas = 0;
       seen = -1;
       gN = 0;
       closing = false;
@@ -628,12 +631,23 @@ export function createDriver(): Driver {
         const hero = s.nubs.hero;
         const drag = HEROES[hero].drag;
         // 2. The hand and the sun move, from the frame as the input filled it (before the driver writes).
-        const hand = (f.down && !c.rest) || f.downEdge || f.upEdge || f.dTheta !== 0 || f.key !== 0;
+        // A resting finger's turn is its sensor jitter inside the input's still box: no hand, no move.
+        const turn = f.dTheta !== 0 && !c.rest;
+        const hand = (f.down && !c.rest) || f.downEdge || f.upEdge || turn || f.key !== 0;
         if (drag === 'sun') {
-          if (s.ready === 0 && (f.downEdge || f.upEdge || f.dTheta !== 0 || f.key !== 0)) moveAt = now;
+          if (s.ready === 0 && (f.downEdge || f.upEdge || turn || f.key !== 0)) moveAt = now;
           // The stroke's net turn, from its downEdge to its upEdge.
           if (f.downEdge) stroke = 0;
           if (f.down || f.downEdge || f.upEdge) stroke += f.dTheta;
+          // A turn key is a stroke too (from its press, at the sim's key rate), and its release a lift.
+          if (f.key !== 0) {
+            if (keyWas === 0 && !f.down) stroke = 0;
+            stroke += f.key === 2 || f.key === -2 ? f.key * 0.75 : f.key * 2.5;
+          } else if (keyWas !== 0 && !f.down && !f.upEdge) {
+            liftAt = now;
+            strokeDir = stroke >= 1 ? 1 : stroke <= -1 ? -1 : 0;
+          }
+          keyWas = f.key;
           if (f.downEdge) {
             // The re-grip carry (an unfinished chase goes on) and undo (a glide since a lift ≤ 0.5 s old).
             let add = s.sun.mode === 'chasing' ? q1024(s.sun.lag) : 0;
@@ -644,7 +658,7 @@ export function createDriver(): Driver {
             liftAt = now;
             strokeDir = stroke >= 1 ? 1 : stroke <= -1 ? -1 : 0;
           }
-        }
+        } else keyWas = 0;
         // 3. The vane (Gust legs; 0 elsewhere).
         if (drag === 'vane') {
           const n0 = vaneNotch(raw);
