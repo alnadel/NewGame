@@ -780,7 +780,7 @@ pacing, spacing and scarcity (the substitutes below), never as input.
 | Moment | What happens |
 |---|---|
 | First run (tutorial, Endless R0) and L1 | The DOM ghost hand drags in the band 130 px below Nubs (today's lesson logic and slow time). Aim help is off until the lesson is passed (§4.1), so the pass is always the player's own drag, and the slow time and ghost hand never end before the player has dragged. No Cold Snap button until the first full meter (§3.1). The first `SETTLE` capture after the lesson shows the cue "Let go near the teal: the sun slides into shade." once per profile. |
-| L10 (Cold Snap) and the first full meter of a profile (in a lesson run, the moment the button first appears) | The button pulses; the game runs at `LESSON_TIME_SCALE` (0.5) until the first press, at most 2.5 s of real time; the ghost hand taps the button; cue "Full! Tap the frost button." |
+| L10 (Cold Snap) and the first full meter of a profile (in a lesson run, the moment the button first appears) | The button pulses; the game runs at `LESSON_TIME_SCALE` (0.5) until the first press, at most 2.5 s of real time; the ghost hand taps the button; cue "Full! Tap the frost button: a frost cloud cools Nubs." (amended, §16.10: the line says what a snap does) |
 | Intro Trials T1, T3 (Ember, Sprout) | At the element's first pick: 0.5× until the first press (≤ 2.5 s real), the ghost hand taps the button (ghost mode `press`), the pick's ring and tether pulse. |
 | Intro Trial T4 (Gust) | At the first red arrival ghost: 0.5× until the first vane notch (≤ 2.5 s), the ghost hand drags sideways 40 px and lifts (mode `vane`). |
 | Intro Trial T2 (Drip) | Unchanged (ghost `steer` at the TAG). |

@@ -223,7 +223,7 @@ export function cueText(id: CueId, dir: -1 | 1 | undefined, keyboard: boolean): 
       return 'SWING! Straight into the next shade: +Snow';
     case 'snap-ready':
       // v1.5: the frost meter is full. Controls v3 (§6.1): the button (or ↓) casts it.
-      return keyboard ? 'Full! Press ↓ for a Cold Snap.' : 'Full! Tap the frost button.';
+      return keyboard ? 'Full! Press ↓: a frost cloud cools Nubs.' : 'Full! Tap the frost button: a frost cloud cools Nubs.';
   }
   // A TAG (Controls v3 §6.1, §13.2): "{Name}'s turn." with the element's drag and button lines, as
   // its canvas banner says them.

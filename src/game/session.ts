@@ -337,7 +337,7 @@ export class Session {
   readonly fx: Fx;
   /** v1.5 mechanics: the renderer's MechView and the test hook's demos (game/mechanics.ts). */
   readonly mech = createMechanics();
-  /** Cold Snaps seen this session (the "Full! Tap the frost button." cue stops after two). */
+  /** Cold Snaps seen this session (the "Full! Tap the frost button: …" cue stops after two). */
   #snapsSeen = 0;
   /** Mission toasts, the first levels' tips and the COMEBACK (moments.ts). */
   readonly #moments: RunMoments;

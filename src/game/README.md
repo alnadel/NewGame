@@ -305,7 +305,7 @@ See V1_5_PLAN §3 for the contract; the sim (core) fills it, the game makes it r
   snow falls from it (`fx.ts`, `P_SNOWFALL`).
 - **Feedback** (`fx.ts`, audio, haptics): budGrow gold motes and a ring tick (sound: a tick climbing
   the scale, ≤ 8/s), bloom (petals, BLOOM!, +Snow, a short hit-stop; a bell run), frostReady (a cool
-  ring; a glassy shimmer; the cue line "Full! Tap the frost button." ("Press ↓" on a keyboard) until
+  ring; a glassy shimmer; the cue line "Full! Tap the frost button: a frost cloud cools Nubs." ("Press ↓" on a keyboard) until
   the player has snapped twice in the session), snap (COLD SNAP!, an ice ring and shards, a cool wash; a crack and whoosh that duck
   the score), snapEnd, deepEnter (DEEP at most every 4 s; a low whoom ≤ 1 per 2.5 s).
 - **Tips** (`moments.ts`): the level that teaches a mechanic shows its `MECH_TIPS` at their moments

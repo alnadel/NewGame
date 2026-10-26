@@ -365,7 +365,7 @@ describe('Title, Daily and cue copy (UM9)', () => {
     expect(cueText('tag-gust', undefined, false)).toBe("Gust's turn. Drag: set the wind · Button: calm the wind");
     expect(cueText('tag-nubs', undefined, false)).toBe("Nubs' turn. Drag: turn the sun · Button: Cold Snap");
     expect(cueDuration('tag-sprout', undefined)).toBe(2400);
-    expect([cueText('snap-ready', undefined, false), cueText('snap-ready', undefined, true)]).toEqual(['Full! Tap the frost button.', 'Full! Press ↓ for a Cold Snap.']);
+    expect([cueText('snap-ready', undefined, false), cueText('snap-ready', undefined, true)]).toEqual(['Full! Tap the frost button: a frost cloud cools Nubs.', 'Full! Press ↓: a frost cloud cools Nubs.']);
   });
 
   it('Controls v3: driver notes on the cue line: refusal reasons with their numbers, Armed and Growing, the calm cues (§8.2, §13.3)', () => {
