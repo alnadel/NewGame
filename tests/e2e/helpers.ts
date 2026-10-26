@@ -49,6 +49,8 @@ export interface ShadyState {
     spent: number;
     /** The ticks of this run's gusts. */
     gusts: number[];
+    /** The ticks the driver set a new vane notch on. */
+    notches: number[];
     objs: { k: string; x: number; y: number; state: number; size: number; grown: number; need: number; veiled: boolean }[];
     burns: number;
     drinks: number;

@@ -403,7 +403,7 @@ test('T4: a swing carried past the TAG into Gust leaves the vane calm; after a 1
   await expect.poll(async () => (await state(page)).drive.vane, { timeout: 2_000 }).toBe(1);
 });
 
-test('T4 leg 1: 10 slow drags of 40-120 px over 0.7-1.2 s each leave the vane at its notch, gusts at least 15 ticks apart', async ({ page }) => {
+test('T4 leg 1: 10 slow drags of 40-120 px over 0.7-1.2 s each leave the vane at its notch, gusts at least 15 ticks apart (but on a new notch)', async ({ page }) => {
   test.slow();
   const cdp = await playTrial(page, 4, 1, 0, 0.5);
   await expect.poll(async () => (await state(page)).hero).toBe('gust');
@@ -423,8 +423,9 @@ test('T4 leg 1: 10 slow drags of 40-120 px over 0.7-1.2 s each leave the vane at
     expect((await state(page)).drive.vane, `drag ${i}: ${dx} px from ${v0}`).toBe(want);
     await page.waitForTimeout(250);
   }
-  const g = (await state(page)).el!.gusts;
-  for (let i = 1; i < g.length; i++) expect(g[i]! - g[i - 1]!, `gusts ${i - 1}-${i}`).toBeGreaterThanOrEqual(15);
+  // §3.5's drag kick: on the tick a drag sets a new notch the governor may gust at once.
+  const { gusts: g, notches } = (await state(page)).el!;
+  for (let i = 1; i < g.length; i++) if (!notches.includes(g[i]!)) expect(g[i]! - g[i - 1]!, `gusts ${i - 1}-${i}`).toBeGreaterThanOrEqual(15);
 });
 
 /**

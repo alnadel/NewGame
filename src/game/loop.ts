@@ -14,37 +14,37 @@ export class FixedClock {
   debugScale = 1;
   /** Sustained assist time scale (1 = normal), eased by the session. */
   assist = 1;
-  private hitStop = 0;
-  private slowScale = 1;
-  private slowLeft = 0;
+  #hitStop = 0;
+  #slowScale = 1;
+  #slowLeft = 0;
   /** Game seconds advanced in the last frame (for render animations). */
   gameDt = 0;
 
   /** Freezes the sim for `sec` real seconds. */
   addHitStop(sec: number): void {
-    this.hitStop = Math.max(this.hitStop, sec);
+    this.#hitStop = Math.max(this.#hitStop, sec);
   }
 
   /** Runs time at `scale` for `sec` real seconds (after any hit-stop). */
   slowMo(scale: number, sec: number): void {
-    if (this.slowLeft > 0 && this.slowScale < scale) {
-      this.slowLeft = Math.max(this.slowLeft, sec);
+    if (this.#slowLeft > 0 && this.#slowScale < scale) {
+      this.#slowLeft = Math.max(this.#slowLeft, sec);
       return;
     }
-    this.slowScale = scale;
-    this.slowLeft = sec;
+    this.#slowScale = scale;
+    this.#slowLeft = sec;
   }
 
   get timeScale(): number {
-    if (this.hitStop > 0) return 0;
-    return (this.slowLeft > 0 ? this.slowScale : 1) * this.assist * this.debugScale;
+    if (this.#hitStop > 0) return 0;
+    return (this.#slowLeft > 0 ? this.#slowScale : 1) * this.assist * this.debugScale;
   }
 
   reset(): void {
     this.acc = 0;
-    this.hitStop = 0;
-    this.slowLeft = 0;
-    this.slowScale = 1;
+    this.#hitStop = 0;
+    this.#slowLeft = 0;
+    this.#slowScale = 1;
     this.gameDt = 0;
     this.assist = 1;
   }
@@ -52,12 +52,12 @@ export class FixedClock {
   /** Advances by `real` seconds; returns the number of ticks to run this frame. */
   advance(real: number): number {
     let scaled: number;
-    if (this.hitStop > 0) {
-      this.hitStop -= real;
+    if (this.#hitStop > 0) {
+      this.#hitStop -= real;
       scaled = 0;
     } else {
-      const s = this.slowLeft > 0 ? this.slowScale : 1;
-      if (this.slowLeft > 0) this.slowLeft -= real;
+      const s = this.#slowLeft > 0 ? this.#slowScale : 1;
+      if (this.#slowLeft > 0) this.#slowLeft -= real;
       scaled = real * s * this.assist * this.debugScale;
     }
     this.gameDt = scaled;

@@ -37,6 +37,7 @@ import {
   needOf,
   nextTagTicks,
   NOTE_PRESS,
+  NOTE_NOTCH,
   NOTE_REFUSE,
   PLAN_START_DATE,
   prepareRun,
@@ -191,6 +192,8 @@ let lastRefuse = 0;
 let cool = false;
 let answered = 0;
 const gustTicks: number[] = [];
+/** Test hook: the ticks the driver set a new vane notch on (§3.5's drag kick waives the gust spacing there). */
+const notchTicks: number[] = [];
 /**
  * World built before the Title's first frame: the view above Nubs plus the 540 u shadow reach, with
  * margin (GR19). Idle frames generate the rest; a tap at once pays the remainder on the first tick.
@@ -958,8 +961,10 @@ export class Session {
         if (!f) break;
         // The player's own turn (a bot's, on a bot run), before the driver adds any glide.
         if (s.ready === 0) this.#ownTurn += Math.abs(f.dTheta) + (f.key !== 0 ? 2.5 : 0);
+        const n0 = SINGLE ? 0 : this.driver.noteN;
         if (ctl) this.driver.fill(s, f, ctl[i] as DriveControl);
         step(s, f);
+        if (!SINGLE) for (let j = n0; j < this.driver.noteN; j++) if (this.driver.notes[2 * j] === NOTE_NOTCH) notchTicks.push(s.tick);
         if (this.#rec) recordFrame(this.#rec, f);
         for (const ev of s.events) {
           events.push(ev);
@@ -1458,7 +1463,7 @@ export class Session {
     this.#resetRender();
     this.fx.resetRun();
     this.mech.reset();
-    if (!SINGLE) gustTicks.length = 0;
+    if (!SINGLE) gustTicks.length = notchTicks.length = 0;
     this.#featSeen.clear();
     this.clock.reset();
     if (!keepInput) this.input.clearPending();
@@ -2904,6 +2909,7 @@ export class Session {
               hold: s.el.hold,
               spent: s.el.spent,
               gusts: gustTicks.slice(),
+              notches: notchTicks.slice(),
               objs: s.el.objs.map((o) => ({ k: o.kind, x: o.x, y: o.y, state: o.state, size: o.size, grown: o.grown, need: needOf(o), veiled: veiled(s, o) })),
               burns: s.stats.burns ?? 0,
               drinks: s.stats.drinks ?? 0,

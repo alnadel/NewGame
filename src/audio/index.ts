@@ -94,85 +94,85 @@ export function muteParam(): boolean {
 }
 
 class ShadyAudioImpl implements ShadyAudio {
-  private readonly engine = new AudioEngine();
-  private readonly router: SfxRouter;
-  private music: Music | null = null;
-  private amb: Ambience | null = null;
+  readonly #engine = new AudioEngine();
+  readonly #router: SfxRouter;
+  #music: Music | null = null;
+  #amb: Ambience | null = null;
   /** The fallback 25 ms pump (only while update() has stopped coming) and the watchdog timeout. */
-  private fallback: ReturnType<typeof setInterval> | null = null;
-  private watchdog: ReturnType<typeof setTimeout> | null = null;
-  private lastUpdate = Number.NEGATIVE_INFINITY;
-  private disposed = false;
-  private analyser: AnalyserNode | null = null;
-  private sfxVolume: number;
-  private musicVolume: number;
-  private isMuted: boolean;
+  #fallback: ReturnType<typeof setInterval> | null = null;
+  #watchdog: ReturnType<typeof setTimeout> | null = null;
+  #lastUpdate = Number.NEGATIVE_INFINITY;
+  #disposed = false;
+  #analyser: AnalyserNode | null = null;
+  #sfxVolume: number;
+  #musicVolume: number;
+  #isMuted: boolean;
   /** Key for direct play() calls: the day of the latest view. */
-  private day = 1;
+  #day = 1;
   onHeartbeat: ((strong: boolean) => void) | null = null;
 
   constructor(opts: AudioOptions) {
-    this.sfxVolume = opts.sfx ?? 0.8;
-    this.musicVolume = opts.music ?? 0.6;
-    this.isMuted = opts.muted ?? muteParam();
-    this.router = new SfxRouter({ play: (n, p, q) => this.start(n, p, q), applyScene: (s) => this.applyScene(s) }, nowMs);
-    this.router.onHeartbeat = (strong) => this.onHeartbeat?.(strong);
-    this.engine.onGraph((g) => {
-      g.setVolumes(this.sfxVolume, this.musicVolume);
-      g.setMuted(this.isMuted);
-      this.music = new Music(g);
+    this.#sfxVolume = opts.sfx ?? 0.8;
+    this.#musicVolume = opts.music ?? 0.6;
+    this.#isMuted = opts.muted ?? muteParam();
+    this.#router = new SfxRouter({ play: (n, p, q) => this.#start(n, p, q), applyScene: (s) => this.#applyScene(s) }, nowMs);
+    this.#router.onHeartbeat = (strong) => this.onHeartbeat?.(strong);
+    this.#engine.onGraph((g) => {
+      g.setVolumes(this.#sfxVolume, this.#musicVolume);
+      g.setMuted(this.#isMuted);
+      this.#music = new Music(g);
       // Cheap: its layers are built when first wanted, not inside the unlocking gesture.
-      this.amb = new Ambience(g);
-      this.armWatchdog();
+      this.#amb = new Ambience(g);
+      this.#armWatchdog();
     });
     const target = opts.unlockTarget === undefined ? (typeof window === 'undefined' ? null : window) : opts.unlockTarget;
-    if (target) this.engine.attachUnlock(target);
+    if (target) this.#engine.attachUnlock(target);
   }
 
   get status(): AudioStatus {
-    return this.engine.status;
+    return this.#engine.status;
   }
 
   get running(): boolean {
-    return this.engine.running;
+    return this.#engine.running;
   }
 
   get muted(): boolean {
-    return this.isMuted;
+    return this.#isMuted;
   }
 
   ensure(): void {
-    this.engine.ensure();
+    this.#engine.ensure();
   }
 
   setVolumes(sfx: number, music: number): void {
-    this.sfxVolume = sfx;
-    this.musicVolume = music;
-    this.engine.graph?.setVolumes(sfx, music);
+    this.#sfxVolume = sfx;
+    this.#musicVolume = music;
+    this.#engine.graph?.setVolumes(sfx, music);
   }
 
   setMuted(muted: boolean): void {
-    this.isMuted = muted;
-    this.engine.graph?.setMuted(muted);
+    this.#isMuted = muted;
+    this.#engine.graph?.setMuted(muted);
   }
 
   onDrive(code: number, a: number): void {
-    this.router.onDrive(code, a);
+    this.#router.onDrive(code, a);
   }
 
   onEvents(events: readonly SimEvent[], view: Readonly<AudioView>): void {
-    this.router.onEvents(events, view);
+    this.#router.onEvents(events, view);
   }
 
   update(view: Readonly<AudioView>, dtReal: number): void {
-    this.day = view.day;
-    this.lastUpdate = nowMs();
-    if (this.fallback !== null) {
-      clearInterval(this.fallback);
-      this.fallback = null;
+    this.#day = view.day;
+    this.#lastUpdate = nowMs();
+    if (this.#fallback !== null) {
+      clearInterval(this.#fallback);
+      this.#fallback = null;
     }
-    this.router.update(view, dtReal);
-    this.pump();
+    this.#router.update(view, dtReal);
+    this.#pump();
   }
 
   prewarm(): void {
@@ -180,86 +180,86 @@ class ShadyAudioImpl implements ShadyAudio {
   }
 
   resetRun(): void {
-    this.router.resetRun();
-    this.music?.stopMelody();
+    this.#router.resetRun();
+    this.#music?.stopMelody();
   }
 
   play(name: SfxName, params: SfxParams = {}): void {
-    this.router.cue(name, params.day === undefined ? { ...params, day: this.day } : params);
+    this.#router.cue(name, params.day === undefined ? { ...params, day: this.#day } : params);
   }
 
   playMelody(degrees: readonly number[], day: number): number {
-    return this.music && this.engine.running ? this.music.playMelody(degrees, day) : 0;
+    return this.#music && this.#engine.running ? this.#music.playMelody(degrees, day) : 0;
   }
 
   stopMelody(): void {
-    this.music?.stopMelody();
+    this.#music?.stopMelody();
   }
 
   onStatusChange(cb: (s: AudioStatus) => void): void {
-    this.engine.onStatus(cb);
+    this.#engine.onStatus(cb);
   }
 
   meter(): AnalyserNode | null {
-    const g = this.engine.graph;
-    if (g && !this.analyser) {
-      this.analyser = g.ctx.createAnalyser();
-      this.analyser.fftSize = 2048;
-      g.out.connect(this.analyser);
+    const g = this.#engine.graph;
+    if (g && !this.#analyser) {
+      this.#analyser = g.ctx.createAnalyser();
+      this.#analyser.fftSize = 2048;
+      g.out.connect(this.#analyser);
     }
-    return this.analyser;
+    return this.#analyser;
   }
 
   dispose(): void {
-    this.disposed = true;
-    if (this.fallback !== null) clearInterval(this.fallback);
-    if (this.watchdog !== null) clearTimeout(this.watchdog);
-    this.fallback = null;
-    this.watchdog = null;
-    const g = this.engine.graph;
-    if (g && this.amb) this.amb.stopAll(g.now);
-    this.engine.dispose();
+    this.#disposed = true;
+    if (this.#fallback !== null) clearInterval(this.#fallback);
+    if (this.#watchdog !== null) clearTimeout(this.#watchdog);
+    this.#fallback = null;
+    this.#watchdog = null;
+    const g = this.#engine.graph;
+    if (g && this.#amb) this.#amb.stopAll(g.now);
+    this.#engine.dispose();
   }
 
-  private armWatchdog(): void {
-    if (this.disposed || this.watchdog !== null) return;
-    this.watchdog = setTimeout(this.onWatchdog, WATCHDOG_MS);
+  #armWatchdog(): void {
+    if (this.#disposed || this.#watchdog !== null) return;
+    this.#watchdog = setTimeout(this.#onWatchdog, WATCHDOG_MS);
   }
 
-  private readonly onWatchdog = (): void => {
-    this.watchdog = null;
+  readonly #onWatchdog = (): void => {
+    this.#watchdog = null;
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    if (this.engine.running && this.fallback === null && (nowMs() - this.lastUpdate > STALE_MS || hidden)) {
-      this.fallback = setInterval(this.pump, PUMP_MS);
+    if (this.#engine.running && this.#fallback === null && (nowMs() - this.#lastUpdate > STALE_MS || hidden)) {
+      this.#fallback = setInterval(this.#pump, PUMP_MS);
     }
-    this.armWatchdog();
+    this.#armWatchdog();
   };
 
   /**
    * Plays a recipe now or on the grid, in the key of the palette playing. Dropped while the
    * context isn't running, so nothing piles up.
    */
-  private start(name: SfxName, params: SfxParams, quantize: boolean): void {
-    const g = this.engine.graph;
-    if (!g || !this.engine.running) return;
+  #start(name: SfxName, params: SfxParams, quantize: boolean): void {
+    const g = this.#engine.graph;
+    if (!g || !this.#engine.running) return;
     const now = g.now + START_AHEAD_S;
-    const t = quantize && this.music ? this.music.gridSlot(now) : now;
-    RECIPES[name](g, t, this.music && params.key === undefined ? { ...params, key: this.music.key } : params);
+    const t = quantize && this.#music ? this.#music.gridSlot(now) : now;
+    RECIPES[name](g, t, this.#music && params.key === undefined ? { ...params, key: this.#music.key } : params);
   }
 
   /** Skipped while the context isn't running: its clock is frozen, so automation would only pile up. */
-  private applyScene(scene: Readonly<Scene>): void {
-    const g = this.engine.graph;
-    if (!g || !this.music || !this.amb || !this.engine.running) return;
-    this.music.applyScene(scene, g.now);
-    this.amb.applyScene(scene, g.now);
+  #applyScene(scene: Readonly<Scene>): void {
+    const g = this.#engine.graph;
+    if (!g || !this.#music || !this.#amb || !this.#engine.running) return;
+    this.#music.applyScene(scene, g.now);
+    this.#amb.applyScene(scene, g.now);
   }
 
-  private readonly pump = (): void => {
-    const g = this.engine.graph;
-    if (!g || !this.music || !this.amb || !this.engine.running) return;
+  readonly #pump = (): void => {
+    const g = this.#engine.graph;
+    if (!g || !this.#music || !this.#amb || !this.#engine.running) return;
     const now = g.now;
-    this.music.pump(now, now + LOOKAHEAD_S);
-    this.amb.pump(now, now + LOOKAHEAD_S);
+    this.#music.pump(now, now + LOOKAHEAD_S);
+    this.#amb.pump(now, now + LOOKAHEAD_S);
   };
 }

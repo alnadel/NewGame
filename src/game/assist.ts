@@ -147,25 +147,25 @@ export class HintTracker {
   /** A lesson hint has shown in this run (latched: the lesson's slow time runs from here). */
   lessonStarted = false;
   /** Plain (non-lesson) hints shown this run. */
-  private plain = 0;
-  private lit = 0;
-  private lessonLost = 0;
-  private lessonShade = 0;
-  private readonly arcStart = new Int16Array(MAX_ARCS);
-  private readonly arcWidth = new Int16Array(MAX_ARCS);
-  private readonly stable = new Uint8Array(360);
+  #plain = 0;
+  #lit = 0;
+  #lessonLost = 0;
+  #lessonShade = 0;
+  readonly #arcStart = new Int16Array(MAX_ARCS);
+  readonly #arcWidth = new Int16Array(MAX_ARCS);
+  readonly #stable = new Uint8Array(360);
 
   reset(): void {
     this.shown = 0;
-    this.plain = 0;
-    this.lit = 0;
+    this.#plain = 0;
+    this.#lit = 0;
     this.active = 0;
     this.turn = 0;
     this.target = NaN;
     this.targetW = 0;
     this.lesson = false;
     this.lessonStarted = false;
-    this.lessonLost = 0;
+    this.#lessonLost = 0;
   }
 
   /** The ghost thumb should be on screen now (the lesson hides it while a finger is down). */
@@ -185,7 +185,7 @@ export class HintTracker {
   stop(): void {
     this.lesson = false;
     this.active = 0;
-    this.lit = 0;
+    this.#lit = 0;
   }
 
   /**
@@ -199,35 +199,35 @@ export class HintTracker {
       this.stop();
       return false;
     }
-    this.lit = p.f > 0 ? this.lit + dt : 0;
+    this.#lit = p.f > 0 ? this.#lit + dt : 0;
 
     if (this.lesson) {
-      this.lessonShade = p.f === 0 ? this.lessonShade + dt : 0;
-      if (!p.lessonOn || this.lessonShade >= LESSON_SHADE) {
+      this.#lessonShade = p.f === 0 ? this.#lessonShade + dt : 0;
+      if (!p.lessonOn || this.#lessonShade >= LESSON_SHADE) {
         // The lesson ended, or Nubs is in shade: the hint rests (it returns when he is lit again).
         this.lesson = false;
-        this.lit = 0;
+        this.#lit = 0;
         return false;
       }
-      if (this.track(p)) this.lessonLost = 0;
-      else if ((this.lessonLost += dt) >= LESSON_LOST) this.stop();
+      if (this.#track(p)) this.#lessonLost = 0;
+      else if ((this.#lessonLost += dt) >= LESSON_LOST) this.stop();
       return false;
     }
     if (this.active > 0) {
-      this.track(p);
+      this.#track(p);
       return false;
     }
-    if ((!p.lessonOn && this.plain >= MAX_HINTS) || p.dragging || this.lit < LIT_BEFORE_HINT) return false;
-    if (!this.track(p)) return false;
+    if ((!p.lessonOn && this.#plain >= MAX_HINTS) || p.dragging || this.#lit < LIT_BEFORE_HINT) return false;
+    if (!this.#track(p)) return false;
     this.shown++;
-    this.lit = 0;
+    this.#lit = 0;
     if (p.lessonOn) {
       this.lesson = true;
       this.lessonStarted = true;
-      this.lessonLost = 0;
-      this.lessonShade = 0;
+      this.#lessonLost = 0;
+      this.#lessonShade = 0;
     } else {
-      this.plain++;
+      this.#plain++;
       this.active = HINT_SECONDS;
     }
     return true;
@@ -237,16 +237,16 @@ export class HintTracker {
    * Picks (or keeps tracking) the target arc and the way round. Returns false when no safe arc of
    * at least MIN_ARC exists (the target is cleared).
    */
-  private track(p: HintInput): boolean {
-    const st = this.stable;
+  #track(p: HintInput): boolean {
+    const st = this.#stable;
     let anyStable = false;
     for (let b = 0; b < 360; b++) {
       const v = p.now[b] !== 0 && p.next[b] !== 0 ? 1 : 0;
       st[b] = v;
       if (v) anyStable = true;
     }
-    let n = anyStable ? this.arcs(st) : 0;
-    if (n === 0) n = this.arcs(p.now);
+    let n = anyStable ? this.#arcs(st) : 0;
+    if (n === 0) n = this.#arcs(p.now);
     if (n === 0) {
       this.target = NaN;
       this.targetW = 0;
@@ -257,8 +257,8 @@ export class HintTracker {
     if (!Number.isNaN(this.target)) {
       let best = Infinity;
       for (let i = 0; i < n; i++) {
-        const w = this.arcWidth[i] as number;
-        const c = (this.arcStart[i] as number) + (w - 1) / 2;
+        const w = this.#arcWidth[i] as number;
+        const c = (this.#arcStart[i] as number) + (w - 1) / 2;
         const gap = Math.max(0, Math.abs(angleDiff(this.target, c)) - (w + this.targetW) / 2);
         if (gap <= TRACK_SLACK && gap < best) {
           best = gap;
@@ -270,15 +270,15 @@ export class HintTracker {
     if (!tracked) {
       let bestW = 0;
       for (let i = 0; i < n; i++) {
-        if ((this.arcWidth[i] as number) > bestW) {
-          bestW = this.arcWidth[i] as number;
+        if ((this.#arcWidth[i] as number) > bestW) {
+          bestW = this.#arcWidth[i] as number;
           pick = i;
         }
       }
     }
-    const w = this.arcWidth[pick] as number;
+    const w = this.#arcWidth[pick] as number;
     this.targetW = w;
-    this.target = ((((this.arcStart[pick] as number) + (w - 1) / 2) % 360) + 360) % 360;
+    this.target = ((((this.#arcStart[pick] as number) + (w - 1) / 2) % 360) + 360) % 360;
     const d = angleDiff(this.target, p.theta);
     const ad = Math.abs(d);
     if (ad <= w / 2) {
@@ -297,7 +297,7 @@ export class HintTracker {
    * degrees as part of the run (the masks have slivers at part edges that would make the target
    * jump between halves of one teal region); returns how many.
    */
-  private arcs(mask: Uint8Array): number {
+  #arcs(mask: Uint8Array): number {
     // Start scanning just after a gap longer than MERGE_GAP, so no merged run wraps past the start.
     let first = -1;
     let gapRun = 0;
@@ -307,8 +307,8 @@ export class HintTracker {
       if (gapRun > MERGE_GAP) first = b;
     }
     if (first < 0) {
-      this.arcStart[0] = 0;
-      this.arcWidth[0] = 360;
+      this.#arcStart[0] = 0;
+      this.#arcWidth[0] = 360;
       return 1;
     }
     let n = 0;
@@ -318,7 +318,7 @@ export class HintTracker {
       const b = (first + k) % 360;
       if (mask[b] === 0) {
         if (start >= 0 && first + k - lastOn > MERGE_GAP) {
-          this.push(start, lastOn - start + 1, n++);
+          this.#push(start, lastOn - start + 1, n++);
           start = -1;
         }
         continue;
@@ -326,22 +326,22 @@ export class HintTracker {
       if (start < 0) start = first + k;
       lastOn = first + k;
     }
-    if (start >= 0) this.push(start, lastOn - start + 1, n++);
+    if (start >= 0) this.#push(start, lastOn - start + 1, n++);
     // Drop the narrow ones (in place).
     let m = 0;
     for (let i = 0; i < n && i < MAX_ARCS; i++) {
-      if ((this.arcWidth[i] as number) < MIN_ARC) continue;
-      this.arcStart[m] = this.arcStart[i] as number;
-      this.arcWidth[m] = this.arcWidth[i] as number;
+      if ((this.#arcWidth[i] as number) < MIN_ARC) continue;
+      this.#arcStart[m] = this.#arcStart[i] as number;
+      this.#arcWidth[m] = this.#arcWidth[i] as number;
       m++;
     }
     return m;
   }
 
-  private push(start: number, width: number, i: number): void {
+  #push(start: number, width: number, i: number): void {
     if (i >= MAX_ARCS) return;
-    this.arcStart[i] = start % 360;
-    this.arcWidth[i] = width;
+    this.#arcStart[i] = start % 360;
+    this.#arcWidth[i] = width;
   }
 }
 

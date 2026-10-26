@@ -391,7 +391,7 @@ describe('Title, Daily and cue copy (UM9)', () => {
     const calm = { ...v, act: 'calm' } as DriveView;
     expect([noteText(NOTE_CALM, 0, calm), noteText(NOTE_CALM, 1, calm), noteText(NOTE_CALM, 2, calm), noteText(NOTE_PRESS, 4, calm), noteText(NOTE_SETTLE, 1, calm)]).toEqual([
       '',
-      'Calm: saving Lift',
+      '', // CALM a=1 (the auto-calm) is never sent since fix round 3 (§3.5): no chip
       'The wind is calm',
       '',
       '',

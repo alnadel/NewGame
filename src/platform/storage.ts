@@ -23,53 +23,53 @@ const PROBE_KEY = 'shady.probe';
  *   up), and `degraded` reports whether the latest write failed.
  */
 class WebStorageAdapter implements StorageAdapter {
-  private readonly memory = new Map<string, string>();
-  private readonly backing: Storage | null;
+  readonly #memory = new Map<string, string>();
+  readonly #backing: Storage | null;
   /** Keys whose latest write reached memory only. */
-  private readonly unsynced = new Set<string>();
-  private lastWriteFailed: boolean;
+  readonly #unsynced = new Set<string>();
+  #lastWriteFailed: boolean;
 
   constructor(backing: Storage | null) {
-    this.backing = backing;
-    this.lastWriteFailed = backing === null || !probe(backing);
+    this.#backing = backing;
+    this.#lastWriteFailed = backing === null || !probe(backing);
   }
 
   get degraded(): boolean {
-    return this.backing === null || this.lastWriteFailed;
+    return this.#backing === null || this.#lastWriteFailed;
   }
 
   get(key: string): string | null {
-    if (this.backing && !this.unsynced.has(key)) {
+    if (this.#backing && !this.#unsynced.has(key)) {
       try {
-        const value = this.backing.getItem(key);
+        const value = this.#backing.getItem(key);
         if (value !== null) return value;
       } catch {
         // Storage revoked or blocked: fall back to what this session wrote.
       }
     }
-    return this.memory.get(key) ?? null;
+    return this.#memory.get(key) ?? null;
   }
 
   set(key: string, value: string): void {
-    this.memory.set(key, value);
-    if (!this.backing) return;
+    this.#memory.set(key, value);
+    if (!this.#backing) return;
     try {
-      this.backing.setItem(key, value);
-      this.unsynced.delete(key);
-      this.lastWriteFailed = false;
+      this.#backing.setItem(key, value);
+      this.#unsynced.delete(key);
+      this.#lastWriteFailed = false;
     } catch {
       // Quota exceeded or storage revoked mid-session: keep playing from memory, retry next write.
-      this.unsynced.add(key);
-      this.lastWriteFailed = true;
+      this.#unsynced.add(key);
+      this.#lastWriteFailed = true;
     }
   }
 
   remove(key: string): void {
-    this.memory.delete(key);
-    this.unsynced.delete(key);
-    if (!this.backing) return;
+    this.#memory.delete(key);
+    this.#unsynced.delete(key);
+    if (!this.#backing) return;
     try {
-      this.backing.removeItem(key);
+      this.#backing.removeItem(key);
     } catch {
       // Nothing else to do: the key is gone from memory either way.
     }

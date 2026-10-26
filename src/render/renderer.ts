@@ -517,16 +517,16 @@ export class Renderer {
    */
   settled = false;
   readonly options: RenderOptions = { mapOverlay: true, multiplyShadows: false, decor: true };
-  private readonly g: CanvasRenderingContext2D;
-  private readonly canvas: HTMLCanvasElement;
+  readonly #g: CanvasRenderingContext2D;
+  readonly #canvas: HTMLCanvasElement;
   /** A draw is in progress (left set when one threw: the next draw resets the context first). */
-  private inDraw = false;
+  #inDraw = false;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
+    this.#canvas = canvas;
     const g = canvas.getContext('2d', { alpha: false });
     if (!g) throw new Error('Canvas 2D is not available');
-    this.g = g;
+    this.#g = g;
     this.scene = createScene();
   }
 
@@ -545,9 +545,9 @@ export class Renderer {
    * that work: a one-off failure heals at once, and a persistent one fails every frame, which the
    * session turns into its crash overlay.
    */
-  private recover(): void {
+  #recover(): void {
     this.settled = false;
-    const g = this.g as CanvasRenderingContext2D & { reset?: () => void };
+    const g = this.#g as CanvasRenderingContext2D & { reset?: () => void };
     if (typeof g.reset === 'function') g.reset();
     else for (let i = 0; i < 8; i++) g.restore();
     const sc = this.scene;
@@ -564,16 +564,16 @@ export class Renderer {
   resize(cssW: number, cssH: number, dpr: number, safe: Insets): void {
     const w = Math.max(1, Math.round(cssW * dpr));
     const h = Math.max(1, Math.round(cssH * dpr));
-    if (this.canvas.width !== w) this.canvas.width = w;
-    if (this.canvas.height !== h) this.canvas.height = h;
+    if (this.#canvas.width !== w) this.#canvas.width = w;
+    if (this.#canvas.height !== h) this.#canvas.height = h;
     resizeScene(this.scene, cssW, cssH, dpr, safe);
     // The next frame repaints everything (a settled Results frame repaints only the map band).
     this.settled = false;
   }
 
   draw(inp: RenderInput): void {
-    if (this.inDraw) this.recover();
-    this.inDraw = true;
+    if (this.#inDraw) this.#recover();
+    this.#inDraw = true;
     this.draws++;
     const t0 = performance.now();
     const sc = this.scene;
@@ -586,14 +586,14 @@ export class Renderer {
       // Its bottom edge sits on a whole device pixel: a part-covered row would blend a little more
       // of each frame into the last and drift.
       const bottom = Math.floor((inp.sheetTop as number) * v.dpr) / v.dpr;
-      this.g.save();
-      this.g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-      this.g.beginPath();
-      this.g.rect(v.vx, v.vy, v.vw, Math.max(0, bottom - v.vy));
-      this.g.clip();
+      this.#g.save();
+      this.#g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+      this.#g.beginPath();
+      this.#g.rect(v.vx, v.vy, v.vw, Math.max(0, bottom - v.vy));
+      this.#g.clip();
     }
-    this.drawScene(inp);
-    if (band) this.g.restore();
+    this.#drawScene(inp);
+    if (band) this.#g.restore();
     this.settled =
       inp.screen === 'results' &&
       inp.sheetTop !== null &&
@@ -604,12 +604,12 @@ export class Renderer {
       !ringsAlive(sc.rings) &&
       !vignettesOn(sc.banners);
     sc.ms = performance.now() - t0;
-    this.inDraw = false;
+    this.#inDraw = false;
   }
 
-  private drawScene(inp: RenderInput): void {
+  #drawScene(inp: RenderInput): void {
     const sc = this.scene;
-    const g = this.g;
+    const g = this.#g;
     const v = sc.view;
     const s = inp.s;
     const snap = inp.snap;

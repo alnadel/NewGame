@@ -624,102 +624,102 @@ export interface SaveStoreOptions {
  */
 export class SaveStore {
   readonly status: LoadStatus;
-  private current: Save;
-  private readonly storage: StorageAdapter;
-  private readonly key: string;
-  private readonly debounceMs: number;
-  private readonly now: () => number;
+  #current: Save;
+  readonly #storage: StorageAdapter;
+  readonly #key: string;
+  readonly #debounceMs: number;
+  readonly #now: () => number;
   /** False after a future-version save was found on disk: that save must never be overwritten. */
-  private writable: boolean;
+  #writable: boolean;
   /** Raw pre-migration value to preserve in `.bak` before the first write. */
-  private pendingBackup: string | null = null;
-  private dirty = false;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  #pendingBackup: string | null = null;
+  #dirty = false;
+  #timer: ReturnType<typeof setTimeout> | null = null;
   /** The raw bytes last read from or written to the main key (to spot writes made elsewhere). */
-  private lastRaw: string | null;
-  private degradedNotified = false;
-  private readonly newRev: () => string;
+  #lastRaw: string | null;
+  #degradedNotified = false;
+  readonly #newRev: () => string;
   /** The revisions the in-memory save includes (as last written or adopted), newest last. */
-  private revs: string[] = [];
+  #revs: string[] = [];
   /** Saves this store wrote or adopted, by revision, oldest first (merge ancestors). */
-  private readonly known: { rev: string; save: Save }[] = [];
-  private readonly listeners = new Set<(save: Save) => void>();
-  private readonly externalListeners = new Set<(save: Save) => void>();
-  private readonly degradedListeners = new Set<() => void>();
-  private readonly detach: (() => void)[] = [];
+  readonly #known: { rev: string; save: Save }[] = [];
+  readonly #listeners = new Set<(save: Save) => void>();
+  readonly #externalListeners = new Set<(save: Save) => void>();
+  readonly #degradedListeners = new Set<() => void>();
+  readonly #detach: (() => void)[] = [];
 
   constructor(storage: StorageAdapter, options: SaveStoreOptions = {}) {
-    this.storage = storage;
-    this.key = options.key ?? SAVE_KEY;
-    this.debounceMs = options.debounceMs ?? SAVE_DEBOUNCE_MS;
-    this.now = options.now ?? Date.now;
-    this.newRev = options.newRev ?? randomRev;
-    const now = this.now();
-    const raw = storage.get(this.key);
-    this.lastRaw = raw;
+    this.#storage = storage;
+    this.#key = options.key ?? SAVE_KEY;
+    this.#debounceMs = options.debounceMs ?? SAVE_DEBOUNCE_MS;
+    this.#now = options.now ?? Date.now;
+    this.#newRev = options.newRev ?? randomRev;
+    const now = this.#now();
+    const raw = storage.get(this.#key);
+    this.#lastRaw = raw;
     const loaded = migrate(raw, now);
     let status: LoadStatus = loaded.status;
-    this.current = loaded.save;
-    this.writable = loaded.status !== 'future';
+    this.#current = loaded.save;
+    this.#writable = loaded.status !== 'future';
 
     if (loaded.status === 'future' && raw !== null) {
-      storage.set(`${this.key}${FUTURE_SUFFIX}`, raw);
+      storage.set(`${this.#key}${FUTURE_SUFFIX}`, raw);
     } else if (loaded.status === 'corrupt') {
-      const bak = migrate(storage.get(`${this.key}${BAK_SUFFIX}`), now);
+      const bak = migrate(storage.get(`${this.#key}${BAK_SUFFIX}`), now);
       if (bak.status === 'ok') {
-        this.current = bak.save;
+        this.#current = bak.save;
         status = 'recovered';
       } else {
         // Keep the unreadable bytes around for manual recovery.
-        this.pendingBackup = raw;
-        this.dirty = true;
+        this.#pendingBackup = raw;
+        this.#dirty = true;
       }
     } else if (loaded.status === 'ok') {
-      this.revs = readRevs(raw);
-      if (serialize(loaded.save, this.revs) !== raw) {
+      this.#revs = readRevs(raw);
+      if (serialize(loaded.save, this.#revs) !== raw) {
         // Validation changed something (older build, repaired field): keep the original in .bak.
-        this.pendingBackup = raw;
-        this.dirty = true;
+        this.#pendingBackup = raw;
+        this.#dirty = true;
       }
     }
     this.status = status;
-    this.remember(this.revs[this.revs.length - 1] ?? ROOT_REV, this.current);
+    this.#remember(this.#revs[this.#revs.length - 1] ?? ROOT_REV, this.#current);
 
     const source = options.changes === undefined ? browserChangeSource() : options.changes;
     if (source) {
-      this.detach.push(
+      this.#detach.push(
         source.onStorage((key, value) => {
-          if (key === this.key && value !== null) this.adopt(value);
+          if (key === this.#key && value !== null) this.#adopt(value);
         }),
-        source.onVisible(() => this.reread()),
+        source.onVisible(() => this.#reread()),
       );
     }
   }
 
   /** True when progress will not survive this session (memory-only storage or a newer save on disk). */
   get degraded(): boolean {
-    return this.storage.degraded || !this.writable;
+    return this.#storage.degraded || !this.#writable;
   }
 
   /** False when a save from a newer version of the game is on disk: nothing may be written over it. */
   get canPersist(): boolean {
-    return this.writable;
+    return this.#writable;
   }
 
   get(): Save {
-    return this.current;
+    return this.#current;
   }
 
   /** Replaces the save (e.g. with the result of a pure progression helper) and schedules a write. */
   set(next: Save): void {
-    this.current = next;
-    this.changed();
+    this.#current = next;
+    this.#changed();
   }
 
   /** Mutates the save in place and schedules a write. */
   update(mutate: (draft: Save) => void): void {
-    mutate(this.current);
-    this.changed();
+    mutate(this.#current);
+    this.#changed();
   }
 
   /**
@@ -727,18 +727,18 @@ export class SaveStore {
    * (whose storage event hasn't arrived yet) is merged in first, never overwritten.
    */
   flush(): void {
-    this.clearTimer();
-    if (!this.dirty || !this.writable) return;
-    const disk = this.storage.get(this.key);
-    const absorbed = disk !== null && disk !== this.lastRaw ? this.absorb(disk) : 'none';
-    if (this.dirty && this.writable) this.write();
-    if (absorbed === 'same' || absorbed === 'merged') this.notifyExternal();
+    this.#clearTimer();
+    if (!this.#dirty || !this.#writable) return;
+    const disk = this.#storage.get(this.#key);
+    const absorbed = disk !== null && disk !== this.#lastRaw ? this.#absorb(disk) : 'none';
+    if (this.#dirty && this.#writable) this.#write();
+    if (absorbed === 'same' || absorbed === 'merged') this.#notifyExternal();
   }
 
   /** Called with the new save after every set/update. Returns an unsubscribe function. */
   subscribe(listener: (save: Save) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
   }
 
   /**
@@ -747,48 +747,48 @@ export class SaveStore {
    * its settings. Returns an unsubscribe function.
    */
   onExternalChange(cb: (save: Save) => void): () => void {
-    this.externalListeners.add(cb);
-    return () => this.externalListeners.delete(cb);
+    this.#externalListeners.add(cb);
+    return () => this.#externalListeners.delete(cb);
   }
 
   /** Called once, on the first write after boot that didn't reach durable storage. */
   onDegraded(cb: () => void): () => void {
-    this.degradedListeners.add(cb);
-    return () => this.degradedListeners.delete(cb);
+    this.#degradedListeners.add(cb);
+    return () => this.#degradedListeners.delete(cb);
   }
 
   /** Writes anything pending and stops listening for other instances. */
   dispose(): void {
     this.flush();
-    for (const off of this.detach.splice(0)) off();
-    this.listeners.clear();
-    this.externalListeners.clear();
-    this.degradedListeners.clear();
+    for (const off of this.#detach.splice(0)) off();
+    this.#listeners.clear();
+    this.#externalListeners.clear();
+    this.#degradedListeners.clear();
   }
 
   /** Visibility re-read: adopt the stored save if another instance changed it meanwhile. */
-  private reread(): void {
-    const raw = this.storage.get(this.key);
-    if (raw !== null && raw !== this.lastRaw) this.adopt(raw);
+  #reread(): void {
+    const raw = this.#storage.get(this.#key);
+    if (raw !== null && raw !== this.#lastRaw) this.#adopt(raw);
   }
 
   /**
    * Another instance wrote `raw` (a storage event or a visibility re-read). Events can arrive late
    * and out of order, so the stored bytes are read again: the newest save is the one to merge.
    */
-  private adopt(raw: string): void {
-    const latest = this.storage.get(this.key) ?? raw;
-    if (latest === this.lastRaw) return;
-    const absorbed = this.absorb(latest);
+  #adopt(raw: string): void {
+    const latest = this.#storage.get(this.#key) ?? raw;
+    if (latest === this.#lastRaw) return;
+    const absorbed = this.#absorb(latest);
     if (absorbed === 'skip') return;
     if (absorbed === 'merged') {
       // The stored save lacks progress this instance has: write the merge back now.
-      this.clearTimer();
-      if (this.writable) this.write();
+      this.#clearTimer();
+      if (this.#writable) this.#write();
     } else {
-      this.clearTimer();
+      this.#clearTimer();
     }
-    this.notifyExternal();
+    this.#notifyExternal();
   }
 
   /**
@@ -797,30 +797,30 @@ export class SaveStore {
    * instance has progress the stored save lacks (left dirty, to be written); 'skip': not a save
    * this build can use (garbage, or a newer version's, which also stops all writes).
    */
-  private absorb(raw: string): 'same' | 'merged' | 'skip' {
-    const remote = migrate(raw, this.now());
-    if (remote.status === 'future') this.writable = false;
+  #absorb(raw: string): 'same' | 'merged' | 'skip' {
+    const remote = migrate(raw, this.#now());
+    if (remote.status === 'future') this.#writable = false;
     if (remote.status !== 'ok') return 'skip';
     const remoteRevs = readRevs(raw);
-    this.lastRaw = raw;
-    const head = this.revs[this.revs.length - 1];
+    this.#lastRaw = raw;
+    const head = this.#revs[this.#revs.length - 1];
     let next: Save;
     // A build from before Elementals v2 drops their field: its save never includes this one's.
-    if (!this.dirty && (head === undefined || remoteRevs.includes(head)) && (remote.save.elementals2 !== undefined || this.current.elementals2 === undefined)) {
+    if (!this.#dirty && (head === undefined || remoteRevs.includes(head)) && (remote.save.elementals2 !== undefined || this.#current.elementals2 === undefined)) {
       // It includes everything this instance has: adopt it as it is.
       next = remote.save;
     } else {
-      next = migrate(mergeSaves(this.ancestor(remoteRevs), this.current, remote.save), this.now()).save;
+      next = migrate(mergeSaves(this.#ancestor(remoteRevs), this.#current, remote.save), this.#now()).save;
     }
-    this.remember(remoteRevs[remoteRevs.length - 1] ?? ROOT_REV, remote.save);
+    this.#remember(remoteRevs[remoteRevs.length - 1] ?? ROOT_REV, remote.save);
     const same = JSON.stringify(next) === JSON.stringify(remote.save);
     // The other instance's revisions go last, so the list keeps its newest ones (its next save
     // will name them): this instance's own unseen ones are only ever named by the merge's.
-    this.revs = same ? remoteRevs : [...this.revs.filter((r) => !remoteRevs.includes(r)), ...remoteRevs].slice(-REVS_KEEP);
-    const target = this.current as unknown as Record<string, unknown>;
+    this.#revs = same ? remoteRevs : [...this.#revs.filter((r) => !remoteRevs.includes(r)), ...remoteRevs].slice(-REVS_KEEP);
+    const target = this.#current as unknown as Record<string, unknown>;
     for (const key of Object.keys(target)) delete target[key];
     Object.assign(target, next);
-    this.dirty = !same;
+    this.#dirty = !same;
     return same ? 'same' : 'merged';
   }
 
@@ -828,57 +828,57 @@ export class SaveStore {
    * The newest save this store knows that `remoteRevs` includes, or null. A revision-less root (a
    * fresh or pre-revision save both loaded) is in every save whose list hasn't overflowed yet.
    */
-  private ancestor(remoteRevs: readonly string[]): Save | null {
-    for (let i = this.known.length - 1; i >= 0; i--) {
-      const k = this.known[i] as { rev: string; save: Save };
+  #ancestor(remoteRevs: readonly string[]): Save | null {
+    for (let i = this.#known.length - 1; i >= 0; i--) {
+      const k = this.#known[i] as { rev: string; save: Save };
       if (k.rev === ROOT_REV ? remoteRevs.length < REVS_KEEP : remoteRevs.includes(k.rev)) return k.save;
     }
     return null;
   }
 
-  private remember(rev: string, save: Save): void {
-    const i = this.known.findIndex((k) => k.rev === rev);
-    if (i >= 0) this.known.splice(i, 1);
-    this.known.push({ rev, save: structuredClone(save) });
-    if (this.known.length > KNOWN_KEEP) this.known.shift();
+  #remember(rev: string, save: Save): void {
+    const i = this.#known.findIndex((k) => k.rev === rev);
+    if (i >= 0) this.#known.splice(i, 1);
+    this.#known.push({ rev, save: structuredClone(save) });
+    if (this.#known.length > KNOWN_KEEP) this.#known.shift();
   }
 
-  private write(): void {
-    if (this.pendingBackup !== null) {
-      this.storage.set(`${this.key}${BAK_SUFFIX}`, this.pendingBackup);
-      this.pendingBackup = null;
+  #write(): void {
+    if (this.#pendingBackup !== null) {
+      this.#storage.set(`${this.#key}${BAK_SUFFIX}`, this.#pendingBackup);
+      this.#pendingBackup = null;
     }
-    const rev = this.newRev();
-    this.revs = [...this.revs, rev].slice(-REVS_KEEP);
-    const raw = serialize(this.current, this.revs);
-    this.storage.set(this.key, raw);
-    this.lastRaw = raw;
-    this.remember(rev, this.current);
-    this.dirty = false;
-    if (this.storage.degraded && !this.degradedNotified) {
-      this.degradedNotified = true;
-      for (const cb of [...this.degradedListeners]) cb();
-    }
-  }
-
-  private notifyExternal(): void {
-    for (const cb of [...this.externalListeners]) cb(this.current);
-  }
-
-  private clearTimer(): void {
-    if (this.timer !== null) {
-      clearTimeout(this.timer);
-      this.timer = null;
+    const rev = this.#newRev();
+    this.#revs = [...this.#revs, rev].slice(-REVS_KEEP);
+    const raw = serialize(this.#current, this.#revs);
+    this.#storage.set(this.#key, raw);
+    this.#lastRaw = raw;
+    this.#remember(rev, this.#current);
+    this.#dirty = false;
+    if (this.#storage.degraded && !this.#degradedNotified) {
+      this.#degradedNotified = true;
+      for (const cb of [...this.#degradedListeners]) cb();
     }
   }
 
-  private changed(): void {
-    this.dirty = true;
-    if (this.timer !== null) clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
-      this.timer = null;
+  #notifyExternal(): void {
+    for (const cb of [...this.#externalListeners]) cb(this.#current);
+  }
+
+  #clearTimer(): void {
+    if (this.#timer !== null) {
+      clearTimeout(this.#timer);
+      this.#timer = null;
+    }
+  }
+
+  #changed(): void {
+    this.#dirty = true;
+    if (this.#timer !== null) clearTimeout(this.#timer);
+    this.#timer = setTimeout(() => {
+      this.#timer = null;
       this.flush();
-    }, this.debounceMs);
-    for (const listener of this.listeners) listener(this.current);
+    }, this.#debounceMs);
+    for (const listener of this.#listeners) listener(this.#current);
   }
 }

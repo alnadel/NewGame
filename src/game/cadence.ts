@@ -46,17 +46,17 @@ export class Cadence {
   /** Timestamp of the last drawn frame (ms), −∞ before the first. */
   lastDraw = Number.NEGATIVE_INFINITY;
   /** Next slot on the capped timeline (ms). */
-  private due = Number.NEGATIVE_INFINITY;
-  private interval = FRAME_60;
-  private lastScreen: CadenceScreen | null = null;
+  #due = Number.NEGATIVE_INFINITY;
+  #interval = FRAME_60;
+  #lastScreen: CadenceScreen | null = null;
   /** The next frame draws: a menu's one draw (entry, resize, DPR/governor change, canvas setting), a resized canvas. */
-  private dirty = true;
+  #dirty = true;
   /** Draws so far. */
   draws = 0;
 
   /** The next frame draws, whatever the screen's cap (resize, DPR or governor change, a canvas setting). */
   invalidate(): void {
-    this.dirty = true;
+    this.#dirty = true;
   }
 
   /** Frame interval (ms) the screen is capped to; 0 = every rAF. */
@@ -81,33 +81,33 @@ export class Cadence {
 
   shouldDraw(inp: CadenceInput): boolean {
     const interval = Cadence.intervalFor(inp);
-    this.interval = interval;
-    if (inp.screen !== this.lastScreen) {
+    this.#interval = interval;
+    if (inp.screen !== this.#lastScreen) {
       // A new screen always draws at once (and a menu draws exactly once from here).
-      this.lastScreen = inp.screen;
-      this.dirty = true;
-      this.due = Number.NEGATIVE_INFINITY;
+      this.#lastScreen = inp.screen;
+      this.#dirty = true;
+      this.#due = Number.NEGATIVE_INFINITY;
       return true;
     }
-    if (this.dirty) return true;
+    if (this.#dirty) return true;
     if (inp.screen === 'menu') return false;
     if (interval <= 0) return true;
-    return inp.now >= this.due - SLACK_MS;
+    return inp.now >= this.#due - SLACK_MS;
   }
 
   /** Call after each draw with the frame's timestamp. */
   drawn(now: number): void {
     this.draws++;
     this.lastDraw = now;
-    this.dirty = false;
-    const interval = this.interval > 0 && Number.isFinite(this.interval) ? this.interval : FRAME_60;
+    this.#dirty = false;
+    const interval = this.#interval > 0 && Number.isFinite(this.#interval) ? this.#interval : FRAME_60;
     // Advance the timeline by one slot when this draw kept to it (up to SLACK_MS early, under a slot
     // late); otherwise restart it from this draw: slow frames, a pause in the rAF stream, and draws
     // off the timeline (every rAF while a finger is down or slow-mo runs, an invalidated redraw).
     // Those come faster than a slot a frame on a 90-144 Hz display: a slot per draw pushed the
     // timeline ahead of the clock and held the canvas still after the finger lifted while the run
     // went on underneath.
-    const late = now - this.due;
-    this.due = this.interval > 0 && late >= -SLACK_MS && late <= interval ? this.due + interval : now + interval;
+    const late = now - this.#due;
+    this.#due = this.#interval > 0 && late >= -SLACK_MS && late <= interval ? this.#due + interval : now + interval;
   }
 }

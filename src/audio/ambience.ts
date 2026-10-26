@@ -68,40 +68,40 @@ function link(a: AudioNode, b: AudioNode | AudioParam): void {
 }
 
 export class Ambience {
-  private readonly g: AudioGraph;
-  private readonly layers: Record<LayerName, Layer | null> = { sizzle: null, cicadas: null, crickets: null, drone: null };
-  private crackleRate = 0;
-  private crackleNext = 0;
+  readonly #g: AudioGraph;
+  readonly #layers: Record<LayerName, Layer | null> = { sizzle: null, cicadas: null, crickets: null, drone: null };
+  #crackleRate = 0;
+  #crackleNext = 0;
 
   constructor(g: AudioGraph) {
-    this.g = g;
+    this.#g = g;
   }
 
   applyScene(s: Readonly<Scene>, now: number): void {
-    const sz = this.drive('sizzle', s.sizzleOn, SIZZLE_GAIN * s.sizzle, SIZZLE_TAU, now);
+    const sz = this.#drive('sizzle', s.sizzleOn, SIZZLE_GAIN * s.sizzle, SIZZLE_TAU, now);
     sz?.band?.set(s.sizzleHz, now, SIZZLE_TAU);
-    this.crackleRate = sz && s.sizzleOn ? s.crackle : 0;
-    this.drive('cicadas', s.cicadasOn, CICADA_PEAK * s.cicadas, CICADA_TAU, now);
-    this.drive('crickets', s.crickets > 0.01, CRICKET_GAIN * s.crickets, CRICKET_TAU, now);
-    this.drive('drone', s.drone > 0.001, DRONE_GAIN * s.drone, DRONE_TAU, now);
+    this.#crackleRate = sz && s.sizzleOn ? s.crackle : 0;
+    this.#drive('cicadas', s.cicadasOn, CICADA_PEAK * s.cicadas, CICADA_TAU, now);
+    this.#drive('crickets', s.crickets > 0.01, CRICKET_GAIN * s.crickets, CRICKET_TAU, now);
+    this.#drive('drone', s.drone > 0.001, DRONE_GAIN * s.drone, DRONE_TAU, now);
   }
 
   /** Schedules crackle grains and cricket chirps falling in [now, horizon). */
   pump(now: number, horizon: number): void {
-    const sz = this.layers.sizzle;
-    if (sz?.crackleIn && this.crackleRate > 0.5) {
-      if (this.crackleNext < now) this.crackleNext = now + this.poissonGap();
-      while (this.crackleNext < horizon) {
-        this.grain(sz.crackleIn, this.crackleNext);
-        this.crackleNext += this.poissonGap();
+    const sz = this.#layers.sizzle;
+    if (sz?.crackleIn && this.#crackleRate > 0.5) {
+      if (this.#crackleNext < now) this.#crackleNext = now + this.#poissonGap();
+      while (this.#crackleNext < horizon) {
+        this.#grain(sz.crackleIn, this.#crackleNext);
+        this.#crackleNext += this.#poissonGap();
       }
     }
-    const cr = this.layers.crickets;
+    const cr = this.#layers.crickets;
     if (!cr?.crickets || cr.idleSince >= 0) return;
     for (const c of cr.crickets) {
       if (c.next < now) c.next = now + Math.random() * 0.4;
       while (c.next < horizon) {
-        this.chirp(c, c.next);
+        this.#chirp(c, c.next);
         c.next += CHIRP.every + (Math.random() * 2 - 1) * CHIRP.jitter;
       }
     }
@@ -109,17 +109,17 @@ export class Ambience {
 
   /** Stops every layer at once (dispose). */
   stopAll(now: number): void {
-    for (const name of Object.keys(this.layers) as LayerName[]) {
-      const l = this.layers[name];
-      if (l) this.stop(l, now);
-      this.layers[name] = null;
+    for (const name of Object.keys(this.#layers) as LayerName[]) {
+      const l = this.#layers[name];
+      if (l) this.#stop(l, now);
+      this.#layers[name] = null;
     }
   }
 
   /** Builds the layer when first wanted, glides its level, and retires it once idle long enough. */
-  private drive(name: LayerName, wanted: boolean, level: number, tau: number, now: number): Layer | null {
-    let l = this.layers[name];
-    if (wanted && !l) l = this.layers[name] = this.build(name, now);
+  #drive(name: LayerName, wanted: boolean, level: number, tau: number, now: number): Layer | null {
+    let l = this.#layers[name];
+    if (wanted && !l) l = this.#layers[name] = this.#build(name, now);
     if (!l) return null;
     l.levelS.set(wanted ? level : 0, now, tau);
     if (wanted) {
@@ -128,12 +128,12 @@ export class Ambience {
     }
     if (l.idleSince < 0) l.idleSince = now;
     if (now - l.idleSince < idleFor(tau)) return l;
-    this.stop(l, now);
-    this.layers[name] = null;
+    this.#stop(l, now);
+    this.#layers[name] = null;
     return null;
   }
 
-  private stop(l: Layer, now: number): void {
+  #stop(l: Layer, now: number): void {
     const p = l.level.gain;
     // Whatever is left of the fade goes to 0 on a short ramp, then the sources stop.
     p.cancelScheduledValues(now);
@@ -151,10 +151,10 @@ export class Ambience {
     if (live === 0) done();
   }
 
-  private build(name: LayerName, t: number): Layer {
-    const ctx = this.g.ctx;
+  #build(name: LayerName, t: number): Layer {
+    const ctx = this.#g.ctx;
     const level = ctx.createGain();
-    level.connect(name === 'sizzle' ? this.g.buses.sfx : this.g.buses.amb);
+    level.connect(name === 'sizzle' ? this.#g.buses.sfx : this.#g.buses.amb);
     const l: Layer = { level, levelS: new Smoothed(level.gain, 0), nodes: [level], sources: [], idleSince: -1 };
     // Connects a chain of nodes into the layer's level and tracks them.
     const chain = (...nodes: AudioNode[]): AudioNode => {
@@ -184,9 +184,9 @@ export class Ambience {
     };
     const noise = (dest: AudioNode): void => {
       const src = ctx.createBufferSource();
-      src.buffer = this.g.white;
+      src.buffer = this.#g.white;
       src.loop = true;
-      source(src, dest, Math.random() * this.g.white.duration);
+      source(src, dest, Math.random() * this.#g.white.duration);
     };
     const osc = (type: OscillatorType, hz: number, dest: AudioNode | AudioParam, depth = 1): OscillatorNode => {
       const o = ctx.createOscillator();
@@ -209,9 +209,9 @@ export class Ambience {
         // it is wanted, and it stops a second after that, far past the 120 ms lookahead.
         const hp = filter('highpass', CRACKLE_HIGHPASS_HZ, 0.7);
         l.crackleIn = gain(CRACKLE_GAIN);
-        l.crackleIn.connect(hp).connect(this.g.buses.sfx);
+        l.crackleIn.connect(hp).connect(this.#g.buses.sfx);
         l.nodes.push(hp, l.crackleIn);
-        this.crackleNext = 0;
+        this.#crackleNext = 0;
         break;
       }
       case 'cicadas':
@@ -247,12 +247,12 @@ export class Ambience {
     return l;
   }
 
-  private poissonGap(): number {
-    return -Math.log(1 - Math.random()) / this.crackleRate;
+  #poissonGap(): number {
+    return -Math.log(1 - Math.random()) / this.#crackleRate;
   }
 
   /** Three 25 ms pulses with 4 ms edges (no clicks), and a hair of pitch variation per chirp. */
-  private chirp(c: Cricket, t: number): void {
+  #chirp(c: Cricket, t: number): void {
     c.osc.frequency.setValueAtTime(c.hz * (1 + (Math.random() - 0.5) * 0.02), t);
     const p = c.gate.gain;
     for (let i = 0; i < CHIRP.pulses; i++) {
@@ -265,9 +265,9 @@ export class Ambience {
   }
 
   /** One crackle tick: a random pre-enveloped grain at a random playback rate. */
-  private grain(dest: GainNode, t: number): void {
-    const src = this.g.ctx.createBufferSource();
-    src.buffer = this.g.crackle;
+  #grain(dest: GainNode, t: number): void {
+    const src = this.#g.ctx.createBufferSource();
+    src.buffer = this.#g.crackle;
     src.playbackRate.value = 0.75 + 0.6 * Math.random();
     src.connect(dest);
     src.onended = () => src.disconnect();
