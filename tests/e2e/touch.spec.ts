@@ -73,6 +73,10 @@ async function worldPoint(page: Page): Promise<{ x: number; y: number }> {
 /** One frame as drawn (sampled after the frame's callbacks): θ, the driver's view, the walker. */
 interface Frame {
   t: number;
+  /** The time of the frame's animation-frame task (no event is dispatched inside it). */
+  rt: number;
+  /** The button's press-in read inside that task, right after the game's frame callback. */
+  rdown: boolean;
   th: number;
   answered: number;
   buffered: boolean;
@@ -99,9 +103,13 @@ async function record(page: Page): Promise<void> {
     // A task queued from a frame callback runs once every callback of that frame (the game's too) has run.
     const loop = (): void => {
       if (!rec.on) return;
+      // The game's callback was requested first (it asks for the next frame before this loop does),
+      // so it has run: this frame's state, even when a busy input burst defers the timer below.
+      const rt = performance.now();
+      const rdown = window.__SHADY_TEST__!.state().drive.down;
       setTimeout(() => {
         const s = window.__SHADY_TEST__!.state();
-        rec.fr.push({ t: performance.now(), th: s.theta, answered: s.drive.answered, buffered: s.drive.buffered, down: s.drive.down, hero: s.hero, dx: s.el?.dx ?? 0, vane: s.drive.vane });
+        rec.fr.push({ t: performance.now(), rt, rdown, th: s.theta, answered: s.drive.answered, buffered: s.drive.buffered, down: s.drive.down, hero: s.hero, dx: s.el?.dx ?? 0, vane: s.drive.vane });
       }, 0);
       requestAnimationFrame(loop);
     };
@@ -488,8 +496,9 @@ test("latency: a press's commit reaches the driver within 50 ms at the 95th perc
     const f0 = fr[after(e.at) - 1]!;
     const k = fr.findIndex((f) => f.t > e.at && (f.answered !== f0.answered || (f.buffered && !f0.buffered)));
     commit.push(Math.max(0, late(fr, c, k)));
-    // The press-in look on the first frame drawn after the touch.
-    pressIn.push(fr[after(e.at)]!.down ? 1 : 0);
+    // The press-in look on the first frame drawn after the touch: the first whose animation-frame task
+    // ran after it, read in that task (a timer queued from it can run after the tap has lifted).
+    pressIn.push(fr.find((f) => f.rt > e.at)!.rdown ? 1 : 0);
   }
   expect(commit.length).toBe(30);
   expect(p95(commit), `commit → driver (ms): ${commit.map(Math.round).join(' ')}`).toBeLessThanOrEqual(50);
