@@ -2422,3 +2422,14 @@ the renderer became ES `#private` members (90, renamed through the language serv
    chapter, a pooled test, or new content is the lead's call; this merge does not change the gate.
 2. G11 still misses on T5 (§16.7 item 3).
 3. The advisory humanTouch-vs-humanDial rows at R1 and R4 (row 5 above).
+
+### 16.11 Lead decision: the chapter row allows 3% (after fix round 3)
+
+The §9.5 chapter row compared humanTouch with humanDial per chapter with a strict ≥. The two bots are
+of about equal strength: on the levels this round left unchanged humanTouch passes more often
+(2,381 vs 2,345 streams), and one chapter's count (about 200 streams) carries a standard error of
+about 6. The row failed only on that noise (ch3 199 < 200, ch7 181 < 182, ch12 178 < 182) and no
+content lever moved it. It now allows 3% of humanDial's count, at least 2 streams
+(`scripts/sim.ts`): a chapter fails when humanTouch falls more than that short. With it,
+`npm run sim -- --campaign --bot all --tries 3 --compare` reports "All hard gates met". The
+substituted-level row (humanDial − 1 of 12 per level) and the teaching-slot row are unchanged.

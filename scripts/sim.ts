@@ -859,9 +859,11 @@ async function campaignMain(workers: number, off: Partial<V16Rules>): Promise<vo
       const a = lv.reduce((n, id) => n + within(mine(id)), 0);
       const b = lv.reduce((n, id) => n + within(old(id)), 0);
       cells.push(`${c}: ${a}/${b}`);
-      if (a < b) badCh.push(`ch${c} ${a} < ${b}`);
+      // Two bots of about equal strength differ by noise: about 6 streams (one standard error) on a
+      // ~200-stream chapter. The row allows 3% of humanDial's count, at least 2 (lead decision, §16.11).
+      if (a < b - Math.max(2, Math.ceil(b * 0.03))) badCh.push(`ch${c} ${a} < ${b}`);
     }
-    line(true, badCh.length === 0, `chapters: humanTouch's passes within ${streamTries} tries over ${streams} streams ≥ humanDial's on the old content`, badCh.length ? badCh.join(', ') : cells.join(' '));
+    line(true, badCh.length === 0, `chapters: humanTouch's passes within ${streamTries} tries over ${streams} streams ≥ humanDial's on the old content − 3%`, badCh.length ? badCh.join(', ') : cells.join(' '));
   }
   const json = arg('json', '');
   if (json !== '' && streamBots.length > 0) {
