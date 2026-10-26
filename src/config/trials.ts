@@ -159,7 +159,7 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // sight 8 vs 59, G5b best θ241 dies at 23%, G6 burns ≥ 7 96% (WAIVERS: every finisher burns them all).
   trial(1, 'Kindling', 7, 'meadow', 240, 400, 34, 0, [[340, 'ember'], [556, 'nubs']], 'ember',
     'b376 b405 t434 g448 b477 g506 b535 i580', ['burns', 7], 30, [],
-    'Tap each wall just before Ember gets there. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls', '', 468, { legStart: [80, 60, 80], costMul: 1.2 }),
+    'Tap the flame button once for each wall: Ember burns it right on time. Light refuels the flame.', 'Burn all 7', 'Burn all 7 walls', '', 468, { legStart: [80, 60, 80], costMul: 1.2 }),
   // T2 pin: salt 187; drain 26 → 28; Drip 70 → 50 and evapMul 1.2 (G5b: the held sun at a constant
   // angle walked Drip's leg), Nubs' closing leg 100 → 80. The verifier round (§13.3, §6.5 levers
   // only): puddle 218 +20 lay wholly under the Old Oak's canopy with no spot in ±6 min and ±8 u that
@@ -179,7 +179,7 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // 81, G3 8/8, G4 13/16 (81%), G5b best θ282 dies at 23%, G6 trees ≥ 2 33%.
   trial(3, 'Green Bridge', 15, 'meadow', 240, 400, 34, 0, [[340, 'sprout'], [556, 'nubs']], 'sprout',
     'p369:44 x408:0:12 s450:0:14 p476:-44 x502:0:16 s530:0:12 p572:44 p586:-44 p600:44', ['trees', 2], 30, [],
-    'Hold on the ground ahead: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3584, { legStart: [80, 80, 80] }),
+    'Tap the leaf button: vines bridge gaps, trees shade Nubs. Sun speeds them.', 'Grow 2 trees', 'Grow 2 trees', '', 3584, { legStart: [80, 80, 80] }),
   // T4 pin: salt 605 (from a scan of salts on Nubs' opening leg: 0..199 held none that a constant
   // sun angle could not walk with a ±20 Nubs lever); drain 28 → 34 and Nubs' legs 100 → 80 (too
   // easy). Gust 80 → 90 lets the east/30 spam Gust through (G5d). Measured: G1 82/bots/83, G2 low
@@ -188,7 +188,7 @@ export const TRIALS: readonly TrialDef[] = Object.freeze([
   // target, 75, still measured 83%).
   trial(4, 'Weather Vane', 8, 'oldtown', 180, 400, 34, 0, [[280, 'gust'], [496, 'nubs']], 'gust',
     'r312:-100:55:20 f340:80:70:-12 r365:110:60:-24 r385:-150:55:0 f400:-90:80:14 r425:150:55:0 r440:-100:60:22 r465:100:65:-20 r520:-190:90:6', ['cloudRide', 60], 30, [],
-    "Swipe to blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him.", 'Rain ride 1 s', 'Ride a rain cloud 1 s', '', 605, { legStart: [80, 80, 80] }),
+    "Drag to set the wind and blow rain and fog off Gust's path. Rain shades Nubs: push a cloud onto him.", 'Rain ride 1 s', 'Ride a rain cloud 1 s', '', 605, { legStart: [80, 80, 80] }),
   // T5 pin: salt 1113 (found by the G5b scan: 0..1112 held no salt whose sun could not stay fixed);
   // drain 28 → 34, Nubs' legs 100 → 80, Ember 80 → 60, Drip 70 → 50, costMul and evapMul 1.2 (too
   // easy: each element leg passed with its verb off); puddles 425 −18 → −26 and 492 18 → 26 (8 u

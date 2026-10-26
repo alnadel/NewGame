@@ -1084,6 +1084,10 @@ describe('Elementals v2 Trials (docs/ELEMENTALS_V2.md §5.0, §7.11)', () => {
     s.flags.tutorialDone = true;
     expect(elementalsOpen(s)).toBe(true);
     expect(nextOpenTrial(s, 0)).toBe(1);
+    // Level 1 passed opens them too, whatever the lesson's own state (an L1 won without its pass).
+    const l1 = quiet();
+    l1.campaign.stars[0] = 1;
+    expect([elementalsOpen(l1), trialOpen(l1, 1), nextOpenTrial(l1, 0)]).toEqual([true, true, 1]);
     const all = quiet();
     all.settings.unlockAll = true;
     expect(elementalsOpen(all)).toBe(true);

@@ -496,12 +496,14 @@ export function createUi(root: HTMLElement, deps: UiDeps): Ui {
       updateGhost();
       updateGhostKey();
     },
-    setGhostAt(x, y) {
+    setGhostAt(x, y, wordLeft = false) {
       const at = x === x;
       if (at) {
         ghostEl.style.setProperty('--gx', `${Math.round(x)}px`);
         ghostEl.style.setProperty('--gy', `${Math.round(y)}px`);
       }
+      // A press ghost says its word beside the button, toward the screen's middle.
+      ghostEl.classList.toggle('is-wl', wordLeft);
       if (at === ghostAt) return;
       ghostAt = at;
       ghostEl.classList.toggle('is-at', at);

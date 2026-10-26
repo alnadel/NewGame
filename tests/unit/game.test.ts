@@ -76,6 +76,11 @@ describe('ghost-thumb hints (V1_PLAN §6.2)', () => {
     const p3 = new HintTracker();
     for (let i = 0; i < 50; i++) expect(p3.update(0.1, input({ profile: 3 }))).toBe(false);
   });
+  it('the first lesson hints at any profile (L1 runs at profile 3): its ghost and slow time (lessonStarted) come while it is on', () => {
+    const h = new HintTracker();
+    expect(h.update(0.35, input({ profile: 3, lessonOn: true }))).toBe(true);
+    expect([h.lesson, h.lessonStarted, h.showing(false), h.showing(true)]).toEqual([true, true, true, false]);
+  });
   it('aims at the arc that lasts (safe now and 0.6 s ahead) and honours invert', () => {
     const h = new HintTracker();
     // Now: a wide arc clockwise that is about to vanish, and one counter-clockwise that stays.

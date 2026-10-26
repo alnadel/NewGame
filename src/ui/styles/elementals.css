@@ -16,6 +16,7 @@
 .el-verb { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin: 0; font-weight: 800; }
 
 .el-verb small { flex-basis: 100%; color: var(--ink-2); font-weight: 700; }
+.sui:not(.is-kbd) .el-verb .kbd-only { display: none; }
 
 /* The heroes: round candy coins (≥ 64 px) with their names hung under them, as the Title's tray;
    the focus ring and the selected one's ring on the coin. */

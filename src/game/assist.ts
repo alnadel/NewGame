@@ -194,7 +194,8 @@ export class HintTracker {
    */
   update(dt: number, p: HintInput): boolean {
     if (this.active > 0) this.active = Math.max(0, this.active - dt);
-    if (p.profile > 1 || !p.sunUp) {
+    // The first-run lesson (Endless R0, and L1 at any profile) teaches the drag; otherwise only the first-run profiles hint.
+    if ((p.profile > 1 && !p.lessonOn) || !p.sunUp) {
       this.stop();
       return false;
     }

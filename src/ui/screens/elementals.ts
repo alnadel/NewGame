@@ -100,7 +100,8 @@ export function createElementalsScreen(ctx: UiContext): Screen {
     setChildren(name, hero.name, ' ', h('span', 'tag', hero.element));
     tagline.textContent = hero.tagline;
     setChildren(rules, ...hero.rules.map((r) => h('li', 'tag', r)));
-    setChildren(verb, icon(hero.gesture as IconName), hero.verbLine, h('small', null, hero.keyLine));
+    // The drag and the button for a finger; the keys only for keyboard players (elementals.css).
+    setChildren(verb, icon(hero.gesture as IconName), `${hero.dragLine} · ${hero.actLine}`, h('small', 'kbd-only', hero.keyLine));
     setButtonLabel(playBtn, `Play ${levelShort(sel.id)} · ${sel.name}`);
 
     // The heroes: a locked one is a silhouette (elementals.css) with its lock, and says what opens it.

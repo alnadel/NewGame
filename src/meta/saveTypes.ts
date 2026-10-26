@@ -205,5 +205,10 @@ export interface Save {
     missionsV2: boolean;
     /** Controls v3 (docs/CONTROLS_V3.md §6.1): the Cold Snap's first full meter was taught (ghost press, slow time). */
     snapTeach: boolean;
+    /**
+     * The element buttons taught by doing (bits: 1 Ember's burn, 2 Sprout's grow, 4 Gust's vane), on
+     * their intro Trial or, for a profile that passed it before Controls v3, the first time it matters.
+     */
+    taught: number;
   };
 }

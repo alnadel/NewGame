@@ -126,7 +126,7 @@ export const CONCEPTS: Readonly<Record<ConceptId, Concept>> = Object.freeze({
   deep: concept('deep', 'Deep Shade', 'Double Shade', 'teach', 'Where two shadows overlap the shade runs deep: Chill and the multiplier fill twice as fast.', 'deep'),
   bloom: concept('bloom', 'Sunflowers', 'Sun Garden', 'teach', 'Buds face the sun. Shine from their side (gold on the dial) and they bloom into tall sunflowers: new shade.', 'bloom'),
   snap: concept('snap', 'Cold Snap', 'Frost Cloud', 'teach', 'Sunflowers grown from cool shade fill the frost meter. Full? Tap the frost button: a frosty cloud rides over Nubs.', 'snap', undefined, { cost: 3 }),
-  drag: concept('drag', 'Sun Drag', 'First Shade', 'teach', 'Drag anywhere: you are the sun. Let go near the teal and it settles into shade.', 'drag', { cloudCount: 0 }),
+  drag: concept('drag', 'Sun Drag', 'First Shade', 'teach', 'Drag anywhere: you are the sun. Swing the shade onto Nubs.', 'drag', { cloudCount: 0 }),
   flakes: concept('flakes', 'Snowflakes', 'Flake Trail', 'goal', 'Collect the flakes before the sun melts them. Shade keeps them whole.', 'flake', { flakesPerCluster: 4 }, { goal: 'flakes', cost: 3 }),
   cloud: concept('cloud', 'Clouds', 'Umbrella', 'sky', 'Clouds are moving shade. Ride one while it lasts.', 'cloud', { waitersOnly: true }, { cost: -2 }),
   noon: concept('noon', 'Noon', 'High Noon', 'sun', 'A high sun throws short shadows. Noon is the boss.', 'sun', { epsNoon: 48 }, { startMinute: 270, lengthMinutes: 180 }),

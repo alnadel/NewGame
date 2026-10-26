@@ -87,7 +87,8 @@ describe('a resting finger (§1.2, §4.3)', () => {
 describe('a thumb held through a hand-off into Drip (§1.5, §4.4)', () => {
   // A DOM stand-in for the input's listeners.
   const g = globalThis as unknown as { window?: EventTarget & { innerWidth: number; innerHeight: number } };
-  if (!g.window) g.window = Object.assign(new EventTarget(), { innerWidth: 390, innerHeight: 844 });
+  // The same stand-in as game.test's (the files share globals: its edge-zone case reads innerWidth 360).
+  if (!g.window) g.window = Object.assign(new EventTarget(), { innerWidth: 360, innerHeight: 640 });
   const win = g.window;
   const fire = (t: EventTarget, type: string, props: Record<string, unknown>): void => {
     const e = new Event(type, { cancelable: true });

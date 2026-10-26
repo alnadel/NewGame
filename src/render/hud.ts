@@ -927,8 +927,9 @@ function drawButton(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudI
   const half = (BTN_RING + BTN_RING_W / 2 + 3) * k;
   const base = cached(2, `${act}${look}${dim}${+inp.hc}${k}`, v, 2 * half, 2 * half, (bg) => {
     ring(bg, half, BTN_RING * k, BTN_RING_W * k, k);
-    coin(bg, half, half, BTN_DISC * k, snap ? (look === 1 ? METER_READY : look === 2 ? METER_FROZEN : FACE.ice) : ACT_FACE[act], k, inp.hc);
-    bg.globalAlpha = dim === 2 ? 0.45 : dim ? 0.6 : 1;
+    // Charging (a Cold Snap below a full meter) is a grey disc with a faint icon: it never reads as ready.
+    coin(bg, half, half, BTN_DISC * k, snap ? (look === 1 ? METER_READY : look === 2 ? METER_FROZEN : dim === 1 ? CHARGING : FACE.ice) : ACT_FACE[act], k, inp.hc);
+    bg.globalAlpha = dim === 2 ? 0.45 : dim ? 0.5 : 1;
     const f = 36 * k;
     if (act === 'snap') bg.drawImage(flake(), half - f / 2, half - f / 2, f, f);
     else drawGlyph(bg, ACT_GLYPH[act], half, half, f, act === 'calm' ? '#6E5CA8' : '#FFFFFF');
@@ -985,6 +986,9 @@ function drawButton(g: CanvasRenderingContext2D, h: HudState, v: View, inp: HudI
   } else if (st === 3) {
     // Low: the next act's cost in red under the icon.
     outlined(g, String(Math.ceil(d.cost)), bx, y + 21 * k, 15 * k, RED);
+  } else if (st === 5 && snap && !snapping) {
+    // Charging: the meter's percent under the faint icon (the frost arc fills the ring).
+    outlined(g, `${Math.floor(Math.min(1, d.fill) * 100)}%`, bx, y + 20 * k, 13 * k);
   }
   const side = inp.hand === 'left' ? 1 : -1;
   if (inc) {
@@ -1101,6 +1105,8 @@ function ring(g: CanvasRenderingContext2D, o: number, r: number, w: number, k: n
 }
 
 const METER_READY: Face = ['#7CC4FF', '#2B7FD0', '#1F62B0', '#164A8A'];
+/** A Cold Snap still charging: a cool grey disc (ready is saturated blue). */
+const CHARGING: Face = ['#EEF0F5', '#C8CDD8', '#A2A9B8', '#6E7587'];
 const SOCKET: Face = [SLOT_2, SLOT_2, SLOT_2, '#3B2A5A'];
 const METER_FROZEN: Face = ['#FFFFFF', '#E4F3FF', '#C6E6FB', '#9FD3F5'];
 

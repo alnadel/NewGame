@@ -62,7 +62,9 @@ describe('the trial table (§5)', () => {
       expect(t.mech).toEqual({ buds: false, snap: true, deep: false, brittle: false });
       expect([t.forecast, t.concepts]).toEqual(['clear', []]);
       expect(t.goal).toEqual({ kind: 'finish', target: 0 });
-      expect(t.card.blurb.length).toBeLessThanOrEqual(90);
+      // Controls v3 §13.2: the card copy runs to 100 characters, and never teaches a retired gesture.
+      expect(t.card.blurb.length).toBeLessThanOrEqual(100);
+      expect(t.card.blurb).not.toMatch(/\bHold\b|\bSwipe\b|just before/);
       expect(t.card.stars[0]).toBe('Finish');
       // The cast is the walkers in order of first appearance; every relay hands over to another element.
       const walkers = [t.cast[0], ...t.relays.map((r) => r.to)];
