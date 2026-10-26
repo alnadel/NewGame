@@ -1,8 +1,10 @@
 // Controls v3 real-touch acceptance (docs/CONTROLS_V3.md §12.2, the mobile project): CDP
 // Input.dispatchTouchEvent on a wall-clock schedule at 120 Hz, never awaiting each call (helpers.ts
-// playTouch). Thumb swings lifted moving never overshoot; button presses of any length count once and
-// never turn the sun, and cast on a full meter; drags that start on the button turn the sun 1:1 and
-// act nothing; a still contact yields to a thumb drag and a second contact never steals one; two
+// playTouch). Thumb swings lifted moving never overshoot; button taps (lifted within 300 ms) count once
+// and never turn the sun, and cast on a full meter, while longer holds act nothing; drags that start on
+// the button turn the sun 1:1 and act nothing, human-shaped swings included (landing pause,
+// minimum-jerk motion, tremor); a still contact, jittering or not, yields to a thumb drag and a second
+// contact never steals one; two
 // strokes add up; a wobbly start tap turns nothing; presses right after sun drags are all answered;
 // a back-and-forth carried through a TAG neither jolts Drip nor sets Gust's vane; slow vane drags keep
 // their notches; and the latency from a move to θ, a press's commit to the driver, and a touch to the
@@ -154,7 +156,7 @@ test('13 thumb swings of 80-160 px in 180-320 ms, lifted moving: none overshoots
   }
 });
 
-test('20 button presses of 80-600 ms with 2-8 px wobble: 20 acts, none turns the sun; the 5 on a full meter cast a snap', async ({ page }) => {
+test('20 button taps of 80-260 ms with 2-8 px wobble: 20 acts, none turns the sun; the 5 on a full meter cast a snap; holds of 400-900 ms act nothing', async ({ page }) => {
   test.slow();
   const cdp = await playEndless(page, '&aim=off');
   const b = await button(page);
@@ -171,7 +173,7 @@ test('20 button presses of 80-600 ms with 2-8 px wobble: 20 acts, none turns the
       await expect.poll(async () => (await state(page)).drive.state).toBe(1);
     }
     const a0 = await acts(page);
-    const ms = 80 + ((i * 131) % 521);
+    const ms = 80 + ((i * 131) % 181);
     await playTouch(cdp, [{ id: i + 1, pts: pressPts(b.x, b.y, ms, 2 + (i % 7)) }]);
     await expect.poll(() => acts(page), { message: `press ${i} (${ms} ms)` }).toBe(a0 + 1);
     if (full) {
@@ -183,6 +185,59 @@ test('20 button presses of 80-600 ms with 2-8 px wobble: 20 acts, none turns the
   }
   expect(casts).toBe(5);
   expect(await acts(page)).toBe(20);
+  // A held touch is no tap (the button acts only on a still tap): nothing, even on a full meter.
+  await page.evaluate(() => window.__SHADY_TEST__!.demo('snapReady'));
+  for (let i = 0; i < 5; i++) {
+    await playTouch(cdp, [{ id: 100 + i, pts: pressPts(b.x, b.y, 400 + i * 125, 3) }]);
+    await page.waitForTimeout(150);
+  }
+  expect(await acts(page)).toBe(20);
+  expect(Math.abs(angleDiff((await state(page)).theta, th0))).toBeLessThan(0.01);
+});
+
+/** A human thumb's swing: a landing pause with a small wobble, then minimum-jerk motion by (dx, dy) over `ms` with a 1 px tremor, at 120 Hz. */
+function swingPts(x: number, y: number, dx: number, dy: number, pause: number, ms: number): Finger['pts'] {
+  const pts: Finger['pts'] = [];
+  for (let k = 0, t = 0; t <= pause + ms + 1e-6; k++, t = (k * 1000) / 120) {
+    const u = Math.max(0, Math.min(1, (t - pause) / ms));
+    const e = u * u * u * (10 - 15 * u + 6 * u * u);
+    const w = k === 0 ? 0 : u > 0 ? 1 : 1.5;
+    pts.push({ t, x: x + dx * e + w * Math.sin(k * 1.3), y: y + dy * e + w * Math.cos(k * 0.9) });
+  }
+  return pts;
+}
+
+test('50 human-shaped swings that start on the button (landing pause 0-80 ms, minimum-jerk 150-450 ms, 50-150 px, tremor), meter full: 0 acts, 0 snaps, the sun turned 1:1', async ({ page }) => {
+  test.slow();
+  const cdp = await playEndless(page, '&aim=off');
+  const vw = await viewWidth(page);
+  const b = await button(page);
+  const a0 = await acts(page);
+  let seed = 2026;
+  const rnd = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < 50; i++) {
+    if (i % 10 === 0) {
+      await page.evaluate(() => window.__SHADY_TEST__!.demo('snapReady'));
+      await expect.poll(async () => (await state(page)).drive.state).toBe(1);
+    }
+    // From anywhere in the inner 60% of the disc, into the screen (left, up to 40° up or down).
+    const r = b.r * 0.6 * Math.sqrt(rnd());
+    const at = rnd() * Math.PI * 2;
+    const dist = 50 + rnd() * 100;
+    const dir = Math.PI + (rnd() - 0.5) * 1.4;
+    const dx = Math.cos(dir) * dist;
+    const th0 = (await state(page)).theta;
+    const pts = swingPts(b.x + r * Math.cos(at), b.y + r * Math.sin(at), dx, Math.sin(dir) * dist, rnd() * 80, 150 + rnd() * 300);
+    await playTouch(cdp, [{ id: 300 + i, pts }]);
+    const moved = pts.at(-1)!.x - pts[0]!.x;
+    const want = th0 - (moved / vw) * 360;
+    await expect.poll(async () => Math.abs(angleDiff((await state(page)).theta, want)), { timeout: 3_000, message: `swing ${i}: ${Math.round(moved)} px` }).toBeLessThan(1);
+    expect(await acts(page), `swing ${i} acts nothing`).toBe(a0);
+  }
+  expect((await mech(page)).snaps).toBe(0);
 });
 
 test('20 thumb drags of 80-160 px from inside the button\'s disc, meter charging then full: no act, no snap, the sun turned 1:1', async ({ page }) => {
@@ -220,12 +275,17 @@ test('a still contact at x = 24 px yields to a thumb drag; a second contact land
   const vw = await viewWidth(page);
   const p = await worldPoint(page);
   let th0 = (await state(page)).theta;
-  // The still contact rests from 0 to 1400 ms; the thumb drags 100 px right from 500 to 800 ms.
-  await playTouch(cdp, [
-    { id: 1, pts: pressPts(24, p.y, 1400) },
-    { id: 2, pts: strokePts(p.x - 50, p.y + 40, 100, 0, 300, 500) },
-  ]);
-  await expect.poll(async () => Math.abs(angleDiff((await state(page)).theta, th0 - (100 / vw) * 360)), { timeout: 3_000 }).toBeLessThan(1);
+  // The still contact rests from 0 to 1400 ms (still, then with ±1.5 px of sensor jitter); the thumb
+  // drags 100 px right from 500 to 800 ms.
+  for (const [k, jitter] of [0, 1.5].entries()) {
+    th0 = (await state(page)).theta;
+    await playTouch(cdp, [
+      { id: 1 + 10 * k, pts: pressPts(24, p.y, 1400, jitter) },
+      { id: 2 + 10 * k, pts: strokePts(p.x - 50, p.y + 40, 100, 0, 300, 500) },
+    ]);
+    // (The contact owns the slot until the thumb lands: its own jitter turns the sun up to ±jitter px.)
+    await expect.poll(async () => Math.abs(angleDiff((await state(page)).theta, th0 - (100 / vw) * 360)), { timeout: 3_000, message: `jitter ${jitter} px` }).toBeLessThan(1 + (jitter / vw) * 360);
+  }
   // The thumb drags 120 px left over 600 ms; a second finger rests on the world from 250 to 550 ms.
   th0 = (await state(page)).theta;
   await playTouch(cdp, [
@@ -410,9 +470,9 @@ test("latency: a press's commit reaches the driver within 50 ms at the 95th perc
   const cdp = await playEndless(page, '&aim=off');
   const b = await button(page);
   await record(page);
-  // 30 presses of 80-300 ms, half a second apart (a refused press resolves within its 300 ms buffer).
+  // 30 taps of 80-260 ms, half a second apart (a refused press resolves within its 300 ms buffer).
   for (let i = 0; i < 30; i++) {
-    await playTouch(cdp, [{ id: i + 1, pts: pressPts(b.x, b.y, 80 + ((i * 47) % 221), 2) }]);
+    await playTouch(cdp, [{ id: i + 1, pts: pressPts(b.x, b.y, 80 + ((i * 47) % 181), 2) }]);
     await page.waitForTimeout(500);
   }
   const { ev, fr } = await stopRecord(page);
@@ -422,9 +482,8 @@ test("latency: a press's commit reaches the driver within 50 ms at the 95th perc
   for (const [i, e] of ev.entries()) {
     if (e.type !== 'pointerdown') continue;
     const up = ev.slice(i).find((x) => x.type === 'pointerup')!;
-    // The commit: the lift, or 120 ms after the touch (its own time: the input times a press by its
-    // events' timestamps). The driver takes or buffers it, or answers, by the next frame drawn.
-    const c = Math.min(Math.max(e.t + 120, e.at), up.at);
+    // The commit: the lift of a still tap. The driver takes or buffers it, or answers, by the next frame drawn.
+    const c = up.at;
     const f0 = fr[after(e.at) - 1]!;
     const k = fr.findIndex((f) => f.t > e.at && (f.answered !== f0.answered || (f.buffered && !f0.buffered)));
     commit.push(Math.max(0, late(fr, c, k)));

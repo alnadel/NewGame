@@ -95,17 +95,21 @@ test('the first pointer wins: a second finger landing mid-drag turns nothing', a
   await expect.poll(async () => Math.abs(angleDiff((await state(page)).theta, want)), { timeout: 3_000 }).toBeLessThan(1);
 });
 
-test('the button: a 500 ms press casts a Cold Snap; a press it cannot take is refused with its reason (busy, then charging), the repeat with +16', async ({ page }) => {
+test('the button: a 500 ms hold acts nothing, a tap casts a Cold Snap; a press it cannot take is refused with its reason (busy, then charging), the repeat with +16', async ({ page }) => {
   // Level 12 starts with a full meter (the Frost Bank's start charge).
   await playLevel12(page);
   await expect.poll(async () => (await state(page)).drive.state).toBe(1);
   const b = await button(page);
   expect(b.shown).toBe(true);
   const cdp = await touchScreen(page);
-  // A 500 ms press commits at 120 ms and casts.
+  // A 500 ms hold is no tap: nothing. A 150 ms tap commits on its lift and casts.
   const before = await acts(page);
-  await playTouch(cdp, [{ id: 1, pts: pressPts(b.x, b.y, 500, 4) }]);
-  expect(await acts(page)).toBe(before + 1);
+  await playTouch(cdp, [{ id: 9, pts: pressPts(b.x, b.y, 500, 4) }]);
+  await page.waitForTimeout(200);
+  expect(await acts(page)).toBe(before);
+  expect((await mech(page)).snapLeft).toBe(0);
+  await playTouch(cdp, [{ id: 1, pts: pressPts(b.x, b.y, 150, 4) }]);
+  await expect.poll(() => acts(page)).toBe(before + 1);
   await expect.poll(async () => (await mech(page)).snapLeft, { timeout: 5_000 }).toBeGreaterThan(0);
   // Under the snap a press waits out the 300 ms buffer and is refused (busy: 7); the second in a row
   // is a repeat (+16): its chip still shows, silent.
@@ -189,6 +193,36 @@ test('the first-run lesson (a fresh save) shows no button, and nothing moves the
   const t = await state(page);
   expect(t.lessonOn).toBe(true);
   expect(Math.abs(angleDiff(t.theta, th0))).toBeLessThan(0.01);
+});
+
+test("Level 1's lesson plays its ghost hand in slow time; reached with no drag it is not passed", async ({ page }) => {
+  test.slow();
+  await page.goto('/?test=1&level=1');
+  await page.waitForFunction(() => window.__SHADY_TEST__ !== undefined);
+  await waitForScreen(page, 'play');
+  const p = await worldPoint(page);
+  const cdp = await touchScreen(page);
+  await playTouch(cdp, [{ id: 1, pts: pressPts(p.x, p.y, 90, 2) }]);
+  await waitPlaying(page);
+  expect((await state(page)).lessonOn).toBe(true);
+  // While Nubs is lit the ghost drags toward the shade and the game runs slow (§6.1: L1 like the first run).
+  await expect.poll(async () => (await page.evaluate(() => window.__SHADY_TEST__!.hint())).mode, { timeout: 15_000 }).toMatch(/^(left|right)$/);
+  await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.timeScale()), { timeout: 3_000 }).toBeLessThan(1);
+  // Nobody drags: the lesson's floor keeps Nubs alive to the flag, and the level is not passed.
+  await page.evaluate(() => window.__SHADY_TEST__!.setTimeScale(8));
+  await expect.poll(() => page.evaluate(() => window.__SHADY_TEST__!.campaign()), { timeout: 90_000, intervals: [500] }).not.toBeNull();
+  const c = (await page.evaluate(() => window.__SHADY_TEST__!.campaign()))!;
+  expect([c.passed, c.stars, c.goalLine]).toEqual([false, 0, 'Drag the sun to swing shade onto Nubs']);
+  const save = await page.evaluate(() => JSON.parse(localStorage.getItem('shady.save') ?? '{}'));
+  expect([save.campaign?.stars?.[0] ?? 0, save.flags?.tutorialDone]).toEqual([0, false]);
+});
+
+test('Level 1 passed shows the Elementals on the Title, whatever the lesson state', async ({ page }) => {
+  const stars = Array.from({ length: 200 }, (_, i) => (i === 0 ? 1 : 0));
+  await seedSave(page, { v: 4, createdAt: 1, settings: {}, stats: { runs: 3 }, flags: { tutorialDone: false }, campaign: { stars, unlocked: 2, lastLevel: 1 } });
+  await openGame(page, 'test=1');
+  await waitForScreen(page, 'title');
+  await expect(page.locator('.elementals-btn')).toBeVisible();
 });
 
 // Aim help (§4): CORE's magnet.

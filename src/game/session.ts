@@ -953,10 +953,9 @@ export class Session {
         takeSnap(s, this.#prev);
         const f = this.#bot ? this.#bot.next(s) : (frames?.[i] ?? null);
         if (!f) break;
-        if (ctl) {
-          if (s.ready === 0) this.#ownTurn += Math.abs(f.dTheta) + (f.key !== 0 ? 2.5 : 0);
-          this.driver.fill(s, f, ctl[i] as DriveControl);
-        }
+        // The player's own turn (a bot's, on a bot run), before the driver adds any glide.
+        if (s.ready === 0) this.#ownTurn += Math.abs(f.dTheta) + (f.key !== 0 ? 2.5 : 0);
+        if (ctl) this.driver.fill(s, f, ctl[i] as DriveControl);
         step(s, f);
         if (this.#rec) recordFrame(this.#rec, f);
         for (const ev of s.events) {
